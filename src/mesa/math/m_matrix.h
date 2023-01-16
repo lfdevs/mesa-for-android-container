@@ -32,7 +32,7 @@
 #define _M_MATRIX_H
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 
 
 #ifdef __cplusplus
@@ -54,6 +54,12 @@ extern "C" {
 #define MAT_TZ 14
 /*@}*/
 
+/**
+ * If you add a new field, please add it to the STATIC_ASSERTs in
+ * _math_matrix_set_identity().
+ */
+#define MATRIX_M   0
+#define MATRIX_INV (MATRIX_M + 16 * 4)
 
 /**
  * Different kinds of 4x4 transformation matrices.
@@ -73,8 +79,8 @@ enum GLmatrixtype {
  * Matrix type to represent 4x4 transformation matrices.
  */
 typedef struct {
-   ALIGN16 GLfloat m[16];	/**< 16 matrix elements (16-byte aligned) */
-   ALIGN16 GLfloat inv[16];	/**< 16-element inverse (16-byte aligned) */
+   alignas(16) GLfloat m[16];	/**< 16 matrix elements (16-byte aligned) */
+   alignas(16) GLfloat inv[16];	/**< 16-element inverse (16-byte aligned) */
    GLuint flags;        /**< possible values determined by (of \link
                          * MatFlags MAT_FLAG_* flags\endlink)
                          */
@@ -140,14 +146,8 @@ _math_matrix_push_copy(GLmatrix *to, GLmatrix *from);
 extern void
 _math_matrix_analyse( GLmatrix *mat );
 
-extern void
-_math_matrix_print( const GLmatrix *m );
-
 extern GLboolean
 _math_matrix_is_length_preserving( const GLmatrix *m );
-
-extern GLboolean
-_math_matrix_has_rotation( const GLmatrix *m );
 
 extern GLboolean
 _math_matrix_is_general_scale( const GLmatrix *m );

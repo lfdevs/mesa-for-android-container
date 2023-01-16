@@ -38,9 +38,9 @@
 #include <unistd.h>
 
 #include "device_select.h"
-#include "hash_table.h"
+#include "util/hash_table.h"
 #include "vk_util.h"
-#include "c11/threads.h"
+#include "util/simple_mtx.h"
 
 struct instance_info {
    PFN_vkDestroyInstance DestroyInstance;
@@ -55,46 +55,38 @@ struct instance_info {
 };
 
 static struct hash_table *device_select_instance_ht = NULL;
-static mtx_t device_select_mutex;
-
-static once_flag device_select_is_init = ONCE_FLAG_INIT;
-
-static void device_select_once_init(void) {
-   mtx_init(&device_select_mutex, mtx_plain);
-}
+static simple_mtx_t device_select_mutex = SIMPLE_MTX_INITIALIZER;
 
 static void
 device_select_init_instances(void)
 {
-   call_once(&device_select_is_init, device_select_once_init);
-
-   mtx_lock(&device_select_mutex);
+   simple_mtx_lock(&device_select_mutex);
    if (!device_select_instance_ht)
       device_select_instance_ht = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
 							  _mesa_key_pointer_equal);
-   mtx_unlock(&device_select_mutex);
+   simple_mtx_unlock(&device_select_mutex);
 }
 
 static void
 device_select_try_free_ht(void)
 {
-   mtx_lock(&device_select_mutex);
+   simple_mtx_lock(&device_select_mutex);
    if (device_select_instance_ht) {
       if (_mesa_hash_table_num_entries(device_select_instance_ht) == 0) {
 	 _mesa_hash_table_destroy(device_select_instance_ht, NULL);
 	 device_select_instance_ht = NULL;
       }
    }
-   mtx_unlock(&device_select_mutex);
+   simple_mtx_unlock(&device_select_mutex);
 }
 
 static void
 device_select_layer_add_instance(VkInstance instance, struct instance_info *info)
 {
    device_select_init_instances();
-   mtx_lock(&device_select_mutex);
+   simple_mtx_lock(&device_select_mutex);
    _mesa_hash_table_insert(device_select_instance_ht, instance, info);
-   mtx_unlock(&device_select_mutex);
+   simple_mtx_unlock(&device_select_mutex);
 }
 
 static struct instance_info *
@@ -102,20 +94,20 @@ device_select_layer_get_instance(VkInstance instance)
 {
    struct hash_entry *entry;
    struct instance_info *info = NULL;
-   mtx_lock(&device_select_mutex);
+   simple_mtx_lock(&device_select_mutex);
    entry = _mesa_hash_table_search(device_select_instance_ht, (void *)instance);
    if (entry)
       info = (struct instance_info *)entry->data;
-   mtx_unlock(&device_select_mutex);
+   simple_mtx_unlock(&device_select_mutex);
    return info;
 }
 
 static void
 device_select_layer_remove_instance(VkInstance instance)
 {
-   mtx_lock(&device_select_mutex);
+   simple_mtx_lock(&device_select_mutex);
    _mesa_hash_table_remove_key(device_select_instance_ht, instance);
-   mtx_unlock(&device_select_mutex);
+   simple_mtx_unlock(&device_select_mutex);
    device_select_try_free_ht();
 }
 

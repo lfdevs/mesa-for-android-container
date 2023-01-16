@@ -85,7 +85,6 @@ struct iris_batch {
 
    uint32_t ctx_id;
    uint32_t exec_flags;
-   bool has_engines_context;
 
    /** A list of all BOs referenced by this batch */
    struct iris_bo **exec_bos;
@@ -358,7 +357,7 @@ static inline void
 iris_batch_mark_flush_sync(struct iris_batch *batch,
                            enum iris_domain access)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
 
    if (iris_domain_is_l3_coherent(devinfo, access))
       batch->l3_coherent_seqnos[access] = batch->next_seqno - 1;
@@ -375,7 +374,7 @@ static inline void
 iris_batch_mark_invalidate_sync(struct iris_batch *batch,
                                 enum iris_domain access)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
 
    for (unsigned i = 0; i < NUM_IRIS_DOMAINS; i++) {
       if (i == access)
@@ -429,7 +428,7 @@ iris_batch_name_to_string(enum iris_batch_name name);
 
 #define iris_foreach_batch(ice, batch)                \
    for (struct iris_batch *batch = &ice->batches[0];  \
-        batch <= &ice->batches[((struct iris_screen *)ice->ctx.screen)->devinfo.ver >= 12 ? IRIS_BATCH_BLITTER : IRIS_BATCH_COMPUTE]; \
+        batch <= &ice->batches[((struct iris_screen *)ice->ctx.screen)->devinfo->ver >= 12 ? IRIS_BATCH_BLITTER : IRIS_BATCH_COMPUTE]; \
         ++batch)
 
 #endif

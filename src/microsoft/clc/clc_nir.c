@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "u_math.h"
+#include "util/u_math.h"
 #include "nir.h"
 #include "glsl_types.h"
 #include "nir_types.h"
@@ -172,7 +172,7 @@ lower_load_kernel_input(nir_builder *b, nir_intrinsic_instr *intr,
    const struct glsl_type *type =
       glsl_vector_type(base_type, nir_dest_num_components(intr->dest));
    nir_ssa_def *ptr = nir_vec2(b, nir_imm_int(b, var->data.binding),
-                                  nir_u2u(b, intr->src[0].ssa, 32));
+                                  nir_u2uN(b, intr->src[0].ssa, 32));
    nir_deref_instr *deref = nir_build_deref_cast(b, ptr, nir_var_mem_ubo, type,
                                                     bit_size / 8);
    deref->cast.align_mul = nir_intrinsic_align_mul(intr);

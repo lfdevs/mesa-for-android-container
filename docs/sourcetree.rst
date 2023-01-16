@@ -168,8 +168,8 @@ each directory.
    -  **loader** - Used by libGL.so to find and load the appropriate DRI driver.
    -  **panfrost** - Panfrost-specific sources
 
-         -  **bifrost** - shader compiler for the Bifrost generation GPUs
-         -  **lib** - GPU data structures (command stream) support code`
+         -  **compiler** - shader compiler for Bifrost and newer GPUs
+         -  **lib** - GPU data structures (command stream) support code
          -  **midgard** - shader compiler for the Midgard generation GPUs
          -  **shared** - shared Mali code between Lima and Panfrost
          -  **util** - shared code between Midgard and Bifrost shader compilers

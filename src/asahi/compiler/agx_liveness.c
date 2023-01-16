@@ -22,10 +22,10 @@
  * SOFTWARE.
  */
 
-#include "agx_compiler.h"
-#include "util/u_memory.h"
 #include "util/list.h"
 #include "util/set.h"
+#include "util/u_memory.h"
+#include "agx_compiler.h"
 
 /* Liveness analysis is a backwards-may dataflow analysis pass. Within a block,
  * we compute live_out from live_in. The intrablock pass is linear-time. It
@@ -36,18 +36,15 @@
 void
 agx_liveness_ins_update(BITSET_WORD *live, agx_instr *I)
 {
-   agx_foreach_dest(I, d) {
-      if (I->dest[d].type == AGX_INDEX_NORMAL)
-         BITSET_CLEAR(live, I->dest[d].value);
-   }
+   agx_foreach_ssa_dest(I, d)
+      BITSET_CLEAR(live, I->dest[d].value);
 
-   agx_foreach_src(I, s) {
-      if (I->src[s].type == AGX_INDEX_NORMAL) {
-         /* If the source is not live after this instruction, but becomes live
-          * at this instruction, this is the use that kills the source */
-         I->src[s].kill = !BITSET_TEST(live, I->src[s].value);
-         BITSET_SET(live, I->src[s].value);
-      }
+   agx_foreach_ssa_src(I, s) {
+      /* If the source is not live after this instruction, but becomes live
+       * at this instruction, this is the use that kills the source
+       */
+      I->src[s].kill = !BITSET_TEST(live, I->src[s].value);
+      BITSET_SET(live, I->src[s].value);
    }
 }
 
@@ -80,7 +77,7 @@ agx_compute_liveness(agx_context *ctx)
    }
 
    /* Iterate the work list */
-   while(!u_worklist_is_empty(&worklist)) {
+   while (!u_worklist_is_empty(&worklist)) {
       /* Pop in reverse order since liveness is a backwards pass */
       agx_block *blk = agx_worklist_pop_head(&worklist);
 
@@ -93,8 +90,8 @@ agx_compute_liveness(agx_context *ctx)
       /* Propagate the live in of the successor (blk) to the live out of
        * predecessors.
        *
-       * Phi nodes are logically on the control flow edge and act in parallel. To
-       * handle when propagating, we kill writes from phis and make live the
+       * Phi nodes are logically on the control flow edge and act in parallel.
+       * To handle when propagating, we kill writes from phis and make live the
        * corresponding sources.
        */
       agx_foreach_predecessor(blk, pred) {

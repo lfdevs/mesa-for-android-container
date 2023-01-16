@@ -49,6 +49,7 @@ New features
 - various ray tracing optimizations on RADV
 - extendedDynamicState2PatchControlPoints on RADV (VK_EXT_extended_dynamic_state2 feature)
 - Radeon Raytracing Analyzer integration (using RADV_RRA_* environment variables)
+- None
 
 
 Bug fixes

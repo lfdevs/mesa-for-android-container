@@ -161,7 +161,6 @@ enum
    GL_EXT_texture_lod_bit,
    GL_EXT_texture_lod_bias_bit,
    GL_EXT_texture_mirror_clamp_bit,
-   GL_EXT_texture_object_bit,
    GL_EXT_vertex_array_bit,
    GL_3DFX_texture_compression_FXT1_bit,
    GL_APPLE_packed_pixels_bit,
@@ -270,7 +269,7 @@ extern void __IndirectGlParseExtensionOverride(struct glx_screen *psc,
                                                const char *override);
 extern void __glXCalculateUsableGLExtensions(struct glx_context *gc,
                                              const char *server_string);
-extern char *__glXGetClientGLExtensionString(void);
+extern char *__glXGetClientGLExtensionString(int screen);
 
 extern GLboolean __glExtensionBitIsEnabled(struct glx_context *gc,
                                            unsigned bit);

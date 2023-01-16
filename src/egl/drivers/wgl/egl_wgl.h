@@ -34,7 +34,7 @@
 
 struct wgl_egl_display
 {
-   struct st_manager base;
+   struct pipe_frontend_screen base;
    _EGLDisplay *parent;
    int ref_count;
    struct pipe_screen *screen;

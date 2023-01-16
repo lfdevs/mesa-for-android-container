@@ -58,7 +58,7 @@ i915_flush_pipe(struct pipe_context *pipe, struct pipe_fence_handle **fence,
 
    FLUSH_BATCH(fence, winsys_flags);
 
-   I915_DBG(DBG_FLUSH, "%s: #####\n", __FUNCTION__);
+   I915_DBG(DBG_FLUSH, "%s: #####\n", __func__);
 }
 
 void

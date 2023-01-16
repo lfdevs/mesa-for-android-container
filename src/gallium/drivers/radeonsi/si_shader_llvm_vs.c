@@ -100,7 +100,7 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
        */
       LLVMValueRef sel_y1 = LLVMBuildICmp(ctx->ac.builder, LLVMIntNE, vertex_id, ctx->ac.i32_1, "");
 
-      unsigned param_vs_blit_inputs = ctx->vs_blit_inputs.arg_index;
+      unsigned param_vs_blit_inputs = ctx->args->vs_blit_inputs.arg_index;
       if (input_index == 0) {
          /* Position: */
          LLVMValueRef x1y1 = LLVMGetParam(ctx->main_fn.value, param_vs_blit_inputs);
@@ -165,11 +165,11 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
    LLVMValueRef tmp;
 
    if (input_index < num_vbos_in_user_sgprs) {
-      vb_desc = ac_get_arg(&ctx->ac, ctx->vb_descriptors[input_index]);
+      vb_desc = ac_get_arg(&ctx->ac, ctx->args->vb_descriptors[input_index]);
    } else {
       unsigned index = input_index - num_vbos_in_user_sgprs;
       vb_desc = ac_build_load_to_sgpr(
-         &ctx->ac, ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->args.vertex_buffers),
+         &ctx->ac, ac_get_ptr_arg(&ctx->ac, &ctx->args->ac, ctx->args->ac.vertex_buffers),
          LLVMConstInt(ctx->ac.i32, index, 0));
    }
 
@@ -182,10 +182,11 @@ static void load_input_vs(struct si_shader_context *ctx, unsigned input_index, L
 
       vertex_index = get_vertex_index(ctx, &ctx->shader->key.ge.part.vs.prolog,
                                       input_index, ctx->instance_divisor_constbuf,
-                                      ctx->args.start_instance.arg_index,
-                                      ctx->args.base_vertex.arg_index);
+                                      ctx->args->ac.start_instance.arg_index,
+                                      ctx->args->ac.base_vertex.arg_index);
    } else {
-      vertex_index = LLVMGetParam(ctx->main_fn.value, ctx->vertex_index0.arg_index + input_index);
+      vertex_index = LLVMGetParam(ctx->main_fn.value,
+                                  ctx->args->vertex_index0.arg_index + input_index);
    }
 
    /* Use the open-coded implementation for all loads of doubles and
@@ -382,7 +383,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
    int i;
 
    /* Get bits [22:16], i.e. (so_param >> 16) & 127; */
-   LLVMValueRef so_vtx_count = si_unpack_param(ctx, ctx->args.streamout_config, 16, 7);
+   LLVMValueRef so_vtx_count = si_unpack_param(ctx, ctx->args->ac.streamout_config, 16, 7);
 
    LLVMValueRef tid = ac_get_thread_id(&ctx->ac);
 
@@ -400,7 +401,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
        *                attrib_offset
        */
 
-      LLVMValueRef so_write_index = ac_get_arg(&ctx->ac, ctx->args.streamout_write_index);
+      LLVMValueRef so_write_index = ac_get_arg(&ctx->ac, ctx->args->ac.streamout_write_index);
 
       /* Compute (streamout_write_index + thread_id). */
       so_write_index = LLVMBuildAdd(builder, so_write_index, tid, "");
@@ -409,7 +410,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
        * enabled buffer. */
       LLVMValueRef so_write_offset[4] = {};
       LLVMValueRef so_buffers[4];
-      struct ac_llvm_pointer arg = ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->internal_bindings);
+      struct ac_llvm_pointer arg = ac_get_ptr_arg(&ctx->ac, &ctx->args->ac, ctx->args->internal_bindings);
 
       for (i = 0; i < 4; i++) {
          if (!so->stride[i])
@@ -419,7 +420,7 @@ void si_llvm_emit_streamout(struct si_shader_context *ctx, struct si_shader_outp
 
          so_buffers[i] = ac_build_load_to_sgpr(&ctx->ac, arg, offset);
 
-         LLVMValueRef so_offset = ac_get_arg(&ctx->ac, ctx->args.streamout_offset[i]);
+         LLVMValueRef so_offset = ac_get_arg(&ctx->ac, ctx->args->ac.streamout_offset[i]);
          so_offset = LLVMBuildMul(builder, so_offset, LLVMConstInt(ctx->ac.i32, 4, 0), "");
 
          so_write_offset[i] = ac_build_imad(
@@ -452,7 +453,7 @@ void si_llvm_clipvertex_to_clipdist(struct si_shader_context *ctx,
    LLVMValueRef base_elt;
    LLVMValueRef constbuf_index = LLVMConstInt(ctx->ac.i32, SI_VS_CONST_CLIP_PLANES, 0);
    LLVMValueRef const_resource = ac_build_load_to_sgpr(
-      &ctx->ac, ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->internal_bindings), constbuf_index);
+      &ctx->ac, ac_get_ptr_arg(&ctx->ac, &ctx->args->ac, ctx->args->internal_bindings), constbuf_index);
    unsigned clipdist_mask = ctx->shader->selector->info.clipdist_mask &
                             ~ctx->shader->key.ge.opt.kill_clip_distances;
 
@@ -501,77 +502,10 @@ static void si_llvm_init_vs_export_args(struct si_shader_context *ctx, const LLV
 }
 
 /**
- * Vertex color clamping.
- *
- * This uses a state constant loaded in a user data SGPR and
- * an IF statement is added that clamps all colors if the constant
- * is true.
- */
-static void si_vertex_color_clamping(struct si_shader_context *ctx,
-                                     struct si_shader_output_values *outputs, unsigned noutput)
-{
-   LLVMValueRef addr[SI_MAX_VS_OUTPUTS][4];
-   bool has_colors = false;
-
-   /* Store original colors to alloca variables. */
-   for (unsigned i = 0; i < noutput; i++) {
-      if (outputs[i].semantic != VARYING_SLOT_COL0 &&
-          outputs[i].semantic != VARYING_SLOT_COL1 &&
-          outputs[i].semantic != VARYING_SLOT_BFC0 &&
-          outputs[i].semantic != VARYING_SLOT_BFC1)
-         continue;
-
-      for (unsigned j = 0; j < 4; j++)
-         addr[i][j] = ac_build_alloca_init(&ctx->ac, outputs[i].values[j], "");
-
-      has_colors = true;
-   }
-
-   if (!has_colors)
-      return;
-
-   /* The state is in the first bit of the user SGPR. */
-   LLVMValueRef cond = GET_FIELD(ctx, VS_STATE_CLAMP_VERTEX_COLOR);
-   cond = LLVMBuildTrunc(ctx->ac.builder, cond, ctx->ac.i1, "");
-
-   ac_build_ifcc(&ctx->ac, cond, 6502);
-
-   /* Store clamped colors to alloca variables within the conditional block. */
-   for (unsigned i = 0; i < noutput; i++) {
-      if (outputs[i].semantic != VARYING_SLOT_COL0 &&
-          outputs[i].semantic != VARYING_SLOT_COL1 &&
-          outputs[i].semantic != VARYING_SLOT_BFC0 &&
-          outputs[i].semantic != VARYING_SLOT_BFC1)
-         continue;
-
-      for (unsigned j = 0; j < 4; j++) {
-         LLVMBuildStore(ctx->ac.builder, ac_build_clamp(&ctx->ac, outputs[i].values[j]),
-                        addr[i][j]);
-      }
-   }
-   ac_build_endif(&ctx->ac, 6502);
-
-   /* Load clamped colors */
-   for (unsigned i = 0; i < noutput; i++) {
-      if (outputs[i].semantic != VARYING_SLOT_COL0 &&
-          outputs[i].semantic != VARYING_SLOT_COL1 &&
-          outputs[i].semantic != VARYING_SLOT_BFC0 &&
-          outputs[i].semantic != VARYING_SLOT_BFC1)
-         continue;
-
-      for (unsigned j = 0; j < 4; j++) {
-         outputs[i].values[j] = LLVMBuildLoad2(ctx->ac.builder, ctx->ac.f32, addr[i][j], "");
-      }
-   }
-}
-
-/**
  * Generate export instructions for hardware VS shader stage or NGG GS stage
  * (position and parameter data only).
- *
- * \param num_export_threads  The number of threads that are active for exports. Only used by gfx11.
  */
-void si_llvm_build_vs_exports(struct si_shader_context *ctx, LLVMValueRef num_export_threads,
+void si_llvm_build_vs_exports(struct si_shader_context *ctx,
                               struct si_shader_output_values *outputs, unsigned noutput)
 {
    struct si_shader *shader = ctx->shader;
@@ -583,8 +517,6 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx, LLVMValueRef num_ex
                              ~shader->key.ge.opt.kill_clip_distances) |
                             shader->selector->info.culldist_mask;
    int i;
-
-   si_vertex_color_clamping(ctx, outputs, noutput);
 
    /* Build position exports. */
    for (i = 0; i < noutput; i++) {
@@ -765,7 +697,9 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx, LLVMValueRef num_ex
       ac_build_export(&ctx->ac, &pos_args[i]);
    }
 
-   if (!shader->info.nr_param_exports)
+   if (!shader->info.nr_param_exports ||
+       /* GFX11 param export is handled in nir */
+       ctx->screen->info.gfx_level >= GFX11)
       return;
 
    /* Build parameter exports. Use 2 loops to export params in ascending order.
@@ -785,88 +719,9 @@ void si_llvm_build_vs_exports(struct si_shader_context *ctx, LLVMValueRef num_ex
                                   &param_exports[offset]);
    }
 
-   if (ctx->screen->info.gfx_level >= GFX11) {
-      /* Store primitive exports to alloca variables, so that we can read them outside this branch. */
-      for (unsigned i = 0; i < shader->info.nr_param_exports; i++) {
-         for (unsigned chan = 0; chan < 4; chan++) {
-            param_exports[i].out[chan] =
-               ac_build_alloca_init(&ctx->ac, param_exports[i].out[chan], "");
-         }
-      }
-      ac_build_endif(&ctx->ac, 0);
-
-      if (!num_export_threads)
-         num_export_threads = si_unpack_param(ctx, ctx->args.merged_wave_info, 0, 8);
-
-      /* We should always store full vec4s in groups of 8 lanes for the best performance even if
-       * some of them are garbage or have unused components, so align the number of export threads
-       * to 8.
-       */
-      num_export_threads = LLVMBuildAdd(ctx->ac.builder, num_export_threads,
-                                        LLVMConstInt(ctx->ac.i32, 7, 0), "");
-      num_export_threads = LLVMBuildAnd(ctx->ac.builder, num_export_threads,
-                                        LLVMConstInt(ctx->ac.i32, ~7, 0), "");
-      ac_build_ifcc(&ctx->ac,
-                    LLVMBuildICmp(ctx->ac.builder, LLVMIntULT,
-                                  ac_get_thread_id(&ctx->ac), num_export_threads, ""), 0);
-
-      /* Get the attribute ring address and descriptor. */
-      LLVMValueRef attr_address;
-      if (ctx->stage == MESA_SHADER_VERTEX && shader->selector->info.base.vs.blit_sgprs_amd) {
-         struct ac_llvm_pointer ring_ptr = ac_get_ptr_arg(&ctx->ac, &ctx->args, ctx->internal_bindings);
-         ring_ptr.pointee_type = ctx->ac.i32;
-         attr_address = ac_build_load_to_sgpr(&ctx->ac, ring_ptr,
-                                              LLVMConstInt(ctx->ac.i32, SI_GS_ATTRIBUTE_RING * 4, 0));
-      } else {
-         attr_address = ac_get_arg(&ctx->ac, ctx->gs_attr_address);
-      }
-
-      unsigned stride = 16 * shader->info.nr_param_exports;
-      LLVMValueRef attr_desc[4] = {
-         attr_address,
-         LLVMConstInt(ctx->ac.i32, S_008F04_BASE_ADDRESS_HI(ctx->screen->info.address32_hi) |
-                                   S_008F04_STRIDE(stride) |
-                                   S_008F04_SWIZZLE_ENABLE_GFX11(3) /* 16B */, 0),
-         LLVMConstInt(ctx->ac.i32, 0xffffffff, 0),
-         LLVMConstInt(ctx->ac.i32, S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
-                                   S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
-                                   S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) |
-                                   S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W) |
-                                   S_008F0C_FORMAT(V_008F0C_GFX11_FORMAT_32_32_32_32_FLOAT) |
-                                   S_008F0C_INDEX_STRIDE(2) /* 32 elements */, 0),
-      };
-      LLVMValueRef attr_rsrc = ac_build_gather_values(&ctx->ac, attr_desc, 4);
-      LLVMValueRef attr_offset = LLVMBuildShl(ctx->ac.builder,
-                                              si_unpack_param(ctx, ctx->args.gs_attr_offset, 0, 15),
-                                              LLVMConstInt(ctx->ac.i32, 9, 0), ""); /* 512B increments */
-      LLVMValueRef vindex = gfx10_get_thread_id_in_tg(ctx);
-
-      LLVMValueRef soffset[32];
-
-      /* Compute scalar offsets first. */
-      for (unsigned i = 0; i < shader->info.nr_param_exports; i++) {
-         soffset[i] = LLVMBuildAdd(ctx->ac.builder, attr_offset,
-                                   LLVMConstInt(ctx->ac.i32, 32 * i * 16, 0), "");
-      }
-
-      /* Write attributes to the attribute ring buffer. */
-      for (unsigned i = 0; i < shader->info.nr_param_exports; i++) {
-         for (unsigned chan = 0; chan < 4; chan++) {
-            param_exports[i].out[chan] =
-               LLVMBuildLoad2(ctx->ac.builder, ctx->ac.f32, param_exports[i].out[chan], "");
-         }
-
-         LLVMValueRef vdata = ac_build_gather_values_extended(&ctx->ac, param_exports[i].out,
-                                                              4, 1, false);
-
-         ac_build_buffer_store_dword(&ctx->ac, attr_rsrc, vdata, vindex,
-                                     ctx->ac.i32_0, soffset[i], ac_swizzled);
-      }
-   } else {
-      /* Export attributes using parameter exports. */
-      for (unsigned i = 0; i < shader->info.nr_param_exports; i++)
-         ac_build_export(&ctx->ac, &param_exports[i]);
-   }
+   /* Export attributes using parameter exports. */
+   for (unsigned i = 0; i < shader->info.nr_param_exports; i++)
+      ac_build_export(&ctx->ac, &param_exports[i]);
 }
 
 void si_llvm_vs_build_end(struct si_shader_context *ctx)
@@ -903,7 +758,7 @@ void si_llvm_vs_build_end(struct si_shader_context *ctx)
       i++;
    }
 
-   si_llvm_build_vs_exports(ctx, NULL, outputs, i);
+   si_llvm_build_vs_exports(ctx, outputs, i);
    FREE(outputs);
 }
 
@@ -937,7 +792,7 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
    unsigned num_all_input_regs = key->vs_prolog.num_input_sgprs + num_input_vgprs;
    unsigned user_sgpr_base = key->vs_prolog.num_merged_next_stage_vgprs ? 8 : 0;
 
-   memset(&ctx->args, 0, sizeof(ctx->args));
+   memset(ctx->args, 0, sizeof(*ctx->args));
 
    /* 4 preloaded VGPRs + vertex load indices as prolog outputs */
    returns = alloca((num_all_input_regs + key->vs_prolog.num_inputs) * sizeof(LLVMTypeRef));
@@ -945,13 +800,13 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
 
    /* Declare input and output SGPRs. */
    for (i = 0; i < key->vs_prolog.num_input_sgprs; i++) {
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &input_sgpr_param[i]);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &input_sgpr_param[i]);
       returns[num_returns++] = ctx->ac.i32;
    }
 
    /* Preloaded VGPRs (outputs must be floats) */
    for (i = 0; i < num_input_vgprs; i++) {
-      ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, &input_vgpr_param[i]);
+      ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &input_vgpr_param[i]);
       returns[num_returns++] = ctx->ac.f32;
    }
 
@@ -984,18 +839,6 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
             input_vgprs[i + 1] = LLVMBuildSelect(ctx->ac.builder, has_hs_threads,
                                                  input_vgprs[i + 1], input_vgprs[i - 1], "");
          }
-      }
-   }
-
-   /* The culling code stored the LDS addresses of the VGPRs into those VGPRs. Load them. */
-   if (key->vs_prolog.load_vgprs_after_culling) {
-      for (i = 5; i <= 8; i++) {
-         bool is_tes_rel_patch_id = i == 7;
-         LLVMTypeRef t = is_tes_rel_patch_id ? ctx->ac.i8 : ctx->ac.i32;
-         input_vgprs[i] = LLVMBuildIntToPtr(ctx->ac.builder, input_vgprs[i], LLVMPointerType(t, AC_ADDR_SPACE_LDS), "");
-         input_vgprs[i] = LLVMBuildLoad2(ctx->ac.builder, t, input_vgprs[i], "");
-         if (is_tes_rel_patch_id)
-            input_vgprs[i] = LLVMBuildZExt(ctx->ac.builder, input_vgprs[i], ctx->ac.i32, "");
       }
    }
 
@@ -1046,13 +889,13 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
                                             user_sgpr_base + SI_SGPR_BASE_VERTEX);
 
       index = ac_to_float(&ctx->ac, index);
-      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, index, ctx->args.arg_count + i, "");
+      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, index, ctx->args->ac.arg_count + i, "");
    }
 
    si_llvm_build_ret(ctx, ret);
 }
 
-void si_llvm_init_vs_callbacks(struct si_shader_context *ctx, bool ngg_cull_shader)
+void si_llvm_init_vs_callbacks(struct si_shader_context *ctx)
 {
    ctx->abi.load_inputs = si_load_vs_input;
 }

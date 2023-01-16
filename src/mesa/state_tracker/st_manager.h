@@ -35,8 +35,6 @@
 
 
 struct st_context;
-struct st_framebuffer;
-struct st_framebuffer_interface;
 struct gl_renderbuffer;
 struct pipe_surface;
 
@@ -49,9 +47,6 @@ st_manager_validate_framebuffers(struct st_context *st);
 bool
 st_manager_add_color_renderbuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
                                   gl_buffer_index idx);
-
-void
-st_framebuffer_interface_destroy(struct st_framebuffer_interface *stfbi);
 
 void
 st_manager_flush_swapbuffers(void);

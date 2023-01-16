@@ -56,6 +56,7 @@
 #define ETNA_DBG_NOCACHE         0x1000000 /* Disable shader cache */
 #define ETNA_DBG_LINEAR_PE       0x2000000 /* Enable linear PE */
 #define ETNA_DBG_MSAA            0x4000000 /* Enable MSAA */
+#define ETNA_DBG_SHARED_TS       0x8000000 /* Enable TS sharing */
 
 extern int etna_mesa_debug; /* set in etnaviv_screen.c from ETNA_MESA_DEBUG */
 
@@ -64,21 +65,21 @@ extern int etna_mesa_debug; /* set in etnaviv_screen.c from ETNA_MESA_DEBUG */
 #define DBG_F(flag, fmt, ...)                             \
    do {                                                   \
       if (etna_mesa_debug & (flag))                       \
-         mesa_logd("%s:%d: " fmt, __FUNCTION__, __LINE__, \
+         mesa_logd("%s:%d: " fmt, __func__, __LINE__,     \
                    ##__VA_ARGS__);                        \
    } while (0)
 
 #define DBG(fmt, ...)                                     \
    do {                                                   \
       if (etna_mesa_debug & ETNA_DBG_MSGS)                \
-         mesa_logd("%s:%d: " fmt, __FUNCTION__, __LINE__, \
+         mesa_logd("%s:%d: " fmt, __func__, __LINE__,     \
                    ##__VA_ARGS__);                        \
    } while (0)
 
 /* A serious bug, show this even in non-debug mode */
 #define BUG(fmt, ...)                                                  \
    do {                                                                \
-      mesa_loge("%s:%d: " fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+      mesa_loge("%s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);     \
    } while (0)
 
 #endif

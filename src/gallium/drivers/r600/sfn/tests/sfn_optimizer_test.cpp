@@ -88,6 +88,49 @@ TEST_F(TestShaderFromNir, FullOPtimizeLoop)
 
    check(sh, vs_nexted_loop_from_nir_expect_opt);
 }
+
+TEST_F(TestShaderFromNir, CombineRegisterToTexSrc)
+{
+const char *shader_input =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R0.x R1.x R2.x R3.x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+ALU ADD R2.x : R0.x R2.x {W}
+ALU MUL R3.x : R0.x R3.x {WL}
+ALU MOV S1.x@group : R2.x {W}
+ALU MOV S1.y@group : R3.x {WL}
+TEX SAMPLE S2.xyzw : S1.xy__ RID:18 SID:0 NNNN
+EXPORT_DONE PIXEL 0 S2.xyzw
+)";
+
+const char *shader_expect =
+   R"(FS
+CHIPCLASS EVERGREEN
+REGISTERS R1024.x@group R1024.y@group R0.x
+PROP MAX_COLOR_EXPORTS:1
+PROP COLOR_EXPORTS:1
+PROP COLOR_EXPORT_MASK:15
+OUTPUT LOC:0 NAME:1 MASK:15
+SHADER
+
+ALU ADD R1024.x@group : R0.x R1024.x@group {W}
+ALU MUL R1024.y@group : R0.x R1024.y@group {WL}
+TEX SAMPLE S2.xyzw : R1024.xy__ RID:18 SID:0 NNNN
+EXPORT_DONE PIXEL 0 S2.xyzw
+)";
+
+   auto sh = from_string(shader_input);
+
+   optimize(*sh);
+
+   check(sh, shader_expect);
+}
+
 TEST_F(TestShaderFromNir, OptimizeWithDestArrayValue)
 {
    auto sh = from_string(shader_with_dest_array);

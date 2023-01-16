@@ -102,7 +102,7 @@ This instruction replicates its result.
 
 .. opcode:: RSQ - Reciprocal Square Root
 
-This instruction replicates its result. The results are undefined for src <= 0.
+This instruction replicates its result. The results are undefined for *src* <= 0.
 
 .. math::
 
@@ -111,7 +111,7 @@ This instruction replicates its result. The results are undefined for src <= 0.
 
 .. opcode:: SQRT - Square Root
 
-This instruction replicates its result. The results are undefined for src < 0.
+This instruction replicates its result. The results are undefined for *src* < 0.
 
 .. math::
 
@@ -356,7 +356,7 @@ This instruction replicates its result.
 
 .. opcode:: LDEXP - Multiply Number by Integral Power of 2
 
-src1 is an integer.
+*src1* is an integer.
 
 .. math::
 
@@ -514,18 +514,18 @@ This instruction replicates its result.
 
 .. opcode:: TEX - Texture Lookup
 
-  for array textures src0.y contains the slice for 1D,
-  and src0.z contain the slice for 2D.
+  for array textures *src0.y* contains the slice for 1D,
+  and *src0.z* contain the slice for 2D.
 
   for shadow textures with no arrays (and not cube map),
-  src0.z contains the reference value.
+  *src0.z* contains the reference value.
 
-  for shadow textures with arrays, src0.z contains
-  the reference value for 1D arrays, and src0.w contains
+  for shadow textures with arrays, *src0.z* contains
+  the reference value for 1D arrays, and *src0.w* contains
   the reference value for 2D arrays and cube maps.
 
   for cube map array shadow textures, the reference value
-  cannot be passed in src0.w, and TEX2 must be used instead.
+  cannot be passed in *src0.w*, and TEX2 must be used instead.
 
 .. math::
 
@@ -708,10 +708,10 @@ This instruction replicates its result.
 .. opcode:: TXB - Texture Lookup With Bias
 
   for cube map array textures and shadow cube maps, the bias value
-  cannot be passed in src0.w, and TXB2 must be used instead.
+  cannot be passed in *src0.w*, and TXB2 must be used instead.
 
   if the target is a shadow texture, the reference value is always
-  in src.z (this prevents shadow 3d and shadow 2d arrays from
+  in *src.z* (this prevents shadow 3d and shadow 2d arrays from
   using this instruction, but this is not needed).
 
 .. math::
@@ -739,7 +739,7 @@ This instruction replicates its result.
   this encoding too, but this is not legal.
 
   if the target is a shadow cube map array, the reference value is in
-  src1.y.
+  *src1.y*.
 
 .. math::
 
@@ -800,10 +800,10 @@ This instruction replicates its result.
 .. opcode:: TXL - Texture Lookup With explicit LOD
 
   for cube map array textures, the explicit LOD value
-  cannot be passed in src0.w, and TXL2 must be used instead.
+  cannot be passed in *src0.w*, and TXL2 must be used instead.
 
   if the target is a shadow texture, the reference value is always
-  in src.z (this prevents shadow 3d / 2d array / cube targets from
+  in *src.z* (this prevents shadow 3d / 2d array / cube targets from
   using this instruction, but this is not needed).
 
 .. math::
@@ -831,7 +831,7 @@ This instruction replicates its result.
   this encoding too, but this is not legal.
 
   if the target is a shadow cube map array, the reference value is in
-  src1.y.
+  *src1.y*.
 
 .. math::
 
@@ -899,9 +899,9 @@ XXX doesn't look like most of the opcodes really belong here.
 
 .. opcode:: TXF - Texel Fetch
 
-  As per NV_gpu_shader4, extract a single texel from a specified texture
-  image or PIPE_BUFFER resource. The source sampler may not be a CUBE or
-  SHADOW.  src 0 is a
+  As per :ext:`GL_NV_gpu_program4`, extract a single texel from a specified
+  texture image or PIPE_BUFFER resource. The source sampler may not be a
+  CUBE or SHADOW.  *src0* is a
   four-component signed integer vector used to identify the single texel
   accessed. 3 components + level.  If the texture is multisampled, then
   the fourth component indicates the sample, not the mipmap level.
@@ -915,11 +915,11 @@ XXX doesn't look like most of the opcodes really belong here.
 
 .. opcode:: TXQ - Texture Size Query
 
-  As per NV_gpu_program4, retrieve the dimensions of the texture depending on
-  the target. For 1D (width), 2D/RECT/CUBE (width, height), 3D (width, height,
-  depth), 1D array (width, layers), 2D array (width, height, layers).
-  Also return the number of accessible levels (last_level - first_level + 1)
-  in W.
+  As per :ext:`GL_NV_gpu_program4`, retrieve the dimensions of the texture
+  depending on   the target. For 1D (width), 2D/RECT/CUBE (width, height),
+  3D (width, height, depth), 1D array (width, layers), 2D array (width,
+  height, layers).  Also return the number of accessible levels
+  (last_level - first_level + 1) in W.
 
   For components which don't return a resource dimension, their value
   is undefined.
@@ -951,15 +951,15 @@ XXX doesn't look like most of the opcodes really belong here.
 
 .. opcode:: TG4 - Texture Gather
 
-  As per ARB_texture_gather, gathers the four texels to be used in a bi-linear
-  filtering operation and packs them into a single register.  Only works with
-  2D, 2D array, cubemaps, and cubemaps arrays.  For 2D textures, only the
-  addressing modes of the sampler and the top level of any mip pyramid are
-  used. Set W to zero.  It behaves like the TEX instruction, but a filtered
-  sample is not generated. The four samples that contribute to filtering are
-  placed into XYZW in clockwise order, starting with the (u,v) texture
-  coordinate delta at the following locations (-, +), (+, +), (+, -), (-, -),
-  where the magnitude of the deltas are half a texel.
+  As per :ext:`GL_ARB_texture_gather`, gathers the four texels to be used in a
+  bi-linear   filtering operation and packs them into a single register.
+  Only works with 2D, 2D array, cubemaps, and cubemaps arrays.  For 2D
+  textures, only the addressing modes of the sampler and the top level of any
+  mip pyramid are used. Set W to zero.  It behaves like the TEX instruction,
+  but a filtered sample is not generated. The four samples that contribute to
+  filtering are placed into XYZW in clockwise order, starting with the (u,v)
+  texture coordinate delta at the following locations (-, +), (+, +), (+, -),
+  (-, -), where the magnitude of the deltas are half a texel.
 
   PIPE_CAP_TEXTURE_SM5 enhances this instruction to support shadow per-sample
   depth compares, single component selection, and a non-constant offset. It
@@ -1183,7 +1183,7 @@ Support for these opcodes indicated by PIPE_SHADER_CAP_INTEGERS (all of them?)
 
 .. opcode:: UDIV - Unsigned Integer Division
 
-   For division by zero, 0xffffffff is returned.
+   For division by zero, ``0xffffffff`` is returned.
 
 .. math::
 
@@ -1198,7 +1198,7 @@ Support for these opcodes indicated by PIPE_SHADER_CAP_INTEGERS (all of them?)
 
 .. opcode:: UMOD - Unsigned Integer Remainder
 
-   If second arg is zero, 0xffffffff is returned.
+   If *src1* is zero, ``0xffffffff`` is returned.
 
 .. math::
 
@@ -1317,7 +1317,7 @@ Support for these opcodes indicated by PIPE_SHADER_CAP_INTEGERS (all of them?)
 
 .. opcode:: SHL - Shift Left
 
-   The shift count is masked with 0x1f before the shift is applied.
+   The shift count is masked with ``0x1f`` before the shift is applied.
 
 .. math::
 
@@ -1332,7 +1332,7 @@ Support for these opcodes indicated by PIPE_SHADER_CAP_INTEGERS (all of them?)
 
 .. opcode:: ISHR - Arithmetic Shift Right (of Signed Integer)
 
-   The shift count is masked with 0x1f before the shift is applied.
+   The shift count is masked with ``0x1f`` before the shift is applied.
 
 .. math::
 
@@ -1347,7 +1347,7 @@ Support for these opcodes indicated by PIPE_SHADER_CAP_INTEGERS (all of them?)
 
 .. opcode:: USHR - Logical Shift Right
 
-   The shift count is masked with 0x1f before the shift is applied.
+   The shift count is masked with ``0x1f`` before the shift is applied.
 
 .. math::
 
@@ -1651,19 +1651,23 @@ Some require glsl version 1.30 (UIF/SWITCH/CASE/DEFAULT/ENDSWITCH).
 
 .. opcode:: CAL - Subroutine Call
 
-  push(pc)
-  pc = target
+  Pseudocode::
+
+    push(pc)
+    pc = target
 
 
 .. opcode:: RET - Subroutine Call Return
 
-  pc = pop()
+  Pseudocode::
+
+    pc = pop()
 
 
 .. opcode:: CONT - Continue
 
   Unconditionally moves the point of execution to the instruction after the
-  last bgnloop. The instruction must appear within a bgnloop/endloop.
+  last BGNLOOP. The instruction must appear within a BGNLOOP/ENDLOOP.
 
 .. note::
 
@@ -1673,17 +1677,17 @@ Some require glsl version 1.30 (UIF/SWITCH/CASE/DEFAULT/ENDSWITCH).
 
 .. opcode:: BGNLOOP - Begin a Loop
 
-  Start a loop. Must have a matching endloop.
+  Start a loop. Must have a matching ENDLOOP.
 
 
 .. opcode:: BGNSUB - Begin Subroutine
 
-  Starts definition of a subroutine. Must have a matching endsub.
+  Starts definition of a subroutine. Must have a matching ENDSUB.
 
 
 .. opcode:: ENDLOOP - End a Loop
 
-  End a loop started with bgnloop.
+  End a loop started with BGNLOOP.
 
 
 .. opcode:: ENDSUB - End Subroutine
@@ -1699,26 +1703,26 @@ Some require glsl version 1.30 (UIF/SWITCH/CASE/DEFAULT/ENDSWITCH).
 .. opcode:: BRK - Break
 
   Unconditionally moves the point of execution to the instruction after the
-  next endloop or endswitch. The instruction must appear within a loop/endloop
-  or switch/endswitch.
+  next ENDLOOP or ENDSWITCH. The instruction must appear within a
+  BGNLOOP/ENDLOOP or SWITCH/ENDSWITCH.
 
 
 .. opcode:: IF - Float If
 
   Start an IF ... ELSE .. ENDIF block.  Condition evaluates to true if
 
-    src0.x != 0.0
+    *src0.x* != 0.0
 
-  where src0.x is interpreted as a floating point register.
+  where *src0.x* is interpreted as a floating point register.
 
 
 .. opcode:: UIF - Bitwise If
 
   Start an UIF ... ELSE .. ENDIF block. Condition evaluates to true if
 
-    src0.x != 0
+    *src0.x* != 0
 
-  where src0.x is interpreted as an integer register.
+  where *src0.x* is interpreted as an integer register.
 
 
 .. opcode:: ELSE - Else
@@ -1738,7 +1742,7 @@ Some require glsl version 1.30 (UIF/SWITCH/CASE/DEFAULT/ENDSWITCH).
    ends when a BRK is hit, but just like in C falling through to other cases
    without a break is allowed. Similarly, DEFAULT label is allowed anywhere not
    just as last statement, and fallthrough is allowed into/from it.
-   CASE src arguments are evaluated at bit level against the SWITCH src argument.
+   CASE *src* arguments are evaluated at bit level against the SWITCH *src* argument.
 
    Example::
 
@@ -1757,7 +1761,7 @@ Some require glsl version 1.30 (UIF/SWITCH/CASE/DEFAULT/ENDSWITCH).
 
 .. opcode:: CASE - Switch case
 
-   This represents a switch case label. The src arg must be an integer immediate.
+   This represents a switch case label. The *src* arg must be an integer immediate.
 
 
 .. opcode:: DEFAULT - Switch default
@@ -1781,17 +1785,17 @@ interpolateAt* functions. The first argument of each of these must come from
 
 .. opcode:: INTERP_CENTROID - Interpolate at the centroid
 
-   Interpolates the varying specified by src0 at the centroid
+   Interpolates the varying specified by *src0* at the centroid
 
 .. opcode:: INTERP_SAMPLE - Interpolate at the specified sample
 
-   Interpolates the varying specified by src0 at the sample id specified by
-   src1.x (interpreted as an integer)
+   Interpolates the varying specified by *src0* at the sample id
+   specified by *src1.x* (interpreted as an integer)
 
 .. opcode:: INTERP_OFFSET - Interpolate at the specified offset
 
-   Interpolates the varying specified by src0 at the offset src1.xy from the
-   pixel center (interpreted as floats)
+   Interpolates the varying specified by *src0* at the offset *src1.xy*
+   from the pixel center (interpreted as floats)
 
 
 .. _doubleopcodes:
@@ -2179,7 +2183,7 @@ two-component vectors with 64-bits in each component.
 
 .. opcode:: U64SHL - Shift Left 64-bit Unsigned Integer
 
-   The shift count is masked with 0x3f before the shift is applied.
+   The shift count is masked with ``0x3f`` before the shift is applied.
 
 .. math::
 
@@ -2189,7 +2193,7 @@ two-component vectors with 64-bits in each component.
 
 .. opcode:: I64SHR - Arithmetic Shift Right (of 64-bit Signed Integer)
 
-   The shift count is masked with 0x3f before the shift is applied.
+   The shift count is masked with ``0x3f`` before the shift is applied.
 
 .. math::
 
@@ -2199,7 +2203,7 @@ two-component vectors with 64-bits in each component.
 
 .. opcode:: U64SHR - Logical Shift Right (of 64-bit Unsigned Integer)
 
-   The shift count is masked with 0x3f before the shift is applied.
+   The shift count is masked with ``0x3f`` before the shift is applied.
 
 .. math::
 
@@ -2970,16 +2974,16 @@ Functions
 ^^^^^^^^^^^^^^
 
 
-  :math:`|x|`       Absolute value of `x`.
+  :math:`|x|`       Absolute value of ``x``.
 
-  :math:`\lceil x \rceil` Ceiling of `x`.
+  :math:`\lceil x \rceil` Ceiling of ``x``.
 
   clamp(x,y,z)      Clamp x between y and z.
                     (x < y) ? y : (x > z) ? z : x
 
-  :math:`\lfloor x\rfloor` Floor of `x`.
+  :math:`\lfloor x\rfloor` Floor of ``x``.
 
-  :math:`\log_2{x}` Logarithm of `x`, base 2.
+  :math:`\log_2{x}` Logarithm of ``x``, base 2.
 
   max(x,y)          Maximum of x and y.
                     (x > y) ? x : y
@@ -2993,7 +2997,7 @@ Functions
 
   pop()             Pop from stack.
 
-  :math:`x^y`       `x` to the power `y`.
+  :math:`x^y`       ``x`` to the power ``y``.
 
   push(x)           Push x on stack.
 
@@ -3217,8 +3221,8 @@ where F will be positive when the fragment belongs to a front-facing polygon,
 and negative when the fragment belongs to a back-facing polygon.
 
 If it is a system value, it will be an integer vector in the form (F, 0, 0, 1),
-where F is 0xffffffff when the fragment belongs to a front-facing polygon and
-0 when the fragment belongs to a back-facing polygon.
+where F is ``0xffffffff`` when the fragment belongs to a front-facing polygon
+and ``0`` when the fragment belongs to a back-facing polygon.
 
 
 TGSI_SEMANTIC_EDGEFLAG
@@ -3533,7 +3537,7 @@ TGSI_SEMANTIC_VIEWPORT_MASK
 """""""""""""""""""""""""""
 
 A bit mask of viewports to broadcast the current primitive to. See
-GL_NV_viewport_array2 for more details.
+:ext:`GL_NV_viewport_array2` for more details.
 
 
 TGSI_SEMANTIC_TESS_DEFAULT_OUTER_LEVEL
@@ -3572,7 +3576,7 @@ DCL SVIEW[#], resource, type(s)
 Declares a shader input sampler view and assigns it to a SVIEW[#]
 register.
 
-resource can be one of BUFFER, 1D, 2D, 3D, 1DArray and 2DArray.
+resource can be one of BUFFER, 1D, 2D, 3D, 1D_ARRAY and 2D_ARRAY.
 
 type must be 1 or 4 entries (if specifying on a per-component
 level) out of UNORM, SNORM, SINT, UINT and FLOAT.
@@ -3600,8 +3604,8 @@ DCL RES[#], resource [, WR] [, RAW]
 Declares a shader input resource and assigns it to a RES[#]
 register.
 
-resource can be one of BUFFER, 1D, 2D, 3D, CUBE, 1DArray and
-2DArray.
+resource can be one of BUFFER, 1D, 2D, 3D, CUBE, 1D_ARRAY and
+2D_ARRAY.
 
 If the RAW keyword is not specified, the texture data will be
 subject to conversion, swizzling and scaling as required to yield
@@ -3662,7 +3666,7 @@ If LOWER_LEFT, the position will be (0,0) at the lower left corner and
 increase upward and rightward.
 
 OpenGL defaults to LOWER_LEFT, and is configurable with the
-GL_ARB_fragment_coord_conventions extension.
+:ext:`GL_ARB_fragment_coord_conventions` extension.
 
 DirectX 9/10 use UPPER_LEFT.
 
@@ -3680,7 +3684,7 @@ rasterization, which is instead controlled by half_pixel_center in the
 rasterizer.
 
 OpenGL defaults to HALF_INTEGER, and is configurable with the
-GL_ARB_fragment_coord_conventions extension.
+:ext:`GL_ARB_fragment_coord_conventions` extension.
 
 DirectX 9 uses INTEGER.
 DirectX 10 uses HALF_INTEGER.
@@ -3846,6 +3850,6 @@ well.
 | S                  | (s, s, s, s) | unknown            | unknown      |
 +--------------------+--------------+--------------------+--------------+
 
-.. [#envmap-bumpmap] http://www.opengl.org/registry/specs/ATI/envmap_bumpmap.txt
+.. [#envmap-bumpmap] https://registry.khronos.org/OpenGL/extensions/ATI/ATI_envmap_bumpmap.txt
 .. [#depth-tex-mode] the default is (z, z, z, 1) but may also be (0, 0, 0, z)
    or (z, z, z, z) depending on the value of GL_DEPTH_TEXTURE_MODE.

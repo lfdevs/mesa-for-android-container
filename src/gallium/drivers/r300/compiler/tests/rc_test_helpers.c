@@ -510,7 +510,7 @@ void init_compiler(
 	unsigned is_r400)
 {
 	struct rc_regalloc_state *rs = malloc(sizeof(struct rc_regalloc_state));
-	rc_init_regalloc_state(rs);
+	rc_init_regalloc_state(rs, program_type);
 	rc_init(c, rs);
 
 	c->is_r500 = is_r500;

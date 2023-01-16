@@ -39,7 +39,7 @@ The exact supported features vary per driver:
      - ``gpu.renderstages.msm``
    * - Intel
      - ``gpu.counters.i915``
-     - ``gpu.renderstages.i915``
+     - ``gpu.renderstages.intel``
    * - Panfrost
      - ``gpu.counters.panfrost``
      -
@@ -52,14 +52,14 @@ To capture a trace with Perfetto you need to take the following steps:
 1. Build Perfetto from sources available at ``subprojects/perfetto`` following
    `this guide <https://perfetto.dev/docs/quickstart/linux-tracing>`__.
 
-2. Create a `trace config <https://perfetto.dev/#/trace-config.md>`__, which is
+2. Create a `trace config <https://perfetto.dev/docs/concepts/config>`__, which is
    a json formatted text file with extension ``.cfg``, or use one of the config
    files under the ``src/tool/pps/cfg`` directory. More examples of config files
    can be found in ``subprojects/perfetto/test/configs``.
 
 3. Change directory to ``subprojects/perfetto`` and run a
-   `convenience script <https://perfetto.dev/#/running.md>`__ to start the
-   tracing service:
+   `convenience script <https://perfetto.dev/docs/quickstart/linux-tracing#capturing-a-trace>`__
+   to start the tracing service:
 
    .. code-block:: console
 
@@ -121,12 +121,12 @@ consequence, we need to ensure command buffers are properly
 instrumented for the Perfetto driver data sources prior to Perfetto
 actually collecting traces.
 
-This can be achieved by setting the ``GPU_TRACE_INSTRUMENT``
+This can be achieved by setting the :envvar:`MESA_GPU_TRACES`
 environment variable before starting a Vulkan application :
 
 .. code-block:: console
 
-   GPU_TRACE_INSTRUMENT=1 ./build/my_vulkan_app
+   MESA_GPU_TRACES=perfetto ./build/my_vulkan_app
 
 Driver Specifics
 ~~~~~~~~~~~~~~~~
@@ -147,7 +147,7 @@ Intel
 ^^^^^
 
 The Intel PPS driver needs root access to read system-wide
-`RenderBasic <https://software.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/gpu-metrics-reference.html>`__
+`RenderBasic <https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/gpu-metrics-reference.html>`__
 performance counters, so you can simply run it with sudo:
 
 .. code-block:: console

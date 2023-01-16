@@ -24,19 +24,6 @@
 #include "brw_nir.h"
 #include "compiler/nir/nir_builder.h"
 
-static nir_op
-get_conversion_op(nir_alu_type src_type,
-                  unsigned src_bit_size,
-                  nir_alu_type dst_type,
-                  unsigned dst_bit_size,
-                  nir_rounding_mode rounding_mode)
-{
-   nir_alu_type src_full_type = (nir_alu_type) (src_type | src_bit_size);
-   nir_alu_type dst_full_type = (nir_alu_type) (dst_type | dst_bit_size);
-
-   return nir_type_conversion_op(src_full_type, dst_full_type, rounding_mode);
-}
-
 static nir_rounding_mode
 get_opcode_rounding_mode(nir_op op)
 {
@@ -51,13 +38,15 @@ get_opcode_rounding_mode(nir_op op)
 }
 
 static void
-split_conversion(nir_builder *b, nir_alu_instr *alu, nir_op op1, nir_op op2)
+split_conversion(nir_builder *b, nir_alu_instr *alu, nir_alu_type src_type,
+                 nir_alu_type tmp_type, nir_alu_type dst_type,
+                 nir_rounding_mode rnd)
 {
    b->cursor = nir_before_instr(&alu->instr);
    assert(alu->dest.write_mask == 1);
    nir_ssa_def *src = nir_ssa_for_alu_src(b, alu, 0);
-   nir_ssa_def *tmp = nir_build_alu(b, op1, src, NULL, NULL, NULL);
-   nir_ssa_def *res = nir_build_alu(b, op2, tmp, NULL, NULL, NULL);
+   nir_ssa_def *tmp = nir_type_convert(b, src, src_type, tmp_type, nir_rounding_mode_undef);
+   nir_ssa_def *res = nir_type_convert(b, tmp, tmp_type, dst_type, rnd);
    nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, res);
    nir_instr_remove(&alu->instr);
 }
@@ -88,13 +77,9 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
     */
    if ((src_full_type == nir_type_float16 && dst_bit_size == 64) ||
        (src_bit_size == 64 && dst_full_type == nir_type_float16)) {
-      nir_op op1 = get_conversion_op(src_type, src_bit_size,
-                                     nir_type_float, 32,
-                                     nir_rounding_mode_undef);
-      nir_op op2 = get_conversion_op(nir_type_float, 32,
-                                     dst_type, dst_bit_size,
-                                     get_opcode_rounding_mode(alu->op));
-      split_conversion(b, alu, op1, op2);
+      split_conversion(b, alu, src_type, nir_type_float | 32,
+                       dst_type | dst_bit_size,
+                       get_opcode_rounding_mode(alu->op));
       return true;
    }
 
@@ -114,11 +99,8 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
     */
    if ((src_bit_size == 8 && dst_bit_size == 64) ||
        (src_bit_size == 64 && dst_bit_size == 8)) {
-      nir_op op1 = get_conversion_op(src_type, src_bit_size, dst_type, 32,
-                                     nir_rounding_mode_undef);
-      nir_op op2 = get_conversion_op(dst_type, 32, dst_type, dst_bit_size,
-                                     nir_rounding_mode_undef);
-      split_conversion(b, alu, op1, op2);
+      split_conversion(b, alu, src_type, dst_type | 32, dst_type | dst_bit_size,
+                       nir_rounding_mode_undef);
       return true;
    }
 

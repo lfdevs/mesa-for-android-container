@@ -217,7 +217,10 @@ async def parse_issues(commits: str) -> typing.List[str]:
 
 async def gather_bugs(version: str) -> typing.List[str]:
     commits = await gather_commits(version)
-    issues = await parse_issues(commits)
+    if commits:
+        issues = await parse_issues(commits)
+    else:
+        issues = []
 
     loop = asyncio.get_event_loop()
     async with aiohttp.ClientSession(loop=loop) as session:
@@ -295,7 +298,7 @@ def calculate_previous_version(version: str, is_point: bool) -> str:
 
 
 def get_features(is_point_release: bool) -> typing.Generator[str, None, None]:
-    p = pathlib.Path(__file__).parent.parent / 'docs' / 'relnotes' / 'new_features.txt'
+    p = pathlib.Path('docs') / 'relnotes' / 'new_features.txt'
     if p.exists() and p.stat().st_size > 0:
         if is_point_release:
             print("WARNING: new features being introduced in a point release", file=sys.stderr)
@@ -307,8 +310,33 @@ def get_features(is_point_release: bool) -> typing.Generator[str, None, None]:
         yield "None"
 
 
+def update_release_notes_index(version: str) -> None:
+    relnotes_index_path = pathlib.Path('docs') / 'relnotes.rst'
+
+    with relnotes_index_path.open('r') as f:
+        relnotes = f.readlines()
+
+    new_relnotes = []
+    first_list = True
+    second_list = True
+    for line in relnotes:
+        if first_list and line.startswith('-'):
+            first_list = False
+            new_relnotes.append(f'-  :doc:`{version} release notes <relnotes/{version}>`\n')
+        if not first_list and second_list and line.startswith('   relnotes/'):
+            second_list = False
+            new_relnotes.append(f'   relnotes/{version}\n')
+        new_relnotes.append(line)
+
+    with relnotes_index_path.open('w') as f:
+        for line in new_relnotes:
+            f.write(line)
+
+    subprocess.run(['git', 'add', relnotes_index_path])
+
+
 async def main() -> None:
-    v = pathlib.Path(__file__).parent.parent / 'VERSION'
+    v = pathlib.Path('VERSION')
     with v.open('rt') as f:
         raw_version = f.read().strip()
     is_point_release = '-rc' not in raw_version
@@ -325,7 +353,7 @@ async def main() -> None:
         gather_bugs(previous_version),
     )
 
-    final = pathlib.Path(__file__).parent.parent / 'docs' / 'relnotes' / f'{this_version}.rst'
+    final = pathlib.Path('docs') / 'relnotes' / f'{this_version}.rst'
     with final.open('wt') as f:
         try:
             f.write(TEMPLATE.render(
@@ -343,8 +371,12 @@ async def main() -> None:
             ))
         except:
             print(exceptions.text_error_template().render())
+            return
 
     subprocess.run(['git', 'add', final])
+
+    update_release_notes_index(this_version)
+
     subprocess.run(['git', 'commit', '-m',
                     f'docs: add release notes for {this_version}'])
 

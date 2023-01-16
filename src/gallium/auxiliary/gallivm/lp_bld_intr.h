@@ -53,18 +53,8 @@ enum lp_func_attr {
    LP_FUNC_ATTR_INREG        = (1 << 2),
    LP_FUNC_ATTR_NOALIAS      = (1 << 3),
    LP_FUNC_ATTR_NOUNWIND     = (1 << 4),
-   LP_FUNC_ATTR_READNONE     = (1 << 5),
-   LP_FUNC_ATTR_READONLY     = (1 << 6),
-   LP_FUNC_ATTR_WRITEONLY    = (1 << 7),
-   LP_FUNC_ATTR_INACCESSIBLE_MEM_ONLY = (1 << 8),
-   LP_FUNC_ATTR_CONVERGENT   = (1 << 9),
-   LP_FUNC_ATTR_PRESPLITCORO = (1 << 10),
-
-   /* Legacy intrinsic that needs attributes on function declarations
-    * and they must match the internal LLVM definition exactly, otherwise
-    * intrinsic selection fails.
-    */
-   LP_FUNC_ATTR_LEGACY       = (1u << 31),
+   LP_FUNC_ATTR_CONVERGENT   = (1 << 5),
+   LP_FUNC_ATTR_PRESPLITCORO = (1 << 6),
 };
 
 void

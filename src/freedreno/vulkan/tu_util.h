@@ -207,6 +207,20 @@ tu6_blend_factor(VkBlendFactor factor)
    return lookup[factor];
 }
 
+static inline bool
+tu_blend_factor_is_dual_src(VkBlendFactor factor)
+{
+   switch (factor) {
+   case VK_BLEND_FACTOR_SRC1_COLOR:
+   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
+   case VK_BLEND_FACTOR_SRC1_ALPHA:
+   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
+      return true;
+   default:
+      return false;
+   }
+}
+
 static inline enum a3xx_rb_blend_opcode
 tu6_blend_op(VkBlendOp op)
 {

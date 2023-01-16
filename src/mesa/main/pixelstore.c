@@ -28,7 +28,7 @@
  */
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "bufferobj.h"
 #include "context.h"
 #include "pixelstore.h"

@@ -1,10 +1,3 @@
-$dxil_dll = cmd.exe /C "C:\BuildTools\Common7\Tools\VsDevCmd.bat -host_arch=amd64 -arch=amd64 -no_logo && where dxil.dll" 2>&1
-if ($dxil_dll -notmatch "dxil.dll$") {
-    Write-Output "Couldn't get path to dxil.dll"
-    exit 1
-}
-$env:Path = "$(Split-Path $dxil_dll);$env:Path"
-
 # VK_ICD_FILENAMES environment variable is not used when running with
 # elevated privileges. Add a key to the registry instead.
 $hkey_path = "HKLM:\SOFTWARE\Khronos\Vulkan\Drivers\"

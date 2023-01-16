@@ -67,10 +67,48 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
                                     enum tu_gmem_layout gmem_layout)
 {
    const uint32_t tile_align_w = pass->tile_align_w;
-   const uint32_t tile_align_h = dev->physical_device->info->tile_align_h;
+   uint32_t tile_align_h = dev->physical_device->info->tile_align_h;
    const uint32_t max_tile_width = dev->physical_device->info->tile_max_w;
    const uint32_t max_tile_height = dev->physical_device->info->tile_max_h;
    struct tu_tiling_config *tiling = &fb->tiling[gmem_layout];
+
+   /* From the Vulkan 1.3.232 spec, under VkFramebufferCreateInfo:
+    *
+    *   If the render pass uses multiview, then layers must be one and each
+    *   attachment requires a number of layers that is greater than the
+    *   maximum bit index set in the view mask in the subpasses in which it is
+    *   used.
+    */
+
+   uint32_t layers = fb->layers;
+   if (pass->subpasses[0].multiview_mask) {
+      uint32_t view_mask = 0;
+      for (unsigned i = 0; i < pass->subpass_count; i++)
+         view_mask |= pass->subpasses[i].multiview_mask;
+      layers = util_logbase2(view_mask) + 1;
+   }
+
+   /* If there is more than one layer, we need to make sure that the layer
+    * stride is expressible as an offset in RB_BLIT_BASE_GMEM which ignores
+    * the low 12 bits. The layer stride seems to be implicitly calculated from
+    * the tile width and height so we need to adjust one of them.
+    */
+   const uint32_t gmem_align_log2 = 12;
+   const uint32_t gmem_align = 1 << gmem_align_log2;
+   uint32_t min_layer_stride = tile_align_h * tile_align_w * pass->min_cpp;
+   if (layers > 1 && align(min_layer_stride, gmem_align) != min_layer_stride) {
+      /* Make sure that min_layer_stride is a multiple of gmem_align. Because
+       * gmem_align is a power of two and min_layer_stride isn't already a
+       * multiple of gmem_align, this is equivalent to shifting tile_align_h
+       * until the number of 0 bits at the bottom of min_layer_stride is at
+       * least gmem_align_log2.
+       */
+      tile_align_h <<= gmem_align_log2 - (ffs(min_layer_stride) - 1);
+
+      /* Check that we did the math right. */
+      min_layer_stride = tile_align_h * tile_align_w * pass->min_cpp;
+      assert(align(min_layer_stride, gmem_align) == min_layer_stride);
+   }
 
    /* start from 1 tile */
    tiling->tile_count = (VkExtent2D) {
@@ -110,16 +148,23 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
          util_align_npot(DIV_ROUND_UP(fb->height, tiling->tile_count.height), tile_align_h);
    }
 
+   tiling->possible = true;
+
    /* do not exceed gmem size */
-   while (tiling->tile0.width * tiling->tile0.height > pass->gmem_pixels[gmem_layout]) {
+   while (tiling->tile0.width * tiling->tile0.height * layers > pass->gmem_pixels[gmem_layout]) {
       if (tiling->tile0.width > MAX2(tile_align_w, tiling->tile0.height)) {
          tiling->tile_count.width++;
          tiling->tile0.width =
             util_align_npot(DIV_ROUND_UP(fb->width, tiling->tile_count.width), tile_align_w);
       } else {
-         /* if this assert fails then layout is impossible.. */
-         assert(tiling->tile0.height > tile_align_h);
          tiling->tile_count.height++;
+         if (DIV_ROUND_UP(fb->height, tiling->tile_count.height) < tile_align_h) {
+            /* Tiling is impossible. This may happen when there is more than
+             * one layer.
+             */
+            tiling->possible = false;
+            return;
+         }
          tiling->tile0.height =
             align(DIV_ROUND_UP(fb->height, tiling->tile_count.height), tile_align_h);
       }

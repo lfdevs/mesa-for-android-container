@@ -516,7 +516,7 @@ bool alu_group_tracker::try_reserve(alu_node* n) {
 	gpr.reset();
 
 	slots[slot] = n;
-	unsigned forced_swz_slots = 0;
+	UNUSED unsigned forced_swz_slots = 0;
 	int first_slot = ~0, first_nf = ~0, last_slot = ~0;
 	unsigned save_bs[5];
 

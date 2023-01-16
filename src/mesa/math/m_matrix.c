@@ -37,10 +37,8 @@
 #include <math.h>
 
 #include "main/errors.h"
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/macros.h"
-#define MATH_ASM_PTR_SIZE sizeof(void *)
-#include "math/m_vector_asm.h"
 
 #include "m_matrix.h"
 
@@ -116,22 +114,6 @@
  */
 #define TEST_MAT_FLAGS(mat, a)  \
     ((MAT_FLAGS_GEOMETRY & (~(a)) & ((mat)->flags) ) == 0)
-
-
-
-/**
- * Names of the corresponding GLmatrixtype values.
- */
-static const char *types[] = {
-   "MATRIX_GENERAL",
-   "MATRIX_IDENTITY",
-   "MATRIX_3D_NO_ROT",
-   "MATRIX_PERSPECTIVE",
-   "MATRIX_2D",
-   "MATRIX_2D_NO_ROT",
-   "MATRIX_3D"
-};
-
 
 /**
  * Identity matrix.
@@ -272,48 +254,6 @@ _math_matrix_mul_floats( GLmatrix *dest, const GLfloat *m )
 }
 
 /*@}*/
-
-
-/**********************************************************************/
-/** \name Matrix output */
-/*@{*/
-
-/**
- * Print a matrix array.
- *
- * \param m matrix array.
- *
- * Called by _math_matrix_print() to print a matrix or its inverse.
- */
-static void print_matrix_floats( const GLfloat m[16] )
-{
-   int i;
-   for (i=0;i<4;i++) {
-      _mesa_debug(NULL,"\t%f %f %f %f\n", m[i], m[4+i], m[8+i], m[12+i] );
-   }
-}
-
-/**
- * Dumps the contents of a GLmatrix structure.
- *
- * \param m pointer to the GLmatrix structure.
- */
-void
-_math_matrix_print( const GLmatrix *m )
-{
-   GLfloat prod[16];
-
-   _mesa_debug(NULL, "Matrix type: %s, flags: %x\n", types[m->type], m->flags);
-   print_matrix_floats(m->m);
-   _mesa_debug(NULL, "Inverse: \n");
-   print_matrix_floats(m->inv);
-   matmul4(prod, m->m, m->inv);
-   _mesa_debug(NULL, "Mat * Inverse:\n");
-   print_matrix_floats(prod);
-}
-
-/*@}*/
-
 
 /**
  * References an element of 4x4 matrix.
@@ -589,34 +529,6 @@ static GLboolean invert_matrix_2d_no_rot( GLmatrix *mat )
    return GL_TRUE;
 }
 
-#if 0
-/* broken */
-static GLboolean invert_matrix_perspective( GLmatrix *mat )
-{
-   const GLfloat *in = mat->m;
-   GLfloat *out = mat->inv;
-
-   if (MAT(in,2,3) == 0)
-      return GL_FALSE;
-
-   memcpy( out, Identity, sizeof(Identity) );
-
-   MAT(out,0,0) = 1.0F / MAT(in,0,0);
-   MAT(out,1,1) = 1.0F / MAT(in,1,1);
-
-   MAT(out,0,3) = MAT(in,0,2);
-   MAT(out,1,3) = MAT(in,1,2);
-
-   MAT(out,2,2) = 0;
-   MAT(out,2,3) = -1;
-
-   MAT(out,3,2) = 1.0F / MAT(in,2,3);
-   MAT(out,3,3) = MAT(in,2,2) * MAT(out,3,2);
-
-   return GL_TRUE;
-}
-#endif
-
 /**
  * Matrix inversion function pointer type.
  */
@@ -629,14 +541,7 @@ static inv_mat_func inv_mat_tab[7] = {
    invert_matrix_general,
    invert_matrix_identity,
    invert_matrix_3d_no_rot,
-#if 0
-   /* Don't use this function for now - it fails when the projection matrix
-    * is premultiplied by a translation (ala Chromium's tilesort SPU).
-    */
-   invert_matrix_perspective,
-#else
    invert_matrix_general,
-#endif
    invert_matrix_3d,		/* lazy! */
    invert_matrix_2d_no_rot,
    invert_matrix_3d
@@ -1304,31 +1209,6 @@ _math_matrix_is_length_preserving( const GLmatrix *m )
 {
    return TEST_MAT_FLAGS( m, MAT_FLAGS_LENGTH_PRESERVING);
 }
-
-
-/**
- * Test if the given matrix does any rotation.
- * (or perhaps if the upper-left 3x3 is non-identity)
- */
-GLboolean
-_math_matrix_has_rotation( const GLmatrix *m )
-{
-   if (m->flags & (MAT_FLAG_GENERAL |
-                   MAT_FLAG_ROTATION |
-                   MAT_FLAG_GENERAL_3D |
-                   MAT_FLAG_PERSPECTIVE))
-      return GL_TRUE;
-   else
-      return GL_FALSE;
-}
-
-
-GLboolean
-_math_matrix_is_general_scale( const GLmatrix *m )
-{
-   return (m->flags & MAT_FLAG_GENERAL_SCALE) ? GL_TRUE : GL_FALSE;
-}
-
 
 GLboolean
 _math_matrix_is_dirty( const GLmatrix *m )

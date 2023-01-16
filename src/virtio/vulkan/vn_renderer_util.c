@@ -21,7 +21,7 @@ vn_renderer_submit_simple_sync(struct vn_renderer *renderer,
          &(const struct vn_renderer_submit_batch){
             .cs_data = cs_data,
             .cs_size = cs_size,
-            .sync_queue_cpu = true,
+            .ring_idx = 0, /* CPU ring */
             .syncs = &sync,
             .sync_values = &(const uint64_t){ 1 },
             .sync_count = 1,

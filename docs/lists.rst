@@ -20,7 +20,7 @@ These are the primary Mesa 3D / DRI mailing lists:
    - announcements of new Mesa versions are sent to this list. Very low
    traffic.
 
--  `dri-devel <http://lists.freedesktop.org/mailman/listinfo/dri-devel>`__
+-  `dri-devel <https://lists.freedesktop.org/mailman/listinfo/dri-devel>`__
    - for the Linux/BSD Direct Rendering Module (DRM) kernel modules
    supporting Mesa's userspace drivers
 
@@ -39,9 +39,9 @@ Follow the links above for list archives.
 
 The old Mesa lists hosted at SourceForge are no longer in use. The
 archives are still available, however:
-`mesa3d-announce <https://sourceforge.net/mailarchive/forum.php?forum_name=mesa3d-announce>`__,
-`mesa3d-users <https://sourceforge.net/mailarchive/forum.php?forum_name=mesa3d-users>`__,
-`mesa3d-dev <https://sourceforge.net/mailarchive/forum.php?forum_name=mesa3d-dev>`__.
+`mesa3d-announce <https://sourceforge.net/p/mesa3d/mailman/mesa3d-announce/>`__,
+`mesa3d-users <https://sourceforge.net/p/mesa3d/mailman/mesa3d-users/>`__,
+`mesa3d-dev <https://sourceforge.net/p/mesa3d/mailman/mesa3d-dev/>`__.
 
 IRC
 ---

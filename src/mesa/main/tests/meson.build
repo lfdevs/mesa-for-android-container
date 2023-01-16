@@ -18,7 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-files_main_test = files('enum_strings.cpp')
+files_main_test = files(
+  'enum_strings.cpp',
+  'disable_windows_include.c',
+)
+# disable_windows_include.c includes this generated header.
+files_main_test += main_marshal_generated_h
 link_main_test = []
 
 if with_shared_glapi
@@ -37,8 +42,8 @@ test(
   executable(
     'main_test',
     [files_main_test, main_dispatch_h],
-    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium],
-    dependencies : [idep_gtest, dep_clock, dep_dl, dep_thread, idep_mesautil],
+    include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
+    dependencies : [idep_gtest, dep_clock, dep_dl, dep_thread, idep_nir_headers, idep_mesautil],
     link_with : [libmesa, libgallium, link_main_test],
   ),
   suite : ['mesa'],

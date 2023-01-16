@@ -32,7 +32,7 @@
 
 agx_index
 agx_indexed_sysval(agx_context *ctx, enum agx_push_type type,
-      enum agx_size size, unsigned index, unsigned length)
+                   enum agx_size size, unsigned index, unsigned length)
 {
    /* Check if we already pushed */
    for (unsigned i = 0; i < ctx->out->push_ranges; ++i) {
@@ -48,18 +48,18 @@ agx_indexed_sysval(agx_context *ctx, enum agx_push_type type,
    /* Otherwise, push */
    assert(ctx->out->push_ranges < AGX_MAX_PUSH_RANGES);
 
-   ctx->out->push_count = ALIGN_POT(ctx->out->push_count, agx_size_align_16(size));
+   ctx->out->push_count =
+      ALIGN_POT(ctx->out->push_count, agx_size_align_16(size));
 
    unsigned base = ctx->out->push_count;
    ctx->out->push_count += length;
    assert(ctx->out->push_count <= AGX_NUM_UNIFORMS);
 
-   ctx->out->push[ctx->out->push_ranges++] = (struct agx_push) {
-      .type = type,
-      .base = base,
-      .length = length,
-      .indirect = false
-   };
+   ctx->out->push[ctx->out->push_ranges++] =
+      (struct agx_push){.type = type,
+                        .base = base,
+                        .length = length,
+                        .indirect = false};
 
    return agx_uniform(base + index, size);
 }
@@ -85,7 +85,7 @@ agx_vbo_base(agx_context *ctx, unsigned vbo)
    ctx->out->push_count += 4;
    assert(ctx->out->push_count <= AGX_NUM_UNIFORMS);
 
-   ctx->out->push[ctx->out->push_ranges++] = (struct agx_push) {
+   ctx->out->push[ctx->out->push_ranges++] = (struct agx_push){
       .type = AGX_PUSH_VBO_BASE,
       .base = base,
       .length = 4,

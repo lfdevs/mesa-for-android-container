@@ -132,11 +132,34 @@ typedef uint64_t (*u_trace_read_ts)(struct u_trace_context *utctx,
 typedef void (*u_trace_delete_flush_data)(struct u_trace_context *utctx,
       void *flush_data);
 
+enum u_trace_type {
+   U_TRACE_TYPE_PRINT = 1u << 0,
+   U_TRACE_TYPE_JSON = 1u << 1,
+   U_TRACE_TYPE_PERFETTO_ACTIVE = 1u << 2,
+   U_TRACE_TYPE_PERFETTO_ENV = 1u << 3,
+   U_TRACE_TYPE_MARKERS = 1u << 4,
+
+   U_TRACE_TYPE_PRINT_JSON = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_JSON,
+   U_TRACE_TYPE_PERFETTO = U_TRACE_TYPE_PERFETTO_ACTIVE | U_TRACE_TYPE_PERFETTO_ENV,
+
+   /*
+   * A mask of traces that require appending to the tracepoint chunk list.
+   */
+   U_TRACE_TYPE_REQUIRE_QUEUING = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_PERFETTO,
+   /*
+   * A mask of traces that require processing the tracepoint chunk list.
+   */
+   U_TRACE_TYPE_REQUIRE_PROCESSING = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_PERFETTO_ACTIVE,
+};
+
 /**
  * The trace context provides tracking for "in-flight" traces, once the
  * cmdstream that records timestamps has been flushed.
  */
 struct u_trace_context {
+   /* All traces enabled in this context */
+   enum u_trace_type enabled_traces;
+
    void *pctx;
 
    u_trace_create_ts_buffer  create_timestamp_buffer;
@@ -273,29 +296,44 @@ void u_trace_disable_event_range(struct u_trace_iterator begin_it,
 void u_trace_flush(struct u_trace *ut, void *flush_data, bool free_data);
 
 #ifdef HAVE_PERFETTO
-extern int ut_perfetto_enabled;
+static ALWAYS_INLINE bool
+u_trace_perfetto_active(struct u_trace_context* utctx) {
+   return p_atomic_read_relaxed(&utctx->enabled_traces) & U_TRACE_TYPE_PERFETTO_ACTIVE;
+}
 
 void u_trace_perfetto_start(void);
 void u_trace_perfetto_stop(void);
 #else
-#  define ut_perfetto_enabled 0
+static ALWAYS_INLINE bool
+u_trace_perfetto_active(UNUSED struct u_trace_context* utctx) {
+   return false;
+}
 #endif
 
 /**
- * Return whether instrumentations should be enabled or not.  This is called
- * from tracepoints.
+ * Return whether utrace is enabled at all or not, this can be used to
+ * gate any expensive traces.
  */
 static ALWAYS_INLINE bool
-u_trace_instrument(void)
-{
-   extern int _u_trace_instrument;
-   return p_atomic_read_relaxed(&_u_trace_instrument);
+u_trace_enabled(struct u_trace_context *utctx) {
+   return p_atomic_read_relaxed(&utctx->enabled_traces) != 0;
 }
 
-static inline bool
-u_trace_context_actively_tracing(struct u_trace_context *utctx)
-{
-   return !!utctx->out || (ut_perfetto_enabled > 0);
+/**
+ * Return whether chunks should be processed or not.
+ */
+static ALWAYS_INLINE bool
+u_trace_should_process(struct u_trace_context *utctx) {
+   return p_atomic_read_relaxed(&utctx->enabled_traces) & U_TRACE_TYPE_REQUIRE_PROCESSING;
+}
+
+/**
+ * Return whether to emit markers into the command stream even if the queue
+ * isn't active.
+ */
+static ALWAYS_INLINE bool
+u_trace_markers_enabled(struct u_trace_context *utctx) {
+   return p_atomic_read_relaxed(&utctx->enabled_traces) & U_TRACE_TYPE_MARKERS;
 }
 
 #ifdef __cplusplus

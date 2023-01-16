@@ -41,6 +41,7 @@
 #include "xm_api.h"
 #include "main/errors.h"
 #include "main/config.h"
+#include "pipe/p_compiler.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 

@@ -112,12 +112,11 @@ si_emit_compute(struct radv_device *device, struct radeon_cmdbuf *cs)
    }
 
    if (device->physical_device->rad_info.gfx_level >= GFX10) {
-      radeon_set_sh_reg_seq(cs, R_00B890_COMPUTE_USER_ACCUM_0, 5);
+      radeon_set_sh_reg_seq(cs, R_00B890_COMPUTE_USER_ACCUM_0, 4);
       radeon_emit(cs, 0); /* R_00B890_COMPUTE_USER_ACCUM_0 */
       radeon_emit(cs, 0); /* R_00B894_COMPUTE_USER_ACCUM_1 */
       radeon_emit(cs, 0); /* R_00B898_COMPUTE_USER_ACCUM_2 */
       radeon_emit(cs, 0); /* R_00B89C_COMPUTE_USER_ACCUM_3 */
-      radeon_emit(cs, 0); /* R_00B8A0_COMPUTE_PGM_RSRC3 */
    }
 
    /* This register has been moved to R_00CD20_COMPUTE_MAX_WAVE_ID
@@ -632,6 +631,15 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
       radeon_set_uconfig_reg(cs, R_031110_SPI_GS_THROTTLE_CNTL1, 0x12355123);
       radeon_set_uconfig_reg(cs, R_031114_SPI_GS_THROTTLE_CNTL2, 0x1544D);
    }
+
+   /* The exclusion bits can be set to improve rasterization efficiency if no sample lies on the
+    * pixel boundary (-8 sample offset). It's currently always TRUE because the driver doesn't
+    * support 16 samples.
+    */
+   bool exclusion = physical_device->rad_info.gfx_level >= GFX7;
+   radeon_set_context_reg(cs, R_02882C_PA_SU_PRIM_FILTER_CNTL,
+                              S_02882C_XMAX_RIGHT_EXCLUSION(exclusion) |
+                              S_02882C_YMAX_BOTTOM_EXCLUSION(exclusion));
 
    si_emit_compute(device, cs);
 }

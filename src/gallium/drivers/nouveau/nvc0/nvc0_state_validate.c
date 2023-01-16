@@ -5,57 +5,6 @@
 
 #include "nvc0/nvc0_context.h"
 
-#if 0
-static void
-nvc0_validate_zcull(struct nvc0_context *nvc0)
-{
-    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-    struct pipe_framebuffer_state *fb = &nvc0->framebuffer;
-    struct nv50_surface *sf = nv50_surface(fb->zsbuf);
-    struct nv50_miptree *mt = nv50_miptree(sf->base.texture);
-    struct nouveau_bo *bo = mt->base.bo;
-    uint32_t size;
-    uint32_t offset = align(mt->total_size, 1 << 17);
-    unsigned width, height;
-
-    assert(mt->base.base.depth0 == 1 && mt->base.base.array_size < 2);
-
-    size = mt->total_size * 2;
-
-    height = align(fb->height, 32);
-    width = fb->width % 224;
-    if (width)
-       width = fb->width + (224 - width);
-    else
-       width = fb->width;
-
-    BEGIN_NVC0(push, NVC0_3D(ZCULL_REGION), 1);
-    PUSH_DATA (push, 0);
-    BEGIN_NVC0(push, NVC0_3D(ZCULL_ADDRESS_HIGH), 2);
-    PUSH_DATAh(push, bo->offset + offset);
-    PUSH_DATA (push, bo->offset + offset);
-    offset += 1 << 17;
-    BEGIN_NVC0(push, NVC0_3D(ZCULL_LIMIT_HIGH), 2);
-    PUSH_DATAh(push, bo->offset + offset);
-    PUSH_DATA (push, bo->offset + offset);
-    BEGIN_NVC0(push, SUBC_3D(0x07e0), 2);
-    PUSH_DATA (push, size);
-    PUSH_DATA (push, size >> 16);
-    BEGIN_NVC0(push, SUBC_3D(0x15c8), 1); /* bits 0x3 */
-    PUSH_DATA (push, 2);
-    BEGIN_NVC0(push, NVC0_3D(ZCULL_WIDTH), 4);
-    PUSH_DATA (push, width);
-    PUSH_DATA (push, height);
-    PUSH_DATA (push, 1);
-    PUSH_DATA (push, 0);
-    BEGIN_NVC0(push, NVC0_3D(ZCULL_WINDOW_OFFSET_X), 2);
-    PUSH_DATA (push, 0);
-    PUSH_DATA (push, 0);
-    BEGIN_NVC0(push, NVC0_3D(ZCULL_INVALIDATE), 1);
-    PUSH_DATA (push, 0);
-}
-#endif
-
 static inline void
 nvc0_fb_set_null_rt(struct nouveau_pushbuf *push, unsigned i, unsigned layers)
 {

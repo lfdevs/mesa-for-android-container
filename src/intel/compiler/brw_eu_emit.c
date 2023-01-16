@@ -827,7 +827,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 
    if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
       assert(dest.file == BRW_GENERAL_REGISTER_FILE ||
-             dest.file == BRW_ARCHITECTURE_REGISTER_FILE);
+             (dest.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+              dest.nr == BRW_ARF_ACCUMULATOR));
 
       if (devinfo->ver >= 12) {
          brw_inst_set_3src_a1_dst_reg_file(devinfo, inst, dest.file);
@@ -907,7 +908,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
              (src0.file == BRW_ARCHITECTURE_REGISTER_FILE &&
               src0.type == BRW_REGISTER_TYPE_NF));
       assert(src1.file == BRW_GENERAL_REGISTER_FILE ||
-             src1.file == BRW_ARCHITECTURE_REGISTER_FILE);
+             (src1.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+              src1.nr == BRW_ARF_ACCUMULATOR));
       assert(src2.file == BRW_GENERAL_REGISTER_FILE ||
              src2.file == BRW_IMMEDIATE_VALUE);
 

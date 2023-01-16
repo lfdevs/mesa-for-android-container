@@ -218,9 +218,9 @@ create_resolve_pipeline(struct radv_device *device, int samples_log2, VkFormat f
 
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
-   result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), device->meta_state.cache,
-      &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc, pipeline);
+   result = radv_graphics_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                          &vk_pipeline_info, &radv_pipeline_info,
+                                          &device->meta_state.alloc, pipeline, true);
    ralloc_free(vs);
    ralloc_free(fs);
 
@@ -507,9 +507,9 @@ create_depth_stencil_resolve_pipeline(struct radv_device *device, int samples_lo
 
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
-   result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), device->meta_state.cache,
-      &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc, pipeline);
+   result = radv_graphics_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                          &vk_pipeline_info, &radv_pipeline_info,
+                                          &device->meta_state.alloc, pipeline, true);
 
    ralloc_free(vs);
    ralloc_free(fs);

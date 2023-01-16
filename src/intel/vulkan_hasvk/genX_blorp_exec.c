@@ -124,7 +124,6 @@ blorp_get_surface_address(struct blorp_batch *blorp_batch,
    }
 }
 
-#if GFX_VER >= 7 && GFX_VER < 10
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch)
 {
@@ -134,7 +133,6 @@ blorp_get_surface_base_address(struct blorp_batch *batch)
       .offset = 0,
    };
 }
-#endif
 
 static void *
 blorp_alloc_dynamic_state(struct blorp_batch *batch,
@@ -282,29 +280,6 @@ blorp_exec_on_render(struct blorp_batch *batch,
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
    assert(cmd_buffer->queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT);
 
-   const unsigned scale = params->fast_clear_op ? UINT_MAX : 1;
-   genX(cmd_buffer_emit_hashing_mode)(cmd_buffer, params->x1 - params->x0,
-                                      params->y1 - params->y0, scale);
-
-#if GFX_VER >= 11
-   /* The PIPE_CONTROL command description says:
-    *
-    *    "Whenever a Binding Table Index (BTI) used by a Render Target Message
-    *     points to a different RENDER_SURFACE_STATE, SW must issue a Render
-    *     Target Cache Flush by enabling this bit. When render target flush
-    *     is set due to new association of BTI, PS Scoreboard Stall bit must
-    *     be set in this packet."
-    */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_STALL_AT_SCOREBOARD_BIT,
-                             "before blorp BTI change");
-#endif
-
-   if (params->depth.enabled &&
-       !(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
-      genX(cmd_buffer_emit_gfx12_depth_wa)(cmd_buffer, &params->depth.surf);
-
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
    /* Apply any outstanding flushes in case pipeline select haven't. */
@@ -318,21 +293,6 @@ blorp_exec_on_render(struct blorp_batch *batch,
    genX(cmd_buffer_enable_pma_fix)(cmd_buffer, false);
 
    blorp_exec(batch, params);
-
-#if GFX_VER >= 11
-   /* The PIPE_CONTROL command description says:
-    *
-    *    "Whenever a Binding Table Index (BTI) used by a Render Target Message
-    *     points to a different RENDER_SURFACE_STATE, SW must issue a Render
-    *     Target Cache Flush by enabling this bit. When render target flush
-    *     is set due to new association of BTI, PS Scoreboard Stall bit must
-    *     be set in this packet."
-    */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_STALL_AT_SCOREBOARD_BIT,
-                             "after blorp BTI change");
-#endif
 
    /* Calculate state that does not get touched by blorp.
     * Flush everything else.

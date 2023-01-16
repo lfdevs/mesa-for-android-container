@@ -73,17 +73,26 @@
 #define TILE_BOTTOM_LEFT  2
 #define TILE_BOTTOM_RIGHT 3
 
+static_assert(alignof(union tgsi_exec_channel) == 16, "");
+static_assert(alignof(struct tgsi_exec_vector) == 16, "");
+static_assert(alignof(struct tgsi_exec_machine) == 16, "");
+
 union tgsi_double_channel {
+   alignas(16)
    double d[TGSI_QUAD_SIZE];
    unsigned u[TGSI_QUAD_SIZE][2];
    uint64_t u64[TGSI_QUAD_SIZE];
    int64_t i64[TGSI_QUAD_SIZE];
-} ALIGN16;
+};
 
-struct ALIGN16 tgsi_double_vector {
+struct tgsi_double_vector {
+   alignas(16)
    union tgsi_double_channel xy;
    union tgsi_double_channel zw;
 };
+
+static_assert(alignof(union tgsi_double_channel) == 16, "");
+static_assert(alignof(struct tgsi_double_vector) == 16, "");
 
 static void
 micro_abs(union tgsi_exec_channel *dst,

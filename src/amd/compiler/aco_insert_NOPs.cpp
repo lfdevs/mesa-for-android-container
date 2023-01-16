@@ -1052,9 +1052,7 @@ handle_lds_direct_valu_hazard_instr(LdsDirectVALUHazardGlobalState& global_state
                                     aco_ptr<Instruction>& instr)
 {
    if (instr->isVALU() || instr->isVINTERP_INREG()) {
-      instr_class cls = instr_info.classes[(int)instr->opcode];
-      block_state.has_trans |= cls == instr_class::valu_transcendental32 ||
-                               cls == instr_class::valu_double_transcendental;
+      block_state.has_trans |= instr->isTrans();
 
       bool uses_vgpr = false;
       for (Definition& def : instr->definitions)
@@ -1340,9 +1338,7 @@ handle_instruction_gfx11(State& state, NOP_ctx_gfx11& ctx, aco_ptr<Instruction>&
       ctx.sgpr_read_by_valu_as_lanemask_then_wr_by_salu.reset();
 
    if (instr->isVALU() || instr->isVINTERP_INREG()) {
-      instr_class cls = instr_info.classes[(int)instr->opcode];
-      bool is_trans = cls == instr_class::valu_transcendental32 ||
-                      cls == instr_class::valu_double_transcendental;
+      bool is_trans = instr->isTrans();
 
       ctx.valu_since_wr_by_trans.inc();
       if (is_trans)

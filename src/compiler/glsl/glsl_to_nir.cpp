@@ -1102,22 +1102,6 @@ nir_visitor::visit(ir_call *ir)
       case ir_intrinsic_image_sparse_load:
          op = nir_intrinsic_image_deref_sparse_load;
          break;
-      case ir_intrinsic_ssbo_store:
-      case ir_intrinsic_ssbo_load:
-      case ir_intrinsic_ssbo_atomic_add:
-      case ir_intrinsic_ssbo_atomic_and:
-      case ir_intrinsic_ssbo_atomic_or:
-      case ir_intrinsic_ssbo_atomic_xor:
-      case ir_intrinsic_ssbo_atomic_min:
-      case ir_intrinsic_ssbo_atomic_max:
-      case ir_intrinsic_ssbo_atomic_exchange:
-      case ir_intrinsic_ssbo_atomic_comp_swap:
-         /* SSBO store/loads should only have been lowered in GLSL IR for
-          * non-nir drivers, NIR drivers make use of gl_nir_lower_buffers()
-          * instead.
-          */
-         unreachable("Invalid operation nir doesn't want lowered ssbo "
-                     "store/loads");
       case ir_intrinsic_shader_clock:
          op = nir_intrinsic_shader_clock;
          break;
@@ -2032,9 +2016,8 @@ nir_visitor::visit(ir_expression *ir)
    case ir_unop_u642i64: {
       nir_alu_type src_type = nir_get_nir_type_for_glsl_base_type(types[0]);
       nir_alu_type dst_type = nir_get_nir_type_for_glsl_base_type(out_type);
-      result = nir_build_alu(&b, nir_type_conversion_op(src_type, dst_type,
-                                 nir_rounding_mode_undef),
-                                 srcs[0], NULL, NULL, NULL);
+      result = nir_type_convert(&b, srcs[0], src_type, dst_type,
+                                nir_rounding_mode_undef);
       /* b2i and b2f don't have fixed bit-size versions so the builder will
        * just assume 32 and we have to fix it up here.
        */

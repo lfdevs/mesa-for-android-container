@@ -471,7 +471,7 @@ is_upper_half_zero(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
 
    for (unsigned i = 0; i < num_components; i++) {
       unsigned half_bit_size = nir_src_bit_size(instr->src[src].src) / 2;
-      uint32_t high_bits = ((1 << half_bit_size) - 1) << half_bit_size;
+      uint64_t high_bits = u_bit_consecutive64(half_bit_size, half_bit_size);
       if ((nir_src_comp_as_uint(instr->src[src].src,
                                 swizzle[i]) & high_bits) != 0) {
          return false;
@@ -495,9 +495,45 @@ is_lower_half_zero(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
       return false;
 
    for (unsigned i = 0; i < num_components; i++) {
-      uint32_t low_bits =
-         (1 << (nir_src_bit_size(instr->src[src].src) / 2)) - 1;
-      if ((nir_src_comp_as_int(instr->src[src].src, swizzle[i]) & low_bits) != 0)
+      uint64_t low_bits = u_bit_consecutive64(0, nir_src_bit_size(instr->src[src].src) / 2);
+      if ((nir_src_comp_as_uint(instr->src[src].src, swizzle[i]) & low_bits) != 0)
+         return false;
+   }
+
+   return true;
+}
+
+static inline bool
+is_upper_half_negative_one(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+                           unsigned src, unsigned num_components,
+                           const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      unsigned half_bit_size = nir_src_bit_size(instr->src[src].src) / 2;
+      uint64_t high_bits = u_bit_consecutive64(half_bit_size, half_bit_size);
+      if ((nir_src_comp_as_uint(instr->src[src].src,
+                                swizzle[i]) & high_bits) != high_bits) {
+         return false;
+      }
+   }
+
+   return true;
+}
+
+static inline bool
+is_lower_half_negative_one(UNUSED struct hash_table *ht, const nir_alu_instr *instr,
+                           unsigned src, unsigned num_components,
+                           const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      uint64_t low_bits = u_bit_consecutive64(0, nir_src_bit_size(instr->src[src].src) / 2);
+      if ((nir_src_comp_as_uint(instr->src[src].src, swizzle[i]) & low_bits) != low_bits)
          return false;
    }
 

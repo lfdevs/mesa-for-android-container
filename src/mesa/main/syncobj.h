@@ -31,7 +31,7 @@
 #ifndef SYNCOBJ_H
 #define SYNCOBJ_H
 
-#include "glheader.h"
+#include "util/glheader.h"
 
 struct _glapi_table;
 struct dd_function_table;

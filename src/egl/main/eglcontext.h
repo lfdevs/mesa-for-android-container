@@ -69,7 +69,7 @@ struct _egl_context
 
 extern EGLBoolean
 _eglInitContext(_EGLContext *ctx, _EGLDisplay *disp,
-                _EGLConfig *config, const EGLint *attrib_list);
+                _EGLConfig *config, _EGLContext *share_list, const EGLint *attrib_list);
 
 
 extern EGLBoolean

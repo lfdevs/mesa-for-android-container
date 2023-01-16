@@ -45,6 +45,9 @@ class Driver
    Driver(const Driver &) = delete;
    Driver &operator=(const Driver &) = delete;
 
+   /// @return Whether dump_perfcnt is preemptible
+   virtual bool is_dump_perfcnt_preemptible() const { return true; }
+
    /// @return The minimum sampling period for the current device
    virtual uint64_t get_min_sampling_period_ns() = 0;
 

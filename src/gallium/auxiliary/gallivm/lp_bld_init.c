@@ -26,7 +26,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 #include "pipe/p_compiler.h"
 #include "util/macros.h"
 #include "util/u_cpu_detect.h"
@@ -50,7 +50,7 @@
 #if GALLIVM_USE_NEW_PASS == 1
 #include <llvm-c/Transforms/PassBuilder.h>
 #elif GALLIVM_HAVE_CORO == 1
-#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_MIPS64))
+#if LLVM_VERSION_MAJOR <= 8 && (DETECT_ARCH_AARCH64 || DETECT_ARCH_ARM || DETECT_ARCH_S390 || DETECT_ARCH_MIPS64)
 #include <llvm-c/Transforms/IPO.h>
 #endif
 #include <llvm-c/Transforms/Coroutines.h>
@@ -140,7 +140,7 @@ create_pass_manager(struct gallivm_state *gallivm)
    }
 
 #if GALLIVM_HAVE_CORO == 1
-#if LLVM_VERSION_MAJOR <= 8 && (defined(PIPE_ARCH_AARCH64) || defined (PIPE_ARCH_ARM) || defined(PIPE_ARCH_S390) || defined(PIPE_ARCH_MIPS64))
+#if LLVM_VERSION_MAJOR <= 8 && (DETECT_ARCH_AARCH64 || DETECT_ARCH_ARM || DETECT_ARCH_S390 || DETECT_ARCH_MIPS64)
    LLVMAddArgumentPromotionPass(gallivm->cgpassmgr);
    LLVMAddFunctionAttrsPass(gallivm->cgpassmgr);
 #endif
@@ -355,7 +355,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    if (!gallivm->module)
       goto fail;
 
-#if defined(PIPE_ARCH_X86)
+#if DETECT_ARCH_X86
    lp_set_module_stack_alignment_override(gallivm->module, 4);
 #endif
 
@@ -447,7 +447,7 @@ lp_build_init(void)
    lp_native_vector_width = debug_get_num_option("LP_NATIVE_VECTOR_WIDTH",
                                                  lp_native_vector_width);
 
-#ifdef PIPE_ARCH_PPC_64
+#if DETECT_ARCH_PPC_64
    /* Set the NJ bit in VSCR to 0 so denormalized values are handled as
     * specified by IEEE standard (PowerISA 2.06 - Section 6.3). This guarantees
     * that some rounding and half-float to float handling does not round
@@ -624,7 +624,7 @@ gallivm_compile_module(struct gallivm_state *gallivm)
 
    /* Disable frame pointer omission on debug/profile builds */
    /* XXX: And workaround http://llvm.org/PR21435 */
-#if defined(DEBUG) || defined(PROFILE) || defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
+#if defined(DEBUG) || defined(PROFILE) || DETECT_ARCH_X86 || DETECT_ARCH_X86_64
       LLVMAddTargetDependentFunctionAttr(func, "no-frame-pointer-elim", "true");
       LLVMAddTargetDependentFunctionAttr(func, "no-frame-pointer-elim-non-leaf", "true");
 #endif

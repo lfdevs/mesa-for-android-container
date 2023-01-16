@@ -49,6 +49,10 @@ class LogFollower:
             section_is_created == section_has_started
         ), "Can't follow logs beginning from uninitialized GitLab sections."
 
+        # Initialize fix_lava_gitlab_section_log generator
+        self.gl_section_fix_gen = fix_lava_gitlab_section_log()
+        next(self.gl_section_fix_gen)
+
     @property
     def phase(self) -> LogSectionType:
         return (
@@ -138,7 +142,7 @@ class LogFollower:
             # job is progressing
             is_job_healthy = True
             self.manage_gl_sections(line)
-            if parsed_line := parse_lava_line(line):
+            if parsed_line := self.parse_lava_line(line):
                 self._buffer.append(parsed_line)
 
         self.log_hints.detect_failure(new_lines)
@@ -150,55 +154,61 @@ class LogFollower:
         self._buffer = []
         return buffer
 
+    def parse_lava_line(self, line) -> Optional[str]:
+        prefix = ""
+        suffix = ""
 
-def fix_lava_color_log(line):
-    """This function is a temporary solution for the color escape codes mangling
-    problem. There is some problem in message passing between the LAVA
-    dispatcher and the device under test (DUT). Here \x1b character is missing
-    before `[:digit::digit:?:digit:?m` ANSI TTY color codes, or the more
-    complicated ones with number values for text format before background and
-    foreground colors.
-    When this problem is fixed on the LAVA side, one should remove this function.
-    """
-    line["msg"] = re.sub(r"(\[(\d+;){0,2}\d{1,3}m)", "\x1b" + r"\1", line["msg"])
+        if line["lvl"] in ["results", "feedback", "debug"]:
+            return
+        elif line["lvl"] in ["warning", "error"]:
+            prefix = CONSOLE_LOG["FG_RED"]
+            suffix = CONSOLE_LOG["RESET"]
+        elif line["lvl"] == "input":
+            prefix = "$ "
+            suffix = ""
+        elif line["lvl"] == "target":
+            # gl_section_fix_gen will output the stored line if it can't find a
+            # match for the first split line
+            # So we can recover it and put it back to the buffer
+            if recovered_first_line := self.gl_section_fix_gen.send(line):
+                self._buffer.append(recovered_first_line)
 
+        return f'{prefix}{line["msg"]}{suffix}'
 
-def fix_lava_gitlab_section_log(line):
+def fix_lava_gitlab_section_log():
     """This function is a temporary solution for the Gitlab section markers
-    mangling problem. Gitlab parses the following lines to define a collapsible
+    splitting problem. Gitlab parses the following lines to define a collapsible
     gitlab section in their log:
     - \x1b[0Ksection_start:timestamp:section_id[collapsible=true/false]\r\x1b[0Ksection_header
     - \x1b[0Ksection_end:timestamp:section_id\r\x1b[0K
     There is some problem in message passing between the LAVA dispatcher and the
-    device under test (DUT), that digests \x1b and \r control characters
-    incorrectly. When this problem is fixed on the LAVA side, one should remove
-    this function.
+    device under test (DUT), that replaces \r control characters into \n. When
+    this problem is fixed on the LAVA side, one should remove this function.
     """
-    if match := re.match(r"\[0K(section_\w+):(\d+):(\S+)\[0K([\S ]+)?", line["msg"]):
-        marker, timestamp, id_collapsible, header = match.groups()
-        # The above regex serves for both section start and end lines.
-        # When the header is None, it means we are dealing with `section_end` line
-        header = header or ""
-        line["msg"] = f"\x1b[0K{marker}:{timestamp}:{id_collapsible}\r\x1b[0K{header}"
+    while True:
+        line = yield False
+        first_line = None
+        split_line_pattern = re.compile(r"\x1b\[0K(section_\w+):(\d+):([^\s\r]+)$")
+        second_line_pattern = re.compile(r"\x1b\[0K([\S ]+)?")
 
+        if not re.search(split_line_pattern, line["msg"]):
+            continue
 
-def parse_lava_line(line) -> Optional[str]:
-    prefix = ""
-    suffix = ""
+        first_line = line["msg"]
+        # Delete the current line and hold this log line stream to be able to
+        # possibly merge it with the next line.
+        line["msg"] = ""
+        line = yield False
 
-    if line["lvl"] in ["results", "feedback", "debug"]:
-        return
-    elif line["lvl"] in ["warning", "error"]:
-        prefix = CONSOLE_LOG["FG_RED"]
-        suffix = CONSOLE_LOG["RESET"]
-    elif line["lvl"] == "input":
-        prefix = "$ "
-        suffix = ""
-    elif line["lvl"] == "target":
-        fix_lava_color_log(line)
-        fix_lava_gitlab_section_log(line)
+        # This code reached when we detect a possible first split line
+        if re.search(second_line_pattern, line["msg"]):
+            assert first_line
+            line["msg"] = f"{first_line}\r{line['msg']}"
+        else:
+            # The current line doesn't match with the previous one, send back the
+            # latter to give the user the chance to recover it.
+            yield first_line
 
-    return f'{prefix}{line["msg"]}{suffix}'
 
 
 def print_log(msg):
@@ -214,5 +224,5 @@ def fatal_err(msg):
     sys.exit(1)
 
 
-def hide_sensitive_data(yaml_data, hide_tag="HIDEME"):
+def hide_sensitive_data(yaml_data: str, hide_tag: str ="HIDEME"):
     return "".join(line for line in yaml_data.splitlines(True) if hide_tag not in line)

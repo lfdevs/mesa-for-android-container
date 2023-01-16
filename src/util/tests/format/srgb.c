@@ -3,7 +3,7 @@
 
 #include "util/macros.h"
 #include "util/format/u_format.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 
 int main(void)
 {

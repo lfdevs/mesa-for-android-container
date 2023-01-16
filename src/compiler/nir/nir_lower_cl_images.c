@@ -108,17 +108,21 @@ nir_dedup_inline_samplers(nir_shader *nir)
 }
 
 bool
-nir_lower_cl_images(nir_shader *shader)
+nir_lower_cl_images(nir_shader *shader, bool lower_image_derefs, bool lower_sampler_derefs)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
    ASSERTED int last_loc = -1;
    int num_rd_images = 0, num_wr_images = 0;
-   nir_foreach_image_variable(var, shader) {
+   nir_foreach_variable_with_modes(var, shader, nir_var_image | nir_var_uniform) {
+      if (!glsl_type_is_image(var->type) && !glsl_type_is_texture(var->type))
+         continue;
+
       /* Assume they come in order */
       assert(var->data.location > last_loc);
       last_loc = var->data.location;
 
+      assert(glsl_type_is_image(var->type) || var->data.access & ACCESS_NON_WRITEABLE);
       if (var->data.access & ACCESS_NON_WRITEABLE)
          var->data.driver_location = num_rd_images++;
       else
@@ -155,6 +159,12 @@ nir_lower_cl_images(nir_shader *shader)
    nir_builder b;
    nir_builder_init(&b, impl);
 
+   /* don't need any lowering if we can keep the derefs */
+   if (!lower_image_derefs && !lower_sampler_derefs) {
+      nir_metadata_preserve(impl, nir_metadata_all);
+      return false;
+   }
+
    bool progress = false;
    nir_foreach_block_reverse(block, impl) {
       nir_foreach_instr_reverse_safe(instr, block) {
@@ -165,7 +175,15 @@ nir_lower_cl_images(nir_shader *shader)
                break;
 
             if (!glsl_type_is_image(deref->type) &&
+                !glsl_type_is_texture(deref->type) &&
                 !glsl_type_is_sampler(deref->type))
+               break;
+
+            if (!lower_image_derefs && glsl_type_is_image(deref->type))
+               break;
+
+            if (!lower_sampler_derefs &&
+                (glsl_type_is_sampler(deref->type) || glsl_type_is_texture(deref->type)))
                break;
 
             b.cursor = nir_instr_remove(&deref->instr);
@@ -178,6 +196,9 @@ nir_lower_cl_images(nir_shader *shader)
          }
 
          case nir_instr_type_tex: {
+            if (!lower_sampler_derefs)
+               break;
+
             nir_tex_instr *tex = nir_instr_as_tex(instr);
             unsigned count = 0;
             for (unsigned i = 0; i < tex->num_srcs; i++) {
@@ -242,6 +263,9 @@ nir_lower_cl_images(nir_shader *shader)
             case nir_intrinsic_image_deref_atomic_dec_wrap:
             case nir_intrinsic_image_deref_size:
             case nir_intrinsic_image_deref_samples: {
+               if (!lower_image_derefs)
+                  break;
+
                assert(intrin->src[0].is_ssa);
                b.cursor = nir_before_instr(&intrin->instr);
                /* Back-ends expect a 32-bit thing, not 64-bit */

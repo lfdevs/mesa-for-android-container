@@ -35,7 +35,7 @@
 #ifndef LP_SCENE_H
 #define LP_SCENE_H
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "lp_rast.h"
 #include "lp_debug.h"
 

@@ -245,8 +245,6 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q, bool wait,
          p->accumulate_result(ctx, sampptr(period->start, i, ptr),
                               sampptr(period->end, i, ptr), result);
       }
-
-      fd_bo_cpu_fini(rsc->bo);
    }
 
    return true;

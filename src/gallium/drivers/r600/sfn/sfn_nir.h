@@ -132,6 +132,9 @@ r600_shader_from_nir(struct r600_context *rctx,
                      struct r600_pipe_shader *pipeshader,
                      union r600_shader_key *key);
 
+char *
+r600_finalize_nir(struct pipe_screen *screen, void *shader);
+
 #ifdef __cplusplus
 }
 #endif

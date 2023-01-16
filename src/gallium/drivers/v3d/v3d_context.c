@@ -293,6 +293,10 @@ v3d_context_destroy(struct pipe_context *pctx)
                 pctx->delete_fs_state(pctx, v3d->sand8_blit_fs_luma);
         if (v3d->sand8_blit_fs_chroma)
                 pctx->delete_fs_state(pctx, v3d->sand8_blit_fs_chroma);
+        if (v3d->sand30_blit_vs)
+                pctx->delete_vs_state(pctx, v3d->sand30_blit_vs);
+        if (v3d->sand30_blit_fs)
+                pctx->delete_fs_state(pctx, v3d->sand30_blit_fs);
 
         v3d_program_fini(pctx);
 

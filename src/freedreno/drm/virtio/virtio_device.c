@@ -35,7 +35,7 @@ virtio_device_destroy(struct fd_device *dev)
 {
    struct virtio_device *virtio_dev = to_virtio_device(dev);
 
-   fd_bo_del_locked(virtio_dev->shmem_bo);
+   fd_bo_del(virtio_dev->shmem_bo);
    util_vma_heap_finish(&virtio_dev->address_space);
 }
 
@@ -43,6 +43,7 @@ static const struct fd_device_funcs funcs = {
    .bo_new = virtio_bo_new,
    .bo_from_handle = virtio_bo_from_handle,
    .pipe_new = virtio_pipe_new,
+   .flush = virtio_execbuf_flush,
    .destroy = virtio_device_destroy,
 };
 
@@ -331,6 +332,7 @@ virtio_execbuf_flush(struct fd_device *dev)
 int
 virtio_execbuf(struct fd_device *dev, struct msm_ccmd_req *req, bool sync)
 {
+   MESA_TRACE_FUNC();
    struct virtio_device *virtio_dev = to_virtio_device(dev);
    int fence_fd, ret = 0;
 
@@ -387,6 +389,7 @@ virtio_host_sync(struct fd_device *dev, const struct msm_ccmd_req *req)
 int
 virtio_simple_ioctl(struct fd_device *dev, unsigned cmd, void *_req)
 {
+   MESA_TRACE_FUNC();
    unsigned req_len = sizeof(struct msm_ccmd_ioctl_simple_req);
    unsigned rsp_len = sizeof(struct msm_ccmd_ioctl_simple_rsp);
 

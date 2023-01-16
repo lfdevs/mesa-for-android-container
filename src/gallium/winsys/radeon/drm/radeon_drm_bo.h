@@ -29,7 +29,7 @@
 #define RADEON_DRM_BO_H
 
 #include "radeon_drm_winsys.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "pipebuffer/pb_slab.h"
 
 struct radeon_bo {

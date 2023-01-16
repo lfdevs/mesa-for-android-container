@@ -1,0 +1,45 @@
+
+# "../src/gallium/drivers/zink/zink_fence.c:130: fence_wait: Assertion `fence->batch_id' failed."
+.*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.4
+.*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.texsubimage2d.4
+
+# deqp-egl: ../src/intel/vulkan/anv_batch_chain.c:520: cmd_buffer_chain_to_batch_bo: Assertion `batch->end == current_bbo->bo->map + current_bbo->bo->size' failed.
+dEQP-EGL.functional.swap_buffers_with_damage.resize.*
+
+# around the time of kernel warnings about dma_resv
+# "ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
+#  ../src/vulkan/runtime/vk_object.h:101: vk_object_base_assert_valid: Assertion `base == NULL || base->type == obj_type' failed."
+dEQP-EGL.functional.query_context.get_current_display.*
+dEQP-EGL.functional.query_context.get_current_.*_window
+dEQP-EGL.functional.query_context.query_context.*_window
+
+# Probably more of the above.
+dEQP-EGL.functional.color_clears.*_window
+
+# MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
+dEQP-EGL.functional.render.*_window
+
+# Expected 15 15 15, observed 0 0 0
+glx@glx-multithread-texture
+
+# "../src/vulkan/wsi/wsi_common_x11.c:1387: Swapchain status changed to VK_ERROR_SURFACE_LOST_KHR
+#  XIO:  fatal IO error 11 (Resource temporarily unavailable) on X server ":0"
+#        after 130 requests (128 known processed) with 0 events remaining."
+glx@glx-multi-context-single-window
+
+spec@!opengl 1.1@depthstencil-default_fb-blit samples=.*
+
+# PIGLIT: {"subtest": {"Tessellation control-Fragment shader/'coherent' qualifier coherency test/256x256" : "pass"}}
+# Probe value at (166, 0, 0, 0)
+#   Expected: 33.000000 33.000000 33.000000 33.000000
+#   Observed: 77.000000 77.000000 77.000000 77.000000
+# PIGLIT: {"subtest": {"Tessellation evaluation-Geometry shader/'coherent' qualifier coherency test/256x256" : "fail"}}
+# PIGLIT: {"subtest": {"Tessellation evaluation-Fragment shader/'coherent' qualifier coherency test/256x256" : "pass"}}
+# PIGLIT: {"subtest": {"Geometry-Fragment shader/'coherent' qualifier coherency test/256x256" : "pass"}}
+# Probe value at (56, 15, 0, 0)
+#   Expected: 33.000000 33.000000 33.000000 33.000000
+#   Observed: 77.000000 77.000000 77.000000 77.000000
+# PIGLIT: {"subtest": {"Vertex-Tessellation control shader/'volatile' qualifier coherency test/256x256" : "fail"}}
+spec@arb_shader_image_load_store@coherency
+
+spec@glsl-4.00@execution@built-in-functions@fs-inverse-dmat4

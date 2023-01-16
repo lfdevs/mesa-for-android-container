@@ -35,13 +35,13 @@
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_sanity.h"
+#include "util/glheader.h"
 #include "util/u_debug.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "util/u_prim.h"
 #include "util/u_bitmask.h"
-#include "GL/gl.h"
 #include "compiler/shader_info.h"
 
 union tgsi_any_token {
@@ -2131,7 +2131,7 @@ const struct tgsi_token *ureg_finalize( struct ureg_program *ureg )
 
    if (ureg->domain[0].tokens == error_tokens ||
        ureg->domain[1].tokens == error_tokens) {
-      debug_printf("%s: error in generated shader\n", __FUNCTION__);
+      debug_printf("%s: error in generated shader\n", __func__);
       assert(0);
       return NULL;
    }
@@ -2139,7 +2139,7 @@ const struct tgsi_token *ureg_finalize( struct ureg_program *ureg )
    tokens = &ureg->domain[DOMAIN_DECL].tokens[0].token;
 
    if (0) {
-      debug_printf("%s: emitted shader %d tokens:\n", __FUNCTION__,
+      debug_printf("%s: emitted shader %d tokens:\n", __func__,
                    ureg->domain[DOMAIN_DECL].count);
       tgsi_dump( tokens, 0 );
    }

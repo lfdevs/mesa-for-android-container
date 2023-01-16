@@ -178,7 +178,7 @@ i915_update_derived(struct i915_context *i915)
    int i;
 
    if (I915_DBG_ON(DBG_ATOMS))
-      i915_dump_dirty(i915, __FUNCTION__);
+      i915_dump_dirty(i915, __func__);
 
    if (!i915->fs) {
       i915->dirty &= ~(I915_NEW_FS_CONSTANTS | I915_NEW_FS);

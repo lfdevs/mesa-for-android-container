@@ -829,12 +829,13 @@ disk_cache_write_item_to_disk(struct disk_cache_put_job *dc_job,
  */
 char *
 disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
-                              const char *driver_id)
+                              const char *driver_id,
+                              enum disk_cache_type cache_type)
 {
    char *cache_dir_name = CACHE_DIR_NAME;
-   if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false))
+   if (cache_type == DISK_CACHE_SINGLE_FILE)
       cache_dir_name = CACHE_DIR_NAME_SF;
-   else if (debug_get_bool_option("MESA_DISK_CACHE_DATABASE", false))
+   else if (cache_type == DISK_CACHE_DATABASE)
       cache_dir_name = CACHE_DIR_NAME_DB;
 
    char *path = getenv("MESA_SHADER_CACHE_DIR");
@@ -904,7 +905,7 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
          return NULL;
    }
 
-   if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false)) {
+   if (cache_type == DISK_CACHE_SINGLE_FILE) {
       path = concatenate_and_mkdir(mem_ctx, path, driver_id);
       if (!path)
          return NULL;

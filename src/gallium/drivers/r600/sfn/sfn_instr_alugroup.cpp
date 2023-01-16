@@ -123,12 +123,30 @@ AluGroup::add_trans_instructions(AluInstr *instr)
    if (!instr->has_alu_flag(alu_is_trans) && !m_slots[instr->dest_chan()]) {
       if (instr->dest() && instr->dest()->pin() == pin_free) {
          int used_slot = 3;
-         while (!m_slots[used_slot] && used_slot >= 0)
+         auto dest = instr->dest();
+         int free_mask = 0xf;
+
+         for (auto p : dest->parents()) {
+            auto alu = p->as_alu();
+            if (alu)
+               free_mask &= alu->allowed_dest_chan_mask();
+         }
+
+         for (auto u : dest->uses()) {
+            free_mask &= u->allowed_src_chan_mask();
+            if (!free_mask)
+               return false;
+         }
+
+         while (used_slot >= 0 &&
+                (!m_slots[used_slot] || !(free_mask & (1 << used_slot))))
             --used_slot;
 
          // if we schedule a non-trans instr into the trans slot,
          // there should always be some slot that is already used
-         assert(used_slot >= 0);
+         if (used_slot < 0)
+            return false;
+
          instr->dest()->set_chan(used_slot);
       }
    }
@@ -202,8 +220,14 @@ AluGroup::add_vec_instructions(AluInstr *instr)
       if (dest && (dest->pin() == pin_free || dest->pin() == pin_group)) {
 
          int free_mask = 0xf;
+         for (auto p : dest->parents()) {
+            auto alu = p->as_alu();
+            if (alu)
+               free_mask &= alu->allowed_dest_chan_mask();
+         }
+
          for (auto u : dest->uses()) {
-            free_mask &= u->allowed_dest_chan_mask();
+            free_mask &= u->allowed_src_chan_mask();
             if (!free_mask)
                return false;
          }

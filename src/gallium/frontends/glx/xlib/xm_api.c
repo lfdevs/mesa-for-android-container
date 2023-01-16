@@ -75,6 +75,9 @@
 
 #include <GL/glx.h>
 
+#include "state_tracker/st_context.h"
+#include "main/context.h"
+
 extern struct pipe_screen *
 xlib_create_screen(Display *display);
 
@@ -107,7 +110,7 @@ xmesa_strict_invalidate(void)
 }
 
 static int
-xmesa_get_param(struct st_manager *smapi,
+xmesa_get_param(struct pipe_frontend_screen *fscreen,
                 enum st_manager_param param)
 {
    switch(param) {
@@ -181,9 +184,8 @@ xmesa_close_display(Display *display)
     * }
     */
 
-   if (xmdpy->smapi->destroy)
-      xmdpy->smapi->destroy(xmdpy->smapi);
-   free(xmdpy->smapi);
+   st_screen_destroy(xmdpy->fscreen);
+   free(xmdpy->fscreen);
 
    XFree((char *) info);
 }
@@ -227,8 +229,8 @@ xmesa_init_display( Display *display )
    xmdpy->display = display;
    xmdpy->pipe = NULL;
 
-   xmdpy->smapi = CALLOC_STRUCT(st_manager);
-   if (!xmdpy->smapi) {
+   xmdpy->fscreen = CALLOC_STRUCT(pipe_frontend_screen);
+   if (!xmdpy->fscreen) {
       Xfree(info);
       mtx_unlock(&init_mutex);
       return NULL;
@@ -236,15 +238,15 @@ xmesa_init_display( Display *display )
 
    xmdpy->screen = xlib_create_screen(display);
    if (!xmdpy->screen) {
-      free(xmdpy->smapi);
+      free(xmdpy->fscreen);
       Xfree(info);
       mtx_unlock(&init_mutex);
       return NULL;
    }
 
-   /* At this point, both smapi and screen are known to be valid */
-   xmdpy->smapi->screen = xmdpy->screen;
-   xmdpy->smapi->get_param = xmesa_get_param;
+   /* At this point, both fscreen and screen are known to be valid */
+   xmdpy->fscreen->screen = xmdpy->screen;
+   xmdpy->fscreen->get_param = xmesa_get_param;
    (void) mtx_init(&xmdpy->mutex, mtx_plain);
 
    /* chain to the list of displays */
@@ -539,7 +541,7 @@ create_xmesa_buffer(Drawable d, BufferType type,
    /*
     * Create framebuffer, but we'll plug in our own renderbuffers below.
     */
-   b->stfb = xmesa_create_st_framebuffer(xmdpy, b);
+   b->drawable = xmesa_create_st_framebuffer(xmdpy, b);
 
    /* GLX_EXT_texture_from_pixmap */
    b->TextureTarget = 0;
@@ -597,12 +599,12 @@ xmesa_free_buffer(XMesaBuffer buffer)
          /* Notify the st manager that the associated framebuffer interface
           * object is no longer valid.
           */
-         st_api_destroy_drawable(buffer->stfb);
+         st_api_destroy_drawable(buffer->drawable);
 
          /* XXX we should move the buffer to a delete-pending list and destroy
           * the buffer until it is no longer current.
           */
-         xmesa_destroy_st_framebuffer(buffer->stfb);
+         xmesa_destroy_st_framebuffer(buffer->drawable);
 
          free(buffer);
 
@@ -956,7 +958,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
    if (contextFlags & GLX_CONTEXT_DEBUG_BIT_ARB)
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
    if (contextFlags & GLX_CONTEXT_ROBUST_ACCESS_BIT_ARB)
-      attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
+      attribs.context_flags |= PIPE_CONTEXT_ROBUST_BUFFER_ACCESS;
 
    switch (profileMask) {
    case GLX_CONTEXT_CORE_PROFILE_BIT_ARB:
@@ -968,7 +970,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
        *     of the context is determined solely by the requested version."
        */
       if (major > 3 || (major == 3 && minor >= 2)) {
-         attribs.profile = ST_PROFILE_OPENGL_CORE;
+         attribs.profile = API_OPENGL_CORE;
          break;
       }
       FALLTHROUGH;
@@ -987,16 +989,16 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
        * honour a 3.1 context is through core profile.
        */
       if (major == 3 && minor == 1) {
-         attribs.profile = ST_PROFILE_OPENGL_CORE;
+         attribs.profile = API_OPENGL_CORE;
       } else {
-         attribs.profile = ST_PROFILE_DEFAULT;
+         attribs.profile = API_OPENGL_COMPAT;
       }
       break;
    case GLX_CONTEXT_ES_PROFILE_BIT_EXT:
       if (major >= 2) {
-         attribs.profile = ST_PROFILE_OPENGL_ES2;
+         attribs.profile = API_OPENGLES2;
       } else {
-         attribs.profile = ST_PROFILE_OPENGL_ES1;
+         attribs.profile = API_OPENGLES;
       }
       break;
    default:
@@ -1004,14 +1006,15 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list,
       goto no_st;
    }
 
-   c->st = st_api_create_context(xmdpy->smapi, &attribs,
+   c->st = st_api_create_context(xmdpy->fscreen, &attribs,
          &ctx_err, (share_list) ? share_list->st : NULL);
    if (c->st == NULL)
       goto no_st;
 
-   c->st->st_manager_private = (void *) c;
+   c->st->frontend_context = (void *) c;
 
-   c->hud = hud_create(c->st->cso_context, c->st, NULL);
+   c->hud = hud_create(c->st->cso_context, NULL, c->st,
+                       st_context_invalidate_state);
 
    return c;
 
@@ -1030,7 +1033,7 @@ void XMesaDestroyContext( XMesaContext c )
       hud_destroy(c->hud, NULL);
    }
 
-   c->st->destroy(c->st);
+   st_destroy_context(c->st);
 
    /* FIXME: We should destroy the screen here, but if we do so, surfaces may
     * outlive it, causing segfaults
@@ -1228,7 +1231,7 @@ XMesaDestroyBuffer(XMesaBuffer b)
 void
 xmesa_notify_invalid_buffer(XMesaBuffer b)
 {
-   p_atomic_inc(&b->stfb->stamp);
+   p_atomic_inc(&b->drawable->stamp);
 }
 
 
@@ -1289,8 +1292,8 @@ GLboolean XMesaMakeCurrent2( XMesaContext c, XMesaBuffer drawBuffer,
       c->xm_read_buffer = readBuffer;
 
       st_api_make_current(c->st,
-                          drawBuffer ? drawBuffer->stfb : NULL,
-                          readBuffer ? readBuffer->stfb : NULL);
+                          drawBuffer ? drawBuffer->drawable : NULL,
+                          readBuffer ? readBuffer->drawable : NULL);
 
       /* Solution to Stephane Rehel's problem with glXReleaseBuffersMESA(): */
       if (drawBuffer)
@@ -1317,8 +1320,8 @@ GLboolean XMesaUnbindContext( XMesaContext c )
 
 XMesaContext XMesaGetCurrentContext( void )
 {
-   struct st_context_iface *st = st_api_get_current();
-   return (XMesaContext) (st) ? st->st_manager_private : NULL;
+   struct st_context *st = st_api_get_current();
+   return (XMesaContext) (st) ? st->frontend_context : NULL;
 }
 
 
@@ -1335,15 +1338,18 @@ void XMesaSwapBuffers( XMesaBuffer b )
    /* Need to draw HUD before flushing */
    if (xmctx && xmctx->hud) {
       struct pipe_resource *back =
-         xmesa_get_framebuffer_resource(b->stfb, ST_ATTACHMENT_BACK_LEFT);
+         xmesa_get_framebuffer_resource(b->drawable, ST_ATTACHMENT_BACK_LEFT);
       hud_run(xmctx->hud, NULL, back);
    }
 
    if (xmctx && xmctx->xm_buffer == b) {
-      xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
+      st_context_flush(xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
    }
 
-   xmesa_swap_st_framebuffer(b->stfb);
+   xmesa_swap_st_framebuffer(b->drawable);
+
+   /* TODO: remove this if the framebuffer state doesn't change. */
+   st_context_invalidate_state(xmctx->st, ST_INVALIDATE_FB_STATE);
 }
 
 
@@ -1355,9 +1361,9 @@ void XMesaCopySubBuffer( XMesaBuffer b, int x, int y, int width, int height )
 {
    XMesaContext xmctx = XMesaGetCurrentContext();
 
-   xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
+   st_context_flush(xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
 
-   xmesa_copy_st_framebuffer(b->stfb,
+   xmesa_copy_st_framebuffer(b->drawable,
          ST_ATTACHMENT_BACK_LEFT, ST_ATTACHMENT_FRONT_LEFT,
          x, b->height - y - height, width, height);
 }
@@ -1370,7 +1376,7 @@ void XMesaFlush( XMesaContext c )
       XMesaDisplay xmdpy = xmesa_init_display(c->xm_visual->display);
       struct pipe_fence_handle *fence = NULL;
 
-      c->st->flush(c->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
+      st_context_flush(c->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
       if (fence) {
          xmdpy->screen->fence_finish(xmdpy->screen, NULL, fence,
                                      PIPE_TIMEOUT_INFINITE);
@@ -1460,8 +1466,8 @@ PUBLIC void
 XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
                   const int *attrib_list)
 {
-   struct st_context_iface *st = st_api_get_current();
-   struct st_framebuffer_iface* stfbi = drawable->stfb;
+   struct st_context *st = st_api_get_current();
+   struct pipe_frontend_drawable* pdrawable = drawable->drawable;
    struct pipe_resource *res;
    int x, y, w, h;
    enum st_attachment_type st_attachment = xmesa_attachment_type(buffer);
@@ -1473,11 +1479,11 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
 
    /* We need to validate our attachments before using them,
     * in case the texture doesn't exist yet. */
-   xmesa_st_framebuffer_validate_textures(stfbi, w, h, 1 << st_attachment);
-   res = xmesa_get_attachment(stfbi, st_attachment);
+   xmesa_st_framebuffer_validate_textures(pdrawable, w, h, 1 << st_attachment);
+   res = xmesa_get_attachment(pdrawable, st_attachment);
 
    if (res) {
-      struct pipe_context* pipe = xmesa_get_context(stfbi);
+      struct pipe_context* pipe = xmesa_get_context(pdrawable);
       enum pipe_format internal_format = res->format;
       struct pipe_transfer *tex_xfer;
       char *map;
@@ -1517,12 +1523,8 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
 
       pipe_texture_unmap(pipe, tex_xfer);
 
-      st->teximage(st,
-                   ST_TEXTURE_2D,
-                   0,    /* level */
-                   internal_format,
-                   res,
-                   FALSE /* no mipmap */);
+      st_context_teximage(st, GL_TEXTURE_2D, 0 /* level */, internal_format,
+                          res, FALSE /* no mipmap */);
 
    }
 }
@@ -1538,6 +1540,5 @@ XMesaReleaseTexImage(Display *dpy, XMesaBuffer drawable, int buffer)
 void
 XMesaCopyContext(XMesaContext src, XMesaContext dst, unsigned long mask)
 {
-   if (dst->st->copy)
-      dst->st->copy(dst->st, src->st, mask);
+   _mesa_copy_context(src->st->ctx, dst->st->ctx, mask);
 }

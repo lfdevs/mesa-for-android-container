@@ -56,16 +56,11 @@ void genX(init_physical_device_state)(struct anv_physical_device *device);
 
 VkResult genX(init_device_state)(struct anv_device *device);
 
-void genX(init_cps_device_state)(struct anv_device *device);
-
 void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_emit_gfx7_depth_flush)(struct anv_cmd_buffer *cmd_buffer);
-
-void genX(cmd_buffer_emit_gfx12_depth_wa)(struct anv_cmd_buffer *cmd_buffer,
-                                          const struct isl_surf *surf);
 
 void genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
                                                     int vb_index,
@@ -74,10 +69,6 @@ void genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(struct anv_cmd_buffer *cmd_b
 void genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
                                                          uint32_t access_type,
                                                          uint64_t vb_used);
-
-void genX(cmd_buffer_emit_hashing_mode)(struct anv_cmd_buffer *cmd_buffer,
-                                        unsigned width, unsigned height,
-                                        unsigned scale);
 
 void genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer);
 void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer);
@@ -134,10 +125,6 @@ void genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
 
 void genX(emit_sample_pattern)(struct anv_batch *batch,
                                const struct vk_sample_locations_state *sl);
-
-void genX(emit_shading_rate)(struct anv_batch *batch,
-                             const struct anv_graphics_pipeline *pipeline,
-                             const struct vk_fragment_shading_rate_state *fsr);
 
 void genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
                                 struct anv_address dst, struct anv_address src,

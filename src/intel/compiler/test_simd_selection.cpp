@@ -41,27 +41,26 @@ const bool not_spilled = false;
 
 class SIMDSelectionTest : public ::testing::Test {
 protected:
-   SIMDSelectionTest() : error{NULL, NULL, NULL} {
-      mem_ctx = ralloc_context(NULL);
-      devinfo = rzalloc(mem_ctx, intel_device_info);
-      prog_data = rzalloc(mem_ctx, struct brw_cs_prog_data);
-      required_dispatch_width = 0;
+   SIMDSelectionTest()
+   : mem_ctx(ralloc_context(NULL))
+   , devinfo(rzalloc(mem_ctx, intel_device_info))
+   , prog_data(rzalloc(mem_ctx, struct brw_cs_prog_data))
+   , simd_state{
+      .mem_ctx = mem_ctx,
+      .devinfo = devinfo,
+      .prog_data = prog_data,
+     }
+   {
    }
 
    ~SIMDSelectionTest() {
       ralloc_free(mem_ctx);
    };
 
-   bool should_compile(unsigned simd) {
-      return brw_simd_should_compile(mem_ctx, simd, devinfo, prog_data,
-                                     required_dispatch_width, &error[simd]);
-   }
-
    void *mem_ctx;
    intel_device_info *devinfo;
    struct brw_cs_prog_data *prog_data;
-   const char *error[3];
-   unsigned required_dispatch_width;
+   brw_simd_selection_state simd_state;
 };
 
 class SIMDSelectionCS : public SIMDSelectionTest {
@@ -78,13 +77,13 @@ protected:
 
 TEST_F(SIMDSelectionCS, DefaultsToSIMD16)
 {
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, not_spilled);
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD16);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD16);
 }
 
 TEST_F(SIMDSelectionCS, TooBigFor16)
@@ -93,12 +92,12 @@ TEST_F(SIMDSelectionCS, TooBigFor16)
    prog_data->local_size[1] = 32;
    prog_data->local_size[2] = 1;
 
-   ASSERT_FALSE(should_compile(SIMD8));
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, spilled);
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD32);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD32);
 }
 
 TEST_F(SIMDSelectionCS, WorkgroupSize1)
@@ -107,12 +106,12 @@ TEST_F(SIMDSelectionCS, WorkgroupSize1)
    prog_data->local_size[1] = 1;
    prog_data->local_size[2] = 1;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD8);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD8);
 }
 
 TEST_F(SIMDSelectionCS, WorkgroupSize8)
@@ -121,12 +120,12 @@ TEST_F(SIMDSelectionCS, WorkgroupSize8)
    prog_data->local_size[1] = 1;
    prog_data->local_size[2] = 1;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD8);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD8);
 }
 
 TEST_F(SIMDSelectionCS, WorkgroupSizeVariable)
@@ -135,12 +134,12 @@ TEST_F(SIMDSelectionCS, WorkgroupSizeVariable)
    prog_data->local_size[1] = 0;
    prog_data->local_size[2] = 0;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
 
    ASSERT_EQ(prog_data->prog_mask, 1u << SIMD8 | 1u << SIMD16 | 1u << SIMD32);
 
@@ -160,12 +159,12 @@ TEST_F(SIMDSelectionCS, WorkgroupSizeVariableSpilled)
    prog_data->local_size[1] = 0;
    prog_data->local_size[2] = 0;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, spilled);
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, spilled);
 
    ASSERT_EQ(prog_data->prog_mask, 1u << SIMD8 | 1u << SIMD16 | 1u << SIMD32);
 
@@ -185,11 +184,11 @@ TEST_F(SIMDSelectionCS, WorkgroupSizeVariableNoSIMD8)
    prog_data->local_size[1] = 0;
    prog_data->local_size[2] = 0;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
 
    ASSERT_EQ(prog_data->prog_mask, 1u << SIMD16 | 1u << SIMD32);
 
@@ -209,11 +208,11 @@ TEST_F(SIMDSelectionCS, WorkgroupSizeVariableNoSIMD16)
    prog_data->local_size[1] = 0;
    prog_data->local_size[2] = 0;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
 
    ASSERT_EQ(prog_data->prog_mask, 1u << SIMD8 | 1u << SIMD32);
 
@@ -233,10 +232,10 @@ TEST_F(SIMDSelectionCS, WorkgroupSizeVariableNoSIMD8NoSIMD16)
    prog_data->local_size[1] = 0;
    prog_data->local_size[2] = 0;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   ASSERT_TRUE(should_compile(SIMD16));
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
 
    ASSERT_EQ(prog_data->prog_mask, 1u << SIMD32);
 
@@ -252,118 +251,148 @@ TEST_F(SIMDSelectionCS, WorkgroupSizeVariableNoSIMD8NoSIMD16)
 
 TEST_F(SIMDSelectionCS, SpillAtSIMD8)
 {
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, spilled);
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD8);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD8);
 }
 
 TEST_F(SIMDSelectionCS, SpillAtSIMD16)
 {
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, spilled);
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD8);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD8);
 }
 
 TEST_F(SIMDSelectionCS, EnvironmentVariable32)
 {
    intel_debug |= DEBUG_DO32;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD32);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD32);
 }
 
 TEST_F(SIMDSelectionCS, EnvironmentVariable32ButSpills)
 {
    intel_debug |= DEBUG_DO32;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, not_spilled);
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, spilled);
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD16);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD16);
 }
 
 TEST_F(SIMDSelectionCS, Require8)
 {
-   required_dispatch_width = 8;
+   simd_state.required_width = 8;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   brw_simd_mark_compiled(SIMD8, prog_data, not_spilled);
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD8);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD8);
 }
 
 TEST_F(SIMDSelectionCS, Require8ErrorWhenNotCompile)
 {
-   required_dispatch_width = 8;
+   simd_state.required_width = 8;
 
-   ASSERT_TRUE(should_compile(SIMD8));
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), -1);
+   ASSERT_EQ(brw_simd_select(simd_state), -1);
 }
 
 TEST_F(SIMDSelectionCS, Require16)
 {
-   required_dispatch_width = 16;
+   simd_state.required_width = 16;
 
-   ASSERT_FALSE(should_compile(SIMD8));
-   ASSERT_TRUE(should_compile(SIMD16));
-   brw_simd_mark_compiled(SIMD16, prog_data, not_spilled);
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD16);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD16);
 }
 
 TEST_F(SIMDSelectionCS, Require16ErrorWhenNotCompile)
 {
-   required_dispatch_width = 16;
+   simd_state.required_width = 16;
 
-   ASSERT_FALSE(should_compile(SIMD8));
-   ASSERT_TRUE(should_compile(SIMD16));
-   ASSERT_FALSE(should_compile(SIMD32));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), -1);
+   ASSERT_EQ(brw_simd_select(simd_state), -1);
 }
 
 TEST_F(SIMDSelectionCS, Require32)
 {
-   required_dispatch_width = 32;
+   simd_state.required_width = 32;
 
-   ASSERT_FALSE(should_compile(SIMD8));
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_TRUE(should_compile(SIMD32));
-   brw_simd_mark_compiled(SIMD32, prog_data, not_spilled);
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
 
-   ASSERT_EQ(brw_simd_select(prog_data), SIMD32);
+   ASSERT_EQ(brw_simd_select(simd_state), SIMD32);
 }
 
 TEST_F(SIMDSelectionCS, Require32ErrorWhenNotCompile)
 {
-   required_dispatch_width = 32;
+   simd_state.required_width = 32;
 
-   ASSERT_FALSE(should_compile(SIMD8));
-   ASSERT_FALSE(should_compile(SIMD16));
-   ASSERT_TRUE(should_compile(SIMD32));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_FALSE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
 
-   ASSERT_EQ(brw_simd_select(prog_data), -1);
+   ASSERT_EQ(brw_simd_select(simd_state), -1);
+}
+
+TEST_F(SIMDSelectionCS, FirstCompiledIsSIMD8)
+{
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   brw_simd_mark_compiled(simd_state, SIMD8, not_spilled);
+
+   ASSERT_TRUE(brw_simd_any_compiled(simd_state));
+   ASSERT_EQ(brw_simd_first_compiled(simd_state), SIMD8);
+}
+
+TEST_F(SIMDSelectionCS, FirstCompiledIsSIMD16)
+{
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   brw_simd_mark_compiled(simd_state, SIMD16, not_spilled);
+
+   ASSERT_TRUE(brw_simd_any_compiled(simd_state));
+   ASSERT_EQ(brw_simd_first_compiled(simd_state), SIMD16);
+}
+
+TEST_F(SIMDSelectionCS, FirstCompiledIsSIMD32)
+{
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD8));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD16));
+   ASSERT_TRUE(brw_simd_should_compile(simd_state, SIMD32));
+   brw_simd_mark_compiled(simd_state, SIMD32, not_spilled);
+
+   ASSERT_TRUE(brw_simd_any_compiled(simd_state));
+   ASSERT_EQ(brw_simd_first_compiled(simd_state), SIMD32);
 }

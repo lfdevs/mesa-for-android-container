@@ -54,14 +54,14 @@ anv_gem_create_regions(struct anv_device *device, uint64_t anv_bo_size,
 }
 
 void*
-anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
+anv_gem_mmap(struct anv_device *device, struct anv_bo *bo,
              uint64_t offset, uint64_t size, uint32_t flags)
 {
    /* Ignore flags, as they're specific to I915_GEM_MMAP. */
    (void) flags;
 
    return mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
-               gem_handle, offset);
+               bo->gem_handle, offset);
 }
 
 /* This is just a wrapper around munmap, but it also notifies valgrind that
@@ -119,25 +119,7 @@ anv_gem_set_caching(struct anv_device *device, uint32_t gem_handle,
 }
 
 int
-anv_gem_get_param(int fd, uint32_t param)
-{
-   unreachable("Unused");
-}
-
-int
-anv_gem_create_context(struct anv_device *device)
-{
-   unreachable("Unused");
-}
-
-int
-anv_gem_destroy_context(struct anv_device *device, int context)
-{
-   unreachable("Unused");
-}
-
-int
-anv_gem_set_context_param(int fd, int context, uint32_t param, uint64_t value)
+anv_gem_set_context_param(int fd, uint32_t context, uint32_t param, uint64_t value)
 {
    unreachable("Unused");
 }

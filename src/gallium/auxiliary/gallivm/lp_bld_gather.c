@@ -598,3 +598,50 @@ lp_build_gather_values(struct gallivm_state * gallivm,
    }
    return vec;
 }
+
+LLVMValueRef
+lp_build_masked_gather(struct gallivm_state *gallivm,
+                       unsigned length,
+                       unsigned bit_size,
+                       LLVMTypeRef vec_type,
+                       LLVMValueRef offset_ptr,
+                       LLVMValueRef exec_mask)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef args[4];
+   char intrin_name[64];
+
+   snprintf(intrin_name, 64, "llvm.masked.gather.v%ui%u.v%up0i%u",
+            length, bit_size, length, bit_size);
+   args[0] = offset_ptr;
+   args[1] = lp_build_const_int32(gallivm, bit_size / 8);
+   args[2] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
+                           LLVMConstNull(LLVMTypeOf(exec_mask)), "");
+   args[3] = LLVMConstNull(vec_type);
+   return lp_build_intrinsic(builder, intrin_name, vec_type,
+                             args, 4, 0);
+
+}
+
+void
+lp_build_masked_scatter(struct gallivm_state *gallivm,
+                        unsigned length,
+                        unsigned bit_size,
+                        LLVMValueRef offset_ptr,
+                        LLVMValueRef value_vec,
+                        LLVMValueRef exec_mask)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef args[4];
+   char intrin_name[64];
+
+   snprintf(intrin_name, 64, "llvm.masked.scatter.v%ui%u.v%up0i%u",
+            length, bit_size, length, bit_size);
+   args[0] = value_vec;
+   args[1] = offset_ptr;
+   args[2] = lp_build_const_int32(gallivm, bit_size / 8);
+   args[3] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
+                           LLVMConstNull(LLVMTypeOf(exec_mask)), "");
+   lp_build_intrinsic(builder, intrin_name, LLVMVoidTypeInContext(gallivm->context),
+                      args, 4, 0);
+}

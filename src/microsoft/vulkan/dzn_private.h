@@ -200,13 +200,17 @@ struct dzn_physical_device {
    struct wsi_device wsi_device;
 
    mtx_t dev_lock;
-   ID3D12Device2 *dev;
+   ID3D12Device4 *dev;
+   ID3D12Device10 *dev10;
    D3D_FEATURE_LEVEL feature_level;
    D3D_SHADER_MODEL shader_model;
    D3D12_FEATURE_DATA_ARCHITECTURE1 architecture;
    D3D12_FEATURE_DATA_D3D12_OPTIONS options;
    D3D12_FEATURE_DATA_D3D12_OPTIONS2 options2;
    D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3;
+   D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12;
+   D3D12_FEATURE_DATA_D3D12_OPTIONS14 options14;
+   D3D12_FEATURE_DATA_D3D12_OPTIONS15 options15;
    VkPhysicalDeviceMemoryProperties memory;
    D3D12_HEAP_FLAGS heap_flags_for_mem_type[VK_MAX_MEMORY_TYPES];
    const struct vk_sync_type *sync_types[MAX_SYNC_TYPES + 1];
@@ -236,7 +240,7 @@ d3d12_enable_debug_layer(struct util_dl_library *d3d12_mod, ID3D12DeviceFactory 
 void
 d3d12_enable_gpu_validation(struct util_dl_library *d3d12_mod, ID3D12DeviceFactory *factory);
 
-ID3D12Device2 *
+ID3D12Device4 *
 d3d12_create_device(struct util_dl_library *d3d12_mod, IUnknown *adapter, ID3D12DeviceFactory *factory, bool experimental_features);
 
 struct dzn_queue {
@@ -252,7 +256,8 @@ struct dzn_device {
    struct vk_device_extension_table enabled_extensions;
    struct vk_device_dispatch_table cmd_dispatch;
 
-   ID3D12Device2 *dev;
+   ID3D12Device4 *dev;
+   ID3D12Device10 *dev10;
    ID3D12DeviceConfiguration *dev_config;
 
    struct dzn_meta_indirect_draw indirect_draws[DZN_NUM_INDIRECT_DRAW_TYPES];
@@ -266,6 +271,12 @@ struct dzn_device {
 #define DZN_QUERY_REFS_RES_SIZE (DZN_QUERY_REFS_ALL_ZEROS_OFFSET + DZN_QUERY_REFS_SECTION_SIZE)
       ID3D12Resource *refs;
    } queries;
+
+   /* Will be the app's graphics queue if there's exactly one, otherwise this will be 
+    * a dedicated graphics queue to host swapchain blits.
+    */
+   bool need_swapchain_blits;
+   struct dzn_queue *swapchain_queue;
 };
 
 void dzn_meta_finish(struct dzn_device *device);
@@ -285,9 +296,13 @@ struct dzn_device_memory {
 
    struct list_head link;
 
+   /* Swapchain image resource, NULL if the memory is not backed by
+    * a DXGI swapchain.
+    */
+   ID3D12Resource *swapchain_res;
+
    ID3D12Heap *heap;
    VkDeviceSize size;
-   D3D12_RESOURCE_STATES initial_state; /* initial state for this memory type */
 
    /* A buffer-resource spanning the entire heap, used for mapping memory */
    ID3D12Resource *map_res;
@@ -360,7 +375,7 @@ struct dzn_buffer_desc {
 #define MAX_DESCS_PER_CBV_SRV_UAV_HEAP 1000000u
 
 struct dzn_descriptor_heap {
-   ID3D12Device2 *dev;
+   ID3D12Device4 *dev;
    ID3D12DescriptorHeap *heap;
    D3D12_DESCRIPTOR_HEAP_TYPE type;
    SIZE_T cpu_base;
@@ -579,6 +594,7 @@ struct dzn_cmd_buffer {
       struct dzn_descriptor_heap_pool pool;
    } rtvs, dsvs;
 
+   bool enhanced_barriers;
    struct hash_table *transition_barriers;
 
    struct dzn_descriptor_heap_pool cbv_srv_uav_pool, sampler_pool;
@@ -588,6 +604,11 @@ struct dzn_cmd_buffer {
 
    ID3D12CommandAllocator *cmdalloc;
    ID3D12GraphicsCommandList1 *cmdlist;
+   ID3D12GraphicsCommandList8 *cmdlist8;
+
+   D3D12_COMMAND_LIST_TYPE type;
+   D3D12_BARRIER_SYNC valid_sync;
+   D3D12_BARRIER_ACCESS valid_access;
 };
 
 struct dzn_descriptor_pool {
@@ -711,6 +732,9 @@ enum dzn_register_space {
 #define D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(__type) \
    ALIGN_POT(ALIGN_POT(sizeof(D3D12_PIPELINE_STATE_SUBOBJECT_TYPE), alignof(__type)) + sizeof(__type), alignof(void *))
 
+static_assert(sizeof(D3D12_DEPTH_STENCIL_DESC2) > sizeof(D3D12_DEPTH_STENCIL_DESC1),
+              "Using just one of these descs in the max size calculation");
+
 #define MAX_GFX_PIPELINE_STATE_STREAM_SIZE \
    D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(ID3D12RootSignature *) + \
    (D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_SHADER_BYTECODE) * 5) + /* VS, PS, DS, HS, GS */ \
@@ -727,7 +751,7 @@ enum dzn_register_space {
    D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_NODE_MASK) + \
    D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_CACHED_PIPELINE_STATE) + \
    D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_PIPELINE_STATE_FLAGS) + \
-   D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_DEPTH_STENCIL_DESC1) + \
+   D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_DEPTH_STENCIL_DESC2) + \
    D3D12_PIPELINE_STATE_STREAM_DESC_SIZE(D3D12_VIEW_INSTANCING_DESC)
 
 #define MAX_COMPUTE_PIPELINE_STATE_STREAM_SIZE \
@@ -794,7 +818,6 @@ struct dzn_graphics_pipeline {
    struct {
       struct {
          bool enable;
-         bool independent_front_back;
          bool dynamic_ref;
          bool dynamic_write_mask;
          bool dynamic_compare_mask;
@@ -880,6 +903,10 @@ struct dzn_image {
    ID3D12Resource *res;
    struct dzn_device_memory *mem;
    VkDeviceSize mem_offset;
+   uint32_t castable_format_count;
+   DXGI_FORMAT *castable_formats;
+
+   D3D12_BARRIER_ACCESS valid_access;
 };
 
 bool
@@ -917,6 +944,11 @@ D3D12_RESOURCE_STATES
 dzn_image_layout_to_state(const struct dzn_image *image,
                           VkImageLayout layout,
                           VkImageAspectFlagBits aspect);
+
+D3D12_BARRIER_LAYOUT
+dzn_vk_layout_to_d3d_layout(VkImageLayout layout,
+                            D3D12_COMMAND_LIST_TYPE type,
+                            VkImageAspectFlags aspect);
 
 uint32_t
 dzn_image_layers_get_subresource_index(const struct dzn_image *image,
@@ -961,6 +993,8 @@ struct dzn_buffer {
 
    VkBufferCreateFlags create_flags;
    VkBufferUsageFlags usage;
+
+   D3D12_BARRIER_ACCESS valid_access;
 };
 
 DXGI_FORMAT
@@ -1105,6 +1139,10 @@ dzn_query_pool_get_availability_offset(const struct dzn_query_pool *qpool, uint3
 
 uint32_t
 dzn_query_pool_get_result_size(const struct dzn_query_pool *qpool, uint32_t count);
+
+VKAPI_ATTR void VKAPI_CALL
+dzn_CmdPipelineBarrier2_enhanced(VkCommandBuffer commandBuffer,
+                                 const VkDependencyInfo *info);
 
 VK_DEFINE_HANDLE_CASTS(dzn_cmd_buffer, vk.base, VkCommandBuffer, VK_OBJECT_TYPE_COMMAND_BUFFER)
 VK_DEFINE_HANDLE_CASTS(dzn_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)

@@ -6,14 +6,6 @@
 # kernel driver
 dEQP-GLES31.functional.draw_indirect.compute_interop.large.*
 
-# We lack a dependency between the vertex job filling the indirect draw
-# buffers and the indirect draw compute job reading from these buffers,
-# leading to unreliable results (the tests pass if the vertex job is
-# done before the compute job starts, and fail otherwise). Let's disable
-# those tests until we sort it out.
-KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-arrays
-KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-elements
-
 # fail seen here and in others
 # https://gitlab.freedesktop.org/mesa/mesa/-/jobs/19776551
 dEQP-GLES31.functional.ssbo.layout.random.all_shared_buffer.36

@@ -184,7 +184,7 @@ struct tu6_global
       uint32_t pad[7];
    } flush_base[4];
 
-   ALIGN16 uint32_t cs_indirect_xyz[3];
+   alignas(16) uint32_t cs_indirect_xyz[3];
 
    volatile uint32_t vtx_stats_query_not_running;
 
@@ -380,6 +380,9 @@ struct tu_tiling_config {
    /* number of VSC pipes */
    VkExtent2D pipe_count;
 
+   /* Whether using GMEM is even possible with this configuration */
+   bool possible;
+
    /* Whether binning should be used for gmem rendering using this framebuffer. */
    bool binning;
 
@@ -441,6 +444,9 @@ tu_device_lookup_bo(struct tu_device *device, uint32_t handle)
 {
    return (struct tu_bo *) util_sparse_array_get(&device->bo_map, handle);
 }
+
+struct u_trace_context *
+tu_device_get_u_trace(struct tu_device *device);
 
 /* Get a scratch bo for use inside a command buffer. This will always return
  * the same bo given the same size or similar sizes, so only one scratch bo

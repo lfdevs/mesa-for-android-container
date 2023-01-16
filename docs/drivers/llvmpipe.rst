@@ -90,25 +90,21 @@ Using
 Environment variables
 ~~~~~~~~~~~~~~~~~~~~~
 
-``LP_NATIVE_VECTOR_WIDTH``
+.. envvar:: LP_NATIVE_VECTOR_WIDTH
+
    We can use it to override vector bits. Because sometimes it turns
    out LLVMpipe can be fastest by using 128 bit vectors,
    yet use AVX instructions.
-``GALLIUM_OVERRIDE_CPU_CAPS``
-   Override CPU capabilities for LLVMpipe and Softpipe, possible values for x86:
-   `nosse`
-   `sse`
-   `sse2`
-   `sse3`
-   `ssse3`
-   `sse4.1`
-   `avx`
-``GALLIUM_NOSSE``
-   Deprecated in favor of `GALLIUM_OVERRIDE_CPU_CAPS`,
-   use `GALLIUM_OVERRIDE_CPU_CAPS=nosse` instead.
-``LP_FORCE_SSE2``
-   Deprecated in favor of `GALLIUM_OVERRIDE_CPU_CAPS`
-   use `GALLIUM_OVERRIDE_CPU_CAPS=sse2` instead.
+
+.. envvar:: GALLIUM_NOSSE
+
+   Deprecated in favor of ``GALLIUM_OVERRIDE_CPU_CAPS``,
+   use ``GALLIUM_OVERRIDE_CPU_CAPS=nosse`` instead.
+
+.. envvar:: LP_FORCE_SSE2
+
+   Deprecated in favor of ``GALLIUM_OVERRIDE_CPU_CAPS``
+   use ``GALLIUM_OVERRIDE_CPU_CAPS=sse2`` instead.
 
 Linux
 ~~~~~
@@ -135,7 +131,7 @@ On Windows, building will create
 ``build/windows-x86-debug/gallium/targets/libgl-gdi/opengl32.dll`` which
 is a drop-in alternative for system's ``opengl32.dll``, which will use
 the Mesa ICD, ``build/windows-x86-debug/gallium/targets/wgl/libgallium_wgl.dll``.
-To use it put both dlls in the same directory as your application. It can also
+To use it put both DLLs in the same directory as your application. It can also
 be used by replacing the native ICD driver, but it's quite an advanced usage, so if
 you need to ask, don't even try it.
 
@@ -227,59 +223,57 @@ Recommended Reading
 -  Rasterization
 
    -  `Triangle Scan Conversion using 2D Homogeneous
-      Coordinates <https://www.cs.unc.edu/~olano/papers/2dh-tri/>`__
+      Coordinates <https://www.csee.umbc.edu/~olano/papers/2dh-tri/>`__
    -  `Rasterization on
-      Larrabee <http://www.drdobbs.com/parallel/rasterization-on-larrabee/217200602>`__
-      (`DevMaster
-      copy <http://devmaster.net/posts/2887/rasterization-on-larrabee>`__)
+      Larrabee <https://www.drdobbs.com/parallel/rasterization-on-larrabee/217200602>`__
    -  `Rasterization using half-space
-      functions <http://devmaster.net/posts/6133/rasterization-using-half-space-functions>`__
+      functions <http://web.archive.org/web/20110820052005/http://www.devmaster.net/codespotlight/show.php?id=17>`__
    -  `Advanced
-      Rasterization <http://devmaster.net/posts/6145/advanced-rasterization>`__
+      Rasterization <http://web.archive.org/web/20140514220546/http://devmaster.net/posts/6145/advanced-rasterization>`__
    -  `Optimizing Software Occlusion
       Culling <https://fgiesen.wordpress.com/2013/02/17/optimizing-sw-occlusion-culling-index/>`__
 
 -  Texture sampling
 
    -  `Perspective Texture
-      Mapping <http://chrishecker.com/Miscellaneous_Technical_Articles#Perspective_Texture_Mapping>`__
+      Mapping <https://chrishecker.com/Miscellaneous_Technical_Articles#Perspective_Texture_Mapping>`__
    -  `Texturing As In
       Unreal <https://www.flipcode.com/archives/Texturing_As_In_Unreal.shtml>`__
    -  `Run-Time MIP-Map
-      Filtering <http://www.gamasutra.com/view/feature/3301/runtime_mipmap_filtering.php>`__
+      Filtering <http://web.archive.org/web/20220709145555/http://www.gamasutra.com/view/feature/3301/runtime_mipmap_filtering.php>`__
    -  `Will "brilinear" filtering
-      persist? <http://alt.3dcenter.org/artikel/2003/10-26_a_english.php>`__
+      persist? <https://alt.3dcenter.org/artikel/2003/10-26_a_english.php>`__
    -  `Trilinear
       filtering <http://ixbtlabs.com/articles2/gffx/nv40-rx800-3.html>`__
-   -  `Texture
-      Swizzling <http://devmaster.net/posts/12785/texture-swizzling>`__
+   -  `Texture tiling and
+      swizzling <https://fgiesen.wordpress.com/2011/01/17/texture-tiling-and-swizzling/>`__
 
 -  SIMD
 
    -  `Whole-Function
-      Vectorization <http://www.cdl.uni-saarland.de/projects/wfv/#header4>`__
+      Vectorization <https://compilers.cs.uni-saarland.de/projects/wfv/#pubs>`__
 
 -  Optimization
 
    -  `Optimizing Pixomatic For Modern x86
-      Processors <http://www.drdobbs.com/optimizing-pixomatic-for-modern-x86-proc/184405807>`__
+      Processors <https://www.drdobbs.com/optimizing-pixomatic-for-modern-x86-proc/184405807>`__
    -  `Intel 64 and IA-32 Architectures Optimization Reference
-      Manual <http://www.intel.com/content/www/us/en/architecture-and-technology/64-ia-32-architectures-optimization-manual.html>`__
+      Manual <https://cdrdv2-public.intel.com/671488/248966_software_optimization_manual.pdf>`__
    -  `Software optimization
-      resources <http://www.agner.org/optimize/>`__
+      resources <https://www.agner.org/optimize/>`__
    -  `Intel Intrinsics
-      Guide <https://software.intel.com/en-us/articles/intel-intrinsics-guide>`__
+      Guide <https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html>`__
 
 -  LLVM
 
    -  `LLVM Language Reference
-      Manual <http://llvm.org/docs/LangRef.html>`__
+      Manual <https://llvm.org/docs/LangRef.html>`__
    -  `The secret of LLVM C
-      bindings <https://npcontemplation.blogspot.co.uk/2008/06/secret-of-llvm-c-bindings.html>`__
+      bindings <https://npcontemplation.blogspot.com/2008/06/secret-of-llvm-c-bindings.html>`__
 
 -  General
 
    -  `A trip through the Graphics
       Pipeline <https://fgiesen.wordpress.com/2011/07/09/a-trip-through-the-graphics-pipeline-2011-index/>`__
    -  `WARP Architecture and
-      Performance <https://msdn.microsoft.com/en-us/library/gg615082.aspx#architecture>`__
+      Performance <https://learn.microsoft.com/en-us/windows/win32/direct3darticles/directx-warp#warp-architecture-and-performance>`__

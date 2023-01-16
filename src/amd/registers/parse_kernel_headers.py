@@ -69,8 +69,18 @@ re_shift = re.compile(r'^#define (?P<name>\w+)__(?P<field>\w+)__SHIFT\s+(?P<valu
 re_mask = re.compile(r'^#define (?P<name>\w+)__(?P<field>\w+)_MASK\s+(?P<value>[0-9a-fA-Fx]+)L?\n')
 
 def register_filter(gfx_level, name, offset, already_added):
+    # Compute shader registers
+    umd_ranges = [0xB]
+
+    # Gfx context, uconfig, and perf counter registers
+    umd_ranges += [0x28, 0x30, 0x31, 0x34, 0x35, 0x36, 0x37]
+
+    # Add all registers in the 0x8000 range for gfx6
+    if gfx_level == 'gfx6':
+        umd_ranges += [0x8]
+
     # Only accept writeable registers and debug registers
-    return ((offset // 0x1000 in [0xB, 0x28, 0x30, 0x31, 0x34, 0x35, 0x36, 0x37] or
+    return ((offset // 0x1000 in umd_ranges or
              # Add SQ_WAVE registers for trap handlers
              name.startswith('SQ_WAVE_') or
              # Add registers in the 0x8000 range used by all generations
@@ -80,8 +90,6 @@ def register_filter(gfx_level, name, offset, already_added):
                name.startswith('SQ_THREAD') or
                name.startswith('GRBM_STATUS') or
                name.startswith('CP_CP'))) or
-             # Add all registers in the 0x8000 range for gfx6
-             (gfx_level == 'gfx6' and offset // 0x1000 == 0x8) or
              # Add registers in the 0x9000 range
              (offset // 0x1000 == 0x9 and
               (name in ['TA_CS_BC_BASE_ADDR', 'GB_ADDR_CONFIG', 'SPI_CONFIG_CNTL'] or
@@ -564,6 +572,29 @@ missing_enums_gfx81plus = {
   },
 }
 
+missing_enums_gfx9 = {
+  **missing_enums_gfx81plus,
+  "DB_DFSM_CONTROL__PUNCHOUT_MODE": DB_DFSM_CONTROL__PUNCHOUT_MODE,
+  "IMG_DATA_FORMAT_STENCIL": IMG_DATA_FORMAT_STENCIL,
+  "SQ_IMG_RSRC_WORD4__BC_SWIZZLE": SQ_IMG_RSRC_WORD4__BC_SWIZZLE,
+  "BinSizeExtend": {
+    "entries": [
+      {"name": "BIN_SIZE_32_PIXELS", "value": 0},
+      {"name": "BIN_SIZE_64_PIXELS", "value": 1},
+      {"name": "BIN_SIZE_128_PIXELS", "value": 2},
+      {"name": "BIN_SIZE_256_PIXELS", "value": 3},
+      {"name": "BIN_SIZE_512_PIXELS", "value": 4}
+    ]
+  },
+  "ScUncertaintyRegionMode": {
+    "entries": [
+      {"name": "SC_HALF_LSB", "value": 0},
+      {"name": "SC_LSB_ONE_SIDED", "value": 1},
+      {"name": "SC_LSB_TWO_SIDED", "value": 2}
+    ]
+  },
+}
+
 missing_enums_gfx103plus = {
   **missing_enums_gfx81plus,
   "ColorFormat": ColorFormat,
@@ -624,10 +655,7 @@ enums_missing = {
     **missing_enums_gfx81plus,
   },
   'gfx9': {
-    **missing_enums_gfx81plus,
-    "DB_DFSM_CONTROL__PUNCHOUT_MODE": DB_DFSM_CONTROL__PUNCHOUT_MODE,
-    "IMG_DATA_FORMAT_STENCIL": IMG_DATA_FORMAT_STENCIL,
-    "SQ_IMG_RSRC_WORD4__BC_SWIZZLE": SQ_IMG_RSRC_WORD4__BC_SWIZZLE,
+    **missing_enums_gfx9,
   },
   'gfx10': {
     **missing_enums_gfx81plus,

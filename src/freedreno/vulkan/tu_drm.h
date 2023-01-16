@@ -97,6 +97,8 @@ tu_bo_finish(struct tu_device *dev, struct tu_bo *bo);
 VkResult
 tu_bo_map(struct tu_device *dev, struct tu_bo *bo);
 
+void tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo);
+
 static inline struct tu_bo *
 tu_bo_get_ref(struct tu_bo *bo)
 {

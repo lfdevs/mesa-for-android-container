@@ -102,9 +102,11 @@ apt-get -y install --no-install-recommends \
     sntp \
     strace \
     waffle-utils \
+    weston \
     wget \
     xinit \
     xserver-xorg-core \
+    xwayland \
     zstd
 
 

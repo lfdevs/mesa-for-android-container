@@ -202,9 +202,9 @@ radv_device_init_meta_copy_vrs_htile_state(struct radv_device *device,
       .layout = state->copy_vrs_htile_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        state->cache, 1,
-                                        &pipeline_info, NULL, &state->copy_vrs_htile_pipeline);
+   result =
+      radv_compute_pipeline_create(radv_device_to_handle(device), state->cache, &pipeline_info,
+                                   NULL, &state->copy_vrs_htile_pipeline, true);
 fail:
    ralloc_free(cs);
    return result;

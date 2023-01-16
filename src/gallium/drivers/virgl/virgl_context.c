@@ -30,10 +30,11 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 #include "nir/nir_to_tgsi.h"
+#include "util/format/u_format.h"
+#include "util/indices/u_primconvert.h"
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
-#include "util/format/u_format.h"
 #include "util/u_prim.h"
 #include "util/u_transfer.h"
 #include "util/u_helpers.h"
@@ -41,7 +42,6 @@
 #include "util/u_upload_mgr.h"
 #include "util/u_blitter.h"
 #include "tgsi/tgsi_text.h"
-#include "indices/u_primconvert.h"
 
 #include "virgl_encode.h"
 #include "virgl_context.h"
@@ -1440,7 +1440,7 @@ static void *virgl_create_compute_state(struct pipe_context *ctx,
    handle = virgl_object_assign_handle();
    ret = virgl_encode_shader_state(vctx, handle, PIPE_SHADER_COMPUTE,
                                    &so_info,
-                                   state->req_local_mem,
+                                   state->static_shared_mem,
                                    new_tokens);
    if (ret) {
       FREE((void *)ntt_tokens);

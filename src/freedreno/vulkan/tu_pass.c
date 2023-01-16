@@ -550,20 +550,6 @@ tu_render_pass_gmem_config(struct tu_render_pass *pass,
 {
    for (enum tu_gmem_layout layout = 0; layout < TU_GMEM_LAYOUT_COUNT;
         layout++) {
-      /* From the VK_KHR_multiview spec:
-       *
-       *    Multiview is all-or-nothing for a render pass - that is, either all
-       *    subpasses must have a non-zero view mask (though some subpasses may
-       *    have only one view) or all must be zero.
-       *
-       * This means we only have to check one of the view masks.
-       */
-      if (pass->subpasses[0].multiview_mask) {
-         /* It seems multiview must use sysmem rendering. */
-         pass->gmem_pixels[layout] = 0;
-         continue;
-      }
-
       /* log2(gmem_align/(tile_align_w*tile_align_h)) */
       uint32_t block_align_shift = 3;
       uint32_t tile_align_w = phys_dev->info->tile_align_w;
@@ -572,14 +558,17 @@ tu_render_pass_gmem_config(struct tu_render_pass *pass,
 
       /* calculate total bytes per pixel */
       uint32_t cpp_total = 0;
+      uint32_t min_cpp = UINT32_MAX;
       for (uint32_t i = 0; i < pass->attachment_count; i++) {
          struct tu_render_pass_attachment *att = &pass->attachments[i];
          bool cpp1 = (att->cpp == 1);
          if (att->gmem) {
             cpp_total += att->cpp;
+            min_cpp = MIN2(min_cpp, att->cpp);
 
             /* take into account the separate stencil: */
             if (att->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+               min_cpp = MIN2(min_cpp, att->samples);
                cpp1 = (att->samples == 1);
                cpp_total += att->samples;
             }
@@ -596,6 +585,7 @@ tu_render_pass_gmem_config(struct tu_render_pass *pass,
       }
 
       pass->tile_align_w = tile_align_w;
+      pass->min_cpp = min_cpp;
 
       /* no gmem attachments */
       if (cpp_total == 0) {

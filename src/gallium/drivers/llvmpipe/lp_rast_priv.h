@@ -100,8 +100,8 @@ struct lp_rasterizer_task
    /** Non-interpolated passthru state and occlude counter for visible pixels */
    struct lp_jit_thread_data thread_data;
 
-   pipe_semaphore work_ready;
-   pipe_semaphore work_done;
+   util_semaphore work_ready;
+   util_semaphore work_done;
 };
 
 

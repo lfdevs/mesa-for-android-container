@@ -84,6 +84,37 @@ TEST_F(ComputeTest, two_global_arrays)
       EXPECT_EQ(g1[i], expected[i]);
 }
 
+TEST_F(ComputeTest, nested_arrays)
+{
+   const char *kernel_source = R"(
+float4 DoMagic(float4 inValue)
+{
+    const float testArr[3][3] = {
+        {0.1f, 0.2f, 0.3f},
+        {0.4f, 0.5f, 0.6f},
+        {0.7f, 0.8f, 0.9f}}; 
+    float4 outValue = inValue;
+    outValue.x = inValue.x * testArr[0][0] + inValue.y * testArr[0][1] + inValue.z * testArr[0][2];
+    outValue.y = inValue.x * testArr[1][0] + inValue.y * testArr[1][1] + inValue.z * testArr[1][2];
+    outValue.z = inValue.x * testArr[2][0] + inValue.y * testArr[2][1] + inValue.z * testArr[2][2];
+    return outValue;
+}
+__kernel void main_test(__global float4 *g1, __global float4 *g2)
+{
+   uint idx = get_global_id(0);
+   g1[idx] = DoMagic(g2[idx]);
+})";
+   auto g1 = ShaderArg<float>({ 10, 20, 30, 40 }, SHADER_ARG_INOUT);
+   auto g2 = ShaderArg<float>({ 0.2f, 0.4f, 0.6f, 1.0f }, SHADER_ARG_INPUT);
+   const float expected[] = {
+      0.28f, 0.64f, 1.0f, 1.0f
+   };
+
+   run_shader(kernel_source, 1, 1, 1, g1, g2);
+   for (int i = 0; i < g1.size(); ++i)
+      EXPECT_FLOAT_EQ(g1[i], expected[i]);
+}
+
 /* Disabled until saturated conversions from f32->i64 fixed (mesa/mesa#3824) */
 TEST_F(ComputeTest, DISABLED_i64tof32)
 {

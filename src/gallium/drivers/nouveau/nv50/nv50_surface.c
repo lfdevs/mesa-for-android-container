@@ -32,7 +32,7 @@
 
 #include "tgsi/tgsi_ureg.h"
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_resource.h"

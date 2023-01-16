@@ -149,7 +149,7 @@ do_viewport(struct draw_vs_variant_generic *vsvg,
 }
 
 
-static void PIPE_CDECL
+static void UTIL_CDECL
 vsvg_run_elts(struct draw_vs_variant *variant,
               const unsigned *elts,
               unsigned count,
@@ -160,7 +160,7 @@ vsvg_run_elts(struct draw_vs_variant *variant,
    void *temp_buffer = MALLOC(align(count,4) * temp_vertex_stride +
                               DRAW_EXTRA_VERTICES_PADDING);
 
-   if (0) debug_printf("%s %d \n", __FUNCTION__,  count);
+   if (0) debug_printf("%s %d \n", __func__,  count);
 
    /* Want to do this in small batches for cache locality?
     */
@@ -214,7 +214,7 @@ vsvg_run_elts(struct draw_vs_variant *variant,
 }
 
 
-static void PIPE_CDECL
+static void UTIL_CDECL
 vsvg_run_linear(struct draw_vs_variant *variant,
                 unsigned start,
                 unsigned count,
@@ -225,7 +225,7 @@ vsvg_run_linear(struct draw_vs_variant *variant,
    void *temp_buffer = MALLOC(align(count,4) * temp_vertex_stride +
                               DRAW_EXTRA_VERTICES_PADDING);
 
-   if (0) debug_printf("%s %d %d (sz %d, %d)\n", __FUNCTION__, start, count,
+   if (0) debug_printf("%s %d %d (sz %d, %d)\n", __func__, start, count,
                        vsvg->base.key.output_stride,
                        temp_vertex_stride);
 

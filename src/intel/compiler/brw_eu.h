@@ -1862,6 +1862,10 @@ brw_MOV_reloc_imm(struct brw_codegen *p,
                   enum brw_reg_type src_type,
                   uint32_t id);
 
+unsigned
+brw_num_sources_from_inst(const struct brw_isa_info *isa,
+                          const brw_inst *inst);
+
 /***********************************************************************
  * brw_eu_util.c:
  */

@@ -971,6 +971,7 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
 {
    rvcn_dec_message_av1_t result;
    unsigned i, j;
+   uint16_t tile_count = pic->picture_parameter.tile_cols * pic->picture_parameter.tile_rows;
 
    memset(&result, 0, sizeof(result));
 
@@ -1301,7 +1302,7 @@ static rvcn_dec_message_av1_t get_av1_msg(struct radeon_decoder *dec,
       for (j = 0; j < 6; ++j)
          result.global_motion[i + 1].wmmat[j] = pic->picture_parameter.wm[i].wmmat[j];
    }
-   for (i = 0; i < 256; ++i) {
+   for (i = 0; i < tile_count && i < 256; ++i) {
       result.tile_info[i].offset = pic->slice_parameter.slice_data_offset[i];
       result.tile_info[i].size = pic->slice_parameter.slice_data_size[i];
    }
@@ -2359,11 +2360,11 @@ static void rvcn_dec_sq_tail(struct radeon_decoder *dec)
    rvcn_sq_tail(&dec->cs, &dec->sq);
 }
 /* flush IB to the hardware */
-static int flush(struct radeon_decoder *dec, unsigned flags)
-{
+static int flush(struct radeon_decoder *dec, unsigned flags,
+                 struct pipe_fence_handle **fence) {
    rvcn_dec_sq_tail(dec);
 
-   return dec->ws->cs_flush(&dec->cs, flags, NULL);
+   return dec->ws->cs_flush(&dec->cs, flags, fence);
 }
 
 /* add a new set register command to the IB */
@@ -2735,7 +2736,7 @@ static void radeon_dec_destroy(struct pipe_video_codec *decoder)
       map_msg_fb_it_probs_buf(dec);
       rvcn_dec_message_destroy(dec);
       send_msg_buf(dec);
-      flush(dec, 0);
+      flush(dec, 0, NULL);
    }
 
    dec->ws->cs_destroy(&dec->cs);
@@ -2904,7 +2905,7 @@ static void radeon_dec_end_frame(struct pipe_video_codec *decoder, struct pipe_v
       return;
 
    dec->send_cmd(dec, target, picture);
-   flush(dec, PIPE_FLUSH_ASYNC);
+   flush(dec, PIPE_FLUSH_ASYNC, picture->fence);
    next_buffer(dec);
 }
 
@@ -2922,7 +2923,7 @@ static void radeon_dec_jpeg_end_frame(struct pipe_video_codec *decoder, struct p
       return;
 
    dec->send_cmd(dec, target, picture);
-   dec->ws->cs_flush(&dec->jcs[dec->cb_idx], PIPE_FLUSH_ASYNC, NULL);
+   dec->ws->cs_flush(&dec->jcs[dec->cb_idx], PIPE_FLUSH_ASYNC, picture->fence);
    next_buffer(dec);
    dec->cb_idx = (dec->cb_idx+1) % dec->njctx;
 }
@@ -2932,6 +2933,14 @@ static void radeon_dec_jpeg_end_frame(struct pipe_video_codec *decoder, struct p
  */
 static void radeon_dec_flush(struct pipe_video_codec *decoder)
 {
+}
+
+static int radeon_dec_get_decoder_fence(struct pipe_video_codec *decoder,
+                                        struct pipe_fence_handle *fence,
+                                        uint64_t timeout) {
+
+   struct radeon_decoder *dec = (struct radeon_decoder *)decoder;
+   return dec->ws->fence_wait(dec->ws, fence, timeout);
 }
 
 /**
@@ -3000,6 +3009,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    dec->base.decode_bitstream = radeon_dec_decode_bitstream;
    dec->base.end_frame = radeon_dec_end_frame;
    dec->base.flush = radeon_dec_flush;
+   dec->base.get_decoder_fence = radeon_dec_get_decoder_fence;
 
    dec->stream_type = stream_type;
    dec->stream_handle = si_vid_alloc_stream_handle();
@@ -3022,7 +3032,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 
    if (dec->stream_type == RDECODE_CODEC_JPEG) {
 
-      if (sctx->family == CHIP_ARCTURUS || sctx->family == CHIP_ALDEBARAN)
+      if (sctx->family == CHIP_MI100 || sctx->family == CHIP_MI200)
          dec->njctx = 2;
       else
          dec->njctx = 1;
@@ -3142,8 +3152,8 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
       dec->reg.cntl = RDECODE_VCN2_ENGINE_CNTL;
       dec->jpg.direct_reg = true;
       break;
-   case CHIP_ARCTURUS:
-   case CHIP_ALDEBARAN:
+   case CHIP_MI100:
+   case CHIP_MI200:
    case CHIP_NAVI21:
    case CHIP_NAVI22:
    case CHIP_NAVI23:
@@ -3174,7 +3184,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
       map_msg_fb_it_probs_buf(dec);
       rvcn_dec_message_create(dec);
       send_msg_buf(dec);
-      r = flush(dec, 0);
+      r = flush(dec, 0, NULL);
       if (r)
          goto error;
    }

@@ -31,7 +31,7 @@
 #include "nir/nir_xfb_info.h"
 #include "vulkan/util/vk_util.h"
 #include "compiler/spirv/nir_spirv.h"
-#include "float64_spv.h"
+#include "shaders/float64_spv.h"
 
 static bool
 anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,

@@ -350,11 +350,12 @@ driParseOptionInfo(driOptionCache *info,
       if (optinfo->name) {
          /* Duplicate options override the value, but the type must match. */
          assert(optinfo->type == opt->info.type);
+      } else {
+         XSTRDUP(optinfo->name, name);
       }
 
       optinfo->type = opt->info.type;
       optinfo->range = opt->info.range;
-      XSTRDUP(optinfo->name, name);
 
       switch (opt->info.type) {
       case DRI_BOOL:

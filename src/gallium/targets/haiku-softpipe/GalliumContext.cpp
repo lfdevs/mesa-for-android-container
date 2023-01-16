@@ -18,7 +18,7 @@
 #include "bitmap_wrapper.h"
 
 #include "glapi/glapi.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 //#include "state_tracker/st_cb_fbo.h"
 //#include "state_tracker/st_cb_flush.h"
 #include "state_tracker/st_context.h"
@@ -96,7 +96,7 @@ GalliumContext::CreateDisplay()
 	struct pipe_screen* screen = sw_screen_create(winsys);
 
 	if (screen == NULL) {
-		ERROR("%s: Couldn't create screen!\n", __FUNCTION__);
+		ERROR("%s: Couldn't create screen!\n", __func__);
 		winsys->destroy(winsys);
 		return B_ERROR;
 	}
@@ -109,7 +109,7 @@ GalliumContext::CreateDisplay()
 	fDisplay = hgl_create_display(screen);
 
 	if (fDisplay == NULL) {
-		ERROR("%s: Couldn't create display!\n", __FUNCTION__);
+		ERROR("%s: Couldn't create display!\n", __func__);
 		screen->destroy(screen); // will also destroy winsys
 		return B_ERROR;
 	}
@@ -125,7 +125,7 @@ GalliumContext::DestroyDisplay()
 		return;
 
 	if (fDisplay != NULL) {
-		struct pipe_screen* screen = fDisplay->manager->screen;
+		struct pipe_screen* screen = fDisplay->fscreen->screen;
 		hgl_destroy_display(fDisplay); fDisplay = NULL;
 		screen->destroy(screen); // destroy will deallocate object
 	}
@@ -140,7 +140,7 @@ GalliumContext::CreateContext(HGLWinsysContext *wsContext)
 	struct hgl_context* context = CALLOC_STRUCT(hgl_context);
 
 	if (!context) {
-		ERROR("%s: Couldn't create pipe context!\n", __FUNCTION__);
+		ERROR("%s: Couldn't create pipe context!\n", __func__);
 		return 0;
 	}
 
@@ -163,13 +163,13 @@ GalliumContext::CreateContext(HGLWinsysContext *wsContext)
 	struct st_context_attribs attribs;
 	memset(&attribs, 0, sizeof(attribs));
 	attribs.options.force_glsl_extensions_warn = false;
-	attribs.profile = ST_PROFILE_DEFAULT;
+	attribs.profile = API_OPENGL_COMPAT;
 	attribs.visual = *context->stVisual;
 	attribs.major = 1;
 	attribs.minor = 0;
 	//attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
 
-	struct st_context_iface* shared = NULL;
+	struct st_context *shared = NULL;
 
 	if (fOptions & BGL_SHARE_CONTEXT) {
 		shared = st_api_get_current();
@@ -178,7 +178,7 @@ GalliumContext::CreateContext(HGLWinsysContext *wsContext)
 
 	// Create context using state tracker api call
 	enum st_context_error result;
-	context->st = st_api_create_context(fDisplay->manager,
+	context->st = st_api_create_context(fDisplay->fscreen,
 		&attribs, &result, shared);
 
 	if (!context->st) {
@@ -191,20 +191,8 @@ GalliumContext::CreateContext(HGLWinsysContext *wsContext)
 			case ST_CONTEXT_ERROR_NO_MEMORY:
 				ERROR("%s: State tracker error: NO_MEMORY\n", __func__);
 				break;
-			case ST_CONTEXT_ERROR_BAD_API:
-				ERROR("%s: State tracker error: BAD_API\n", __func__);
-				break;
 			case ST_CONTEXT_ERROR_BAD_VERSION:
 				ERROR("%s: State tracker error: BAD_VERSION\n", __func__);
-				break;
-			case ST_CONTEXT_ERROR_BAD_FLAG:
-				ERROR("%s: State tracker error: BAD_FLAG\n", __func__);
-				break;
-			case ST_CONTEXT_ERROR_UNKNOWN_ATTRIBUTE:
-				ERROR("%s: State tracker error: BAD_ATTRIBUTE\n", __func__);
-				break;
-			case ST_CONTEXT_ERROR_UNKNOWN_FLAG:
-				ERROR("%s: State tracker error: UNKNOWN_FLAG\n", __func__);
 				break;
 		}
 
@@ -213,15 +201,16 @@ GalliumContext::CreateContext(HGLWinsysContext *wsContext)
 		return -1;
 	}
 
-	assert(!context->st->st_manager_private);
-	context->st->st_manager_private = (void*)context;
+	assert(!context->st->frontend_context);
+	context->st->frontend_context = (void*)context;
 
-	struct st_context *stContext = (struct st_context*)context->st;
+	struct st_context *stContext = context->st;
 
 	// Init Gallium3D Post Processing
 	// TODO: no pp filters are enabled yet through postProcessEnable
 	context->postProcess = pp_init(stContext->pipe, context->postProcessEnable,
-		stContext->cso_context, &stContext->iface);
+		stContext->cso_context, stContext,
+		st_context_invalidate_state);
 
 	context_id contextNext = -1;
 	Lock();
@@ -260,8 +249,8 @@ GalliumContext::DestroyContext(context_id contextID)
 		return;
 
 	if (fContext[contextID]->st) {
-		fContext[contextID]->st->flush(fContext[contextID]->st, 0, NULL, NULL, NULL);
-		fContext[contextID]->st->destroy(fContext[contextID]->st);
+		st_context_flush(fContext[contextID]->st, 0, NULL, NULL, NULL);
+		st_destroy_context(fContext[contextID]->st);
 	}
 
 	if (fContext[contextID]->postProcess)
@@ -309,13 +298,13 @@ GalliumContext::SetCurrentContext(bool set, context_id contextID)
 	fCurrentContext = contextID;
 
 	if (oldContextID > 0 && oldContextID != contextID) {
-		fContext[oldContextID]->st->flush(fContext[oldContextID]->st,
+		st_context_flush(fContext[oldContextID]->st,
 			ST_FLUSH_FRONT, NULL, NULL, NULL);
 	}
 
 	// We need to lock and unlock framebuffers before accessing them
-	st_api_make_current(context->st, context->buffer->stfbi,
-		context->buffer->stfbi);
+	st_api_make_current(context->st, &context->buffer->base,
+		&context->buffer->base);
 	Unlock();
 
 	return B_OK;
@@ -337,7 +326,7 @@ GalliumContext::SwapBuffers(context_id contextID)
 	}
 
 	// will flush front buffer if no double buffering is used
-	context->st->flush(context->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
+	st_context_flush(context->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
 
 	struct hgl_buffer* buffer = context->buffer;
 
@@ -346,8 +335,11 @@ GalliumContext::SwapBuffers(context_id contextID)
 		buffer->screen->flush_frontbuffer(buffer->screen, NULL, buffer->textures[ST_ATTACHMENT_BACK_LEFT],
 			0, 0, buffer->winsysContext, NULL);
 		std::swap(buffer->textures[ST_ATTACHMENT_FRONT_LEFT], buffer->textures[ST_ATTACHMENT_BACK_LEFT]);
-		p_atomic_inc(&buffer->stfbi->stamp);
+		p_atomic_inc(&buffer->base.stamp);
 	}
+
+        /* TODO: remove this if the framebuffer state doesn't change. */
+        st_context_invalidate_state(context->st, ST_INVALIDATE_FB_STATE);
 
 	Unlock();
 	return B_OK;
@@ -403,7 +395,7 @@ GalliumContext::Invalidate(uint32 width, uint32 height)
 	fContext[fCurrentContext]->height = height + 1;
 
 	// Is this the best way to invalidate?
-	p_atomic_inc(&fContext[fCurrentContext]->buffer->stfbi->stamp);
+	p_atomic_inc(&fContext[fCurrentContext]->buffer->base.stamp);
 }
 
 

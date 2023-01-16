@@ -126,7 +126,7 @@ static unsigned r300_texture_get_stride(struct r300_screen *screen,
     /* Check the level. */
     if (level > tex->b.last_level) {
         SCREEN_DBG(screen, DBG_TEX, "%s: level (%u) > last_level (%u)\n",
-                   __FUNCTION__, level, tex->b.last_level);
+                   __func__, level, tex->b.last_level);
         return 0;
     }
 

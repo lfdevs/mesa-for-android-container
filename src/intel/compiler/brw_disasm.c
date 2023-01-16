@@ -1792,13 +1792,44 @@ qtr_ctrl(FILE *file, const struct intel_device_info *devinfo,
    return 0;
 }
 
+static bool
+inst_has_type(const struct brw_isa_info *isa,
+              const brw_inst *inst,
+              enum brw_reg_type type)
+{
+   const struct intel_device_info *devinfo = isa->devinfo;
+   const unsigned num_sources = brw_num_sources_from_inst(isa, inst);
+
+   if (brw_inst_dst_type(devinfo, inst) == type)
+      return true;
+
+   if (num_sources >= 3) {
+      if (brw_inst_3src_access_mode(devinfo, inst) == BRW_ALIGN_1)
+         return brw_inst_3src_a1_src0_type(devinfo, inst) == type ||
+                brw_inst_3src_a1_src1_type(devinfo, inst) == type ||
+                brw_inst_3src_a1_src2_type(devinfo, inst) == type;
+      else
+         return brw_inst_3src_a16_src_type(devinfo, inst) == type;
+   } else if (num_sources == 2) {
+      return brw_inst_src0_type(devinfo, inst) == type ||
+             brw_inst_src1_type(devinfo, inst) == type;
+   } else {
+      return brw_inst_src0_type(devinfo, inst) == type;
+   }
+}
+
 static int
 swsb(FILE *file, const struct brw_isa_info *isa, const brw_inst *inst)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
    const enum opcode opcode = brw_inst_opcode(isa, inst);
    const uint8_t x = brw_inst_swsb(devinfo, inst);
-   const struct tgl_swsb swsb = tgl_swsb_decode(devinfo, opcode, x);
+   const bool is_unordered =
+      opcode == BRW_OPCODE_SEND || opcode == BRW_OPCODE_SENDC ||
+      opcode == BRW_OPCODE_MATH ||
+      (devinfo->has_64bit_float_via_math_pipe &&
+       inst_has_type(isa, inst, BRW_REGISTER_TYPE_DF));
+   const struct tgl_swsb swsb = tgl_swsb_decode(devinfo, is_unordered, x);
    if (swsb.regdist)
       format(file, " %s@%d",
              (swsb.pipe == TGL_PIPE_FLOAT ? "F" :

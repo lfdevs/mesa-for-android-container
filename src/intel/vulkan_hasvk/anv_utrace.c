@@ -31,7 +31,7 @@ command_buffers_count_utraces(struct anv_device *device,
                               struct anv_cmd_buffer **cmd_buffers,
                               uint32_t *utrace_copies)
 {
-   if (!u_trace_context_actively_tracing(&device->ds.trace_context))
+   if (!u_trace_should_process(&device->ds.trace_context))
       return 0;
 
    uint32_t utraces = 0;
@@ -127,7 +127,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
 
       result = anv_bo_pool_alloc(&device->utrace_bo_pool,
                                  /* 128 dwords of setup + 64 dwords per copy */
-                                 align_u32(512 + 64 * utrace_copies, 4096),
+                                 align(512 + 64 * utrace_copies, 4096),
                                  &flush->batch_bo);
       if (result != VK_SUCCESS)
          goto error_batch_buf;
@@ -200,7 +200,7 @@ anv_utrace_create_ts_buffer(struct u_trace_context *utctx, uint32_t size_b)
    struct anv_bo *bo = NULL;
    UNUSED VkResult result =
       anv_bo_pool_alloc(&device->utrace_bo_pool,
-                        align_u32(size_b, 4096),
+                        align(size_b, 4096),
                         &bo);
    assert(result == VK_SUCCESS);
 

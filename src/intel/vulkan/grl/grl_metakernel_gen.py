@@ -866,7 +866,7 @@ C_PROLOGUE = COPYRIGHT + '''
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
-#include "genxml/gen_rt_pack.h"
+#include "genxml/genX_rt_pack.h"
 
 /* We reserve :
  *    - GPR 14 for secondary command buffer returns

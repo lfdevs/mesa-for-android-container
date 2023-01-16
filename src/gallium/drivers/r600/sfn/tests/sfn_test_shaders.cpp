@@ -894,12 +894,12 @@ ALU ADD S30.z : KC0[3].z KC0[2].z {WL}
 ALU MULADD_IEEE S33.x : S25.x@free KC0[4].x S30.x {W}
 ALU MULADD_IEEE S33.y : S25.x@free KC0[4].y S30.y {W}
 ALU MULADD_IEEE S33.z : S25.x@free KC0[4].z S30.z {WL}
-ALU MULADD_IEEE CLAMP S40.x@group : S27.x@free KC0[5].x S33.x {W}
-ALU MULADD_IEEE CLAMP S40.y@group : S27.x@free KC0[5].y S33.y {W}
-ALU MULADD_IEEE CLAMP S40.z@group : S27.x@free KC0[5].z S33.z {W}
+ALU MULADD_IEEE CLAMP S1024.x@group : S27.x@free KC0[5].x S33.x {W}
+ALU MULADD_IEEE CLAMP S1024.y@group : S27.x@free KC0[5].y S33.y {W}
+ALU MULADD_IEEE CLAMP S1024.z@group : S27.x@free KC0[5].z S33.z {WL}
 EXPORT_DONE POS 0 S15.xyzw
-ALU MOV CLAMP S40.w@group : KC0[2].w {WL}
-EXPORT_DONE PARAM 0 S40.xyzw)";
+ALU MOV CLAMP S1024.w@group : KC0[2].w {WL}
+EXPORT_DONE PARAM 0 S1024.xyzw)";
 
 const char *vs_nexted_loop_nir =
    R"(shader: MESA_SHADER_VERTEX
@@ -2263,12 +2263,10 @@ PROP COLOR_EXPORT_MASK:15
 PROP WRITE_ALL_COLORS:1
 OUTPUT LOC:0 NAME:1 MASK:15
 SHADER
-ALU DOT4_IEEE S5.x@group : KC0[0].y KC0[0].y + KC0[0].y KC0[0].y + I[0] I[0] + I[0] I[0] {W}
-ALU DOT4_IEEE S3.x@free : KC0[0].x KC0[0].z + KC0[0].x KC0[0].w + I[0] I[0] + I[0] I[0] {WL}
-ALU DOT4_IEEE S5.w@group : KC0[0].y KC0[0].w + KC0[0].w KC0[0].y + I[0] I[0] + I[0] I[0] {WL}
-ALU MOV S5.y@group : S3.x@free {W}
-ALU MOV S5.z@group : S3.x@free {W}
-EXPORT_DONE PIXEL 0 S5.xyzw
+ALU DOT4_IEEE S1026.x@group : KC0[0].y KC0[0].y + KC0[0].y KC0[0].y + I[0] I[0] + I[0] I[0] {WL}
+ALU DOT4_IEEE S1026.z@group : KC0[0].x KC0[0].z + KC0[0].x KC0[0].w + I[0] I[0] + I[0] I[0] {WL}
+ALU DOT4_IEEE S1026.w@group : KC0[0].y KC0[0].w + KC0[0].w KC0[0].y + I[0] I[0] + I[0] I[0] {WL}
+EXPORT_DONE PIXEL 0 S1026.xzzw
 )";
 
 const char *fs_with_grand_and_abs =

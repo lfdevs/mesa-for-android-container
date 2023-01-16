@@ -26,7 +26,7 @@
  */
 
 #include "context.h"
-#include "glheader.h"
+#include "util/glheader.h"
 #include "errors.h"
 #include "enums.h"
 #include "teximage.h"

@@ -869,8 +869,6 @@ print_stage(Stage stage, FILE* output)
       fprintf(output, "compute_cs");
    else if (stage == fragment_fs)
       fprintf(output, "fragment_fs");
-   else if (stage == gs_copy_vs)
-      fprintf(output, "gs_copy_vs");
    else if (stage == vertex_ls)
       fprintf(output, "vertex_ls");
    else if (stage == vertex_es)

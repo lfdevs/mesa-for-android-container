@@ -31,7 +31,7 @@
 
 #include "tgsi/tgsi_ureg.h"
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_resource.h"

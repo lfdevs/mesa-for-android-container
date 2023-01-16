@@ -189,19 +189,16 @@ find_device(void)
 static void
 flush_ring(void)
 {
-   int ret;
-
    if (!dev.submit)
       return;
 
-   struct fd_submit_fence fence = {};
-   util_queue_fence_init(&fence.ready);
+   struct fd_fence *fence = fd_submit_flush(dev.submit, -1, false);
 
-   ret = fd_submit_flush(dev.submit, -1, &fence);
+   if (!fence)
+      errx(1, "submit failed");
 
-   if (ret)
-      errx(1, "submit failed: %d", ret);
-   util_queue_fence_wait(&fence.ready);
+   fd_fence_flush(fence);
+   fd_fence_del(fence);
    fd_ringbuffer_del(dev.ring);
    fd_submit_del(dev.submit);
 

@@ -35,6 +35,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 
+#include "util/simple_mtx.h"
 #include "util/u_inlines.h"
 #include "util/u_cpu_detect.h"
 #include "util/format/u_format.h"
@@ -60,7 +61,7 @@
 
 #ifdef DEBUG
 static struct llvmpipe_resource resource_list;
-static mtx_t resource_list_mutex = _MTX_INITIALIZER_NP;
+static simple_mtx_t resource_list_mutex = SIMPLE_MTX_INITIALIZER;
 #endif
 static unsigned id_counter = 0;
 
@@ -303,9 +304,9 @@ llvmpipe_resource_create_all(struct pipe_screen *_screen,
    lpr->id = id_counter++;
 
 #ifdef DEBUG
-   mtx_lock(&resource_list_mutex);
+   simple_mtx_lock(&resource_list_mutex);
    list_addtail(&lpr->list, &resource_list.list);
-   mtx_unlock(&resource_list_mutex);
+   simple_mtx_unlock(&resource_list_mutex);
 #endif
 
    return &lpr->base;
@@ -437,9 +438,9 @@ llvmpipe_resource_from_memobj(struct pipe_screen *pscreen,
    lpr->imported_memory = true;
 
 #ifdef DEBUG
-   mtx_lock(&resource_list_mutex);
+   simple_mtx_lock(&resource_list_mutex);
    list_addtail(&lpr->list, &resource_list.list);
-   mtx_unlock(&resource_list_mutex);
+   simple_mtx_unlock(&resource_list_mutex);
 #endif
 
    return &lpr->base;
@@ -474,10 +475,10 @@ llvmpipe_resource_destroy(struct pipe_screen *pscreen,
       }
    }
 #ifdef DEBUG
-   mtx_lock(&resource_list_mutex);
+   simple_mtx_lock(&resource_list_mutex);
    if (!list_is_empty(&lpr->list))
       list_del(&lpr->list);
-   mtx_unlock(&resource_list_mutex);
+   simple_mtx_unlock(&resource_list_mutex);
 #endif
 
    FREE(lpr);
@@ -611,9 +612,9 @@ llvmpipe_resource_from_handle(struct pipe_screen *_screen,
    lpr->id = id_counter++;
 
 #ifdef DEBUG
-   mtx_lock(&resource_list_mutex);
+   simple_mtx_lock(&resource_list_mutex);
    list_addtail(&lpr->list, &resource_list.list);
-   mtx_unlock(&resource_list_mutex);
+   simple_mtx_unlock(&resource_list_mutex);
 #endif
 
    return &lpr->base;
@@ -670,9 +671,9 @@ llvmpipe_resource_from_user_memory(struct pipe_screen *_screen,
       lpr->data = user_memory;
    lpr->user_ptr = true;
 #ifdef DEBUG
-   mtx_lock(&resource_list_mutex);
+   simple_mtx_lock(&resource_list_mutex);
    list_addtail(&lpr->list, &resource_list.list);
-   mtx_unlock(&resource_list_mutex);
+   simple_mtx_unlock(&resource_list_mutex);
 #endif
    return &lpr->base;
 fail:
@@ -713,7 +714,7 @@ llvmpipe_transfer_map_ms(struct pipe_context *pipe,
                                    read_only,
                                    TRUE, /* cpu_access */
                                    do_not_block,
-                                   __FUNCTION__)) {
+                                   __func__)) {
          /*
           * It would have blocked, but gallium frontend requested no to.
           */
@@ -1066,7 +1067,7 @@ llvmpipe_print_resources(void)
    unsigned n = 0, total = 0;
 
    debug_printf("LLVMPIPE: current resources:\n");
-   mtx_lock(&resource_list_mutex);
+   simple_mtx_lock(&resource_list_mutex);
    LIST_FOR_EACH_ENTRY(lpr, &resource_list.list, list) {
       unsigned size = llvmpipe_resource_size(&lpr->base);
       debug_printf("resource %u at %p, size %ux%ux%u: %u bytes, refcount %u\n",
@@ -1076,7 +1077,7 @@ llvmpipe_print_resources(void)
       total += size;
       n++;
    }
-   mtx_unlock(&resource_list_mutex);
+   simple_mtx_unlock(&resource_list_mutex);
    debug_printf("LLVMPIPE: total size of %u resources: %u\n", n, total);
 }
 #endif

@@ -84,6 +84,8 @@ def define_tracepoints(args):
                           Arg(type='enum isl_format', name='src_fmt', var='src_fmt', c_format='%s', to_prim_type='isl_format_get_short_name({})'),
                           ])
 
+    begin_end_tp('generate_draws')
+
     begin_end_tp('draw',
                  tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
     begin_end_tp('draw_multi',
@@ -133,23 +135,28 @@ def define_tracepoints(args):
             exprs.append('(__entry->flags & INTEL_DS_{0}_BIT) ? "+{1}" : ""'.format(a[0], a[1]))
         fmt += ' : %s'
         exprs.append('__entry->reason ? __entry->reason : "unknown"')
+        # To printout flags
+        # fmt += '(0x%08x)'
+        # exprs.append('__entry->flags')
         fmt = [fmt]
         fmt += exprs
         return fmt
 
-    stall_flags = [['DEPTH_CACHE_FLUSH',         'depth_flush'],
-                   ['DATA_CACHE_FLUSH',          'dc_flush'],
-                   ['HDC_PIPELINE_FLUSH',        'hdc_flush'],
-                   ['RENDER_TARGET_CACHE_FLUSH', 'rt_flush'],
-                   ['TILE_CACHE_FLUSH',          'tile_flush'],
-                   ['STATE_CACHE_INVALIDATE',    'state_inval'],
-                   ['CONST_CACHE_INVALIDATE',    'const_inval'],
-                   ['VF_CACHE_INVALIDATE',       'vf_inval'],
-                   ['TEXTURE_CACHE_INVALIDATE',  'tex_inval'],
-                   ['INST_CACHE_INVALIDATE',     'ic_inval'],
-                   ['STALL_AT_SCOREBOARD',       'pb_stall'],
-                   ['DEPTH_STALL',               'depth_stall'],
-                   ['CS_STALL',                  'cs_stall']]
+    stall_flags = [['DEPTH_CACHE_FLUSH',             'depth_flush'],
+                   ['DATA_CACHE_FLUSH',              'dc_flush'],
+                   ['HDC_PIPELINE_FLUSH',            'hdc_flush'],
+                   ['RENDER_TARGET_CACHE_FLUSH',     'rt_flush'],
+                   ['TILE_CACHE_FLUSH',              'tile_flush'],
+                   ['STATE_CACHE_INVALIDATE',        'state_inval'],
+                   ['CONST_CACHE_INVALIDATE',        'const_inval'],
+                   ['VF_CACHE_INVALIDATE',           'vf_inval'],
+                   ['TEXTURE_CACHE_INVALIDATE',      'tex_inval'],
+                   ['INST_CACHE_INVALIDATE',         'ic_inval'],
+                   ['STALL_AT_SCOREBOARD',           'pb_stall'],
+                   ['DEPTH_STALL',                   'depth_stall'],
+                   ['CS_STALL',                      'cs_stall'],
+                   ['UNTYPED_DATAPORT_CACHE_FLUSH',  'udp_flush'],
+                   ['PSS_STALL_SYNC',                'pss_stall']]
 
     begin_end_tp('stall',
                  tp_args=[ArgStruct(type='uint32_t', var='flags'),

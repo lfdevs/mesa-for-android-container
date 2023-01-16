@@ -800,15 +800,15 @@ vn_sizeof_VkClearColorValue_tag(const VkClearColorValue *val, uint32_t tag)
     switch (tag) {
     case 0:
         size += vn_sizeof_array_size(4);
-    size += vn_sizeof_float_array(val->float32, 4);
+        size += vn_sizeof_float_array(val->float32, 4);
         break;
     case 1:
         size += vn_sizeof_array_size(4);
-    size += vn_sizeof_int32_t_array(val->int32, 4);
+        size += vn_sizeof_int32_t_array(val->int32, 4);
         break;
     case 2:
         size += vn_sizeof_array_size(4);
-    size += vn_sizeof_uint32_t_array(val->uint32, 4);
+        size += vn_sizeof_uint32_t_array(val->uint32, 4);
         break;
     default:
         assert(false);
@@ -830,15 +830,15 @@ vn_encode_VkClearColorValue_tag(struct vn_cs_encoder *enc, const VkClearColorVal
     switch (tag) {
     case 0:
         vn_encode_array_size(enc, 4);
-    vn_encode_float_array(enc, val->float32, 4);
+        vn_encode_float_array(enc, val->float32, 4);
         break;
     case 1:
         vn_encode_array_size(enc, 4);
-    vn_encode_int32_t_array(enc, val->int32, 4);
+        vn_encode_int32_t_array(enc, val->int32, 4);
         break;
     case 2:
         vn_encode_array_size(enc, 4);
-    vn_encode_uint32_t_array(enc, val->uint32, 4);
+        vn_encode_uint32_t_array(enc, val->uint32, 4);
         break;
     default:
         assert(false);

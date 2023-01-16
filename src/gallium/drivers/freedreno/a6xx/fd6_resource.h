@@ -30,6 +30,7 @@
 
 #include "freedreno_resource.h"
 
+bool fd6_valid_tiling(struct fd_resource *rsc, enum pipe_format format);
 void fd6_validate_format(struct fd_context *ctx, struct fd_resource *rsc,
                          enum pipe_format format) assert_dt;
 void fd6_emit_flag_reference(struct fd_ringbuffer *ring,

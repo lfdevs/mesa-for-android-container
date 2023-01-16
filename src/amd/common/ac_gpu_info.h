@@ -118,6 +118,7 @@ struct radeon_info {
    bool discardable_allows_big_page;
    bool has_export_conflict_bug;
    bool has_vrs_ds_export_bug;
+   bool has_taskmesh_indirect0_bug;
 
    /* Display features. */
    /* There are 2 display DCC codepaths, because display expects unaligned DCC. */
@@ -192,6 +193,7 @@ struct radeon_info {
    bool has_eqaa_surface_allocator;
    bool has_sparse_vm_mappings;
    bool has_scheduled_fence_dependency;
+   bool has_gang_submit;
    bool has_stable_pstate;
    /* Whether SR-IOV is enabled or amdgpu.mcbp=1 was set on the kernel command line. */
    bool mid_command_buffer_preemption_enabled;

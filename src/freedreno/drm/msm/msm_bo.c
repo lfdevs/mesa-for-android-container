@@ -78,16 +78,6 @@ msm_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
    return drmCommandWrite(bo->dev->fd, DRM_MSM_GEM_CPU_PREP, &req, sizeof(req));
 }
 
-static void
-msm_bo_cpu_fini(struct fd_bo *bo)
-{
-   struct drm_msm_gem_cpu_fini req = {
-      .handle = bo->handle,
-   };
-
-   drmCommandWrite(bo->dev->fd, DRM_MSM_GEM_CPU_FINI, &req, sizeof(req));
-}
-
 static int
 msm_bo_madvise(struct fd_bo *bo, int willneed)
 {
@@ -150,13 +140,13 @@ static void
 msm_bo_destroy(struct fd_bo *bo)
 {
    struct msm_bo *msm_bo = to_msm_bo(bo);
+   fd_bo_fini_common(bo);
    free(msm_bo);
 }
 
 static const struct fd_bo_funcs funcs = {
    .offset = msm_bo_offset,
    .cpu_prep = msm_bo_cpu_prep,
-   .cpu_fini = msm_bo_cpu_fini,
    .madvise = msm_bo_madvise,
    .iova = msm_bo_iova,
    .set_name = msm_bo_set_name,

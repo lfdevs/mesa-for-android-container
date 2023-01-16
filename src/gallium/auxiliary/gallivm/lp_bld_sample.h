@@ -36,7 +36,7 @@
 #define LP_BLD_SAMPLE_H
 
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "util/u_debug.h"
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_type.h"

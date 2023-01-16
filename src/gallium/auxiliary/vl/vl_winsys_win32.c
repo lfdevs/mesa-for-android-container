@@ -41,8 +41,6 @@ vl_win32_screen_destroy(struct vl_screen *vscreen)
    if (vscreen == NULL)
       return;
 
-   struct vl_win32_screen *win32_screen = (struct vl_win32_screen *) vscreen;
-
    if (vscreen->pscreen)
       vscreen->pscreen->destroy(vscreen->pscreen);
 

@@ -44,13 +44,13 @@
 #include "compiler/v3d_compiler.h"
 
 #include "drm-uapi/v3d_drm.h"
-#include "format/u_format.h"
 #include "vk_drm_syncobj.h"
 #include "vk_util.h"
 #include "git_sha1.h"
 
 #include "util/build_id.h"
 #include "util/u_debug.h"
+#include "util/format/u_format.h"
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
@@ -155,6 +155,7 @@ get_device_extensions(const struct v3dv_physical_device *device,
       .KHR_storage_buffer_storage_class     = true,
       .KHR_timeline_semaphore               = true,
       .KHR_uniform_buffer_standard_layout   = true,
+      .KHR_shader_integer_dot_product       = true,
       .KHR_synchronization2                 = true,
       .KHR_workgroup_memory_explicit_layout = true,
 #ifdef V3DV_USE_WSI_PLATFORM
@@ -1169,6 +1170,7 @@ v3dv_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       .shaderZeroInitializeWorkgroupMemory = true,
       .synchronization2 = true,
       .robustImageAccess = true,
+      .shaderIntegerDotProduct = true,
    };
 
    VkPhysicalDeviceVulkan12Features vk12 = {
@@ -1391,20 +1393,6 @@ v3dv_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
          break;
       }
    }
-}
-
-VKAPI_ATTR void VKAPI_CALL
-v3dv_GetDeviceGroupPeerMemoryFeatures(VkDevice device,
-                                      uint32_t heapIndex,
-                                      uint32_t localDeviceIndex,
-                                      uint32_t remoteDeviceIndex,
-                                      VkPeerMemoryFeatureFlags *pPeerMemoryFeatures)
-{
-   assert(localDeviceIndex == 0 && remoteDeviceIndex == 0);
-   *pPeerMemoryFeatures = VK_PEER_MEMORY_FEATURE_COPY_SRC_BIT |
-                          VK_PEER_MEMORY_FEATURE_COPY_DST_BIT |
-                          VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT |
-                          VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
 }
 
 uint32_t
@@ -1636,6 +1624,36 @@ v3dv_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .storageTexelBufferOffsetSingleTexelAlignment = false,
       .uniformTexelBufferOffsetAlignmentBytes = V3D_TMU_TEXEL_ALIGN,
       .uniformTexelBufferOffsetSingleTexelAlignment = false,
+      /* No native acceleration for integer dot product. We use NIR lowering. */
+      .integerDotProduct8BitUnsignedAccelerated = false,
+      .integerDotProduct8BitMixedSignednessAccelerated = false,
+      .integerDotProduct4x8BitPackedUnsignedAccelerated = false,
+      .integerDotProduct4x8BitPackedSignedAccelerated = false,
+      .integerDotProduct4x8BitPackedMixedSignednessAccelerated = false,
+      .integerDotProduct16BitUnsignedAccelerated = false,
+      .integerDotProduct16BitSignedAccelerated = false,
+      .integerDotProduct16BitMixedSignednessAccelerated = false,
+      .integerDotProduct32BitUnsignedAccelerated = false,
+      .integerDotProduct32BitSignedAccelerated = false,
+      .integerDotProduct32BitMixedSignednessAccelerated = false,
+      .integerDotProduct64BitUnsignedAccelerated = false,
+      .integerDotProduct64BitSignedAccelerated = false,
+      .integerDotProduct64BitMixedSignednessAccelerated = false,
+      .integerDotProductAccumulatingSaturating8BitUnsignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating8BitSignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating8BitMixedSignednessAccelerated = false,
+      .integerDotProductAccumulatingSaturating4x8BitPackedUnsignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating4x8BitPackedMixedSignednessAccelerated = false,
+      .integerDotProductAccumulatingSaturating16BitUnsignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating16BitSignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating16BitMixedSignednessAccelerated = false,
+      .integerDotProductAccumulatingSaturating32BitUnsignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating32BitSignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating32BitMixedSignednessAccelerated = false,
+      .integerDotProductAccumulatingSaturating64BitUnsignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating64BitSignedAccelerated = false,
+      .integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated = false,
    };
 
    VkPhysicalDeviceVulkan12Properties vk12 = {
@@ -2113,6 +2131,10 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
       goto fail;
    }
 
+   result = v3dv_query_allocate_resources(device);
+   if (result != VK_SUCCESS)
+      goto fail;
+
    *pDevice = v3dv_device_to_handle(device);
 
    return VK_SUCCESS;
@@ -2123,6 +2145,8 @@ fail:
    queue_finish(&device->queue);
    destroy_device_meta(device);
    v3dv_pipeline_cache_finish(&device->default_pipeline_cache);
+   v3dv_event_free_resources(device);
+   v3dv_query_free_resources(device);
    vk_device_finish(&device->vk);
    vk_free(&device->vk.alloc, device);
 
@@ -2140,6 +2164,8 @@ v3dv_DestroyDevice(VkDevice _device,
 
    v3dv_event_free_resources(device);
    mtx_destroy(&device->events.lock);
+
+   v3dv_query_free_resources(device);
 
    destroy_device_meta(device);
    v3dv_pipeline_cache_finish(&device->default_pipeline_cache);
@@ -3072,4 +3098,32 @@ v3dv_GetDeviceMemoryOpaqueCaptureAddress(
 {
    /* Not implemented */
    return 0;
+}
+
+VkResult
+v3dv_create_compute_pipeline_from_nir(struct v3dv_device *device,
+                                      nir_shader *nir,
+                                      VkPipelineLayout pipeline_layout,
+                                      VkPipeline *pipeline)
+{
+   struct vk_shader_module cs_m = vk_shader_module_from_nir(nir);
+
+   VkPipelineShaderStageCreateInfo set_event_cs_stage = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = vk_shader_module_to_handle(&cs_m),
+      .pName = "main",
+   };
+
+   VkComputePipelineCreateInfo info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = set_event_cs_stage,
+      .layout = pipeline_layout,
+   };
+
+   VkResult result =
+      v3dv_CreateComputePipelines(v3dv_device_to_handle(device), VK_NULL_HANDLE,
+                                  1, &info, &device->vk.alloc, pipeline);
+
+   return result;
 }

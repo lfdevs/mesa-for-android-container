@@ -31,7 +31,7 @@
 #ifndef __CONSTS_EXTS_H__
 #define __CONSTS_EXTS_H__
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "compiler/shader_enums.h"
 #include "compiler/shader_info.h"
 
@@ -178,7 +178,6 @@ struct gl_extensions
    GLboolean EXT_memory_object_win32;
    GLboolean EXT_multisampled_render_to_texture;
    GLboolean EXT_packed_float;
-   GLboolean EXT_pixel_buffer_object;
    GLboolean EXT_provoking_vertex;
    GLboolean EXT_render_snorm;
    GLboolean EXT_semaphore;
@@ -998,5 +997,8 @@ struct gl_constants
 
    /** Use hardware accelerated GL_SELECT */
    bool HardwareAcceleratedSelect;
+
+   /** Allow GLThread to convert glBuffer */
+   bool AllowGLThreadBufferSubDataOpt;
 };
 #endif

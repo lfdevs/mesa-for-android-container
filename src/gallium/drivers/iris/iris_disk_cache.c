@@ -268,7 +268,7 @@ iris_disk_cache_init(struct iris_screen *screen)
    /* array length = print length + nul char + 1 extra to verify it's unused */
    char renderer[11];
    UNUSED int len =
-      snprintf(renderer, sizeof(renderer), "iris_%04x", screen->devinfo.pci_device_id);
+      snprintf(renderer, sizeof(renderer), "iris_%04x", screen->devinfo->pci_device_id);
    assert(len == sizeof(renderer) - 2);
 
    const struct build_id_note *note =

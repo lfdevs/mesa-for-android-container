@@ -115,7 +115,7 @@ fd_screen_get_name(struct pipe_screen *pscreen)
 static const char *
 fd_screen_get_vendor(struct pipe_screen *pscreen)
 {
-   return "freedreno";
+   return "Mesa";
 }
 
 static const char *
@@ -304,6 +304,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
          return A4XX_MAX_TEXEL_BUFFER_ELEMENTS_UINT;
 
       return 0;
+
+   case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
+      return PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_FREEDRENO;
 
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_CUBE_MAP_ARRAY:
@@ -506,8 +509,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 12;
 
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-      return (is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen) ||
-              is_a6xx(screen))
+      if (is_a6xx(screen))
+         return 2048;
+      return (is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen))
                 ? 256
                 : 0;
 
@@ -960,7 +964,7 @@ static void
 _fd_fence_ref(struct pipe_screen *pscreen, struct pipe_fence_handle **ptr,
               struct pipe_fence_handle *pfence)
 {
-   fd_fence_ref(ptr, pfence);
+   fd_pipe_fence_ref(ptr, pfence);
 }
 
 static void
@@ -1180,8 +1184,8 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro,
    pscreen->get_timestamp = fd_screen_get_timestamp;
 
    pscreen->fence_reference = _fd_fence_ref;
-   pscreen->fence_finish = fd_fence_finish;
-   pscreen->fence_get_fd = fd_fence_get_fd;
+   pscreen->fence_finish = fd_pipe_fence_finish;
+   pscreen->fence_get_fd = fd_pipe_fence_get_fd;
 
    pscreen->query_dmabuf_modifiers = fd_screen_query_dmabuf_modifiers;
    pscreen->is_dmabuf_modifier_supported =

@@ -32,7 +32,7 @@
 #include "syncobj.h"
 
 int
-st_interop_query_device_info(struct st_context_iface *st,
+st_interop_query_device_info(struct st_context *st,
                              struct mesa_glinterop_device_info *out)
 {
    struct pipe_screen *screen = st->pipe->screen;
@@ -237,12 +237,12 @@ lookup_object(struct gl_context *ctx,
 }
 
 int
-st_interop_export_object(struct st_context_iface *st,
+st_interop_export_object(struct st_context *st,
                          struct mesa_glinterop_export_in *in,
                          struct mesa_glinterop_export_out *out)
 {
    struct pipe_screen *screen = st->pipe->screen;
-   struct gl_context *ctx = ((struct st_context *)st)->ctx;
+   struct gl_context *ctx = st->ctx;
    struct pipe_resource *res = NULL;
    struct winsys_handle whandle;
    unsigned usage;
@@ -254,8 +254,7 @@ st_interop_export_object(struct st_context_iface *st,
       return MESA_GLINTEROP_INVALID_VERSION;
 
    /* Wait for glthread to finish to get up-to-date GL object lookups. */
-   if (st->thread_finish)
-      st->thread_finish(st);
+   _mesa_glthread_finish(st->ctx);
 
    /* Validate the OpenGL object and get pipe_resource. */
    simple_mtx_lock(&ctx->Shared->Mutex);
@@ -341,15 +340,14 @@ flush_object(struct gl_context *ctx,
 }
 
 int
-st_interop_flush_objects(struct st_context_iface *st,
+st_interop_flush_objects(struct st_context *st,
                          unsigned count, struct mesa_glinterop_export_in *objects,
                          GLsync *sync)
 {
-   struct gl_context *ctx = ((struct st_context *)st)->ctx;
+   struct gl_context *ctx = st->ctx;
 
    /* Wait for glthread to finish to get up-to-date GL object lookups. */
-   if (st->thread_finish)
-      st->thread_finish(st);
+   _mesa_glthread_finish(st->ctx);
 
    simple_mtx_lock(&ctx->Shared->Mutex);
 

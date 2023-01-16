@@ -64,7 +64,8 @@ panvk_GetDescriptorSetLayoutSupport(VkDevice _device,
    }
 
    unsigned sampler_idx = 0, tex_idx = 0, ubo_idx = 0;
-   unsigned dynoffset_idx = 0, img_idx = 0;
+   unsigned img_idx = 0;
+   UNUSED unsigned dynoffset_idx = 0;
 
    for (unsigned i = 0; i < pCreateInfo->bindingCount; i++) {
       const VkDescriptorSetLayoutBinding *binding = &bindings[i];

@@ -220,7 +220,10 @@ TEST_F(ValueTest, reg_from_string)
    EXPECT_EQ(*fs, reg);
 
    EXPECT_EQ(*Register::from_string("R1001.y"), Register(1001, 1, pin_none));
-   EXPECT_EQ(*Register::from_string("R1.z@fully"), Register(1, 2, pin_fully));
+
+   auto reg2 = Register(1, 2, pin_fully);
+   reg2.set_flag(Register::pin_start);
+   EXPECT_EQ(*Register::from_string("R1.z@fully"), reg2);
    EXPECT_EQ(*Register::from_string("R1000.y@chan"), Register(1000, 1, pin_chan));
    EXPECT_EQ(*Register::from_string("R1000.y@free"), Register(1000, 1, pin_free));
 

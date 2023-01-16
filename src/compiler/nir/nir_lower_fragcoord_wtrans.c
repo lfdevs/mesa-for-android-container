@@ -45,10 +45,11 @@ lower_fragcoord_wtrans_filter(const nir_instr *instr, UNUSED const void *_option
    if (intr->intrinsic != nir_intrinsic_load_deref)
       return false;
 
-   nir_variable *var = nir_intrinsic_get_var(intr, 0);
-   if (var->data.mode != nir_var_shader_in)
+   nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+   if (!nir_deref_mode_must_be(deref, nir_var_shader_in))
       return false;
 
+   nir_variable *var = nir_intrinsic_get_var(intr, 0);
    return var->data.location == VARYING_SLOT_POS;
 }
 

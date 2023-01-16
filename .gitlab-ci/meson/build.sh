@@ -24,7 +24,7 @@ fi
 # tests in their meson.build with:
 #
 # test(...,
-#      should_fail: meson.get_cross_property('xfail', '').contains(t),
+#      should_fail: meson.get_external_property('xfail', '').contains(t),
 #     )
 #
 # where t is the name of the test, and the '' is the string to search when

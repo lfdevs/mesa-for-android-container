@@ -107,9 +107,9 @@ TEST_F(LiveRangeTests, SimpleAInterpolation)
 
    ValueFactory vf;
    Register *r0x = vf.dest_from_string("R0.x@fully");
-   r0x->pin_live_range(true, false);
+   r0x->set_flag(Register::pin_start);
    Register *r0y = vf.dest_from_string("R0.y@fully");
-   r0y->pin_live_range(true, false);
+   r0y->set_flag(Register::pin_start);
 
    Register *r1x = vf.dest_from_string("S1.x@free");
    RegisterVec4 r2 = vf.dest_vec4_from_string("S2.xyzw", dummy, pin_chan);

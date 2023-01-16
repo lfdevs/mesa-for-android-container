@@ -60,8 +60,8 @@ struct wsi_image_create_info {
     const void *pNext;
     bool scanout;
 
-    /* if true, the image is a buffer blit source */
-    bool buffer_blit_src;
+    /* if true, the image is a blit source */
+    bool blit_src;
 };
 
 struct wsi_memory_allocate_info {
@@ -87,6 +87,7 @@ struct wsi_memory_signal_submit_info {
 };
 
 struct wsi_interface;
+struct vk_instance;
 
 struct driOptionCache;
 
@@ -146,6 +147,15 @@ struct wsi_device {
       bool xwaylandWaitReady;
    } x11;
 
+   struct {
+      void *(*get_d3d12_command_queue)(VkDevice device);
+      /* Needs to be per VkDevice, not VkPhysicalDevice, depends on queue config */
+      bool (*requires_blits)(VkDevice device);
+      VkResult (*create_image_memory)(VkDevice device, void *resource,
+                                      const VkAllocationCallbacks *alloc,
+                                      VkDeviceMemory *out);
+   } win32;
+
    bool sw;
 
    /* Set to true if the implementation is ok with linear WSI images. */
@@ -165,6 +175,12 @@ struct wsi_device {
     * vk_sync must support CPU waits.
     */
    bool signal_fence_with_memory;
+
+   /* Whether present_wait functionality is enabled on the device.
+    * In this case, we have to create an extra timeline semaphore
+    * to be able to synchronize with the WSI present semaphore being unsignalled.
+    * This requires VK_KHR_timeline_semaphore. */
+   bool khr_present_wait;
 
    /*
     * This sets the ownership for a WSI memory object:
@@ -192,7 +208,7 @@ struct wsi_device {
     * A driver can implement this callback to return a special queue to execute
     * buffer blits.
     */
-   VkQueue (*get_buffer_blit_queue)(VkDevice device);
+   VkQueue (*get_blit_queue)(VkDevice device);
 
 #define WSI_CB(cb) PFN_vk##cb cb
    WSI_CB(AllocateMemory);
@@ -201,6 +217,7 @@ struct wsi_device {
    WSI_CB(BindImageMemory);
    WSI_CB(BeginCommandBuffer);
    WSI_CB(CmdPipelineBarrier);
+   WSI_CB(CmdCopyImage);
    WSI_CB(CmdCopyImageToBuffer);
    WSI_CB(CreateBuffer);
    WSI_CB(CreateCommandPool);
@@ -216,6 +233,7 @@ struct wsi_device {
    WSI_CB(FreeMemory);
    WSI_CB(FreeCommandBuffers);
    WSI_CB(GetBufferMemoryRequirements);
+   WSI_CB(GetFenceStatus);
    WSI_CB(GetImageDrmFormatModifierPropertiesEXT);
    WSI_CB(GetImageMemoryRequirements);
    WSI_CB(GetImageSubresourceLayout);
@@ -229,6 +247,7 @@ struct wsi_device {
    WSI_CB(WaitForFences);
    WSI_CB(MapMemory);
    WSI_CB(UnmapMemory);
+   WSI_CB(WaitSemaphoresKHR);
 #undef WSI_CB
 
     struct wsi_interface *                  wsi[VK_ICD_WSI_PLATFORM_MAX];
@@ -304,6 +323,9 @@ wsi_common_bind_swapchain_image(const struct wsi_device *wsi,
                                 VkImage vk_image,
                                 VkSwapchainKHR _swapchain,
                                 uint32_t image_idx);
+
+bool
+wsi_common_vk_instance_supports_present_wait(const struct vk_instance *instance);
 
 #ifdef __cplusplus
 }

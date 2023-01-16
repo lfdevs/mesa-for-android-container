@@ -209,7 +209,7 @@ calc_bbox_line(nir_builder *b, nir_ssa_def *pos[3][4], nir_ssa_def *bbox_min[2],
 
       nir_ssa_def *width = nir_channel(b, clip_half_line_width, chan);
       bbox_min[chan] = nir_fsub(b, bbox_min[chan], width);
-      bbox_max[chan] = nir_fsub(b, bbox_max[chan], width);
+      bbox_max[chan] = nir_fadd(b, bbox_max[chan], width);
    }
 }
 
@@ -268,8 +268,8 @@ cull_small_primitive_line(nir_builder *b, nir_ssa_def *pos[3][4],
       rotate_45degrees(b, v1);
 
       nir_ssa_def *small_prim_precision = nir_load_cull_small_prim_precision_amd(b);
-      prim_is_small = prim_is_small_else;
 
+      nir_ssa_def *rounded_to_eq[2];
       for (unsigned chan = 0; chan < 2; chan++) {
          /* The width of each square is sqrt(0.5), so scale it to 1 because we want
           * round() to give us the position of the closest center of a square (diamond).
@@ -293,9 +293,11 @@ cull_small_primitive_line(nir_builder *b, nir_ssa_def *pos[3][4],
          min = nir_fround_even(b, min);
          max = nir_fround_even(b, max);
 
-         nir_ssa_def *rounded_to_eq = nir_feq(b, min, max);
-         prim_is_small = nir_ior(b, prim_is_small, rounded_to_eq);
+         rounded_to_eq[chan] = nir_feq(b, min, max);
       }
+
+      prim_is_small = nir_iand(b, rounded_to_eq[0], rounded_to_eq[1]);
+      prim_is_small = nir_ior(b, prim_is_small, prim_is_small_else);
    }
    nir_pop_if(b, if_cull_small_prims);
 

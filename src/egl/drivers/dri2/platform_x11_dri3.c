@@ -101,7 +101,6 @@ static const struct loader_dri3_vtable egl_dri3_vtable = {
    .get_dri_context = egl_dri3_get_dri_context,
    .get_dri_screen = egl_dri3_get_dri_screen,
    .flush_drawable = egl_dri3_flush_drawable,
-   .show_fps = NULL,
 };
 
 static EGLBoolean

@@ -119,6 +119,20 @@ struct pipe_video_codec
     * get encoder feedback
     */
    void (*get_feedback)(struct pipe_video_codec *codec, void *feedback, unsigned *size);
+
+   /**
+    * Get decoder fence.
+    *
+    * Can be used to query the status of the previous decode job denoted by
+    * 'fence' given 'timeout'.
+    *
+    * A pointer to a fence pointer can be passed to the codecs before the
+    * end_frame vfunc and the codec should then be responsible for allocating a
+    * fence on command stream submission.
+    */
+   int (*get_decoder_fence)(struct pipe_video_codec *codec,
+                            struct pipe_fence_handle *fence,
+                            uint64_t timeout);
 };
 
 /**
@@ -168,6 +182,11 @@ struct pipe_video_buffer
     * destroy the associated data
     */
    void (*destroy_associated_data)(void *associated_data);
+
+   /*
+    * encoded frame statistics for this particular picture
+    */
+   void *statistics_data;
 };
 
 #ifdef __cplusplus

@@ -82,7 +82,7 @@ tu_tracepoints = custom_target(
   output: ['tu_tracepoints.c', 'tu_tracepoints.h', 'tu_tracepoints_perfetto.h'],
   command: [
     prog_python, '@INPUT@',
-    '-p', join_paths(meson.source_root(), 'src/util/perf/'),
+    '-p', join_paths(dir_source_root, 'src/util/perf/'),
     '--utrace-src', '@OUTPUT0@',
     '--utrace-hdr', '@OUTPUT1@',
     '--perfetto-hdr', '@OUTPUT2@',

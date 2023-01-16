@@ -23,7 +23,7 @@
  */
 
 #include <stdbool.h>
-#include "glheader.h"
+#include "util/glheader.h"
 #include "draw_validate.h"
 #include "arrayobj.h"
 #include "bufferobj.h"

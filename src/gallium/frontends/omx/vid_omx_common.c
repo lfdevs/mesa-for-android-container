@@ -37,7 +37,7 @@
 #define Display void
 #endif
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_memory.h"
 #include "loader/loader.h"
 

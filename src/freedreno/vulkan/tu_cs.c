@@ -290,8 +290,14 @@ tu_cs_alloc(struct tu_cs *cs,
    assert(cs->mode == TU_CS_MODE_SUB_STREAM);
    assert(size && size <= 1024);
 
-   if (!count)
+   if (!count) {
+      /* If you allocated no memory, you'd better not use the iova for anything
+       * (but it's left aligned for sanity).
+       */
+      memory->map = NULL;
+      memory->iova = 0xdead0000;
       return VK_SUCCESS;
+   }
 
    /* TODO: smarter way to deal with alignment? */
 
@@ -434,4 +440,72 @@ tu_cs_reset(struct tu_cs *cs)
    }
 
    cs->entry_count = 0;
+}
+
+void
+tu_cs_emit_debug_string(struct tu_cs *cs, const char *string, int len)
+{
+   assert(cs->mode == TU_CS_MODE_GROW);
+
+   /* max packet size is 0x3fff dwords */
+   len = MIN2(len, 0x3fff * 4);
+
+   tu_cs_emit_pkt7(cs, CP_NOP, align(len, 4) / 4);
+   const uint32_t *buf = (const uint32_t *) string;
+
+   tu_cs_emit_array(cs, buf, len / 4);
+   buf += len / 4;
+   len = len % 4;
+
+   /* copy remainder bytes without reading past end of input string */
+   if (len > 0) {
+      uint32_t w = 0;
+      memcpy(&w, buf, len);
+      tu_cs_emit(cs, w);
+   }
+}
+
+void
+tu_cs_emit_debug_magic_strv(struct tu_cs *cs,
+                            uint32_t magic,
+                            const char *fmt,
+                            va_list args)
+{
+   int fmt_len = vsnprintf(NULL, 0, fmt, args);
+   int len = 4 + fmt_len + 1;
+   char *string = (char *) malloc(len);
+
+   /* format: <magic><formatted string>\0 */
+   *(uint32_t *) string = magic;
+   vsnprintf(string + 4, fmt_len + 1, fmt, args);
+
+   tu_cs_emit_debug_string(cs, string, len);
+   free(string);
+}
+
+__attribute__((format(printf, 2, 3))) void
+tu_cs_emit_debug_msg(struct tu_cs *cs, const char *fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   tu_cs_emit_debug_magic_strv(cs, CP_NOP_MESG, fmt, args);
+   va_end(args);
+}
+
+void
+tu_cs_trace_start(void *cs, const char *fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   tu_cs_emit_debug_magic_strv((struct tu_cs *) cs, CP_NOP_BEGN, fmt, args);
+   va_end(args);
+}
+
+void
+tu_cs_trace_end(void *cs, const char *fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   tu_cs_emit_debug_magic_strv((struct tu_cs *) cs, CP_NOP_END, fmt, args);
+   va_end(args);
 }

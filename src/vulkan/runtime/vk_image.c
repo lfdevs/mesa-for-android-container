@@ -33,25 +33,12 @@
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
 #include "vk_format.h"
+#include "vk_format_info.h"
+#include "vk_log.h"
+#include "vk_physical_device.h"
 #include "vk_render_pass.h"
 #include "vk_util.h"
 #include "vulkan/wsi/wsi_common.h"
-
-static VkExtent3D
-sanitize_image_extent(const VkImageType imageType,
-                      const VkExtent3D imageExtent)
-{
-   switch (imageType) {
-   case VK_IMAGE_TYPE_1D:
-      return (VkExtent3D) { imageExtent.width, 1, 1 };
-   case VK_IMAGE_TYPE_2D:
-      return (VkExtent3D) { imageExtent.width, imageExtent.height, 1 };
-   case VK_IMAGE_TYPE_3D:
-      return imageExtent;
-   default:
-      unreachable("invalid image type");
-   }
-}
 
 void
 vk_image_init(struct vk_device *device,
@@ -76,8 +63,7 @@ vk_image_init(struct vk_device *device,
    image->create_flags = pCreateInfo->flags;
    image->image_type = pCreateInfo->imageType;
    vk_image_set_format(image, pCreateInfo->format);
-   image->extent = sanitize_image_extent(pCreateInfo->imageType,
-                                         pCreateInfo->extent);
+   image->extent = vk_image_sanitize_extent(image, pCreateInfo->extent);
    image->mip_levels = pCreateInfo->mipLevels;
    image->array_layers = pCreateInfo->arrayLayers;
    image->samples = pCreateInfo->samples;
@@ -566,10 +552,10 @@ vk_image_layout_is_read_only(VkImageLayout layout,
       return aspect == VK_IMAGE_ASPECT_STENCIL_BIT;
 
    case VK_IMAGE_LAYOUT_MAX_ENUM:
-#ifdef VK_ENABLE_BETA_EXTENSIONS
    case VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR:
+#ifdef VK_ENABLE_BETA_EXTENSIONS
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR:
@@ -591,6 +577,143 @@ vk_image_layout_is_depth_only(VkImageLayout layout)
    default:
       return false;
    }
+}
+
+static VkResult
+vk_image_create_get_format_list_uncompressed(struct vk_device *device,
+                                             const VkImageCreateInfo *pCreateInfo,
+                                             const VkAllocationCallbacks *pAllocator,
+                                             VkFormat **formats,
+                                             uint32_t *format_count)
+{
+   const struct vk_format_class_info *class =
+      vk_format_get_class_info(pCreateInfo->format);
+
+   *formats = NULL;
+   *format_count = 0;
+
+   if (class->format_count < 2)
+      return VK_SUCCESS;
+
+   *formats = vk_alloc2(&device->alloc, pAllocator,
+                        sizeof(VkFormat) * class->format_count,
+                        alignof(VkFormat), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   if (*formats == NULL)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   memcpy(*formats, class->formats, sizeof(VkFormat) * class->format_count);
+   *format_count = class->format_count;
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+vk_image_create_get_format_list_compressed(struct vk_device *device,
+                                           const VkImageCreateInfo *pCreateInfo,
+                                           const VkAllocationCallbacks *pAllocator,
+                                           VkFormat **formats,
+                                           uint32_t *format_count)
+{
+   if ((pCreateInfo->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) == 0) {
+      return vk_image_create_get_format_list_uncompressed(device,
+                                                          pCreateInfo,
+                                                          pAllocator,
+                                                          formats,
+                                                          format_count);
+   }
+
+   const struct vk_format_class_info *class =
+      vk_format_get_class_info(pCreateInfo->format);
+   const struct vk_format_class_info *uncompr_class = NULL;
+
+   switch (vk_format_get_blocksizebits(pCreateInfo->format)) {
+   case 64:
+      uncompr_class = vk_format_class_get_info(MESA_VK_FORMAT_CLASS_64_BIT);
+      break;
+   case 128:
+      uncompr_class = vk_format_class_get_info(MESA_VK_FORMAT_CLASS_128_BIT);
+      break;
+   }
+
+   if (!uncompr_class)
+      return vk_error(device, VK_ERROR_FORMAT_NOT_SUPPORTED);
+
+   uint32_t fmt_count = class->format_count + uncompr_class->format_count;
+
+   *formats = vk_alloc2(&device->alloc, pAllocator,
+                        sizeof(VkFormat) * fmt_count,
+                        alignof(VkFormat), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   if (*formats == NULL)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   memcpy(*formats, class->formats, sizeof(VkFormat) * class->format_count);
+   memcpy(*formats + class->format_count, uncompr_class->formats,
+          sizeof(VkFormat) * uncompr_class->format_count);
+   *format_count = class->format_count + uncompr_class->format_count;
+
+   return VK_SUCCESS;
+}
+
+/* Get a list of compatible formats when VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT
+ * or VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT is set. This list is
+ * either retrieved from a VkImageFormatListCreateInfo passed to the creation
+ * chain, or forged from the default compatible list specified in the
+ * "formats-compatibility-classes" section of the spec.
+ *
+ * The value returned in *formats must be freed with
+ * vk_free2(&device->alloc, pAllocator), and should not live past the
+ * vkCreateImage() call (allocated in the COMMAND scope).
+ */
+VkResult
+vk_image_create_get_format_list(struct vk_device *device,
+                                const VkImageCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator,
+                                VkFormat **formats,
+                                uint32_t *format_count)
+{
+   *formats = NULL;
+   *format_count = 0;
+
+   if (!(pCreateInfo->flags &
+         (VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
+          VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT))) {
+      return VK_SUCCESS;
+   }
+
+   /* "Each depth/stencil format is only compatible with itself." */
+   if (vk_format_is_depth_or_stencil(pCreateInfo->format))
+      return VK_SUCCESS;
+
+   const VkImageFormatListCreateInfo *format_list = (const VkImageFormatListCreateInfo *)
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_FORMAT_LIST_CREATE_INFO);
+
+   if (format_list) {
+      if (!format_list->viewFormatCount)
+         return VK_SUCCESS;
+
+      *formats = vk_alloc2(&device->alloc, pAllocator,
+                           sizeof(VkFormat) * format_list->viewFormatCount,
+                           alignof(VkFormat), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+      if (*formats == NULL)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      memcpy(*formats, format_list->pViewFormats, sizeof(VkFormat) * format_list->viewFormatCount);
+      *format_count = format_list->viewFormatCount;
+      return VK_SUCCESS;
+   }
+
+   if (vk_format_is_compressed(pCreateInfo->format))
+      return vk_image_create_get_format_list_compressed(device,
+                                                        pCreateInfo,
+                                                        pAllocator,
+                                                        formats,
+                                                        format_count);
+
+   return vk_image_create_get_format_list_uncompressed(device,
+                                                       pCreateInfo,
+                                                       pAllocator,
+                                                       formats,
+                                                       format_count);
 }
 
 /* From the Vulkan Specification 1.2.166 - VkAttachmentReference2:
@@ -811,10 +934,10 @@ vk_image_layout_to_usage_flags(VkImageLayout layout,
       }
 
    case VK_IMAGE_LAYOUT_MAX_ENUM:
-#ifdef VK_ENABLE_BETA_EXTENSIONS
    case VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR:
+#ifdef VK_ENABLE_BETA_EXTENSIONS
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR:
    case VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR:

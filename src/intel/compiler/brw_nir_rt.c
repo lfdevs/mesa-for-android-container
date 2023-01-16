@@ -43,7 +43,7 @@ resize_deref(nir_builder *b, nir_deref_instr *deref,
       if (nir_src_is_const(deref->arr.index)) {
          idx = nir_imm_intN_t(b, nir_src_as_int(deref->arr.index), bit_size);
       } else {
-         idx = nir_i2i(b, deref->arr.index.ssa, bit_size);
+         idx = nir_i2iN(b, deref->arr.index.ssa, bit_size);
       }
       nir_instr_rewrite_src(&deref->instr, &deref->arr.index,
                             nir_src_for_ssa(idx));
@@ -439,12 +439,28 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
     * raygen BSR address here; the global data we'll deal with later.
     */
    b.shader->num_uniforms = 32;
-   nir_ssa_def *raygen_bsr_addr =
+   nir_ssa_def *raygen_param_bsr_addr =
       load_trampoline_param(&b, raygen_bsr_addr, 1, 64);
+   nir_ssa_def *is_indirect =
+      nir_i2b(&b, load_trampoline_param(&b, is_indirect, 1, 8));
    nir_ssa_def *local_shift =
       nir_u2u32(&b, load_trampoline_param(&b, local_group_size_log2, 3, 8));
 
-   nir_ssa_def *global_id = nir_load_workgroup_id(&b, 32);
+   nir_ssa_def *raygen_indirect_bsr_addr;
+   nir_push_if(&b, is_indirect);
+   {
+      raygen_indirect_bsr_addr =
+         nir_load_global_constant(&b, raygen_param_bsr_addr,
+                                  8 /* align */,
+                                  1 /* components */,
+                                  64 /* bit_size */);
+   }
+   nir_pop_if(&b, NULL);
+
+   nir_ssa_def *raygen_bsr_addr =
+      nir_if_phi(&b, raygen_indirect_bsr_addr, raygen_param_bsr_addr);
+
+   nir_ssa_def *global_id = nir_load_workgroup_id_zero_base(&b);
    nir_ssa_def *simd_channel = nir_load_subgroup_invocation(&b);
    nir_ssa_def *local_x =
       nir_ubfe(&b, simd_channel, nir_imm_int(&b, 0),

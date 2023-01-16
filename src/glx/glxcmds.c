@@ -2,30 +2,7 @@
  * SGI FREE SOFTWARE LICENSE B (Version 2.0, Sept. 18, 2008)
  * Copyright (C) 1991-2000 Silicon Graphics, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice including the dates of first publication and
- * either this permission notice or a reference to
- * http://oss.sgi.com/projects/FreeB/
- * shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * SILICON GRAPHICS, INC. BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
- * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- * Except as contained in this notice, the name of Silicon Graphics, Inc.
- * shall not be used in advertising or otherwise to promote the sale, use or
- * other dealings in this Software without prior written authorization from
- * Silicon Graphics, Inc.
+ * SPDX-License-Identifier: SGI-B-2.0
  */
 
 /**
@@ -377,27 +354,6 @@ CreateContext(Display *dpy, int generic_id, struct glx_config *config,
       GetReq(GLXCreateNewContext, req);
       req->reqType = gc->majorOpcode;
       req->glxCode = X_GLXCreateNewContext;
-      req->context = gc->xid = XAllocID(dpy);
-      req->fbconfig = generic_id;
-      req->screen = config->screen;
-      req->renderType = renderType;
-      req->shareList = shareList ? shareList->xid : None;
-      req->isDirect = gc->isDirect;
-      break;
-   }
-
-   case X_GLXvop_CreateContextWithConfigSGIX: {
-      xGLXVendorPrivateWithReplyReq *vpreq;
-      xGLXCreateContextWithConfigSGIXReq *req;
-
-      /* Send the glXCreateNewContext request */
-      GetReqExtra(GLXVendorPrivateWithReply,
-		  sz_xGLXCreateContextWithConfigSGIXReq -
-		  sz_xGLXVendorPrivateWithReplyReq, vpreq);
-      req = (xGLXCreateContextWithConfigSGIXReq *) vpreq;
-      req->reqType = gc->majorOpcode;
-      req->glxCode = X_GLXVendorPrivateWithReply;
-      req->vendorCode = X_GLXvop_CreateContextWithConfigSGIX;
       req->context = gc->xid = XAllocID(dpy);
       req->fbconfig = generic_id;
       req->screen = config->screen;
@@ -764,7 +720,7 @@ glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
       }
 
       if (__glxHashInsert(priv->drawHash, xid, pdraw)) {
-         (*pdraw->destroyDrawable) (pdraw);
+         pdraw->destroyDrawable(pdraw);
          xid = None;
          break;
       }
@@ -821,7 +777,7 @@ glXDestroyGLXPixmap(Display * dpy, GLXPixmap glxpixmap)
       __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, glxpixmap);
 
       if (priv != NULL && pdraw != NULL) {
-         (*pdraw->destroyDrawable) (pdraw);
+         pdraw->destroyDrawable(pdraw);
          __glxHashDelete(priv->drawHash, glxpixmap);
       }
    }
@@ -1446,28 +1402,12 @@ glXImportContextEXT(Display *dpy, GLXContextID contextID)
    /* Send the glXQueryContextInfoEXT request */
    LockDisplay(dpy);
 
-   if (priv->minorVersion >= 3) {
-      xGLXQueryContextReq *req;
+   xGLXQueryContextReq *req;
+   GetReq(GLXQueryContext, req);
 
-      GetReq(GLXQueryContext, req);
-
-      req->reqType = opcode;
-      req->glxCode = X_GLXQueryContext;
-      req->context = contextID;
-   }
-   else {
-      xGLXVendorPrivateReq *vpreq;
-      xGLXQueryContextInfoEXTReq *req;
-
-      GetReqExtra(GLXVendorPrivate,
-		  sz_xGLXQueryContextInfoEXTReq - sz_xGLXVendorPrivateReq,
-		  vpreq);
-      req = (xGLXQueryContextInfoEXTReq *) vpreq;
-      req->reqType = opcode;
-      req->glxCode = X_GLXVendorPrivateWithReply;
-      req->vendorCode = X_GLXvop_QueryContextInfoEXT;
-      req->context = contextID;
-   }
+   req->reqType = opcode;
+   req->glxCode = X_GLXQueryContext;
+   req->context = contextID;
 
    if (_XReply(dpy, (xReply *) & reply, 0, False) &&
        reply.n < (INT32_MAX / 2)) {
@@ -1977,94 +1917,23 @@ glXCreateGLXPixmapWithConfigSGIX(Display * dpy,
                                  GLXFBConfigSGIX fbconfig,
                                  Pixmap pixmap)
 {
-#ifndef GLX_USE_APPLEGL
-   xGLXVendorPrivateWithReplyReq *vpreq;
-   xGLXCreateGLXPixmapWithConfigSGIXReq *req;
-   GLXPixmap xid = None;
-   CARD8 opcode;
-   struct glx_screen *psc;
-#endif
-   struct glx_config *config = (struct glx_config *) fbconfig;
-
-
-   if ((dpy == NULL) || (config == NULL)) {
-      return None;
-   }
-#ifdef GLX_USE_APPLEGL
-   if(apple_glx_pixmap_create(dpy, config->screen, pixmap, config))
-      return None;
-   return pixmap;
-#else
-
-   psc = GetGLXScreenConfigs(dpy, config->screen);
-   if ((psc != NULL)
-       && __glXExtensionBitIsEnabled(psc, SGIX_fbconfig_bit)) {
-      opcode = __glXSetupForCommand(dpy);
-      if (!opcode) {
-         return None;
-      }
-
-      /* Send the glXCreateGLXPixmapWithConfigSGIX request */
-      LockDisplay(dpy);
-      GetReqExtra(GLXVendorPrivateWithReply,
-                  sz_xGLXCreateGLXPixmapWithConfigSGIXReq -
-                  sz_xGLXVendorPrivateWithReplyReq, vpreq);
-      req = (xGLXCreateGLXPixmapWithConfigSGIXReq *) vpreq;
-      req->reqType = opcode;
-      req->glxCode = X_GLXVendorPrivateWithReply;
-      req->vendorCode = X_GLXvop_CreateGLXPixmapWithConfigSGIX;
-      req->screen = config->screen;
-      req->fbconfig = config->fbconfigID;
-      req->pixmap = pixmap;
-      req->glxpixmap = xid = XAllocID(dpy);
-      UnlockDisplay(dpy);
-      SyncHandle();
-   }
-
-   return xid;
-#endif
+   return glXCreatePixmap(dpy, fbconfig, pixmap, NULL);
 }
 
-_GLX_PUBLIC GLXContext
-glXCreateContextWithConfigSGIX(Display * dpy,
-                               GLXFBConfigSGIX fbconfig, int renderType,
-                               GLXContext shareList, Bool allowDirect)
-{
-   GLXContext gc = NULL;
-   struct glx_config *config = (struct glx_config *) fbconfig;
-   struct glx_screen *psc;
-
-
-   if ((dpy == NULL) || (config == NULL)) {
-      return None;
-   }
-
-   psc = GetGLXScreenConfigs(dpy, config->screen);
-   if ((psc != NULL)
-       && __glXExtensionBitIsEnabled(psc, SGIX_fbconfig_bit)) {
-      gc = CreateContext(dpy, config->fbconfigID, config, shareList,
-                         allowDirect,
-			 X_GLXvop_CreateContextWithConfigSGIX, renderType);
-   }
-
-   return gc;
-}
-
+_GLX_PUBLIC GLX_ALIAS(GLXContext, glXCreateContextWithConfigSGIX,
+                      (Display *dpy, GLXFBConfigSGIX fbconfig,
+                       int renderType, GLXContext shareList, Bool direct),
+                      (dpy, config, renderType, shareList, direct),
+                      glXCreateNewContext)
 
 _GLX_PUBLIC GLXFBConfigSGIX
 glXGetFBConfigFromVisualSGIX(Display * dpy, XVisualInfo * vis)
 {
-   struct glx_display *priv;
-   struct glx_screen *psc = NULL;
+   int attrib_list[] = { GLX_VISUAL_ID, vis->visualid, None };
+   int nconfigs = 0;
 
-   if ((GetGLXPrivScreenConfig(dpy, vis->screen, &priv, &psc) == Success)
-       && __glXExtensionBitIsEnabled(psc, SGIX_fbconfig_bit)
-       && (psc->configs->fbconfigID != (int) GLX_DONT_CARE)) {
-      return (GLXFBConfigSGIX) glx_config_find_visual(psc->configs,
-						      vis->visualid);
-   }
-
-   return NULL;
+   return (GLXFBConfigSGIX)
+      glXChooseFBConfig(dpy, vis->screen, attrib_list, &nconfigs);
 }
 
 #ifndef GLX_USE_APPLEGL
@@ -2225,7 +2094,7 @@ glXSwapBuffersMscOML(Display *dpy, GLXDrawable drawable,
 
 #ifdef GLX_DIRECT_RENDERING
    if (psc->driScreen && psc->driScreen->swapBuffers)
-      return (*psc->driScreen->swapBuffers)(pdraw, target_msc, divisor,
+      return psc->driScreen->swapBuffers(pdraw, target_msc, divisor,
 					    remainder, False);
 #endif
 
@@ -2295,56 +2164,6 @@ glXWaitForSbcOML(Display *dpy, GLXDrawable drawable, int64_t target_sbc,
 
 
 /**
- * Mesa extension stubs.  These will help reduce portability problems.
- */
-/*@{*/
-
-/**
- * Release all buffers associated with the specified GLX drawable.
- *
- * \todo
- * This function was intended for stand-alone Mesa.  The issue there is that
- * the library doesn't get any notification when a window is closed.  In
- * DRI there is a similar but slightly different issue.  When GLX 1.3 is
- * supported, there are 3 different functions to destroy a drawable.  It
- * should be possible to create GLX protocol (or have it determine which
- * protocol to use based on the type of the drawable) to have one function
- * do the work of 3.  For the direct-rendering case, this function could
- * just call the driver's \c __DRIdrawableRec::destroyDrawable function.
- * This would reduce the frequency with which \c __driGarbageCollectDrawables
- * would need to be used.  This really should be done as part of the new DRI
- * interface work.
- *
- * \sa http://oss.sgi.com/projects/ogl-sample/registry/MESA/release_buffers.txt
- *     __driGarbageCollectDrawables
- *     glXDestroyGLXPixmap
- *     glXDestroyPbuffer glXDestroyPixmap glXDestroyWindow
- *     glXDestroyGLXPbufferSGIX glXDestroyGLXVideoSourceSGIX
- */
-_X_HIDDEN Bool
-glXReleaseBuffersMESA(Display * dpy, GLXDrawable d)
-{
-   (void) dpy;
-   (void) d;
-   return False;
-}
-
-
-_GLX_PUBLIC GLXPixmap
-glXCreateGLXPixmapMESA(Display * dpy, XVisualInfo * visual,
-                       Pixmap pixmap, Colormap cmap)
-{
-   (void) dpy;
-   (void) visual;
-   (void) pixmap;
-   (void) cmap;
-   return 0;
-}
-
-/*@}*/
-
-
-/**
  * GLX_MESA_copy_sub_buffer
  */
 #define X_GLXvop_CopySubBufferMESA 5154 /* temporary */
@@ -2364,7 +2183,7 @@ glXCopySubBufferMESA(Display * dpy, GLXDrawable drawable,
    if (pdraw != NULL) {
       struct glx_screen *psc = pdraw->psc;
       if (psc->driScreen->copySubBuffer != NULL) {
-         (*psc->driScreen->copySubBuffer) (pdraw, x, y, width, height, True);
+         psc->driScreen->copySubBuffer(pdraw, x, y, width, height, True);
       }
 
       return;
@@ -2431,7 +2250,7 @@ glXBindTexImageEXT(Display *dpy, GLXDrawable drawable, int buffer,
    if (pdraw != NULL) {
       struct glx_screen *psc = pdraw->psc;
       if (psc->driScreen->bindTexImage != NULL)
-         (*psc->driScreen->bindTexImage) (pdraw, buffer, attrib_list);
+         psc->driScreen->bindTexImage(pdraw, buffer, attrib_list);
 
       return;
    }
@@ -2489,7 +2308,7 @@ glXReleaseTexImageEXT(Display * dpy, GLXDrawable drawable, int buffer)
    if (pdraw != NULL) {
       struct glx_screen *psc = pdraw->psc;
       if (psc->driScreen->releaseTexImage != NULL)
-         (*psc->driScreen->releaseTexImage) (pdraw, buffer);
+         psc->driScreen->releaseTexImage(pdraw, buffer);
 
       return;
    }
@@ -2623,12 +2442,6 @@ static const struct name_address_pair GLX_functions[] = {
    /*** GLX_MESA_copy_sub_buffer ***/
    GLX_FUNCTION(glXCopySubBufferMESA),
 
-   /*** GLX_MESA_pixmap_colormap ***/
-   GLX_FUNCTION(glXCreateGLXPixmapMESA),
-
-   /*** GLX_MESA_release_buffers ***/
-   GLX_FUNCTION(glXReleaseBuffersMESA),
-
    /*** GLX_MESA_swap_control ***/
    GLX_FUNCTION(glXSwapIntervalMESA),
    GLX_FUNCTION(glXGetSwapIntervalMESA),
@@ -2704,9 +2517,6 @@ _GLX_PUBLIC void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
    f = (gl_function) get_glx_proc_address((const char *) procName);
    if ((f == NULL) && (procName[0] == 'g') && (procName[1] == 'l')
        && (procName[2] != 'X')) {
-#ifdef GLX_INDIRECT_RENDERING
-      f = (gl_function) __indirect_get_proc_address((const char *) procName);
-#endif
       if (!f)
          f = (gl_function) _glapi_get_proc_address((const char *) procName);
 #ifdef GLX_USE_APPLEGL

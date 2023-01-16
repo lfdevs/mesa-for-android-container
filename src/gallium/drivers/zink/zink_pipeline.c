@@ -268,7 +268,8 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    assert(state->rast_prim != PIPE_PRIM_MAX);
 
    VkPipelineRasterizationLineStateCreateInfoEXT rast_line_state;
-   if (screen->info.have_EXT_line_rasterization) {
+   if (screen->info.have_EXT_line_rasterization &&
+       !state->shader_keys.key[MESA_SHADER_FRAGMENT].key.fs.lower_line_smooth) {
       rast_line_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT;
       rast_line_state.pNext = rast_state.pNext;
       rast_line_state.stippledLineEnable = VK_FALSE;
@@ -292,7 +293,15 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
          mode_idx += hw_rast_state->line_stipple_enable * 3;
          if (*(feat + mode_idx))
             rast_line_state.lineRasterizationMode = hw_rast_state->line_mode;
-         else
+         else if (hw_rast_state->line_stipple_enable &&
+                  screen->driver_workarounds.no_linestipple) {
+            /* drop line stipple, we can emulate it */
+            mode_idx -= hw_rast_state->line_stipple_enable * 3;
+            if (*(feat + mode_idx))
+               rast_line_state.lineRasterizationMode = hw_rast_state->line_mode;
+            else
+               warn_missing_feature(warned[mode_idx], features[hw_rast_state->line_mode][0]);
+         } else
             warn_missing_feature(warned[mode_idx], features[hw_rast_state->line_mode][hw_rast_state->line_stipple_enable]);
       }
 
@@ -677,7 +686,7 @@ zink_create_gfx_pipeline_library(struct zink_screen *screen, struct zink_gfx_pro
    dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT;
    if (screen->info.dynamic_state3_feats.extendedDynamicState3LineStippleEnable)
       dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_LINE_STIPPLE_ENABLE_EXT;
-   if (screen->info.have_EXT_line_rasterization)
+   if (!screen->driver_workarounds.no_linestipple)
       dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_LINE_STIPPLE_EXT;
    assert(state_count < ARRAY_SIZE(dynamicStateEnables));
 

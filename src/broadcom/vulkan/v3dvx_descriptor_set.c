@@ -51,7 +51,7 @@ v3dX(descriptor_bo_size)(VkDescriptorType type)
 }
 
 /* To compute the max_bo_size we want to iterate through the descriptor
- * types. Unfourtunately we can't just use the descriptor type enum values, as
+ * types. Unfortunately we can't just use the descriptor type enum values, as
  * the values are not defined consecutively (so extensions could add new
  * descriptor types), and VK_DESCRIPTOR_TYPE_MAX_ENUM is also a really big
  * number.

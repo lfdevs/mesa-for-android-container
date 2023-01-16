@@ -576,9 +576,6 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
       if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT)
          flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
 
-      if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && devinfo->ver >= 9)
-         flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
-
       if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT)
          flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT;
 
@@ -611,9 +608,6 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
                 VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
 
       flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT;
-
-      if (devinfo->ver >= 9)
-         flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
 
       if (isl_format_supports_filtering(devinfo, plane_format.isl_format))
          flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
@@ -795,11 +789,6 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
          }
       }
 
-      if (isl_mod_info->aux_usage == ISL_AUX_USAGE_CCS_E &&
-          !isl_format_supports_ccs_e(devinfo, plane_format.isl_format)) {
-         return 0;
-      }
-
       if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE) {
          /* Rejection DISJOINT for consistency with the GL driver. In
           * eglCreateImage, we require that the dma_buf for the primary surface
@@ -815,11 +804,6 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
          flags &= ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_ATOMIC_BIT;
       }
    }
-
-   if (devinfo->has_coarse_pixel_primitive_and_cb &&
-       vk_format == VK_FORMAT_R8_UINT &&
-       vk_tiling == VK_IMAGE_TILING_OPTIMAL)
-      flags |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
 
    return flags;
 }
@@ -1000,7 +984,8 @@ anv_get_image_format_properties(
    struct anv_physical_device *physical_device,
    const VkPhysicalDeviceImageFormatInfo2 *info,
    VkImageFormatProperties *pImageFormatProperties,
-   VkSamplerYcbcrConversionImageFormatProperties *pYcbcrImageFormatProperties)
+   VkSamplerYcbcrConversionImageFormatProperties *pYcbcrImageFormatProperties,
+   bool from_wsi)
 {
    VkFormatFeatureFlags2 format_feature_flags;
    VkExtent3D maxExtent;
@@ -1120,13 +1105,6 @@ anv_get_image_format_properties(
       maxArraySize = 1;
       maxMipLevels = 1;
       sampleCounts = VK_SAMPLE_COUNT_1_BIT;
-
-      if (isl_mod_info->aux_usage == ISL_AUX_USAGE_CCS_E &&
-          !anv_formats_ccs_e_compatible(devinfo, info->flags, info->format,
-                                        info->tiling, image_usage,
-                                        format_list_info)) {
-         goto unsupported;
-      }
    }
 
    /* Our hardware doesn't support 1D compressed textures.
@@ -1148,6 +1126,12 @@ anv_get_image_format_properties(
        !(image_usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
        isl_format_supports_multisampling(devinfo, format->planes[0].isl_format)) {
       sampleCounts = isl_device_get_sample_counts(&physical_device->isl_dev);
+      /* Gfx7 doesn't support 8xMSAA with depth/stencil images when their width
+       * is greater than 8192 pixels. */
+      if (devinfo->ver == 7 &&
+         (format_feature_flags & VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+         maxExtent.width = 8192;
+      }
    }
 
    if (view_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
@@ -1233,7 +1217,7 @@ anv_get_image_format_properties(
       }
    }
 
-   if (info->flags & VK_IMAGE_CREATE_ALIAS_BIT) {
+   if (info->flags & VK_IMAGE_CREATE_ALIAS_BIT && !from_wsi) {
       /* Reject aliasing of images with non-linear DRM format modifiers because:
        *
        * 1. For modifiers with compression, we store aux tracking state in
@@ -1243,6 +1227,9 @@ anv_get_image_format_properties(
        * 2. For tiled modifiers without compression, we may attempt to compress
        *    them behind the scenes, in which case both the aux tracking state
        *    and the CCS data are bound to ANV_IMAGE_MEMORY_BINDING_PRIVATE.
+       *
+       * 3. For WSI we should ignore ALIAS_BIT because we have the ability to
+       *    bind the ANV_MEMORY_BINDING_PRIVATE from the other WSI image.
        */
       if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
           isl_mod_info->modifier != DRM_FORMAT_MOD_LINEAR) {
@@ -1326,7 +1313,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties(
    };
 
    return anv_get_image_format_properties(physical_device, &info,
-                                          pImageFormatProperties, NULL);
+                                          pImageFormatProperties, NULL, false);
 }
 
 
@@ -1392,10 +1379,11 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
    VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
    VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
    VkResult result;
+   bool from_wsi = false;
 
    /* Extract input structs */
    vk_foreach_struct_const(s, base_info->pNext) {
-      switch (s->sType) {
+      switch ((unsigned)s->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
          external_info = (const void *) s;
          break;
@@ -1405,6 +1393,9 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          break;
       case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
          /* Ignore but don't warn */
+         break;
+      case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
+         from_wsi = true;
          break;
       default:
          anv_debug_ignored_stype(s->sType);
@@ -1431,7 +1422,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
    }
 
    result = anv_get_image_format_properties(physical_device, base_info,
-               &base_props->imageFormatProperties, ycbcr_props);
+               &base_props->imageFormatProperties, ycbcr_props, from_wsi);
    if (result != VK_SUCCESS)
       goto fail;
 

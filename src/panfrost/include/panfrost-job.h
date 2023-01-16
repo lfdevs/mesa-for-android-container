@@ -28,11 +28,11 @@
 #ifndef __PANFROST_JOB_H__
 #define __PANFROST_JOB_H__
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-typedef uint8_t  u8;
+typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
@@ -68,13 +68,13 @@ typedef uint64_t mali_ptr;
 /* These formats seem to largely duplicate the others. They're used at least
  * for Bifrost framebuffer output.
  */
-#define MALI_FORMAT_SPECIAL2 (7 << 5)
-#define MALI_EXTRACT_TYPE(fmt) ((fmt) & 0xe0)
+#define MALI_FORMAT_SPECIAL2   (7 << 5)
+#define MALI_EXTRACT_TYPE(fmt) ((fmt)&0xe0)
 
 /* If the high 3 bits are 3 to 6 these two bits say how many components
  * there are.
  */
-#define MALI_NR_CHANNELS(n) ((n - 1) << 3)
+#define MALI_NR_CHANNELS(n)        ((n - 1) << 3)
 #define MALI_EXTRACT_CHANNELS(fmt) ((((fmt) >> 3) & 3) + 1)
 
 /* If the high 3 bits are 3 to 6, then the low 3 bits say how big each
@@ -93,7 +93,7 @@ typedef uint64_t mali_ptr;
 /* For MALI_FORMAT_SINT it means a half-float (e.g. RG16F). For
  * MALI_FORMAT_UNORM, it means a 32-bit float.
  */
-#define MALI_CHANNEL_FLOAT 7
+#define MALI_CHANNEL_FLOAT     7
 #define MALI_EXTRACT_BITS(fmt) (fmt & 0x7)
 
 #define MALI_EXTRACT_INDEX(pixfmt) (((pixfmt) >> 12) & 0xFF)
@@ -241,18 +241,18 @@ typedef uint64_t mali_ptr;
 /* Used for lod encoding. Thanks @urjaman for pointing out these routines can
  * be cleaned up a lot. */
 
-#define DECODE_FIXED_16(x) ((float) (x / 256.0))
+#define DECODE_FIXED_16(x) ((float)(x / 256.0))
 
 static inline int16_t
 FIXED_16(float x, bool allow_negative)
 {
-        /* Clamp inputs, accounting for float error */
-        float max_lod = (32.0 - (1.0 / 512.0));
-        float min_lod = allow_negative ? -max_lod : 0.0;
+   /* Clamp inputs, accounting for float error */
+   float max_lod = (32.0 - (1.0 / 512.0));
+   float min_lod = allow_negative ? -max_lod : 0.0;
 
-        x = ((x > max_lod) ? max_lod : ((x < min_lod) ? min_lod : x));
+   x = ((x > max_lod) ? max_lod : ((x < min_lod) ? min_lod : x));
 
-        return (int) (x * 256.0);
+   return (int)(x * 256.0);
 }
 
 #endif /* __PANFROST_JOB_H__ */

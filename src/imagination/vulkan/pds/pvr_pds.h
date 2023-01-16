@@ -431,7 +431,7 @@ struct pvr_pds_vertex_shader_program {
 
    bool iterate_instance_id;
    uint32_t instance_id_register;
-   uint32_t instance_ID_modifier;
+   uint32_t instance_id_modifier;
    uint32_t base_instance;
 
    bool iterate_remap_id;
@@ -570,6 +570,29 @@ struct pvr_pds_ldst_control {
  * the value is unused.
  */
 #define PVR_PDS_COMPUTE_INPUT_REG_UNUSED 0xFFFFFFFFU
+
+static inline void pvr_pds_compute_shader_program_init(
+   struct pvr_pds_compute_shader_program *program)
+{
+   *program = (struct pvr_pds_compute_shader_program){
+      .local_input_regs = {
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+      },
+      .work_group_input_regs = {
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+      },
+      .global_input_regs = {
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+         PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+      },
+      .barrier_coefficient = PVR_PDS_COMPUTE_INPUT_REG_UNUSED,
+   };
+}
 
 /*****************************************************************************
  function declarations

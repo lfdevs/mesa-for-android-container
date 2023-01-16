@@ -174,7 +174,7 @@ create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkFormat
          .use_rectlist = true,
          .custom_blend_mode = V_028808_CB_RESOLVE,
       },
-      &device->meta_state.alloc, pipeline);
+      &device->meta_state.alloc, pipeline, true);
    if (result != VK_SUCCESS)
       goto cleanup;
 

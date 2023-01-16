@@ -748,9 +748,9 @@ blit2d_init_color_pipeline(struct radv_device *device, enum blit2d_src_type src_
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), device->meta_state.cache,
-      &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc,
-      &device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key]);
+      radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
+      &radv_pipeline_info, &device->meta_state.alloc,
+      &device->meta_state.blit2d[log2_samples].pipelines[src_type][fs_key], true);
 
    ralloc_free(vs);
    ralloc_free(fs);
@@ -905,9 +905,9 @@ blit2d_init_depth_only_pipeline(struct radv_device *device, enum blit2d_src_type
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), device->meta_state.cache,
-      &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc,
-      &device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type]);
+      radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
+      &radv_pipeline_info, &device->meta_state.alloc,
+      &device->meta_state.blit2d[log2_samples].depth_only_pipeline[src_type], true);
 
    ralloc_free(vs);
    ralloc_free(fs);
@@ -1059,9 +1059,9 @@ blit2d_init_stencil_only_pipeline(struct radv_device *device, enum blit2d_src_ty
    const struct radv_graphics_pipeline_create_info radv_pipeline_info = {.use_rectlist = true};
 
    result = radv_graphics_pipeline_create(
-      radv_device_to_handle(device), device->meta_state.cache,
-      &vk_pipeline_info, &radv_pipeline_info, &device->meta_state.alloc,
-      &device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type]);
+      radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
+      &radv_pipeline_info, &device->meta_state.alloc,
+      &device->meta_state.blit2d[log2_samples].stencil_only_pipeline[src_type], true);
 
    ralloc_free(vs);
    ralloc_free(fs);

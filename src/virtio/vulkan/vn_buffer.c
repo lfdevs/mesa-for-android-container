@@ -213,13 +213,15 @@ vn_buffer_cache_init(struct vn_device *dev)
          return result;
    }
 
-   result = vn_buffer_get_max_buffer_size(dev, &max_buffer_size);
-   if (result != VK_SUCCESS)
-      return result;
+   if (!VN_PERF(NO_ASYNC_BUFFER_CREATE)) {
+      result = vn_buffer_get_max_buffer_size(dev, &max_buffer_size);
+      if (result != VK_SUCCESS)
+         return result;
 
-   result = vn_buffer_cache_entries_create(dev, &entries, &entry_count);
-   if (result != VK_SUCCESS)
-      return result;
+      result = vn_buffer_cache_entries_create(dev, &entries, &entry_count);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 
    dev->buffer_cache.ahb_mem_type_bits = ahb_mem_type_bits;
    dev->buffer_cache.max_buffer_size = max_buffer_size;

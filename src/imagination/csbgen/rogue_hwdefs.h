@@ -26,6 +26,7 @@
 
 #include "rogue_cdm.h"
 #include "rogue_cr.h"
+#include "rogue_fw.h"
 #include "rogue_ipf.h"
 #include "rogue_lls.h"
 #include "rogue_pbestate.h"

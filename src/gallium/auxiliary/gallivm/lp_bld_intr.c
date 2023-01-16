@@ -138,10 +138,6 @@ static const char *attr_to_str(enum lp_func_attr attr)
    case LP_FUNC_ATTR_INREG: return "inreg";
    case LP_FUNC_ATTR_NOALIAS: return "noalias";
    case LP_FUNC_ATTR_NOUNWIND: return "nounwind";
-   case LP_FUNC_ATTR_READNONE: return "readnone";
-   case LP_FUNC_ATTR_READONLY: return "readonly";
-   case LP_FUNC_ATTR_WRITEONLY: return "writeonly";
-   case LP_FUNC_ATTR_INACCESSIBLE_MEM_ONLY: return "inaccessiblememonly";
    case LP_FUNC_ATTR_CONVERGENT: return "convergent";
    case LP_FUNC_ATTR_PRESPLITCORO: return "presplitcoroutine";
    default:
@@ -182,7 +178,6 @@ lp_add_func_attributes(LLVMValueRef function, unsigned attrib_mask)
     * Set it for all intrinsics.
     */
    attrib_mask |= LP_FUNC_ATTR_NOUNWIND;
-   attrib_mask &= ~LP_FUNC_ATTR_LEGACY;
 
    while (attrib_mask) {
       enum lp_func_attr attr = 1u << u_bit_scan(&attrib_mask);
@@ -200,7 +195,6 @@ lp_build_intrinsic(LLVMBuilderRef builder,
 {
    LLVMModuleRef module = LLVMGetGlobalParent(LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)));
    LLVMValueRef function, call;
-   bool set_callsite_attrs = !(attr_mask & LP_FUNC_ATTR_LEGACY);
 
    LLVMTypeRef arg_types[LP_MAX_FUNC_ARGS];
 
@@ -229,17 +223,13 @@ lp_build_intrinsic(LLVMBuilderRef builder,
          abort();
       }
 
-      if (!set_callsite_attrs)
-         lp_add_func_attributes(function, attr_mask);
-
       if (gallivm_debug & GALLIVM_DEBUG_IR) {
          lp_debug_dump_value(function);
       }
    }
 
    call = LLVMBuildCall2(builder, function_type, function, args, num_args, "");
-   if (set_callsite_attrs)
-      lp_add_func_attributes(call, attr_mask);
+   lp_add_func_attributes(call, attr_mask);
    return call;
 }
 
@@ -335,7 +325,7 @@ lp_build_intrinsic_binary_anylength(struct gallivm_state *gallivm,
           * so crash and burn.
           */
          debug_printf("%s: should handle arbitrary vector size\n",
-                      __FUNCTION__);
+                      __func__);
          assert(0);
          return NULL;
       }

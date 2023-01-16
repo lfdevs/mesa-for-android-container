@@ -3,7 +3,7 @@ Docker CI
 
 For LLVMpipe and Softpipe CI, we run tests in a container containing
 VK-GL-CTS, on the shared GitLab runners provided by `freedesktop
-<http://freedesktop.org>`_
+<https://freedesktop.org>`__
 
 Software architecture
 ---------------------
@@ -53,7 +53,7 @@ step across multiple test runs.  Since the images are large and change
 approximately weekly, the DUTs also need to be running some script to
 prune stale Docker images periodically in order to not run out of disk
 space as we rev those containers (perhaps `this script
-<https://gitlab.com/gitlab-org/gitlab-runner/issues/2980#note_169233611>`_).
+<https://gitlab.com/gitlab-org/gitlab-runner/-/issues/2980#note_169233611>`__).
 
 Note that Docker doesn't allow containers to be stored on NFS, and
 doesn't allow multiple Docker daemons to interact with the same

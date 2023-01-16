@@ -56,15 +56,17 @@ struct ac_wave_info {
 
 typedef void *(*ac_debug_addr_callback)(void *data, uint64_t addr);
 
-const char *ac_get_register_name(enum amd_gfx_level gfx_level, unsigned offset);
-void ac_dump_reg(FILE *file, enum amd_gfx_level gfx_level, unsigned offset, uint32_t value,
-                 uint32_t field_mask);
+const char *ac_get_register_name(enum amd_gfx_level gfx_level, enum radeon_family family,
+                                 unsigned offset);
+void ac_dump_reg(FILE *file, enum amd_gfx_level gfx_level, enum radeon_family family,
+                 unsigned offset, uint32_t value, uint32_t field_mask);
 void ac_parse_ib_chunk(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids,
                        unsigned trace_id_count, enum amd_gfx_level gfx_level,
+                       enum radeon_family family,
                        ac_debug_addr_callback addr_callback, void *addr_callback_data);
 void ac_parse_ib(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids, unsigned trace_id_count,
-                 const char *name, enum amd_gfx_level gfx_level, ac_debug_addr_callback addr_callback,
-                 void *addr_callback_data);
+                 const char *name, enum amd_gfx_level gfx_level, enum radeon_family family,
+                 ac_debug_addr_callback addr_callback, void *addr_callback_data);
 
 bool ac_vm_fault_occured(enum amd_gfx_level gfx_level, uint64_t *old_dmesg_timestamp,
                          uint64_t *out_addr);

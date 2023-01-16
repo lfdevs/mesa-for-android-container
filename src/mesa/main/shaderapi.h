@@ -28,7 +28,7 @@
 #define SHADERAPI_H
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "compiler/shader_enums.h"
 #include "util/mesa-sha1.h"
 

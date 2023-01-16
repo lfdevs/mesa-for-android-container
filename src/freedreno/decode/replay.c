@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -27,10 +28,12 @@
 #include "util/os_time.h"
 #include "util/rb_tree.h"
 #include "util/u_vector.h"
+#include "util/vma.h"
 #include "buffers.h"
 #include "cffdec.h"
 #include "io.h"
 #include "redump.h"
+#include "rdutil.h"
 
 /**
  * Replay command stream obtained from:
@@ -41,22 +44,21 @@
  *
  * Requires kernel with MSM_INFO_SET_IOVA support.
  *
- * This tool is intended for reproduction of various GPU issues:
- * - GPU hangs, note that command stream obtained from hangrd
- *   may not reproduce (rarely) the hang, since the buffers are
- *   snapshotted at the moment of the hang and not at the start
- *   of the hanging command stream.
- * - TODO: Misrendering, would require marking framebuffer images
- *   at each renderpass in order to fetch and decode them.
+ * TODO: Misrendering, would require marking framebuffer images
+ *       at each renderpass in order to fetch and decode them.
  *
  * Code from Freedreno/Turnip is not re-used here since the relevant
  * pieces may introduce additional allocations which cannot be allowed
  * during the replay.
+ *
+ * For how-to see freedreno.rst
  */
 
 static const char *exename = NULL;
 
-static int handle_file(const char *filename);
+static int handle_file(const char *filename, uint32_t first_submit,
+                       uint32_t last_submit, uint32_t submit_to_override,
+                       const char *cmdstreamgen);
 
 static void
 print_usage(const char *name)
@@ -65,8 +67,12 @@ print_usage(const char *name)
    fprintf(stderr, "Usage:\n\n"
            "\t%s [OPTSIONS]... FILE...\n\n"
            "Options:\n"
-           "\t-e, --exe=NAME   - only use cmdstream from named process\n"
-           "\t-h, --help       - show this message\n"
+           "\t-e, --exe=NAME         - only use cmdstream from named process\n"
+           "\t-o  --override=submit  - № of the submit to override\n"
+           "\t-g  --generator=path   - executable which generate cmdstream for override\n"
+           "\t-f  --first=submit     - first submit № to replay\n"
+           "\t-l  --last=submit      - last submit № to replay\n"
+           "\t-h, --help             - show this message\n"
            , name);
    /* clang-format on */
    exit(2);
@@ -74,10 +80,11 @@ print_usage(const char *name)
 
 /* clang-format off */
 static const struct option opts[] = {
-      /* Long opts that simply set a flag (no corresponding short alias: */
-
-      /* Long opts with short alias: */
       { "exe",       required_argument, 0, 'e' },
+      { "override",  required_argument, 0, 'o' },
+      { "generator", required_argument, 0, 'g' },
+      { "first",     required_argument, 0, 'f' },
+      { "last",      required_argument, 0, 'l' },
       { "help",      no_argument,       0, 'h' },
 };
 /* clang-format on */
@@ -88,13 +95,30 @@ main(int argc, char **argv)
    int ret = -1;
    int c;
 
-   while ((c = getopt_long(argc, argv, "e:h", opts, NULL)) != -1) {
+   uint32_t submit_to_override = -1;
+   uint32_t first_submit = 0;
+   uint32_t last_submit = -1;
+   const char *cmdstreamgen = NULL;
+
+   while ((c = getopt_long(argc, argv, "e:o:g:f:l:h", opts, NULL)) != -1) {
       switch (c) {
       case 0:
          /* option that set a flag, nothing to do */
          break;
       case 'e':
          exename = optarg;
+         break;
+      case 'o':
+         submit_to_override = strtoul(optarg, NULL, 0);
+         break;
+      case 'g':
+         cmdstreamgen = optarg;
+         break;
+      case 'f':
+         first_submit = strtoul(optarg, NULL, 0);
+         break;
+      case 'l':
+         last_submit = strtoul(optarg, NULL, 0);
          break;
       case 'h':
       default:
@@ -103,7 +127,8 @@ main(int argc, char **argv)
    }
 
    while (optind < argc) {
-      ret = handle_file(argv[optind]);
+      ret = handle_file(argv[optind], first_submit, last_submit,
+                        submit_to_override, cmdstreamgen);
       if (ret) {
          fprintf(stderr, "error reading: %s\n", argv[optind]);
          fprintf(stderr, "continuing..\n");
@@ -115,15 +140,6 @@ main(int argc, char **argv)
       print_usage(argv[0]);
 
    return ret;
-}
-
-static void
-parse_addr(uint32_t *buf, int sz, unsigned int *len, uint64_t *gpuaddr)
-{
-   *gpuaddr = buf[0];
-   *len = buf[1];
-   if (sz > 8)
-      *gpuaddr |= ((uint64_t)(buf[2])) << 32;
 }
 
 struct buffer {
@@ -147,11 +163,12 @@ struct device {
    int fd;
 
    struct rb_tree buffers;
+   struct util_vma_heap vma;
+
    struct u_vector cmdstreams;
 };
 
-void
-buffer_mem_free(struct device *dev, struct buffer *buf);
+void buffer_mem_free(struct device *dev, struct buffer *buf);
 
 static int
 rb_buffer_insert_cmp(const struct rb_node *n1, const struct rb_node *n2)
@@ -188,19 +205,28 @@ device_create()
       errx(1, "Cannot open MSM fd!");
    }
 
+   uint64_t va_start, va_size;
+
    struct drm_msm_param req = {
       .pipe = MSM_PIPE_3D0,
       .param = MSM_PARAM_VA_START,
    };
 
-   int ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req,
-                                 sizeof(req));
+   int ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req, sizeof(req));
+   va_start = req.value;
+
+   if (!ret) {
+      req.param = MSM_PARAM_VA_SIZE;
+      ret = drmCommandWriteRead(dev->fd, DRM_MSM_GET_PARAM, &req, sizeof(req));
+      va_size = req.value;
+   }
 
    if (ret) {
       err(1, "MSM_INFO_SET_IOVA is unsupported");
    }
 
    rb_tree_init(&dev->buffers);
+   util_vma_heap_init(&dev->vma, va_start, ROUND_DOWN_TO(va_size, 4096));
    u_vector_init(&dev->cmdstreams, 8, sizeof(struct cmdstream));
 
    return dev;
@@ -344,6 +370,8 @@ device_submit_cmdstreams(struct device *dev)
 static void
 buffer_mem_alloc(struct device *dev, struct buffer *buf)
 {
+   util_vma_heap_alloc_addr(&dev->vma, buf->iova, buf->size);
+
    {
       struct drm_msm_gem_new req = {.size = buf->size, .flags = MSM_BO_WC};
 
@@ -402,6 +430,8 @@ buffer_mem_free(struct device *dev, struct buffer *buf)
       .handle = buf->gem_handle,
    };
    drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &req);
+
+   util_vma_heap_free(&dev->vma, buf->iova, buf->size);
 }
 
 static void
@@ -429,15 +459,88 @@ upload_buffer(struct device *dev, uint64_t iova, unsigned int size,
 }
 
 static int
-handle_file(const char *filename)
+override_cmdstream(struct device *dev, struct cmdstream *cs,
+                   const char *cmdstreamgen)
 {
-   enum rd_sect_type type = RD_NONE;
-   void *buf = NULL;
+   static const char *tmpfilename = "/tmp/cmdstream_override.rd";
+
+   /* Find a free space for the new cmdstreams and resources we will use
+    * when overriding existing cmdstream.
+    */
+   /* TODO: should the size be configurable? */
+   uint64_t hole_size = 32 * 1024 * 1024;
+   uint64_t hole_iova = util_vma_heap_alloc(&dev->vma, hole_size, 4096);
+   util_vma_heap_free(&dev->vma, hole_iova, hole_size);
+
+   char cmd[2048];
+   snprintf(cmd, sizeof(cmd),
+            "%s --vastart=%" PRIu64 " --vasize=%" PRIu64 " %s", cmdstreamgen,
+            hole_iova, hole_size, tmpfilename);
+
+   printf("generating cmdstream '%s'\n", cmd);
+
+   int ret = system(cmd);
+   if (ret) {
+      fprintf(stderr, "Error executing %s\n", cmd);
+      return -1;
+   }
+
+   struct io *io;
+   struct rd_parsed_section ps = {0};
+
+   io = io_open(tmpfilename);
+   if (!io) {
+      fprintf(stderr, "could not open: %s\n", tmpfilename);
+      return -1;
+   }
+
+   struct {
+      unsigned int len;
+      uint64_t gpuaddr;
+   } gpuaddr = {0};
+
+   while (parse_rd_section(io, &ps)) {
+      switch (ps.type) {
+      case RD_GPUADDR:
+         parse_addr(ps.buf, ps.sz, &gpuaddr.len, &gpuaddr.gpuaddr);
+         /* no-op */
+         break;
+      case RD_BUFFER_CONTENTS:
+         upload_buffer(dev, gpuaddr.gpuaddr, gpuaddr.len, ps.buf);
+         ps.buf = NULL;
+         break;
+      case RD_CMDSTREAM_ADDR: {
+         unsigned int sizedwords;
+         uint64_t gpuaddr;
+         parse_addr(ps.buf, ps.sz, &sizedwords, &gpuaddr);
+         printf("override cmdstream: %d dwords\n", sizedwords);
+
+         cs->iova = gpuaddr;
+         cs->size = sizedwords * sizeof(uint32_t);
+         break;
+      }
+      default:
+         break;
+      }
+   }
+
+   io_close(io);
+   if (ps.ret < 0) {
+      fprintf(stderr, "corrupt file %s\n", tmpfilename);
+   }
+
+   return ps.ret;
+}
+
+static int
+handle_file(const char *filename, uint32_t first_submit, uint32_t last_submit,
+            uint32_t submit_to_override, const char *cmdstreamgen)
+{
    struct io *io;
    int submit = 0;
-   int sz, ret = 0;
    bool skip = false;
    bool need_submit = false;
+   struct rd_parsed_section ps = {0};
 
    printf("Reading %s...\n", filename);
 
@@ -458,36 +561,8 @@ handle_file(const char *filename)
       uint64_t gpuaddr;
    } gpuaddr = {0};
 
-   while (true) {
-      uint32_t arr[2];
-
-      ret = io_readn(io, arr, 8);
-      if (ret <= 0)
-         goto end;
-
-      while ((arr[0] == 0xffffffff) && (arr[1] == 0xffffffff)) {
-         ret = io_readn(io, arr, 8);
-         if (ret <= 0)
-            goto end;
-      }
-
-      type = arr[0];
-      sz = arr[1];
-
-      if (sz < 0) {
-         ret = -1;
-         goto end;
-      }
-
-      free(buf);
-
-      buf = malloc(sz + 1);
-      ((char *)buf)[sz] = '\0';
-      ret = io_readn(io, buf, sz);
-      if (ret < 0)
-         goto end;
-
-      switch (type) {
+   while (parse_rd_section(io, &ps)) {
+      switch (ps.type) {
       case RD_TEST:
       case RD_VERT_SHADER:
       case RD_FRAG_SHADER:
@@ -496,12 +571,12 @@ handle_file(const char *filename)
       case RD_CMD:
          skip = false;
          if (exename) {
-            skip |= (strstr(buf, exename) != buf);
+            skip |= (strstr(ps.buf, exename) != ps.buf);
          } else {
-            skip |= (strstr(buf, "fdperf") == buf);
-            skip |= (strstr(buf, "chrome") == buf);
-            skip |= (strstr(buf, "surfaceflinger") == buf);
-            skip |= ((char *)buf)[0] == 'X';
+            skip |= (strstr(ps.buf, "fdperf") == ps.buf);
+            skip |= (strstr(ps.buf, "chrome") == ps.buf);
+            skip |= (strstr(ps.buf, "surfaceflinger") == ps.buf);
+            skip |= ((char *)ps.buf)[0] == 'X';
          }
          break;
 
@@ -511,23 +586,38 @@ handle_file(const char *filename)
             device_submit_cmdstreams(dev);
          }
 
-         parse_addr(buf, sz, &gpuaddr.len, &gpuaddr.gpuaddr);
+         parse_addr(ps.buf, ps.sz, &gpuaddr.len, &gpuaddr.gpuaddr);
          /* no-op */
          break;
       case RD_BUFFER_CONTENTS:
-         upload_buffer(dev, gpuaddr.gpuaddr, gpuaddr.len, buf);
-         buf = NULL;
+         /* TODO: skip buffer uploading and even reading if this buffer
+          * is used for submit outside of [first_submit, last_submit]
+          * range. A set of buffers is shared between several cmdstreams,
+          * so we'd have to find starting from which RD_CMD to upload
+          * the buffers.
+          */
+         upload_buffer(dev, gpuaddr.gpuaddr, gpuaddr.len, ps.buf);
          break;
       case RD_CMDSTREAM_ADDR: {
          unsigned int sizedwords;
          uint64_t gpuaddr;
-         parse_addr(buf, sz, &sizedwords, &gpuaddr);
-         printf("cmdstream %d: %d dwords\n", submit, sizedwords);
+         parse_addr(ps.buf, ps.sz, &sizedwords, &gpuaddr);
 
-         if (!skip) {
-            struct cmdstream *cmd = u_vector_add(&dev->cmdstreams);
-            cmd->iova = gpuaddr;
-            cmd->size = sizedwords * sizeof(uint32_t);
+         bool add_submit = !skip && (submit >= first_submit) && (submit <= last_submit);
+         printf("%scmdstream %d: %d dwords\n", add_submit ? "" : "skipped ",
+                submit, sizedwords);
+
+         if (add_submit) {
+            struct cmdstream *cs = u_vector_add(&dev->cmdstreams);
+
+            if (submit == submit_to_override) {
+               if (override_cmdstream(dev, cs, cmdstreamgen) < 0)
+                  break;
+            } else {
+               cs->iova = gpuaddr;
+               cs->size = sizedwords * sizeof(uint32_t);
+            }
+
             need_submit = true;
          }
 
@@ -535,17 +625,13 @@ handle_file(const char *filename)
          break;
       }
       case RD_GPU_ID: {
-         uint32_t gpu_id = *((unsigned int *)buf);
-         if (!gpu_id)
-            break;
-         printf("gpuid: %d\n", gpu_id);
+         uint32_t gpu_id = parse_gpu_id(ps.buf);
+         if (gpu_id)
+            printf("gpuid: %d\n", gpu_id);
          break;
       }
       case RD_CHIP_ID: {
-         uint64_t chip_id = *((uint64_t *)buf);
-         uint32_t gpu_id = 100 * ((chip_id >> 24) & 0xff) +
-                           10 * ((chip_id >> 16) & 0xff) +
-                           ((chip_id >> 8) & 0xff);
+         uint32_t gpu_id = parse_chip_id(ps.buf);
          printf("gpuid: %d\n", gpu_id);
          break;
       }
@@ -554,7 +640,6 @@ handle_file(const char *filename)
       }
    }
 
-end:
    if (need_submit)
       device_submit_cmdstreams(dev);
 
@@ -563,7 +648,7 @@ end:
    io_close(io);
    fflush(stdout);
 
-   if (ret < 0) {
+   if (ps.ret < 0) {
       printf("corrupt file\n");
    }
    return 0;

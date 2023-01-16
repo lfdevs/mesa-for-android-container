@@ -226,7 +226,7 @@ lower_kernel_intrinsics(nir_shader *nir)
 
             /* We may need to do a bit-size cast here */
             nir_ssa_def *num_work_groups =
-               nir_u2u(&b, &load->dest.ssa, intrin->dest.ssa.bit_size);
+               nir_u2uN(&b, &load->dest.ssa, intrin->dest.ssa.bit_size);
 
             nir_ssa_def_rewrite_uses(&intrin->dest.ssa, num_work_groups);
             progress = true;

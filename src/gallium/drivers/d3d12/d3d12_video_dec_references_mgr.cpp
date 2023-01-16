@@ -213,7 +213,7 @@ d3d12_video_decoder_references_manager::d3d12_video_decoder_references_manager(
      m_dpbDescriptor(m_dpbDescriptor),
      m_formatInfo({ m_dpbDescriptor.Format })
 {
-   HRESULT hr = m_pD3D12Screen->dev->CheckFeatureSupport(D3D12_FEATURE_FORMAT_INFO, &m_formatInfo, sizeof(m_formatInfo));
+   ASSERTED HRESULT hr = m_pD3D12Screen->dev->CheckFeatureSupport(D3D12_FEATURE_FORMAT_INFO, &m_formatInfo, sizeof(m_formatInfo));
    assert(SUCCEEDED(hr));
    D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC targetFrameResolution = { static_cast<uint32_t>(m_dpbDescriptor.Width),
                                                                          m_dpbDescriptor.Height };
@@ -328,7 +328,7 @@ d3d12_video_decoder_references_manager::store_future_reference(uint16_t         
    // Set the index as the key in this map entry.
    m_referenceDXVAIndices[remappedIndex].originalIndex = index;
    IUnknown *pUnkHeap                                  = nullptr;
-   HRESULT hr = decoderHeap.Get()->QueryInterface(IID_PPV_ARGS(&pUnkHeap));
+   ASSERTED HRESULT hr = decoderHeap.Get()->QueryInterface(IID_PPV_ARGS(&pUnkHeap));
    assert(SUCCEEDED(hr));
    d3d12_video_reconstructed_picture reconPic = { pTexture2D, subresourceIndex, pUnkHeap };
 
@@ -362,7 +362,7 @@ d3d12_video_decoder_references_manager::release_unused_references_texture_memory
       if (!m_referenceDXVAIndices[index].fUsed) {
          d3d12_video_reconstructed_picture reconPicture = m_upD3D12TexturesStorageManager->get_reference_frame(index);
          if (reconPicture.pReconstructedPicture != nullptr) {
-            bool wasTracked = m_upD3D12TexturesStorageManager->untrack_reconstructed_picture_allocation(reconPicture);
+            ASSERTED bool wasTracked = m_upD3D12TexturesStorageManager->untrack_reconstructed_picture_allocation(reconPicture);
             // Untrack this resource, will mark it as free un the underlying storage buffer pool
             // if not tracked, must be due to no-copies allocation
             assert (wasTracked || is_pipe_buffer_underlying_output_decode_allocation());

@@ -957,7 +957,7 @@ ttn_alu(nir_builder *b, nir_op op, nir_alu_dest dest, unsigned dest_bitsize,
 {
    nir_ssa_def *def = nir_build_alu_src_arr(b, op, src);
    if (def->bit_size == 1)
-      def = nir_ineg(b, nir_b2i(b, def, dest_bitsize));
+      def = nir_ineg(b, nir_b2iN(b, def, dest_bitsize));
    assert(def->bit_size == dest_bitsize);
    if (dest_bitsize == 64) {
       if (def->num_components > 2) {

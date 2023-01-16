@@ -54,7 +54,7 @@ struct vtest {
    int sock_fd;
 
    uint32_t protocol_version;
-   uint32_t max_sync_queue_count;
+   uint32_t max_timeline_count;
 
    struct {
       enum virgl_renderer_capset id;
@@ -540,10 +540,9 @@ vtest_vcmd_submit_cmd2(struct vtest *vtest,
          .sync_offset = sync_offset / sizeof(uint32_t),
          .sync_count = batch->sync_count,
       };
-      if (!batch->sync_queue_cpu) {
-         dst.flags = VCMD_SUBMIT_CMD2_FLAG_SYNC_QUEUE;
-         dst.sync_queue_index = batch->sync_queue_index;
-         dst.sync_queue_id = batch->vk_queue_id;
+      if (vtest->base.info.supports_multiple_timelines) {
+         dst.flags = VCMD_SUBMIT_CMD2_FLAG_RING_IDX;
+         dst.ring_idx = batch->ring_idx;
       }
       vtest_write(vtest, &dst, sizeof(dst));
 
@@ -942,8 +941,6 @@ vtest_init_renderer_info(struct vtest *vtest)
    info->has_external_sync = false;
    info->has_implicit_fencing = false;
 
-   info->max_sync_queue_count = vtest->max_sync_queue_count;
-
    const struct virgl_renderer_capset_venus *capset = &vtest->capset.data;
    info->wire_format_version = capset->wire_format_version;
    info->vk_xml_version = capset->vk_xml_version;
@@ -960,6 +957,9 @@ vtest_init_renderer_info(struct vtest *vtest)
           sizeof(capset->vk_extension_mask1));
 
    info->allow_vk_wait_syncs = capset->allow_vk_wait_syncs;
+
+   info->supports_multiple_timelines = capset->supports_multiple_timelines;
+   info->max_timeline_count = vtest->max_timeline_count;
 }
 
 static void
@@ -1001,13 +1001,12 @@ vtest_init_capset(struct vtest *vtest)
 static VkResult
 vtest_init_params(struct vtest *vtest)
 {
-   uint32_t val =
-      vtest_vcmd_get_param(vtest, VCMD_PARAM_MAX_SYNC_QUEUE_COUNT);
+   uint32_t val = vtest_vcmd_get_param(vtest, VCMD_PARAM_MAX_TIMELINE_COUNT);
    if (!val) {
-      vn_log(vtest->instance, "no sync queue support");
+      vn_log(vtest->instance, "no timeline support");
       return VK_ERROR_INITIALIZATION_FAILED;
    }
-   vtest->max_sync_queue_count = val;
+   vtest->max_timeline_count = val;
 
    return VK_SUCCESS;
 }

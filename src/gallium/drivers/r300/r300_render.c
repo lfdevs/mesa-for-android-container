@@ -772,13 +772,6 @@ static unsigned r300_max_vertex_count(struct r300_context *r300)
       }
       size -= value;
 
-      /* Subtract format_size. */
-      value = r300->velems->format_size[i];
-      if (value >= size) {
-         return 0;
-      }
-      size -= value;
-
       /* Compute the max count. */
       max_count = 1 + size / vb->stride;
       result = MIN2(result, max_count);

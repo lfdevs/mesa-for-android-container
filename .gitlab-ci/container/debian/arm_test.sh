@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2154 # arch is assigned in previous scripts
 
 set -e
 set -o xtrace
@@ -25,12 +26,13 @@ apt-get install -y --no-remove \
 wget https://raw.githubusercontent.com/net-snmp/net-snmp/master/mibs/SNMPv2-SMI.txt \
     -O /usr/share/snmp/mibs/SNMPv2-SMI.txt
 
-arch=arm64 . .gitlab-ci/container/baremetal_build.sh
-arch=armhf . .gitlab-ci/container/baremetal_build.sh
+. .gitlab-ci/container/baremetal_build.sh
 
-# This firmware file from Debian bullseye causes hangs
-wget https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/qcom/a530_pfp.fw?id=d5f9eea5a251d43412b07f5295d03e97b89ac4a5 \
-     -O /rootfs-arm64/lib/firmware/qcom/a530_pfp.fw
+if [[ "$arch" == "arm64" ]]; then
+    # This firmware file from Debian bullseye causes hangs
+    wget https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/qcom/a530_pfp.fw?id=d5f9eea5a251d43412b07f5295d03e97b89ac4a5 \
+      -O /rootfs-arm64/lib/firmware/qcom/a530_pfp.fw
+fi
 
 mkdir -p /baremetal-files/jetson-nano/boot/
 ln -s \

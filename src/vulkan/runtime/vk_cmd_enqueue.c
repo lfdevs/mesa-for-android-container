@@ -118,6 +118,36 @@ vk_cmd_enqueue_CmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer,
    }
 }
 
+static void
+push_descriptors_set_free(struct vk_cmd_queue *queue,
+                          struct vk_cmd_queue_entry *cmd)
+{
+  struct vk_cmd_push_descriptor_set_khr *pds = &cmd->u.push_descriptor_set_khr;
+  for (unsigned i = 0; i < pds->descriptor_write_count; i++) {
+    VkWriteDescriptorSet *entry = &pds->descriptor_writes[i];
+    switch (entry->descriptorType) {
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+       vk_free(queue->alloc, (void *)entry->pImageInfo);
+       break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+       vk_free(queue->alloc, (void *)entry->pTexelBufferView);
+       break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+    default:
+       vk_free(queue->alloc, (void *)entry->pBufferInfo);
+       break;
+    }
+  }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 vk_cmd_enqueue_CmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
                                        VkPipelineBindPoint pipelineBindPoint,
@@ -138,6 +168,7 @@ vk_cmd_enqueue_CmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
    pds = &cmd->u.push_descriptor_set_khr;
 
    cmd->type = VK_CMD_PUSH_DESCRIPTOR_SET_KHR;
+   cmd->driver_free_cb = push_descriptors_set_free;
    list_addtail(&cmd->cmd_link, &cmd_buffer->cmd_queue.cmds);
 
    pds->pipeline_bind_point = pipelineBindPoint;

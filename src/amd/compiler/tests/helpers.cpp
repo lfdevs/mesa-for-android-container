@@ -287,11 +287,11 @@ Temp fabs(Temp src, Builder b)
 {
    if (src.bytes() == 2) {
       Builder::Result res = b.vop2_e64(aco_opcode::v_mul_f16, b.def(v2b), Operand::c16(0x3c00), src);
-      res.instr->vop3().abs[1] = true;
+      res->vop3().abs[1] = true;
       return res;
    } else {
       Builder::Result res = b.vop2_e64(aco_opcode::v_mul_f32, b.def(v1), Operand::c32(0x3f800000u), src);
-      res.instr->vop3().abs[1] = true;
+      res->vop3().abs[1] = true;
       return res;
    }
 }
@@ -343,6 +343,16 @@ Temp fsat(Temp src, Builder b)
    else
       return b.vop3(aco_opcode::v_med3_f32, b.def(v1), Operand::zero(),
                     Operand::c32(0x3f800000u), src);
+}
+
+Temp fmin(Temp src0, Temp src1, Builder b)
+{
+   return b.vop2(aco_opcode::v_min_f32, b.def(v1), src0, src1);
+}
+
+Temp fmax(Temp src0, Temp src1, Builder b)
+{
+   return b.vop2(aco_opcode::v_max_f32, b.def(v1), src0, src1);
 }
 
 Temp ext_ushort(Temp src, unsigned idx, Builder b)

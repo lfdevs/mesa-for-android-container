@@ -221,6 +221,20 @@ static void normal_rewrite_writemask_cb(
 {
 	unsigned int * conversion_swizzle = (unsigned int *)userdata;
 	src->Swizzle = rc_adjust_channels(src->Swizzle, *conversion_swizzle);
+
+	/* Per-channel negates are possible in vertex shaders,
+	 * so we need to rewrite it properly as well. */
+	unsigned int new_negate = 0;
+	for (unsigned int i = 0; i < 4; i++) {
+		unsigned int new_chan = get_swz(*conversion_swizzle, i);
+
+		if (new_chan == RC_SWIZZLE_UNUSED)
+			continue;
+
+		if ((1 << i) & src->Negate)
+			new_negate |= 1 << new_chan;
+	}
+	src->Negate = new_negate;
 }
 
 /**
@@ -441,6 +455,16 @@ unsigned int rc_inst_can_use_presub(
 
 	if (info->HasTexture) {
 		return 0;
+	}
+
+	/* We can't allow constant swizzles from presubtract, because it is not possible
+	 * to rewrite it to a native swizzle later. */
+	if (!c->is_r500) {
+		for (i = 0; i < 4; i++) {
+			rc_swizzle swz = GET_SWZ(replace_reg->Swizzle, i);
+			if (swz > RC_SWIZZLE_W && swz < RC_SWIZZLE_UNUSED)
+				return 0;
+		}
 	}
 
 	/* We can't use more than one presubtract value in an

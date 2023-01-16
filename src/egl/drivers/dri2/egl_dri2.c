@@ -46,6 +46,7 @@
 #include <GL/internal/dri_interface.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include "dri_screen.h"
 
 #ifdef HAVE_WAYLAND_PLATFORM
 #include <wayland-client.h>
@@ -71,6 +72,7 @@
 #include "util/bitscan.h"
 #include "util/driconf.h"
 #include "util/u_math.h"
+#include "pipe/p_screen.h"
 
 #define NUM_ATTRIBS 12
 
@@ -345,24 +347,10 @@ dri2_get_shifts_and_sizes(const __DRIcoreExtension *core,
                           const __DRIconfig *config, int *shifts,
 		          unsigned int *sizes)
 {
-   unsigned int mask;
-
-   if (core->getConfigAttrib(config, __DRI_ATTRIB_RED_SHIFT, (unsigned int *)&shifts[0])) {
-      core->getConfigAttrib(config, __DRI_ATTRIB_GREEN_SHIFT, (unsigned int *)&shifts[1]);
-      core->getConfigAttrib(config, __DRI_ATTRIB_BLUE_SHIFT, (unsigned int *)&shifts[2]);
-      core->getConfigAttrib(config, __DRI_ATTRIB_ALPHA_SHIFT, (unsigned int *)&shifts[3]);
-   } else {
-      /* Driver isn't exposing shifts, so convert masks to shifts */
-      core->getConfigAttrib(config, __DRI_ATTRIB_RED_MASK, &mask);
-      shifts[0] = ffs(mask) - 1;
-      core->getConfigAttrib(config, __DRI_ATTRIB_GREEN_MASK, &mask);
-      shifts[1] = ffs(mask) - 1;
-      core->getConfigAttrib(config, __DRI_ATTRIB_BLUE_MASK, &mask);
-      shifts[2] = ffs(mask) - 1;
-      core->getConfigAttrib(config, __DRI_ATTRIB_ALPHA_MASK, &mask);
-      shifts[3] = ffs(mask) - 1;
-   }
-
+   core->getConfigAttrib(config, __DRI_ATTRIB_RED_SHIFT, (unsigned int *)&shifts[0]);
+   core->getConfigAttrib(config, __DRI_ATTRIB_GREEN_SHIFT, (unsigned int *)&shifts[1]);
+   core->getConfigAttrib(config, __DRI_ATTRIB_BLUE_SHIFT, (unsigned int *)&shifts[2]);
+   core->getConfigAttrib(config, __DRI_ATTRIB_ALPHA_SHIFT, (unsigned int *)&shifts[3]);
    core->getConfigAttrib(config, __DRI_ATTRIB_RED_SIZE, &sizes[0]);
    core->getConfigAttrib(config, __DRI_ATTRIB_GREEN_SIZE, &sizes[1]);
    core->getConfigAttrib(config, __DRI_ATTRIB_BLUE_SIZE, &sizes[2]);
@@ -709,101 +697,49 @@ const __DRIimageLookupExtension image_lookup_extension = {
    .lookupEGLImageValidated = dri2_lookup_egl_image_validated,
 };
 
-struct dri2_extension_match {
-   const char *name;
-   int version;
-   int offset;
+
+static const struct dri_extension_match dri3_driver_extensions[] = {
+   { __DRI_CORE, 1, offsetof(struct dri2_egl_display, core), false },
+   { __DRI_MESA, 1, offsetof(struct dri2_egl_display, mesa), false },
+   { __DRI_IMAGE_DRIVER, 1, offsetof(struct dri2_egl_display, image_driver), false },
+   { __DRI_CONFIG_OPTIONS, 2, offsetof(struct dri2_egl_display, configOptions), true },
 };
 
-static const struct dri2_extension_match dri3_driver_extensions[] = {
-   { __DRI_CORE, 1, offsetof(struct dri2_egl_display, core) },
-   { __DRI_IMAGE_DRIVER, 1, offsetof(struct dri2_egl_display, image_driver) },
-   { NULL, 0, 0 }
+static const struct dri_extension_match dri2_driver_extensions[] = {
+   { __DRI_CORE, 1, offsetof(struct dri2_egl_display, core), false },
+   { __DRI_MESA, 1, offsetof(struct dri2_egl_display, mesa), false },
+   { __DRI_DRI2, 4, offsetof(struct dri2_egl_display, dri2), false },
+   { __DRI_CONFIG_OPTIONS, 2, offsetof(struct dri2_egl_display, configOptions), true },
 };
 
-static const struct dri2_extension_match dri2_driver_extensions[] = {
-   { __DRI_CORE, 1, offsetof(struct dri2_egl_display, core) },
-   { __DRI_DRI2, 2, offsetof(struct dri2_egl_display, dri2) },
-   { NULL, 0, 0 }
+static const struct dri_extension_match dri2_core_extensions[] = {
+   { __DRI2_FLUSH, 1, offsetof(struct dri2_egl_display, flush), false },
+   { __DRI_TEX_BUFFER, 2, offsetof(struct dri2_egl_display, tex_buffer), false },
+   { __DRI_IMAGE, 6, offsetof(struct dri2_egl_display, image), false },
 };
 
-static const struct dri2_extension_match dri2_core_extensions[] = {
-   { __DRI2_FLUSH, 1, offsetof(struct dri2_egl_display, flush) },
-   { __DRI_TEX_BUFFER, 2, offsetof(struct dri2_egl_display, tex_buffer) },
-   { __DRI_IMAGE, 1, offsetof(struct dri2_egl_display, image) },
-   { NULL, 0, 0 }
+static const struct dri_extension_match swrast_driver_extensions[] = {
+   { __DRI_CORE, 1, offsetof(struct dri2_egl_display, core), false },
+   { __DRI_MESA, 1, offsetof(struct dri2_egl_display, mesa), false },
+   { __DRI_SWRAST, 4, offsetof(struct dri2_egl_display, swrast), false },
+   { __DRI_CONFIG_OPTIONS, 2, offsetof(struct dri2_egl_display, configOptions), true },
 };
 
-static const struct dri2_extension_match swrast_driver_extensions[] = {
-   { __DRI_CORE, 1, offsetof(struct dri2_egl_display, core) },
-   { __DRI_SWRAST, 2, offsetof(struct dri2_egl_display, swrast) },
-   { NULL, 0, 0 }
+static const struct dri_extension_match swrast_core_extensions[] = {
+   { __DRI_TEX_BUFFER, 2, offsetof(struct dri2_egl_display, tex_buffer), false },
 };
 
-static const struct dri2_extension_match swrast_core_extensions[] = {
-   { __DRI_TEX_BUFFER, 2, offsetof(struct dri2_egl_display, tex_buffer) },
-   { NULL, 0, 0 }
+static const struct dri_extension_match optional_core_extensions[] = {
+   { __DRI2_CONFIG_QUERY, 1, offsetof(struct dri2_egl_display, config), true },
+   { __DRI2_FENCE, 2, offsetof(struct dri2_egl_display, fence), true },
+   { __DRI2_BUFFER_DAMAGE, 1, offsetof(struct dri2_egl_display, buffer_damage), true },
+   { __DRI2_INTEROP, 1, offsetof(struct dri2_egl_display, interop), true },
+   { __DRI_IMAGE, 6, offsetof(struct dri2_egl_display, image), true },
+   { __DRI2_FLUSH_CONTROL, 1, offsetof(struct dri2_egl_display, flush_control), true },
+   { __DRI2_BLOB, 1, offsetof(struct dri2_egl_display, blob), true },
+   { __DRI_MUTABLE_RENDER_BUFFER_DRIVER, 1, offsetof(struct dri2_egl_display, mutable_render_buffer), true },
+   { __DRI_KOPPER, 1, offsetof(struct dri2_egl_display, kopper), true },
 };
-
-static const struct dri2_extension_match optional_driver_extensions[] = {
-   { __DRI_CONFIG_OPTIONS, 1, offsetof(struct dri2_egl_display, configOptions) },
-   { NULL, 0, 0 }
-};
-
-static const struct dri2_extension_match optional_core_extensions[] = {
-   { __DRI2_ROBUSTNESS, 1, offsetof(struct dri2_egl_display, robustness) },
-   { __DRI2_CONFIG_QUERY, 1, offsetof(struct dri2_egl_display, config) },
-   { __DRI2_FENCE, 1, offsetof(struct dri2_egl_display, fence) },
-   { __DRI2_BUFFER_DAMAGE, 1, offsetof(struct dri2_egl_display, buffer_damage) },
-   { __DRI2_RENDERER_QUERY, 1, offsetof(struct dri2_egl_display, rendererQuery) },
-   { __DRI2_INTEROP, 1, offsetof(struct dri2_egl_display, interop) },
-   { __DRI_IMAGE, 1, offsetof(struct dri2_egl_display, image) },
-   { __DRI2_FLUSH_CONTROL, 1, offsetof(struct dri2_egl_display, flush_control) },
-   { __DRI2_BLOB, 1, offsetof(struct dri2_egl_display, blob) },
-   { __DRI_MUTABLE_RENDER_BUFFER_DRIVER, 1, offsetof(struct dri2_egl_display, mutable_render_buffer) },
-   { __DRI_KOPPER, 1, offsetof(struct dri2_egl_display, kopper) },
-   { NULL, 0, 0 }
-};
-
-static EGLBoolean
-dri2_bind_extensions(struct dri2_egl_display *dri2_dpy,
-                     const struct dri2_extension_match *matches,
-                     const __DRIextension **extensions,
-                     bool optional)
-{
-   int ret = EGL_TRUE;
-   void *field;
-
-   for (int i = 0; extensions[i]; i++) {
-      _eglLog(_EGL_DEBUG, "found extension `%s'", extensions[i]->name);
-      for (int j = 0; matches[j].name; j++) {
-         if (strcmp(extensions[i]->name, matches[j].name) == 0 &&
-             extensions[i]->version >= matches[j].version) {
-            field = ((char *) dri2_dpy + matches[j].offset);
-            *(const __DRIextension **) field = extensions[i];
-            _eglLog(_EGL_INFO, "found extension %s version %d",
-                    extensions[i]->name, extensions[i]->version);
-            break;
-         }
-      }
-   }
-
-   for (int j = 0; matches[j].name; j++) {
-      field = ((char *) dri2_dpy + matches[j].offset);
-      if (*(const __DRIextension **) field == NULL) {
-         if (optional) {
-            _eglLog(_EGL_DEBUG, "did not find optional extension %s version %d",
-                    matches[j].name, matches[j].version);
-         } else {
-            _eglLog(_EGL_WARNING, "did not find extension %s version %d",
-                    matches[j].name, matches[j].version);
-            ret = EGL_FALSE;
-         }
-      }
-   }
-
-   return ret;
-}
 
 static const __DRIextension **
 dri2_open_driver(_EGLDisplay *disp)
@@ -821,7 +757,8 @@ dri2_open_driver(_EGLDisplay *disp)
 
 static EGLBoolean
 dri2_load_driver_common(_EGLDisplay *disp,
-                        const struct dri2_extension_match *driver_extensions)
+                        const struct dri_extension_match *driver_extensions,
+                        int num_matches)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    const __DRIextension **extensions;
@@ -830,14 +767,12 @@ dri2_load_driver_common(_EGLDisplay *disp,
    if (!extensions)
       return EGL_FALSE;
 
-   if (!dri2_bind_extensions(dri2_dpy, driver_extensions, extensions, false)) {
+   if (!loader_bind_extensions(dri2_dpy, driver_extensions, num_matches, extensions)) {
       dlclose(dri2_dpy->driver);
       dri2_dpy->driver = NULL;
       return EGL_FALSE;
    }
    dri2_dpy->driver_extensions = extensions;
-
-   dri2_bind_extensions(dri2_dpy, optional_driver_extensions, extensions, true);
 
    return EGL_TRUE;
 }
@@ -845,32 +780,19 @@ dri2_load_driver_common(_EGLDisplay *disp,
 EGLBoolean
 dri2_load_driver(_EGLDisplay *disp)
 {
-   return dri2_load_driver_common(disp, dri2_driver_extensions);
+   return dri2_load_driver_common(disp, dri2_driver_extensions, ARRAY_SIZE(dri2_driver_extensions));
 }
 
 EGLBoolean
 dri2_load_driver_dri3(_EGLDisplay *disp)
 {
-   return dri2_load_driver_common(disp, dri3_driver_extensions);
+   return dri2_load_driver_common(disp, dri3_driver_extensions, ARRAY_SIZE(dri3_driver_extensions));
 }
 
 EGLBoolean
 dri2_load_driver_swrast(_EGLDisplay *disp)
 {
-   return dri2_load_driver_common(disp, swrast_driver_extensions);
-}
-
-static unsigned
-dri2_renderer_query_integer(struct dri2_egl_display *dri2_dpy, int param)
-{
-   const __DRI2rendererQueryExtension *rendererQuery = dri2_dpy->rendererQuery;
-   unsigned int value = 0;
-
-   if (!rendererQuery ||
-       rendererQuery->queryInteger(dri2_dpy->dri_screen, param, &value) == -1)
-      return 0;
-
-   return value;
+   return dri2_load_driver_common(disp, swrast_driver_extensions, ARRAY_SIZE(swrast_driver_extensions));
 }
 
 static const char *
@@ -884,26 +806,30 @@ static char *
 dri2_query_driver_config(_EGLDisplay *disp)
 {
     struct dri2_egl_display *dri2_dpy = dri2_egl_display_lock(disp);
-    const __DRIconfigOptionsExtension *ext = dri2_dpy->configOptions;
     char *ret;
 
-    if (ext->base.version >= 2) {
-        ret = ext->getXml(dri2_dpy->driver_name);
-    } else {
-       ret = strdup(ext->xml);
-    }
+    ret = dri2_dpy->configOptions->getXml(dri2_dpy->driver_name);
 
     mtx_unlock(&dri2_dpy->lock);
 
     return ret;
 }
 
+static int
+get_screen_param(_EGLDisplay *disp, enum pipe_cap param)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri_screen *screen = dri_screen(dri2_dpy->dri_screen);
+   return screen->base.screen->get_param(screen->base.screen, param);
+}
 
 void
 dri2_setup_screen(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   unsigned int api_mask;
+   struct dri_screen *screen = dri_screen(dri2_dpy->dri_screen);
+   struct pipe_screen *pscreen = screen->base.screen;
+   unsigned int api_mask = screen->api_mask;
 
    /*
     * EGL 1.5 specification defines the default value to 1. Moreover,
@@ -917,18 +843,6 @@ dri2_setup_screen(_EGLDisplay *disp)
    dri2_dpy->max_swap_interval = 1;
    dri2_dpy->default_swap_interval = 1;
 
-   if (dri2_dpy->image_driver) {
-      api_mask = dri2_dpy->image_driver->getAPIMask(dri2_dpy->dri_screen);
-   } else if (dri2_dpy->dri2) {
-      api_mask = dri2_dpy->dri2->getAPIMask(dri2_dpy->dri_screen);
-   } else {
-      assert(dri2_dpy->swrast);
-      api_mask = 1 << __DRI_API_OPENGL |
-                 1 << __DRI_API_GLES |
-                 1 << __DRI_API_GLES2 |
-                 1 << __DRI_API_GLES3;
-   }
-
    disp->ClientAPIs = 0;
    if ((api_mask & (1 <<__DRI_API_OPENGL)) && _eglIsApiValid(EGL_OPENGL_API))
       disp->ClientAPIs |= EGL_OPENGL_BIT;
@@ -940,6 +854,8 @@ dri2_setup_screen(_EGLDisplay *disp)
       disp->ClientAPIs |= EGL_OPENGL_ES3_BIT_KHR;
 
    assert(dri2_dpy->image_driver || dri2_dpy->dri2 || dri2_dpy->swrast);
+   disp->Extensions.KHR_create_context = EGL_TRUE;
+   disp->Extensions.KHR_create_context_no_error = EGL_TRUE;
    disp->Extensions.KHR_no_config_context = EGL_TRUE;
    disp->Extensions.KHR_surfaceless_context = EGL_TRUE;
 
@@ -948,41 +864,28 @@ dri2_setup_screen(_EGLDisplay *disp)
    }
 
    /* Report back to EGL the bitmask of priorities supported */
-   disp->Extensions.IMG_context_priority =
-      dri2_renderer_query_integer(dri2_dpy,
-                                  __DRI2_RENDERER_HAS_CONTEXT_PRIORITY);
+   disp->Extensions.IMG_context_priority = get_screen_param(disp, PIPE_CAP_CONTEXT_PRIORITY_MASK);
 
    disp->Extensions.EXT_pixel_format_float = EGL_TRUE;
 
-   if (dri2_renderer_query_integer(dri2_dpy,
-                                   __DRI2_RENDERER_HAS_FRAMEBUFFER_SRGB))
+   if (pscreen->is_format_supported(pscreen,
+                                    PIPE_FORMAT_B8G8R8A8_SRGB,
+                                    PIPE_TEXTURE_2D, 0, 0,
+                                    PIPE_BIND_RENDER_TARGET)) {
       disp->Extensions.KHR_gl_colorspace = EGL_TRUE;
-
-   if (dri2_dpy->image_driver ||
-       (dri2_dpy->dri2 && dri2_dpy->dri2->base.version >= 3) ||
-       (dri2_dpy->swrast && dri2_dpy->swrast->base.version >= 3)) {
-      disp->Extensions.KHR_create_context = EGL_TRUE;
-
-      if (dri2_dpy->robustness)
-         disp->Extensions.EXT_create_context_robustness = EGL_TRUE;
    }
 
-   if (dri2_renderer_query_integer(dri2_dpy,
-                                   __DRI2_RENDERER_HAS_NO_ERROR_CONTEXT))
-      disp->Extensions.KHR_create_context_no_error = EGL_TRUE;
+   disp->Extensions.EXT_create_context_robustness = get_screen_param(disp, PIPE_CAP_DEVICE_RESET_STATUS_QUERY);
 
    if (dri2_dpy->fence) {
       disp->Extensions.KHR_fence_sync = EGL_TRUE;
       disp->Extensions.KHR_wait_sync = EGL_TRUE;
       if (dri2_dpy->fence->get_fence_from_cl_event)
          disp->Extensions.KHR_cl_event2 = EGL_TRUE;
-      if (dri2_dpy->fence->base.version >= 2 &&
-          dri2_dpy->fence->get_capabilities) {
-         unsigned capabilities =
-            dri2_dpy->fence->get_capabilities(dri2_dpy->dri_screen);
-         disp->Extensions.ANDROID_native_fence_sync =
-            (capabilities & __DRI_FENCE_CAP_NATIVE_FD) != 0;
-      }
+      unsigned capabilities =
+         dri2_dpy->fence->get_capabilities(dri2_dpy->dri_screen);
+      disp->Extensions.ANDROID_native_fence_sync =
+         (capabilities & __DRI_FENCE_CAP_NATIVE_FD) != 0;
    }
 
    if (dri2_dpy->blob)
@@ -1008,15 +911,12 @@ dri2_setup_screen(_EGLDisplay *disp)
 
       disp->Extensions.KHR_image_base = EGL_TRUE;
       disp->Extensions.KHR_gl_renderbuffer_image = EGL_TRUE;
-      if (dri2_dpy->image->base.version >= 5 &&
-          dri2_dpy->image->createImageFromTexture) {
-         disp->Extensions.KHR_gl_texture_2D_image = EGL_TRUE;
-         disp->Extensions.KHR_gl_texture_cubemap_image = EGL_TRUE;
+      disp->Extensions.KHR_gl_texture_2D_image = EGL_TRUE;
+      disp->Extensions.KHR_gl_texture_cubemap_image = EGL_TRUE;
 
-         if (dri2_renderer_query_integer(dri2_dpy,
-                                         __DRI2_RENDERER_HAS_TEXTURE_3D))
-             disp->Extensions.KHR_gl_texture_3D_image = EGL_TRUE;
-      }
+      if (get_screen_param(disp, PIPE_CAP_MAX_TEXTURE_3D_LEVELS) != 0)
+         disp->Extensions.KHR_gl_texture_3D_image = EGL_TRUE;
+
 #ifdef HAVE_LIBDRM
       if (dri2_dpy->image->base.version >= 8 &&
           dri2_dpy->image->createImageFromDmaBufs) {
@@ -1033,11 +933,9 @@ dri2_setup_screen(_EGLDisplay *disp)
       disp->Extensions.KHR_partial_update = EGL_TRUE;
 
    disp->Extensions.EXT_protected_surface =
-      dri2_renderer_query_integer(dri2_dpy,
-                                  __DRI2_RENDERER_HAS_PROTECTED_SURFACE);
+      get_screen_param(disp, PIPE_CAP_DEVICE_PROTECTED_SURFACE) != 0;
    disp->Extensions.EXT_protected_content =
-      dri2_renderer_query_integer(dri2_dpy,
-                                  __DRI2_RENDERER_HAS_PROTECTED_CONTEXT);
+      get_screen_param(disp, PIPE_CAP_DEVICE_PROTECTED_CONTEXT) != 0;
 }
 
 void
@@ -1083,39 +981,12 @@ dri2_create_screen(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   if (dri2_dpy->image_driver) {
-      dri2_dpy->dri_screen =
-         dri2_dpy->image_driver->createNewScreen2(0, dri2_dpy->fd,
-                                                  dri2_dpy->loader_extensions,
-                                                  dri2_dpy->driver_extensions,
-                                                  &dri2_dpy->driver_configs,
-                                                  disp);
-   } else if (dri2_dpy->dri2) {
-      if (dri2_dpy->dri2->base.version >= 4) {
-         dri2_dpy->dri_screen =
-            dri2_dpy->dri2->createNewScreen2(0, dri2_dpy->fd,
-                                             dri2_dpy->loader_extensions,
-                                             dri2_dpy->driver_extensions,
-                                             &dri2_dpy->driver_configs, disp);
-      } else {
-         dri2_dpy->dri_screen =
-            dri2_dpy->dri2->createNewScreen(0, dri2_dpy->fd,
-                                            dri2_dpy->loader_extensions,
-                                            &dri2_dpy->driver_configs, disp);
-      }
-   } else {
-      assert(dri2_dpy->swrast);
-      if (dri2_dpy->swrast->base.version >= 4) {
-         dri2_dpy->dri_screen =
-            dri2_dpy->swrast->createNewScreen2(0, dri2_dpy->loader_extensions,
-                                               dri2_dpy->driver_extensions,
-                                               &dri2_dpy->driver_configs, disp);
-      } else {
-         dri2_dpy->dri_screen =
-            dri2_dpy->swrast->createNewScreen(0, dri2_dpy->loader_extensions,
-                                              &dri2_dpy->driver_configs, disp);
-      }
-   }
+   int screen_fd = dri2_dpy->swrast ? -1 : dri2_dpy->fd;
+   dri2_dpy->dri_screen = dri2_dpy->mesa->createNewScreen(0, screen_fd,
+                                                          dri2_dpy->loader_extensions,
+                                                          dri2_dpy->driver_extensions,
+                                                          &dri2_dpy->driver_configs,
+                                                          disp);
 
    if (dri2_dpy->dri_screen == NULL) {
       _eglLog(_EGL_WARNING, "egl: failed to create dri2 screen");
@@ -1130,18 +1001,17 @@ EGLBoolean
 dri2_setup_extensions(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   const struct dri2_extension_match *mandatory_core_extensions;
    const __DRIextension **extensions;
 
    extensions = dri2_dpy->core->getExtensions(dri2_dpy->dri_screen);
 
-   if (dri2_dpy->image_driver || dri2_dpy->dri2)
-      mandatory_core_extensions = dri2_core_extensions;
-   else
-      mandatory_core_extensions = swrast_core_extensions;
-
-   if (!dri2_bind_extensions(dri2_dpy, mandatory_core_extensions, extensions, false))
-      return EGL_FALSE;
+   if (dri2_dpy->image_driver || dri2_dpy->dri2) {
+      if (!loader_bind_extensions(dri2_dpy, dri2_core_extensions, ARRAY_SIZE(dri2_core_extensions), extensions))
+         return EGL_FALSE;
+   } else {
+      if (!loader_bind_extensions(dri2_dpy, swrast_core_extensions, ARRAY_SIZE(swrast_core_extensions), extensions))
+         return EGL_FALSE;
+   }
 
 #ifdef HAVE_DRI3_MODIFIERS
    dri2_dpy->multibuffers_available =
@@ -1152,7 +1022,7 @@ dri2_setup_extensions(_EGLDisplay *disp)
       (dri2_dpy->image && dri2_dpy->image->base.version >= 15);
 #endif
 
-   dri2_bind_extensions(dri2_dpy, optional_core_extensions, extensions, true);
+   loader_bind_extensions(dri2_dpy, optional_core_extensions, ARRAY_SIZE(optional_core_extensions), extensions);
    return EGL_TRUE;
 }
 
@@ -1431,30 +1301,11 @@ dri2_fill_context_attribs(struct dri2_egl_context *dri2_ctx,
    ctx_attribs[pos++] = dri2_ctx->base.ClientMinorVersion;
 
    if (dri2_ctx->base.Flags != 0) {
-      /* If the implementation doesn't support the __DRI2_ROBUSTNESS
-       * extension, don't even try to send it the robust-access flag.
-       * It may explode.  Instead, generate the required EGL error here.
-       */
-      if ((dri2_ctx->base.Flags & EGL_CONTEXT_OPENGL_ROBUST_ACCESS_BIT_KHR) != 0
-            && !dri2_dpy->robustness) {
-         _eglError(EGL_BAD_MATCH, "eglCreateContext");
-         return false;
-      }
-
       ctx_attribs[pos++] = __DRI_CTX_ATTRIB_FLAGS;
       ctx_attribs[pos++] = dri2_ctx->base.Flags;
    }
 
    if (dri2_ctx->base.ResetNotificationStrategy != EGL_NO_RESET_NOTIFICATION_KHR) {
-      /* If the implementation doesn't support the __DRI2_ROBUSTNESS
-       * extension, don't even try to send it a reset strategy.  It may
-       * explode.  Instead, generate the required EGL error here.
-       */
-      if (!dri2_dpy->robustness) {
-         _eglError(EGL_BAD_CONFIG, "eglCreateContext");
-         return false;
-      }
-
       ctx_attribs[pos++] = __DRI_CTX_ATTRIB_RESET_STRATEGY;
       ctx_attribs[pos++] = __DRI_CTX_RESET_LOSE_CONTEXT;
    }
@@ -1526,33 +1377,8 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
       return NULL;
    }
 
-   if (!_eglInitContext(&dri2_ctx->base, disp, conf, attrib_list))
+   if (!_eglInitContext(&dri2_ctx->base, disp, conf, share_list, attrib_list))
       goto cleanup;
-
-   /* The EGL_EXT_create_context_robustness spec says:
-    *
-    *    "Add to the eglCreateContext context creation errors: [...]
-    *
-    *     * If the reset notification behavior of <share_context> and the
-    *       newly created context are different then an EGL_BAD_MATCH error is
-    *       generated."
-    */
-   if (share_list && share_list->ResetNotificationStrategy !=
-                     dri2_ctx->base.ResetNotificationStrategy) {
-      _eglError(EGL_BAD_MATCH, "eglCreateContext");
-      goto cleanup;
-   }
-
-   /* The EGL_KHR_create_context_no_error spec says:
-    *
-    *    "BAD_MATCH is generated if the value of EGL_CONTEXT_OPENGL_NO_ERROR_KHR
-    *    used to create <share_context> does not match the value of
-    *    EGL_CONTEXT_OPENGL_NO_ERROR_KHR for the context being created."
-    */
-   if (share_list && share_list->NoError != dri2_ctx->base.NoError) {
-      _eglError(EGL_BAD_MATCH, "eglCreateContext");
-      goto cleanup;
-   }
 
    switch (dri2_ctx->base.ClientAPI) {
    case EGL_OPENGL_ES_API:
@@ -1608,59 +1434,16 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
                                   &num_attribs))
       goto cleanup;
 
-   if (dri2_dpy->image_driver) {
-      dri2_ctx->dri_context =
-         dri2_dpy->image_driver->createContextAttribs(dri2_dpy->dri_screen,
-                                                      api,
-                                                      dri_config,
-                                                      shared,
-                                                      num_attribs / 2,
-                                                      ctx_attribs,
-                                                      & error,
-                                                      dri2_ctx);
-      dri2_create_context_attribs_error(error);
-   } else if (dri2_dpy->dri2) {
-      if (dri2_dpy->dri2->base.version >= 3) {
-         dri2_ctx->dri_context =
-            dri2_dpy->dri2->createContextAttribs(dri2_dpy->dri_screen,
-                                                 api,
-                                                 dri_config,
-                                                 shared,
-                                                 num_attribs / 2,
-                                                 ctx_attribs,
-                                                 & error,
-                                                 dri2_ctx);
-         dri2_create_context_attribs_error(error);
-      } else {
-         dri2_ctx->dri_context =
-            dri2_dpy->dri2->createNewContextForAPI(dri2_dpy->dri_screen,
-                                                   api,
-                                                   dri_config,
-                                                   shared,
-                                                   dri2_ctx);
-      }
-   } else {
-      assert(dri2_dpy->swrast);
-      if (dri2_dpy->swrast->base.version >= 3) {
-         dri2_ctx->dri_context =
-            dri2_dpy->swrast->createContextAttribs(dri2_dpy->dri_screen,
-                                                   api,
-                                                   dri_config,
-                                                   shared,
-                                                   num_attribs / 2,
-                                                   ctx_attribs,
-                                                   & error,
-                                                   dri2_ctx);
-         dri2_create_context_attribs_error(error);
-      } else {
-         dri2_ctx->dri_context =
-            dri2_dpy->swrast->createNewContextForAPI(dri2_dpy->dri_screen,
-                                                     api,
-                                                     dri_config,
-                                                     shared,
-                                                     dri2_ctx);
-      }
-   }
+   dri2_ctx->dri_context =
+       dri2_dpy->mesa->createContext(dri2_dpy->dri_screen,
+                                     api,
+                                     dri_config,
+                                     shared,
+                                     num_attribs / 2,
+                                     ctx_attribs,
+                                     &error,
+                                     dri2_ctx);
+   dri2_create_context_attribs_error(error);
 
    if (!dri2_ctx->dri_context)
       goto cleanup;
@@ -1702,8 +1485,7 @@ dri2_init_surface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
 
    dri2_surf->out_fence_fd = -1;
    dri2_surf->enable_out_fence = false;
-   if (dri2_dpy->fence && dri2_dpy->fence->base.version >= 2 &&
-       dri2_dpy->fence->get_capabilities &&
+   if (dri2_dpy->fence &&
        (dri2_dpy->fence->get_capabilities(dri2_dpy->dri_screen) &
         __DRI_FENCE_CAP_NATIVE_FD)) {
       dri2_surf->enable_out_fence = enable_out_fence;
@@ -2783,6 +2565,7 @@ dri2_num_fourcc_format_planes(EGLint format)
    case DRM_FORMAT_P010:
    case DRM_FORMAT_P012:
    case DRM_FORMAT_P016:
+   case DRM_FORMAT_P030:
       return 2;
 
    case DRM_FORMAT_YUV410:

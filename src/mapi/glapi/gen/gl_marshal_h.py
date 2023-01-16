@@ -52,7 +52,7 @@ class PrintCode(gl_XML.gl_print_base):
         print(footer)
 
     def printBody(self, api):
-        print('#include "GL/gl.h"')
+        print('#include "util/glheader.h"')
         print('')
         print('enum marshal_dispatch_cmd_id')
         print('{')

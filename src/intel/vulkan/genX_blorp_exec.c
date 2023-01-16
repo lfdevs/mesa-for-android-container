@@ -294,6 +294,9 @@ blorp_exec_on_render(struct blorp_batch *batch,
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
+   /* Wa_14015814527 */
+   genX(apply_task_urb_workaround)(cmd_buffer);
+
    /* Apply any outstanding flushes in case pipeline select haven't. */
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
@@ -369,6 +372,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
                  const struct blorp_params *params)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+
+   /* Turn on preemption if it was toggled off. */
+   if (!cmd_buffer->state.gfx.object_preemption)
+      genX(cmd_buffer_set_preemption)(cmd_buffer, true);
 
    if (!cmd_buffer->state.current_l3_config) {
       const struct intel_l3_config *cfg =

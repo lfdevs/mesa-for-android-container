@@ -1,7 +1,9 @@
-22.2,2022-11-02,22.2.3,Dylan Baker,
-,2022-11-16,22.2.4,Dylan Baker,
-,2022-11-30,22.2.5,Dylan Baker,This is the last planned release of the 22.2.x series.
-22.3,2022-11-02,22.3.0-rc1,Eric Engestrom,
-,2022-11-09,22.3.0-rc2,Eric Engestrom,
-,2022-11-16,22.3.0-rc3,Eric Engestrom,
-,2022-11-23,22.3.0-rc4,Eric Engestrom,or 22.3.0 final.
+22.2,2022-11-30,22.2.5,Dylan Baker,This is the last planned release of the 22.2.x series.
+22.3,2023-01-25,22.3.4,Eric Engestrom,
+,2023-02-08,22.3.5,Eric Engestrom,
+,2023-02-22,22.3.6,Eric Engestrom,
+,2023-03-08,22.3.7,Eric Engestrom,Last planned release.
+23.0,2023-01-11,23.0.0-rc1,Dylan Baker
+,2023-01-18,23.0.0-rc2,Dylan Baker
+,2023-01-25,23.0.0-rc3,Dylan Baker
+,2023-02-01,23.0.0-rc4,Dylan Baker,Or 23.0.0 final.

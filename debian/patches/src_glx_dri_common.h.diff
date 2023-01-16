@@ -1,6 +1,6 @@
---- a/src/glx/dri_common.h	2020-04-30 00:48:24.000000000 +0200
-+++ b/src/glx/dri_common.h	2020-05-10 15:22:44.000000000 +0200
-@@ -55,6 +55,10 @@
+--- a/src/glx/dri_common.h
++++ b/src/glx/dri_common.h
+@@ -57,6 +57,10 @@ extern struct glx_config *driConvertConf
  
  extern void driDestroyConfigs(const __DRIconfig **configs);
  

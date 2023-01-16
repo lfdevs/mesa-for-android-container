@@ -28,7 +28,7 @@
  */
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "arrayobj.h"
 #include "blend.h"
 #include "clip.h"
@@ -128,7 +128,9 @@ client_state(struct gl_context *ctx, struct gl_vertex_array_object* vao,
 
       case GL_POINT_SIZE_ARRAY_OES:
          if (ctx->VertexProgram.PointSizeEnabled != state) {
-            FLUSH_VERTICES(ctx, _NEW_PROGRAM, 0);
+            FLUSH_VERTICES(ctx, ctx->st->lower_point_size ? _NEW_PROGRAM : 0,
+                           0);
+            ctx->NewDriverState |= ST_NEW_RASTERIZER;
             ctx->VertexProgram.PointSizeEnabled = state;
          }
          vao_state(ctx, vao, VERT_ATTRIB_POINT_SIZE, state);
@@ -866,8 +868,6 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             GLbitfield newEnabled =
                state * ((1 << ctx->Const.MaxViewports) - 1);
             if (newEnabled != ctx->Scissor.EnableFlags) {
-               st_flush_bitmap_cache(st_context(ctx));
-
                FLUSH_VERTICES(ctx, 0,
                               GL_SCISSOR_BIT | GL_ENABLE_BIT);
                ctx->NewDriverState |= ST_NEW_SCISSOR | ST_NEW_RASTERIZER;
@@ -1091,7 +1091,9 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             goto invalid_enum_error;
          if (ctx->VertexProgram.PointSizeEnabled == state)
             return;
-         FLUSH_VERTICES(ctx, _NEW_PROGRAM, GL_ENABLE_BIT);
+         FLUSH_VERTICES(ctx, ctx->st->lower_point_size ? _NEW_PROGRAM : 0,
+                        GL_ENABLE_BIT);
+         ctx->NewDriverState |= ST_NEW_RASTERIZER;
          ctx->VertexProgram.PointSizeEnabled = state;
          break;
       case GL_VERTEX_PROGRAM_TWO_SIDE_ARB:
@@ -1099,7 +1101,14 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             goto invalid_enum_error;
          if (ctx->VertexProgram.TwoSideEnabled == state)
             return;
-         FLUSH_VERTICES(ctx, _NEW_PROGRAM, GL_ENABLE_BIT);
+         FLUSH_VERTICES(ctx, 0, GL_ENABLE_BIT);
+         if (ctx->st->lower_two_sided_color) {
+            /* TODO: this could be smaller, but most drivers don't get here */
+            ctx->NewDriverState |= ST_NEW_VS_STATE |
+                                   ST_NEW_TES_STATE |
+                                   ST_NEW_GS_STATE;
+         }
+         ctx->NewDriverState |= ST_NEW_RASTERIZER;
          ctx->VertexProgram.TwoSideEnabled = state;
          break;
 
@@ -1393,8 +1402,6 @@ _mesa_set_enablei(struct gl_context *ctx, GLenum cap,
          return;
       }
       if (((ctx->Scissor.EnableFlags >> index) & 1) != state) {
-         st_flush_bitmap_cache(st_context(ctx));
-
          FLUSH_VERTICES(ctx, 0,
                         GL_SCISSOR_BIT | GL_ENABLE_BIT);
          ctx->NewDriverState |= ST_NEW_SCISSOR | ST_NEW_RASTERIZER;

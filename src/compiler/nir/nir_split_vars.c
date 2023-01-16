@@ -299,13 +299,14 @@ nir_split_struct_vars(nir_shader *shader, nir_variable_mode modes)
       _mesa_pointer_hash_table_create(mem_ctx);
    struct set *complex_vars = NULL;
 
-   assert((modes & (nir_var_shader_temp | nir_var_function_temp)) == modes);
+   assert((modes & (nir_var_shader_temp | nir_var_ray_hit_attrib | nir_var_function_temp)) == modes);
 
    bool has_global_splits = false;
-   if (modes & nir_var_shader_temp) {
+   nir_variable_mode global_modes = modes & (nir_var_shader_temp | nir_var_ray_hit_attrib);
+   if (global_modes) {
       has_global_splits = split_var_list_structs(shader, NULL,
                                                  &shader->variables,
-                                                 nir_var_shader_temp,
+                                                 global_modes,
                                                  var_field_map,
                                                  &complex_vars,
                                                  mem_ctx);
@@ -864,13 +865,13 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
    struct hash_table *var_info_map = _mesa_pointer_hash_table_create(mem_ctx);
    struct set *complex_vars = NULL;
 
-   assert((modes & (nir_var_shader_temp | nir_var_function_temp)) == modes);
+   assert((modes & (nir_var_shader_temp | nir_var_ray_hit_attrib | nir_var_function_temp)) == modes);
 
    bool has_global_array = false;
-   if (modes & nir_var_shader_temp) {
+   if (modes & (nir_var_shader_temp | nir_var_ray_hit_attrib)) {
       has_global_array = init_var_list_array_infos(shader,
                                                    &shader->variables,
-                                                   nir_var_shader_temp,
+                                                   modes,
                                                    var_info_map,
                                                    &complex_vars,
                                                    mem_ctx);
@@ -905,10 +906,10 @@ nir_split_array_vars(nir_shader *shader, nir_variable_mode modes)
    }
 
    bool has_global_splits = false;
-   if (modes & nir_var_shader_temp) {
+   if (modes & (nir_var_shader_temp | nir_var_ray_hit_attrib)) {
       has_global_splits = split_var_list_arrays(shader, NULL,
                                                 &shader->variables,
-                                                nir_var_shader_temp,
+                                                modes,
                                                 var_info_map, mem_ctx);
    }
 

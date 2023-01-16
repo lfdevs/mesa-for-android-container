@@ -264,8 +264,11 @@ SOFTWARE.
     <field name="mask" start="0" end="31" type="uint"/>
   </struct>
 
-  <struct name="PDS_CTRL" length="2">
-    <field name="sm_overlap_enable" start="55" end="55" type="bool"/>
+  <struct name="CDM_ITEM" length="1">
+    <field name="mode" start="0" end="1" type="uint"/>
+  </struct>
+
+  <struct name="PDS_CTRL0" length="1">
     <condition type="if" check="ROGUEXE"/>
       <condition type="if" check="COMPUTE"/>
         <field name="roguexe_max_num_cdm_tasks" start="24" end="31" type="uint"/>
@@ -283,6 +286,10 @@ SOFTWARE.
       <field name="max_num_pdm_tasks" start="16" end="22" type="uint"/>
       <field name="max_num_vdm_tasks" start="8" end="14" type="uint"/>
     <condition type="endif" check="ROGUEXE"/>
+  </struct>
+
+  <struct name="PDS_CTRL1" length="1">
+    <field name="sm_overlap_enable" start="23" end="23" type="bool"/>
   </struct>
 
   <struct name="EVENT_PIXEL_PDS_CODE" length="1">

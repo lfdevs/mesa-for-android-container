@@ -486,6 +486,28 @@ vn_QueueSubmit(VkQueue queue_h,
       return vn_error(dev->instance, result);
    }
 
+   /* If external fence, track the submission's ring_idx to facilitate
+    * sync_file export.
+    *
+    * Imported syncs don't need a proxy renderer sync on subsequent export,
+    * because an fd is already available.
+    */
+   if (fence && fence->is_external &&
+       fence->payload->type == VN_SYNC_TYPE_DEVICE_ONLY)
+      fence->ring_idx = queue->ring_idx;
+
+   for (uint32_t i = 0; i < submit.batch_count; i++) {
+      const VkSubmitInfo *submit_info = &submit.submit_batches[i];
+      for (uint32_t j = 0; j < submit_info->signalSemaphoreCount; j++) {
+         struct vn_semaphore *sem =
+            vn_semaphore_from_handle(submit_info->pSignalSemaphores[j]);
+         if (sem->is_external &&
+             sem->payload->type == VN_SYNC_TYPE_DEVICE_ONLY) {
+            sem->ring_idx = queue->ring_idx;
+         }
+      }
+   }
+
    /* TODO intercept original submit batches to append the fence feedback cmd
     * with a per-queue cached submission builder to avoid transient allocs.
     *
@@ -511,10 +533,16 @@ vn_QueueSubmit(VkQueue queue_h,
    if (submit.wsi_mem) {
       /* XXX this is always false and kills the performance */
       if (dev->instance->renderer->info.has_implicit_fencing) {
-         vn_renderer_submit(dev->renderer, &(const struct vn_renderer_submit){
-                                              .bos = &submit.wsi_mem->base_bo,
-                                              .bo_count = 1,
-                                           });
+         vn_renderer_submit(dev->renderer,
+                            &(const struct vn_renderer_submit){
+                               .bos = &submit.wsi_mem->base_bo,
+                               .bo_count = 1,
+                               .batches =
+                                  &(struct vn_renderer_submit_batch){
+                                     .ring_idx = queue->ring_idx,
+                                  },
+                               .batch_count = 1,
+                            });
       } else {
          vn_queue_wait_idle_before_present(queue);
       }
@@ -545,7 +573,9 @@ vn_submit_info2_has_external_signal_semaphore(uint32_t submit_count,
 }
 
 static VkResult
-vn_queue_submit2_import_semaphores(struct vn_device *dev, uint32_t submit_count, const VkSubmitInfo2 *submits)
+vn_queue_submit2_import_semaphores(struct vn_device *dev,
+                                   uint32_t submit_count,
+                                   const VkSubmitInfo2 *submits)
 {
    struct vn_instance *instance = dev->instance;
    VkDevice dev_h = vn_device_to_handle(dev);
@@ -573,7 +603,8 @@ vn_queue_submit2_import_semaphores(struct vn_device *dev, uint32_t submit_count,
             .resourceId = 0,
          };
 
-         vn_async_vkImportSemaphoreResource100000MESA(instance, dev_h, &res_info);
+         vn_async_vkImportSemaphoreResource100000MESA(instance, dev_h,
+                                                      &res_info);
       }
    }
 
@@ -644,8 +675,10 @@ vn_QueueSubmit2(VkQueue queue_h,
           VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT);
 
    const struct wsi_memory_signal_submit_info *wsi_info = NULL;
-   if (submitCount == 1)
-         wsi_info = vk_find_struct_const(pSubmits[0].pNext, WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA);
+   if (submitCount == 1) {
+      wsi_info = vk_find_struct_const(pSubmits[0].pNext,
+                                      WSI_MEMORY_SIGNAL_SUBMIT_INFO_MESA);
+   }
 
    const bool has_external_fence = fence && fence->is_external;
    const bool has_feedback_fence = fence && fence->feedback.slot;
@@ -666,6 +699,23 @@ vn_QueueSubmit2(VkQueue queue_h,
    if (result != VK_SUCCESS)
       return vn_error(instance, result);
 
+   /* see similar process in vn_QueueSubmit() for rationale */
+   if (fence && fence->is_external &&
+       fence->payload->type == VN_SYNC_TYPE_DEVICE_ONLY)
+      fence->ring_idx = queue->ring_idx;
+
+   for (uint32_t i = 0; i < submitCount; i++) {
+      const VkSubmitInfo2 *submit_info = &pSubmits[i];
+      for (uint32_t j = 0; j < submit_info->signalSemaphoreInfoCount; j++) {
+         struct vn_semaphore *sem = vn_semaphore_from_handle(
+            submit_info->pSignalSemaphoreInfos[j].semaphore);
+         if (sem->is_external &&
+             sem->payload->type == VN_SYNC_TYPE_DEVICE_ONLY) {
+            sem->ring_idx = queue->ring_idx;
+         }
+      }
+   }
+
    if (has_feedback_fence) {
       result = vn_queue_submit2_feedback_fence(queue, fence, sync);
       if (result != VK_SUCCESS)
@@ -678,10 +728,16 @@ vn_QueueSubmit2(VkQueue queue_h,
             vn_device_memory_from_handle(wsi_info->memory);
          assert(!wsi_mem->base_memory && wsi_mem->base_bo);
 
-         vn_renderer_submit(dev->renderer, &(const struct vn_renderer_submit){
-                                              .bos = &wsi_mem->base_bo,
-                                              .bo_count = 1,
-                                           });
+         vn_renderer_submit(dev->renderer,
+                            &(const struct vn_renderer_submit){
+                               .bos = &wsi_mem->base_bo,
+                               .bo_count = 1,
+                               .batches =
+                                  &(struct vn_renderer_submit_batch){
+                                     .ring_idx = queue->ring_idx,
+                                  },
+                               .batch_count = 1,
+                            });
       } else {
          vn_queue_wait_idle_before_present(queue);
       }
@@ -1105,7 +1161,7 @@ vn_WaitForFences(VkDevice device,
 }
 
 static VkResult
-vn_create_sync_file(struct vn_device *dev, int *out_fd)
+vn_create_sync_file(struct vn_device *dev, uint32_t ring_idx, int *out_fd)
 {
    struct vn_renderer_sync *sync;
    VkResult result = vn_renderer_sync_create(dev->renderer, 0,
@@ -1119,6 +1175,7 @@ vn_create_sync_file(struct vn_device *dev, int *out_fd)
             .syncs = &sync,
             .sync_values = &(const uint64_t){ 1 },
             .sync_count = 1,
+            .ring_idx = ring_idx,
          },
       .batch_count = 1,
    };
@@ -1186,7 +1243,7 @@ vn_GetFenceFdKHR(VkDevice device,
    assert(sync_file);
    int fd = -1;
    if (payload->type == VN_SYNC_TYPE_DEVICE_ONLY) {
-      result = vn_create_sync_file(dev, &fd);
+      result = vn_create_sync_file(dev, fence->ring_idx, &fd);
       if (result != VK_SUCCESS)
          return vn_error(dev->instance, result);
 
@@ -1497,7 +1554,7 @@ vn_GetSemaphoreFdKHR(VkDevice device,
    assert(sync_file);
    int fd = -1;
    if (payload->type == VN_SYNC_TYPE_DEVICE_ONLY) {
-      VkResult result = vn_create_sync_file(dev, &fd);
+      VkResult result = vn_create_sync_file(dev, sem->ring_idx, &fd);
       if (result != VK_SUCCESS)
          return vn_error(dev->instance, result);
 

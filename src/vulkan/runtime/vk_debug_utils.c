@@ -31,7 +31,7 @@
 #include "vk_alloc.h"
 #include "vk_util.h"
 #include "stdarg.h"
-#include "u_dynarray.h"
+#include "util/u_dynarray.h"
 
 void
 vk_debug_message(struct vk_instance *instance,

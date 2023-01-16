@@ -46,9 +46,11 @@
 #endif
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
+#include <GL/internal/mesa_interface.h>
 #include "loader.h"
 #include "util/os_file.h"
 #include "util/os_misc.h"
+#include "git_sha1.h"
 
 #ifdef HAVE_LIBDRM
 #include <xf86drm.h>
@@ -603,6 +605,46 @@ loader_get_extensions_name(const char *driver_name)
    return name;
 }
 
+bool
+loader_bind_extensions(void *data,
+                       const struct dri_extension_match *matches, size_t num_matches,
+                       const __DRIextension **extensions)
+{
+   bool ret = true;
+
+   for (size_t j = 0; j < num_matches; j++) {
+      const struct dri_extension_match *match = &matches[j];
+      const __DRIextension **field = (const __DRIextension **)((char *)data + matches[j].offset);
+      for (size_t i = 0; extensions[i]; i++) {
+         if (strcmp(extensions[i]->name, match->name) == 0 &&
+             extensions[i]->version >= match->version) {
+            *field = extensions[i];
+            break;
+         }
+      }
+
+      if (!*field) {
+         log_(match->optional ? _LOADER_DEBUG : _LOADER_FATAL, "did not find extension %s version %d\n",
+               match->name, match->version);
+         if (!match->optional)
+            ret = false;
+      }
+
+      /* The loaders rely on the loaded DRI drivers being from the same Mesa
+       * build so that we can reference the same structs on both sides.
+       */
+      if (strcmp(match->name, __DRI_MESA) == 0) {
+         const __DRImesaCoreExtension *mesa = (const __DRImesaCoreExtension *)*field;
+         if (strcmp(mesa->version_string, MESA_INTERFACE_VERSION_STRING) != 0) {
+            log_(_LOADER_FATAL, "DRI driver not from this Mesa build ('%s' vs '%s')\n",
+                 mesa->version_string, MESA_INTERFACE_VERSION_STRING);
+            ret = false;
+         }
+      }
+   }
+
+   return ret;
+}
 /**
  * Opens a driver or backend using its name, returning the library handle.
  *

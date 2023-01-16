@@ -34,12 +34,6 @@
 
 #define AC_LLVM_MAX_OUTPUTS (VARYING_SLOT_VAR31 + 1)
 
-enum ac_prim_count {
-   ac_prim_count_gs_emit,
-   ac_prim_count_gen,
-   ac_prim_count_xfb,
-};
-
 /* Document the shader ABI during compilation. This is what allows radeonsi and
  * radv to share a compiler backend.
  */
@@ -68,15 +62,10 @@ struct ac_shader_abi {
 
    void (*export_vertex)(struct ac_shader_abi *abi);
 
-   void (*emit_vertex)(struct ac_shader_abi *abi, unsigned stream, LLVMValueRef *addrs);
-
    void (*emit_primitive)(struct ac_shader_abi *abi, unsigned stream);
 
    void (*emit_vertex_with_counter)(struct ac_shader_abi *abi, unsigned stream,
                                     LLVMValueRef vertexidx, LLVMValueRef *addrs);
-
-   void (*atomic_add_prim_count)(struct ac_shader_abi *abi, unsigned stream,
-                                 LLVMValueRef prim_count, enum ac_prim_count count_type);
 
    LLVMValueRef (*load_inputs)(struct ac_shader_abi *abi,
                                unsigned driver_location, unsigned component,
@@ -103,28 +92,17 @@ struct ac_shader_abi {
    /**
     * Load a descriptor associated to a sampler.
     *
-    * \param descriptor_set the descriptor set index (only for Vulkan)
-    * \param base_index the base index of the sampler variable
-    * \param constant_index constant part of an array index (or 0, if the
-    *                       sampler variable is not an array)
-    * \param index non-constant part of an array index (may be NULL)
+    * \param index of the descriptor
     * \param desc_type the type of descriptor to load
-    * \param image whether the descriptor is loaded for an image operation
     */
-   LLVMValueRef (*load_sampler_desc)(struct ac_shader_abi *abi, unsigned descriptor_set,
-                                     unsigned base_index, unsigned constant_index,
-                                     LLVMValueRef index, enum ac_descriptor_type desc_type,
-                                     bool image, bool write, bool bindless);
+   LLVMValueRef (*load_sampler_desc)(struct ac_shader_abi *abi, LLVMValueRef index,
+                                     enum ac_descriptor_type desc_type);
 
    LLVMValueRef (*load_sample_position)(struct ac_shader_abi *abi, LLVMValueRef sample_id);
 
-   LLVMValueRef (*load_user_clip_plane)(struct ac_shader_abi *abi, unsigned ucp_id);
-
-   LLVMValueRef (*load_streamout_buffer)(struct ac_shader_abi *abi, unsigned buffer);
-
    LLVMValueRef (*emit_fbfetch)(struct ac_shader_abi *abi);
 
-   LLVMValueRef (*intrinsic_load)(struct ac_shader_abi *abi, nir_intrinsic_op op);
+   LLVMValueRef (*intrinsic_load)(struct ac_shader_abi *abi, nir_intrinsic_instr *intrin);
 
    /* Whether to clamp the shadow reference value to [0,1]on GFX8. Radeonsi currently
     * uses it due to promoting D16 to D32, but radv needs it off. */
@@ -149,6 +127,9 @@ struct ac_shader_abi {
    /* Whether to detect divergent textures/samplers index and apply
     * waterfall to avoid incorrect rendering. */
    bool use_waterfall_for_divergent_tex_samplers;
+
+   /* Whether to disable anisotropic filtering. */
+   bool disable_aniso_single_level;
 
    /* Number of all interpolated inputs */
    unsigned num_interp;

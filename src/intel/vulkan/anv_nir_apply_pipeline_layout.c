@@ -1081,6 +1081,21 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *intrin,
    return true;
 }
 
+static bool
+lower_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intrin,
+                        struct apply_pipeline_layout_state *state)
+{
+   b->cursor = nir_instr_remove(&intrin->instr);
+
+   nir_ssa_def *base_workgroup_id =
+      nir_load_push_constant(b, 3, 32, nir_imm_int(b, 0),
+                             .base = offsetof(struct anv_push_constants, cs.base_work_group_id),
+                             .range = 3 * sizeof(uint32_t));
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, base_workgroup_id);
+
+   return true;
+}
+
 static void
 lower_tex_deref(nir_builder *b, nir_tex_instr *tex,
                 nir_tex_src_type deref_src_type,
@@ -1279,6 +1294,8 @@ apply_pipeline_layout(nir_builder *b, nir_instr *instr, void *_state)
          return lower_image_intrinsic(b, intrin, state);
       case nir_intrinsic_load_constant:
          return lower_load_constant(b, intrin, state);
+      case nir_intrinsic_load_base_workgroup_id:
+         return lower_base_workgroup_id(b, intrin, state);
       case nir_intrinsic_load_ray_query_global_intel:
          return lower_ray_query_globals(b, intrin, state);
       default:

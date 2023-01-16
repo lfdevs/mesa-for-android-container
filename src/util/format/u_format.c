@@ -33,6 +33,7 @@
  */
 
 #include "c11/threads.h"
+#include "util/detect_arch.h"
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
 #include "util/u_math.h"
@@ -47,18 +48,20 @@
  * src_stride may be negative to do vertical flip of pixels from source.
  */
 void
-util_copy_rect(ubyte * dst,
+util_copy_rect(void * dst_in,
                enum pipe_format format,
                unsigned dst_stride,
                unsigned dst_x,
                unsigned dst_y,
                unsigned width,
                unsigned height,
-               const ubyte * src,
+               const void * src_in,
                int src_stride,
                unsigned src_x,
                unsigned src_y)
 {
+   uint8_t *dst = dst_in;
+   const uint8_t *src = src_in;
    unsigned i;
    int src_stride_pos = src_stride < 0 ? -src_stride : src_stride;
    int blocksize = util_format_get_blocksize(format);
@@ -94,7 +97,7 @@ util_copy_rect(ubyte * dst,
 }
 
 
-boolean
+bool
 util_format_is_float(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -102,15 +105,15 @@ util_format_is_float(enum pipe_format format)
 
    i = util_format_get_first_non_void_channel(format);
    if (i < 0) {
-      return FALSE;
+      return false;
    }
 
-   return desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT ? TRUE : FALSE;
+   return desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT ? true : false;
 }
 
 
 /** Test if the format contains RGB, but not alpha */
-boolean
+bool
 util_format_has_alpha(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -122,7 +125,7 @@ util_format_has_alpha(enum pipe_format format)
 }
 
 /** Test if format has alpha as 1 (like RGBX) */
-boolean
+bool
 util_format_has_alpha1(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -134,7 +137,7 @@ util_format_has_alpha1(enum pipe_format format)
            desc->swizzle[3] == PIPE_SWIZZLE_1;
 }
 
-boolean
+bool
 util_format_is_luminance(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -146,12 +149,12 @@ util_format_is_luminance(enum pipe_format format)
        desc->swizzle[1] == PIPE_SWIZZLE_X &&
        desc->swizzle[2] == PIPE_SWIZZLE_X &&
        desc->swizzle[3] == PIPE_SWIZZLE_1) {
-      return TRUE;
+      return true;
    }
-   return FALSE;
+   return false;
 }
 
-boolean
+bool
 util_format_is_alpha(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -163,12 +166,12 @@ util_format_is_alpha(enum pipe_format format)
        desc->swizzle[1] == PIPE_SWIZZLE_0 &&
        desc->swizzle[2] == PIPE_SWIZZLE_0 &&
        desc->swizzle[3] == PIPE_SWIZZLE_X) {
-      return TRUE;
+      return true;
    }
-   return FALSE;
+   return false;
 }
 
-boolean
+bool
 util_format_is_pure_integer(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -185,12 +188,12 @@ util_format_is_pure_integer(enum pipe_format format)
    /* Find the first non-void channel. */
    i = util_format_get_first_non_void_channel(format);
    if (i == -1)
-      return FALSE;
+      return false;
 
-   return desc->channel[i].pure_integer ? TRUE : FALSE;
+   return desc->channel[i].pure_integer ? true : false;
 }
 
-boolean
+bool
 util_format_is_pure_sint(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -198,12 +201,12 @@ util_format_is_pure_sint(enum pipe_format format)
 
    i = util_format_get_first_non_void_channel(format);
    if (i == -1)
-      return FALSE;
+      return false;
 
-   return (desc->channel[i].type == UTIL_FORMAT_TYPE_SIGNED && desc->channel[i].pure_integer) ? TRUE : FALSE;
+   return (desc->channel[i].type == UTIL_FORMAT_TYPE_SIGNED && desc->channel[i].pure_integer) ? true : false;
 }
 
-boolean
+bool
 util_format_is_pure_uint(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -211,15 +214,15 @@ util_format_is_pure_uint(enum pipe_format format)
 
    i = util_format_get_first_non_void_channel(format);
    if (i == -1)
-      return FALSE;
+      return false;
 
-   return (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED && desc->channel[i].pure_integer) ? TRUE : FALSE;
+   return (desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED && desc->channel[i].pure_integer) ? true : false;
 }
 
 /**
  * Returns true if the format contains normalized signed channels.
  */
-boolean
+bool
 util_format_is_snorm(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -230,7 +233,7 @@ util_format_is_snorm(enum pipe_format format)
 /**
  * Returns true if the format contains normalized unsigned channels.
  */
-boolean
+bool
 util_format_is_unorm(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -241,7 +244,7 @@ util_format_is_unorm(enum pipe_format format)
 /**
  * Returns true if the format contains scaled integer format channels.
  */
-boolean
+bool
 util_format_is_scaled(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
@@ -249,30 +252,30 @@ util_format_is_scaled(enum pipe_format format)
 
    /* format none is described as scaled but not for this check */
    if (format == PIPE_FORMAT_NONE)
-      return FALSE;
+      return false;
 
    /* Find the first non-void channel. */
    i = util_format_get_first_non_void_channel(format);
    if (i == -1)
-      return FALSE;
+      return false;
 
    return !desc->channel[i].pure_integer && !desc->channel[i].normalized &&
       (desc->channel[i].type == UTIL_FORMAT_TYPE_SIGNED ||
        desc->channel[i].type == UTIL_FORMAT_TYPE_UNSIGNED);
 }
 
-boolean
+bool
 util_format_is_snorm8(enum pipe_format format)
 {
    const struct util_format_description *desc = util_format_description(format);
    int i;
 
    if (desc->is_mixed)
-      return FALSE;
+      return false;
 
    i = util_format_get_first_non_void_channel(format);
    if (i == -1)
-      return FALSE;
+      return false;
 
    return desc->channel[i].type == UTIL_FORMAT_TYPE_SIGNED &&
           !desc->channel[i].pure_integer &&
@@ -280,7 +283,7 @@ util_format_is_snorm8(enum pipe_format format)
           desc->channel[i].size == 8;
 }
 
-boolean
+bool
 util_format_is_luminance_alpha(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -292,13 +295,13 @@ util_format_is_luminance_alpha(enum pipe_format format)
        desc->swizzle[1] == PIPE_SWIZZLE_X &&
        desc->swizzle[2] == PIPE_SWIZZLE_X &&
        desc->swizzle[3] == PIPE_SWIZZLE_Y) {
-      return TRUE;
+      return true;
    }
-   return FALSE;
+   return false;
 }
 
 
-boolean
+bool
 util_format_is_intensity(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -310,12 +313,12 @@ util_format_is_intensity(enum pipe_format format)
        desc->swizzle[1] == PIPE_SWIZZLE_X &&
        desc->swizzle[2] == PIPE_SWIZZLE_X &&
        desc->swizzle[3] == PIPE_SWIZZLE_X) {
-      return TRUE;
+      return true;
    }
-   return FALSE;
+   return false;
 }
 
-boolean
+bool
 util_format_is_subsampled_422(enum pipe_format format)
 {
    const struct util_format_description *desc =
@@ -511,31 +514,31 @@ util_format_write_4ub(enum pipe_format format, const uint8_t *src, unsigned src_
  *    r10g10b10a2_uscaled -> r10g10b10x2_uscaled
  *    r10sg10sb10sa2u_norm -> r10g10b10x2_snorm
  */
-boolean
+bool
 util_is_format_compatible(const struct util_format_description *src_desc,
                           const struct util_format_description *dst_desc)
 {
    unsigned chan;
 
    if (src_desc->format == dst_desc->format) {
-      return TRUE;
+      return true;
    }
 
    if (src_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN ||
        dst_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN) {
-      return FALSE;
+      return false;
    }
 
    if (src_desc->block.bits != dst_desc->block.bits ||
        src_desc->nr_channels != dst_desc->nr_channels ||
        src_desc->colorspace != dst_desc->colorspace) {
-      return FALSE;
+      return false;
    }
 
    for (chan = 0; chan < 4; ++chan) {
       if (src_desc->channel[chan].size !=
           dst_desc->channel[chan].size) {
-         return FALSE;
+         return false;
       }
    }
 
@@ -544,22 +547,22 @@ util_is_format_compatible(const struct util_format_description *src_desc,
 
       if (swizzle < 4) {
          if (src_desc->swizzle[chan] != swizzle) {
-            return FALSE;
+            return false;
          }
          if ((src_desc->channel[swizzle].type !=
               dst_desc->channel[swizzle].type) ||
              (src_desc->channel[swizzle].normalized !=
               dst_desc->channel[swizzle].normalized)) {
-            return FALSE;
+            return false;
          }
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 
-boolean
+bool
 util_format_fits_8unorm(const struct util_format_description *format_desc)
 {
    unsigned chan;
@@ -569,7 +572,7 @@ util_format_fits_8unorm(const struct util_format_description *format_desc)
     */
 
    if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) {
-      return FALSE;
+      return false;
    }
 
    switch (format_desc->layout) {
@@ -578,23 +581,23 @@ util_format_fits_8unorm(const struct util_format_description *format_desc)
       /*
        * These are straight forward.
        */
-      return TRUE;
+      return true;
    case UTIL_FORMAT_LAYOUT_RGTC:
       if (format_desc->format == PIPE_FORMAT_RGTC1_SNORM ||
           format_desc->format == PIPE_FORMAT_RGTC2_SNORM ||
           format_desc->format == PIPE_FORMAT_LATC1_SNORM ||
           format_desc->format == PIPE_FORMAT_LATC2_SNORM)
-         return FALSE;
-      return TRUE;
+         return false;
+      return true;
    case UTIL_FORMAT_LAYOUT_BPTC:
       if (format_desc->format == PIPE_FORMAT_BPTC_RGBA_UNORM)
-         return TRUE;
-      return FALSE;
+         return true;
+      return false;
 
    case UTIL_FORMAT_LAYOUT_ETC:
       if (format_desc->format == PIPE_FORMAT_ETC1_RGB8)
-         return TRUE;
-      return FALSE;
+         return true;
+      return false;
 
    case UTIL_FORMAT_LAYOUT_PLAIN:
       /*
@@ -608,14 +611,14 @@ util_format_fits_8unorm(const struct util_format_description *format_desc)
          case UTIL_FORMAT_TYPE_UNSIGNED:
             if (!format_desc->channel[chan].normalized ||
                 format_desc->channel[chan].size > 8) {
-               return FALSE;
+               return false;
             }
             break;
          default:
-            return FALSE;
+            return false;
          }
       }
-      return TRUE;
+      return true;
 
    default:
       /*
@@ -628,16 +631,16 @@ util_format_fits_8unorm(const struct util_format_description *format_desc)
       case PIPE_FORMAT_YUYV:
       case PIPE_FORMAT_R8G8_B8G8_UNORM:
       case PIPE_FORMAT_G8R8_G8B8_UNORM:
-         return TRUE;
+         return true;
 
       default:
-         return FALSE;
+         return false;
       }
    }
 }
 
 
-boolean
+bool
 util_format_translate(enum pipe_format dst_format,
                       void *dst, unsigned dst_stride,
                       unsigned dst_x, unsigned dst_y,
@@ -669,7 +672,7 @@ util_format_translate(enum pipe_format dst_format,
       util_copy_rect(dst, dst_format, dst_stride,  dst_x, dst_y,
                      width, height, src, (int)src_stride,
                      src_x, src_y);
-      return TRUE;
+      return true;
    }
 
    assert(dst_x % dst_format_desc->block.width == 0);
@@ -733,7 +736,7 @@ util_format_translate(enum pipe_format dst_format,
 
       free(tmp_z);
 
-      return TRUE;
+      return true;
    }
 
    if (util_format_fits_8unorm(src_format_desc) ||
@@ -743,13 +746,13 @@ util_format_translate(enum pipe_format dst_format,
 
       if ((!unpack->unpack_rgba_8unorm && !unpack->unpack_rgba_8unorm_rect) ||
           !pack->pack_rgba_8unorm) {
-         return FALSE;
+         return false;
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
       tmp_row = malloc(y_step * tmp_stride);
       if (!tmp_row)
-         return FALSE;
+         return false;
 
       while (height >= y_step) {
          util_format_unpack_rgba_8unorm_rect(src_format, tmp_row, tmp_stride, src_row, src_stride, width, y_step);
@@ -774,13 +777,13 @@ util_format_translate(enum pipe_format dst_format,
 
       if (util_format_is_pure_sint(src_format) !=
           util_format_is_pure_sint(dst_format)) {
-         return FALSE;
+         return false;
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
       tmp_row = malloc(y_step * tmp_stride);
       if (!tmp_row)
-         return FALSE;
+         return false;
 
       while (height >= y_step) {
          util_format_unpack_rgba_rect(src_format, tmp_row, tmp_stride, src_row, src_stride, width, y_step);
@@ -805,13 +808,13 @@ util_format_translate(enum pipe_format dst_format,
 
       if ((!unpack->unpack_rgba && !unpack->unpack_rgba_rect) ||
           !pack->pack_rgba_uint) {
-         return FALSE;
+         return false;
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
       tmp_row = malloc(y_step * tmp_stride);
       if (!tmp_row)
-         return FALSE;
+         return false;
 
       while (height >= y_step) {
          util_format_unpack_rgba_rect(src_format, tmp_row, tmp_stride, src_row, src_stride, width, y_step);
@@ -835,13 +838,13 @@ util_format_translate(enum pipe_format dst_format,
 
       if ((!unpack->unpack_rgba && !unpack->unpack_rgba_rect) ||
           !pack->pack_rgba_float) {
-         return FALSE;
+         return false;
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
       tmp_row = malloc(y_step * tmp_stride);
       if (!tmp_row)
-         return FALSE;
+         return false;
 
       while (height >= y_step) {
          util_format_unpack_rgba_rect(src_format, tmp_row, tmp_stride, src_row, src_stride, width, y_step);
@@ -859,10 +862,10 @@ util_format_translate(enum pipe_format dst_format,
 
       free(tmp_row);
    }
-   return TRUE;
+   return true;
 }
 
-boolean
+bool
 util_format_translate_3d(enum pipe_format dst_format,
                          void *dst, unsigned dst_stride,
                          unsigned dst_slice_stride,
@@ -888,12 +891,12 @@ util_format_translate_3d(enum pipe_format dst_format,
                                  src_format, src_layer, src_stride,
                                  src_x, src_y,
                                  width, height))
-          return FALSE;
+          return false;
 
       dst_layer += dst_slice_stride;
       src_layer += src_slice_stride;
    }
-   return TRUE;
+   return true;
 }
 
 void util_format_compose_swizzles(const unsigned char swz1[4],
@@ -911,7 +914,7 @@ void util_format_compose_swizzles(const unsigned char swz1[4],
 void util_format_apply_color_swizzle(union pipe_color_union *dst,
                                      const union pipe_color_union *src,
                                      const unsigned char swz[4],
-                                     const boolean is_integer)
+                                     const bool is_integer)
 {
    unsigned c;
 
@@ -1184,7 +1187,7 @@ static void
 util_format_unpack_table_init(void)
 {
    for (enum pipe_format format = PIPE_FORMAT_NONE; format < PIPE_FORMAT_COUNT; format++) {
-#if (defined(PIPE_ARCH_AARCH64) || defined(PIPE_ARCH_ARM)) && !defined(NO_FORMAT_ASM) && !defined(__SOFTFP__)
+#if (DETECT_ARCH_AARCH64 || DETECT_ARCH_ARM) && !defined(NO_FORMAT_ASM) && !defined(__SOFTFP__)
       const struct util_format_unpack_description *unpack = util_format_unpack_description_neon(format);
       if (unpack) {
          util_format_unpack_table[format] = unpack;

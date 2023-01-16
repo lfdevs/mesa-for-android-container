@@ -133,7 +133,7 @@ image_binding_grow(const struct anv_device *device,
       &image->bindings[binding].memory_range;
 
    if (has_implicit_offset) {
-      offset = align_u64(container->offset + container->size, alignment);
+      offset = align64(container->offset + container->size, alignment);
    } else {
       /* Offset must be validated because it comes from
        * VkImageDrmFormatModifierExplicitCreateInfoEXT.
@@ -328,46 +328,6 @@ add_surface(struct anv_device *device,
                              &surf->memory_range);
 }
 
-/**
- * Do hardware limitations require the image plane to use a shadow surface?
- *
- * If hardware limitations force us to use a shadow surface, then the same
- * limitations may also constrain the tiling of the primary surface; therefore
- * parameter @a inout_primary_tiling_flags.
- *
- * If the image plane is a separate stencil plane and if the user provided
- * VkImageStencilUsageCreateInfo, then @a usage must be stencilUsage.
- *
- * @see anv_image::planes[]::shadow_surface
- */
-static bool
-anv_image_plane_needs_shadow_surface(const struct intel_device_info *devinfo,
-                                     struct anv_format_plane plane_format,
-                                     VkImageTiling vk_tiling,
-                                     VkImageUsageFlags vk_plane_usage,
-                                     VkImageCreateFlags vk_create_flags,
-                                     isl_tiling_flags_t *inout_primary_tiling_flags)
-{
-   if (devinfo->ver <= 8 &&
-       (vk_create_flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) &&
-       vk_tiling == VK_IMAGE_TILING_OPTIMAL) {
-      /* We must fallback to a linear surface because we may not be able to
-       * correctly handle the offsets if tiled. (On gfx9,
-       * RENDER_SURFACE_STATE::X/Y Offset are sufficient). To prevent garbage
-       * performance while texturing, we maintain a tiled shadow surface.
-       */
-      assert(isl_format_is_compressed(plane_format.isl_format));
-
-      if (inout_primary_tiling_flags) {
-         *inout_primary_tiling_flags = ISL_TILING_LINEAR_BIT;
-      }
-
-      return true;
-   }
-
-   return false;
-}
-
 static bool
 can_fast_clear_with_non_zero_color(const struct intel_device_info *devinfo,
                                    const struct anv_image *image,
@@ -412,27 +372,6 @@ can_fast_clear_with_non_zero_color(const struct intel_device_info *devinfo,
 
       if (!isl_formats_have_same_bits_per_channel(img_format, view_format))
          return false;
-
-      /* Switching between any of those format types on Gfx7/8 will cause
-       * problems https://gitlab.freedesktop.org/mesa/mesa/-/issues/1711
-       */
-      if (devinfo->ver <= 8) {
-         if (isl_format_has_float_channel(img_format) &&
-             !isl_format_has_float_channel(view_format))
-            return false;
-
-         if (isl_format_has_int_channel(img_format) &&
-             !isl_format_has_int_channel(view_format))
-            return false;
-
-         if (isl_format_has_unorm_channel(img_format) &&
-             !isl_format_has_unorm_channel(view_format))
-            return false;
-
-         if (isl_format_has_snorm_channel(img_format) &&
-             !isl_format_has_snorm_channel(view_format))
-            return false;
-      }
    }
 
    return true;
@@ -660,7 +599,7 @@ add_aux_state_tracking_buffer(struct anv_device *device,
    if (image->planes[plane].aux_usage == ISL_AUX_USAGE_CCS_E) {
       if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
          for (uint32_t l = 0; l < image->vk.mip_levels; l++)
-            state_size += anv_minify(image->vk.extent.depth, l) * 4;
+            state_size += u_minify(image->vk.extent.depth, l) * 4;
       } else {
          state_size += image->vk.mip_levels * image->vk.array_layers * 4;
       }
@@ -732,12 +671,6 @@ add_aux_surface_if_supported(struct anv_device *device,
 
       if (image->vk.mip_levels > 1) {
          anv_perf_warn(VK_LOG_OBJS(&image->vk.base), "Enable multi-LOD HiZ");
-         return VK_SUCCESS;
-      }
-
-      if (device->info->ver == 8 && image->vk.samples > 1) {
-         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
-                       "Enable gfx8 multisampled HiZ");
          return VK_SUCCESS;
       }
 
@@ -873,42 +806,6 @@ add_aux_surface_if_supported(struct anv_device *device,
    }
 
    return VK_SUCCESS;
-}
-
-static VkResult
-add_shadow_surface(struct anv_device *device,
-                   struct anv_image *image,
-                   uint32_t plane,
-                   struct anv_format_plane plane_format,
-                   uint32_t stride,
-                   VkImageUsageFlags vk_plane_usage)
-{
-   ASSERTED bool ok;
-
-   ok = isl_surf_init(&device->isl_dev,
-                      &image->planes[plane].shadow_surface.isl,
-                     .dim = vk_to_isl_surf_dim[image->vk.image_type],
-                     .format = plane_format.isl_format,
-                     .width = image->vk.extent.width,
-                     .height = image->vk.extent.height,
-                     .depth = image->vk.extent.depth,
-                     .levels = image->vk.mip_levels,
-                     .array_len = image->vk.array_layers,
-                     .samples = image->vk.samples,
-                     .min_alignment_B = 0,
-                     .row_pitch_B = stride,
-                     .usage = ISL_SURF_USAGE_TEXTURE_BIT |
-                              (vk_plane_usage & ISL_SURF_USAGE_CUBE_BIT),
-                     .tiling_flags = ISL_TILING_ANY_MASK);
-
-   /* isl_surf_init() will fail only if provided invalid input. Invalid input
-    * here is illegal in Vulkan.
-    */
-   assert(ok);
-
-   return add_surface(device, image, &image->planes[plane].shadow_surface,
-                      ANV_IMAGE_MEMORY_BINDING_PLANE_0 + plane,
-                      ANV_OFFSET_IMPLICIT);
 }
 
 /**
@@ -1052,13 +949,6 @@ check_memory_bindings(const struct anv_device *device,
                          .test_surface = &plane->primary_surface,
                          .expect_binding = primary_binding);
 
-      /* Check shadow surface */
-      if (anv_surface_is_valid(&plane->shadow_surface)) {
-         check_memory_range(accum_ranges,
-                            .test_surface = &plane->shadow_surface,
-                            .expect_binding = primary_binding);
-      }
-
       /* Check aux_surface */
       if (anv_surface_is_valid(&plane->aux_surface)) {
          enum anv_image_memory_binding binding = primary_binding;
@@ -1166,7 +1056,6 @@ check_drm_format_mod(const struct anv_device *device,
       assert(isl_layout->txc == ISL_TXC_NONE);
       assert(isl_layout->colorspace == ISL_COLORSPACE_LINEAR ||
              isl_layout->colorspace == ISL_COLORSPACE_SRGB);
-      assert(!anv_surface_is_valid(&plane->shadow_surface));
 
       if (isl_mod_info->aux_usage != ISL_AUX_USAGE_NONE) {
          /* Reject DISJOINT for consistency with the GL driver. */
@@ -1214,27 +1103,11 @@ add_all_surfaces_implicit_layout(
          choose_isl_surf_usage(image->vk.create_flags, vk_usage,
                                isl_extra_usage_flags, aspect);
 
-      /* Must call this before adding any surfaces because it may modify
-       * isl_tiling_flags.
-       */
-      bool needs_shadow =
-         anv_image_plane_needs_shadow_surface(devinfo, plane_format,
-                                              image->vk.tiling, vk_usage,
-                                              image->vk.create_flags,
-                                              &isl_tiling_flags);
-
       result = add_primary_surface(device, image, plane, plane_format,
                                    ANV_OFFSET_IMPLICIT, stride,
                                    isl_tiling_flags, isl_usage);
       if (result != VK_SUCCESS)
          return result;
-
-      if (needs_shadow) {
-         result = add_shadow_surface(device, image, plane, plane_format,
-                                     stride, vk_usage);
-         if (result != VK_SUCCESS)
-            return result;
-      }
 
       /* Disable aux if image supports export without modifiers. */
       if (image->vk.external_handle_types != 0 &&
@@ -2069,8 +1942,8 @@ void anv_GetImageSubresourceLayout(
                                           0 /* logical_z_offset_px */,
                                           &offset_B, NULL, NULL);
       layout->offset += offset_B;
-      layout->size = layout->rowPitch * anv_minify(image->vk.extent.height,
-                                                   subresource->mipLevel) *
+      layout->size = layout->rowPitch * u_minify(image->vk.extent.height,
+                                                 subresource->mipLevel) *
                      image->vk.extent.depth;
    } else {
       layout->size = surface->memory_range.size;
@@ -2481,20 +2354,6 @@ anv_image_fill_surface_state(struct anv_device *device,
    struct isl_view view = *view_in;
    view.usage |= view_usage;
 
-   /* For texturing with VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL from a
-    * compressed surface with a shadow surface, we use the shadow instead of
-    * the primary surface.  The shadow surface will be tiled, unlike the main
-    * surface, so it should get significantly better performance.
-    */
-   if (anv_surface_is_valid(&image->planes[plane].shadow_surface) &&
-       isl_format_is_compressed(view.format) &&
-       (flags & ANV_IMAGE_VIEW_STATE_TEXTURE_OPTIMAL)) {
-      assert(isl_format_is_compressed(surface->isl.format));
-      assert(surface->isl.tiling == ISL_TILING_LINEAR);
-      assert(image->planes[plane].shadow_surface.isl.tiling != ISL_TILING_LINEAR);
-      surface = &image->planes[plane].shadow_surface;
-   }
-
    if (view_usage == ISL_SURF_USAGE_RENDER_TARGET_BIT)
       view.swizzle = anv_swizzle_for_render(view.swizzle);
 
@@ -2577,12 +2436,6 @@ anv_image_fill_surface_state(struct anv_device *device,
                                            &offset_B, &tile_x_sa, &tile_y_sa);
          assert(ok);
          isl_surf = &tmp_surf;
-
-         if (device->info->ver <= 8) {
-            assert(surface->isl.tiling == ISL_TILING_LINEAR);
-            assert(tile_x_sa == 0);
-            assert(tile_y_sa == 0);
-         }
       }
 
       state_inout->address = anv_address_add(address, offset_B);

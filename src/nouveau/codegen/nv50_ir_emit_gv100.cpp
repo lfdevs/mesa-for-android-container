@@ -1583,6 +1583,12 @@ CodeEmitterGV100::emitBAR()
 {
    uint8_t subop, redop = 0x00;
 
+   //XXX: ILLEGAL_INSTR_PARAM - why?
+   if (targ->getChipset() >= 0x170) {
+      emitNOP();
+      return;
+   }
+
    // 80
    //    01: DEFER_BLOCKING
    // 78:77

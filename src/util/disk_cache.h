@@ -290,8 +290,8 @@ disk_cache_create(const char *gpu_name, const char *timestamp,
 }
 
 static inline void
-disk_cache_destroy(struct disk_cache *cache) {
-   return;
+disk_cache_destroy(struct disk_cache *cache)
+{
 }
 
 static inline void
@@ -299,7 +299,6 @@ disk_cache_put(struct disk_cache *cache, const cache_key key,
                const void *data, size_t size,
                struct cache_item_metadata *cache_item_metadata)
 {
-   return;
 }
 
 static inline void
@@ -307,13 +306,11 @@ disk_cache_put_nocopy(struct disk_cache *cache, const cache_key key,
                       void *data, size_t size,
                       struct cache_item_metadata *cache_item_metadata)
 {
-   return;
 }
 
 static inline void
 disk_cache_remove(struct disk_cache *cache, const cache_key key)
 {
-   return;
 }
 
 static inline uint8_t *
@@ -325,7 +322,6 @@ disk_cache_get(struct disk_cache *cache, const cache_key key, size_t *size)
 static inline void
 disk_cache_put_key(struct disk_cache *cache, const cache_key key)
 {
-   return;
 }
 
 static inline bool
@@ -336,16 +332,14 @@ disk_cache_has_key(struct disk_cache *cache, const cache_key key)
 
 static inline void
 disk_cache_compute_key(struct disk_cache *cache, const void *data, size_t size,
-                       const cache_key key)
+                       cache_key key)
 {
-   return;
 }
 
 static inline void
 disk_cache_set_callbacks(struct disk_cache *cache, disk_cache_put_cb put,
                          disk_cache_get_cb get)
 {
-   return;
 }
 
 #endif /* ENABLE_SHADER_CACHE */

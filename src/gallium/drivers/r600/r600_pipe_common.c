@@ -716,7 +716,7 @@ static const struct debug_named_value common_debug_options[] = {
 
 static const char* r600_get_vendor(struct pipe_screen* pscreen)
 {
-	return "X.Org";
+	return "Mesa";
 }
 
 static const char* r600_get_device_vendor(struct pipe_screen* pscreen)
@@ -1334,6 +1334,8 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		.lower_isign = true,
 		.lower_fsign = true,
 		.lower_fmod = true,
+		.lower_uadd_carry = true,
+		.lower_usub_borrow = true,
 		.lower_extract_byte = true,
 		.lower_extract_word = true,
 		.lower_insert_byte = true,
@@ -1355,8 +1357,6 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		.lower_iabs = true,
 		.lower_uadd_sat = true,
 		.lower_usub_sat = true,
-		.lower_bitfield_extract = true,
-		.lower_bitfield_insert_to_bitfield_select = true,
 		.has_fused_comp_and_csel = true,
 		.lower_find_msb_to_reverse = true,
 		.lower_to_scalar = true,
@@ -1373,10 +1373,17 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	if (rscreen->info.family < CHIP_CEDAR)
 		rscreen->nir_options.force_indirect_unrolling_sampler = true;
 
+   if (rscreen->info.gfx_level >= EVERGREEN) {
+      rscreen->nir_options.lower_bitfield_extract = true;
+		rscreen->nir_options.lower_bitfield_insert_to_bitfield_select = true;
+   }
+
 	if (rscreen->info.gfx_level < EVERGREEN) {
 		/* Pre-EG doesn't have these ALU ops */
 		rscreen->nir_options.lower_bit_count = true;
 		rscreen->nir_options.lower_bitfield_reverse = true;
+      rscreen->nir_options.lower_bitfield_insert_to_shifts = true;
+      rscreen->nir_options.lower_bitfield_extract_to_shifts = true;
 	}
 
 	if (rscreen->info.gfx_level < CAYMAN) {

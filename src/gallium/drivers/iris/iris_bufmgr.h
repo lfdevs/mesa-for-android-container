@@ -296,6 +296,7 @@ struct iris_bo {
    };
 };
 
+#define BO_ALLOC_PLAIN       0
 #define BO_ALLOC_ZEROED      (1<<0)
 #define BO_ALLOC_COHERENT    (1<<1)
 #define BO_ALLOC_SMEM        (1<<2)
@@ -485,8 +486,7 @@ bool iris_bo_busy(struct iris_bo *bo);
  */
 int iris_bo_madvise(struct iris_bo *bo, int madv);
 
-struct iris_bufmgr *iris_bufmgr_get_for_fd(struct intel_device_info *devinfo,
-                                           int fd, bool bo_reuse);
+struct iris_bufmgr *iris_bufmgr_get_for_fd(int fd, bool bo_reuse);
 int iris_bufmgr_get_fd(struct iris_bufmgr *bufmgr);
 
 struct iris_bo *iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
@@ -498,10 +498,6 @@ void* iris_bufmgr_get_aux_map_context(struct iris_bufmgr *bufmgr);
 uint32_t iris_create_hw_context(struct iris_bufmgr *bufmgr, bool protected);
 uint32_t iris_clone_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 int iris_kernel_context_get_priority(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
-
-#define IRIS_CONTEXT_LOW_PRIORITY    ((I915_CONTEXT_MIN_USER_PRIORITY-1)/2)
-#define IRIS_CONTEXT_MEDIUM_PRIORITY (I915_CONTEXT_DEFAULT_PRIORITY)
-#define IRIS_CONTEXT_HIGH_PRIORITY   ((I915_CONTEXT_MAX_USER_PRIORITY+1)/2)
 
 void iris_hw_context_set_unrecoverable(struct iris_bufmgr *bufmgr,
                                        uint32_t ctx_id);
@@ -528,8 +524,6 @@ struct iris_bo *iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd);
  */
 int iris_bo_export_gem_handle_for_device(struct iris_bo *bo, int drm_fd,
                                          uint32_t *out_handle);
-
-uint32_t iris_bo_export_gem_handle(struct iris_bo *bo);
 
 /**
  * Returns the BO's address relative to the appropriate base address.
@@ -601,5 +595,6 @@ uint32_t iris_upload_border_color(struct iris_border_color_pool *pool,
 
 uint64_t iris_bufmgr_vram_size(struct iris_bufmgr *bufmgr);
 uint64_t iris_bufmgr_sram_size(struct iris_bufmgr *bufmgr);
+const struct intel_device_info *iris_bufmgr_get_device_info(struct iris_bufmgr *bufmgr);
 
 #endif /* IRIS_BUFMGR_H */

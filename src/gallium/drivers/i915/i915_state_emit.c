@@ -34,7 +34,7 @@
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 
 #include "util/format/u_format.h"
 #include "util/u_math.h"
@@ -476,7 +476,7 @@ i915_emit_hardware_state(struct i915_context *i915)
    assert(i915->dirty == 0);
 
    if (I915_DBG_ON(DBG_ATOMS))
-      i915_dump_hardware_dirty(i915, __FUNCTION__);
+      i915_dump_hardware_dirty(i915, __func__);
 
    if (!i915_validate_state(i915, &batch_space)) {
       FLUSH_BATCH(NULL, I915_FLUSH_ASYNC);
@@ -506,7 +506,7 @@ i915_emit_hardware_state(struct i915_context *i915)
    EMIT_ATOM(draw_rect, I915_HW_STATIC);
 #undef EMIT_ATOM
 
-   I915_DBG(DBG_EMIT, "%s: used %d dwords, %d dwords reserved\n", __FUNCTION__,
+   I915_DBG(DBG_EMIT, "%s: used %d dwords, %d dwords reserved\n", __func__,
             ((uintptr_t)i915->batch->ptr - save_ptr) / 4, batch_space);
    assert(((uintptr_t)i915->batch->ptr - save_ptr) / 4 == batch_space);
 

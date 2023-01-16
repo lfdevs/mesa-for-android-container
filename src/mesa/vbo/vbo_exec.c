@@ -26,7 +26,7 @@
  */
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/arrayobj.h"
 #include "main/api_arrayelt.h"
 #include "vbo_private.h"

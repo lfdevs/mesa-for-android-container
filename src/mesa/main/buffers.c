@@ -30,7 +30,7 @@
 
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "buffers.h"
 #include "context.h"
 #include "enums.h"
@@ -46,6 +46,7 @@
 #include "state_tracker/st_manager.h"
 #include "state_tracker/st_atom.h"
 #include "state_tracker/st_context.h"
+#include "state_tracker/st_util.h"
 
 #define BAD_MASK ~0u
 
@@ -949,7 +950,7 @@ read_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
          /* add the buffer */
          st_manager_add_color_renderbuffer(ctx, fb, fb->_ColorReadBufferIndex);
          _mesa_update_state(ctx);
-         st_validate_state(st_context(ctx), ST_PIPELINE_UPDATE_FRAMEBUFFER);
+         st_validate_state(st_context(ctx), ST_PIPELINE_UPDATE_FB_STATE_MASK);
       }
    }
 }

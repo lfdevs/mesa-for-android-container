@@ -36,6 +36,7 @@
 
 #include <GL/gl.h> /* dri_interface needs GL types */
 #include "GL/internal/dri_interface.h"
+#include "GL/internal/mesa_interface.h"
 #include "kopper_interface.h"
 
 struct gbm_dri_surface;
@@ -71,8 +72,8 @@ struct gbm_dri_device {
    mtx_t mutex;
 
    const __DRIcoreExtension   *core;
+   const __DRImesaCoreExtension   *mesa;
    const __DRIdri2Extension   *dri2;
-   const __DRI2fenceExtension *fence;
    const __DRIimageExtension  *image;
    const __DRIswrastExtension *swrast;
    const __DRIkopperExtension *kopper;

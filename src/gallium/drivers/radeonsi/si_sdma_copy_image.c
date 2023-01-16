@@ -76,13 +76,8 @@ bool si_translate_format_to_hw(struct si_context *sctx, enum pipe_format format,
    const struct util_format_description *desc = util_format_description(format);
    *hw_fmt = si_translate_colorformat(sctx->gfx_level, format);
 
-   int firstchan;
-   for (firstchan = 0; firstchan < 4; firstchan++) {
-      if (desc->channel[firstchan].type != UTIL_FORMAT_TYPE_VOID) {
-         break;
-      }
-   }
-   if (firstchan == 4 || desc->channel[firstchan].type == UTIL_FORMAT_TYPE_FLOAT) {
+   int firstchan = util_format_get_first_non_void_channel(format);
+   if (firstchan == -1 || desc->channel[firstchan].type == UTIL_FORMAT_TYPE_FLOAT) {
       *hw_type = V_028C70_NUMBER_FLOAT;
    } else {
       *hw_type = V_028C70_NUMBER_UNORM;

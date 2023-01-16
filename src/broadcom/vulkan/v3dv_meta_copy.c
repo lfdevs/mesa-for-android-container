@@ -1318,7 +1318,7 @@ copy_buffer_to_image_tfu(struct v3dv_cmd_buffer *cmd_buffer,
     * at a time, and the TFU copies full images. Also, V3D depth bits for
     * both D24S8 and D24X8 stored in the 24-bit MSB of each 32-bit word, but
     * the Vulkan spec has the buffer data specified the other way around, so it
-    * is not a straight copy, we would havew to swizzle the channels, which the
+    * is not a straight copy, we would have to swizzle the channels, which the
     * TFU can't do.
     */
    if (image->vk.format == VK_FORMAT_D24_UNORM_S8_UINT ||

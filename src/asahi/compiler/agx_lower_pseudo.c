@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#include "agx_compiler.h"
 #include "agx_builder.h"
+#include "agx_compiler.h"
 
 /* Lower pseudo instructions created during optimization. */
 static agx_instr *
@@ -46,7 +46,8 @@ lower(agx_builder *b, agx_instr *I)
    case AGX_OPCODE_OR:
       return agx_bitop_to(b, I->dest[0], I->src[0], I->src[1], AGX_BITOP_OR);
 
-   default: return NULL;
+   default:
+      return NULL;
    }
 }
 

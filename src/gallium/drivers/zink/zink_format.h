@@ -24,7 +24,7 @@
 #ifndef ZINK_FORMAT_H
 #define ZINK_FORMAT_H
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "util/format/u_format.h"
 
 #include <stdbool.h>

@@ -27,6 +27,7 @@ vn_renderer_submit_simple(struct vn_renderer *renderer,
          &(const struct vn_renderer_submit_batch){
             .cs_data = cs_data,
             .cs_size = cs_size,
+            .ring_idx = 0, /* CPU ring */
          },
       .batch_count = 1,
    };

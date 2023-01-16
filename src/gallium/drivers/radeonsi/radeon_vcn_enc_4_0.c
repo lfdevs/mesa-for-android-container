@@ -37,6 +37,8 @@
 #define RENCODE_FW_INTERFACE_MAJOR_VERSION   1
 #define RENCODE_FW_INTERFACE_MINOR_VERSION   0
 
+#define RENCODE_IB_PARAM_ENCODE_STATISTICS         0x0000001a
+
 static void radeon_enc_sq_begin(struct radeon_encoder *enc)
 {
    rvcn_sq_header(&enc->cs, &enc->sq, true);
@@ -108,6 +110,8 @@ void radeon_enc_4_0_init(struct radeon_encoder *enc)
    enc->begin = radeon_enc_sq_begin;
    enc->encode = radeon_enc_sq_encode;
    enc->destroy = radeon_enc_sq_destroy;
+
+   enc->cmd.enc_statistics = RENCODE_IB_PARAM_ENCODE_STATISTICS;
 
    enc->enc_pic.session_info.interface_version =
       ((RENCODE_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |

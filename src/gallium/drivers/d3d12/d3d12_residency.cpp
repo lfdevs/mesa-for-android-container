@@ -278,7 +278,7 @@ d3d12_promote_to_permanent_residency(struct d3d12_screen *screen, struct d3d12_r
       bool was_made_resident = (base_bo->residency_status == d3d12_resident);
       if(!was_made_resident) {
          ID3D12Pageable *pageable = base_bo->res;
-         HRESULT hr = screen->dev->MakeResident(1, &pageable);
+         ASSERTED HRESULT hr = screen->dev->MakeResident(1, &pageable);
          assert(SUCCEEDED(hr));
       }
    }

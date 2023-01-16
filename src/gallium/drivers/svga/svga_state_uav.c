@@ -267,7 +267,7 @@ svga_create_uav(struct svga_context *svga,
    /* allocate a uav id */
    uaViewId = util_bitmask_add(svga->uav_id_bm);
 
-   SVGA_DBG(DEBUG_UAV, "%s: uavId=%d surf=0x%x\n", __FUNCTION__, uaViewId, surf);
+   SVGA_DBG(DEBUG_UAV, "%s: uavId=%d surf=0x%x\n", __func__, uaViewId, surf);
 
    ret = SVGA3D_sm5_DefineUAView(svga->swc, uaViewId, surf,
                                  svga_format, resourceDim, desc);
@@ -289,7 +289,7 @@ svga_destroy_uav(struct svga_context *svga)
 {
    unsigned index = 0;
 
-   SVGA_DBG(DEBUG_UAV, "%s: ", __FUNCTION__);
+   SVGA_DBG(DEBUG_UAV, "%s: ", __func__);
 
    while ((index = util_bitmask_get_next_index(svga->uav_to_free_id_bm, index))
           != UTIL_BITMASK_INVALID_INDEX) {
@@ -377,7 +377,7 @@ svga_create_uav_list(struct svga_context *svga,
 
       SVGA_DBG(DEBUG_UAV,
             "%s: shader=%d num_image_views=%d num_shader_buffers=%d\n",
-            __FUNCTION__, shader, num_image_views, num_shader_buffers);
+            __func__, shader, num_image_views, num_shader_buffers);
 
       /* add enabled shader images to the uav list */
       if (num_image_views) {
@@ -511,7 +511,7 @@ svga_create_uav_list(struct svga_context *svga,
    unsigned num_atomic_buffers = svga->curr.num_atomic_buffers;
 
    SVGA_DBG(DEBUG_UAV,
-            "%s: num_atomic_buffers=%d\n", __FUNCTION__, num_atomic_buffers);
+            "%s: num_atomic_buffers=%d\n", __func__, num_atomic_buffers);
 
    if (num_atomic_buffers) {
       num_atomic_buffers = MIN2(num_atomic_buffers, num_free_uavs-*num_uavs);
@@ -770,7 +770,7 @@ update_uav(struct svga_context *svga, uint64_t dirty)
       goto done;
 
    /* Send the SetUAViews command */
-   SVGA_DBG(DEBUG_UAV, "%s: SetUAViews uavSpliceIndex=%d", __FUNCTION__,
+   SVGA_DBG(DEBUG_UAV, "%s: SetUAViews uavSpliceIndex=%d", __func__,
             uavSpliceIndex);
 
 #ifdef DEBUG
@@ -877,7 +877,7 @@ update_cs_uav(struct svga_context *svga, uint64_t dirty)
 
    /* Send the uaviews to compute */
 
-   SVGA_DBG(DEBUG_UAV, "%s: SetCSUAViews", __FUNCTION__);
+   SVGA_DBG(DEBUG_UAV, "%s: SetCSUAViews", __func__);
 
 #ifdef DEBUG
    for (unsigned i = 0; i < ARRAY_SIZE(uaViewIds); i++) {

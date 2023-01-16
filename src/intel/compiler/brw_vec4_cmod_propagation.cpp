@@ -50,7 +50,7 @@ static bool
 opt_cmod_propagation_local(bblock_t *block, vec4_visitor *v)
 {
    bool progress = false;
-   int ip = block->end_ip + 1;
+   UNUSED int ip = block->end_ip + 1;
 
    foreach_inst_in_block_reverse_safe(vec4_instruction, inst, block) {
       ip--;

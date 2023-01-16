@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "hash_table.h"
+#include "util/hash_table.h"
 
 static const char *str1 = "test1";
 static const char *str2 = "test2";

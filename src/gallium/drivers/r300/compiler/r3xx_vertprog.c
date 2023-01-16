@@ -32,8 +32,9 @@
 #include "radeon_program.h"
 #include "radeon_program_alu.h"
 #include "radeon_swizzle.h"
-#include "radeon_emulate_branches.h"
 #include "radeon_remove_constants.h"
+#include "radeon_regalloc.h"
+#include "radeon_list.h"
 
 #include "util/compiler.h"
 
@@ -61,7 +62,7 @@ static unsigned long t_dst_class(rc_register_file file)
 {
 	switch (file) {
 	default:
-		fprintf(stderr, "%s: Bad register file %i\n", __FUNCTION__, file);
+		fprintf(stderr, "%s: Bad register file %i\n", __func__, file);
 		FALLTHROUGH;
 	case RC_FILE_TEMPORARY:
 		return PVS_DST_REG_TEMPORARY;
@@ -85,7 +86,7 @@ static unsigned long t_src_class(rc_register_file file)
 {
 	switch (file) {
 	default:
-		fprintf(stderr, "%s: Bad register file %i\n", __FUNCTION__, file);
+		fprintf(stderr, "%s: Bad register file %i\n", __func__, file);
 		FALLTHROUGH;
 	case RC_FILE_NONE:
 	case RC_FILE_TEMPORARY:
@@ -610,82 +611,64 @@ static int get_reg(struct radeon_compiler *c, struct temporary_allocation *ta, b
 
 static void allocate_temporary_registers(struct radeon_compiler *c, void *user)
 {
-	struct r300_vertex_program_compiler *compiler = (struct r300_vertex_program_compiler*)c;
-	struct rc_instruction *inst;
-	struct rc_instruction *end_loop = NULL;
-	unsigned int num_orig_temps = 0;
-	bool hwtemps[RC_REGISTER_MAX_INDEX];
-	struct temporary_allocation * ta;
-	unsigned int i;
-
-	memset(hwtemps, 0, sizeof(hwtemps));
+	unsigned int node_count, node_index;
+	struct ra_class ** node_classes;
+	struct rc_list * var_ptr;
+	struct rc_list * variables;
+	struct ra_graph * graph;
+	const struct rc_regalloc_state *ra_state = c->regalloc_state;
 
 	rc_recompute_ips(c);
 
-	/* Pass 1: Count original temporaries. */
-	for(inst = compiler->Base.Program.Instructions.Next; inst != &compiler->Base.Program.Instructions; inst = inst->Next) {
-		const struct rc_opcode_info * opcode = rc_get_opcode_info(inst->U.I.Opcode);
+	/* Get list of program variables */
+	variables = rc_get_variables(c);
+	node_count = rc_list_count(variables);
+	node_classes = memory_pool_malloc(&c->Pool,
+			node_count * sizeof(struct ra_class *));
 
-		for (i = 0; i < opcode->NumSrcRegs; ++i) {
-			if (inst->U.I.SrcReg[i].File == RC_FILE_TEMPORARY) {
-				if (inst->U.I.SrcReg[i].Index >= num_orig_temps)
-					num_orig_temps = inst->U.I.SrcReg[i].Index + 1;
-			}
+	for (var_ptr = variables, node_index = 0; var_ptr;
+					var_ptr = var_ptr->Next, node_index++) {
+		unsigned int class_index = 0;
+		int index;
+		/* Compute the live intervals */
+		rc_variable_compute_live_intervals(var_ptr->Item);
+		unsigned int writemask = rc_variable_writemask_sum(var_ptr->Item);
+		index = rc_find_class(c->regalloc_state->class_list, writemask, 6);
+		if (index > -1) {
+			class_index = c->regalloc_state->class_list[index].ID;
+		} else {
+			rc_error(c,
+				"Could not find class for index=%u mask=%u\n",
+				((struct rc_variable *)var_ptr->Item)->Dst.Index, writemask);
 		}
-
-		if (opcode->HasDstReg) {
-			if (inst->U.I.DstReg.File == RC_FILE_TEMPORARY) {
-				if (inst->U.I.DstReg.Index >= num_orig_temps)
-					num_orig_temps = inst->U.I.DstReg.Index + 1;
-			}
-		}
+		node_classes[node_index] = ra_state->classes[class_index];
 	}
 
-	ta = (struct temporary_allocation*)memory_pool_malloc(&compiler->Base.Pool,
-			sizeof(struct temporary_allocation) * num_orig_temps);
-	memset(ta, 0, sizeof(struct temporary_allocation) * num_orig_temps);
+	graph = ra_alloc_interference_graph(ra_state->regs, node_count);
 
-	/* Pass 2: Determine original temporary lifetimes */
-	for(inst = compiler->Base.Program.Instructions.Next; inst != &compiler->Base.Program.Instructions; inst = inst->Next) {
-		const struct rc_opcode_info * opcode = rc_get_opcode_info(inst->U.I.Opcode);
-		/* Instructions inside of loops need to use the ENDLOOP
-		 * instruction as their LastRead. */
-		if (!end_loop && inst->U.I.Opcode == RC_OPCODE_BGNLOOP)
-			end_loop = rc_match_bgnloop(inst);
-
-		if (inst == end_loop) {
-			end_loop = NULL;
-			continue;
-		}
-
-		for (i = 0; i < opcode->NumSrcRegs; ++i) {
-			if (inst->U.I.SrcReg[i].File == RC_FILE_TEMPORARY) {
-				ta[inst->U.I.SrcReg[i].Index].LastRead = end_loop ? end_loop : inst;
-			}
-		}
+	for (node_index = 0; node_index < node_count; node_index++) {
+		ra_set_node_class(graph, node_index, node_classes[node_index]);
 	}
 
-	/* Pass 3: Register allocation */
-	for(inst = compiler->Base.Program.Instructions.Next; inst != &compiler->Base.Program.Instructions; inst = inst->Next) {
-		const struct rc_opcode_info * opcode = rc_get_opcode_info(inst->U.I.Opcode);
+	rc_build_interference_graph(graph, variables);
 
-		for (i = 0; i < opcode->NumSrcRegs; ++i) {
-			if (inst->U.I.SrcReg[i].File == RC_FILE_TEMPORARY) {
-				unsigned int orig = inst->U.I.SrcReg[i].Index;
-				inst->U.I.SrcReg[i].Index = get_reg(c, ta, hwtemps, orig);
-
-				if (ta[orig].Allocated && inst == ta[orig].LastRead)
-					hwtemps[ta[orig].HwTemp] = false;
-			}
-		}
-
-		if (opcode->HasDstReg) {
-			if (inst->U.I.DstReg.File == RC_FILE_TEMPORARY) {
-				unsigned int orig = inst->U.I.DstReg.Index;
-				inst->U.I.DstReg.Index = get_reg(c, ta, hwtemps, orig);
-			}
-		}
+	if (!ra_allocate(graph)) {
+		rc_error(c, "Ran out of hardware temporaries\n");
+		return;
 	}
+
+	/* Rewrite the registers */
+	for (var_ptr = variables, node_index = 0; var_ptr;
+				var_ptr = var_ptr->Next, node_index++) {
+		int reg = ra_get_node_reg(graph, node_index);
+		unsigned int writemask = reg_get_writemask(reg);
+		unsigned int index = reg_get_index(reg);
+		struct rc_variable * var = var_ptr->Item;
+
+		rc_variable_change_dst(var, index, writemask);
+	}
+
+	ralloc_free(graph);
 }
 
 /**
@@ -923,7 +906,6 @@ void r3xx_compile_vertex_program(struct r300_vertex_program_compiler *c)
 	struct radeon_compiler_pass vs_list[] = {
 		/* NAME				DUMP PREDICATE	FUNCTION			PARAM */
 		{"add artificial outputs",	0, 1,		rc_vs_add_artificial_outputs,	NULL},
-		{"emulate branches",		1, !is_r500,	rc_emulate_branches,		NULL},
 		{"emulate negative addressing", 1, 1,		rc_emulate_negative_addressing,	NULL},
 		{"native rewrite",		1, is_r500,	rc_local_transform,		alu_rewrite_r500},
 		{"native rewrite",		1, !is_r500,	rc_local_transform,		alu_rewrite_r300},

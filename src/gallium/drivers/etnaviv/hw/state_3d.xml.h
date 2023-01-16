@@ -14,7 +14,7 @@ The rules-ng-ng source files this header was generated from are:
 - state_hi.xml  (  34803 bytes, from 2020-10-28 12:56:03)
 - copyright.xml (   1597 bytes, from 2020-10-28 12:56:03)
 - state_2d.xml  (  51552 bytes, from 2020-10-28 12:56:03)
-- state_3d.xml  (  84382 bytes, from 2022-11-07 13:00:30)
+- state_3d.xml  (  84445 bytes, from 2022-11-15 15:59:38)
 - state_blt.xml (  14424 bytes, from 2022-11-07 11:18:41)
 - state_vg.xml  (   5975 bytes, from 2020-10-28 12:56:03)
 
@@ -1290,6 +1290,9 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_RS_EXTRA_CONFIG_ENDIAN__SHIFT			8
 #define VIVS_RS_EXTRA_CONFIG_ENDIAN(x)				(((x) << VIVS_RS_EXTRA_CONFIG_ENDIAN__SHIFT) & VIVS_RS_EXTRA_CONFIG_ENDIAN__MASK)
 #define VIVS_RS_EXTRA_CONFIG_UNK20				0x00100000
+#define VIVS_RS_EXTRA_CONFIG_TS_MODE__MASK			0x01000000
+#define VIVS_RS_EXTRA_CONFIG_TS_MODE__SHIFT			24
+#define VIVS_RS_EXTRA_CONFIG_TS_MODE(x)				(((x) << VIVS_RS_EXTRA_CONFIG_TS_MODE__SHIFT) & VIVS_RS_EXTRA_CONFIG_TS_MODE__MASK)
 #define VIVS_RS_EXTRA_CONFIG_UNK28				0x10000000
 
 #define VIVS_RS_KICKER_INPLACE					0x000016b0

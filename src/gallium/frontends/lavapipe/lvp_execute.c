@@ -39,6 +39,7 @@
 #include "util/u_sampler.h"
 #include "util/u_box.h"
 #include "util/u_inlines.h"
+#include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_prim_restart.h"
@@ -2537,7 +2538,7 @@ static void handle_draw_indexed(struct vk_cmd_queue_entry *cmd,
 
    state->info.index_bounds_valid = false;
    state->info.min_index = 0;
-   state->info.max_index = ~0;
+   state->info.max_index = ~0U;
    state->info.index_size = state->index_size;
    state->info.index.resource = state->index_buffer;
    state->info.start_instance = cmd->u.draw_indexed.first_instance;
@@ -2549,7 +2550,8 @@ static void handle_draw_indexed(struct vk_cmd_queue_entry *cmd,
    draw.count = cmd->u.draw_indexed.index_count;
    draw.index_bias = cmd->u.draw_indexed.vertex_offset;
    /* TODO: avoid calculating multiple times if cmdbuf is submitted again */
-   draw.start = (state->index_offset / state->index_size) + cmd->u.draw_indexed.first_index;
+   draw.start = util_clamped_uadd(state->index_offset / state->index_size,
+                                  cmd->u.draw_indexed.first_index);
 
    state->info.index_bias_varies = !cmd->u.draw_indexed.vertex_offset;
    state->pctx->set_patch_vertices(state->pctx, state->patch_vertices);
@@ -2564,7 +2566,7 @@ static void handle_draw_multi_indexed(struct vk_cmd_queue_entry *cmd,
 
    state->info.index_bounds_valid = false;
    state->info.min_index = 0;
-   state->info.max_index = ~0;
+   state->info.max_index = ~0U;
    state->info.index_size = state->index_size;
    state->info.index.resource = state->index_buffer;
    state->info.start_instance = cmd->u.draw_multi_indexed_ext.first_instance;
@@ -2585,7 +2587,8 @@ static void handle_draw_multi_indexed(struct vk_cmd_queue_entry *cmd,
 
    /* TODO: avoid calculating multiple times if cmdbuf is submitted again */
    for (unsigned i = 0; i < cmd->u.draw_multi_indexed_ext.draw_count; i++)
-      draws[i].start = (state->index_offset / state->index_size) + draws[i].start;
+      draws[i].start = util_clamped_uadd(state->index_offset / state->index_size,
+                                         draws[i].start);
 
    state->info.index_bias_varies = !cmd->u.draw_multi_indexed_ext.vertex_offset;
    state->pctx->set_patch_vertices(state->pctx, state->patch_vertices);
@@ -2604,7 +2607,7 @@ static void handle_draw_indirect(struct vk_cmd_queue_entry *cmd,
       state->info.index_bounds_valid = false;
       state->info.index_size = state->index_size;
       state->info.index.resource = state->index_buffer;
-      state->info.max_index = ~0;
+      state->info.max_index = ~0U;
       if (state->info.primitive_restart)
          state->info.restart_index = util_prim_restart_index_from_size(state->info.index_size);
    } else
@@ -3107,7 +3110,7 @@ static void handle_draw_indirect_count(struct vk_cmd_queue_entry *cmd,
       state->info.index_bounds_valid = false;
       state->info.index_size = state->index_size;
       state->info.index.resource = state->index_buffer;
-      state->info.max_index = ~0;
+      state->info.max_index = ~0U;
    } else
       state->info.index_size = 0;
    state->indirect_info.offset = cmd->u.draw_indirect_count.offset;

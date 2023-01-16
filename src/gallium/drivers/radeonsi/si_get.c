@@ -165,6 +165,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
    case PIPE_CAP_TEXTURE_MULTISAMPLE:
+   case PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT: /* TODO: remove if it's slow */
       return 1;
 
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
@@ -495,10 +496,10 @@ static int si_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_typ
    case PIPE_SHADER_CAP_FP16:
    case PIPE_SHADER_CAP_FP16_DERIVATIVES:
    case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
+   case PIPE_SHADER_CAP_INT16:
       return sscreen->info.gfx_level >= GFX8 && sscreen->options.fp16;
 
    /* Unsupported boolean features. */
-   case PIPE_SHADER_CAP_INT16:
    case PIPE_SHADER_CAP_SUBROUTINES:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
@@ -870,6 +871,13 @@ static bool si_vid_is_format_supported(struct pipe_screen *screen, enum pipe_for
       }
    }
 
+   /* support 10 bit input for encoding on some of the chips with vcn 2.0 and up */
+   if (profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH &&
+       entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
+       sscreen->info.family >= CHIP_RENOIR) {
+      return (format == PIPE_FORMAT_P010 || format == PIPE_FORMAT_NV12);
+   }
+
    /* we can only handle this one with UVD */
    if (profile != PIPE_VIDEO_PROFILE_UNKNOWN)
       return format == PIPE_FORMAT_NV12;
@@ -1141,7 +1149,6 @@ void si_init_screen_get_functions(struct si_screen *sscreen)
       .lower_flrp16 = true,
       .lower_flrp32 = true,
       .lower_flrp64 = true,
-      .lower_fsat = true,
       .lower_fdiv = true,
       .lower_bitfield_insert_to_bitfield_select = true,
       .lower_bitfield_extract = true,

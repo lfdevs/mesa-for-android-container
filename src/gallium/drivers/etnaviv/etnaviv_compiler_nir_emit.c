@@ -83,7 +83,6 @@ static const struct etna_op_info etna_ops[] = {
    UOP(b2f32, AND, 0_X_X), /* AND with fui(1.0f) */
    UOP(b2i32, AND, 0_X_X), /* AND with 1 */
    OPC(f2b32, CMP, 0_X_X, NE), /* != 0.0 */
-   UOPC(i2b32, CMP, 0_X_X, NE), /* != 0 */
 
    /* arithmetic */
    IOP(iadd, ADD, 0_X_1),
@@ -166,9 +165,6 @@ etna_emit_alu(struct etna_compile *c, nir_op op, struct etna_inst_dst dst,
       break;
    case nir_op_f2b32:
       inst.src[1] = etna_immediate_float(0.0f);
-      break;
-   case nir_op_i2b32:
-      inst.src[1] = etna_immediate_int(0);
       break;
    case nir_op_ineg:
       inst.src[0] = etna_immediate_int(0);

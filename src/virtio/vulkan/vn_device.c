@@ -41,16 +41,35 @@ vn_queue_init(struct vn_device *dev,
 {
    vn_object_base_init(&queue->base, VK_OBJECT_TYPE_QUEUE, &dev->base);
 
+   VkDeviceQueueTimelineInfoMESA timeline_info;
+   const struct vn_renderer_info *renderer_info =
+      &dev->instance->renderer->info;
+   if (renderer_info->supports_multiple_timelines) {
+      int ring_idx = vn_instance_acquire_ring_idx(dev->instance);
+      if (ring_idx < 0) {
+         vn_log(dev->instance, "failed binding VkQueue to renderer timeline");
+         return VK_ERROR_INITIALIZATION_FAILED;
+      }
+      queue->ring_idx = (uint32_t)ring_idx;
+
+      timeline_info = (VkDeviceQueueTimelineInfoMESA){
+         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA,
+         .ringIdx = queue->ring_idx,
+      };
+   }
+
+   const VkDeviceQueueInfo2 device_queue_info = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+      .pNext =
+         renderer_info->supports_multiple_timelines ? &timeline_info : NULL,
+      .flags = queue_info->flags,
+      .queueFamilyIndex = queue_info->queueFamilyIndex,
+      .queueIndex = queue_index,
+   };
+
    VkQueue queue_handle = vn_queue_to_handle(queue);
-   vn_async_vkGetDeviceQueue2(
-      dev->instance, vn_device_to_handle(dev),
-      &(VkDeviceQueueInfo2){
-         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
-         .flags = queue_info->flags,
-         .queueFamilyIndex = queue_info->queueFamilyIndex,
-         .queueIndex = queue_index,
-      },
-      &queue_handle);
+   vn_async_vkGetDeviceQueue2(dev->instance, vn_device_to_handle(dev),
+                              &device_queue_info, &queue_handle);
 
    queue->device = dev;
    queue->family = queue_info->queueFamilyIndex;
@@ -295,6 +314,11 @@ vn_device_fix_create_info(const struct vn_device *dev,
       block_exts[block_count++] = VK_EXT_TOOLING_INFO_EXTENSION_NAME;
    }
 
+   if (app_exts->EXT_pci_bus_info) {
+      /* always filter for simplicity */
+      block_exts[block_count++] = VK_EXT_PCI_BUS_INFO_EXTENSION_NAME;
+   }
+
    assert(extra_count <= ARRAY_SIZE(extra_exts));
    assert(block_count <= ARRAY_SIZE(block_exts));
 
@@ -492,6 +516,16 @@ vn_DestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
     * the queues in the renderer.
     */
    vn_async_vkDestroyDevice(dev->instance, device, NULL);
+
+   /* We must emit vn_call_vkDestroyDevice before releasing bound ring_idx.
+    * Otherwise, another thread might reuse their ring_idx while they
+    * are still bound to the queues in the renderer.
+    */
+   if (dev->instance->renderer->info.supports_multiple_timelines) {
+      for (uint32_t i = 0; i < dev->queue_count; i++) {
+         vn_instance_release_ring_idx(dev->instance, dev->queues[i].ring_idx);
+      }
+   }
 
    vk_free(alloc, dev->queues);
 

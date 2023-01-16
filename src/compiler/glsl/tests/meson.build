@@ -77,7 +77,7 @@ if meson.has_exe_wrapper()
       join_paths(meson.current_source_dir(), 'warnings_test.py'),
       '--glsl-compiler', glsl_compiler,
       '--test-directory', join_paths(
-        meson.source_root(), 'src', 'compiler', 'glsl', 'tests', 'warnings'
+        dir_source_root, 'src', 'compiler', 'glsl', 'tests', 'warnings'
       ),
     ],
     suite : ['compiler', 'glsl'],

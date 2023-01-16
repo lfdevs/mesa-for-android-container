@@ -44,7 +44,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "../indirect_init.h"
 #include "glapi/glapi.h"
 #include "../../mesa/main/dispatch.h"

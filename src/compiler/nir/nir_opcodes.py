@@ -229,7 +229,7 @@ for src_t in [tint, tuint, tfloat, tbool]:
    if src_t == tbool:
       dst_types = [tfloat, tint, tbool]
    elif src_t == tint:
-      dst_types = [tfloat, tint, tbool]
+      dst_types = [tfloat, tint]
    elif src_t == tuint:
       dst_types = [tfloat, tuint]
    elif src_t == tfloat:

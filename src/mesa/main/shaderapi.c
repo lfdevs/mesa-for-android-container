@@ -36,7 +36,7 @@
 #include <stdbool.h>
 #include <c99_alloca.h>
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 #include "draw_validate.h"
 #include "main/enums.h"

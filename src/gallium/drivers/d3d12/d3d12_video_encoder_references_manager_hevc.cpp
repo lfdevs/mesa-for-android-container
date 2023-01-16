@@ -53,8 +53,8 @@ d3d12_video_encoder_references_manager_hevc::reset_gop_tracking_and_dpb()
    m_CurrentFrameReferencesData.ReconstructedPicTexture = { nullptr, 0 };
 
    // Reset DPB storage
-   uint32_t numPicsBeforeClearInDPB = m_rDPBStorageManager.get_number_of_pics_in_dpb();
-   uint32_t cFreedResources = m_rDPBStorageManager.clear_decode_picture_buffer();
+   ASSERTED uint32_t numPicsBeforeClearInDPB = m_rDPBStorageManager.get_number_of_pics_in_dpb();
+   ASSERTED uint32_t cFreedResources = m_rDPBStorageManager.clear_decode_picture_buffer();
    assert(numPicsBeforeClearInDPB == cFreedResources);
 
    // Initialize if needed the reconstructed picture allocation for the first IDR picture in the GOP

@@ -69,7 +69,7 @@ static const struct debug_named_value vc4_debug_options[] = {
         { "dump", VC4_DEBUG_DUMP,
           "Write a GPU command stream trace file" },
 #endif
-        { NULL }
+        DEBUG_NAMED_VALUE_END
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(vc4_debug, "VC4_DEBUG", vc4_debug_options, 0)

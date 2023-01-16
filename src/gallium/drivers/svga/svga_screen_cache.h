@@ -32,7 +32,7 @@
 #include "svga_reg.h"
 #include "svga3d_reg.h"
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "util/list.h"
 

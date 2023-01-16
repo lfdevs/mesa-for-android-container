@@ -78,7 +78,7 @@ debian-testing:
       -D dri3=enabled
       -D gallium-va=enabled
     GALLIUM_DRIVERS: "swrast,virgl,radeonsi,zink,crocus,iris,i915"
-    VULKAN_DRIVERS: "swrast,amd,intel,virtio-experimental"
+    VULKAN_DRIVERS: "swrast,amd,intel,intel_hasvk,virtio-experimental"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
@@ -121,7 +121,7 @@ debian-testing-msan:
     MESON_TEST_ARGS: "--suite glcpp --suite gallium  --suite format"
     # Freedreno dropped because freedreno tools fail at msan.
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus"
-    VULKAN_DRIVERS: intel,amd,broadcom,virtio-experimental
+    VULKAN_DRIVERS: intel,intel_hasvk,amd,broadcom,virtio-experimental
 
 .debian-cl-testing:
   extends:
@@ -183,6 +183,8 @@ debian-build-testing:
       -D spirv-to-dxil=true
       -D osmesa=true
       -D tools=drm-shim,etnaviv,freedreno,glsl,intel,intel-ui,nir,nouveau,lima,panfrost,asahi
+      -D b_lto=true
+    LLVM_VERSION: 13
   script:
     - .gitlab-ci/lava/lava-pytest.sh
     - .gitlab-ci/run-shellcheck.sh
@@ -224,6 +226,44 @@ debian-release:
   script:
     - .gitlab-ci/meson/build.sh
 
+alpine-build-testing:
+  extends:
+    - .meson-build
+    - .use-alpine/x86_build
+  stage: build-x86_64
+  variables:
+    BUILDTYPE: "release"
+    C_ARGS: >
+      -Wno-error=cpp
+      -Wno-error=array-bounds
+      -Wno-error=stringop-overread
+    DRI_LOADERS: >
+      -D glx=disabled
+      -D gbm=enabled
+      -D egl=enabled
+      -D glvnd=false
+      -D platforms=wayland
+    LLVM_VERSION: ""
+    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,iris,kmsro,lima,nouveau,panfrost,r300,r600,radeonsi,svga,swrast,tegra,v3d,vc4,virgl,zink"
+    GALLIUM_ST: >
+      -D dri3=enabled
+      -D gallium-extra-hud=true
+      -D gallium-vdpau=disabled
+      -D gallium-omx=disabled
+      -D gallium-va=enabled
+      -D gallium-xa=disabled
+      -D gallium-nine=true
+      -D gallium-rusticl=false
+      -D gles1=disabled
+      -D gles2=enabled
+      -D llvm=enabled
+      -D microsoft-clc=disabled
+      -D shared-llvm=enabled
+    UNWIND: "disabled"
+    VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,imagination-experimental"
+  script:
+    - .gitlab-ci/meson/build.sh
+
 fedora-release:
   extends:
     - .meson-build
@@ -233,9 +273,6 @@ fedora-release:
     C_ARGS: >
       -Wno-error=array-bounds
       -Wno-error=stringop-overread
-      -Wno-error=uninitialized
-    CPP_ARGS: >
-      -Wno-error=array-bounds
     DRI_LOADERS: >
       -D glx=dri
       -D gbm=enabled
@@ -268,7 +305,7 @@ fedora-release:
       -D shared-llvm=enabled
     LLVM_VERSION: ""
     UNWIND: "disabled"
-    VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,imagination-experimental"
+    VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,intel_hasvk,imagination-experimental"
   script:
     - .gitlab-ci/meson/build.sh
 
@@ -285,9 +322,6 @@ debian-android:
       -Wno-error=initializer-overrides
       -Wno-error=missing-braces
       -Wno-error=sometimes-uninitialized
-      -Wno-error=unused-function
-    CPP_ARGS: >
-      -Wno-error=deprecated-declarations
     DRI_LOADERS: >
       -D glx=disabled
       -D gbm=disabled
@@ -316,7 +350,7 @@ debian-android:
     # is not a dependency that AOSP wants to accept.  Can't do Radeon Gallium
     # drivers because they requires LLVM, which we don't have an Android build
     # of.
-    - PKG_CONFIG_PATH=/usr/local/lib/x86_64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/pkgconfig/ CROSS=x86_64-linux-android GALLIUM_DRIVERS=iris VULKAN_DRIVERS=amd,intel .gitlab-ci/meson/build.sh
+    - PKG_CONFIG_PATH=/usr/local/lib/x86_64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/pkgconfig/ CROSS=x86_64-linux-android GALLIUM_DRIVERS=iris VULKAN_DRIVERS=amd,intel,intel_hasvk .gitlab-ci/meson/build.sh
 
 .meson-cross:
   extends:
@@ -328,7 +362,7 @@ debian-android:
       -D glx=dri
       -D gbm=enabled
       -D egl=enabled
-      -D platforms=x11
+      -D platforms=x11,wayland
       -D osmesa=false
     GALLIUM_ST: >
       -D dri3=enabled
@@ -361,6 +395,9 @@ debian-armhf:
       -D llvm=disabled
       -D valgrind=false
     MINIO_ARTIFACT_NAME: mesa-armhf
+    # The strip command segfaults, failing to strip the binary and leaving
+    # tempfiles in our artifacts.
+    ARTIFACTS_DEBUG_SYMBOLS: 1
   script:
     - .gitlab-ci/meson/build.sh
     - .gitlab-ci/prepare-artifacts.sh
@@ -421,7 +458,6 @@ debian-clang:
       -Wno-error=implicit-const-int-float-conversion
       -Wno-error=overloaded-virtual
       -Wno-error=tautological-constant-out-of-range-compare
-      -Wno-error=unused-const-variable
       -Wno-error=unused-private-field
     DRI_LOADERS: >
       -D glx=dri
@@ -445,7 +481,7 @@ debian-clang:
       -D shared-llvm=enabled
       -D opencl-spirv=true
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus,i915,asahi"
-    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,swrast,panfrost,imagination-experimental,microsoft-experimental
+    VULKAN_DRIVERS: intel,intel_hasvk,amd,freedreno,broadcom,virtio-experimental,swrast,panfrost,imagination-experimental,microsoft-experimental
     EXTRA_OPTION:
       -D spirv-to-dxil=true
       -D osmesa=true
@@ -543,7 +579,7 @@ debian-vulkan:
       -D c_args=-fno-sanitize-recover=all
       -D cpp_args=-fno-sanitize-recover=all
     UBSAN_OPTIONS: "print_stacktrace=1"
-    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,imagination-experimental,microsoft-experimental
+    VULKAN_DRIVERS: intel,intel_hasvk,amd,freedreno,broadcom,virtio-experimental,imagination-experimental,microsoft-experimental
     EXTRA_OPTION: >
       -D vulkan-layers=device-select,overlay
       -D build-aco-tests=true
@@ -556,7 +592,7 @@ debian-i386:
     - .use-debian/i386_build
   variables:
     CROSS: i386
-    VULKAN_DRIVERS: intel,amd,swrast,virtio-experimental
+    VULKAN_DRIVERS: intel,intel_hasvk,amd,swrast,virtio-experimental
     GALLIUM_DRIVERS: "iris,nouveau,r300,r600,radeonsi,swrast,virgl,zink,crocus"
     LLVM_VERSION: 13
     EXTRA_OPTION: >

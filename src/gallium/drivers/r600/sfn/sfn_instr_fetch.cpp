@@ -26,6 +26,7 @@
 
 #include "sfn_instr_fetch.h"
 
+#include "sfn_alu_defines.h"
 #include "sfn_defines.h"
 #include "sfn_valuefactory.h"
 
@@ -655,17 +656,18 @@ public:
    }
    void visit(LocalArray& value)
    {
-      assert(0);
+      unreachable("An array can't be a direct source for scratch reads");
       (void)value;
    }
    void visit(LocalArrayValue& value)
    {
-      assert(0);
+      unreachable("An array value can't be a direct source for scratch reads");
+      // TODO: an array element with constant offset could be used here
       (void)value;
    }
    void visit(UniformValue& value)
    {
-      assert(0);
+      unreachable("A uniform can't be a direct source for scratch reads");
       (void)value;
    }
    void visit(LiteralConstant& value)
@@ -675,8 +677,12 @@ public:
    }
    void visit(InlineConstant& value)
    {
-      assert(0);
-      (void)value;
+      if (value.sel() == ALU_SRC_1_INT)
+         m_lfs->set_array_base(1);
+      else if (value.sel() != ALU_SRC_0)
+         unreachable("Scratch array base is an inpossible inline constant");
+
+      m_lfs->set_src(new Register(0, 7, pin_none));
    }
 
    LoadFromScratch *m_lfs;

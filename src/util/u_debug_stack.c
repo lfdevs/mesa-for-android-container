@@ -36,7 +36,7 @@
 #include "util/u_debug.h"
 #include "u_debug_symbol.h"
 #include "u_debug_stack.h"
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #if defined(HAVE_LIBUNWIND)
 
@@ -45,7 +45,7 @@
 #endif
 #include <dlfcn.h>
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/hash_table.h"
 
 static struct hash_table* symbols_hash;
@@ -183,7 +183,7 @@ debug_backtrace_print(FILE *f,
    /* Not implemented here; see u_debug_stack_android.cpp */
 #else /* ! HAVE_LIBUNWIND */
 
-#if defined(PIPE_OS_WINDOWS)
+#if DETECT_OS_WINDOWS
 #include <windows.h>
 #endif
 
@@ -210,7 +210,7 @@ debug_backtrace_capture(struct debug_stack_frame *backtrace,
     *
     * It works reliably both for x86 for x86_64.
     */
-#if defined(PIPE_OS_WINDOWS)
+#if DETECT_OS_WINDOWS
    {
       typedef USHORT (WINAPI *PFNCAPTURESTACKBACKTRACE)(ULONG, ULONG,
                                                         PVOID *, PULONG);
@@ -249,13 +249,13 @@ debug_backtrace_capture(struct debug_stack_frame *backtrace,
    }
 #endif
 
-#ifdef PIPE_ARCH_X86
-#if defined(PIPE_CC_GCC) && (PIPE_CC_GCC_VERSION > 404) || defined(__clang__)
+#if DETECT_ARCH_X86
+#if DETECT_CC_GCC && (DETECT_CC_GCC_VERSION > 404) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wframe-address"
    const void **frame_pointer = ((const void **)__builtin_frame_address(1));
 #pragma GCC diagnostic pop
-#elif defined(PIPE_CC_MSVC)
+#elif DETECT_CC_MSVC
    const void **frame_pointer;
    __asm {
       mov frame_pointer, ebp

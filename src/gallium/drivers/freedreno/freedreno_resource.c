@@ -209,7 +209,9 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
    struct fd_screen *screen = fd_screen(rsc->b.b.screen);
    uint32_t flags =
       COND(rsc->layout.tile_mode, FD_BO_NOMAP) |
-      COND(prsc->usage & PIPE_USAGE_STAGING, FD_BO_CACHED_COHERENT) |
+      COND((prsc->usage & PIPE_USAGE_STAGING) &&
+           (prsc->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT),
+           FD_BO_CACHED_COHERENT) |
       COND(prsc->bind & PIPE_BIND_SHARED, FD_BO_SHARED) |
       COND(prsc->bind & PIPE_BIND_SCANOUT, FD_BO_SCANOUT);
    /* TODO other flags? */
@@ -586,7 +588,7 @@ fd_resource_dump(struct fd_resource *rsc, const char *name)
 
 static struct fd_resource *
 fd_alloc_staging(struct fd_context *ctx, struct fd_resource *rsc,
-                 unsigned level, const struct pipe_box *box)
+                 unsigned level, const struct pipe_box *box, unsigned usage)
    assert_dt
 {
    struct pipe_context *pctx = &ctx->base;
@@ -616,6 +618,7 @@ fd_alloc_staging(struct fd_context *ctx, struct fd_resource *rsc,
    tmpl.last_level = 0;
    tmpl.bind |= PIPE_BIND_LINEAR;
    tmpl.usage = PIPE_USAGE_STAGING;
+   tmpl.flags = (usage & PIPE_MAP_READ) ? PIPE_RESOURCE_FLAG_MAP_COHERENT : 0;
 
    struct pipe_resource *pstaging =
       pctx->screen->resource_create(pctx->screen, &tmpl);
@@ -725,8 +728,6 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
    if (trans->upload_ptr) {
       fd_bo_upload(rsc->bo, trans->upload_ptr, ptrans->box.x, ptrans->box.width);
       free(trans->upload_ptr);
-   } else if (!(ptrans->usage & PIPE_MAP_UNSYNCHRONIZED)) {
-      fd_bo_cpu_fini(rsc->bo);
    }
 
    util_range_add(&rsc->b.b, &rsc->valid_buffer_range, ptrans->box.x,
@@ -776,7 +777,7 @@ resource_transfer_map_staging(struct pipe_context *pctx,
 
    assert(prsc->target != PIPE_BUFFER);
 
-   staging_rsc = fd_alloc_staging(ctx, rsc, level, box);
+   staging_rsc = fd_alloc_staging(ctx, rsc, level, box, usage);
    if (!staging_rsc)
       return NULL;
 
@@ -920,7 +921,7 @@ resource_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
              * use a staging buffer to do the upload.
              */
             if (is_renderable(prsc))
-               staging_rsc = fd_alloc_staging(ctx, rsc, level, box);
+               staging_rsc = fd_alloc_staging(ctx, rsc, level, box, usage);
             if (staging_rsc) {
                trans->staging_prsc = &staging_rsc->b.b;
                trans->b.b.stride = fd_resource_pitch(staging_rsc, 0);

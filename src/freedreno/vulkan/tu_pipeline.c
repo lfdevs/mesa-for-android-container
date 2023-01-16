@@ -87,7 +87,6 @@ tu6_load_state_size(struct tu_pipeline *pipeline,
          case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-         case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
             /* Textures and UBO's needs a packet for each stage */
             count = stage_count;
             break;
@@ -98,6 +97,7 @@ tu6_load_state_size(struct tu_pipeline *pipeline,
             count = stage_count * binding->array_size * 2;
             break;
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+         case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
          case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
             break;
          default:
@@ -185,8 +185,9 @@ tu6_emit_load_state(struct tu_pipeline *pipeline,
             break;
          }
          case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+         case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
          case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
-            /* nothing - input attachment doesn't use bindless */
+            /* nothing - input attachments and inline uniforms don't use bindless */
             break;
          case VK_DESCRIPTOR_TYPE_SAMPLER:
          case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
@@ -204,8 +205,7 @@ tu6_emit_load_state(struct tu_pipeline *pipeline,
             offset = (layout->set[i].dynamic_offset_start +
                       binding->dynamic_offset_offset) / 4;
             FALLTHROUGH;
-         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-         case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT: {
+         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
             tu_foreach_stage(stage, stages) {
                emit_load_state(&cs, tu6_stage2opcode(stage), ST6_UBO,
                                tu6_stage2shadersb(stage), base, offset, count);
@@ -304,33 +304,6 @@ tu_logic_op_reads_dst(VkLogicOp op)
       return false;
    default:
       return true;
-   }
-}
-
-static VkBlendFactor
-tu_blend_factor_no_dst_alpha(VkBlendFactor factor)
-{
-   /* treat dst alpha as 1.0 and avoid reading it */
-   switch (factor) {
-   case VK_BLEND_FACTOR_DST_ALPHA:
-      return VK_BLEND_FACTOR_ONE;
-   case VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA:
-      return VK_BLEND_FACTOR_ZERO;
-   default:
-      return factor;
-   }
-}
-
-static bool tu_blend_factor_is_dual_src(VkBlendFactor factor)
-{
-   switch (factor) {
-   case VK_BLEND_FACTOR_SRC1_COLOR:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
-   case VK_BLEND_FACTOR_SRC1_ALPHA:
-   case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-      return true;
-   default:
-      return false;
    }
 }
 
@@ -1495,6 +1468,17 @@ tu6_emit_vpc(struct tu_cs *cs,
    tu6_emit_vpc_varying_modes(cs, fs, last_shader);
 }
 
+static enum a6xx_tex_prefetch_cmd
+tu6_tex_opc_to_prefetch_cmd(opc_t tex_opc)
+{
+   switch (tex_opc) {
+   case OPC_SAM:
+      return TEX_PREFETCH_SAM;
+   default:
+      unreachable("Unknown tex opc for prefeth cmd");
+   }
+}
+
 void
 tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs)
 {
@@ -1514,15 +1498,15 @@ tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs)
       ij_regid[i] = ir3_find_sysval_regid(fs, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + i);
 
    if (fs->num_sampler_prefetch > 0) {
-      assert(VALIDREG(ij_regid[IJ_PERSP_PIXEL]));
-      /* also, it seems like ij_pix is *required* to be r0.x */
-      assert(ij_regid[IJ_PERSP_PIXEL] == regid(0, 0));
+      /* It seems like ij_pix is *required* to be r0.x */
+      assert(!VALIDREG(ij_regid[IJ_PERSP_PIXEL]) ||
+             ij_regid[IJ_PERSP_PIXEL] == regid(0, 0));
    }
 
    tu_cs_emit_pkt4(cs, REG_A6XX_SP_FS_PREFETCH_CNTL, 1 + fs->num_sampler_prefetch);
    tu_cs_emit(cs, A6XX_SP_FS_PREFETCH_CNTL_COUNT(fs->num_sampler_prefetch) |
-         A6XX_SP_FS_PREFETCH_CNTL_UNK4(regid(63, 0)) |
-         0x7000);    // XXX);
+                     COND(!VALIDREG(ij_regid[IJ_PERSP_PIXEL]),
+                          A6XX_SP_FS_PREFETCH_CNTL_IJ_WRITE_DISABLE));
    for (int i = 0; i < fs->num_sampler_prefetch; i++) {
       const struct ir3_sampler_prefetch *prefetch = &fs->sampler_prefetch[i];
       tu_cs_emit(cs, A6XX_SP_FS_PREFETCH_CMD_SRC(prefetch->src) |
@@ -1531,7 +1515,9 @@ tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs)
                      A6XX_SP_FS_PREFETCH_CMD_DST(prefetch->dst) |
                      A6XX_SP_FS_PREFETCH_CMD_WRMASK(prefetch->wrmask) |
                      COND(prefetch->half_precision, A6XX_SP_FS_PREFETCH_CMD_HALF) |
-                     A6XX_SP_FS_PREFETCH_CMD_CMD(prefetch->cmd));
+                     COND(prefetch->bindless, A6XX_SP_FS_PREFETCH_CMD_BINDLESS) |
+                     A6XX_SP_FS_PREFETCH_CMD_CMD(
+                        tu6_tex_opc_to_prefetch_cmd(prefetch->tex_opc)));
    }
 
    if (fs->num_sampler_prefetch > 0) {
@@ -1605,6 +1591,7 @@ tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs)
          CONDREG(smask_in_regid, A6XX_RB_RENDER_CONTROL1_SAMPLEMASK) |
          CONDREG(samp_id_regid, A6XX_RB_RENDER_CONTROL1_SAMPLEID) |
          CONDREG(ij_regid[IJ_PERSP_CENTER_RHW], A6XX_RB_RENDER_CONTROL1_CENTERRHW) |
+         COND(fs->post_depth_coverage, A6XX_RB_RENDER_CONTROL1_POSTDEPTHCOVERAGE)  |
          COND(fs->frag_face, A6XX_RB_RENDER_CONTROL1_FACENESS));
 
    tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_CNTL, 1);
@@ -2139,43 +2126,54 @@ tu6_emit_scissor(struct tu_cs *cs, const VkRect2D *scissors, uint32_t scissor_co
 }
 
 void
+tu6_emit_sample_locations_enable(struct tu_cs *cs, bool enable)
+{
+   uint32_t sample_config =
+      COND(enable, A6XX_RB_SAMPLE_CONFIG_LOCATION_ENABLE);
+
+   tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SAMPLE_CONFIG, 1);
+   tu_cs_emit(cs, sample_config);
+
+   tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_CONFIG, 1);
+   tu_cs_emit(cs, sample_config);
+
+   tu_cs_emit_pkt4(cs, REG_A6XX_SP_TP_SAMPLE_CONFIG, 1);
+   tu_cs_emit(cs, sample_config);
+}
+
+void
 tu6_emit_sample_locations(struct tu_cs *cs, const VkSampleLocationsInfoEXT *samp_loc)
 {
-   if (!samp_loc) {
-      tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SAMPLE_CONFIG, 1);
-      tu_cs_emit(cs, 0);
-
-      tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_CONFIG, 1);
-      tu_cs_emit(cs, 0);
-
-      tu_cs_emit_pkt4(cs, REG_A6XX_SP_TP_SAMPLE_CONFIG, 1);
-      tu_cs_emit(cs, 0);
-      return;
-   }
-
    assert(samp_loc->sampleLocationsPerPixel == samp_loc->sampleLocationsCount);
    assert(samp_loc->sampleLocationGridSize.width == 1);
    assert(samp_loc->sampleLocationGridSize.height == 1);
 
-   uint32_t sample_config =
-      A6XX_RB_SAMPLE_CONFIG_LOCATION_ENABLE;
    uint32_t sample_locations = 0;
    for (uint32_t i = 0; i < samp_loc->sampleLocationsCount; i++) {
+      /* From VkSampleLocationEXT:
+       *
+       *    The values specified in a VkSampleLocationEXT structure are always
+       *    clamped to the implementation-dependent sample location coordinate
+       *    range
+       *    [sampleLocationCoordinateRange[0],sampleLocationCoordinateRange[1]]
+       */
+      float x = CLAMP(samp_loc->pSampleLocations[i].x, SAMPLE_LOCATION_MIN,
+                      SAMPLE_LOCATION_MAX);
+      float y = CLAMP(samp_loc->pSampleLocations[i].y, SAMPLE_LOCATION_MIN,
+                      SAMPLE_LOCATION_MAX);
+
       sample_locations |=
-         (A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_X(samp_loc->pSampleLocations[i].x) |
-          A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_Y(samp_loc->pSampleLocations[i].y)) << i*8;
+         (A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_X(x) |
+          A6XX_RB_SAMPLE_LOCATION_0_SAMPLE_0_Y(y)) << i*8;
    }
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SAMPLE_CONFIG, 2);
-   tu_cs_emit(cs, sample_config);
+   tu_cs_emit_pkt4(cs, REG_A6XX_GRAS_SAMPLE_LOCATION_0, 1);
    tu_cs_emit(cs, sample_locations);
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_CONFIG, 2);
-   tu_cs_emit(cs, sample_config);
+   tu_cs_emit_pkt4(cs, REG_A6XX_RB_SAMPLE_LOCATION_0, 1);
    tu_cs_emit(cs, sample_locations);
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_SP_TP_SAMPLE_CONFIG, 2);
-   tu_cs_emit(cs, sample_config);
+   tu_cs_emit_pkt4(cs, REG_A6XX_SP_TP_SAMPLE_LOCATION_0, 1);
    tu_cs_emit(cs, sample_locations);
 }
 
@@ -2224,16 +2222,13 @@ tu6_emit_depth_bias(struct tu_cs *cs,
 }
 
 static uint32_t
-tu6_rb_mrt_blend_control(const VkPipelineColorBlendAttachmentState *att,
-                         bool has_alpha)
+tu6_rb_mrt_blend_control(const VkPipelineColorBlendAttachmentState *att)
 {
    const enum a3xx_rb_blend_opcode color_op = tu6_blend_op(att->colorBlendOp);
-   const enum adreno_rb_blend_factor src_color_factor = tu6_blend_factor(
-      has_alpha ? att->srcColorBlendFactor
-                : tu_blend_factor_no_dst_alpha(att->srcColorBlendFactor));
-   const enum adreno_rb_blend_factor dst_color_factor = tu6_blend_factor(
-      has_alpha ? att->dstColorBlendFactor
-                : tu_blend_factor_no_dst_alpha(att->dstColorBlendFactor));
+   const enum adreno_rb_blend_factor src_color_factor =
+      tu6_blend_factor(att->srcColorBlendFactor);
+   const enum adreno_rb_blend_factor dst_color_factor =
+      tu6_blend_factor(att->dstColorBlendFactor);
    const enum a3xx_rb_blend_opcode alpha_op = tu6_blend_op(att->alphaBlendOp);
    const enum adreno_rb_blend_factor src_alpha_factor =
       tu6_blend_factor(att->srcAlphaBlendFactor);
@@ -2249,21 +2244,14 @@ tu6_rb_mrt_blend_control(const VkPipelineColorBlendAttachmentState *att,
 }
 
 static uint32_t
-tu6_rb_mrt_control(const VkPipelineColorBlendAttachmentState *att,
-                   uint32_t rb_mrt_control_rop,
-                   bool has_alpha)
+tu6_rb_mrt_control(const VkPipelineColorBlendAttachmentState *att)
 {
    uint32_t rb_mrt_control =
       A6XX_RB_MRT_CONTROL_COMPONENT_ENABLE(att->colorWriteMask);
 
-   rb_mrt_control |= rb_mrt_control_rop;
-
-   if (att->blendEnable) {
-      rb_mrt_control |= A6XX_RB_MRT_CONTROL_BLEND;
-
-      if (has_alpha)
-         rb_mrt_control |= A6XX_RB_MRT_CONTROL_BLEND2;
-   }
+   rb_mrt_control |= COND(att->blendEnable,
+                          A6XX_RB_MRT_CONTROL_BLEND |
+                          A6XX_RB_MRT_CONTROL_BLEND2);
 
    return rb_mrt_control;
 }
@@ -2297,12 +2285,9 @@ tu6_emit_rb_mrt_controls(struct tu_pipeline *pipeline,
    *rop_reads_dst = false;
    *color_bandwidth_per_sample = 0;
 
-   uint32_t rb_mrt_control_rop = 0;
-   if (blend_info->logicOpEnable) {
-      pipeline->blend.logic_op_enabled = true;
-      rb_mrt_control_rop = tu6_rb_mrt_control_rop(blend_info->logicOp,
-                                                  rop_reads_dst);
-   }
+   pipeline->blend.rb_mrt_control_rop =
+      tu6_rb_mrt_control_rop(blend_info->logicOp, rop_reads_dst);
+   pipeline->blend.logic_op_enabled = blend_info->logicOpEnable;
 
    uint32_t total_bpp = 0;
    pipeline->blend.num_rts = blend_info->attachmentCount;
@@ -2315,15 +2300,19 @@ tu6_emit_rb_mrt_controls(struct tu_pipeline *pipeline,
       uint32_t rb_mrt_blend_control = 0;
       if (format != VK_FORMAT_UNDEFINED &&
           (!color_info || color_info->pColorWriteEnables[i])) {
-         const bool has_alpha = vk_format_has_alpha(format);
-
-         rb_mrt_control =
-            tu6_rb_mrt_control(att, rb_mrt_control_rop, has_alpha);
-         rb_mrt_blend_control = tu6_rb_mrt_blend_control(att, has_alpha);
+         const uint64_t blend_att_states =
+            BIT(TU_DYNAMIC_STATE_COLOR_WRITE_MASK) |
+            BIT(TU_DYNAMIC_STATE_BLEND_ENABLE) |
+            BIT(TU_DYNAMIC_STATE_BLEND_EQUATION);
+         if ((pipeline->dynamic_state_mask & blend_att_states) != blend_att_states) {
+            rb_mrt_control = tu6_rb_mrt_control(att);
+            rb_mrt_blend_control = tu6_rb_mrt_blend_control(att);
+         }
 
          /* calculate bpp based on format and write mask */
          uint32_t write_bpp = 0;
-         if (att->colorWriteMask == 0xf) {
+         if ((pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_COLOR_WRITE_MASK)) ||
+             att->colorWriteMask == 0xf) {
             write_bpp = vk_format_get_blocksizebits(format);
          } else {
             const enum pipe_format pipe_format = vk_format_to_pipe_format(format);
@@ -2337,11 +2326,14 @@ tu6_emit_rb_mrt_controls(struct tu_pipeline *pipeline,
          total_bpp += write_bpp;
 
          pipeline->blend.color_write_enable |= BIT(i);
-         if (att->blendEnable)
-            pipeline->blend.blend_enable |= BIT(i);
 
-         if (att->blendEnable || *rop_reads_dst) {
-            total_bpp += write_bpp;
+         if (!(pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_BLEND_ENABLE))) {
+            if (att->blendEnable)
+               pipeline->blend.blend_enable |= BIT(i);
+
+            if (att->blendEnable || (blend_info->logicOpEnable && *rop_reads_dst)) {
+               total_bpp += write_bpp;
+            }
          }
       }
 
@@ -2360,7 +2352,7 @@ tu6_emit_blend_control(struct tu_pipeline *pipeline,
 {
    const uint32_t sample_mask =
       msaa_info->pSampleMask ? (*msaa_info->pSampleMask & 0xffff)
-                             : ((1 << msaa_info->rasterizationSamples) - 1);
+                             : 0xffff;
 
 
    pipeline->blend.sp_blend_cntl =
@@ -2391,7 +2383,9 @@ tu6_emit_blend(struct tu_cs *cs,
 
    for (unsigned i = 0; i < pipeline->blend.num_rts; i++) {
       tu_cs_emit_regs(cs,
-                      A6XX_RB_MRT_CONTROL(i, .dword = pipeline->blend.rb_mrt_control[i]),
+                      A6XX_RB_MRT_CONTROL(i, .dword = pipeline->blend.rb_mrt_control[i] |
+                                                      (pipeline->blend.logic_op_enabled ?
+                                                       pipeline->blend.rb_mrt_control_rop : 0)),
                       A6XX_RB_MRT_BLEND_CONTROL(i, .dword = pipeline->blend.rb_mrt_blend_control[i]));
    }
 }
@@ -2633,8 +2627,7 @@ tu_pipeline_shader_key_init(struct ir3_shader_key *key,
     * just checked in tu6_emit_fs_inputs.  We will also copy the value to
     * tu_shader_key::force_sample_interp in a bit.
     */
-   if (msaa_info && msaa_info->sampleShadingEnable &&
-       (msaa_info->minSampleShading * msaa_info->rasterizationSamples) > 1.0f)
+   if (msaa_info && msaa_info->sampleShadingEnable)
       key->sample_shading = true;
 }
 
@@ -3589,6 +3582,8 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
       builder->create_info->pDynamicState;
 
    pipeline->rast.gras_su_cntl_mask = ~0u;
+   pipeline->rast.gras_cl_cntl_mask = ~0u;
+   pipeline->rast.rb_depth_cntl_mask = ~0u;
    pipeline->rast.pc_raster_cntl_mask = ~0u;
    pipeline->rast.vpc_unknown_9107_mask = ~0u;
    pipeline->ds.rb_depth_cntl_mask = ~0u;
@@ -3600,6 +3595,9 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
    if (!dynamic_info)
       return;
 
+   bool dynamic_depth_clip = false, dynamic_depth_clamp = false;
+   bool dynamic_viewport = false, dynamic_viewport_range = false;
+
    for (uint32_t i = 0; i < dynamic_info->dynamicStateCount; i++) {
       VkDynamicState state = dynamic_info->pDynamicStates[i];
       switch (state) {
@@ -3607,18 +3605,23 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
          if (state == VK_DYNAMIC_STATE_LINE_WIDTH)
             pipeline->rast.gras_su_cntl_mask &= ~A6XX_GRAS_SU_CNTL_LINEHALFWIDTH__MASK;
          pipeline->dynamic_state_mask |= BIT(state);
+         if (state == VK_DYNAMIC_STATE_VIEWPORT)
+            dynamic_viewport = true;
          break;
       case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
          pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_SAMPLE_LOCATIONS);
          break;
+      case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE);
+         break;
       case VK_DYNAMIC_STATE_CULL_MODE:
          pipeline->rast.gras_su_cntl_mask &=
             ~(A6XX_GRAS_SU_CNTL_CULL_BACK | A6XX_GRAS_SU_CNTL_CULL_FRONT);
-         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_GRAS_SU_CNTL);
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_RAST);
          break;
       case VK_DYNAMIC_STATE_FRONT_FACE:
          pipeline->rast.gras_su_cntl_mask &= ~A6XX_GRAS_SU_CNTL_FRONT_CW;
-         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_GRAS_SU_CNTL);
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_RAST);
          break;
       case VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY:
          pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY);
@@ -3628,6 +3631,7 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
          break;
       case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT:
          pipeline->dynamic_state_mask |= BIT(VK_DYNAMIC_STATE_VIEWPORT);
+         dynamic_viewport = true;
          break;
       case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT:
          pipeline->dynamic_state_mask |= BIT(VK_DYNAMIC_STATE_SCISSOR);
@@ -3669,7 +3673,7 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
          break;
       case VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE:
          pipeline->rast.gras_su_cntl_mask &= ~A6XX_GRAS_SU_CNTL_POLY_OFFSET;
-         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_GRAS_SU_CNTL);
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_RAST);
          break;
       case VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE:
          pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE);
@@ -3677,14 +3681,19 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
       case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE:
          pipeline->rast.pc_raster_cntl_mask &= ~A6XX_PC_RASTER_CNTL_DISCARD;
          pipeline->rast.vpc_unknown_9107_mask &= ~A6XX_VPC_UNKNOWN_9107_RASTER_DISCARD;
-         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_RASTERIZER_DISCARD);
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_PC_RASTER_CNTL);
          break;
       case VK_DYNAMIC_STATE_LOGIC_OP_EXT:
          pipeline->blend.sp_blend_cntl_mask &= ~A6XX_SP_BLEND_CNTL_ENABLE_BLEND__MASK;
          pipeline->blend.rb_blend_cntl_mask &= ~A6XX_RB_BLEND_CNTL_ENABLE_BLEND__MASK;
-         pipeline->blend.rb_mrt_control_mask &= ~A6XX_RB_MRT_CONTROL_ROP_CODE__MASK;
          pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_BLEND);
          pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_LOGIC_OP);
+         break;
+      case VK_DYNAMIC_STATE_LOGIC_OP_ENABLE_EXT:
+         pipeline->blend.sp_blend_cntl_mask &= ~A6XX_SP_BLEND_CNTL_ENABLE_BLEND__MASK;
+         pipeline->blend.rb_blend_cntl_mask &= ~A6XX_RB_BLEND_CNTL_ENABLE_BLEND__MASK;
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_BLEND);
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_LOGIC_OP_ENABLE);
          break;
       case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
          pipeline->blend.sp_blend_cntl_mask &= ~A6XX_SP_BLEND_CNTL_ENABLE_BLEND__MASK;
@@ -3701,15 +3710,122 @@ tu_pipeline_builder_parse_dynamic(struct tu_pipeline_builder *builder,
          pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_VERTEX_INPUT) |
             BIT(TU_DYNAMIC_STATE_VB_STRIDE);
          break;
+      case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
+         break;
       case VK_DYNAMIC_STATE_PATCH_CONTROL_POINTS_EXT:
          pipeline->dynamic_state_mask |=
             BIT(TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS);
+         break;
+      case VK_DYNAMIC_STATE_POLYGON_MODE_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_RAST) |
+            BIT(TU_DYNAMIC_STATE_POLYGON_MODE);
+         break;
+      case VK_DYNAMIC_STATE_TESSELLATION_DOMAIN_ORIGIN_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_TESS_DOMAIN_ORIGIN);
+         break;
+      case VK_DYNAMIC_STATE_DEPTH_CLIP_ENABLE_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_RAST);
+         pipeline->rast.gras_cl_cntl_mask &=
+            ~(A6XX_GRAS_CL_CNTL_ZNEAR_CLIP_DISABLE |
+              A6XX_GRAS_CL_CNTL_ZFAR_CLIP_DISABLE);
+         dynamic_depth_clip = true;
+         break;
+      case VK_DYNAMIC_STATE_DEPTH_CLAMP_ENABLE_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_RAST)  |
+            BIT(TU_DYNAMIC_STATE_RB_DEPTH_CNTL);
+         pipeline->rast.gras_cl_cntl_mask &=
+            ~A6XX_GRAS_CL_CNTL_Z_CLAMP_ENABLE;
+         pipeline->rast.rb_depth_cntl_mask &=
+            ~A6XX_RB_DEPTH_CNTL_Z_CLAMP_ENABLE;
+         dynamic_depth_clamp = true;
+         break;
+      case VK_DYNAMIC_STATE_SAMPLE_MASK_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_BLEND);
+         pipeline->blend.rb_blend_cntl_mask &=
+            ~A6XX_RB_BLEND_CNTL_SAMPLE_MASK__MASK;
+         break;
+      case VK_DYNAMIC_STATE_RASTERIZATION_SAMPLES_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_MSAA_SAMPLES);
+         break;
+      case VK_DYNAMIC_STATE_ALPHA_TO_COVERAGE_ENABLE_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_ALPHA_TO_COVERAGE) |
+            BIT(TU_DYNAMIC_STATE_BLEND);
+         pipeline->blend.rb_blend_cntl_mask &=
+            ~A6XX_RB_BLEND_CNTL_ALPHA_TO_COVERAGE;
+         pipeline->blend.sp_blend_cntl_mask &=
+            ~A6XX_SP_BLEND_CNTL_ALPHA_TO_COVERAGE;
+         break;
+      case VK_DYNAMIC_STATE_ALPHA_TO_ONE_ENABLE_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_BLEND);
+         pipeline->blend.rb_blend_cntl_mask &=
+            ~A6XX_RB_BLEND_CNTL_ALPHA_TO_ONE;
+         break;
+      case VK_DYNAMIC_STATE_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(VK_DYNAMIC_STATE_VIEWPORT) |
+            BIT(TU_DYNAMIC_STATE_RAST) |
+            BIT(TU_DYNAMIC_STATE_VIEWPORT_RANGE);
+         pipeline->rast.gras_cl_cntl_mask &=
+            ~A6XX_GRAS_CL_CNTL_ZERO_GB_SCALE_Z;
+         dynamic_viewport_range = true;
+         break;
+      case VK_DYNAMIC_STATE_RASTERIZATION_STREAM_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_PC_RASTER_CNTL);
+         pipeline->rast.pc_raster_cntl_mask &=
+            ~A6XX_PC_RASTER_CNTL_STREAM__MASK;
+         break;
+      case VK_DYNAMIC_STATE_LINE_RASTERIZATION_MODE_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_RAST) |
+            BIT(TU_DYNAMIC_STATE_LINE_MODE);
+         pipeline->rast.gras_su_cntl_mask &=
+            ~A6XX_GRAS_SU_CNTL_LINE_MODE__MASK;
+         break;
+      case VK_DYNAMIC_STATE_PROVOKING_VERTEX_MODE_EXT:
+         pipeline->dynamic_state_mask |= BIT(TU_DYNAMIC_STATE_PROVOKING_VTX);
+         break;
+      case VK_DYNAMIC_STATE_COLOR_BLEND_ENABLE_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_BLEND) |
+            BIT(TU_DYNAMIC_STATE_BLEND_ENABLE);
+         pipeline->blend.rb_mrt_control_mask &=
+            ~(A6XX_RB_MRT_CONTROL_BLEND | A6XX_RB_MRT_CONTROL_BLEND2);
+         pipeline->blend.sp_blend_cntl_mask &= ~A6XX_SP_BLEND_CNTL_ENABLE_BLEND__MASK;
+         pipeline->blend.rb_blend_cntl_mask &= ~A6XX_RB_BLEND_CNTL_ENABLE_BLEND__MASK;
+         break;
+      case VK_DYNAMIC_STATE_COLOR_BLEND_EQUATION_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_BLEND) |
+            BIT(TU_DYNAMIC_STATE_BLEND_EQUATION);
+         pipeline->blend.sp_blend_cntl_mask &= ~A6XX_SP_BLEND_CNTL_DUAL_COLOR_IN_ENABLE;
+         pipeline->blend.rb_blend_cntl_mask &= ~A6XX_RB_BLEND_CNTL_DUAL_COLOR_IN_ENABLE;
+         break;
+      case VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT:
+         pipeline->dynamic_state_mask |=
+            BIT(TU_DYNAMIC_STATE_BLEND) |
+            BIT(TU_DYNAMIC_STATE_COLOR_WRITE_MASK);
+         pipeline->blend.rb_mrt_control_mask &= ~A6XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK;
          break;
       default:
          assert(!"unsupported dynamic state");
          break;
       }
    }
+
+   pipeline->rast.override_depth_clip =
+      dynamic_depth_clamp && !dynamic_depth_clip;
+
+   /* If the viewport range is dynamic, the viewport may need to be adjusted
+    * dynamically so we can't emit it up-front, but we need to copy the state
+    * viewport state to the dynamic state as if we had called CmdSetViewport()
+    * when binding the pipeline.
+    */
+   pipeline->viewport.set_dynamic_vp_to_static =
+      dynamic_viewport_range && !dynamic_viewport;
 }
 
 static void
@@ -3737,7 +3853,7 @@ tu_pipeline_builder_parse_libraries(struct tu_pipeline_builder *builder,
       struct tu_pipeline *library = builder->libraries[i];
       pipeline->state |= library->state;
 
-      uint32_t library_dynamic_state = 0;
+      uint64_t library_dynamic_state = 0;
       if (library->state &
           VK_GRAPHICS_PIPELINE_LIBRARY_VERTEX_INPUT_INTERFACE_BIT_EXT) {
          pipeline->vi = library->vi;
@@ -3758,10 +3874,15 @@ tu_pipeline_builder_parse_libraries(struct tu_pipeline_builder *builder,
          library_dynamic_state |=
             BIT(VK_DYNAMIC_STATE_VIEWPORT) |
             BIT(VK_DYNAMIC_STATE_SCISSOR) |
-            BIT(VK_DYNAMIC_STATE_LINE_WIDTH) |
+            BIT(TU_DYNAMIC_STATE_RAST) |
             BIT(VK_DYNAMIC_STATE_DEPTH_BIAS) |
-            BIT(TU_DYNAMIC_STATE_RASTERIZER_DISCARD) |
-            BIT(TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS);
+            BIT(TU_DYNAMIC_STATE_PC_RASTER_CNTL) |
+            BIT(TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS) |
+            BIT(TU_DYNAMIC_STATE_POLYGON_MODE) |
+            BIT(TU_DYNAMIC_STATE_TESS_DOMAIN_ORIGIN) |
+            BIT(TU_DYNAMIC_STATE_VIEWPORT_RANGE) |
+            BIT(TU_DYNAMIC_STATE_LINE_MODE) |
+            BIT(TU_DYNAMIC_STATE_PROVOKING_VTX);
       }
 
       if (library->state &
@@ -3790,9 +3911,15 @@ tu_pipeline_builder_parse_libraries(struct tu_pipeline_builder *builder,
          library_dynamic_state |=
             BIT(VK_DYNAMIC_STATE_BLEND_CONSTANTS) |
             BIT(TU_DYNAMIC_STATE_SAMPLE_LOCATIONS) |
+            BIT(TU_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE) |
             BIT(TU_DYNAMIC_STATE_BLEND) |
+            BIT(TU_DYNAMIC_STATE_BLEND_ENABLE) |
+            BIT(TU_DYNAMIC_STATE_BLEND_EQUATION) |
             BIT(TU_DYNAMIC_STATE_LOGIC_OP) |
-            BIT(TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE);
+            BIT(TU_DYNAMIC_STATE_LOGIC_OP_ENABLE) |
+            BIT(TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE) |
+            BIT(TU_DYNAMIC_STATE_MSAA_SAMPLES) |
+            BIT(TU_DYNAMIC_STATE_ALPHA_TO_COVERAGE);
       }
 
       if ((library->state &
@@ -4090,11 +4217,50 @@ tu_pipeline_builder_parse_viewport(struct tu_pipeline_builder *builder,
 
    struct tu_cs cs;
 
-   if (tu_pipeline_static_state(pipeline, &cs, VK_DYNAMIC_STATE_VIEWPORT, 8 + 10 * vp_info->viewportCount))
+   if (tu_pipeline_static_state(pipeline, &cs, VK_DYNAMIC_STATE_VIEWPORT, 8 + 10 * vp_info->viewportCount)) {
       tu6_emit_viewport(&cs, vp_info->pViewports, vp_info->viewportCount, pipeline->viewport.z_negative_one_to_one);
+   } else if (pipeline->viewport.set_dynamic_vp_to_static) {
+      memcpy(pipeline->viewport.viewports, vp_info->pViewports,
+             vp_info->viewportCount * sizeof(*vp_info->pViewports));
+      pipeline->viewport.num_viewports = vp_info->viewportCount;
+   }
 
    if (tu_pipeline_static_state(pipeline, &cs, VK_DYNAMIC_STATE_SCISSOR, 1 + 2 * vp_info->scissorCount))
       tu6_emit_scissor(&cs, vp_info->pScissors, vp_info->scissorCount);
+}
+
+uint32_t
+tu6_rast_size(struct tu_device *dev)
+{
+   return 11 + (dev->physical_device->info->a6xx.has_shading_rate ? 8 : 0);
+}
+
+void
+tu6_emit_rast(struct tu_cs *cs,
+              uint32_t gras_su_cntl,
+              uint32_t gras_cl_cntl,
+              enum a6xx_polygon_mode polygon_mode)
+{
+   tu_cs_emit_regs(cs, A6XX_GRAS_SU_CNTL(.dword = gras_su_cntl));
+   tu_cs_emit_regs(cs, A6XX_GRAS_CL_CNTL(.dword = gras_cl_cntl));
+
+   tu_cs_emit_regs(cs,
+                   A6XX_VPC_POLYGON_MODE(polygon_mode));
+
+   tu_cs_emit_regs(cs,
+                   A6XX_PC_POLYGON_MODE(polygon_mode));
+
+   /* move to hw ctx init? */
+   tu_cs_emit_regs(cs,
+                   A6XX_GRAS_SU_POINT_MINMAX(.min = 1.0f / 16.0f, .max = 4092.0f),
+                   A6XX_GRAS_SU_POINT_SIZE(1.0f));
+
+   if (cs->device->physical_device->info->a6xx.has_shading_rate) {
+      tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A00());
+      tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A10());
+      tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A20());
+      tu_cs_emit_regs(cs, A6XX_RB_UNKNOWN_8A30());
+   }
 }
 
 static void
@@ -4104,7 +4270,7 @@ tu_pipeline_builder_parse_rasterization(struct tu_pipeline_builder *builder,
    const VkPipelineRasterizationStateCreateInfo *rast_info =
       builder->create_info->pRasterizationState;
 
-   enum a6xx_polygon_mode mode = tu6_polygon_mode(rast_info->polygonMode);
+   pipeline->rast.polygon_mode = tu6_polygon_mode(rast_info->polygonMode);
 
    bool depth_clip_disable = rast_info->depthClampEnable;
 
@@ -4127,36 +4293,13 @@ tu_pipeline_builder_parse_rasterization(struct tu_pipeline_builder *builder,
       pipeline->rast.line_mode = BRESENHAM;
    }
 
-   struct tu_cs cs;
-   uint32_t cs_size = 9 +
-      (builder->device->physical_device->info->a6xx.has_shading_rate ? 8 : 0);
-   pipeline->rast.state = tu_cs_draw_state(&pipeline->cs, &cs, cs_size);
-
-   tu_cs_emit_regs(&cs,
-                   A6XX_GRAS_CL_CNTL(
-                     .znear_clip_disable = depth_clip_disable,
-                     .zfar_clip_disable = depth_clip_disable,
-                     .z_clamp_enable = rast_info->depthClampEnable,
-                     .zero_gb_scale_z = pipeline->viewport.z_negative_one_to_one ? 0 : 1,
-                     .vp_clip_code_ignore = 1));
-
-   tu_cs_emit_regs(&cs,
-                   A6XX_VPC_POLYGON_MODE(mode));
-
-   tu_cs_emit_regs(&cs,
-                   A6XX_PC_POLYGON_MODE(mode));
-
-   /* move to hw ctx init? */
-   tu_cs_emit_regs(&cs,
-                   A6XX_GRAS_SU_POINT_MINMAX(.min = 1.0f / 16.0f, .max = 4092.0f),
-                   A6XX_GRAS_SU_POINT_SIZE(1.0f));
-
-   if (builder->device->physical_device->info->a6xx.has_shading_rate) {
-      tu_cs_emit_regs(&cs, A6XX_RB_UNKNOWN_8A00());
-      tu_cs_emit_regs(&cs, A6XX_RB_UNKNOWN_8A10());
-      tu_cs_emit_regs(&cs, A6XX_RB_UNKNOWN_8A20());
-      tu_cs_emit_regs(&cs, A6XX_RB_UNKNOWN_8A30());
-   }
+   pipeline->rast.gras_cl_cntl =
+       A6XX_GRAS_CL_CNTL(
+         .znear_clip_disable = depth_clip_disable,
+         .zfar_clip_disable = depth_clip_disable,
+         .z_clamp_enable = rast_info->depthClampEnable,
+         .zero_gb_scale_z = pipeline->viewport.z_negative_one_to_one ? 0 : 1,
+         .vp_clip_code_ignore = 1).value;
 
    const VkPipelineRasterizationStateStreamCreateInfoEXT *stream_info =
       vk_find_struct_const(rast_info->pNext,
@@ -4170,16 +4313,22 @@ tu_pipeline_builder_parse_rasterization(struct tu_pipeline_builder *builder,
       pipeline->rast.vpc_unknown_9107 |= A6XX_VPC_UNKNOWN_9107_RASTER_DISCARD;
    }
 
-   if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_RASTERIZER_DISCARD, 4)) {
+   pipeline->rast.gras_su_cntl =
+      tu6_gras_su_cntl(rast_info, pipeline->rast.line_mode, builder->multiview_mask != 0);
+
+   struct tu_cs cs;
+
+   if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_PC_RASTER_CNTL, 4)) {
       tu_cs_emit_regs(&cs, A6XX_PC_RASTER_CNTL(.dword = pipeline->rast.pc_raster_cntl));
       tu_cs_emit_regs(&cs, A6XX_VPC_UNKNOWN_9107(.dword = pipeline->rast.vpc_unknown_9107));
    }
 
-   pipeline->rast.gras_su_cntl =
-      tu6_gras_su_cntl(rast_info, pipeline->rast.line_mode, builder->multiview_mask != 0);
-
-   if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_GRAS_SU_CNTL, 2))
-      tu_cs_emit_regs(&cs, A6XX_GRAS_SU_CNTL(.dword = pipeline->rast.gras_su_cntl));
+   if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_RAST,
+                                tu6_rast_size(builder->device))) {
+      tu6_emit_rast(&cs, pipeline->rast.gras_su_cntl,
+                    pipeline->rast.gras_cl_cntl,
+                    pipeline->rast.polygon_mode);
+   }
 
    if (tu_pipeline_static_state(pipeline, &cs, VK_DYNAMIC_STATE_DEPTH_BIAS, 4)) {
       tu6_emit_depth_bias(&cs, rast_info->depthBiasConstantFactor,
@@ -4318,7 +4467,8 @@ tu_pipeline_builder_parse_rast_ds(struct tu_pipeline_builder *builder,
 
    pipeline->rast_ds.rb_depth_cntl =
       pipeline->rast.rb_depth_cntl | pipeline->ds.rb_depth_cntl;
-   pipeline->rast_ds.rb_depth_cntl_mask = pipeline->ds.rb_depth_cntl_mask;
+   pipeline->rast_ds.rb_depth_cntl_mask =
+      pipeline->rast.rb_depth_cntl_mask & pipeline->ds.rb_depth_cntl_mask;
 
    struct tu_cs cs;
    if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_RB_DEPTH_CNTL, 2)) {
@@ -4367,9 +4517,14 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
       builder->use_color_attachments ? builder->create_info->pColorBlendState
                                      : &dummy_blend_info;
 
+   bool alpha_to_coverage =
+      !(pipeline->dynamic_state_mask &
+        BIT(TU_DYNAMIC_STATE_ALPHA_TO_COVERAGE)) &&
+      msaa_info->alphaToCoverageEnable;
+
    bool no_earlyz = builder->depth_attachment_format == VK_FORMAT_S8_UINT ||
       /* alpha to coverage can behave like a discard */
-      msaa_info->alphaToCoverageEnable;
+      alpha_to_coverage;
    pipeline->lrz.force_late_z |= no_earlyz;
 
    pipeline->output.subpass_feedback_loop_color =
@@ -4410,7 +4565,7 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
                             &pipeline->blend.rop_reads_dst,
                             &pipeline->output.color_bandwidth_per_sample);
 
-   if (msaa_info->alphaToCoverageEnable && pipeline->blend.num_rts == 0) {
+   if (alpha_to_coverage && pipeline->blend.num_rts == 0) {
       /* In addition to changing the *_OUTPUT_CNTL1 registers, this will also
        * make sure we disable memory writes for MRT0 rather than using
        * whatever setting was leftover.
@@ -4419,10 +4574,11 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
    }
 
    uint32_t blend_enable_mask =
-      pipeline->blend.rop_reads_dst ? 
+      (pipeline->blend.logic_op_enabled && pipeline->blend.rop_reads_dst) ? 
       pipeline->blend.color_write_enable :
       pipeline->blend.blend_enable;
    tu6_emit_blend_control(pipeline, blend_enable_mask,
+                          !(pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_BLEND_EQUATION)) &&
                           tu_blend_state_is_dual_src(blend_info), msaa_info);
 
    if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_BLEND,
@@ -4440,21 +4596,31 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
     * Therefore, we need to emit it in a separate draw state. We keep
     * it disabled for sysmem path as well for the moment.
     */
-   if (blend_enable_mask)
+   if (blend_enable_mask &&
+       !(pipeline->dynamic_state_mask &
+        (BIT(TU_DYNAMIC_STATE_LOGIC_OP) |
+         BIT(TU_DYNAMIC_STATE_BLEND_ENABLE))))
       pipeline->lrz.force_disable_mask |= TU_LRZ_FORCE_DISABLE_WRITE;
 
-   for (int i = 0; i < blend_info->attachmentCount; i++) {
-      VkPipelineColorBlendAttachmentState blendAttachment = blend_info->pAttachments[i];
-      /* From the PoV of LRZ, having masked color channels is
-       * the same as having blend enabled, in that the draw will
-       * care about the fragments from an earlier draw.
-       */
-      VkFormat format = builder->color_attachment_formats[i];
-      unsigned mask = MASK(vk_format_get_nr_components(format));
-      if (format != VK_FORMAT_UNDEFINED &&
-          ((blendAttachment.colorWriteMask & mask) != mask ||
-           !(pipeline->blend.color_write_enable & BIT(i)))) {
-         pipeline->lrz.force_disable_mask |= TU_LRZ_FORCE_DISABLE_WRITE;
+   if (!(pipeline->dynamic_state_mask &
+         BIT(TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE)) &&
+       (pipeline->blend.color_write_enable & MASK(pipeline->blend.num_rts)) !=
+       MASK(pipeline->blend.num_rts))
+      pipeline->lrz.force_disable_mask |= TU_LRZ_FORCE_DISABLE_WRITE;
+
+   if (!(pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_BLEND))) {
+      for (int i = 0; i < blend_info->attachmentCount; i++) {
+         VkPipelineColorBlendAttachmentState blendAttachment = blend_info->pAttachments[i];
+         /* From the PoV of LRZ, having masked color channels is
+          * the same as having blend enabled, in that the draw will
+          * care about the fragments from an earlier draw.
+          */
+         VkFormat format = builder->color_attachment_formats[i];
+         unsigned mask = MASK(vk_format_get_nr_components(format));
+         if (format != VK_FORMAT_UNDEFINED &&
+             (blendAttachment.colorWriteMask & mask) != mask) {
+            pipeline->lrz.force_disable_mask |= TU_LRZ_FORCE_DISABLE_WRITE;
+         }
       }
    }
 
@@ -4467,12 +4633,22 @@ tu_pipeline_builder_parse_multisample_and_color_blend(
       vk_find_struct_const(msaa_info->pNext, PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT);
    const VkSampleLocationsInfoEXT *samp_loc = NULL;
 
-   if (sample_locations && sample_locations->sampleLocationsEnable)
+   if (sample_locations)
       samp_loc = &sample_locations->sampleLocationsInfo;
 
-    if (tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_SAMPLE_LOCATIONS,
-                                 samp_loc ? 9 : 6)) {
+    bool samp_loc_enable = sample_locations &&
+       sample_locations->sampleLocationsEnable;
+
+    if (samp_loc &&
+        ((pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE)) ||
+         samp_loc_enable) &&
+        tu_pipeline_static_state(pipeline, &cs, TU_DYNAMIC_STATE_SAMPLE_LOCATIONS, 6)) {
       tu6_emit_sample_locations(&cs, samp_loc);
+    }
+
+    if (tu_pipeline_static_state(pipeline, &cs,
+                                 TU_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE, 6)) {
+       tu6_emit_sample_locations_enable(&cs, samp_loc_enable);
     }
 }
 

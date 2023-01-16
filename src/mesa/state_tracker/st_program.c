@@ -269,31 +269,33 @@ delete_variant(struct st_context *st, struct st_variant *v, GLenum target)
 static void
 st_unbind_program(struct st_context *st, struct gl_program *p)
 {
+   struct gl_context *ctx = st->ctx;
+
    /* Unbind the shader in cso_context and re-bind in st/mesa. */
    switch (p->info.stage) {
    case MESA_SHADER_VERTEX:
       cso_set_vertex_shader_handle(st->cso_context, NULL);
-      st->dirty |= ST_NEW_VS_STATE;
+      ctx->NewDriverState |= ST_NEW_VS_STATE;
       break;
    case MESA_SHADER_TESS_CTRL:
       cso_set_tessctrl_shader_handle(st->cso_context, NULL);
-      st->dirty |= ST_NEW_TCS_STATE;
+      ctx->NewDriverState |= ST_NEW_TCS_STATE;
       break;
    case MESA_SHADER_TESS_EVAL:
       cso_set_tesseval_shader_handle(st->cso_context, NULL);
-      st->dirty |= ST_NEW_TES_STATE;
+      ctx->NewDriverState |= ST_NEW_TES_STATE;
       break;
    case MESA_SHADER_GEOMETRY:
       cso_set_geometry_shader_handle(st->cso_context, NULL);
-      st->dirty |= ST_NEW_GS_STATE;
+      ctx->NewDriverState |= ST_NEW_GS_STATE;
       break;
    case MESA_SHADER_FRAGMENT:
       cso_set_fragment_shader_handle(st->cso_context, NULL);
-      st->dirty |= ST_NEW_FS_STATE;
+      ctx->NewDriverState |= ST_NEW_FS_STATE;
       break;
    case MESA_SHADER_COMPUTE:
       cso_set_compute_shader_handle(st->cso_context, NULL);
-      st->dirty |= ST_NEW_CS_STATE;
+      ctx->NewDriverState |= ST_NEW_CS_STATE;
       break;
    default:
       unreachable("invalid shader type");
@@ -549,7 +551,7 @@ st_create_nir_shader(struct st_context *st, struct pipe_shader_state *state)
    case MESA_SHADER_COMPUTE: {
       struct pipe_compute_state cs = {0};
       cs.ir_type = state->type;
-      cs.req_local_mem = info.shared_size;
+      cs.static_shared_mem = info.shared_size;
 
       if (state->type == PIPE_SHADER_IR_NIR)
          cs.prog = state->ir.nir;
@@ -1311,12 +1313,28 @@ st_serialize_nir(struct gl_program *prog)
 void
 st_finalize_program(struct st_context *st, struct gl_program *prog)
 {
-   if (st->current_program[prog->info.stage] == prog) {
+   struct gl_context *ctx = st->ctx;
+   bool is_bound = false;
+
+   if (prog->info.stage == MESA_SHADER_VERTEX)
+      is_bound = prog == ctx->VertexProgram._Current;
+   else if (prog->info.stage == MESA_SHADER_TESS_CTRL)
+      is_bound = prog == ctx->TessCtrlProgram._Current;
+   else if (prog->info.stage == MESA_SHADER_TESS_EVAL)
+      is_bound = prog == ctx->TessEvalProgram._Current;
+   else if (prog->info.stage == MESA_SHADER_GEOMETRY)
+      is_bound = prog == ctx->GeometryProgram._Current;
+   else if (prog->info.stage == MESA_SHADER_FRAGMENT)
+      is_bound = prog == ctx->FragmentProgram._Current;
+   else if (prog->info.stage == MESA_SHADER_COMPUTE)
+      is_bound = prog == ctx->ComputeProgram._Current;
+
+   if (is_bound) {
       if (prog->info.stage == MESA_SHADER_VERTEX) {
-         st->ctx->Array.NewVertexElements = true;
-         st->dirty |= ST_NEW_VERTEX_PROGRAM(st, prog);
+         ctx->Array.NewVertexElements = true;
+         ctx->NewDriverState |= ST_NEW_VERTEX_PROGRAM(ctx, prog);
       } else {
-         st->dirty |= prog->affected_states;
+         ctx->NewDriverState |= prog->affected_states;
       }
    }
 

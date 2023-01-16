@@ -73,17 +73,18 @@ extern "C" {
   */
 union tgsi_exec_channel
 {
+   alignas(16)
    float    f[TGSI_QUAD_SIZE];
    int      i[TGSI_QUAD_SIZE];
    unsigned u[TGSI_QUAD_SIZE];
-} ALIGN16;
+};
 
 /**
   * A vector[RGBA] of channels[4 pixels]
   */
-struct ALIGN16 tgsi_exec_vector
+struct tgsi_exec_vector
 {
-   union tgsi_exec_channel xyzw[TGSI_NUM_CHANNELS];
+   alignas(16) union tgsi_exec_channel xyzw[TGSI_NUM_CHANNELS];
 };
 
 /**
@@ -286,10 +287,11 @@ typedef void (* apply_sample_offset_func)(
 /**
  * Run-time virtual machine state for executing TGSI shader.
  */
-struct ALIGN16 tgsi_exec_machine
+struct tgsi_exec_machine
 {
    /* Total = program temporaries + internal temporaries
     */
+   alignas(16)
    struct tgsi_exec_vector       Temps[TGSI_EXEC_NUM_TEMPS];
 
    unsigned                       ImmsReserved;

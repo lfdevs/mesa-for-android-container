@@ -34,7 +34,7 @@
 #ifndef ST_DRAW_H
 #define ST_DRAW_H
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 
 struct gl_context;
 struct st_context;

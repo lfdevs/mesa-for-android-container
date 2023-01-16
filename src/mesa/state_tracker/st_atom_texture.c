@@ -190,6 +190,7 @@ st_get_sampler_views(struct st_context *st,
       case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P012:
       case PIPE_FORMAT_P016:
+      case PIPE_FORMAT_P030:
          /* we need one additional R16G16 view: */
          tmpl.format = PIPE_FORMAT_RG1616_UNORM;
          tmpl.swizzle_g = PIPE_SWIZZLE_Y;   /* tmpl from Y plane is R16 */

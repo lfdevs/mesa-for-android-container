@@ -306,18 +306,6 @@ void GpuDataSource::trace(TraceContext &ctx)
       state->was_cleared = false;
    }
 
-   // Save current scheduler for restoring later
-   int prev_sched_policy = sched_getscheduler(0);
-   sched_param prev_priority_param;
-   sched_getparam(0, &prev_priority_param);
-
-   // Use FIFO policy to avoid preemption while collecting counters
-   int sched_policy = SCHED_FIFO;
-   // Do not use max priority to avoid starving migration and watchdog threads
-   int priority_value = sched_get_priority_max(sched_policy) - 1;
-   sched_param priority_param { priority_value };
-   sched_setscheduler(0, sched_policy, &priority_param);
-
    if (driver->dump_perfcnt()) {
       while (auto gpu_timestamp = driver->next()) {
          if (gpu_timestamp <= descriptor_gpu_timestamp) {
@@ -346,9 +334,6 @@ void GpuDataSource::trace(TraceContext &ctx)
       add_timestamp(event, driver);
       last_correlation_timestamp = cpu_ts;
    }
-
-   // Reset normal scheduler
-   sched_setscheduler(0, prev_sched_policy, &prev_priority_param);
 }
 
 void GpuDataSource::trace_callback(TraceContext ctx)

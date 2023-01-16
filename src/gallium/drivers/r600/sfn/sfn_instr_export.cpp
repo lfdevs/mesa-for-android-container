@@ -161,7 +161,7 @@ ExportInstr::from_string_impl(std::istream& is, ValueFactory& vf)
 }
 
 uint8_t
-ExportInstr::allowed_dest_chan_mask() const
+ExportInstr::allowed_src_chan_mask() const
 {
    return value().free_chan_mask();
 }
@@ -254,7 +254,7 @@ ScratchIOInstr::do_print(std::ostream& os) const
    os << (is_read() ? "READ_SCRATCH " : "WRITE_SCRATCH ");
 
    if (is_read()) {
-      os << (value()[0]->is_ssa() ? " S" : " R") << value().sel() << "."
+      os << (value()[0]->has_flag(Register::ssa) ? " S" : " R") << value().sel() << "."
          << writemask_to_swizzle(m_writemask, buf) << " ";
    }
 
@@ -264,7 +264,7 @@ ScratchIOInstr::do_print(std::ostream& os) const
       os << m_loc;
 
    if (!is_read())
-      os << (value()[0]->is_ssa() ? " S" : " R") << value().sel() << "."
+      os << (value()[0]->has_flag(Register::ssa) ? " S" : " R") << value().sel() << "."
          << writemask_to_swizzle(m_writemask, buf);
 
    os << " "
@@ -622,6 +622,13 @@ WriteTFInstr::from_string(std::istream& is, ValueFactory& vf) -> Pointer
 
    return new WriteTFInstr(value);
 }
+
+uint8_t
+WriteTFInstr::allowed_src_chan_mask() const
+{
+   return value().free_chan_mask();
+}
+
 
 bool
 WriteTFInstr::do_ready() const

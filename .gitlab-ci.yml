@@ -23,6 +23,8 @@ variables:
   LIMA_FARM: "online"
   IGALIA_FARM: "online"
   ANHOLT_FARM: "online"
+  VALVE_FARM: "online"
+  AUSTRIANCODER_FARM: "online"  # only etnaviv GPUs
 
 default:
   before_script:
@@ -53,6 +55,7 @@ include:
   - project: 'freedesktop/ci-templates'
     ref: *ci-templates-commit
     file:
+      - '/templates/alpine.yml'
       - '/templates/debian.yml'
       - '/templates/fedora.yml'
   - local: '.gitlab-ci/image-tags.yml'
@@ -127,21 +130,24 @@ stages:
 
 
 .docs-base:
+  variables:
+    BUILDER: html
   extends:
     - .fdo.ci-fairy
     - .build-rules
+  artifacts:
+    expose_as: 'Documentation preview'
+    paths:
+    - public/
   script:
   - apk --no-cache add graphviz doxygen
   - pip3 install sphinx===5.1.1 breathe===4.34.0 mako===1.2.3 sphinx_rtd_theme===1.0.0
   - docs/doxygen-wrapper.py --out-dir=docs/doxygen_xml
-  - sphinx-build -W -b html docs public
+  - sphinx-build -W -b $BUILDER docs public
 
 pages:
   extends: .docs-base
   stage: deploy
-  artifacts:
-    paths:
-    - public
   needs: []
   rules:
     - !reference [.no_scheduled_pipelines-rules, rules]
@@ -170,15 +176,23 @@ test-docs-mr:
     - test-docs
   needs:
     - sanity
-  artifacts:
-    expose_as: 'Documentation preview'
-    paths:
-    - public/
   rules:
     - if: *is-pre-merge
       changes: *docs-or-ci
       when: on_success
     # Other cases default to never
+
+lincheck-docs:
+  extends: .docs-base
+  # Cancel job if a newer commit is pushed to the same branch
+  interruptible: true
+  stage: deploy
+  needs: []
+  rules:
+    - !reference [.scheduled_pipeline-rules, rules]
+  allow_failure: true
+  variables:
+    BUILDER: linkcheck
 
 # When to automatically run the CI for build jobs
 .build-rules:

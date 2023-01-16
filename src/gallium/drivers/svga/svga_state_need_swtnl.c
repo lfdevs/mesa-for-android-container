@@ -69,11 +69,11 @@ update_need_pipeline(struct svga_context *svga, uint64_t dirty)
    if (svga->curr.rast &&
        (svga->curr.rast->need_pipeline & (1 << svga->curr.reduced_prim))) {
       SVGA_DBG(DEBUG_SWTNL, "%s: rast need_pipeline (0x%x) & prim (0x%x)\n",
-                 __FUNCTION__,
+                 __func__,
                  svga->curr.rast->need_pipeline,
                  (1 << svga->curr.reduced_prim) );
       SVGA_DBG(DEBUG_SWTNL, "%s: rast need_pipeline tris (%s), lines (%s), points (%s)\n",
-                 __FUNCTION__,
+                 __func__,
                  svga->curr.rast->need_pipeline_tris_str,
                  svga->curr.rast->need_pipeline_lines_str,
                  svga->curr.rast->need_pipeline_points_str);
@@ -97,7 +97,7 @@ update_need_pipeline(struct svga_context *svga, uint64_t dirty)
    /* EDGEFLAGS
     */
     if (vs && vs->base.info.writes_edgeflag) {
-      SVGA_DBG(DEBUG_SWTNL, "%s: edgeflags\n", __FUNCTION__);
+      SVGA_DBG(DEBUG_SWTNL, "%s: edgeflags\n", __func__);
       need_pipeline = TRUE;
       reason = "edge flags";
    }
@@ -183,7 +183,7 @@ update_need_swtnl(struct svga_context *svga, uint64_t dirty)
    if (need_swtnl != svga->state.sw.need_swtnl) {
       SVGA_DBG(DEBUG_SWTNL|DEBUG_PERF,
                "%s: need_swvfetch %s, need_pipeline %s\n",
-               __FUNCTION__,
+               __func__,
                svga->state.sw.need_swvfetch ? "true" : "false",
                svga->state.sw.need_pipeline ? "true" : "false");
 

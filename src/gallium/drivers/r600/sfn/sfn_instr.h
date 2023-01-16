@@ -136,7 +136,7 @@ public:
    const InstrList& dependend_instr() { return m_dependend_instr; }
 
    virtual AluInstr *as_alu() { return nullptr; }
-   virtual uint8_t allowed_dest_chan_mask() const { return 0; }
+   virtual uint8_t allowed_src_chan_mask() const { return 0; }
 
 protected:
    const InstrList& required_instr() const { return m_required_instr; }

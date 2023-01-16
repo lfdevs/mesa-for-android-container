@@ -73,6 +73,9 @@ pub trait HelperContextWrapper {
 
     fn texture_map_coherent(&self, res: &PipeResource, bx: &pipe_box, rw: RWFlags) -> PipeTransfer;
 
+    fn create_compute_state(&self, nir: &NirShader, static_local_mem: u32) -> *mut c_void;
+    fn delete_compute_state(&self, cso: *mut c_void);
+
     fn unmap(&self, tx: PipeTransfer);
 }
 
@@ -146,6 +149,14 @@ impl<'a> HelperContextWrapper for HelperContext<'a> {
     fn texture_map_coherent(&self, res: &PipeResource, bx: &pipe_box, rw: RWFlags) -> PipeTransfer {
         self.lock
             .texture_map(res, bx, rw, ResourceMapType::Coherent)
+    }
+
+    fn create_compute_state(&self, nir: &NirShader, static_local_mem: u32) -> *mut c_void {
+        self.lock.create_compute_state(nir, static_local_mem)
+    }
+
+    fn delete_compute_state(&self, cso: *mut c_void) {
+        self.lock.delete_compute_state(cso)
     }
 
     fn unmap(&self, tx: PipeTransfer) {
@@ -725,6 +736,18 @@ impl Device {
             return 0;
         }
         id as u32
+    }
+
+    pub fn shareable_shaders(&self) -> bool {
+        self.screen.param(pipe_cap::PIPE_CAP_SHAREABLE_SHADERS) == 1
+    }
+
+    pub fn images_as_deref(&self) -> bool {
+        self.screen.param(pipe_cap::PIPE_CAP_NIR_IMAGES_AS_DEREF) == 1
+    }
+
+    pub fn samplers_as_deref(&self) -> bool {
+        self.screen.param(pipe_cap::PIPE_CAP_NIR_SAMPLERS_AS_DEREF) == 1
     }
 
     pub fn helper_ctx(&self) -> impl HelperContextWrapper + '_ {

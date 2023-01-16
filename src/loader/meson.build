@@ -42,7 +42,7 @@ loader_c_args = [
 ]
 libloader = static_library(
   'loader',
-  ['loader_dri_helper.c', 'loader.c'],
+  ['loader_dri_helper.c', 'loader.c', sha1_h],
   c_args : loader_c_args,
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_util],

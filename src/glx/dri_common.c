@@ -413,7 +413,7 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
    }
 
    if (__glxHashInsert(priv->drawHash, glxDrawable, pdraw)) {
-      (*pdraw->destroyDrawable) (pdraw);
+      pdraw->destroyDrawable(pdraw);
       return NULL;
    }
    pdraw->refcount = 1;

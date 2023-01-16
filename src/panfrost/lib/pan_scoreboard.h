@@ -31,27 +31,27 @@
 #include "pan_pool.h"
 
 struct pan_scoreboard {
-        /* The first job in the batch */
-        mali_ptr first_job;
+   /* The first job in the batch */
+   mali_ptr first_job;
 
-        /* The number of jobs in the primary batch, essentially */
-        unsigned job_index;
+   /* The number of jobs in the primary batch, essentially */
+   unsigned job_index;
 
-        /* A CPU-side pointer to the previous job for next_job linking */
-        struct mali_job_header_packed *prev_job;
+   /* A CPU-side pointer to the previous job for next_job linking */
+   struct mali_job_header_packed *prev_job;
 
-        /* A CPU-side pointer to the first tiler job for dep updates when
-         * injecting a reload tiler job.
-         */
-        struct mali_job_header_packed *first_tiler;
-        uint32_t first_tiler_dep1;
+   /* A CPU-side pointer to the first tiler job for dep updates when
+    * injecting a reload tiler job.
+    */
+   struct mali_job_header_packed *first_tiler;
+   uint32_t first_tiler_dep1;
 
-        /* The dependency for tiler jobs (i.e. the index of the last emitted
-         * tiler job, or zero if none have been emitted) */
-        unsigned tiler_dep;
+   /* The dependency for tiler jobs (i.e. the index of the last emitted
+    * tiler job, or zero if none have been emitted) */
+   unsigned tiler_dep;
 
-        /* The job index of the WRITE_VALUE job (before it has been created) */
-        unsigned write_value_index;
+   /* The job index of the WRITE_VALUE job (before it has been created) */
+   unsigned write_value_index;
 };
 
 #ifdef PAN_ARCH
@@ -132,16 +132,16 @@ static bool
 panfrost_job_uses_tiling(enum mali_job_type type)
 {
 #if PAN_ARCH >= 9
-        if (type == MALI_JOB_TYPE_MALLOC_VERTEX)
-                return true;
+   if (type == MALI_JOB_TYPE_MALLOC_VERTEX)
+      return true;
 #endif
 
 #if PAN_ARCH >= 6
-        if (type == MALI_JOB_TYPE_INDEXED_VERTEX)
-                return true;
+   if (type == MALI_JOB_TYPE_INDEXED_VERTEX)
+      return true;
 #endif
 
-        return (type == MALI_JOB_TYPE_TILER);
+   return (type == MALI_JOB_TYPE_TILER);
 }
 
 /* Generates, uploads, and queues a a new job. All fields are written in order
@@ -154,83 +154,80 @@ panfrost_job_uses_tiling(enum mali_job_type type)
  * not wallpapering and set this, dragons will eat you. */
 
 static inline unsigned
-panfrost_add_job(struct pan_pool *pool,
-                 struct pan_scoreboard *scoreboard,
-                 enum mali_job_type type,
-                 bool barrier, bool suppress_prefetch,
+panfrost_add_job(struct pan_pool *pool, struct pan_scoreboard *scoreboard,
+                 enum mali_job_type type, bool barrier, bool suppress_prefetch,
                  unsigned local_dep, unsigned global_dep,
-                 const struct panfrost_ptr *job,
-                 bool inject)
+                 const struct panfrost_ptr *job, bool inject)
 {
-        if (panfrost_job_uses_tiling(type)) {
-                /* Tiler jobs must be chained, and on Midgard, the first tiler
-                 * job must depend on the write value job, whose index we
-                 * reserve now */
+   if (panfrost_job_uses_tiling(type)) {
+      /* Tiler jobs must be chained, and on Midgard, the first tiler
+       * job must depend on the write value job, whose index we
+       * reserve now */
 
-                if (PAN_ARCH <= 5 && !scoreboard->write_value_index)
-                        scoreboard->write_value_index = ++scoreboard->job_index;
+      if (PAN_ARCH <= 5 && !scoreboard->write_value_index)
+         scoreboard->write_value_index = ++scoreboard->job_index;
 
-                if (scoreboard->tiler_dep && !inject)
-                        global_dep = scoreboard->tiler_dep;
-                else if (PAN_ARCH <= 5)
-                        global_dep = scoreboard->write_value_index;
-        }
+      if (scoreboard->tiler_dep && !inject)
+         global_dep = scoreboard->tiler_dep;
+      else if (PAN_ARCH <= 5)
+         global_dep = scoreboard->write_value_index;
+   }
 
-        /* Assign the index */
-        unsigned index = ++scoreboard->job_index;
+   /* Assign the index */
+   unsigned index = ++scoreboard->job_index;
 
-        pan_pack(job->cpu, JOB_HEADER, header) {
-                header.type = type;
-                header.barrier = barrier;
-                header.suppress_prefetch = suppress_prefetch;
-                header.index = index;
-                header.dependency_1 = local_dep;
-                header.dependency_2 = global_dep;
+   pan_pack(job->cpu, JOB_HEADER, header) {
+      header.type = type;
+      header.barrier = barrier;
+      header.suppress_prefetch = suppress_prefetch;
+      header.index = index;
+      header.dependency_1 = local_dep;
+      header.dependency_2 = global_dep;
 
-                if (inject)
-                        header.next = scoreboard->first_job;
-        }
+      if (inject)
+         header.next = scoreboard->first_job;
+   }
 
-        if (inject) {
-                assert(type == MALI_JOB_TYPE_TILER && "only for blit shaders");
+   if (inject) {
+      assert(type == MALI_JOB_TYPE_TILER && "only for blit shaders");
 
-                if (scoreboard->first_tiler) {
-                        /* Manual update of the dep2 field. This is bad,
-                         * don't copy this pattern.
-                         */
-                        scoreboard->first_tiler->opaque[5] =
-                                scoreboard->first_tiler_dep1 | (index << 16);
-                }
+      if (scoreboard->first_tiler) {
+         /* Manual update of the dep2 field. This is bad,
+          * don't copy this pattern.
+          */
+         scoreboard->first_tiler->opaque[5] =
+            scoreboard->first_tiler_dep1 | (index << 16);
+      }
 
-                scoreboard->first_tiler = (void *)job->cpu;
-                scoreboard->first_tiler_dep1 = local_dep;
-                scoreboard->first_job = job->gpu;
-                return index;
-        }
+      scoreboard->first_tiler = (void *)job->cpu;
+      scoreboard->first_tiler_dep1 = local_dep;
+      scoreboard->first_job = job->gpu;
+      return index;
+   }
 
-        /* Form a chain */
-        if (panfrost_job_uses_tiling(type)) {
-                if (!scoreboard->first_tiler) {
-                        scoreboard->first_tiler = (void *)job->cpu;
-                        scoreboard->first_tiler_dep1 = local_dep;
-                }
-                scoreboard->tiler_dep = index;
-        }
+   /* Form a chain */
+   if (panfrost_job_uses_tiling(type)) {
+      if (!scoreboard->first_tiler) {
+         scoreboard->first_tiler = (void *)job->cpu;
+         scoreboard->first_tiler_dep1 = local_dep;
+      }
+      scoreboard->tiler_dep = index;
+   }
 
-        if (scoreboard->prev_job) {
-                /* Manual update of the next pointer. This is bad, don't copy
-                 * this pattern.
-                 * TODO: Find a way to defer last job header emission until we
-                 * have a new job to queue or the batch is ready for execution.
-                 */
-                scoreboard->prev_job->opaque[6] = job->gpu;
-                scoreboard->prev_job->opaque[7] = job->gpu >> 32;
-	} else {
-                scoreboard->first_job = job->gpu;
-        }
+   if (scoreboard->prev_job) {
+      /* Manual update of the next pointer. This is bad, don't copy
+       * this pattern.
+       * TODO: Find a way to defer last job header emission until we
+       * have a new job to queue or the batch is ready for execution.
+       */
+      scoreboard->prev_job->opaque[6] = job->gpu;
+      scoreboard->prev_job->opaque[7] = job->gpu >> 32;
+   } else {
+      scoreboard->first_job = job->gpu;
+   }
 
-        scoreboard->prev_job = (struct mali_job_header_packed *)job->cpu;
-        return index;
+   scoreboard->prev_job = (struct mali_job_header_packed *)job->cpu;
+   return index;
 }
 
 /* Generates a write value job, used to initialize the tiler structures. Note
@@ -241,30 +238,30 @@ panfrost_scoreboard_initialize_tiler(struct pan_pool *pool,
                                      struct pan_scoreboard *scoreboard,
                                      mali_ptr polygon_list)
 {
-        struct panfrost_ptr transfer = { 0 };
+   struct panfrost_ptr transfer = {0};
 
-        /* Check if we even need tiling */
-        if (PAN_ARCH >= 6 || !scoreboard->first_tiler)
-                return transfer;
+   /* Check if we even need tiling */
+   if (PAN_ARCH >= 6 || !scoreboard->first_tiler)
+      return transfer;
 
-        /* Okay, we do. Let's generate it. We'll need the job's polygon list
-         * regardless of size. */
+   /* Okay, we do. Let's generate it. We'll need the job's polygon list
+    * regardless of size. */
 
-        transfer = pan_pool_alloc_desc(pool, WRITE_VALUE_JOB);
+   transfer = pan_pool_alloc_desc(pool, WRITE_VALUE_JOB);
 
-        pan_section_pack(transfer.cpu, WRITE_VALUE_JOB, HEADER, header) {
-                header.type = MALI_JOB_TYPE_WRITE_VALUE;
-                header.index = scoreboard->write_value_index;
-                header.next = scoreboard->first_job;
-        }
+   pan_section_pack(transfer.cpu, WRITE_VALUE_JOB, HEADER, header) {
+      header.type = MALI_JOB_TYPE_WRITE_VALUE;
+      header.index = scoreboard->write_value_index;
+      header.next = scoreboard->first_job;
+   }
 
-        pan_section_pack(transfer.cpu, WRITE_VALUE_JOB, PAYLOAD, payload) {
-                payload.address = polygon_list;
-                payload.type = MALI_WRITE_VALUE_TYPE_ZERO;
-        }
+   pan_section_pack(transfer.cpu, WRITE_VALUE_JOB, PAYLOAD, payload) {
+      payload.address = polygon_list;
+      payload.type = MALI_WRITE_VALUE_TYPE_ZERO;
+   }
 
-        scoreboard->first_job = transfer.gpu;
-        return transfer;
+   scoreboard->first_job = transfer.gpu;
+   return transfer;
 }
 #endif /* PAN_ARCH */
 

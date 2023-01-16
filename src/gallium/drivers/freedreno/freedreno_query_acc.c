@@ -64,7 +64,6 @@ realloc_query_bo(struct fd_context *ctx, struct fd_acc_query *aq)
 
    map = fd_bo_map(rsc->bo);
    memset(map, 0, aq->size);
-   fd_bo_cpu_fini(rsc->bo);
 }
 
 static void
@@ -193,7 +192,6 @@ fd_acc_get_query_result(struct fd_context *ctx, struct fd_query *q, bool wait,
 
    struct fd_acc_query_sample *s = fd_bo_map(rsc->bo);
    p->result(aq, s, result);
-   fd_bo_cpu_fini(rsc->bo);
 
    return true;
 }

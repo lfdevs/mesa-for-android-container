@@ -86,7 +86,7 @@ GENXML_DESC = {
     'struct'      : [ 'name', 'length', ],
     'field'       : [ 'name', 'start', 'end', 'type', 'default', 'prefix', 'nonzero' ],
     'instruction' : [ 'name', 'bias', 'length', 'engine', ],
-    'value'       : [ 'name', 'value', ],
+    'value'       : [ 'name', 'value', 'dont_use', ],
     'group'       : [ 'count', 'start', 'size', ],
     'register'    : [ 'name', 'length', 'num', ],
 }

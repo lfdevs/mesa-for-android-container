@@ -14310,6 +14310,126 @@ vn_encode_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT_partial(struct vn_
     vn_encode_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT_self_partial(enc, val);
 }
 
+/* struct VkPhysicalDevicePCIBusInfoPropertiesEXT chain */
+
+static inline size_t
+vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_self(const VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_uint32_t(&val->pciDomain);
+    size += vn_sizeof_uint32_t(&val->pciBus);
+    size += vn_sizeof_uint32_t(&val->pciDevice);
+    size += vn_sizeof_uint32_t(&val->pciFunction);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT(const VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext(val->pNext);
+    size += vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_self(val);
+
+    return size;
+}
+
+static inline void
+vn_decode_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext(struct vn_cs_decoder *dec, const void *val)
+{
+    /* no known/supported struct */
+    if (vn_decode_simple_pointer(dec))
+        assert(false);
+}
+
+static inline void
+vn_decode_VkPhysicalDevicePCIBusInfoPropertiesEXT_self(struct vn_cs_decoder *dec, VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_decode_uint32_t(dec, &val->pciDomain);
+    vn_decode_uint32_t(dec, &val->pciBus);
+    vn_decode_uint32_t(dec, &val->pciDevice);
+    vn_decode_uint32_t(dec, &val->pciFunction);
+}
+
+static inline void
+vn_decode_VkPhysicalDevicePCIBusInfoPropertiesEXT(struct vn_cs_decoder *dec, VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    VkStructureType stype;
+    vn_decode_VkStructureType(dec, &stype);
+    assert(stype == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT);
+
+    assert(val->sType == stype);
+    vn_decode_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext(dec, val->pNext);
+    vn_decode_VkPhysicalDevicePCIBusInfoPropertiesEXT_self(dec, val);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext_partial(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_self_partial(const VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    /* skip val->pciDomain */
+    /* skip val->pciBus */
+    /* skip val->pciDevice */
+    /* skip val->pciFunction */
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_partial(const VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext_partial(val->pNext);
+    size += vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_self_partial(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext_partial(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkPhysicalDevicePCIBusInfoPropertiesEXT_self_partial(struct vn_cs_encoder *enc, const VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    /* skip val->pciDomain */
+    /* skip val->pciBus */
+    /* skip val->pciDevice */
+    /* skip val->pciFunction */
+}
+
+static inline void
+vn_encode_VkPhysicalDevicePCIBusInfoPropertiesEXT_partial(struct vn_cs_encoder *enc, const VkPhysicalDevicePCIBusInfoPropertiesEXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT });
+    vn_encode_VkPhysicalDevicePCIBusInfoPropertiesEXT_pnext_partial(enc, val->pNext);
+    vn_encode_VkPhysicalDevicePCIBusInfoPropertiesEXT_self_partial(enc, val);
+}
+
 /* struct VkPhysicalDeviceDepthStencilResolveProperties chain */
 
 static inline size_t
@@ -16382,6 +16502,14 @@ vn_sizeof_VkPhysicalDeviceProperties2_pnext(const void *val)
             size += vn_sizeof_VkPhysicalDeviceProperties2_pnext(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT_self((const VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)pnext);
             return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(213 /* VK_EXT_pci_bus_info */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkPhysicalDeviceProperties2_pnext(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_self((const VkPhysicalDevicePCIBusInfoPropertiesEXT *)pnext);
+            return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES:
             size += vn_sizeof_simple_pointer(pnext);
             size += vn_sizeof_VkStructureType(&pnext->sType);
@@ -16590,6 +16718,10 @@ vn_decode_VkPhysicalDeviceProperties2_pnext(struct vn_cs_decoder *dec, const voi
         vn_decode_VkPhysicalDeviceProperties2_pnext(dec, pnext->pNext);
         vn_decode_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT_self(dec, (VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)pnext);
         break;
+    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
+        vn_decode_VkPhysicalDeviceProperties2_pnext(dec, pnext->pNext);
+        vn_decode_VkPhysicalDevicePCIBusInfoPropertiesEXT_self(dec, (VkPhysicalDevicePCIBusInfoPropertiesEXT *)pnext);
+        break;
     case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES:
         vn_decode_VkPhysicalDeviceProperties2_pnext(dec, pnext->pNext);
         vn_decode_VkPhysicalDeviceDepthStencilResolveProperties_self(dec, (VkPhysicalDeviceDepthStencilResolveProperties *)pnext);
@@ -16784,6 +16916,14 @@ vn_sizeof_VkPhysicalDeviceProperties2_pnext_partial(const void *val)
             size += vn_sizeof_VkStructureType(&pnext->sType);
             size += vn_sizeof_VkPhysicalDeviceProperties2_pnext_partial(pnext->pNext);
             size += vn_sizeof_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT_self_partial((const VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)pnext);
+            return size;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(213 /* VK_EXT_pci_bus_info */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkPhysicalDeviceProperties2_pnext_partial(pnext->pNext);
+            size += vn_sizeof_VkPhysicalDevicePCIBusInfoPropertiesEXT_self_partial((const VkPhysicalDevicePCIBusInfoPropertiesEXT *)pnext);
             return size;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES:
             size += vn_sizeof_simple_pointer(pnext);
@@ -17027,6 +17167,14 @@ vn_encode_VkPhysicalDeviceProperties2_pnext_partial(struct vn_cs_encoder *enc, c
             vn_encode_VkPhysicalDeviceProperties2_pnext_partial(enc, pnext->pNext);
             vn_encode_VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT_self_partial(enc, (const VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)pnext);
             return;
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(213 /* VK_EXT_pci_bus_info */))
+                break;
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkPhysicalDeviceProperties2_pnext_partial(enc, pnext->pNext);
+            vn_encode_VkPhysicalDevicePCIBusInfoPropertiesEXT_self_partial(enc, (const VkPhysicalDevicePCIBusInfoPropertiesEXT *)pnext);
+            return;
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES:
             vn_encode_simple_pointer(enc, pnext);
             vn_encode_VkStructureType(enc, &pnext->sType);
@@ -17265,7 +17413,7 @@ vn_sizeof_VkDrmFormatModifierPropertiesListEXT_self_partial(const VkDrmFormatMod
 {
     size_t size = 0;
     /* skip val->{sType,pNext} */
-    /* WA1: size += vn_sizeof_uint32_t(&val->drmFormatModifierCount) */(void)0;
+    /* WA1: size += vn_sizeof_uint32_t(&val->drmFormatModifierCount); */(void)0;
     if (val->pDrmFormatModifierProperties) {
         size += vn_sizeof_array_size(val->drmFormatModifierCount);
         for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
@@ -17299,7 +17447,7 @@ static inline void
 vn_encode_VkDrmFormatModifierPropertiesListEXT_self_partial(struct vn_cs_encoder *enc, const VkDrmFormatModifierPropertiesListEXT *val)
 {
     /* skip val->{sType,pNext} */
-    /* WA1: vn_encode_uint32_t(enc, &val->drmFormatModifierCount) */(void)0;
+    /* WA1: vn_encode_uint32_t(enc, &val->drmFormatModifierCount); */(void)0;
     if (val->pDrmFormatModifierProperties) {
         vn_encode_array_size(enc, val->drmFormatModifierCount);
         for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
@@ -17556,7 +17704,7 @@ vn_sizeof_VkDrmFormatModifierPropertiesList2EXT_self_partial(const VkDrmFormatMo
 {
     size_t size = 0;
     /* skip val->{sType,pNext} */
-    /* WA1: size += vn_sizeof_uint32_t(&val->drmFormatModifierCount) */(void)0;
+    /* WA1: size += vn_sizeof_uint32_t(&val->drmFormatModifierCount); */(void)0;
     if (val->pDrmFormatModifierProperties) {
         size += vn_sizeof_array_size(val->drmFormatModifierCount);
         for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
@@ -17590,7 +17738,7 @@ static inline void
 vn_encode_VkDrmFormatModifierPropertiesList2EXT_self_partial(struct vn_cs_encoder *enc, const VkDrmFormatModifierPropertiesList2EXT *val)
 {
     /* skip val->{sType,pNext} */
-    /* WA1: vn_encode_uint32_t(enc, &val->drmFormatModifierCount) */(void)0;
+    /* WA1: vn_encode_uint32_t(enc, &val->drmFormatModifierCount); */(void)0;
     if (val->pDrmFormatModifierProperties) {
         vn_encode_array_size(enc, val->drmFormatModifierCount);
         for (uint32_t i = 0; i < val->drmFormatModifierCount; i++)
@@ -19608,12 +19756,82 @@ vn_encode_VkPhysicalDeviceGroupProperties_partial(struct vn_cs_encoder *enc, con
     vn_encode_VkPhysicalDeviceGroupProperties_self_partial(enc, val);
 }
 
+/* struct VkDeviceQueueTimelineInfoMESA chain */
+
+static inline size_t
+vn_sizeof_VkDeviceQueueTimelineInfoMESA_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkDeviceQueueTimelineInfoMESA_self(const VkDeviceQueueTimelineInfoMESA *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_uint32_t(&val->ringIdx);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkDeviceQueueTimelineInfoMESA(const VkDeviceQueueTimelineInfoMESA *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkDeviceQueueTimelineInfoMESA_pnext(val->pNext);
+    size += vn_sizeof_VkDeviceQueueTimelineInfoMESA_self(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkDeviceQueueTimelineInfoMESA_pnext(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkDeviceQueueTimelineInfoMESA_self(struct vn_cs_encoder *enc, const VkDeviceQueueTimelineInfoMESA *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_encode_uint32_t(enc, &val->ringIdx);
+}
+
+static inline void
+vn_encode_VkDeviceQueueTimelineInfoMESA(struct vn_cs_encoder *enc, const VkDeviceQueueTimelineInfoMESA *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA });
+    vn_encode_VkDeviceQueueTimelineInfoMESA_pnext(enc, val->pNext);
+    vn_encode_VkDeviceQueueTimelineInfoMESA_self(enc, val);
+}
+
 /* struct VkDeviceQueueInfo2 chain */
 
 static inline size_t
 vn_sizeof_VkDeviceQueueInfo2_pnext(const void *val)
 {
-    /* no known/supported struct */
+    const VkBaseInStructure *pnext = val;
+    size_t size = 0;
+
+    while (pnext) {
+        switch ((int32_t)pnext->sType) {
+        case VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA:
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkDeviceQueueInfo2_pnext(pnext->pNext);
+            size += vn_sizeof_VkDeviceQueueTimelineInfoMESA_self((const VkDeviceQueueTimelineInfoMESA *)pnext);
+            return size;
+        default:
+            /* ignore unknown/unsupported struct */
+            break;
+        }
+        pnext = pnext->pNext;
+    }
+
     return vn_sizeof_simple_pointer(NULL);
 }
 
@@ -19643,7 +19861,23 @@ vn_sizeof_VkDeviceQueueInfo2(const VkDeviceQueueInfo2 *val)
 static inline void
 vn_encode_VkDeviceQueueInfo2_pnext(struct vn_cs_encoder *enc, const void *val)
 {
-    /* no known/supported struct */
+    const VkBaseInStructure *pnext = val;
+
+    while (pnext) {
+        switch ((int32_t)pnext->sType) {
+        case VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA:
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkDeviceQueueInfo2_pnext(enc, pnext->pNext);
+            vn_encode_VkDeviceQueueTimelineInfoMESA_self(enc, (const VkDeviceQueueTimelineInfoMESA *)pnext);
+            return;
+        default:
+            /* ignore unknown/unsupported struct */
+            break;
+        }
+        pnext = pnext->pNext;
+    }
+
     vn_encode_simple_pointer(enc, NULL);
 }
 

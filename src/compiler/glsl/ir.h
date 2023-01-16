@@ -1128,17 +1128,6 @@ enum ir_intrinsic_id {
    ir_intrinsic_image_atomic_dec_wrap,
    ir_intrinsic_image_sparse_load,
 
-   ir_intrinsic_ssbo_load,
-   ir_intrinsic_ssbo_store = MAKE_INTRINSIC_FOR_TYPE(store, ssbo),
-   ir_intrinsic_ssbo_atomic_add = MAKE_INTRINSIC_FOR_TYPE(atomic_add, ssbo),
-   ir_intrinsic_ssbo_atomic_and = MAKE_INTRINSIC_FOR_TYPE(atomic_and, ssbo),
-   ir_intrinsic_ssbo_atomic_or = MAKE_INTRINSIC_FOR_TYPE(atomic_or, ssbo),
-   ir_intrinsic_ssbo_atomic_xor = MAKE_INTRINSIC_FOR_TYPE(atomic_xor, ssbo),
-   ir_intrinsic_ssbo_atomic_min = MAKE_INTRINSIC_FOR_TYPE(atomic_min, ssbo),
-   ir_intrinsic_ssbo_atomic_max = MAKE_INTRINSIC_FOR_TYPE(atomic_max, ssbo),
-   ir_intrinsic_ssbo_atomic_exchange = MAKE_INTRINSIC_FOR_TYPE(atomic_exchange, ssbo),
-   ir_intrinsic_ssbo_atomic_comp_swap = MAKE_INTRINSIC_FOR_TYPE(atomic_comp_swap, ssbo),
-
    ir_intrinsic_memory_barrier,
    ir_intrinsic_shader_clock,
    ir_intrinsic_group_memory_barrier,

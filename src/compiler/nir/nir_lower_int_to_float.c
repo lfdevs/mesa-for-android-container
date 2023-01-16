@@ -34,6 +34,51 @@ assert_ssa_def_is_not_int(nir_ssa_def *def, void *arg)
 }
 
 static bool
+instr_has_only_trivial_swizzles(nir_alu_instr *alu)
+{
+   const nir_op_info *info = &nir_op_infos[alu->op];
+
+   for (unsigned i = 0; i < info->num_inputs; i++) {
+      for (unsigned chan = 0; chan < alu->dest.dest.ssa.num_components; chan++) {
+         if (alu->src[i].swizzle[chan] != chan)
+            return false;
+      }
+   }
+   return true;
+}
+
+/* Recognize the y = x - ffract(x) patterns from lowered ffloor.
+ * It only works for the simple case when no swizzling is involved.
+ */
+static bool
+check_for_lowered_ffloor(nir_alu_instr *fadd)
+{
+   if (!instr_has_only_trivial_swizzles(fadd))
+      return false;
+
+   nir_alu_instr *fneg = NULL;
+   nir_src x;
+   for (unsigned i = 0; i < 2; i++) {
+      nir_alu_instr *fadd_src_alu = nir_src_as_alu_instr(fadd->src[i].src);
+      if (fadd_src_alu && fadd_src_alu->op == nir_op_fneg) {
+         fneg = fadd_src_alu;
+         x = fadd->src[1 - i].src;
+      }
+   }
+
+   if (!fneg || !instr_has_only_trivial_swizzles(fneg))
+      return false;
+
+   nir_alu_instr *ffract = nir_src_as_alu_instr(fneg->src[0].src);
+   if (ffract && ffract->op == nir_op_ffract &&
+       nir_srcs_equal(ffract->src[0].src, x) &&
+       instr_has_only_trivial_swizzles(ffract))
+      return true;
+
+   return false;
+}
+
+static bool
 lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
 {
    const nir_op_info *info = &nir_op_infos[alu->op];
@@ -75,6 +120,11 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
       nir_alu_instr *src_alu = nir_src_as_alu_instr(alu->src[0].src);
       if (src_alu) {
          switch (src_alu->op) {
+         /* Check for the y = x - ffract(x) patterns from lowered ffloor. */
+         case nir_op_fadd:
+            if (check_for_lowered_ffloor(src_alu))
+               alu->op = nir_op_mov;
+            break;
          case nir_op_fround_even:
          case nir_op_fceil:
          case nir_op_ftrunc:
@@ -89,7 +139,6 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    }
 
    case nir_op_f2u32: alu->op = nir_op_ffloor; break;
-   case nir_op_i2b1: alu->op = nir_op_f2b1; break;
 
    case nir_op_ilt: alu->op = nir_op_flt; break;
    case nir_op_ige: alu->op = nir_op_fge; break;

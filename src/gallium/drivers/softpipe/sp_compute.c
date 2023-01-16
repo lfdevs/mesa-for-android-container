@@ -184,8 +184,9 @@ softpipe_launch_grid(struct pipe_context *context,
 
    fill_grid_size(context, info, grid_size);
 
-   if (cs->shader.req_local_mem) {
-      local_mem = CALLOC(1, cs->shader.req_local_mem);
+   uint32_t shared_mem_size = cs->shader.static_shared_mem + info->variable_shared_mem;
+   if (shared_mem_size) {
+      local_mem = CALLOC(1, shared_mem_size);
    }
 
    machines = CALLOC(sizeof(struct tgsi_exec_machine *), num_threads_in_group);
@@ -202,7 +203,7 @@ softpipe_launch_grid(struct pipe_context *context,
             machines[idx] = tgsi_exec_machine_create(PIPE_SHADER_COMPUTE);
 
             machines[idx]->LocalMem = local_mem;
-            machines[idx]->LocalMemSize = cs->shader.req_local_mem;
+            machines[idx]->LocalMemSize = shared_mem_size;
             machines[idx]->NonHelperMask = (1 << (MIN2(TGSI_QUAD_SIZE, bwidth - local_x))) - 1;
             cs_prepare(cs, machines[idx],
                        local_x, local_y, local_z,

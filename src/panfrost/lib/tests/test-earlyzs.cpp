@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#include "pan_earlyzs.h"
 #include "util/pan_ir.h"
+#include "pan_earlyzs.h"
 
 #include <gtest/gtest.h>
 
@@ -34,18 +34,19 @@
  * under test, only the external API. So we test only the composition.
  */
 
-#define ZS_WRITEMASK BITFIELD_BIT(0)
-#define ALPHA2COV BITFIELD_BIT(1)
+#define ZS_WRITEMASK     BITFIELD_BIT(0)
+#define ALPHA2COV        BITFIELD_BIT(1)
 #define ZS_ALWAYS_PASSES BITFIELD_BIT(2)
-#define DISCARD BITFIELD_BIT(3)
-#define WRITES_Z BITFIELD_BIT(4)
-#define WRITES_S BITFIELD_BIT(5)
-#define WRITES_COV BITFIELD_BIT(6)
-#define SIDEFX BITFIELD_BIT(7)
-#define API_EARLY BITFIELD_BIT(8)
+#define DISCARD          BITFIELD_BIT(3)
+#define WRITES_Z         BITFIELD_BIT(4)
+#define WRITES_S         BITFIELD_BIT(5)
+#define WRITES_COV       BITFIELD_BIT(6)
+#define SIDEFX           BITFIELD_BIT(7)
+#define API_EARLY        BITFIELD_BIT(8)
 
 static void
-test(enum pan_earlyzs expected_update, enum pan_earlyzs expected_kill, uint32_t flags)
+test(enum pan_earlyzs expected_update, enum pan_earlyzs expected_kill,
+     uint32_t flags)
 {
    struct pan_shader_info info = {};
    info.fs.can_discard = !!(flags & DISCARD);
@@ -56,18 +57,15 @@ test(enum pan_earlyzs expected_update, enum pan_earlyzs expected_kill, uint32_t 
    info.writes_global = !!(flags & SIDEFX);
 
    struct pan_earlyzs_state result =
-      pan_earlyzs_get(pan_earlyzs_analyze(&info),
-                      !!(flags & ZS_WRITEMASK),
-                      !!(flags & ALPHA2COV),
-                      !!(flags & ZS_ALWAYS_PASSES));
+      pan_earlyzs_get(pan_earlyzs_analyze(&info), !!(flags & ZS_WRITEMASK),
+                      !!(flags & ALPHA2COV), !!(flags & ZS_ALWAYS_PASSES));
 
    ASSERT_EQ(result.update, expected_update);
    ASSERT_EQ(result.kill, expected_kill);
 }
 
-
-#define CASE(expected_update, expected_kill, flags) \
-   test(PAN_EARLYZS_ ## expected_update, PAN_EARLYZS_ ## expected_kill, flags)
+#define CASE(expected_update, expected_kill, flags)                            \
+   test(PAN_EARLYZS_##expected_update, PAN_EARLYZS_##expected_kill, flags)
 
 TEST(EarlyZS, APIForceEarly)
 {
@@ -91,7 +89,8 @@ TEST(EarlyZS, ModifiesCoverageWritesZSNoSideFX)
    CASE(FORCE_LATE, FORCE_EARLY, ZS_WRITEMASK | WRITES_COV);
    CASE(FORCE_LATE, FORCE_EARLY, ZS_WRITEMASK | DISCARD);
    CASE(FORCE_LATE, FORCE_EARLY, ZS_WRITEMASK | ALPHA2COV);
-   CASE(FORCE_LATE, FORCE_EARLY, ZS_WRITEMASK | WRITES_COV | DISCARD | ALPHA2COV);
+   CASE(FORCE_LATE, FORCE_EARLY,
+        ZS_WRITEMASK | WRITES_COV | DISCARD | ALPHA2COV);
 }
 
 TEST(EarlyZS, ModifiesCoverageWritesZSNoSideFXAlt)
@@ -99,7 +98,8 @@ TEST(EarlyZS, ModifiesCoverageWritesZSNoSideFXAlt)
    CASE(FORCE_LATE, WEAK_EARLY, ZS_ALWAYS_PASSES | ZS_WRITEMASK | WRITES_COV);
    CASE(FORCE_LATE, WEAK_EARLY, ZS_ALWAYS_PASSES | ZS_WRITEMASK | DISCARD);
    CASE(FORCE_LATE, WEAK_EARLY, ZS_ALWAYS_PASSES | ZS_WRITEMASK | ALPHA2COV);
-   CASE(FORCE_LATE, WEAK_EARLY, ZS_ALWAYS_PASSES | ZS_WRITEMASK | WRITES_COV | DISCARD | ALPHA2COV);
+   CASE(FORCE_LATE, WEAK_EARLY,
+        ZS_ALWAYS_PASSES | ZS_WRITEMASK | WRITES_COV | DISCARD | ALPHA2COV);
 }
 
 TEST(EarlyZS, ModifiesCoverageWritesZSSideFX)
@@ -107,7 +107,8 @@ TEST(EarlyZS, ModifiesCoverageWritesZSSideFX)
    CASE(FORCE_LATE, FORCE_LATE, ZS_WRITEMASK | SIDEFX | WRITES_COV);
    CASE(FORCE_LATE, FORCE_LATE, ZS_WRITEMASK | SIDEFX | DISCARD);
    CASE(FORCE_LATE, FORCE_LATE, ZS_WRITEMASK | SIDEFX | ALPHA2COV);
-   CASE(FORCE_LATE, FORCE_LATE, ZS_WRITEMASK | SIDEFX | WRITES_COV | DISCARD | ALPHA2COV);
+   CASE(FORCE_LATE, FORCE_LATE,
+        ZS_WRITEMASK | SIDEFX | WRITES_COV | DISCARD | ALPHA2COV);
 }
 
 TEST(EarlyZS, SideFXNoShaderZS)
@@ -136,6 +137,7 @@ TEST(EarlyZS, NoSideFXNoShaderZS)
 TEST(EarlyZS, NoSideFXNoShaderZSAlt)
 {
    CASE(WEAK_EARLY, WEAK_EARLY, ZS_ALWAYS_PASSES);
-   CASE(WEAK_EARLY, WEAK_EARLY, ZS_ALWAYS_PASSES | ALPHA2COV | DISCARD | WRITES_COV);
+   CASE(WEAK_EARLY, WEAK_EARLY,
+        ZS_ALWAYS_PASSES | ALPHA2COV | DISCARD | WRITES_COV);
    CASE(WEAK_EARLY, WEAK_EARLY, ZS_ALWAYS_PASSES | ZS_WRITEMASK);
 }

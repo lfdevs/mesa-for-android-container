@@ -227,7 +227,7 @@ vmw_svga_winsys_add_stats(struct vmw_winsys_screen *vws, int slot)
    void *area = mmap(NULL, area_size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED | MAP_NORESERVE, -1, 0);
 
    if (area == MAP_FAILED) {
-      fprintf(stderr, "%s could not mmap memory: %s\n", __FUNCTION__, strerror(errno));
+      fprintf(stderr, "%s could not mmap memory: %s\n", __func__, strerror(errno));
       return -1;
    }
 
@@ -237,13 +237,13 @@ vmw_svga_winsys_add_stats(struct vmw_winsys_screen *vws, int slot)
    pstatTime = vmw_mksstat_get_pstat_time(area, pg_size);
 
    if (mlock(area, area_size)) {
-      fprintf(stderr, "%s could not mlock memory: %s\n", __FUNCTION__, strerror(errno));
+      fprintf(stderr, "%s could not mlock memory: %s\n", __func__, strerror(errno));
       goto error;
    }
 
    /* Suppress pages copy-on-write; for MAP_SHARED this should not really matter; it would if we go MAP_PRIVATE */
    if (madvise(area, area_size, MADV_DONTFORK)) {
-      fprintf(stderr, "%s could not madvise memory: %s\n", __FUNCTION__, strerror(errno));
+      fprintf(stderr, "%s could not madvise memory: %s\n", __func__, strerror(errno));
       goto error;
    }
 
@@ -286,7 +286,7 @@ vmw_svga_winsys_add_stats(struct vmw_winsys_screen *vws, int slot)
          .id = -1U
       };
       if (drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_MKSSTAT_ADD, &arg, sizeof(arg))) {
-         fprintf(stderr, "%s could not ioctl: %s\n", __FUNCTION__, strerror(errno));
+         fprintf(stderr, "%s could not ioctl: %s\n", __func__, strerror(errno));
          goto error;
       }
       id = arg.id;

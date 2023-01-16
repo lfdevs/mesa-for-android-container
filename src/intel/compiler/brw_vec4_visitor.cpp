@@ -1363,7 +1363,6 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
      ubo_push_start(),
      push_length(0),
      live_analysis(this), performance_analysis(this),
-     need_all_constants_in_pull_buffer(false),
      no_spills(no_spills),
      last_scratch(0)
 {

@@ -25,6 +25,7 @@
 #define PROGRAM_PARSER_H
 
 #include "main/config.h"
+#include "program/prog_instruction.h"
 #include "program/prog_parameter.h"
 
 struct gl_context;

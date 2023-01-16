@@ -11,7 +11,7 @@ intel_tracepoint_files = custom_target(
             'intel_tracepoints.c'],
   command : [
     prog_python, '@INPUT@',
-    '-p', join_paths(meson.source_root(), 'src/util/perf/'),
+    '-p', join_paths(dir_source_root, 'src/util/perf/'),
     '--utrace-hdr', '@OUTPUT0@',
     '--perfetto-hdr', '@OUTPUT1@',
     '--utrace-src', '@OUTPUT2@',

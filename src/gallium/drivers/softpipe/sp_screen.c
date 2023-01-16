@@ -64,7 +64,7 @@ DEBUG_GET_ONCE_FLAGS_OPTION(sp_debug, "SOFTPIPE_DEBUG", sp_debug_options, 0)
 static const char *
 softpipe_get_vendor(struct pipe_screen *screen)
 {
-   return "Mesa/X.org";
+   return "Mesa";
 }
 
 

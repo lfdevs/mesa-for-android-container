@@ -177,7 +177,7 @@ struct d3d12_context {
    struct hash_table *compute_transform_cache;
    struct hash_table_u64 *bo_state_table;
 
-   struct d3d12_batch batches[4];
+   struct d3d12_batch batches[8];
    unsigned current_batch_idx;
 
    struct util_dynarray recently_destroyed_bos;
@@ -248,6 +248,7 @@ struct d3d12_context {
    ID3D12GraphicsCommandList *state_fixup_cmdlist;
 
    struct list_head active_queries;
+   struct util_dynarray ended_queries;
    bool queries_disabled;
 
    struct d3d12_descriptor_pool *sampler_pool;

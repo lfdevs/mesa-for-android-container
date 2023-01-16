@@ -48,9 +48,6 @@ public:
    void visit(LDSReadInstr *instr) override { (void)instr; };
    void visit(RatInstr *instr) override { (void)instr; };
 
-   bool src_is_zero(PVirtualValue value);
-   bool src_is_one(PVirtualValue value);
-
    void convert_to_mov(AluInstr *alu, int src_idx);
 
    bool progress{false};
@@ -86,60 +83,35 @@ PeepholeVisitor::visit(AluInstr *instr)
    switch (instr->opcode()) {
    case op2_add:
    case op2_add_int:
-      if (src_is_zero(instr->psrc(0)))
+      if (value_is_const_uint(instr->src(0), 0))
          convert_to_mov(instr, 1);
-      else if (src_is_zero(instr->psrc(1)))
+      else if (value_is_const_uint(instr->src(1), 0))
          convert_to_mov(instr, 0);
       break;
    case op2_mul:
    case op2_mul_ieee:
-      if (src_is_one(instr->psrc(0)))
+      if (value_is_const_float(instr->src(0), 1.0f))
          convert_to_mov(instr, 1);
-      else if (src_is_one(instr->psrc(1)))
+      else if (value_is_const_float(instr->src(1), 1.0f))
          convert_to_mov(instr, 0);
       break;
    case op3_muladd:
    case op3_muladd_ieee:
-      if (src_is_zero(instr->psrc(0)) || src_is_zero(instr->psrc(1)))
+      if (value_is_const_uint(instr->src(0), 0) || value_is_const_uint(instr->src(1), 0))
          convert_to_mov(instr, 2);
       break;
    case op2_killne_int:
-      if (src_is_zero(instr->psrc(1))) {
+      if (value_is_const_uint(instr->src(1), 0)) {
          auto src0 = instr->psrc(0)->as_register();
-         if (src0 && src0->is_ssa()) {
+         if (src0 && src0->has_flag(Register::ssa)) {
             auto parent = *src0->parents().begin();
             ReplacePredicate visitor(instr);
             parent->accept(visitor);
             progress |= visitor.success;
          }
       }
-
    default:;
    }
-}
-
-bool
-PeepholeVisitor::src_is_zero(PVirtualValue value)
-{
-   if (value->as_inline_const() && value->as_inline_const()->sel() == ALU_SRC_0)
-      return true;
-
-   if (value->as_literal() && value->as_literal()->value() == 0)
-      return true;
-
-   return false;
-}
-
-bool
-PeepholeVisitor::src_is_one(PVirtualValue value)
-{
-   if (value->as_inline_const() && value->as_inline_const()->sel() == ALU_SRC_1)
-      return true;
-
-   if (value->as_literal() && value->as_literal()->value() == 0x3f800000)
-      return true;
-
-   return false;
 }
 
 void
@@ -169,9 +141,9 @@ PeepholeVisitor::visit(IfInstr *instr)
    auto pred = instr->predicate();
 
    auto& src1 = pred->src(1);
-   if (src1.as_inline_const() && src1.as_inline_const()->sel() == ALU_SRC_0) {
+   if (value_is_const_uint(src1, 0)) {
       auto src0 = pred->src(0).as_register();
-      if (src0 && src0->is_ssa() && !src0->parents().empty()) {
+      if (src0 && src0->has_flag(Register::ssa) && !src0->parents().empty()) {
          assert(src0->parents().size() == 1);
          auto parent = *src0->parents().begin();
 
@@ -284,7 +256,7 @@ ReplacePredicate::visit(AluInstr *alu)
        *   R = SOME_OP
        *   IF (COND(R, X))
        */
-      if (reg && !reg->is_ssa())
+      if (reg && !reg->has_flag(Register::ssa))
          return;
    }
 

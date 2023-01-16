@@ -217,8 +217,10 @@ resource_busy(struct fd_resource *rsc, unsigned op)
 
 int __fd_resource_wait(struct fd_context *ctx, struct fd_resource *rsc,
                        unsigned op, const char *func);
-#define fd_resource_wait(ctx, rsc, op)                                         \
-   __fd_resource_wait(ctx, rsc, op, __func__)
+#define fd_resource_wait(ctx, rsc, op) ({                                      \
+   MESA_TRACE_FUNC();                                                          \
+   __fd_resource_wait(ctx, rsc, op, __func__);                                 \
+})
 
 static inline void
 fd_resource_lock(struct fd_resource *rsc)
@@ -340,7 +342,7 @@ fd_resource_ubwc_enabled(struct fd_resource *rsc, int level)
  * most of the time)
  */
 static inline unsigned
-fd_resource_nr_samples(struct pipe_resource *prsc)
+fd_resource_nr_samples(const struct pipe_resource *prsc)
 {
    return MAX2(1, prsc->nr_samples);
 }

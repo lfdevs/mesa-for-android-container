@@ -254,7 +254,7 @@ int bc_parser::decode_alu_clause(cf_node* cf) {
 	cgroup = 0;
 	memset(slots[0], 0, 5*sizeof(slots[0][0]));
 
-	unsigned ng = 0;
+	UNUSED unsigned ng = 0;
 
 	do {
 		decode_alu_group(cf, i, gcnt);

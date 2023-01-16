@@ -178,17 +178,27 @@ create_bci(struct zink_screen *screen, const struct pipe_resource *templ, unsign
    bci.flags = 0;
    assert(bci.size > 0);
 
-   bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+   if (bind & ZINK_BIND_DESCRIPTOR) {
+      /* gallium sizes are all uint32_t, while the total size of this buffer may exceed that limit */
+      bci.size *= ZINK_DESCRIPTOR_BUFFER_MULTIPLIER;
+      bci.usage = 0;
+      if (bind & ZINK_BIND_SAMPLER_DESCRIPTOR)
+         bci.usage |= VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT;
+      if (bind & ZINK_BIND_RESOURCE_DESCRIPTOR)
+         bci.usage |= VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT;
+   } else {
+      bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-   bci.usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
-                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-                VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
-                VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
+      bci.usage |= VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+                  VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                  VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
+                  VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
+   }
 
    if (bind & PIPE_BIND_SHADER_IMAGE)
       bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
@@ -653,7 +663,7 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
          goto fail1;
       }
 
-      if (!(templ->bind & PIPE_BIND_SHADER_IMAGE)) {
+      if (!(templ->bind & (PIPE_BIND_SHADER_IMAGE | ZINK_BIND_DESCRIPTOR))) {
          bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
          if (VKSCR(CreateBuffer)(screen->dev, &bci, NULL, &obj->storage_buffer) != VK_SUCCESS) {
             mesa_loge("ZINK: vkCreateBuffer failed");
@@ -1182,6 +1192,8 @@ resource_create(struct pipe_screen *pscreen,
           */
          res->base.b.flags |= PIPE_RESOURCE_FLAG_DONT_MAP_DIRECTLY;
       }
+      if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
+         zink_resource_get_address(screen, res);
    } else {
       if (templ->flags & PIPE_RESOURCE_FLAG_SPARSE)
          res->base.b.bind |= PIPE_BIND_SHADER_IMAGE;
@@ -1351,7 +1363,7 @@ zink_resource_get_param(struct pipe_screen *pscreen, struct pipe_context *pctx,
    switch (param) {
    case PIPE_RESOURCE_PARAM_NPLANES:
       if (screen->info.have_EXT_image_drm_format_modifier)
-         *value = util_format_get_num_planes(res->drm_format);
+         *value = screen->base.get_dmabuf_modifier_planes(&screen->base, obj->modifier, res->internal_format);
       else
          *value = 1;
       break;
@@ -1537,7 +1549,6 @@ zink_resource_from_handle(struct pipe_screen *pscreen,
    struct pipe_resource *pres = resource_create(pscreen, &templ2, whandle, usage, &modifier, modifier_count, NULL);
    if (pres) {
       struct zink_resource *res = zink_resource(pres);
-      res->drm_format = whandle->format;
       if (pres->target != PIPE_BUFFER)
          res->valid = true;
       else
@@ -2348,6 +2359,7 @@ zink_screen_resource_init(struct pipe_screen *pscreen)
    pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
       U_TRANSFER_HELPER_SEPARATE_Z32S8 | U_TRANSFER_HELPER_SEPARATE_STENCIL |
       U_TRANSFER_HELPER_INTERLEAVE_IN_PLACE |
+      U_TRANSFER_HELPER_MSAA_MAP |
       (!screen->have_D24_UNORM_S8_UINT ? U_TRANSFER_HELPER_Z24_IN_Z32F : 0));
 
    if (screen->info.have_KHR_external_memory_fd || screen->info.have_KHR_external_memory_win32) {

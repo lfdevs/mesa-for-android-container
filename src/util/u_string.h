@@ -67,14 +67,15 @@ util_strchrnul(const char *s, char c)
 #ifdef _WIN32
 
 #define sprintf util_sprintf
-static inline void
+static inline int
    PRINTFLIKE(2, 3)
 util_sprintf(char *str, const char *format, ...)
 {
    va_list ap;
    va_start(ap, format);
-   vsnprintf(str, INT_MAX, format, ap);
+   int r = vsnprintf(str, INT_MAX, format, ap);
    va_end(ap);
+   return r;
 }
 
 #define vasprintf util_vasprintf

@@ -57,12 +57,32 @@ struct morton_args {
    REF(key_id_pair) ids;
 };
 
-struct lbvh_internal_args {
+#define LBVH_RIGHT_CHILD_BIT_SHIFT 29
+#define LBVH_RIGHT_CHILD_BIT (1 << LBVH_RIGHT_CHILD_BIT_SHIFT)
+
+struct lbvh_node_info {
+   /* Number of children that have been processed (or are invalid/leaves) in
+    * the lbvh_generate_ir pass.
+    */
+   uint32_t path_count;
+
+   uint32_t children[2];
+   uint32_t parent;
+};
+
+struct lbvh_main_args {
    VOID_REF bvh;
    REF(key_id_pair) src_ids;
-   REF(key_id_pair) dst_ids;
-   uint32_t dst_offset;
-   uint32_t src_count;
+   VOID_REF node_info;
+   uint32_t id_count;
+   uint32_t internal_node_base;
+};
+
+struct lbvh_generate_ir_args {
+   VOID_REF bvh;
+   VOID_REF node_info;
+   VOID_REF header;
+   uint32_t internal_node_base;
 };
 
 #define RADV_COPY_MODE_COPY        0

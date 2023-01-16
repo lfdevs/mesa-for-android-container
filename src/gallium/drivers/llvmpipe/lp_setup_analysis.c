@@ -326,7 +326,7 @@ lp_setup_analyse_triangles(struct lp_setup_context *setup,
    const boolean variant_blit = setup->fs.current.variant->blit;
 
    if (0) {
-      debug_printf("%s %d\n", __FUNCTION__, nr);
+      debug_printf("%s %d\n", __func__, nr);
 
       if (variant_blit) {
          debug_printf("  - blit variant\n");

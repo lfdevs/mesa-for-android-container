@@ -89,11 +89,171 @@ tex_filter(unsigned filter, bool aniso)
    }
 }
 
+static void
+setup_border_color(struct fd_screen *screen,
+                   const struct pipe_sampler_state *sampler,
+                   struct fd6_bcolor_entry *e)
+{
+   STATIC_ASSERT(sizeof(struct fd6_bcolor_entry) == FD6_BORDER_COLOR_SIZE);
+   const bool has_z24uint_s8uint = screen->info->a6xx.has_z24uint_s8uint;
+   const union pipe_color_union *bc = &sampler->border_color;
+
+   enum pipe_format format = sampler->border_color_format;
+   const struct util_format_description *desc =
+      util_format_description(format);
+
+   e->rgb565 = 0;
+   e->rgb5a1 = 0;
+   e->rgba4 = 0;
+   e->rgb10a2 = 0;
+   e->z24 = 0;
+
+   unsigned char swiz[4];
+
+   fdl6_format_swiz(format, false, swiz);
+
+   for (unsigned j = 0; j < 4; j++) {
+      int c = swiz[j];
+      int cd = c;
+
+      /*
+       * HACK: for PIPE_FORMAT_X24S8_UINT we end up w/ the
+       * stencil border color value in bc->ui[0] but according
+       * to desc->swizzle and desc->channel, the .x/.w component
+       * is NONE and the stencil value is in the y component.
+       * Meanwhile the hardware wants this in the .x component
+       * for x24s8 and x32_s8x24, or the .y component for x24s8 with the
+       * special Z24UINT_S8UINT format.
+       */
+      if ((format == PIPE_FORMAT_X24S8_UINT) ||
+          (format == PIPE_FORMAT_X32_S8X24_UINT)) {
+         if (j == 0) {
+            c = 1;
+            cd = (format == PIPE_FORMAT_X24S8_UINT && has_z24uint_s8uint) ? 1 : 0;
+         } else {
+            continue;
+         }
+      }
+
+      if (c >= 4)
+         continue;
+
+      if (desc->channel[c].pure_integer) {
+         uint16_t clamped;
+         switch (desc->channel[c].size) {
+         case 2:
+            assert(desc->channel[c].type == UTIL_FORMAT_TYPE_UNSIGNED);
+            clamped = CLAMP(bc->ui[j], 0, 0x3);
+            break;
+         case 8:
+            if (desc->channel[c].type == UTIL_FORMAT_TYPE_SIGNED)
+               clamped = CLAMP(bc->i[j], -128, 127);
+            else
+               clamped = CLAMP(bc->ui[j], 0, 255);
+            break;
+         case 10:
+            assert(desc->channel[c].type == UTIL_FORMAT_TYPE_UNSIGNED);
+            clamped = CLAMP(bc->ui[j], 0, 0x3ff);
+            break;
+         case 16:
+            if (desc->channel[c].type == UTIL_FORMAT_TYPE_SIGNED)
+               clamped = CLAMP(bc->i[j], -32768, 32767);
+            else
+               clamped = CLAMP(bc->ui[j], 0, 65535);
+            break;
+         default:
+            unreachable("Unexpected bit size");
+         case 32:
+            clamped = 0;
+            break;
+         }
+         e->fp32[cd] = bc->ui[j];
+         e->fp16[cd] = clamped;
+      } else {
+         float f = bc->f[j];
+         float f_u = CLAMP(f, 0, 1);
+         float f_s = CLAMP(f, -1, 1);
+
+         e->fp32[c] = fui(f);
+         e->fp16[c] = _mesa_float_to_half(f);
+         e->srgb[c] = _mesa_float_to_half(f_u);
+         e->ui16[c] = f_u * 0xffff;
+         e->si16[c] = f_s * 0x7fff;
+         e->ui8[c] = f_u * 0xff;
+         e->si8[c] = f_s * 0x7f;
+
+         if (c == 1)
+            e->rgb565 |= (int)(f_u * 0x3f) << 5;
+         else if (c < 3)
+            e->rgb565 |= (int)(f_u * 0x1f) << (c ? 11 : 0);
+         if (c == 3)
+            e->rgb5a1 |= (f_u > 0.5f) ? 0x8000 : 0;
+         else
+            e->rgb5a1 |= (int)(f_u * 0x1f) << (c * 5);
+         if (c == 3)
+            e->rgb10a2 |= (int)(f_u * 0x3) << 30;
+         else
+            e->rgb10a2 |= (int)(f_u * 0x3ff) << (c * 10);
+         e->rgba4 |= (int)(f_u * 0xf) << (c * 4);
+         if (c == 0)
+            e->z24 = f_u * 0xffffff;
+      }
+   }
+}
+
+static uint32_t
+bcolor_key_hash(const void *_key)
+{
+   const struct fd6_bcolor_entry *key = _key;
+   return XXH32(key, sizeof(*key), 0);
+}
+
+static bool
+bcolor_key_equals(const void *_a, const void *_b)
+{
+   const struct fd6_bcolor_entry *a = _a;
+   const struct fd6_bcolor_entry *b = _b;
+   return memcmp(a, b, sizeof(struct fd6_bcolor_entry)) == 0;
+}
+
+static unsigned
+get_bcolor_offset(struct fd_context *ctx, const struct pipe_sampler_state *sampler)
+{
+   struct fd6_context *fd6_ctx = fd6_context(ctx);
+   struct fd6_bcolor_entry *entries = fd_bo_map(fd6_ctx->bcolor_mem);
+   struct fd6_bcolor_entry key = {};
+
+   setup_border_color(ctx->screen, sampler, &key);
+
+   uint32_t hash = bcolor_key_hash(&key);
+
+   struct hash_entry *entry =
+      _mesa_hash_table_search_pre_hashed(fd6_ctx->bcolor_cache, hash, &key);
+
+   if (entry) {
+      return (unsigned)(uintptr_t)entry->data;
+   }
+
+   unsigned idx = fd6_ctx->bcolor_cache->entries;
+   if (idx >= FD6_MAX_BORDER_COLORS) {
+      mesa_loge("too many border colors");
+      return 0;
+   }
+
+   entries[idx] = key;
+
+   _mesa_hash_table_insert_pre_hashed(fd6_ctx->bcolor_cache, hash,
+                                      &entries[idx], (void *)(uintptr_t)idx);
+
+   return idx;
+}
+
 static void *
 fd6_sampler_state_create(struct pipe_context *pctx,
                          const struct pipe_sampler_state *cso)
 {
    struct fd6_sampler_stateobj *so = CALLOC_STRUCT(fd6_sampler_stateobj);
+   struct fd_context *ctx = fd_context(pctx);
    unsigned aniso = util_last_bit(MIN2(cso->max_anisotropy >> 1, 8));
    bool miplinear = false;
 
@@ -101,20 +261,20 @@ fd6_sampler_state_create(struct pipe_context *pctx,
       return NULL;
 
    so->base = *cso;
-   so->seqno = ++fd6_context(fd_context(pctx))->tex_seqno;
+   so->seqno = ++fd6_context(ctx)->tex_seqno;
 
    if (cso->min_mip_filter == PIPE_TEX_MIPFILTER_LINEAR)
       miplinear = true;
 
-   so->needs_border = false;
+   bool needs_border = false;
    so->texsamp0 =
       COND(miplinear, A6XX_TEX_SAMP_0_MIPFILTER_LINEAR_NEAR) |
       A6XX_TEX_SAMP_0_XY_MAG(tex_filter(cso->mag_img_filter, aniso)) |
       A6XX_TEX_SAMP_0_XY_MIN(tex_filter(cso->min_img_filter, aniso)) |
       A6XX_TEX_SAMP_0_ANISO(aniso) |
-      A6XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, &so->needs_border)) |
-      A6XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, &so->needs_border)) |
-      A6XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, &so->needs_border));
+      A6XX_TEX_SAMP_0_WRAP_S(tex_clamp(cso->wrap_s, &needs_border)) |
+      A6XX_TEX_SAMP_0_WRAP_T(tex_clamp(cso->wrap_t, &needs_border)) |
+      A6XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, &needs_border));
 
    so->texsamp1 =
       COND(cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE,
@@ -129,6 +289,16 @@ fd6_sampler_state_create(struct pipe_context *pctx,
    if (cso->compare_mode)
       so->texsamp1 |=
          A6XX_TEX_SAMP_1_COMPARE_FUNC(cso->compare_func); /* maps 1:1 */
+
+   if (needs_border)
+      so->texsamp2 = A6XX_TEX_SAMP_2_BCOLOR(get_bcolor_offset(ctx, cso));
+
+   /* We don't know if the format is going to be YUV.  Setting CHROMA_LINEAR
+    * unconditionally seems fine.
+    */
+   if (cso->mag_img_filter == PIPE_TEX_FILTER_LINEAR &&
+       cso->min_img_filter == PIPE_TEX_FILTER_LINEAR)
+      so->texsamp2 |= A6XX_TEX_SAMP_2_CHROMA_LINEAR;
 
    return so;
 }
@@ -258,6 +428,12 @@ fd6_sampler_view_update(struct fd_context *ctx,
          .chroma_offsets = {FDL_CHROMA_LOCATION_COSITED_EVEN,
                             FDL_CHROMA_LOCATION_COSITED_EVEN},
       };
+
+      if (rsc->b.b.format == PIPE_FORMAT_R8_G8B8_420_UNORM) {
+         args.chroma_offsets[0] = FDL_CHROMA_LOCATION_MIDPOINT;
+         args.chroma_offsets[1] = FDL_CHROMA_LOCATION_MIDPOINT;
+      }
+
       struct fd_resource *plane1 = fd_resource(rsc->b.b.next);
       struct fd_resource *plane2 =
          plane1 ? fd_resource(plane1->b.b.next) : NULL;
@@ -317,14 +493,14 @@ fd6_sampler_view_destroy(struct pipe_context *pctx,
 }
 
 static uint32_t
-key_hash(const void *_key)
+tex_key_hash(const void *_key)
 {
    const struct fd6_texture_key *key = _key;
    return XXH32(key, sizeof(*key), 0);
 }
 
 static bool
-key_equals(const void *_a, const void *_b)
+tex_key_equals(const void *_a, const void *_b)
 {
    const struct fd6_texture_key *a = _a;
    const struct fd6_texture_key *b = _b;
@@ -338,7 +514,6 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
    struct fd6_context *fd6_ctx = fd6_context(ctx);
    struct fd6_texture_state *state = NULL;
    struct fd6_texture_key key;
-   bool needs_border = false;
 
    memset(&key, 0, sizeof(key));
 
@@ -366,14 +541,11 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
          fd6_sampler_stateobj(tex->samplers[i]);
 
       key.samp[i].seqno = sampler->seqno;
-
-      needs_border |= sampler->needs_border;
    }
 
    key.type = type;
-   key.bcolor_offset = fd6_border_color_offset(ctx, type, tex);
 
-   uint32_t hash = key_hash(&key);
+   uint32_t hash = tex_key_hash(&key);
    fd_screen_lock(ctx->screen);
    struct hash_entry *entry =
       _mesa_hash_table_search_pre_hashed(fd6_ctx->tex_cache, hash, &key);
@@ -389,9 +561,8 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
    pipe_reference_init(&state->reference, 2);
    state->key = key;
    state->stateobj = fd_ringbuffer_new_object(ctx->pipe, 32 * 4);
-   state->needs_border = needs_border;
 
-   fd6_emit_textures(ctx, state->stateobj, type, tex, key.bcolor_offset, NULL);
+   fd6_emit_textures(ctx, state->stateobj, type, tex, NULL);
 
    /* NOTE: uses copy of key in state obj, because pointer passed by caller
     * is probably on the stack
@@ -455,7 +626,13 @@ fd6_texture_init(struct pipe_context *pctx) disable_thread_safety_analysis
 
    ctx->rebind_resource = fd6_rebind_resource;
 
-   fd6_ctx->tex_cache = _mesa_hash_table_create(NULL, key_hash, key_equals);
+   fd6_ctx->bcolor_cache =
+         _mesa_hash_table_create(NULL, bcolor_key_hash, bcolor_key_equals);
+   fd6_ctx->bcolor_mem = fd_bo_new(ctx->screen->dev,
+                                   FD6_MAX_BORDER_COLORS * FD6_BORDER_COLOR_SIZE,
+                                   0, "bcolor");
+
+   fd6_ctx->tex_cache = _mesa_hash_table_create(NULL, tex_key_hash, tex_key_equals);
 }
 
 void
@@ -473,4 +650,6 @@ fd6_texture_fini(struct pipe_context *pctx)
    fd_screen_unlock(ctx->screen);
 
    ralloc_free(fd6_ctx->tex_cache);
+   fd_bo_del(fd6_ctx->bcolor_mem);
+   ralloc_free(fd6_ctx->bcolor_cache);
 }

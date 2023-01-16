@@ -45,6 +45,7 @@ const struct agx_opcode_info agx_opcodes_info[AGX_NUM_OPCODES] = {
       ${make_encoding(op.encoding_16)},
       ${int(op.is_float)},
       ${int(op.can_eliminate)},
+      ${int(op.can_reorder)},
    },
 % endfor
 };

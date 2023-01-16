@@ -47,7 +47,8 @@ public:
    bool do_ready() const override;
 
    auto opcode() const { return m_op; }
-   auto src() const { return m_src; }
+   auto& src() { return m_src; }
+   auto& src() const { return m_src; }
 
    const auto& dest() const { return m_dest; }
    auto& dest() { return m_dest; }
@@ -56,6 +57,7 @@ public:
 
    static bool emit_atomic_counter(nir_intrinsic_instr *intr, Shader& shader);
    uint32_t slots() const override { return 1; };
+   uint8_t allowed_src_chan_mask() const override;
 
 private:
    static bool emit_atomic_read(nir_intrinsic_instr *intr, Shader& shader);

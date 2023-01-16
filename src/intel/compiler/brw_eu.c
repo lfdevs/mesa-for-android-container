@@ -747,3 +747,59 @@ brw_opcode_desc_from_hw(const struct brw_isa_info *isa, unsigned hw)
 {
    return hw < ARRAY_SIZE(isa->hw_to_descs) ? isa->hw_to_descs[hw] : NULL;
 }
+
+unsigned
+brw_num_sources_from_inst(const struct brw_isa_info *isa,
+                          const brw_inst *inst)
+{
+   const struct intel_device_info *devinfo = isa->devinfo;
+   const struct opcode_desc *desc =
+      brw_opcode_desc(isa, brw_inst_opcode(isa, inst));
+   unsigned math_function;
+
+   if (brw_inst_opcode(isa, inst) == BRW_OPCODE_MATH) {
+      math_function = brw_inst_math_function(devinfo, inst);
+   } else if (devinfo->ver < 6 &&
+              brw_inst_opcode(isa, inst) == BRW_OPCODE_SEND) {
+      if (brw_inst_sfid(devinfo, inst) == BRW_SFID_MATH) {
+         /* src1 must be a descriptor (including the information to determine
+          * that the SEND is doing an extended math operation), but src0 can
+          * actually be null since it serves as the source of the implicit GRF
+          * to MRF move.
+          *
+          * If we stop using that functionality, we'll have to revisit this.
+          */
+         return 2;
+      } else {
+         /* Send instructions are allowed to have null sources since they use
+          * the base_mrf field to specify which message register source.
+          */
+         return 0;
+      }
+   } else {
+      assert(desc->nsrc < 4);
+      return desc->nsrc;
+   }
+
+   switch (math_function) {
+   case BRW_MATH_FUNCTION_INV:
+   case BRW_MATH_FUNCTION_LOG:
+   case BRW_MATH_FUNCTION_EXP:
+   case BRW_MATH_FUNCTION_SQRT:
+   case BRW_MATH_FUNCTION_RSQ:
+   case BRW_MATH_FUNCTION_SIN:
+   case BRW_MATH_FUNCTION_COS:
+   case BRW_MATH_FUNCTION_SINCOS:
+   case GFX8_MATH_FUNCTION_INVM:
+   case GFX8_MATH_FUNCTION_RSQRTM:
+      return 1;
+   case BRW_MATH_FUNCTION_FDIV:
+   case BRW_MATH_FUNCTION_POW:
+   case BRW_MATH_FUNCTION_INT_DIV_QUOTIENT_AND_REMAINDER:
+   case BRW_MATH_FUNCTION_INT_DIV_QUOTIENT:
+   case BRW_MATH_FUNCTION_INT_DIV_REMAINDER:
+      return 2;
+   default:
+      unreachable("not reached");
+   }
+}

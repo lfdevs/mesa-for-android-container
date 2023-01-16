@@ -61,7 +61,7 @@ svga_define_stream_output(struct svga_context *svga,
 {
    unsigned i;
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s: id=%d\n", __FUNCTION__, soid);
+   SVGA_DBG(DEBUG_STREAMOUT, "%s: id=%d\n", __func__, soid);
    SVGA_DBG(DEBUG_STREAMOUT,
             "numOutputStreamEntires=%d\n", numOutputStreamEntries);
 
@@ -181,7 +181,7 @@ svga_create_stream_output(struct svga_context *svga,
    memset(dstOffset, 0, sizeof(dstOffset));
 
    SVGA_DBG(DEBUG_STREAMOUT, "%s: num_outputs=%d\n",
-            __FUNCTION__, info->num_outputs);
+            __func__, info->num_outputs);
 
    for (i = 0, numDecls = 0; i < info->num_outputs; i++, numDecls++) {
       unsigned reg_idx = info->output[i].register_index;
@@ -305,7 +305,7 @@ svga_set_stream_output(struct svga_context *svga,
       return PIPE_OK;
    }
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s streamout=0x%x id=%d\n", __FUNCTION__,
+   SVGA_DBG(DEBUG_STREAMOUT, "%s streamout=0x%x id=%d\n", __func__,
             streamout, id);
 
    if (svga->current_so != streamout) {
@@ -342,7 +342,7 @@ svga_delete_stream_output(struct svga_context *svga,
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s streamout=0x%x\n", __FUNCTION__, streamout);
+   SVGA_DBG(DEBUG_STREAMOUT, "%s streamout=0x%x\n", __func__, streamout);
 
    assert(svga_have_vgpu10(svga));
    assert(streamout != NULL);
@@ -380,7 +380,7 @@ svga_create_stream_output_target(struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
    struct svga_stream_output_target *sot;
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s offset=%d size=%d\n", __FUNCTION__,
+   SVGA_DBG(DEBUG_STREAMOUT, "%s offset=%d size=%d\n", __func__,
             buffer_offset, buffer_size);
 
    assert(svga_have_vgpu10(svga));
@@ -406,7 +406,7 @@ svga_destroy_stream_output_target(struct pipe_context *pipe,
 {
    struct svga_stream_output_target *sot = svga_stream_output_target(target);
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s\n", __FUNCTION__);
+   SVGA_DBG(DEBUG_STREAMOUT, "%s\n", __func__);
 
    pipe_resource_reference(&sot->base.buffer, NULL);
    FREE(sot);
@@ -424,7 +424,7 @@ svga_set_stream_output_targets(struct pipe_context *pipe,
    unsigned num_so_targets;
    boolean begin_so_queries = num_targets > 0;
 
-   SVGA_DBG(DEBUG_STREAMOUT, "%s num_targets=%d\n", __FUNCTION__,
+   SVGA_DBG(DEBUG_STREAMOUT, "%s num_targets=%d\n", __func__,
             num_targets);
 
    assert(svga_have_vgpu10(svga));

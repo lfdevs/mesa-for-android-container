@@ -52,6 +52,7 @@ upgrade_memory_barrier(const VkMemoryBarrier *barrier,
 {
    return (VkMemoryBarrier2) {
       .sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+      .pNext         = barrier->pNext,
       .srcStageMask  = src_stage_mask2,
       .srcAccessMask = (VkAccessFlags2) barrier->srcAccessMask,
       .dstStageMask  = dst_stage_mask2,
@@ -66,6 +67,7 @@ upgrade_buffer_memory_barrier(const VkBufferMemoryBarrier *barrier,
 {
    return (VkBufferMemoryBarrier2) {
       .sType                = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+      .pNext                = barrier->pNext,
       .srcStageMask         = src_stage_mask2,
       .srcAccessMask        = (VkAccessFlags2) barrier->srcAccessMask,
       .dstStageMask         = dst_stage_mask2,
@@ -85,6 +87,7 @@ upgrade_image_memory_barrier(const VkImageMemoryBarrier *barrier,
 {
    return (VkImageMemoryBarrier2) {
       .sType                = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .pNext                = barrier->pNext,
       .srcStageMask         = src_stage_mask2,
       .srcAccessMask        = (VkAccessFlags2) barrier->srcAccessMask,
       .dstStageMask         = dst_stage_mask2,

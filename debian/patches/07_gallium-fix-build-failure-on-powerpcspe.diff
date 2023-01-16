@@ -16,20 +16,20 @@ https://bugs.debian.org/695746
  src/gallium/include/pipe/p_config.h | 2 ++
  1 file changed, 2 insertions(+)
 
---- a/src/gallium/include/pipe/p_config.h
-+++ b/src/gallium/include/pipe/p_config.h
-@@ -98,12 +98,14 @@
+--- a/src/util/detect_arch.h
++++ b/src/util/detect_arch.h
+@@ -70,12 +70,14 @@
  #endif
  #endif
  
 +#ifndef __NO_FPRS__
  #if defined(__ppc__) || defined(__ppc64__) || defined(__PPC__) || defined(__PPC64__)
- #define PIPE_ARCH_PPC
+ #define DETECT_ARCH_PPC 1
  #if defined(__ppc64__) || defined(__PPC64__)
- #define PIPE_ARCH_PPC_64
+ #define DETECT_ARCH_PPC_64 1
  #endif
  #endif
 +#endif
  
  #if defined(__s390x__)
- #define PIPE_ARCH_S390
+ #define DETECT_ARCH_S390 1

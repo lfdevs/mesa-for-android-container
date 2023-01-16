@@ -34,7 +34,7 @@
 #ifndef U_RANGE_H
 #define U_RANGE_H
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "pipe/p_state.h"
 #include "pipe/p_screen.h"
 #include "util/u_atomic.h"

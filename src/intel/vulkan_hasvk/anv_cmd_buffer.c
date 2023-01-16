@@ -82,18 +82,12 @@ anv_cmd_state_reset(struct anv_cmd_buffer *cmd_buffer)
    anv_cmd_state_init(cmd_buffer);
 }
 
-static void anv_cmd_buffer_destroy(struct vk_command_buffer *vk_cmd_buffer);
-
-static const struct vk_command_buffer_ops cmd_buffer_ops = {
-   .destroy = anv_cmd_buffer_destroy,
-};
-
-static VkResult anv_create_cmd_buffer(
-    struct anv_device *                         device,
-    struct vk_command_pool *                    pool,
-    VkCommandBufferLevel                        level,
-    VkCommandBuffer*                            pCommandBuffer)
+static VkResult
+anv_create_cmd_buffer(struct vk_command_pool *pool,
+                      struct vk_command_buffer **cmd_buffer_out)
 {
+   struct anv_device *device =
+      container_of(pool->base.device, struct anv_device, vk);
    struct anv_cmd_buffer *cmd_buffer;
    VkResult result;
 
@@ -103,7 +97,7 @@ static VkResult anv_create_cmd_buffer(
       return vk_error(pool, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    result = vk_command_buffer_init(pool, &cmd_buffer->vk,
-                                   &cmd_buffer_ops, level);
+                                   &anv_cmd_buffer_ops, 0);
    if (result != VK_SUCCESS)
       goto fail_alloc;
 
@@ -137,7 +131,7 @@ static VkResult anv_create_cmd_buffer(
 
    u_trace_init(&cmd_buffer->trace, &device->ds.trace_context);
 
-   *pCommandBuffer = anv_cmd_buffer_to_handle(cmd_buffer);
+   *cmd_buffer_out = &cmd_buffer->vk;
 
    return VK_SUCCESS;
 
@@ -145,36 +139,6 @@ static VkResult anv_create_cmd_buffer(
    vk_command_buffer_finish(&cmd_buffer->vk);
  fail_alloc:
    vk_free2(&device->vk.alloc, &pool->alloc, cmd_buffer);
-
-   return result;
-}
-
-VkResult anv_AllocateCommandBuffers(
-    VkDevice                                    _device,
-    const VkCommandBufferAllocateInfo*          pAllocateInfo,
-    VkCommandBuffer*                            pCommandBuffers)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   VK_FROM_HANDLE(vk_command_pool, pool, pAllocateInfo->commandPool);
-
-   VkResult result = VK_SUCCESS;
-   uint32_t i;
-
-   for (i = 0; i < pAllocateInfo->commandBufferCount; i++) {
-      result = anv_create_cmd_buffer(device, pool, pAllocateInfo->level,
-                                     &pCommandBuffers[i]);
-      if (result != VK_SUCCESS)
-         break;
-   }
-
-   if (result != VK_SUCCESS) {
-      while (i--) {
-         VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, pCommandBuffers[i]);
-         anv_cmd_buffer_destroy(cmd_buffer);
-      }
-      for (i = 0; i < pAllocateInfo->commandBufferCount; i++)
-         pCommandBuffers[i] = VK_NULL_HANDLE;
-   }
 
    return result;
 }
@@ -203,9 +167,13 @@ anv_cmd_buffer_destroy(struct vk_command_buffer *vk_cmd_buffer)
    vk_free(&cmd_buffer->vk.pool->alloc, cmd_buffer);
 }
 
-VkResult
-anv_cmd_buffer_reset(struct anv_cmd_buffer *cmd_buffer)
+void
+anv_cmd_buffer_reset(struct vk_command_buffer *vk_cmd_buffer,
+                     UNUSED VkCommandBufferResetFlags flags)
 {
+   struct anv_cmd_buffer *cmd_buffer =
+      container_of(vk_cmd_buffer, struct anv_cmd_buffer, vk);
+
    vk_command_buffer_reset(&cmd_buffer->vk);
 
    cmd_buffer->usage_flags = 0;
@@ -229,17 +197,13 @@ anv_cmd_buffer_reset(struct anv_cmd_buffer *cmd_buffer)
 
    u_trace_fini(&cmd_buffer->trace);
    u_trace_init(&cmd_buffer->trace, &cmd_buffer->device->ds.trace_context);
-
-   return VK_SUCCESS;
 }
 
-VkResult anv_ResetCommandBuffer(
-    VkCommandBuffer                             commandBuffer,
-    VkCommandBufferResetFlags                   flags)
-{
-   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   return anv_cmd_buffer_reset(cmd_buffer);
-}
+const struct vk_command_buffer_ops anv_cmd_buffer_ops = {
+   .create = anv_create_cmd_buffer,
+   .reset = anv_cmd_buffer_reset,
+   .destroy = anv_cmd_buffer_destroy,
+};
 
 void
 anv_cmd_buffer_emit_state_base_address(struct anv_cmd_buffer *cmd_buffer)
@@ -410,27 +374,6 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
    if (pipe_state->descriptors[set_index] != set ||
          anv_descriptor_set_is_push(set)) {
       pipe_state->descriptors[set_index] = set;
-
-      /* Those stages don't have access to HW binding tables.
-       * This means that we have to upload the descriptor set
-       * as an 64-bit address in the push constants.
-       */
-      bool update_desc_sets = stages & (VK_SHADER_STAGE_TASK_BIT_NV |
-                                        VK_SHADER_STAGE_MESH_BIT_NV);
-
-      if (update_desc_sets) {
-         struct anv_push_constants *push = &pipe_state->push_constants;
-
-         struct anv_address addr = anv_descriptor_set_address(set);
-         push->desc_sets[set_index] = anv_address_physical(addr);
-
-         if (addr.bo) {
-            anv_reloc_list_add_bo(cmd_buffer->batch.relocs,
-                                  cmd_buffer->batch.alloc,
-                                  addr.bo);
-         }
-      }
-
       dirty_stages |= stages;
    }
 
@@ -648,16 +591,10 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
       cmd_buffer->device->info->ver < 8 ? 32 : 64;
    const unsigned aligned_total_push_constants_size =
       ALIGN(total_push_constants_size, push_constant_alignment);
-   struct anv_state state;
-   if (devinfo->verx10 >= 125) {
-      state = anv_state_stream_alloc(&cmd_buffer->general_state_stream,
-                                     aligned_total_push_constants_size,
-                                     push_constant_alignment);
-   } else {
-      state = anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
-                                                 aligned_total_push_constants_size,
-                                                 push_constant_alignment);
-   }
+   struct anv_state state =
+      anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
+                                         aligned_total_push_constants_size,
+                                         push_constant_alignment);
 
    void *dst = state.map;
    const void *src = (char *)data + (range->start * 32);
@@ -694,9 +631,7 @@ void anv_CmdPushConstants(
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   if (stageFlags & (VK_SHADER_STAGE_ALL_GRAPHICS |
-                     VK_SHADER_STAGE_TASK_BIT_NV |
-                     VK_SHADER_STAGE_MESH_BIT_NV)) {
+   if (stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) {
       struct anv_cmd_pipeline_state *pipe_state =
          &cmd_buffer->state.gfx.base;
 
@@ -910,11 +845,4 @@ void anv_CmdPushDescriptorSetWithTemplateKHR(
 
    anv_cmd_buffer_bind_descriptor_set(cmd_buffer, template->bind_point,
                                       layout, _set, set, NULL, NULL);
-}
-
-void anv_CmdSetDeviceMask(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    deviceMask)
-{
-   /* No-op */
 }

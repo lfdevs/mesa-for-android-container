@@ -60,12 +60,11 @@ fd_submit_ref(struct fd_submit *submit)
    return submit;
 }
 
-int
-fd_submit_flush(struct fd_submit *submit, int in_fence_fd,
-                struct fd_submit_fence *out_fence)
+struct fd_fence *
+fd_submit_flush(struct fd_submit *submit, int in_fence_fd, bool use_fence_fd)
 {
    submit->fence = fd_pipe_emit_fence(submit->pipe, submit->primary);
-   return submit->funcs->flush(submit, in_fence_fd, out_fence);
+   return submit->funcs->flush(submit, in_fence_fd, use_fence_fd);
 }
 
 struct fd_ringbuffer *

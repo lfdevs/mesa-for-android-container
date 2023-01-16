@@ -7,6 +7,9 @@ Debugging
 Here are a few environment variable debug environment variables
 specific to ANV:
 
+:envvar:`ANV_ENABLE_GENERATED_INDIRECT_DRAWS`
+   If defined to ``0`` or ``false``, this will disable the generated
+   indirect draw optimization in Anv. This will only affect Gfx11+.
 :envvar:`ANV_ENABLE_PIPELINE_CACHE`
    If defined to ``0`` or ``false``, this will disable pipeline
    caching, forcing ANV to reparse and recompile any VkShaderModule
@@ -14,7 +17,7 @@ specific to ANV:
 :envvar:`ANV_DISABLE_SECONDARY_CMD_BUFFER_CALLS`
    If defined to ``1`` or ``true``, this will prevent usage of self
    modifying command buffers to implement ``vkCmdExecuteCommands``. As
-   a result of this, it will also disable ``VK_KHR_performance_query``.
+   a result of this, it will also disable :ext:`VK_KHR_performance_query`.
 :envvar:`ANV_ALWAYS_BINDLESS`
    If defined to ``1`` or ``true``, this forces all descriptor sets to
    use the internal `Bindless model`_.
@@ -28,7 +31,7 @@ specific to ANV:
    Haswell, Cherryview).
 :envvar:`ANV_PRIMITIVE_REPLICATION_MAX_VIEWS`
    Specifies up to how many view shaders can be lowered to handle
-   VK_KHR_multiview. Beyond this number, multiview is implemented
+   :ext:`VK_KHR_multiview`. Beyond this number, multiview is implemented
    using instanced rendering. If unspecified, the value default to
    ``2``.
 
@@ -38,7 +41,7 @@ Experimental features
 
 :envvar:`ANV_EXPERIMENTAL_NV_MESH_SHADER`
    If defined to ``1`` or ``true``, this advertise support for
-   VK_NV_mesh_shader extension for platforms that have hardware
+   :ext:`VK_NV_mesh_shader` extension for platforms that have hardware
    support for it.
 
 
@@ -272,3 +275,34 @@ checking for ``ANV_CMD_DIRTY_PIPELINE``. It should only do so if it
 requires to know some value that is coming from the
 ``anv_graphics_pipeline`` object that is not available from
 ``anv_dynamic_state``.
+
+
+Generated indirect draws optimization
+-------------------------------------
+
+Indirect draws have traditionally been implemented on Intel HW by
+loading the indirect parameters from memory into HW registers using
+the command streamer's ``MI_LOAD_REGISTER_MEM`` instruction before
+dispatching a draw call to the 3D pipeline.
+
+On recent products, it was found that the command streamer is showing
+as performance bottleneck, because it cannot dispatch draw calls fast
+enough to keep the 3D pipeline busy.
+
+The solution to this problem is to change the way we deal with
+indirect draws. Instead of loading HW registers with values using the
+command streamer, we generate entire set of ``3DPRIMITIVE``
+instructions using a shader. The generated instructions contain the
+entire draw call parameters. This way the command streamer executes
+only ``3DPRIMITIVE`` instructions and doesn´t do any data loading from
+memory or touch HW registers, feeding the 3D pipeline as fast as it
+can.
+
+In Anv this implemented by using a side batch buffer. When Anv
+encounters the first indirect draws, it generates a jump into the side
+batch, the side batch contains a draw call using a generation shader
+for each indirect draw. We keep adding on more generation draws into
+the batch until we have to stop due to command buffer end, secondary
+command buffer calls or a barrier containing the access flag
+``VK_ACCESS_INDIRECT_COMMAND_READ_BIT``. The side batch buffer jump
+back right after the instruction where it was called.

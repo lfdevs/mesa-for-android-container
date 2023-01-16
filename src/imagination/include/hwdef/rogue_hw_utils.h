@@ -102,14 +102,25 @@ rogue_get_isp_samples_per_tile_xy(const struct pvr_device_info *dev_info,
    }
 }
 
-static inline uint32_t
-rogue_get_max_num_vdm_pds_tasks(const struct pvr_device_info *dev_info)
+static inline void
+rogue_get_zls_tile_size_xy(const struct pvr_device_info *dev_info,
+                           uint32_t *const x_out,
+                           uint32_t *const y_out)
 {
-   /* Default value based on the minimum value found in all existing cores. */
-   uint32_t max_usc_tasks = PVR_GET_FEATURE_VALUE(dev_info, max_usc_tasks, 24U);
+   uint32_t version = 0;
+   bool has_version;
 
-   /* FIXME: Where does the 9 come from? */
-   return max_usc_tasks - 9;
+   has_version =
+      !PVR_FEATURE_VALUE(dev_info, simple_parameter_format_version, &version);
+
+   *x_out = PVR_GET_FEATURE_VALUE(dev_info, tile_size_x, 0U);
+   *y_out = PVR_GET_FEATURE_VALUE(dev_info, tile_size_y, 0U);
+
+   if (PVR_HAS_FEATURE(dev_info, simple_internal_parameter_format) &&
+       has_version && version == 2) {
+      *x_out *= 2;
+      *y_out *= 2;
+   }
 }
 
 static inline uint32_t

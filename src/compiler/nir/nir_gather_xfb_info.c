@@ -358,6 +358,7 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
                out.component_mask =
                   BITFIELD_RANGE(index, xfb.out[index % 2].num_components);
                out.location = sem.location;
+               out.high_16bits = sem.high_16bits;
                out.buffer = xfb.out[index % 2].buffer;
                out.offset = (uint32_t)xfb.out[index % 2].offset * 4;
                util_dynarray_append(&array, nir_xfb_output_info, out);
@@ -398,7 +399,8 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
          for (int j = i + 1;
               j < count &&
               cur->buffer == outputs[j].buffer &&
-              cur->location == outputs[j].location; j++) {
+              cur->location == outputs[j].location &&
+              cur->high_16bits == outputs[j].high_16bits; j++) {
             if (outputs[j].component_mask &&
                 outputs[j].offset - outputs[j].component_offset * 4 ==
                 cur->offset - cur->component_offset * 4) {
@@ -479,11 +481,12 @@ nir_print_xfb_info(nir_xfb_info *info, FILE *fp)
    fprintf(fp, "output_count: %u\n", info->output_count);
 
    for (unsigned i = 0; i < info->output_count; i++) {
-      fprintf(fp, "output%u: buffer=%u, offset=%u, location=%u, "
+      fprintf(fp, "output%u: buffer=%u, offset=%u, location=%u, high_16bits=%u, "
                   "component_offset=%u, component_mask=0x%x\n",
               i, info->outputs[i].buffer,
               info->outputs[i].offset,
               info->outputs[i].location,
+              info->outputs[i].high_16bits,
               info->outputs[i].component_offset,
               info->outputs[i].component_mask);
    }

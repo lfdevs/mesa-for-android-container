@@ -783,9 +783,11 @@ util_can_blit_via_copy_region(const struct pipe_blit_info *blit,
    }
    else {
       /* do loose format compatibility checking */
-      if (blit->src.resource->format != blit->src.format ||
-          blit->dst.resource->format != blit->dst.format ||
-          !util_is_format_compatible(src_desc, dst_desc)) {
+      if ((blit->src.format != blit->dst.format ||
+           src_desc != dst_desc) &&
+          (blit->src.resource->format != blit->src.format ||
+           blit->dst.resource->format != blit->dst.format ||
+           !util_is_format_compatible(src_desc, dst_desc))) {
          return FALSE;
       }
    }

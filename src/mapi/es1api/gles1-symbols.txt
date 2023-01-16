@@ -1,6 +1,6 @@
 # gl.* functions in GL ES 1.1
 # or in extensions that are part of the ES 1.1 extension pack.
-# (see http://www.khronos.org/registry/gles/specs/1.1/opengles_spec_1_1_extension_pack.pdf)
+# (see https://registry.khronos.org/OpenGL/specs/es/1.1/opengles_spec_1_1_extension_pack.pdf)
 
 glActiveTexture
 glAlphaFunc

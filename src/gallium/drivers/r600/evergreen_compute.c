@@ -435,8 +435,7 @@ static void *evergreen_create_compute_state(struct pipe_context *ctx,
 #endif
 
 	shader->ctx = rctx;
-	shader->local_size = cso->req_local_mem;
-	shader->private_size = cso->req_private_mem;
+	shader->local_size = cso->static_shared_mem;
 	shader->input_size = cso->req_input_mem;
 
 	shader->ir_type = cso->ir_type;
@@ -611,7 +610,7 @@ static void evergreen_emit_dispatch(struct r600_context *rctx,
 	unsigned num_pipes = rctx->screen->b.info.r600_max_quad_pipes;
 	unsigned wave_divisor = (16 * num_pipes);
 	int group_size = 1;
-	unsigned lds_size = shader->local_size / 4;
+	unsigned lds_size = (shader->local_size + info->variable_shared_mem) / 4;
 
 	if (shader->ir_type != PIPE_SHADER_IR_TGSI &&
 	    shader->ir_type != PIPE_SHADER_IR_NIR)

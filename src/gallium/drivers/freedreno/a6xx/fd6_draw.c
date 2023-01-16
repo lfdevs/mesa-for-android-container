@@ -131,6 +131,56 @@ fixup_draw_state(struct fd_context *ctx, struct fd6_emit *emit) assert_dt
    }
 }
 
+static const struct fd6_program_state *
+get_program_state(struct fd_context *ctx, const struct pipe_draw_info *info)
+   assert_dt
+{
+   struct fd6_context *fd6_ctx = fd6_context(ctx);
+   struct ir3_cache_key key = {
+         .vs = ctx->prog.vs,
+         .gs = ctx->prog.gs,
+         .fs = ctx->prog.fs,
+         .key = {
+               .rasterflat = ctx->rasterizer->flatshade,
+               .ucp_enables = ctx->rasterizer->clip_plane_enable,
+               .sample_shading = (ctx->min_samples > 1),
+               .msaa = (ctx->framebuffer.samples > 1),
+         },
+         .clip_plane_enable = ctx->rasterizer->clip_plane_enable,
+         .patch_vertices = ctx->patch_vertices,
+   };
+
+   if (info->mode == PIPE_PRIM_PATCHES) {
+      struct shader_info *gs_info = ir3_get_shader_info(ctx->prog.gs);
+
+      key.hs = ctx->prog.hs;
+      key.ds = ctx->prog.ds;
+
+      struct shader_info *ds_info = ir3_get_shader_info(key.ds);
+      key.key.tessellation = ir3_tess_mode(ds_info->tess._primitive_mode);
+
+      struct shader_info *fs_info = ir3_get_shader_info(key.fs);
+      key.key.tcs_store_primid =
+         BITSET_TEST(ds_info->system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
+         (gs_info && BITSET_TEST(gs_info->system_values_read, SYSTEM_VALUE_PRIMITIVE_ID)) ||
+         (fs_info && (fs_info->inputs_read & (1ull << VARYING_SLOT_PRIMITIVE_ID)));
+   }
+
+   if (key.gs) {
+      key.key.has_gs = true;
+   }
+
+   ir3_fixup_shader_state(&ctx->base, &key.key);
+
+   if (ctx->gen_dirty & BIT(FD6_GROUP_PROG)) {
+      struct ir3_program_state *s = ir3_cache_lookup(
+            ctx->shader_cache, &key, &ctx->debug);
+      fd6_ctx->prog = fd6_program_state(s);
+   }
+
+   return fd6_ctx->prog;
+}
+
 static bool
 fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
              unsigned drawid_offset,
@@ -139,78 +189,49 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
              unsigned index_offset) assert_dt
 {
    struct fd6_context *fd6_ctx = fd6_context(ctx);
-   struct shader_info *gs_info = ir3_get_shader_info(ctx->prog.gs);
-   struct fd6_emit emit = {
-      .ctx = ctx,
-      .vtx = &ctx->vtx,
-      .info = info,
-      .drawid_offset = drawid_offset,
-      .indirect = indirect,
-      .draw = draw,
-      .key = {
-         .vs = ctx->prog.vs,
-         .gs = ctx->prog.gs,
-         .fs = ctx->prog.fs,
-         .key = {
-            .rasterflat = ctx->rasterizer->flatshade,
-            .ucp_enables = ctx->rasterizer->clip_plane_enable,
-            .sample_shading = (ctx->min_samples > 1),
-            .msaa = (ctx->framebuffer.samples > 1),
-         },
-         .clip_plane_enable = ctx->rasterizer->clip_plane_enable,
-         .patch_vertices = ctx->patch_vertices,
-      },
-      .rasterflat = ctx->rasterizer->flatshade,
-      .sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
-      .sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
-      .primitive_restart = info->primitive_restart && info->index_size,
-   };
+   struct fd6_emit emit;
+
+   emit.ctx = ctx;
+   emit.info = info;
+   emit.indirect = indirect;
+   emit.draw = draw;
+   emit.rasterflat = ctx->rasterizer->flatshade;
+   emit.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable;
+   emit.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode;
+   emit.primitive_restart = info->primitive_restart && info->index_size;
+   emit.state.num_groups = 0;
+   emit.streamout_mask = 0;
+   emit.prog = NULL;
 
    if (!(ctx->prog.vs && ctx->prog.fs))
       return false;
 
-   if (info->mode == PIPE_PRIM_PATCHES) {
-      emit.key.hs = ctx->prog.hs;
-      emit.key.ds = ctx->prog.ds;
-
-      struct shader_info *ds_info = ir3_get_shader_info(emit.key.ds);
-      emit.key.key.tessellation = ir3_tess_mode(ds_info->tess._primitive_mode);
+   if ((info->mode == PIPE_PRIM_PATCHES) || ctx->prog.gs) {
       ctx->gen_dirty |= BIT(FD6_GROUP_PRIMITIVE_PARAMS);
-
-      struct shader_info *fs_info = ir3_get_shader_info(emit.key.fs);
-      emit.key.key.tcs_store_primid =
-         BITSET_TEST(ds_info->system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
-         (gs_info && BITSET_TEST(gs_info->system_values_read, SYSTEM_VALUE_PRIMITIVE_ID)) ||
-         (fs_info && (fs_info->inputs_read & (1ull << VARYING_SLOT_PRIMITIVE_ID)));
-   }
-
-   if (emit.key.gs) {
-      emit.key.key.has_gs = true;
-      ctx->gen_dirty |= BIT(FD6_GROUP_PRIMITIVE_PARAMS);
-   }
-
-   if (!(emit.key.hs || emit.key.ds || emit.key.gs || indirect))
+   } else if (!indirect) {
       fd6_vsc_update_sizes(ctx->batch, info, draw);
+   }
 
-   ir3_fixup_shader_state(&ctx->base, &emit.key.key);
-
-   if (!(ctx->gen_dirty & BIT(FD6_GROUP_PROG))) {
-      emit.prog = fd6_ctx->prog;
+   /* If PROG state (which will mark PROG_KEY dirty) or any state that the
+    * key depends on, is dirty, then we actually need to construct the shader
+    * key, figure out if we need a new variant, and lookup the PROG state.
+    * Otherwise we can just use the previous prog state.
+    */
+   if (unlikely(ctx->gen_dirty & BIT(FD6_GROUP_PROG_KEY))) {
+      emit.prog = get_program_state(ctx, info);
    } else {
-      fd6_ctx->prog = fd6_emit_get_prog(&emit);
+      emit.prog = fd6_ctx->prog;
    }
 
    /* bail if compile failed: */
-   if (!fd6_ctx->prog)
+   if (!emit.prog)
       return false;
 
    fixup_draw_state(ctx, &emit);
 
    /* *after* fixup_shader_state(): */
-   emit.dirty = ctx->dirty;
    emit.dirty_groups = ctx->gen_dirty;
 
-   emit.bs = fd6_emit_get_prog(&emit)->bs;
    emit.vs = fd6_emit_get_prog(&emit)->vs;
    emit.hs = fd6_emit_get_prog(&emit)->hs;
    emit.ds = fd6_emit_get_prog(&emit)->ds;
@@ -243,7 +264,7 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
    struct CP_DRAW_INDX_OFFSET_0 draw0 = {
       .prim_type = ctx->screen->primtypes[info->mode],
       .vis_cull = USE_VISIBILITY,
-      .gs_enable = !!emit.key.gs,
+      .gs_enable = !!ctx->prog.gs,
    };
 
    if (indirect && indirect->count_from_stream_output) {
@@ -256,12 +277,15 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
    }
 
    if (info->mode == PIPE_PRIM_PATCHES) {
-      uint32_t factor_stride = ir3_tess_factor_stride(emit.key.key.tessellation);
+      struct shader_info *ds_info = ir3_get_shader_info(ctx->prog.ds);
+      unsigned tessellation = ir3_tess_mode(ds_info->tess._primitive_mode);
+
+      uint32_t factor_stride = ir3_tess_factor_stride(tessellation);
 
       STATIC_ASSERT(IR3_TESS_ISOLINES == TESS_ISOLINES + 1);
       STATIC_ASSERT(IR3_TESS_TRIANGLES == TESS_TRIANGLES + 1);
       STATIC_ASSERT(IR3_TESS_QUADS == TESS_QUADS + 1);
-      draw0.patch_type = emit.key.key.tessellation - 1;
+      draw0.patch_type = tessellation - 1;
 
       draw0.prim_type = DI_PT_PATCHES0 + ctx->patch_vertices;
       draw0.tess_enable = true;
@@ -299,9 +323,8 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       ctx->last.restart_index = restart_index;
    }
 
-   // TODO move fd6_emit_streamout.. I think..
    if (emit.dirty_groups)
-      fd6_emit_state(ring, &emit);
+      fd6_emit_3d_state(ring, &emit);
 
    /* for debug after a lock up, write a unique counter value
     * to scratch7 for each draw, to make it easier to match up
@@ -429,18 +452,21 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth) a
 
    fd6_event_write(batch, ring, 0x3f, false);
 
-   OUT_WFI5(ring);
-
-   OUT_PKT4(ring, REG_A6XX_RB_DBG_ECO_CNTL, 1);
-   OUT_RING(ring, screen->info->a6xx.magic.RB_DBG_ECO_CNTL_blit);
+   if (screen->info->a6xx.magic.RB_DBG_ECO_CNTL_blit != screen->info->a6xx.magic.RB_DBG_ECO_CNTL) {
+      /* This a non-context register, so we have to WFI before changing. */
+      OUT_WFI5(ring);
+      OUT_PKT4(ring, REG_A6XX_RB_DBG_ECO_CNTL, 1);
+      OUT_RING(ring, screen->info->a6xx.magic.RB_DBG_ECO_CNTL_blit);
+   }
 
    OUT_PKT7(ring, CP_BLIT, 1);
    OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
 
-   OUT_WFI5(ring);
-
-   OUT_PKT4(ring, REG_A6XX_RB_DBG_ECO_CNTL, 1);
-   OUT_RING(ring, 0x0); /* RB_DBG_ECO_CNTL */
+   if (screen->info->a6xx.magic.RB_DBG_ECO_CNTL_blit != screen->info->a6xx.magic.RB_DBG_ECO_CNTL) {
+      OUT_WFI5(ring);
+      OUT_PKT4(ring, REG_A6XX_RB_DBG_ECO_CNTL, 1);
+      OUT_RING(ring, screen->info->a6xx.magic.RB_DBG_ECO_CNTL);
+   }
 
    fd6_event_write(batch, ring, PC_CCU_FLUSH_COLOR_TS, true);
    fd6_event_write(batch, ring, PC_CCU_FLUSH_DEPTH_TS, true);

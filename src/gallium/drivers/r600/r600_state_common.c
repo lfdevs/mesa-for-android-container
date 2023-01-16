@@ -1191,6 +1191,8 @@ void r600_delete_shader_selector(struct pipe_context *ctx,
 	}
 	else if (sel->ir_type == PIPE_SHADER_IR_NIR)
 		ralloc_free(sel->nir);
+	if (sel->nir_blob)
+		free(sel->nir_blob);
 	free(sel);
 }
 
@@ -2020,13 +2022,6 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 		r600_update_db_shader_control(rctx);
 	}
 
-	/* For each shader stage that needs to spill, set up buffer for MEM_SCRATCH */
-	if (rctx->b.gfx_level >= EVERGREEN) {
-		evergreen_setup_scratch_buffers(rctx);
-	} else {
-		r600_setup_scratch_buffers(rctx);
-	}
-
 	/* on R600 we stuff masks + txq info into one constant buffer */
 	/* on evergreen we only need a txq info one */
 	if (rctx->ps_shader) {
@@ -2404,6 +2399,13 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 				      r600_conv_pipe_prim(info->mode));
 
 		rctx->last_primitive_type = info->mode;
+	}
+
+   /* For each shader stage that needs to spill, set up buffer for MEM_SCRATCH */
+	if (rctx->b.gfx_level >= EVERGREEN) {
+		evergreen_setup_scratch_buffers(rctx);
+	} else {
+		r600_setup_scratch_buffers(rctx);
 	}
 
 	/* Draw packets. */
@@ -3034,14 +3036,8 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 		goto out_unknown;
 	}
 
-	/* Find the first non-VOID channel. */
-	for (i = 0; i < 4; i++) {
-		if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-			break;
-		}
-	}
-
-	if (i == 4)
+	i = util_format_get_first_non_void_channel(format);
+	if (i == -1)
 		goto out_unknown;
 
 	/* uniform formats */

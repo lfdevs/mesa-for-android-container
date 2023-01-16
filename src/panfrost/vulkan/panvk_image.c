@@ -85,7 +85,6 @@ panvk_image_create(VkDevice _device,
       .array_size = image->vk.array_layers,
       .nr_samples = image->vk.samples,
       .nr_slices = image->vk.mip_levels,
-      .crc_mode = PAN_IMAGE_CRC_NONE
    };
 
    pan_image_layout_init(&image->pimage.layout, NULL);

@@ -3,7 +3,6 @@ from .gitlab_section import GitlabSection
 from .log_follower import (
     LogFollower,
     fatal_err,
-    fix_lava_color_log,
     fix_lava_gitlab_section_log,
     hide_sensitive_data,
     print_log,

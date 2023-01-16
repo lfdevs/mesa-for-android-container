@@ -62,6 +62,8 @@ struct radeon_compiler {
 	int max_alu_insts;
 	unsigned max_tex_insts;
 
+	int max_temp_index;
+
 	/* Whether to remove unused constants and empty holes in constant space. */
 	unsigned remove_unused_constants:1;
 

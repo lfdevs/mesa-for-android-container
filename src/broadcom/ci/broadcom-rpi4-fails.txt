@@ -362,3 +362,14 @@ dEQP-VK.compute.workgroup_memory_explicit_layout.copy_memory.two_invocations,Cra
 dEQP-VK.compute.workgroup_memory_explicit_layout.zero_ext.block,Crash
 dEQP-VK.compute.workgroup_memory_explicit_layout.zero_ext.other_block,Crash
 dEQP-VK.compute.workgroup_memory_explicit_layout.zero_ext.block_with_offset,Crash
+
+# EGL_BAD_DISPLAY is generated if display is not an EGL display connection
+# eglCreatePixmapSurface(0, 0x00000000, 0x00000000, { EGL_NONE });
+# // 0x00000000 returned
+# eglCreatePixmapSurface(0xffffffff, 0x00000000, 0x00000000, { EGL_NONE });
+# // 0x00000000 returned
+# EGL_BAD_CONFIG or EGL_BAD_PARAMETER is generated if config is not an EGL frame buffer configuration or if the PixmapSurface call is not supported
+# eglCreatePixmapSurface(0xb1f4d8, 0xffffffff, 0x00000000, { EGL_NONE });
+# // 0x00000000 returned
+# // ERROR expected: EGL_BAD_CONFIG or EGL_BAD_PARAMETER, Got: EGL_BAD_NATIVE_PIXMAP
+wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail

@@ -30,12 +30,12 @@ LLVMValueRef si_get_rel_patch_id(struct si_shader_context *ctx)
 {
    switch (ctx->stage) {
    case MESA_SHADER_TESS_CTRL:
-      return si_unpack_param(ctx, ctx->args.tcs_rel_ids, 0, 8);
+      return si_unpack_param(ctx, ctx->args->ac.tcs_rel_ids, 0, 8);
 
    case MESA_SHADER_TESS_EVAL:
       return ctx->abi.tes_rel_patch_id_replaced ?
          ctx->abi.tes_rel_patch_id_replaced :
-         ac_get_arg(&ctx->ac, ctx->args.tes_rel_patch_id);
+         ac_get_arg(&ctx->ac, ctx->args->ac.tes_rel_patch_id);
 
    default:
       assert(0);
@@ -83,7 +83,7 @@ static LLVMValueRef get_tcs_out_patch_stride(struct si_shader_context *ctx)
 
 static LLVMValueRef get_tcs_out_patch0_patch_data_offset(struct si_shader_context *ctx)
 {
-   return si_unpack_param(ctx, ctx->tcs_out_lds_offsets, 16, 16);
+   return si_unpack_param(ctx, ctx->args->tcs_out_lds_offsets, 16, 16);
 }
 
 static LLVMValueRef get_tcs_out_current_patch_data_offset(struct si_shader_context *ctx)
@@ -95,7 +95,7 @@ static LLVMValueRef get_tcs_out_current_patch_data_offset(struct si_shader_conte
    return ac_build_imad(&ctx->ac, patch_stride, rel_patch_id, patch0_patch_data_offset);
 }
 
-LLVMValueRef si_get_num_tcs_out_vertices(struct si_shader_context *ctx)
+static LLVMValueRef si_get_num_tcs_out_vertices(struct si_shader_context *ctx)
 {
    unsigned tcs_out_vertices =
       ctx->shader->selector ? ctx->shader->selector->info.base.tess.tcs_vertices_out
@@ -106,29 +106,7 @@ LLVMValueRef si_get_num_tcs_out_vertices(struct si_shader_context *ctx)
       return LLVMConstInt(ctx->ac.i32, tcs_out_vertices, 0);
 
    return LLVMBuildAdd(ctx->ac.builder,
-                       si_unpack_param(ctx, ctx->tcs_offchip_layout, 6, 5), ctx->ac.i32_1, "");
-}
-
-LLVMValueRef si_get_tcs_in_vertex_dw_stride(struct si_shader_context *ctx)
-{
-   unsigned stride;
-
-   switch (ctx->stage) {
-   case MESA_SHADER_VERTEX:
-      stride = ctx->shader->selector->info.lshs_vertex_stride / 4;
-      return LLVMConstInt(ctx->ac.i32, stride, 0);
-
-   case MESA_SHADER_TESS_CTRL:
-      if (ctx->screen->info.gfx_level >= GFX9 && ctx->shader->is_monolithic) {
-         stride = ctx->shader->key.ge.part.tcs.ls->info.lshs_vertex_stride / 4;
-         return LLVMConstInt(ctx->ac.i32, stride, 0);
-      }
-      return GET_FIELD(ctx, VS_STATE_LS_OUT_VERTEX_SIZE);
-
-   default:
-      assert(0);
-      return NULL;
-   }
+                       si_unpack_param(ctx, ctx->args->tcs_offchip_layout, 6, 5), ctx->ac.i32_1, "");
 }
 
 /* The offchip buffer layout for TCS->TES is
@@ -157,7 +135,7 @@ static LLVMValueRef get_tcs_tes_buffer_address(struct si_shader_context *ctx,
    LLVMValueRef param_stride, constant16;
 
    vertices_per_patch = si_get_num_tcs_out_vertices(ctx);
-   num_patches = si_unpack_param(ctx, ctx->tcs_offchip_layout, 0, 6);
+   num_patches = si_unpack_param(ctx, ctx->args->tcs_offchip_layout, 0, 6);
    num_patches = LLVMBuildAdd(ctx->ac.builder, num_patches, ctx->ac.i32_1, "");
    total_vertices = LLVMBuildMul(ctx->ac.builder, vertices_per_patch, num_patches, "");
 
@@ -174,7 +152,7 @@ static LLVMValueRef get_tcs_tes_buffer_address(struct si_shader_context *ctx,
    base_addr = LLVMBuildMul(ctx->ac.builder, base_addr, constant16, "");
 
    if (!vertex_index) {
-      LLVMValueRef patch_data_offset = si_unpack_param(ctx, ctx->tcs_offchip_layout, 11, 21);
+      LLVMValueRef patch_data_offset = si_unpack_param(ctx, ctx->args->tcs_offchip_layout, 11, 21);
 
       base_addr = LLVMBuildAdd(ctx->ac.builder, base_addr, patch_data_offset, "");
    }
@@ -218,7 +196,7 @@ static LLVMValueRef get_tess_ring_descriptor(struct si_shader_context *ctx, enum
 {
    LLVMBuilderRef builder = ctx->ac.builder;
    LLVMValueRef addr = ac_get_arg(
-      &ctx->ac, ring == TESS_OFFCHIP_RING_TES ? ctx->tes_offchip_addr : ctx->tcs_out_lds_layout);
+      &ctx->ac, ring == TESS_OFFCHIP_RING_TES ? ctx->args->tes_offchip_addr : ctx->args->tcs_out_lds_layout);
 
    /* TCS only receives high 13 bits of the address. */
    if (ring == TESS_OFFCHIP_RING_TCS || ring == TCS_FACTOR_RING) {
@@ -270,7 +248,7 @@ static LLVMValueRef si_nir_load_tcs_varyings(struct ac_shader_abi *abi, LLVMType
 
    ubyte semantic = info->input[driver_location].semantic;
    /* Load the TCS input from a VGPR. */
-   unsigned func_param = ctx->args.tcs_rel_ids.arg_index + 1 +
+   unsigned func_param = ctx->args->ac.tcs_rel_ids.arg_index + 1 +
       si_shader_io_get_unique_index(semantic, false) * 4;
 
    LLVMValueRef value[4];
@@ -384,7 +362,7 @@ static void si_write_tess_factors(struct si_shader_context *ctx, union si_shader
    buffer = get_tess_ring_descriptor(ctx, TCS_FACTOR_RING);
 
    /* Get the offset. */
-   tf_base = ac_get_arg(&ctx->ac, ctx->args.tcs_factor_offset);
+   tf_base = ac_get_arg(&ctx->ac, ctx->args->ac.tcs_factor_offset);
    byteoffset =
       LLVMBuildMul(ctx->ac.builder, rel_patch_id, LLVMConstInt(ctx->ac.i32, 4 * stride, 0), "");
    offset = 0;
@@ -418,7 +396,7 @@ static void si_write_tess_factors(struct si_shader_context *ctx, union si_shader
       unsigned param_outer, param_inner;
 
       buf = get_tess_ring_descriptor(ctx, TESS_OFFCHIP_RING_TCS);
-      base = ac_get_arg(&ctx->ac, ctx->args.tess_offchip_offset);
+      base = ac_get_arg(&ctx->ac, ctx->args->ac.tess_offchip_offset);
 
       param_outer = si_shader_io_get_unique_index_patch(VARYING_SLOT_TESS_LEVEL_OUTER);
       tf_outer_offset = get_tcs_tes_buffer_address(ctx, rel_patch_id, NULL,
@@ -449,7 +427,7 @@ void si_llvm_tcs_build_end(struct si_shader_context *ctx)
    LLVMValueRef rel_patch_id, invocation_id, tf_lds_offset;
 
    rel_patch_id = si_get_rel_patch_id(ctx);
-   invocation_id = si_unpack_param(ctx, ctx->args.tcs_rel_ids, 8, 5);
+   invocation_id = si_unpack_param(ctx, ctx->args->ac.tcs_rel_ids, 8, 5);
    tf_lds_offset = get_tcs_out_current_patch_data_offset(ctx);
 
    if (ctx->screen->info.gfx_level >= GFX9 && !ctx->shader->is_monolithic) {
@@ -477,18 +455,18 @@ void si_llvm_tcs_build_end(struct si_shader_context *ctx)
 
    if (ctx->screen->info.gfx_level >= GFX9) {
       ret =
-         si_insert_input_ret(ctx, ret, ctx->tcs_offchip_layout, 8 + GFX9_SGPR_TCS_OFFCHIP_LAYOUT);
-      ret = si_insert_input_ret(ctx, ret, ctx->tcs_out_lds_layout, 8 + GFX9_SGPR_TCS_OUT_LAYOUT);
+         si_insert_input_ret(ctx, ret, ctx->args->tcs_offchip_layout, 8 + GFX9_SGPR_TCS_OFFCHIP_LAYOUT);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->tcs_out_lds_layout, 8 + GFX9_SGPR_TCS_OUT_LAYOUT);
       /* Tess offchip and tess factor offsets are at the beginning. */
-      ret = si_insert_input_ret(ctx, ret, ctx->args.tess_offchip_offset, 2);
-      ret = si_insert_input_ret(ctx, ret, ctx->args.tcs_factor_offset, 4);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->ac.tess_offchip_offset, 2);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->ac.tcs_factor_offset, 4);
       vgpr = 8 + GFX9_SGPR_TCS_OUT_LAYOUT + 1;
    } else {
-      ret = si_insert_input_ret(ctx, ret, ctx->tcs_offchip_layout, GFX6_SGPR_TCS_OFFCHIP_LAYOUT);
-      ret = si_insert_input_ret(ctx, ret, ctx->tcs_out_lds_layout, GFX6_SGPR_TCS_OUT_LAYOUT);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->tcs_offchip_layout, GFX6_SGPR_TCS_OFFCHIP_LAYOUT);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->tcs_out_lds_layout, GFX6_SGPR_TCS_OUT_LAYOUT);
       /* Tess offchip and tess factor offsets are after user SGPRs. */
-      ret = si_insert_input_ret(ctx, ret, ctx->args.tess_offchip_offset, GFX6_TCS_NUM_USER_SGPR);
-      ret = si_insert_input_ret(ctx, ret, ctx->args.tcs_factor_offset, GFX6_TCS_NUM_USER_SGPR + 1);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->ac.tess_offchip_offset, GFX6_TCS_NUM_USER_SGPR);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->ac.tcs_factor_offset, GFX6_TCS_NUM_USER_SGPR + 1);
       vgpr = GFX6_TCS_NUM_USER_SGPR + 2;
    }
 
@@ -542,30 +520,30 @@ static void si_set_ls_return_value_for_tcs(struct si_shader_context *ctx)
 
    LLVMValueRef ret = ctx->return_value;
 
-   ret = si_insert_input_ptr(ctx, ret, ctx->other_const_and_shader_buffers, 0);
-   ret = si_insert_input_ptr(ctx, ret, ctx->other_samplers_and_images, 1);
-   ret = si_insert_input_ret(ctx, ret, ctx->args.tess_offchip_offset, 2);
-   ret = si_insert_input_ret(ctx, ret, ctx->args.merged_wave_info, 3);
-   ret = si_insert_input_ret(ctx, ret, ctx->args.tcs_factor_offset, 4);
+   ret = si_insert_input_ptr(ctx, ret, ctx->args->other_const_and_shader_buffers, 0);
+   ret = si_insert_input_ptr(ctx, ret, ctx->args->other_samplers_and_images, 1);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->ac.tess_offchip_offset, 2);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->ac.merged_wave_info, 3);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->ac.tcs_factor_offset, 4);
    if (ctx->screen->info.gfx_level <= GFX10_3)
-      ret = si_insert_input_ret(ctx, ret, ctx->args.scratch_offset, 5);
+      ret = si_insert_input_ret(ctx, ret, ctx->args->ac.scratch_offset, 5);
 
-   ret = si_insert_input_ptr(ctx, ret, ctx->internal_bindings, 8 + SI_SGPR_INTERNAL_BINDINGS);
-   ret = si_insert_input_ptr(ctx, ret, ctx->bindless_samplers_and_images,
+   ret = si_insert_input_ptr(ctx, ret, ctx->args->internal_bindings, 8 + SI_SGPR_INTERNAL_BINDINGS);
+   ret = si_insert_input_ptr(ctx, ret, ctx->args->bindless_samplers_and_images,
                              8 + SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES);
 
-   ret = si_insert_input_ret(ctx, ret, ctx->vs_state_bits, 8 + SI_SGPR_VS_STATE_BITS);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->vs_state_bits, 8 + SI_SGPR_VS_STATE_BITS);
 
-   ret = si_insert_input_ret(ctx, ret, ctx->tcs_offchip_layout, 8 + GFX9_SGPR_TCS_OFFCHIP_LAYOUT);
-   ret = si_insert_input_ret(ctx, ret, ctx->tcs_out_lds_offsets, 8 + GFX9_SGPR_TCS_OUT_OFFSETS);
-   ret = si_insert_input_ret(ctx, ret, ctx->tcs_out_lds_layout, 8 + GFX9_SGPR_TCS_OUT_LAYOUT);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->tcs_offchip_layout, 8 + GFX9_SGPR_TCS_OFFCHIP_LAYOUT);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->tcs_out_lds_offsets, 8 + GFX9_SGPR_TCS_OUT_OFFSETS);
+   ret = si_insert_input_ret(ctx, ret, ctx->args->tcs_out_lds_layout, 8 + GFX9_SGPR_TCS_OUT_LAYOUT);
 
    unsigned vgpr = 8 + GFX9_TCS_NUM_USER_SGPR;
    ret = LLVMBuildInsertValue(ctx->ac.builder, ret,
-                              ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args.tcs_patch_id)),
+                              ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args->ac.tcs_patch_id)),
                               vgpr++, "");
    ret = LLVMBuildInsertValue(ctx->ac.builder, ret,
-                              ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args.tcs_rel_ids)),
+                              ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, ctx->args->ac.tcs_rel_ids)),
                               vgpr++, "");
    ctx->return_value = ret;
 }
@@ -604,54 +582,54 @@ void si_llvm_ls_build_end(struct si_shader_context *ctx)
  */
 void si_llvm_build_tcs_epilog(struct si_shader_context *ctx, union si_shader_part_key *key)
 {
-   memset(&ctx->args, 0, sizeof(ctx->args));
+   memset(ctx->args, 0, sizeof(*ctx->args));
 
    if (ctx->screen->info.gfx_level >= GFX9) {
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args.tess_offchip_offset);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL); /* wave info */
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args.tcs_factor_offset);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->tcs_offchip_layout);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->tcs_out_lds_layout);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->ac.tess_offchip_offset);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL); /* wave info */
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->ac.tcs_factor_offset);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->tcs_offchip_layout);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->tcs_out_lds_layout);
    } else {
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->tcs_offchip_layout);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->tcs_out_lds_layout);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args.tess_offchip_offset);
-      ac_add_arg(&ctx->args, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args.tcs_factor_offset);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->tcs_offchip_layout);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->tcs_out_lds_layout);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, NULL);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->ac.tess_offchip_offset);
+      ac_add_arg(&ctx->args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &ctx->args->ac.tcs_factor_offset);
    }
 
-   ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* VGPR gap */
-   ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* VGPR gap */
+   ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* VGPR gap */
+   ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* VGPR gap */
    struct ac_arg rel_patch_id; /* patch index within the wave (REL_PATCH_ID) */
-   ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, &rel_patch_id);
+   ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &rel_patch_id);
    struct ac_arg invocation_id; /* invocation ID within the patch */
-   ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, &invocation_id);
+   ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &invocation_id);
    struct ac_arg
       tcs_out_current_patch_data_offset; /* LDS offset where tess factors should be loaded from */
-   ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, &tcs_out_current_patch_data_offset);
+   ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &tcs_out_current_patch_data_offset);
 
    struct ac_arg tess_factors[6];
    for (unsigned i = 0; i < 6; i++)
-      ac_add_arg(&ctx->args, AC_ARG_VGPR, 1, AC_ARG_INT, &tess_factors[i]);
+      ac_add_arg(&ctx->args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &tess_factors[i]);
 
    /* Create the function. */
    si_llvm_create_func(ctx, "tcs_epilog", NULL, 0, ctx->screen->info.gfx_level >= GFX7 ? 128 : 0);

@@ -482,11 +482,9 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
        * double if the other operands are double also.
        */
       if (I->bit_size != eta->bit_size) {
-         nir_op conversion_op =
-            nir_type_conversion_op(nir_type_float | eta->bit_size,
-                                   nir_type_float | I->bit_size,
-                                   nir_rounding_mode_undef);
-         eta = nir_build_alu(nb, conversion_op, eta, NULL, NULL, NULL);
+         eta = nir_type_convert(nb, eta, nir_type_float,
+                                nir_type_float | I->bit_size,
+                                nir_rounding_mode_undef);
       }
       /* k = 1.0 - eta * eta * (1.0 - dot(N, I) * dot(N, I)) */
       nir_ssa_def *k =

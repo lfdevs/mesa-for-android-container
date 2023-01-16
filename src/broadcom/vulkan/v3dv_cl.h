@@ -26,7 +26,7 @@
 
 #include "broadcom/cle/v3d_packet_helpers.h"
 
-#include "list.h"
+#include "util/list.h"
 
 struct v3dv_bo;
 struct v3dv_job;

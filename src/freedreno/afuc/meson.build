@@ -68,7 +68,7 @@ if with_tests
     diff,
     args: ['-u', files('../.gitlab-ci/reference/afuc_test.fw'), asm_fw],
     suite: 'freedreno',
-    workdir: meson.source_root()
+    workdir: dir_source_root
   )
 endif
 
@@ -112,7 +112,7 @@ if cc.sizeof('size_t') > 4
       diff,
       args: ['-u', files('../.gitlab-ci/reference/afuc_test.asm'), disasm_fw],
       suite: 'freedreno',
-      workdir: meson.source_root()
+      workdir: dir_source_root
     )
   endif
 endif

@@ -34,7 +34,7 @@
 #include "etnaviv_tiling.h"
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_shader_tokens.h"
 #include "pipe/p_state.h"
 #include "util/slab.h"
@@ -215,5 +215,9 @@ etna_transfer(struct pipe_transfer *p)
 
 struct pipe_context *
 etna_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags);
+
+void
+etna_context_add_flush_resource(struct etna_context *ctx,
+                                struct pipe_resource *rsc);
 
 #endif

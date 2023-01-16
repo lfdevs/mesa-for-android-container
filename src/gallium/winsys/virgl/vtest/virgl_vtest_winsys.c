@@ -27,7 +27,7 @@
 #include "util/u_inlines.h"
 #include "util/os_time.h"
 #include "frontend/sw_winsys.h"
-#include "os/os_mman.h"
+#include "util/os_mman.h"
 
 #include "virgl_vtest_winsys.h"
 #include "virgl_vtest_public.h"

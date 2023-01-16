@@ -40,7 +40,7 @@
 
 #include "svga_winsys.h"
 #include "pipebuffer/pb_buffer_fenced.h"
-#include <os/os_thread.h>
+#include "util/u_thread.h"
 #include <sys/types.h>
 
 #define VMW_GMR_POOL_SIZE (16*1024*1024)

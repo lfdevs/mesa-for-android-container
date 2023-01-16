@@ -117,7 +117,7 @@ stw_tls_data_create(DWORD dwThreadId)
    struct stw_tls_data *data;
 
    if (0) {
-      debug_printf("%s(0x%04lx)\n", __FUNCTION__, dwThreadId);
+      debug_printf("%s(0x%04lx)\n", __func__, dwThreadId);
    }
 
    data = calloc(1, sizeof *data);
@@ -158,7 +158,7 @@ stw_tls_data_destroy(struct stw_tls_data *data)
    }
 
    if (0) {
-      debug_printf("%s(0x%04lx)\n", __FUNCTION__, data->dwThreadId);
+      debug_printf("%s(0x%04lx)\n", __func__, data->dwThreadId);
    }
 
    if (data->hCallWndProcHook) {

@@ -21,7 +21,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 #include "main/hash.h"
 
@@ -827,7 +827,8 @@ _mesa_SetFragmentShaderConstantATI(GLuint dst, const GLfloat * value)
       curProg->LocalConstDef |= 1 << dstindex;
    }
    else {
-      FLUSH_VERTICES(ctx, _NEW_PROGRAM, 0);
+      FLUSH_VERTICES(ctx, 0, 0);
+      ctx->NewDriverState |= ST_NEW_FS_CONSTANTS;
       COPY_4V(ctx->ATIFragmentShader.GlobalConstants[dstindex], value);
    }
 }

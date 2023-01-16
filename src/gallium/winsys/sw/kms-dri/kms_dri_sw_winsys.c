@@ -43,7 +43,7 @@
 #include <xf86drm.h>
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_state.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"

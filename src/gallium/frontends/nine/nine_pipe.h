@@ -24,7 +24,7 @@
 #define _NINE_PIPE_H_
 
 #include "d3d9.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h" /* pipe_box */
 #include "util/macros.h"

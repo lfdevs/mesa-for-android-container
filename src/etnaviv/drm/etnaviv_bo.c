@@ -24,7 +24,7 @@
  *    Christian Gmeiner <christian.gmeiner@gmail.com>
  */
 
-#include "os/os_mman.h"
+#include "util/os_mman.h"
 #include "util/hash_table.h"
 
 #include "etnaviv_priv.h"

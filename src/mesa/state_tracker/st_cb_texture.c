@@ -1622,9 +1622,9 @@ fail:
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
 
    ctx->Array.NewVertexElements = true;
-   st->dirty |= ST_NEW_VERTEX_ARRAYS |
-                ST_NEW_FS_CONSTANTS |
-                ST_NEW_FS_SAMPLER_VIEWS;
+   ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS |
+                          ST_NEW_FS_CONSTANTS |
+                          ST_NEW_FS_SAMPLER_VIEWS;
 
    return success;
 }
@@ -1912,10 +1912,10 @@ fail:
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
 
    st->ctx->Array.NewVertexElements = true;
-   st->dirty |= ST_NEW_FS_CONSTANTS |
-                ST_NEW_FS_IMAGES |
-                ST_NEW_FS_SAMPLER_VIEWS |
-                ST_NEW_VERTEX_ARRAYS;
+   st->ctx->NewDriverState |= ST_NEW_FS_CONSTANTS |
+                              ST_NEW_FS_IMAGES |
+                              ST_NEW_FS_SAMPLER_VIEWS |
+                              ST_NEW_VERTEX_ARRAYS;
 
    return success;
 }
@@ -3079,7 +3079,7 @@ st_finalize_texture(struct gl_context *ctx,
           */
          pipe_resource_reference(&tObj->pt, NULL);
          st_texture_release_all_sampler_views(st, tObj);
-         st->dirty |= ST_NEW_FRAMEBUFFER;
+         ctx->NewDriverState |= ST_NEW_FRAMEBUFFER;
       }
    }
 

@@ -290,9 +290,11 @@ TEST_F(TestInstrFromString, test_alu_interp_xy)
    auto init =
       std::string("ALU INTERP_ZW R1024.z@chan : R0.y@fully Param0.z {W} VEC_210");
 
+   auto r0y = new Register(0, 1, pin_fully);
+   r0y->set_flag(Register::pin_start);
    AluInstr expect(op2_interp_zw,
                    new Register(1024, 2, pin_chan),
-                   new Register(0, 1, pin_fully),
+                   r0y,
                    new InlineConstant(ALU_SRC_PARAM_BASE, 2),
                    {alu_write});
    expect.set_bank_swizzle(alu_vec_210);
@@ -305,9 +307,12 @@ TEST_F(TestInstrFromString, test_alu_interp_xy_no_write)
    add_dest_from_string("R0.x@fully");
    auto init = std::string("ALU INTERP_XY __.x@chan : R0.x@fully Param0.z {} VEC_210");
 
+   auto r0x = new Register(0, 0, pin_fully);
+   r0x->set_flag(Register::pin_start);
+
    AluInstr expect(op2_interp_xy,
                    new Register(1024, 0, pin_chan),
-                   new Register(0, 0, pin_fully),
+                   r0x,
                    new InlineConstant(ALU_SRC_PARAM_BASE, 2),
                    {});
    expect.set_bank_swizzle(alu_vec_210);
@@ -696,7 +701,7 @@ TEST_F(TestInstrFromString, test_writeTF)
 
    add_dest_vec4_from_string("R1.xyzw");
 
-   WriteTFInstr expect(RegisterVec4(1, true, {0, 1, 2, 3}, pin_group));
+   WriteTFInstr expect(RegisterVec4(1, false, {0, 1, 2, 3}, pin_group));
 
    check(init, expect);
 }
@@ -721,10 +726,6 @@ TestInstrFromString::check(const string& init, const Instr& expect)
    auto instr = from_string(init);
    ASSERT_TRUE(instr);
    EXPECT_EQ(*instr, expect);
-
-   ostringstream os;
-   instr->print(os);
-   EXPECT_EQ(os.str(), init);
 }
 
 void

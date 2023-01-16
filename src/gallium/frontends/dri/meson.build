@@ -59,7 +59,7 @@ endif
 
 libdri = static_library(
   'dri',
-  files_libdri,
+  [ files_libdri, sha1_h ],
   include_directories : [
     inc_include, inc_util, inc_mesa, inc_mapi, inc_src, inc_gallium,
     inc_gallium_aux, inc_util,  inc_gallium_drivers,

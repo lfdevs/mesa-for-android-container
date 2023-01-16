@@ -60,7 +60,6 @@ struct nvc0_program {
       uint32_t tess_mode; /* ~0 if defined by the other stage */
    } tp;
    struct {
-      uint32_t lmem_size; /* local memory (TGSI PRIVATE resource) size */
       uint32_t smem_size; /* shared memory (TGSI LOCAL resource) size */
    } cp;
    uint8_t num_barriers;

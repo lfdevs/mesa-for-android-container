@@ -100,6 +100,7 @@ kernel::launch(command_queue &q,
    copy(pad_vector(q, reduced_grid_size, 1), info.grid);
    info.pc = find(name_equals(_name), b.syms).offset;
    info.input = exec.input.data();
+   info.variable_shared_mem = exec.mem_local;
 
    q.pipe->launch_grid(q.pipe, &info);
 
@@ -274,14 +275,14 @@ kernel::exec_context::bind(intrusive_ptr<command_queue> _q,
 
    // Create a new compute state if anything changed.
    if (!st || q != _q ||
-       cs.req_local_mem != mem_local ||
        cs.req_input_mem != input.size()) {
       if (st)
          _q->pipe->delete_compute_state(_q->pipe, st);
 
       cs.ir_type = q->device().ir_format();
       cs.prog = &(msec.data[0]);
-      cs.req_local_mem = mem_local;
+      // we only pass in NIRs or LLVMs and both IRs decode the size
+      cs.static_shared_mem = 0;
       cs.req_input_mem = input.size();
       st = q->pipe->create_compute_state(q->pipe, &cs);
       if (!st) {

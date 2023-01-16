@@ -19,8 +19,8 @@ struct vn_info_extension {
 };
 
 /* sorted by extension names for bsearch */
-static const uint32_t _vn_info_extension_count = 98;
-static const struct vn_info_extension _vn_info_extensions[98] = {
+static const uint32_t _vn_info_extension_count = 99;
+static const struct vn_info_extension _vn_info_extensions[99] = {
    { "VK_EXT_4444_formats", 341, 1 },
    { "VK_EXT_calibrated_timestamps", 185, 2 },
    { "VK_EXT_command_serialization", 384, 0 },
@@ -42,6 +42,7 @@ static const struct vn_info_extension _vn_info_extensions[98] = {
    { "VK_EXT_line_rasterization", 260, 1 },
    { "VK_EXT_multi_draw", 393, 1 },
    { "VK_EXT_mutable_descriptor_type", 495, 1 },
+   { "VK_EXT_pci_bus_info", 213, 2 },
    { "VK_EXT_pipeline_creation_cache_control", 298, 3 },
    { "VK_EXT_pipeline_creation_feedback", 193, 1 },
    { "VK_EXT_primitive_topology_list_restart", 357, 1 },

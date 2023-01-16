@@ -25,19 +25,6 @@ dEQP-EGL.functional.color_clears.single_context.gles3.rgb888_pbuffer
 dEQP-EGL.functional.color_clears.single_context.gles3.rgb888_window
 dEQP-EGL.functional.color_clears.single_context.gles3.rgba8888_pbuffer
 dEQP-EGL.functional.color_clears.single_context.gles3.rgba8888_window
-dEQP-EGL.functional.create_context_ext.gl_31.rgba8888_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.gl_32.rgb888_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.gl_32.rgba8888_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.gles_20.rgba8888_depth_stencil
-dEQP-EGL.functional.create_context_ext.gles_30.rgba8888_depth_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_depth_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_no_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_no_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_32.rgb888_no_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_32.rgba8888_no_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.robust_gl_33.rgba8888_depth_no_stencil
-dEQP-EGL.functional.create_context_ext.robust_gles_2_ext.rgb888_no_depth_no_stencil
 dEQP-EGL.functional.render.multi_context.gles2_gles3.rgb888_pbuffer
 dEQP-EGL.functional.render.multi_context.gles2_gles3.rgb888_window
 dEQP-EGL.functional.render.multi_context.gles2_gles3.rgba8888_pbuffer
@@ -70,16 +57,11 @@ dEQP-EGL.functional.render.single_context.gles3.rgb888_pbuffer
 dEQP-EGL.functional.render.single_context.gles3.rgb888_window
 dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer
 dEQP-EGL.functional.render.single_context.gles3.rgba8888_window
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex
 dEQP-EGL.functional.sharing.gles2.buffer.render
 dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.textures.copyteximage2d.13
 dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copyteximage2d.0
 dEQP-EGL.functional.sharing.gles2.multithread.random.textures.copyteximage2d.16
 dEQP-EGL.functional.sharing.gles2.multithread.simple.buffers.bufferdata
-dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_srgb
-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_srgb
-dEQP-EGL.functional.wide_color.window_8888_colorspace_default
-dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb
 
 # Started at least by Jan 2020, current as of May 2021
 dEQP-GLES31.functional.layout_binding.ssbo.fragment_binding_array
@@ -206,3 +188,15 @@ spec@arb_depth_buffer_float@fbo-depthstencil-gl_depth32f_stencil8-blit
 # Flakes from aug-oct 2022.
 spec@ext_timer_query@time-elapsed
 spec@ext_texture_lod_bias@lodbias
+
+# Started around 2022-11-16, first appeared in https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/19588
+# Tracking issue: https://gitlab.freedesktop.org/mesa/mesa/-/issues/7713
+KHR-GL45.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std430-matC-pad
+
+# sometimes passes.
+KHR-GL45.shader_image_load_store.basic-allTargets-store
+
+# First appeared 2022-09-28, innocent branch
+KHR-GLES31.core.shader_image_load_store.basic-allTargets-atomicFS
+
+KHR-GL45.shader_image_load_store.basic-allTargets-atomic

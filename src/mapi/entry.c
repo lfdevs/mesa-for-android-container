@@ -84,4 +84,8 @@ entry_patch(mapi_func entry, int slot)
 
 #endif /* MAPI_MODE_BRIDGE */
 
+#if defined(_WIN32) && defined(_WINDOWS_)
+#error "Should not include <windows.h> here"
+#endif
+
 #endif /* asm */

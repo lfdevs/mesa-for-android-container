@@ -30,7 +30,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  *   Keith Whitwell <keithw@vmware.com>
  */
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/bufferobj.h"
 #include "main/context.h"
 #include "main/macros.h"
@@ -211,6 +211,9 @@ vbo_exec_copy_to_current(struct vbo_exec_context *exec)
                 i == VBO_ATTRIB_MAT_BACK_SHININESS)
                ctx->NewState |= _NEW_FF_VERT_PROGRAM;
          } else {
+            if (i == VBO_ATTRIB_EDGEFLAG)
+               _mesa_update_edgeflag_state_vao(ctx);
+
             ctx->NewState |= _NEW_CURRENT_ATTRIB;
             ctx->PopAttribState |= GL_CURRENT_BIT;
          }
@@ -222,8 +225,8 @@ vbo_exec_copy_to_current(struct vbo_exec_context *exec)
        * directly.
        */
       /* Size here is in components - not bytes */
-      if (exec->vtx.attr[i].type != vbo->current[i].Format.Type ||
-          (exec->vtx.attr[i].size >> dmul_shift) != vbo->current[i].Format.Size) {
+      if (exec->vtx.attr[i].type != vbo->current[i].Format.User.Type ||
+          (exec->vtx.attr[i].size >> dmul_shift) != vbo->current[i].Format.User.Size) {
          vbo_set_vertex_format(&vbo->current[i].Format,
                                exec->vtx.attr[i].size >> dmul_shift,
                                exec->vtx.attr[i].type);

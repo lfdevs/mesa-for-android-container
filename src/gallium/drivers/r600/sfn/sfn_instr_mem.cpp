@@ -42,7 +42,8 @@ GDSInstr::GDSInstr(
    set_always_keep();
 
    m_src.add_use(this);
-   m_dest->add_parent(this);
+   if (m_dest)
+      m_dest->add_parent(this);
 }
 
 bool
@@ -79,7 +80,11 @@ GDSInstr::do_ready() const
 void
 GDSInstr::do_print(std::ostream& os) const
 {
-   os << "GDS " << lds_ops.at(m_op).name << *m_dest;
+   os << "GDS " << lds_ops.at(m_op).name;
+   if (m_dest)
+      os << *m_dest;
+   else
+      os << "___";
    os << " " << m_src;
    os << " BASE:" << resource_base();
 
@@ -109,6 +114,11 @@ GDSInstr::emit_atomic_counter(nir_intrinsic_instr *intr, Shader& shader)
    default:
       return false;
    }
+}
+
+uint8_t GDSInstr::allowed_src_chan_mask() const
+{
+   return m_src.free_chan_mask();
 }
 
 static ESDOp
@@ -178,7 +188,7 @@ GDSInstr::emit_atomic_op2(nir_intrinsic_instr *instr, Shader& shader)
 {
    auto& vf = shader.value_factory();
    bool read_result = !instr->dest.is_ssa || !list_is_empty(&instr->dest.ssa.uses);
-
+	
    ESDOp op =
       read_result ? get_opcode(instr->intrinsic) : get_opcode_wo(instr->intrinsic);
 
@@ -190,7 +200,7 @@ GDSInstr::emit_atomic_op2(nir_intrinsic_instr *instr, Shader& shader)
    }
    offset += nir_intrinsic_base(instr);
 
-   auto dest = vf.dest(instr->dest, 0, pin_free);
+   auto dest = read_result ? vf.dest(instr->dest, 0, pin_free) : nullptr;
 
    PRegister src_as_register = nullptr;
    auto src_val = vf.src(instr->src[1], 0);
@@ -280,14 +290,13 @@ GDSInstr::emit_atomic_inc(nir_intrinsic_instr *instr, Shader& shader)
    offset += shader.remap_atomic_base(nir_intrinsic_base(instr));
 
    GDSInstr *ir = nullptr;
+   auto dest = read_result ? vf.dest(instr->dest, 0, pin_free) : nullptr;
 
    if (shader.chip_class() < ISA_CC_CAYMAN) {
-      auto dest = vf.dest(instr->dest, 0, pin_free);
-      RegisterVec4 src(nullptr, shader.atomic_update(), nullptr, nullptr, pin_chan);
+            RegisterVec4 src(nullptr, shader.atomic_update(), nullptr, nullptr, pin_chan);
       ir =
          new GDSInstr(read_result ? DS_OP_ADD_RET : DS_OP_ADD, dest, src, offset, uav_id);
    } else {
-      auto dest = vf.dest(instr->dest, 0, pin_free);
       auto tmp = vf.temp_vec4(pin_group, {0, 1, 7, 7});
 
       if (uav_id)
@@ -314,18 +323,23 @@ GDSInstr::emit_atomic_pre_dec(nir_intrinsic_instr *instr, Shader& shader)
 {
    auto& vf = shader.value_factory();
 
+   bool read_result = !instr->dest.is_ssa || !list_is_empty(&instr->dest.ssa.uses);
+
+   auto opcode = read_result ? DS_OP_SUB_RET : DS_OP_SUB;
+	
    auto [offset, uav_id] = shader.evaluate_resource_offset(instr, 0);
    {
    }
    offset += shader.remap_atomic_base(nir_intrinsic_base(instr));
 
-   auto *tmp_dest = vf.temp_register();
+
+   auto *tmp_dest = read_result ? vf.temp_register() : nullptr;
 
    GDSInstr *ir = nullptr;
 
    if (shader.chip_class() < ISA_CC_CAYMAN) {
       RegisterVec4 src(nullptr, shader.atomic_update(), nullptr, nullptr, pin_chan);
-      ir = new GDSInstr(DS_OP_SUB_RET, tmp_dest, src, offset, uav_id);
+      ir = new GDSInstr(opcode, tmp_dest, src, offset, uav_id);
    } else {
       auto tmp = vf.temp_vec4(pin_group, {0, 1, 7, 7});
       if (uav_id)
@@ -341,15 +355,16 @@ GDSInstr::emit_atomic_pre_dec(nir_intrinsic_instr *instr, Shader& shader)
 
       shader.emit_instruction(
          new AluInstr(op1_mov, tmp[1], shader.atomic_update(), AluInstr::last_write));
-      ir = new GDSInstr(DS_OP_SUB_RET, tmp_dest, tmp, 0, nullptr);
+      ir = new GDSInstr(opcode, tmp_dest, tmp, 0, nullptr);
    }
 
    shader.emit_instruction(ir);
-   shader.emit_instruction(new AluInstr(op2_sub_int,
-                                        vf.dest(instr->dest, 0, pin_free),
-                                        tmp_dest,
-                                        vf.one_i(),
-                                        AluInstr::last_write));
+   if (read_result)
+      shader.emit_instruction(new AluInstr(op2_sub_int,
+                                           vf.dest(instr->dest, 0, pin_free),
+                                           tmp_dest,
+                                           vf.one_i(),
+                                           AluInstr::last_write));
    return true;
 }
 

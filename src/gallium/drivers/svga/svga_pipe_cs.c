@@ -70,7 +70,7 @@ svga_create_compute_state(struct pipe_context *pipe,
    /* Collect shader basic info */
    svga_tgsi_scan_shader(&cs->base);
 
-   cs->shared_mem_size = templ->req_local_mem;
+   cs->shared_mem_size = templ->static_shared_mem;
 
    SVGA_STATS_TIME_POP(svga_sws(svga));
    return cs;

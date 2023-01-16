@@ -133,10 +133,28 @@
 #define RENCODE_FEEDBACK_BUFFER_MODE_LINEAR                                         0
 #define RENCODE_FEEDBACK_BUFFER_MODE_CIRCULAR                                       1
 
+#define RENCODE_STATISTICS_TYPE_NONE                                                0
+#define RENCODE_STATISTICS_TYPE_0                                                   1
+
 #define RENCODE_MAX_NUM_TEMPORAL_LAYERS                                             4
 
 #define PIPE_H265_ENC_CTB_SIZE                                                      64
 #define PIPE_H264_MB_SIZE                                                           16
+
+#define RENCODE_COLOR_VOLUME_G22_BT709                                               0
+
+#define RENCODE_COLOR_RANGE_FULL                                                     0
+#define RENCODE_CHROMA_LOCATION_INTERSTITIAL                                         0
+
+#define RENCODE_COLOR_BIT_DEPTH_8_BIT                                                0
+#define RENCODE_COLOR_BIT_DEPTH_10_BIT                                               1
+
+#define RENCODE_CHROMA_SUBSAMPLING_4_2_0                                             0
+
+#define RENCODE_COLOR_PACKING_FORMAT_NV12                                            0
+#define RENCODE_COLOR_PACKING_FORMAT_P010                                            1
+
+#define RENCODE_COLOR_SPACE_YUV                                                      0
 
 #define PIPE_ALIGN_IN_BLOCK_SIZE(value, align) (((value) + ((align) - 1))/(align))
 
@@ -417,6 +435,31 @@ typedef struct rvcn_enc_feedback_buffer_s {
    uint32_t feedback_data_size;
 } rvcn_enc_feedback_buffer_t;
 
+typedef struct rvcn_encode_stats_type_0_s
+{
+    uint32_t qp_frame;
+    uint32_t qp_avg_ctb;
+    uint32_t qp_max_ctb;
+    uint32_t qp_min_ctb;
+    uint32_t pix_intra;
+    uint32_t pix_inter;
+    uint32_t pix_skip;
+    uint32_t bitcount_residual;
+    uint32_t bitcount_all_minus_header;
+    uint32_t bitcount_motion;
+    uint32_t bitcount_inter;
+    uint32_t bitcount_intra;
+    uint32_t mv_x_frame;
+    uint32_t mv_y_frame;
+} rvcn_encode_stats_type_0_t;
+
+typedef struct rvcn_encode_stats_s
+{
+    uint32_t encode_stats_type;
+    uint32_t encode_stats_buffer_address_hi;
+    uint32_t encode_stats_buffer_address_lo;
+} rvcn_enc_stats_t;
+
 typedef struct rvcn_enc_cmd_s {
    uint32_t session_info;
    uint32_t task_info;
@@ -444,6 +487,7 @@ typedef struct rvcn_enc_cmd_s {
    uint32_t deblocking_filter_h264;
    uint32_t input_format;
    uint32_t output_format;
+   uint32_t enc_statistics;
 } rvcn_enc_cmd_t;
 
 typedef struct rvcn_enc_quality_modes_s
@@ -466,6 +510,25 @@ typedef struct rvcn_enc_vui_info_s
    uint32_t num_units_in_tick;
    uint32_t time_scale;
 }rvcn_enc_vui_info;
+
+typedef struct rvcn_enc_input_format_s
+{
+   uint32_t input_color_volume;
+   uint32_t input_color_space;
+   uint32_t input_color_range;
+   uint32_t input_chroma_subsampling;
+   uint32_t input_chroma_location;
+   uint32_t input_color_bit_depth;
+   uint32_t input_color_packing_format;
+} rvcn_enc_input_format_t;
+
+typedef struct rvcn_enc_output_format_s
+{
+   uint32_t output_color_volume;
+   uint32_t output_color_range;
+   uint32_t output_chroma_location;  /* chroma location to luma */
+   uint32_t output_color_bit_depth;
+} rvcn_enc_output_format_t;
 
 typedef void (*radeon_enc_get_buffer)(struct pipe_resource *resource, struct pb_buffer **handle,
                                       struct radeon_surf **surface);
@@ -543,6 +606,9 @@ struct radeon_enc_pic {
    rvcn_enc_feedback_buffer_t fb_buf;
    rvcn_enc_intra_refresh_t intra_ref;
    rvcn_enc_encode_params_t enc_params;
+   rvcn_enc_stats_t enc_statistics;
+   rvcn_enc_input_format_t enc_input_format;
+   rvcn_enc_output_format_t enc_output_format;
 };
 
 struct radeon_encoder {
@@ -586,6 +652,7 @@ struct radeon_encoder {
    void (*encode_headers)(struct radeon_encoder *enc);
    void (*input_format)(struct radeon_encoder *enc);
    void (*output_format)(struct radeon_encoder *enc);
+   void (*encode_statistics)(struct radeon_encoder *enc);
    /* mq is used for preversing multiple queue ibs */
    void (*mq_begin)(struct radeon_encoder *enc);
    void (*mq_encode)(struct radeon_encoder *enc);
@@ -610,6 +677,7 @@ struct radeon_encoder {
    struct rvid_buffer *fb;
    struct rvid_buffer *dpb;
    struct radeon_enc_pic enc_pic;
+   struct pb_buffer *stats;
    rvcn_enc_cmd_t cmd;
 
    unsigned alignment;

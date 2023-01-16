@@ -24,7 +24,7 @@
 
 
 #include <stdbool.h>
-#include "glheader.h"
+#include "util/glheader.h"
 #include "context.h"
 #include "debug_output.h"
 #include "get.h"

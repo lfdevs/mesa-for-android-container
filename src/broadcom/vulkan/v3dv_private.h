@@ -79,7 +79,7 @@
 #include "util/hash_table.h"
 #include "util/sparse_array.h"
 #include "util/xmlconfig.h"
-#include "u_atomic.h"
+#include "util/u_atomic.h"
 
 #include "v3dv_entrypoints.h"
 #include "v3dv_bo.h"
@@ -177,10 +177,10 @@ struct v3dv_physical_device {
     * Specifically, when self-importing (i.e. importing a BO into the same
     * device that created it), the kernel will give us the same BO handle
     * for both BOs and we must only free it once when  both references are
-    * freed. Otherwise, if we are not self-importing, we get two differnt BO
+    * freed. Otherwise, if we are not self-importing, we get two different BO
     * handles, and we want to free each one individually.
     *
-    * The BOs in this map all have a refcnt with the referece counter and
+    * The BOs in this map all have a refcnt with the reference counter and
     * only self-imported BOs will ever have a refcnt > 1.
     */
    struct util_sparse_array bo_map;
@@ -316,7 +316,6 @@ struct v3dv_pipeline_key {
    uint8_t topology;
    uint8_t logicop_func;
    bool msaa;
-   bool sample_coverage;
    bool sample_alpha_to_coverage;
    bool sample_alpha_to_one;
    uint8_t cbufs;
@@ -454,15 +453,6 @@ struct v3dv_pipeline_cache {
    bool externally_synchronized;
 };
 
-/* This is used to implement a list of free events in the BO we use
- * hold event states. The index here is used to calculate the offset
- * within that BO.
- */
-struct v3dv_event_desc {
-   struct list_head link;
-   uint32_t index;
-};
-
 struct v3dv_device {
    struct vk_device vk;
 
@@ -531,14 +521,13 @@ struct v3dv_device {
       /* BO for the event states: signaled (1) or reset (0) */
       struct v3dv_bo *bo;
 
-      /* Events can be created and destroyed. Since we have a dedicated BO for
-       * all events we use, we need to keep track of the free slots within that
-       * BO. For that we use a free list where we link together available event
-       * slots in the form of "descriptors" that include an index (which is
-       * basically an offset into the BO that is available).
+      /* We pre-allocate all the events we can fit for the size of the BO we
+       * create to track their states, where each event has an index which is
+       * basically the offset of its state in that BO. We keep a free list with
+       * the pre-allocated events that are available.
        */
-      uint32_t desc_count;
-      struct v3dv_event_desc *desc;
+      uint32_t event_count;
+      struct v3dv_event *events;
       struct list_head free_list;
 
       /* Vulkan resources to access the event BO from shaders. We have a
@@ -556,9 +545,34 @@ struct v3dv_device {
       VkPipeline wait_event_pipeline;
    } events;
 
+   /* Query handling resources.
+    *
+    * Our implementation of occlusion queries uses a BO per pool to keep track
+    * of the per-query availability state and dispatches compute shaders to
+    * handle GPU query functions that read and write that state. This struct
+    * holds Vulkan resources that can be shared across all query pools to
+    * implement this. This framework may be extended in the future to handle
+    * more query types.
+    */
+   struct {
+      VkDescriptorSetLayout buf_descriptor_set_layout;
+
+      /* Set query availability */
+      VkPipelineLayout avail_pipeline_layout;
+      VkPipeline avail_pipeline;
+
+      /* Reset query availability and clear occlusion counters */
+      VkPipelineLayout reset_occlusion_pipeline_layout;
+      VkPipeline reset_occlusion_pipeline;
+
+      /* Copy query results */
+      VkPipelineLayout copy_pipeline_layout;
+      VkPipeline copy_pipeline[8];
+   } queries;
+
    struct v3dv_pipeline_cache default_pipeline_cache;
 
-   /* GL_SHADER_STATE_RECORD needs to speficy default attribute values. The
+   /* GL_SHADER_STATE_RECORD needs to specify default attribute values. The
     * following covers the most common case, that is all attributes format
     * being float being float, allowing us to reuse the same BO for all
     * pipelines matching this requirement. Pipelines that need integer
@@ -1026,7 +1040,7 @@ struct v3dv_reset_query_cpu_job_info {
    uint32_t count;
 };
 
-struct v3dv_end_query_cpu_job_info {
+struct v3dv_end_query_info {
    struct v3dv_query_pool *pool;
    uint32_t query;
 
@@ -1218,7 +1232,7 @@ struct v3dv_job {
    /* Job specs for CPU jobs */
    union {
       struct v3dv_reset_query_cpu_job_info          query_reset;
-      struct v3dv_end_query_cpu_job_info            query_end;
+      struct v3dv_end_query_info                    query_end;
       struct v3dv_copy_query_results_cpu_job_info   query_copy_results;
       struct v3dv_copy_buffer_to_image_cpu_job_info copy_buffer_to_image;
       struct v3dv_csd_indirect_cpu_job_info         csd_indirect;
@@ -1449,7 +1463,7 @@ struct v3dv_cmd_buffer_state {
       struct {
          uint32_t used_count;
          uint32_t alloc_count;
-         struct v3dv_end_query_cpu_job_info *states;
+         struct v3dv_end_query_info *states;
       } end;
 
       struct {
@@ -1498,13 +1512,19 @@ struct v3dv_descriptor {
 };
 
 struct v3dv_query {
+   /* Used by queries where we implement result copying in the CPU so we can
+    * tell if the relevant jobs have been submitted for execution. Currently
+    * these are all but occlusion queries.
+    */
    bool maybe_available;
+
    union {
-      /* Used by GPU queries (occlusion) */
+      /* Used by occlusion queries */
       struct {
-         struct v3dv_bo *bo;
+         /* Offset of this query in the occlusion query counter BO */
          uint32_t offset;
-      };
+      } occlusion;
+
       /* Used by CPU queries (timestamp) */
       uint64_t value;
 
@@ -1516,7 +1536,28 @@ struct v3dv_query {
 struct v3dv_query_pool {
    struct vk_object_base base;
 
-   struct v3dv_bo *bo; /* Only used with GPU queries (occlusion) */
+   /* Per-pool Vulkan resources required to implement GPU-side query
+    * functions (only occlusion queries for now).
+    */
+   struct {
+      /* Buffer to access the BO with the occlusion query results and
+       * availability info.
+       */
+      VkBuffer buf;
+      VkDeviceMemory mem;
+
+      /* Descriptor set for accessing the buffer from a pipeline. */
+      VkDescriptorPool descriptor_pool;
+      VkDescriptorSet descriptor_set;
+   } meta;
+
+   /* Only used with occlusion queries */
+   struct {
+      /* BO with the occlusion counters and query availability */
+      struct v3dv_bo *bo;
+      /* Offset of the availability info in the BO */
+      uint32_t avail_offset;
+   } occlusion;
 
    /* Only used with performance queries */
    struct {
@@ -1537,18 +1578,29 @@ struct v3dv_query_pool {
    struct v3dv_query *queries;
 };
 
-VkResult v3dv_get_query_pool_results(struct v3dv_device *device,
-                                     struct v3dv_query_pool *pool,
-                                     uint32_t first,
-                                     uint32_t count,
-                                     void *data,
-                                     VkDeviceSize stride,
-                                     VkQueryResultFlags flags);
+VkResult
+v3dv_query_allocate_resources(struct v3dv_device *decice);
 
-void v3dv_reset_query_pools(struct v3dv_device *device,
-                            struct v3dv_query_pool *query_pool,
-                            uint32_t first,
-                            uint32_t last);
+void
+v3dv_query_free_resources(struct v3dv_device *decice);
+
+VkResult v3dv_get_query_pool_results_cpu(struct v3dv_device *device,
+                                         struct v3dv_query_pool *pool,
+                                         uint32_t first,
+                                         uint32_t count,
+                                         void *data,
+                                         VkDeviceSize stride,
+                                         VkQueryResultFlags flags);
+
+void v3dv_reset_query_pool_cpu(struct v3dv_device *device,
+                               struct v3dv_query_pool *query_pool,
+                               uint32_t first,
+                               uint32_t last);
+
+void v3dv_cmd_buffer_emit_set_query_availability(struct v3dv_cmd_buffer *cmd_buffer,
+                                                 struct v3dv_query_pool *pool,
+                                                 uint32_t query, uint32_t count,
+                                                 uint8_t availability);
 
 typedef void (*v3dv_cmd_buffer_private_obj_destroy_cb)(VkDevice device,
                                                        uint64_t pobj,
@@ -1568,7 +1620,7 @@ struct v3dv_cmd_buffer {
 
    /* Used at submit time to link command buffers in the submission that have
     * spawned wait threads, so we can then wait on all of them to complete
-    * before we process any signal sempahores or fences.
+    * before we process any signal semaphores or fences.
     */
    struct list_head list_link;
 
@@ -1597,6 +1649,10 @@ struct v3dv_cmd_buffer {
          /* The current descriptor pool for texel buffer copy sources */
          VkDescriptorPool dspool;
       } texel_buffer_copy;
+      struct {
+         /* The current descriptor pool for the copy query results output buffer */
+         VkDescriptorPool dspool;
+      } query;
    } meta;
 
    /* List of jobs in the command buffer. For primary command buffers it
@@ -1623,11 +1679,6 @@ void v3dv_cmd_buffer_meta_state_push(struct v3dv_cmd_buffer *cmd_buffer,
                                      bool push_descriptor_state);
 void v3dv_cmd_buffer_meta_state_pop(struct v3dv_cmd_buffer *cmd_buffer,
                                     bool needs_subpass_resume);
-
-void v3dv_cmd_buffer_reset_queries(struct v3dv_cmd_buffer *cmd_buffer,
-                                   struct v3dv_query_pool *pool,
-                                   uint32_t first,
-                                   uint32_t count);
 
 void v3dv_cmd_buffer_begin_query(struct v3dv_cmd_buffer *cmd_buffer,
                                  struct v3dv_query_pool *pool,
@@ -1677,6 +1728,9 @@ void v3dv_cmd_buffer_emit_pipeline_barrier(struct v3dv_cmd_buffer *cmd_buffer,
 
 struct v3dv_event {
    struct vk_object_base base;
+
+   /* Link in the device list of pre-allocated free events */
+   struct list_head link;
 
    /* Each event gets a different index, which we use to compute the offset
     * in the BO we use to track their state (signaled vs reset).
@@ -1826,7 +1880,7 @@ struct v3dv_descriptor_set_binding_layout {
    /* Number of array elements in this binding */
    uint32_t array_size;
 
-   /* Index into the flattend descriptor set */
+   /* Index into the flattened descriptor set */
    uint32_t descriptor_index;
 
    uint32_t dynamic_offset_count;
@@ -2377,6 +2431,12 @@ struct v3dv_bo *
 v3dv_pipeline_create_default_attribute_values(struct v3dv_device *device,
                                               struct v3dv_pipeline *pipeline);
 
+VkResult
+v3dv_create_compute_pipeline_from_nir(struct v3dv_device *device,
+                                      nir_shader *nir,
+                                      VkPipelineLayout pipeline_layout,
+                                      VkPipeline *pipeline);
+
 #define V3DV_FROM_HANDLE(__v3dv_type, __name, __handle)			\
    VK_FROM_HANDLE(__v3dv_type, __name, __handle)
 
@@ -2471,7 +2531,7 @@ u64_compare(const void *key1, const void *key2)
    return memcmp(key1, key2, sizeof(uint64_t)) == 0;
 }
 
-/* Helper to call hw ver speficic functions */
+/* Helper to call hw ver specific functions */
 #define v3dv_X(device, thing) ({                      \
    __typeof(&v3d42_##thing) v3d_X_thing;              \
    switch (device->devinfo.ver) {                     \

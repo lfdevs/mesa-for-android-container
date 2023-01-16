@@ -1393,7 +1393,7 @@ static bool amdgpu_add_sparse_backing_buffers(struct amdgpu_cs_context *cs)
           */
          int idx = amdgpu_do_add_real_buffer(cs, backing->bo);
          if (idx < 0) {
-            fprintf(stderr, "%s: failed to add buffer\n", __FUNCTION__);
+            fprintf(stderr, "%s: failed to add buffer\n", __func__);
             simple_mtx_unlock(&bo->lock);
             return false;
          }

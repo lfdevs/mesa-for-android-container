@@ -150,7 +150,7 @@ add_conv_test(struct gallivm_state *gallivm,
 }
 
 
-PIPE_ALIGN_STACK
+UTIL_ALIGN_STACK
 static boolean
 test_one(unsigned verbose,
          FILE *fp,

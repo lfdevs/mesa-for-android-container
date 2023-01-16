@@ -23,6 +23,7 @@
 #ifndef VK_DEVICE_H
 #define VK_DEVICE_H
 
+#include "rmv/vk_rmv_common.h"
 #include "vk_dispatch_table.h"
 #include "vk_extensions.h"
 #include "vk_object.h"
@@ -241,6 +242,8 @@ struct vk_device {
     * details.
     */
    enum vk_queue_submit_mode submit_mode;
+
+   struct vk_memory_trace_data memory_trace_data;
 
 #ifdef ANDROID
    mtx_t swapchain_private_mtx;

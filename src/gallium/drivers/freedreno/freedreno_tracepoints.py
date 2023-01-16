@@ -146,7 +146,16 @@ begin_end_tp('blit',
         'util_str_tex_target(__entry->dst_target, true)'],
 )
 
-begin_end_tp('compute')
+begin_end_tp('compute',
+    args=[TracepointArg(type='uint8_t',  var='indirect',     c_format='%u'),
+          TracepointArg(type='uint8_t',  var='work_dim',     c_format='%u'),
+          TracepointArg(type='uint16_t', var='local_size_x', c_format='%u'),
+          TracepointArg(type='uint16_t', var='local_size_y', c_format='%u'),
+          TracepointArg(type='uint16_t', var='local_size_z', c_format='%u'),
+          TracepointArg(type='uint32_t', var='num_groups_x', c_format='%u'),
+          TracepointArg(type='uint32_t', var='num_groups_y', c_format='%u'),
+          TracepointArg(type='uint32_t', var='num_groups_z', c_format='%u')]
+)
 
 utrace_generate(cpath=args.src,
                 hpath=args.hdr,

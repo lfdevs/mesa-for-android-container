@@ -48,7 +48,7 @@ sanitize_32bit_sysval(nir_builder *b, nir_intrinsic_instr *intrin)
       return NULL;
 
    intrin->dest.ssa.bit_size = 32;
-   return nir_u2u(b, &intrin->dest.ssa, bit_size);
+   return nir_u2uN(b, &intrin->dest.ssa, bit_size);
 }
 
 static nir_ssa_def*
@@ -56,7 +56,7 @@ build_global_group_size(nir_builder *b, unsigned bit_size)
 {
    nir_ssa_def *group_size = nir_load_workgroup_size(b);
    nir_ssa_def *num_workgroups = nir_load_num_workgroups(b, bit_size);
-   return nir_imul(b, nir_u2u(b, group_size, bit_size),
+   return nir_imul(b, nir_u2uN(b, group_size, bit_size),
                       num_workgroups);
 }
 
@@ -105,11 +105,7 @@ lower_system_value_instr(nir_builder *b, nir_instr *instr, void *_state)
 
    case nir_intrinsic_load_helper_invocation:
       if (b->shader->options->lower_helper_invocation) {
-         nir_ssa_def *tmp;
-         tmp = nir_ishl(b, nir_imm_int(b, 1),
-                           nir_load_sample_id_no_per_sample(b));
-         tmp = nir_iand(b, nir_load_sample_mask_in(b), tmp);
-         return nir_inot(b, nir_i2b(b, tmp));
+         return nir_build_lowered_load_helper_invocation(b);
       } else {
          return NULL;
       }
@@ -245,6 +241,16 @@ lower_system_value_instr(nir_builder *b, nir_instr *instr, void *_state)
    }
 }
 
+nir_ssa_def *
+nir_build_lowered_load_helper_invocation(nir_builder *b)
+{
+   nir_ssa_def *tmp;
+   tmp = nir_ishl(b, nir_imm_int(b, 1),
+                  nir_load_sample_id_no_per_sample(b));
+   tmp = nir_iand(b, nir_load_sample_mask_in(b), tmp);
+   return nir_inot(b, nir_i2b(b, tmp));
+}
+
 bool
 nir_lower_system_values(nir_shader *shader)
 {
@@ -290,7 +296,7 @@ lower_id_to_index_no_umod(nir_builder *b, nir_ssa_def *index,
    nir_ssa_def *y_portion = nir_imul(b, id_y, size_x);
    nir_ssa_def *id_x = nir_isub(b, index, nir_iadd(b, z_portion, y_portion));
 
-   return nir_u2u(b, nir_vec3(b, id_x, id_y, id_z), bit_size);
+   return nir_u2uN(b, nir_vec3(b, id_x, id_y, id_z), bit_size);
 }
 
 
@@ -321,7 +327,7 @@ lower_id_to_index(nir_builder *b, nir_ssa_def *index, nir_ssa_def *size,
    nir_ssa_def *id_y = nir_umod(b, nir_udiv(b, index, size_x), size_y);
    nir_ssa_def *id_z = nir_udiv(b, index, nir_imul(b, size_x, size_y));
 
-   return nir_u2u(b, nir_vec3(b, id_x, id_y, id_z), bit_size);
+   return nir_u2uN(b, nir_vec3(b, id_x, id_y, id_z), bit_size);
 }
 
 static bool
@@ -501,7 +507,7 @@ lower_compute_system_value_instr(nir_builder *b,
          index = nir_iadd(b, index,
                              nir_imul(b, nir_channel(b, local_id, 1), size_x));
          index = nir_iadd(b, index, nir_channel(b, local_id, 0));
-         return nir_u2u(b, index, bit_size);
+         return nir_u2uN(b, index, bit_size);
       } else {
          return NULL;
       }
@@ -521,7 +527,7 @@ lower_compute_system_value_instr(nir_builder *b,
          workgroup_size_const[0].u32 = b->shader->info.workgroup_size[0];
          workgroup_size_const[1].u32 = b->shader->info.workgroup_size[1];
          workgroup_size_const[2].u32 = b->shader->info.workgroup_size[2];
-         return nir_u2u(b, nir_build_imm(b, 3, 32, workgroup_size_const), bit_size);
+         return nir_u2uN(b, nir_build_imm(b, 3, 32, workgroup_size_const), bit_size);
       }
 
    case nir_intrinsic_load_global_invocation_id_zero_base: {
@@ -532,8 +538,8 @@ lower_compute_system_value_instr(nir_builder *b,
          nir_ssa_def *local_id = nir_load_local_invocation_id(b);
 
          return nir_iadd(b, nir_imul(b, group_id,
-                                        nir_u2u(b, group_size, bit_size)),
-                            nir_u2u(b, local_id, bit_size));
+                                        nir_u2uN(b, group_size, bit_size)),
+                            nir_u2uN(b, local_id, bit_size));
       } else {
          return NULL;
       }
@@ -569,7 +575,7 @@ lower_compute_system_value_instr(nir_builder *b,
 
    case nir_intrinsic_load_workgroup_id: {
       if (options && options->has_base_workgroup_id)
-         return nir_iadd(b, nir_u2u(b, nir_load_workgroup_id_zero_base(b), bit_size),
+         return nir_iadd(b, nir_u2uN(b, nir_load_workgroup_id_zero_base(b), bit_size),
                             nir_load_base_workgroup_id(b, bit_size));
       else if (options && options->lower_workgroup_id_to_index)
          return lower_id_to_index_no_umod(b, nir_load_workgroup_index(b),

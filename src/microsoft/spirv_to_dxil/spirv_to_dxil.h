@@ -112,6 +112,8 @@ struct dxil_spirv_vertex_runtime_data {
       };
    };
    uint32_t draw_id;
+   float viewport_width;
+   float viewport_height;
 };
 
 enum dxil_spirv_yz_flip_mode {

@@ -5,13 +5,14 @@ The Vulkan runtime code in Mesa provides several helpful utilities to make
 managing render passes easier.
 
 
-VK_KHR_create_renderpass2
--------------------------
+:ext:`VK_KHR_create_renderpass2`
+--------------------------------
 
-It is strongly recommended that drivers implement VK_KHR_create_renderpass2
-directly and not bother implementing the old Vulkan 1.0 entrypoints.  If a
-driver does not implement them, the following will be implemented in common
-code in terms of their VK_KHR_create_renderpass2 counterparts:
+It is strongly recommended that drivers implement
+:ext:`VK_KHR_create_renderpass2` directly and not bother implementing the
+old Vulkan 1.0 entrypoints.  If a driver does not implement them, the
+following will be implemented in common code in terms of their
+:ext:`VK_KHR_create_renderpass2` counterparts:
 
  - :cpp:func:`vkCreateRenderPass`
  - :cpp:func:`vkCmdBeginRenderPass`
@@ -34,12 +35,12 @@ that driver doesn't need to do any additional compilation at
 of :cpp:func:`vkCreateRenderPass2` and :cpp:func:`vkDestroyRenderPass`.
 
 
-VK_KHR_dynamic_rendering
-------------------------
+:ext:`VK_KHR_dynamic_rendering`
+-------------------------------
 
 For drivers which don't need to do subpass combining, it is recommended
 that they skip implementing render passes entirely and implement
-VK_KHR_dynamic_rendering instead.  If they choose to do so, the runtime
+:ext:`VK_KHR_dynamic_rendering` instead.  If they choose to do so, the runtime
 will provide the following, implemented in terms of
 :cpp:func:`vkCmdBeginRendering` and :cpp:func:`vkCmdEndRendering`:
 
@@ -66,7 +67,7 @@ Because render passes and subpass indices are also passed into
 :cpp:func:`vkCmdCreateGraphicsPipelines` and
 :cpp:func:`vkCmdExecuteCommands` which we can't implement on the driver's
 behalf, we provide a couple of helpers for getting the render pass
-information in terms of the relevant VK_KHR_dynamic_rendering:
+information in terms of the relevant :ext:`VK_KHR_dynamic_rendering`:
 
 .. doxygenfunction:: vk_get_pipeline_rendering_create_info
 

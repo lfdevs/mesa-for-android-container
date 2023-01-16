@@ -40,6 +40,11 @@ def needs_num_components(opcode):
 static inline nir_ssa_def *
 nir_${name}(nir_builder *build, ${src_decl_list(opcode.num_inputs)})
 {
+% if opcode.is_conversion and \
+     type_base_type(opcode.output_type) == opcode.input_types[0]:
+   if (src0->bit_size == ${type_size(opcode.output_type)})
+      return src0;
+%endif
 % if opcode.num_inputs <= 4:
    return nir_build_alu${opcode.num_inputs}(build, nir_op_${name}, ${src_list(opcode.num_inputs)});
 % else:
@@ -164,8 +169,13 @@ _nir_build_${name}(build${intrinsic_macro_list(opcode)}, (struct _nir_${name}_in
 
 #endif /* _NIR_BUILDER_OPCODES_ */"""
 
-from nir_opcodes import opcodes
+from nir_opcodes import opcodes, type_size, type_base_type
 from nir_intrinsics import INTR_OPCODES, WRITE_MASK, ALIGN_MUL
 from mako.template import Template
 
-print(Template(template).render(opcodes=opcodes, INTR_OPCODES=INTR_OPCODES, WRITE_MASK=WRITE_MASK, ALIGN_MUL=ALIGN_MUL))
+print(Template(template).render(opcodes=opcodes,
+                                type_size=type_size,
+                                type_base_type=type_base_type,
+                                INTR_OPCODES=INTR_OPCODES,
+                                WRITE_MASK=WRITE_MASK,
+                                ALIGN_MUL=ALIGN_MUL))

@@ -89,6 +89,7 @@ st_get_external_sampler_key(struct st_context *st, struct gl_program *prog)
       case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P012:
       case PIPE_FORMAT_P016:
+      case PIPE_FORMAT_P030:
          key.lower_nv12 |= (1 << unit);
          break;
       case PIPE_FORMAT_IYUV:

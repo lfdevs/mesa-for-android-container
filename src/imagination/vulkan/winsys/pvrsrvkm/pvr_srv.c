@@ -50,6 +50,25 @@
 /* Amount of space used to hold sync prim values (in bytes). */
 #define PVR_SRV_SYNC_PRIM_VALUE_SIZE 4U
 
+/**
+ * Maximum PB free list size supported by RGX and Services.
+ *
+ * Maximum PB free list size must ensure that no PM address space can be fully
+ * used, because if the full address space was used it would wrap and corrupt
+ * itself. Since there are two freelists (local is always minimum sized) this
+ * can be described as following three conditions being met:
+ *
+ *  Minimum PB + Maximum PB < ALIST PM address space size (16GB)
+ *  Minimum PB + Maximum PB < TE PM address space size (16GB) / NUM_TE_PIPES
+ *  Minimum PB + Maximum PB < VCE PM address space size (16GB) / NUM_VCE_PIPES
+ *
+ * Since the max of NUM_TE_PIPES and NUM_VCE_PIPES is 4, we have a hard limit
+ * of 4GB minus the Minimum PB. For convenience we take the smaller power-of-2
+ * value of 2GB. This is far more than any normal application would request
+ * or use.
+ */
+#define PVR_SRV_FREE_LIST_MAX_SIZE (2ULL * 1024ULL * 1024ULL * 1024ULL)
+
 static VkResult pvr_srv_heap_init(
    struct pvr_srv_winsys *srv_ws,
    struct pvr_srv_winsys_heap *srv_heap,
@@ -518,6 +537,7 @@ pvr_srv_winsys_device_info_init(struct pvr_winsys *ws,
    }
 
    runtime_info->min_free_list_size = pvr_srv_get_min_free_list_size(dev_info);
+   runtime_info->max_free_list_size = PVR_SRV_FREE_LIST_MAX_SIZE;
    runtime_info->reserved_shared_size =
       pvr_srv_get_reserved_shared_size(dev_info);
    runtime_info->total_reserved_partition_size =

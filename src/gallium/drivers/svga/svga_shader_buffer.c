@@ -69,7 +69,7 @@ svga_create_uav_buffer(struct svga_context *svga,
       return uaViewId;
 
    SVGA_DBG(DEBUG_UAV, "%s: resource=0x%x uaViewId=%d\n",
-            __FUNCTION__, buf->buffer, uaViewId);
+            __func__, buf->buffer, uaViewId);
 
    /* Mark this buffer as a uav bound buffer */
    struct svga_buffer *sbuf = svga_buffer(buf->buffer);
@@ -99,7 +99,7 @@ svga_set_shader_buffers(struct pipe_context *pipe,
 #ifdef DEBUG
    const struct pipe_shader_buffer *b = buffers;
    SVGA_DBG(DEBUG_UAV, "%s: shader=%d start=%d num=%d ",
-            __FUNCTION__, shader, start, num);
+            __func__, shader, start, num);
    if (buffers) {
       for (unsigned i = 0; i < num; i++, b++) {
          SVGA_DBG(DEBUG_UAV, " 0x%x ", b);
@@ -144,7 +144,7 @@ svga_set_shader_buffers(struct pipe_context *pipe,
 #ifdef DEBUG
    SVGA_DBG(DEBUG_UAV,
             "%s: current num_shader_buffers=%d start=%d num=%d buffers=",
-            __FUNCTION__, svga->curr.num_shader_buffers[shader],
+            __func__, svga->curr.num_shader_buffers[shader],
             start, num);
 
    for (unsigned i = start; i < start + num; i++) {
@@ -178,7 +178,7 @@ svga_set_hw_atomic_buffers(struct pipe_context *pipe,
    assert(start + num <= SVGA_MAX_ATOMIC_BUFFERS);
 
 #ifdef DEBUG
-   SVGA_DBG(DEBUG_UAV, "%s: start=%d num=%d \n", __FUNCTION__, start, num);
+   SVGA_DBG(DEBUG_UAV, "%s: start=%d num=%d \n", __func__, start, num);
 #endif
 
    buf = buffers;
@@ -223,7 +223,7 @@ svga_set_hw_atomic_buffers(struct pipe_context *pipe,
 
 #ifdef DEBUG
    SVGA_DBG(DEBUG_UAV, "%s: current num_atomic_buffers=%d start=%d num=%d ",
-            __FUNCTION__, svga->curr.num_atomic_buffers,
+            __func__, svga->curr.num_atomic_buffers,
             start, num);
 
    for (unsigned i = start; i < start + num; i++) {

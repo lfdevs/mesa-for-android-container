@@ -48,7 +48,7 @@
 #include "util/list.h"
 #include "util/u_inlines.h"
 #include "util/u_string.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include <stdio.h>
 
 /* Future improvement: Use realloc instead? */
@@ -337,7 +337,7 @@ out_no_item:
                 "for this command batch.\n");
 }
 
-static enum pipe_error
+static int
 debug_flush_might_flush_cb(UNUSED void *key, void *value, void *data)
 {
    struct debug_flush_item *item =
@@ -360,7 +360,7 @@ debug_flush_might_flush_cb(UNUSED void *key, void *value, void *data)
    }
    mtx_unlock(&fbuf->mutex);
 
-   return PIPE_OK;
+   return 0;
 }
 
 /**
@@ -378,7 +378,7 @@ debug_flush_might_flush(struct debug_flush_ctx *fctx)
                            "Might flush");
 }
 
-static enum pipe_error
+static int
 debug_flush_flush_cb(UNUSED void *key, void *value, UNUSED void *data)
 {
    struct debug_flush_item *item =
@@ -386,7 +386,7 @@ debug_flush_flush_cb(UNUSED void *key, void *value, UNUSED void *data)
 
    debug_flush_item_destroy(item);
 
-   return PIPE_OK;
+   return 0;
 }
 
 

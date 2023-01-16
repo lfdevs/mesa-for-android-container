@@ -26,7 +26,7 @@
 #include "nine_helpers.h"
 #include "nine_shader.h"
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_context.h"
 #include "util/u_math.h"
 #include "util/format/u_format.h"

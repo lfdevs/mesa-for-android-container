@@ -199,7 +199,7 @@ CreateResource(D3D10DDI_HDEVICE hDevice,                                // IN
         pCreateResource->pPrimaryDesc->DriverFlags & DXGI_DDI_PRIMARY_OPTIONAL)) {
 
       DebugPrintf("%s(%dx%dx%d hResource=%p)\n",
-	       __FUNCTION__,
+	       __func__,
 	       pCreateResource->pMipInfoList[0].TexelWidth,
 	       pCreateResource->pMipInfoList[0].TexelHeight,
 	       pCreateResource->pMipInfoList[0].TexelDepth,
@@ -298,7 +298,7 @@ CreateResource(D3D10DDI_HDEVICE hDevice,                                // IN
                                        templat.nr_storage_samples,
                                        templat.bind)) {
          debug_printf("%s: unsupported format %s\n",
-                     __FUNCTION__, util_format_name(templat.format));
+                     __func__, util_format_name(templat.format));
          SetError(hDevice, E_OUTOFMEMORY);
          return;
       }
@@ -306,7 +306,7 @@ CreateResource(D3D10DDI_HDEVICE hDevice,                                // IN
 
    pResource->resource = screen->resource_create(screen, &templat);
    if (!pResource) {
-      DebugPrintf("%s: failed to create resource\n", __FUNCTION__);
+      DebugPrintf("%s: failed to create resource\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
    }
@@ -539,7 +539,7 @@ ResourceMap(D3D10DDI_HDEVICE hDevice,                                // IN
                               &pResource->transfers[SubResource]);
    }
    if (!map) {
-      DebugPrintf("%s: failed to map resource\n", __FUNCTION__);
+      DebugPrintf("%s: failed to map resource\n", __func__);
       SetError(hDevice, E_FAIL);
       return;
    }

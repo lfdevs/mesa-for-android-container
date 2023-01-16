@@ -38,7 +38,7 @@
 #define PROG_INSTRUCTION_H
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 
 
 /**

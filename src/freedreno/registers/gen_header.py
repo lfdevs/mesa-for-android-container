@@ -41,9 +41,11 @@ class Field(object):
 
 		builtin_types = [ None, "a3xx_regid", "boolean", "uint", "hex", "int", "fixed", "ufixed", "float", "address", "waddress" ]
 
-		if low < 0 or low > 31:
+		maxpos = parser.current_bitsize - 1;
+
+		if low < 0 or low > maxpos:
 			raise parser.error("low attribute out of range: %d" % low)
-		if high < 0 or high > 31:
+		if high < 0 or high > maxpos:
 			raise parser.error("high attribute out of range: %d" % high)
 		if high < low:
 			raise parser.error("low is greater than high: low=%d, high=%d" % (low, high))
@@ -98,7 +100,7 @@ def tab_to(name, value):
 	print(name + ('\t' * tab_count) + value)
 
 def mask(low, high):
-	return ((0xffffffff >> (32 - (high + 1 - low))) << low)
+	return ((0xffffffffffffffff >> (64 - (high + 1 - low))) << low)
 
 class Bitset(object):
 	def __init__(self, name, template):
@@ -191,7 +193,8 @@ class Bitset(object):
 			if f.type == "waddress":
 				print("        .bo_write = true,")
 			print("        .bo_offset = fields.bo_offset,")
-			print("        .bo_shift = %d" % address.shr)
+			print("        .bo_shift = %d," % address.shr)
+			print("        .bo_low = %d," % address.low)
 
 		print("    };\n}\n")
 
@@ -295,6 +298,7 @@ class Parser(object):
 		self.current_prefix = None
 		self.current_stripe = None
 		self.current_bitset = None
+		self.current_bitsize = 32
 		self.bitsets = {}
 		self.enums = {}
 		self.file = []
@@ -320,7 +324,7 @@ class Parser(object):
 				low = int(attrs["low"], 0)
 			else:
 				low = 0
-				high = 31
+				high = self.current_bitsize - 1
 
 			if "type" in attrs:
 				type = attrs["type"]
@@ -357,6 +361,7 @@ class Parser(object):
 		self.do_parse(filename)
 
 	def parse_reg(self, attrs, bit_size):
+		self.current_bitsize = bit_size
 		if "type" in attrs and attrs["type"] in self.bitsets:
 			bitset = self.bitsets[attrs["type"]]
 			if bitset.inline:
@@ -404,6 +409,7 @@ class Parser(object):
 		elif name == "reg64":
 			self.parse_reg(attrs, 64)
 		elif name == "array":
+			self.current_bitsize = 32
 			self.current_array = Array(attrs, self.prefix())
 			if len(self.stack) == 1:
 				self.file.append(self.current_array)

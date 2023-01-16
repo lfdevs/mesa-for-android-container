@@ -26,3 +26,7 @@ inc_asahi = include_directories([
 subdir('layout')
 subdir('lib')
 subdir('compiler')
+
+if with_tools.contains('drm-shim')
+  subdir('drm-shim')
+endif

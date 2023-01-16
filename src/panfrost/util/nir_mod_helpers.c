@@ -34,12 +34,13 @@
  * ALU source (principally fneg or fabs). If so, return true and rewrite the
  * source to be the argument, respecting swizzles as needed. If not (or it
  * cannot be proven), return false and leave the source untouched.
-*/
+ */
 
 bool
 pan_has_source_mod(nir_alu_src *src, nir_op op)
 {
-   if (!src->src.is_ssa || src->src.ssa->parent_instr->type != nir_instr_type_alu)
+   if (!src->src.is_ssa ||
+       src->src.ssa->parent_instr->type != nir_instr_type_alu)
       return false;
 
    nir_alu_instr *alu = nir_instr_as_alu(src->src.ssa->parent_instr);
@@ -56,7 +57,7 @@ pan_has_source_mod(nir_alu_src *src, nir_op op)
 
    /* Okay - we've found the modifier we wanted. Let's construct the new ALU
     * src. In a scalar world, this is just psrc, but for vector archs we need
-    * to respect the swizzle, so we compose. 
+    * to respect the swizzle, so we compose.
     */
 
    nir_alu_src nsrc = {

@@ -315,7 +315,7 @@ ir3_shader_compute_state_create(struct pipe_context *pctx,
                               .real_wavesize = IR3_SINGLE_OR_DOUBLE,
                           }, NULL);
    shader->cs.req_input_mem = align(cso->req_input_mem, 4) / 4;     /* byte->dword */
-   shader->cs.req_local_mem = cso->req_local_mem;
+   shader->cs.req_local_mem = cso->static_shared_mem;
 
    struct ir3_shader_state *hwcso = calloc(1, sizeof(*hwcso));
 
@@ -556,7 +556,7 @@ ir3_screen_init(struct pipe_screen *pscreen)
     * big cores.  OTOH if they are sitting idle, maybe it is useful to
     * use them?
     */
-   unsigned num_threads = sysconf(_SC_NPROCESSORS_ONLN) - 1;
+   unsigned num_threads = sysconf(_SC_NPROCESSORS_ONLN) / 2;
 
    /* Create at least one thread - even on single core CPU systems. */
    num_threads = MAX2(1, num_threads);

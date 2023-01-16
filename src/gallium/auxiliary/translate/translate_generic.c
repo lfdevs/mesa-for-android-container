@@ -584,7 +584,7 @@ get_emit_func(enum pipe_format format)
    }
 }
 
-static ALWAYS_INLINE void PIPE_CDECL
+static ALWAYS_INLINE void UTIL_CDECL
 generic_run_one(struct translate_generic *tg,
                 unsigned elt,
                 unsigned start_instance,
@@ -651,7 +651,7 @@ generic_run_one(struct translate_generic *tg,
 /**
  * Fetch vertex attributes for 'count' vertices.
  */
-static void PIPE_CDECL
+static void UTIL_CDECL
 generic_run_elts(struct translate *translate,
                  const unsigned *elts,
                  unsigned count,
@@ -669,7 +669,7 @@ generic_run_elts(struct translate *translate,
    }
 }
 
-static void PIPE_CDECL
+static void UTIL_CDECL
 generic_run_elts16(struct translate *translate,
                    const uint16_t *elts,
                    unsigned count,
@@ -687,7 +687,7 @@ generic_run_elts16(struct translate *translate,
    }
 }
 
-static void PIPE_CDECL
+static void UTIL_CDECL
 generic_run_elts8(struct translate *translate,
                   const uint8_t *elts,
                   unsigned count,
@@ -705,7 +705,7 @@ generic_run_elts8(struct translate *translate,
    }
 }
 
-static void PIPE_CDECL
+static void UTIL_CDECL
 generic_run(struct translate *translate,
             unsigned start,
             unsigned count,

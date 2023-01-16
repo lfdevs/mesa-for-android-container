@@ -349,8 +349,7 @@ void trace_dump_compute_state(const struct pipe_compute_state *state)
    }
    trace_dump_member_end();
 
-   trace_dump_member(uint, state, req_local_mem);
-   trace_dump_member(uint, state, req_private_mem);
+   trace_dump_member(uint, state, static_shared_mem);
    trace_dump_member(uint, state, req_input_mem);
 
    trace_dump_struct_end();
@@ -1082,6 +1081,7 @@ void trace_dump_grid_info(const struct pipe_grid_info *state)
 
    trace_dump_member(uint, state, pc);
    trace_dump_member(ptr, state, input);
+   trace_dump_member(uint, state, variable_shared_mem);
 
    trace_dump_member_begin("block");
    trace_dump_array(uint, state->block, ARRAY_SIZE(state->block));

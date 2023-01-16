@@ -65,7 +65,7 @@
 #include "lp_bld_arit.h"
 #include "lp_bld_flow.h"
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
 #include <xmmintrin.h>
 #endif
 
@@ -137,7 +137,7 @@ lp_build_min_simple(struct lp_build_context *bld,
    else if (type.floating && util_get_cpu_caps()->has_altivec) {
       if (nan_behavior == GALLIVM_NAN_RETURN_NAN_FIRST_NONNAN) {
          debug_printf("%s: altivec doesn't support nan return nan behavior\n",
-                      __FUNCTION__);
+                      __func__);
       }
       if (type.width == 32 && type.length == 4) {
          intrinsic = "llvm.ppc.altivec.vminfp";
@@ -291,7 +291,7 @@ lp_build_max_simple(struct lp_build_context *bld,
    else if (type.floating && util_get_cpu_caps()->has_altivec) {
       if (nan_behavior == GALLIVM_NAN_RETURN_NAN_FIRST_NONNAN) {
          debug_printf("%s: altivec doesn't support nan return nan behavior\n",
-                      __FUNCTION__);
+                      __func__);
       }
       if (type.width == 32 || type.length == 4) {
          intrinsic = "llvm.ppc.altivec.vmaxfp";
@@ -2800,7 +2800,7 @@ lp_build_fast_rsqrt(struct lp_build_context *bld,
       return lp_build_intrinsic_unary(builder, intrinsic, bld->vec_type, a);
    }
    else {
-      debug_printf("%s: emulating fast rsqrt with rcp/sqrt\n", __FUNCTION__);
+      debug_printf("%s: emulating fast rsqrt with rcp/sqrt\n", __func__);
    }
    return lp_build_rcp(bld, lp_build_sqrt(bld, a));
 }
@@ -3073,7 +3073,7 @@ lp_build_pow(struct lp_build_context *bld,
    if (gallivm_debug & GALLIVM_DEBUG_PERF &&
        LLVMIsConstant(x) && LLVMIsConstant(y)) {
       debug_printf("%s: inefficient/imprecise constant arithmetic\n",
-                   __FUNCTION__);
+                   __func__);
    }
 
    LLVMValueRef cmp = lp_build_cmp(bld, PIPE_FUNC_EQUAL, x, lp_build_const_vec(bld->gallivm, bld->type, 0.0f));
@@ -3157,7 +3157,7 @@ lp_build_polynomial(struct lp_build_context *bld,
    if (gallivm_debug & GALLIVM_DEBUG_PERF &&
        LLVMIsConstant(x)) {
       debug_printf("%s: inefficient/imprecise constant arithmetic\n",
-                   __FUNCTION__);
+                   __func__);
    }
 
    /*
@@ -3253,7 +3253,7 @@ lp_build_exp2(struct lp_build_context *bld,
    if (gallivm_debug & GALLIVM_DEBUG_PERF &&
        LLVMIsConstant(x)) {
       debug_printf("%s: inefficient/imprecise constant arithmetic\n",
-                   __FUNCTION__);
+                   __func__);
    }
 
    assert(type.floating && type.width == 32);
@@ -3444,7 +3444,7 @@ lp_build_log2_approx(struct lp_build_context *bld,
       if (gallivm_debug & GALLIVM_DEBUG_PERF &&
           LLVMIsConstant(x)) {
          debug_printf("%s: inefficient/imprecise constant arithmetic\n",
-                      __FUNCTION__);
+                      __func__);
       }
 
       assert(type.floating && type.width == 32);

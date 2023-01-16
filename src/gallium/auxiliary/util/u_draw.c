@@ -115,7 +115,7 @@ util_draw_max_index(
                 * indices/instances and simply start clamping against buffer
                 * size. */
                debug_printf("%s: too many instances for vertex buffer\n",
-                            __FUNCTION__);
+                            __func__);
                return 0;
             }
          }
@@ -147,7 +147,7 @@ util_draw_indirect_read(struct pipe_context *pipe,
                                                  indirect->indirect_draw_count_offset,
                                                  4, PIPE_MAP_READ, &dc_transfer);
       if (!dc_transfer) {
-         debug_printf("%s: failed to map indirect draw count buffer\n", __FUNCTION__);
+         debug_printf("%s: failed to map indirect draw count buffer\n", __func__);
          return NULL;
       }
       draw_count = dc_param[0];
@@ -169,7 +169,7 @@ util_draw_indirect_read(struct pipe_context *pipe,
                                   PIPE_MAP_READ,
                                   &transfer);
    if (!transfer) {
-      debug_printf("%s: failed to map indirect buffer\n", __FUNCTION__);
+      debug_printf("%s: failed to map indirect buffer\n", __func__);
       free(draws);
       return NULL;
    }
@@ -215,7 +215,7 @@ util_draw_indirect(struct pipe_context *pipe,
                                                  indirect->indirect_draw_count_offset,
                                                  4, PIPE_MAP_READ, &dc_transfer);
       if (!dc_transfer) {
-         debug_printf("%s: failed to map indirect draw count buffer\n", __FUNCTION__);
+         debug_printf("%s: failed to map indirect draw count buffer\n", __func__);
          return;
       }
       if (dc_param[0] < draw_count)
@@ -233,7 +233,7 @@ util_draw_indirect(struct pipe_context *pipe,
                             PIPE_MAP_READ,
                             &transfer);
    if (!transfer) {
-      debug_printf("%s: failed to map indirect buffer\n", __FUNCTION__);
+      debug_printf("%s: failed to map indirect buffer\n", __func__);
       return;
    }
 

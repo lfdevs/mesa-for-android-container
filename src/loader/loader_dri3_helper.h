@@ -111,7 +111,6 @@ struct loader_dri3_vtable {
    __DRIcontext *(*get_dri_context)(struct loader_dri3_drawable *);
    __DRIscreen *(*get_dri_screen)(void);
    void (*flush_drawable)(struct loader_dri3_drawable *, unsigned);
-   void (*show_fps)(struct loader_dri3_drawable *, uint64_t);
 };
 
 #define LOADER_DRI3_NUM_BUFFERS (1 + LOADER_DRI3_MAX_BACK)

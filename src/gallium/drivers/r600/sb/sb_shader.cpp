@@ -37,7 +37,7 @@ shader::shader(sb_context &sctx, shader_target t, unsigned id)
   pool(), all_nodes(), src_stats(), opt_stats(), errors(),
   optimized(), id(id),
   coal(*this), bbs(),
-  target(t), vt(ex), ex(*this), root(),
+  target(t), ex(*this), vt(ex), root(),
   compute_interferences(),
   has_alu_predication(),
   uses_gradients(), safe_math(), ngpr(), nstack(), dce_flags() {}

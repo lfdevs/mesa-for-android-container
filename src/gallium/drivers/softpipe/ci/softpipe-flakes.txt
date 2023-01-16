@@ -9,4 +9,5 @@ glx@glx-swap-singlebuffer
 spec@arb_sync@sync_api
 
 spec@!opengl 1.1@read-front clear-front-first
+spec@ext_framebuffer_blit@fbo-sys-blit
 spec@ext_framebuffer_blit@fbo-sys-sub-blit

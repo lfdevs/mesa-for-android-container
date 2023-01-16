@@ -421,6 +421,7 @@ PIPE_FORMAT_Y16_U16_V16_444_UNORM , planar3, 1, 1, 1,     ,     ,     ,     , xy
 PIPE_FORMAT_P010                  , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
 PIPE_FORMAT_P012                  , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
 PIPE_FORMAT_P016                  , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
+PIPE_FORMAT_P030                  , planar2, 1, 1, 1,     ,     ,     ,     , xyzw, yuv
 
 PIPE_FORMAT_Y210                  , subsampled, 2, 1, 1, x64 ,     ,     ,     , xyz1, yuv
 PIPE_FORMAT_Y212                  , subsampled, 2, 1, 1, x64 ,     ,     ,     , xyz1, yuv

@@ -170,8 +170,10 @@ wgl_present(struct pipe_screen *screen,
     * other structs such as this stw_winsys as well...
     */
 
+#if defined(GALLIUM_LLVMPIPE) || defined(GALLIUM_SOFTPIPE)
    struct sw_winsys *winsys = NULL;
    struct sw_displaytarget *dt = NULL;
+#endif
 
 #ifdef GALLIUM_LLVMPIPE
    if (use_llvmpipe) {

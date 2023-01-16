@@ -31,7 +31,7 @@
 
 
 #include "compiler/glsl/string_to_uint_map.h"
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 #include "main/glspirv.h"
 #include "main/hash.h"

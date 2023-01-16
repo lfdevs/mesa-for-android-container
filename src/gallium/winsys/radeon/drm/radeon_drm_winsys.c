@@ -152,11 +152,14 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 
    /* Get DRM version. */
    version = drmGetVersion(ws->fd);
+   if (!version)
+      return false;
+
    if (version->version_major != 2 ||
        version->version_minor < 50) {
       fprintf(stderr, "%s: DRM version is %d.%d.%d but this driver is "
                       "only compatible with 2.50.0 (kernel 4.12) or later.\n",
-              __FUNCTION__,
+              __func__,
               version->version_major,
               version->version_minor,
               version->version_patchlevel);

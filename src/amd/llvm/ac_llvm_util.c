@@ -153,9 +153,9 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
    case CHIP_RAVEN2:
    case CHIP_RENOIR:
       return "gfx909";
-   case CHIP_ARCTURUS:
+   case CHIP_MI100:
       return "gfx908";
-   case CHIP_ALDEBARAN:
+   case CHIP_MI200:
       return "gfx90a";
    case CHIP_NAVI10:
       return "gfx1010";
@@ -248,55 +248,16 @@ static LLVMPassManagerRef ac_create_passmgr(LLVMTargetLibraryInfoRef target_libr
    return passmgr;
 }
 
-static const char *attr_to_str(enum ac_func_attr attr)
+LLVMAttributeRef ac_get_llvm_attribute(LLVMContextRef ctx, const char *str)
 {
-   switch (attr) {
-   case AC_FUNC_ATTR_ALWAYSINLINE:
-      return "alwaysinline";
-   case AC_FUNC_ATTR_INREG:
-      return "inreg";
-   case AC_FUNC_ATTR_NOALIAS:
-      return "noalias";
-   case AC_FUNC_ATTR_NOUNWIND:
-      return "nounwind";
-   case AC_FUNC_ATTR_READNONE:
-      return "readnone";
-   case AC_FUNC_ATTR_READONLY:
-      return "readonly";
-   case AC_FUNC_ATTR_WRITEONLY:
-      return "writeonly";
-   case AC_FUNC_ATTR_INACCESSIBLE_MEM_ONLY:
-      return "inaccessiblememonly";
-   case AC_FUNC_ATTR_CONVERGENT:
-      return "convergent";
-   default:
-      fprintf(stderr, "Unhandled function attribute: %x\n", attr);
-      return 0;
-   }
+   return LLVMCreateEnumAttribute(ctx, LLVMGetEnumAttributeKindForName(str, strlen(str)), 0);
 }
 
 void ac_add_function_attr(LLVMContextRef ctx, LLVMValueRef function, int attr_idx,
-                          enum ac_func_attr attr)
+                          const char *attr)
 {
-   const char *attr_name = attr_to_str(attr);
-   unsigned kind_id = LLVMGetEnumAttributeKindForName(attr_name, strlen(attr_name));
-   LLVMAttributeRef llvm_attr = LLVMCreateEnumAttribute(ctx, kind_id, 0);
-
-   if (LLVMIsAFunction(function))
-      LLVMAddAttributeAtIndex(function, attr_idx, llvm_attr);
-   else
-      LLVMAddCallSiteAttribute(function, attr_idx, llvm_attr);
-}
-
-void ac_add_func_attributes(LLVMContextRef ctx, LLVMValueRef function, unsigned attrib_mask)
-{
-   attrib_mask |= AC_FUNC_ATTR_NOUNWIND;
-   attrib_mask &= ~AC_FUNC_ATTR_LEGACY;
-
-   while (attrib_mask) {
-      enum ac_func_attr attr = 1u << u_bit_scan(&attrib_mask);
-      ac_add_function_attr(ctx, function, -1, attr);
-   }
+   assert(LLVMIsAFunction(function));
+   LLVMAddAttributeAtIndex(function, attr_idx, ac_get_llvm_attribute(ctx, attr));
 }
 
 void ac_dump_module(LLVMModuleRef module)

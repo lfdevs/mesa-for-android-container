@@ -32,7 +32,7 @@
 #define _VBO_H
 
 #include <stdbool.h>
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/dd.h"
 #include "main/draw.h"
 #include "main/macros.h"

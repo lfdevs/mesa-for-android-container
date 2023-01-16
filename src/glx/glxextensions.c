@@ -35,12 +35,12 @@
 #include "glxextensions.h"
 
 #include "util/driconf.h"
+#include "util/macros.h"
 
 #define SET_BIT(m,b)   (m[ (b) / 8 ] |=  (1U << ((b) % 8)))
 #define CLR_BIT(m,b)   (m[ (b) / 8 ] &= ~(1U << ((b) % 8)))
 #define IS_SET(m,b)    ((m[ (b) / 8 ] & (1U << ((b) % 8))) != 0)
-#define CONCAT(a,b) a ## b
-#define GLX(n) "GLX_" # n, 4 + sizeof( # n ) - 1, CONCAT(n,_bit)
+#define GLX(n) "GLX_" # n, 4 + sizeof( # n ) - 1, PASTE2(n,_bit)
 #define GL(n)  "GL_" # n,  3 + sizeof( # n ) - 1, GL_ ## n ## _bit
 #define Y  1
 #define N  0
@@ -192,7 +192,6 @@ static const struct extension_info known_gl_extensions[] = {
    { GL(EXT_texture_lod),                 N, N },
    { GL(EXT_texture_lod_bias),            N, N },
    { GL(EXT_texture_mirror_clamp),        N, N },
-   { GL(EXT_texture_object),              N, N },
    { GL(EXT_texture_rectangle),           N, N },
    { GL(EXT_vertex_array),                N, N },
    { GL(3DFX_texture_compression_FXT1),   N, N },
@@ -763,7 +762,10 @@ __glXCalculateUsableGLExtensions(struct glx_context * gc,
  * supported by the client to the server.
  */
 char *
-__glXGetClientGLExtensionString(void)
+__glXGetClientGLExtensionString(int screen)
 {
+   if (screen < 0)
+      return strdup("");
+
    return __glXGetStringFromTable(known_gl_extensions, NULL);
 }

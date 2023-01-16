@@ -27,5 +27,6 @@ libi915drm = static_library(
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers
   ],
+  link_with : [libintel_common],
   dependencies : [dep_libdrm, dep_libdrm_intel],
 )

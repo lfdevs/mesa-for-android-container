@@ -169,7 +169,7 @@ uint32_t r300_translate_texformat(enum pipe_format format,
 {
     uint32_t result = 0;
     const struct util_format_description *desc;
-    unsigned i;
+    int i;
     boolean uniform = TRUE;
     const uint32_t sign_bit[4] = {
         R300_TX_FORMAT_SIGNED_W,
@@ -358,14 +358,8 @@ uint32_t r300_translate_texformat(enum pipe_format format,
         return ~0; /* Unsupported/unknown. */
     }
 
-    /* Find the first non-VOID channel. */
-    for (i = 0; i < 4; i++) {
-        if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-            break;
-        }
-    }
-
-    if (i == 4)
+    i = util_format_get_first_non_void_channel(format);
+    if (i == -1)
         return ~0; /* Unsupported/unknown. */
 
     /* And finally, uniform formats. */
@@ -591,21 +585,15 @@ static uint32_t r300_translate_zsformat(enum pipe_format format)
 static uint32_t r300_translate_out_fmt(enum pipe_format format)
 {
     uint32_t modifier = 0;
-    unsigned i;
+    int i;
     const struct util_format_description *desc;
     boolean uniform_sign;
 
     format = r300_unbyteswap_array_format(format);
     desc = util_format_description(format);
 
-    /* Find the first non-VOID channel. */
-    for (i = 0; i < 4; i++) {
-        if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-            break;
-        }
-    }
-
-    if (i == 4)
+    i = util_format_get_first_non_void_channel(format);
+    if (i == -1)
         return ~0; /* Unsupported/unknown. */
 
     /* Specifies how the shader output is written to the fog unit. */

@@ -81,6 +81,9 @@ void genX(cmd_buffer_emit_hashing_mode)(struct anv_cmd_buffer *cmd_buffer,
 
 void genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer);
 void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer);
+void genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline);
+
+void genX(apply_task_urb_workaround)(struct anv_cmd_buffer *cmd_buffer);
 
 enum anv_pipe_bits
 genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
@@ -178,3 +181,23 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline);
 
 void
 genX(ray_tracing_pipeline_emit)(struct anv_ray_tracing_pipeline *pipeline);
+
+#define anv_shader_bin_get_bsr(bin, local_arg_offset) ({             \
+   assert((local_arg_offset) % 8 == 0);                              \
+   const struct brw_bs_prog_data *prog_data =                        \
+      brw_bs_prog_data_const(bin->prog_data);                        \
+   assert(prog_data->simd_size == 8 || prog_data->simd_size == 16);  \
+                                                                     \
+   (struct GENX(BINDLESS_SHADER_RECORD)) {                           \
+      .OffsetToLocalArguments = (local_arg_offset) / 8,              \
+      .BindlessShaderDispatchMode =                                  \
+         prog_data->simd_size == 16 ? RT_SIMD16 : RT_SIMD8,          \
+      .KernelStartPointer = bin->kernel.offset,                      \
+   };                                                                \
+})
+
+void
+genX(batch_set_preemption)(struct anv_batch *batch, bool value);
+
+void
+genX(cmd_buffer_set_preemption)(struct anv_cmd_buffer *cmd_buffer, bool value);

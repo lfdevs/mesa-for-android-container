@@ -11,10 +11,6 @@ dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.line
 # Lines were the wrong colors on iteration 4/10.
 dEQP-GLES3.functional.transform_feedback.random.separate.lines.4
 
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.texture2d_array_to_cubemap
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16f.texture2d_array_to_texture3d
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.cubemap_to_texture2d_array
-
 # Looks like maybe the end of level 0 face 5 got overwritten, others were all
 # OK.  source is 7 levels 65x65x9, dst is 7 levels 65x65x1 cubemap
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16i.texture3d_to_cubemap
@@ -34,3 +30,12 @@ dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_6x5_k
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_srgb8_alpha8_astc_12x12_khr.texture3d_to_texture2d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x5_khr_rgba32i.texture2d_array_to_cubemap
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x6_khr_rgba32ui.cubemap_to_cubemap
+
+# Found when expanding coverage on 2022/11/17
+dEQP-GLES31.functional.separate_shader.random.79
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.lines.4
+dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.rgba4_2d_array
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.*cubemap.*
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.*texture2d_array.*
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.*astc.*cubemap.*
+dEQP-GLES3.functional.fbo.msaa.2_samples.depth_component16

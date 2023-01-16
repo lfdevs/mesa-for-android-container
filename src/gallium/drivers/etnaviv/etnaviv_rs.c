@@ -175,6 +175,8 @@ etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
          !rs->swap_rb && !rs->flip &&
          !rs->clear_mode && rs->source_padded_width &&
          !rs->source_ts_compressed) {
+      if (VIV_FEATURE(ctx->screen, chipMinorFeatures6, CACHE128B256BPERLINE))
+         cs->RS_EXTRA_CONFIG |= VIVS_RS_EXTRA_CONFIG_TS_MODE(rs->source_ts_mode);
       /* Total number of tiles (same as for autodisable) */
       cs->RS_KICKER_INPLACE = rs->tile_count;
    }
@@ -302,20 +304,20 @@ etna_rs_gen_clear_surface(struct etna_context *ctx, struct etna_surface *surf,
    }
 
    /* use tiled clear if width is multiple of 16 */
-   bool tiled_clear = (surf->surf.padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
-                      (surf->surf.padded_height & ETNA_RS_HEIGHT_MASK) == 0;
+   bool tiled_clear = (surf->level->padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
+                      (surf->level->padded_height & ETNA_RS_HEIGHT_MASK) == 0;
 
    etna_compile_rs_state( ctx, &surf->clear_command, &(struct rs_state) {
       .source_format = format,
       .dest_format = format,
       .dest = dst->bo,
-      .dest_offset = surf->surf.offset,
-      .dest_stride = surf->surf.stride,
-      .dest_padded_height = surf->surf.padded_height,
+      .dest_offset = surf->offset,
+      .dest_stride = surf->level->stride,
+      .dest_padded_height = surf->level->padded_height,
       .dest_tiling = tiled_clear ? dst->layout : ETNA_LAYOUT_LINEAR,
       .dither = {0xffffffff, 0xffffffff},
-      .width = surf->surf.padded_width, /* These must be padded to 16x4 if !LINEAR, otherwise RS will hang */
-      .height = surf->surf.padded_height,
+      .width = surf->level->padded_width, /* These must be padded to 16x4 if !LINEAR, otherwise RS will hang */
+      .height = surf->level->padded_height,
       .clear_value = {clear_value, clear_value >> 32, clear_value, clear_value >> 32},
       .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_ENABLED1,
       .clear_bits = 0xffff
@@ -330,16 +332,21 @@ etna_blit_clear_color_rs(struct pipe_context *pctx, struct pipe_surface *dst,
    struct etna_surface *surf = etna_surface(dst);
    uint64_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color);
 
-   if (surf->surf.ts_size) { /* TS: use precompiled clear command */
+   if (surf->level->ts_size) { /* TS: use precompiled clear command */
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT = new_clear_value >> 32;
 
       if (VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
          /* Set number of color tiles to be filled */
          etna_set_state(ctx->stream, VIVS_TS_COLOR_AUTO_DISABLE_COUNT,
-                        surf->surf.padded_width * surf->surf.padded_height / 16);
+                        surf->level->padded_width * surf->level->padded_height / 16);
          ctx->framebuffer.TS_MEM_CONFIG |= VIVS_TS_MEM_CONFIG_COLOR_AUTO_DISABLE;
       }
+
+      /* update clear color in SW meta area of the buffer if TS is exported */
+      if (unlikely(new_clear_value != surf->level->clear_value &&
+          etna_resource_ext_ts(etna_resource(dst->texture))))
+         etna_resource(dst->texture)->ts_meta->v0.clear_value = new_clear_value;
 
       surf->level->ts_valid = true;
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
@@ -390,13 +397,13 @@ etna_blit_clear_zs_rs(struct pipe_context *pctx, struct pipe_surface *dst,
     * We may be better off recording the pending clear operation,
     * delaying the actual clear to the first use.  This way, we can merge
     * consecutive clears together. */
-   if (surf->surf.ts_size) { /* TS: use precompiled clear command */
+   if (surf->level->ts_size) { /* TS: use precompiled clear command */
       /* Set new clear depth value */
       ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = new_clear_value;
       if (VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
          /* Set number of depth tiles to be filled */
          etna_set_state(ctx->stream, VIVS_TS_DEPTH_AUTO_DISABLE_COUNT,
-                        surf->surf.padded_width * surf->surf.padded_height / 16);
+                        surf->level->padded_width * surf->level->padded_height / 16);
          ctx->framebuffer.TS_MEM_CONFIG |= VIVS_TS_MEM_CONFIG_DEPTH_AUTO_DISABLE;
       }
 
@@ -435,13 +442,14 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers, const struct pipe_sci
    bool need_ts_flush = false;
    if ((buffers & PIPE_CLEAR_COLOR) && ctx->framebuffer_s.nr_cbufs) {
       struct etna_surface *surf = etna_surface(ctx->framebuffer_s.cbufs[0]);
-      if (surf->surf.ts_size)
+
+      if (surf->level->ts_size)
          need_ts_flush = true;
    }
    if ((buffers & PIPE_CLEAR_DEPTHSTENCIL) && ctx->framebuffer_s.zsbuf != NULL) {
       struct etna_surface *surf = etna_surface(ctx->framebuffer_s.zsbuf);
 
-      if (surf->surf.ts_size)
+      if (surf->level->ts_size)
          need_ts_flush = true;
    }
 
@@ -453,8 +461,13 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers, const struct pipe_sci
     */
    if (buffers & PIPE_CLEAR_COLOR) {
       for (int idx = 0; idx < ctx->framebuffer_s.nr_cbufs; ++idx) {
+         struct etna_surface *surf = etna_surface(ctx->framebuffer_s.cbufs[idx]);
+
          etna_blit_clear_color_rs(pctx, ctx->framebuffer_s.cbufs[idx],
                                &color[idx]);
+
+         if (!etna_resource(surf->prsc)->explicit_flush)
+            etna_context_add_flush_resource(ctx, surf->prsc);
       }
    }
 

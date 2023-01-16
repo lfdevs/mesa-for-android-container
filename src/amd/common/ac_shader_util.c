@@ -25,7 +25,7 @@
 #include "ac_gpu_info.h"
 
 #include "sid.h"
-#include "u_math.h"
+#include "util/u_math.h"
 
 #include <assert.h>
 #include <stdlib.h>

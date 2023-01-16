@@ -79,7 +79,8 @@ fd6_ssbo_descriptor(struct fd_context *ctx,
 }
 
 static void
-fd6_emit_image_descriptor(struct fd_context *ctx, struct fd_ringbuffer *ring, const struct pipe_image_view *buf, bool ibo)
+fd6_emit_image_descriptor(struct fd_context *ctx, struct fd_ringbuffer *ring,
+                          const struct pipe_image_view *buf, bool ibo)
 {
    struct fd_resource *rsc = fd_resource(buf->resource);
    if (!rsc) {
@@ -202,7 +203,26 @@ fd6_set_shader_images(struct pipe_context *pctx, enum pipe_shader_type shader,
       if (!buf->resource)
          continue;
 
-      fd6_validate_format(ctx, fd_resource(buf->resource), buf->format);
+      struct fd_resource *rsc = fd_resource(buf->resource);
+
+      if (buf->shader_access & (PIPE_IMAGE_ACCESS_COHERENT |
+                                PIPE_IMAGE_ACCESS_VOLATILE)) {
+         /* UBWC compression cannot be used with coherent/volatile access
+          * due to the extra caching (CCU) involved:
+          */
+         if (rsc->layout.ubwc) {
+            bool linear = fd6_valid_tiling(rsc, buf->format);
+
+            perf_debug_ctx(ctx,
+                           "%" PRSC_FMT ": demoted to %suncompressed due to coherent/volatile use as %s",
+                           PRSC_ARGS(&rsc->b.b), linear ? "linear+" : "",
+                           util_format_short_name(buf->format));
+
+            fd_resource_uncompress(ctx, rsc, linear);
+         }
+      } else {
+         fd6_validate_format(ctx, rsc, buf->format);
+      }
    }
 }
 

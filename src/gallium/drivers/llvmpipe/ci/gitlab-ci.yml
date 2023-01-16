@@ -10,15 +10,11 @@
 .llvmpipe-piglit-cl:
   extends:
     - .test-cl
-    - .piglit-test
+    - .deqp-test
     - .llvmpipe-test
   variables:
     LP_NUM_THREADS: 1
     PIGLIT_PROFILES: cl
-    PIGLIT_TESTS: >
-      -x bswap -x phatk -x clz-optimizations
-  script:
-    - install/piglit/run_cl.sh
 
 llvmpipe-piglit-clover:
   extends:
@@ -29,7 +25,8 @@ llvmpipe-piglit-clover:
     - debian/x86_test-gl
   variables:
     LP_CL: 1
-    PIGLIT_RESULTS: "llvmpipe-clover"
+    DEQP_SUITE: llvmpipe-clover
+    GPU_VERSION: llvmpipe-clover
 
 llvmpipe-piglit-rusticl:
   extends:
@@ -40,7 +37,8 @@ llvmpipe-piglit-rusticl:
     - debian/x86_test-gl
   variables:
     RUSTICL_ENABLE: "llvmpipe"
-    PIGLIT_RESULTS: "llvmpipe-rusticl"
+    DEQP_SUITE: llvmpipe-rusticl
+    GPU_VERSION: llvmpipe-rusticl
 
 llvmpipe-traces:
   extends:
@@ -66,9 +64,12 @@ llvmpipe:
     - mesa-swrast
   variables:
     DEQP_SUITE: llvmpipe
+    XDG_RUNTIME_DIR: /run/user
   extends: .llvmpipe-deqp-test
   script:
-    - LD_LIBRARY_PATH=`pwd`/install xvfb-run --server-args='-noreset' install/deqp-runner.sh
+    - mkdir -p $XDG_RUNTIME_DIR
+    - LD_LIBRARY_PATH=`pwd`/install weston -Bheadless-backend.so -Swayland-0 &
+    - LD_LIBRARY_PATH=`pwd`/install WAYLAND_DISPLAY=wayland-0 xvfb-run --server-args='-noreset' install/deqp-runner.sh
 
 llvmpipe-deqp-asan:
   variables:

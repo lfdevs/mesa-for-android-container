@@ -92,7 +92,7 @@ ninja install
 popd
 rm -rf DirectX-Headers
 
-pip3 install git+https://git.lavasoftware.org/lava/lavacli@3db3ddc45e5358908bc6a17448059ea2340492b7
+pip3 install lavacli==1.5.2
 
 # install bindgen
 RUSTFLAGS='-L native=/usr/local/lib' cargo install \

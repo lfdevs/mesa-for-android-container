@@ -108,7 +108,7 @@ static const struct surface_format_info format_info[] = {
    SF(  x,   x,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R32G32B32A32_UNORM)
    SF(  x,   x,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R32G32B32A32_SNORM)
    SF(  x,   x,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R64G64_FLOAT)
-   SF(  Y,  50,   x,   x, 100, 100,   x,   x,   x,   x,   x, 100,    x,  R32G32B32X32_FLOAT)
+   SF(  Y,  50,   x,   x, 110, 110,   x,   x,   x,   x,   x, 110,    x,  R32G32B32X32_FLOAT)
    SF(  x,   x,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R32G32B32A32_SSCALED)
    SF(  x,   x,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R32G32B32A32_USCALED)
    SF(  x,   x,   x,   x,   x,   x,  75,   x,   x,   x,   x,   x,    x,  R32G32B32A32_SFIXED)
@@ -148,14 +148,14 @@ static const struct surface_format_info format_info[] = {
    SF(  x,   x,   x,   x,   x,   x,  75,   x,   x,   x,   x,   x,    x,  R32G32_SFIXED)
    SF(  x,   x,   x,   x,   x,   x,  80,   x,   x,   x,   x,   x,   90,  R64_PASSTHRU)
    SF(  Y,   Y,   x,   Y,   Y,   Y,   Y,   x,  60,  70,   x,  90,    x,  B8G8R8A8_UNORM)
-   SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,   x,   x,   x, 100,    x,  B8G8R8A8_UNORM_SRGB)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,   x,   x,   x, 110,    x,  B8G8R8A8_UNORM_SRGB)
 /*    smpl filt  shad  CK   RT   AB   VB   SO color TW   TR  ccs_e  TA */
-   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,  60,  70,   x, 100,    x,  R10G10B10A2_UNORM)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,  60,  70,   x, 110,    x,  R10G10B10A2_UNORM)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,  60,   x,   x, 120,    x,  R10G10B10A2_UNORM_SRGB)
-   SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,   x, 100,    x,  R10G10B10A2_UINT)
+   SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,   x, 110,    x,  R10G10B10A2_UINT)
    SF(  Y,   Y,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R10G10B10_SNORM_A2_UNORM)
    SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,  60,  70, 110,  90,    x,  R8G8B8A8_UNORM)
-   SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,  60,   x,   x, 100,    x,  R8G8B8A8_UNORM_SRGB)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,  60,   x,   x, 110,    x,  R8G8B8A8_UNORM_SRGB)
    SF(  Y,   Y,   x,   x,   Y,  60,   Y,   x,   x,  70, 110,  90,    x,  R8G8B8A8_SNORM)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,  90,  90,    x,  R8G8B8A8_SINT)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,  75,  90,    x,  R8G8B8A8_UINT)
@@ -164,9 +164,9 @@ static const struct surface_format_info format_info[] = {
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,  90,  90,    x,  R16G16_SINT)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,  75,  90,    x,  R16G16_UINT)
    SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,   x,  70,  90,  90,    x,  R16G16_FLOAT)
-   SF(  Y,   Y,   x,   x,   Y,   Y,  75,   x,  60,  70,   x, 100,    x,  B10G10R10A2_UNORM)
-   SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,  60,   x,   x, 100,    x,  B10G10R10A2_UNORM_SRGB)
-   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,   x,  70,   x, 100,    x,  R11G11B10_FLOAT)
+   SF(  Y,   Y,   x,   x,   Y,   Y,  75,   x,  60,  70,   x, 110,    x,  B10G10R10A2_UNORM)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,  60,   x,   x, 110,    x,  B10G10R10A2_UNORM_SRGB)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,   x,  70,   x, 110,    x,  R11G11B10_FLOAT)
    SF(120, 120,   x,   x, 120, 120,   x,   x,   x,   x,   x, 120,    x,  R10G10B10_FLOAT_A2_UNORM)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   Y,   x,  70,  70,  90,   70,  R32_SINT)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   Y,   x,  70,  70,  90,   70,  R32_UINT)
@@ -181,7 +181,7 @@ static const struct surface_format_info format_info[] = {
    SF(  Y,  50,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  L32_FLOAT)
    SF(  Y,  50,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  A32_FLOAT)
    SF(  Y,   Y,   x,   Y,  80,  80,   x,   x,  60,   x,   x,  90,    x,  B8G8R8X8_UNORM)
-   SF(  Y,   Y,   x,   x,  80,  80,   x,   x,   x,   x,   x, 100,    x,  B8G8R8X8_UNORM_SRGB)
+   SF(  Y,   Y,   x,   x,  80,  80,   x,   x,   x,   x,   x, 110,    x,  B8G8R8X8_UNORM_SRGB)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  R8G8B8X8_UNORM)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  R8G8B8X8_UNORM_SRGB)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  R9G9B9E5_SHAREDEXP)
@@ -359,20 +359,20 @@ static const struct surface_format_info format_info[] = {
    SF( 90,  90,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_LDR_2D_10X10_U8SRGB)
    SF( 90,  90,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_LDR_2D_12X10_U8SRGB)
    SF( 90,  90,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_LDR_2D_12X12_U8SRGB)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_4X4_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_5X4_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_5X5_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_6X5_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_6X6_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_8X5_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_8X6_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_8X8_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X5_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X6_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X8_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X10_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_12X10_FLT16)
-   SF(100, 100,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_12X12_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_4X4_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_5X4_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_5X5_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_6X5_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_6X6_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_8X5_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_8X6_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_8X8_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X5_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X6_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X8_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_10X10_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_12X10_FLT16)
+   SF(110, 110,   x,   x,   x,   x,   x,   x,   x,   x,   x,   x,    x,  ASTC_HDR_2D_12X12_FLT16)
 };
 #undef x
 #undef Y
@@ -876,6 +876,10 @@ bool
 isl_format_supports_ccs_e(const struct intel_device_info *devinfo,
                           enum isl_format format)
 {
+   /* Wa_14017353530: Disable compression on MTL until B0 */
+   if (intel_device_info_is_mtl(devinfo) && devinfo->revision < 4)
+      return false;
+
    /* Wa_22011186057: Disable compression on ADL-P A0 */
    if (devinfo->platform == INTEL_PLATFORM_ADL && devinfo->gt == 2 && devinfo->revision == 0)
       return false;
@@ -885,11 +889,12 @@ isl_format_supports_ccs_e(const struct intel_device_info *devinfo,
 
    /* For simplicity, only report that a format supports CCS_E if blorp can
     * perform bit-for-bit copies with an image of that format while compressed.
-    * Unfortunately, R11G11B10_FLOAT is in a compression class of its own and
-    * there is no way to copy to/from it which doesn't potentially loose data
-    * if one of the bit patterns being copied isn't valid finite floats.
+    * Unfortunately, R11G11B10_FLOAT is in a compression class of its own, and
+    * on ICL, there is no way to copy to/from it which doesn't potentially
+    * loose data if one of the bit patterns being copied isn't valid finite
+    * floats.
     */
-   if (format == ISL_FORMAT_R11G11B10_FLOAT)
+   if (devinfo->ver == 11 && format == ISL_FORMAT_R11G11B10_FLOAT)
       return false;
 
    return devinfo->verx10 >= format_info[format].ccs_e;
@@ -988,14 +993,12 @@ isl_formats_are_ccs_e_compatible(const struct intel_device_info *devinfo,
        !isl_format_supports_ccs_e(devinfo, format2))
       return false;
 
-   /* Gfx12 added CCS_E support for A8_UNORM, A8_UNORM and R8_UNORM share the
-    * same aux map format encoding so they are definitely compatible.
+   /* On TGL+, drivers may specify a compression format independently from the
+    * surface format. So, even if the surface format changes, hardware is
+    * still able to determine how to access the CCS.
     */
-   if (format1 == ISL_FORMAT_A8_UNORM)
-      format1 = ISL_FORMAT_R8_UNORM;
-
-   if (format2 == ISL_FORMAT_A8_UNORM)
-      format2 = ISL_FORMAT_R8_UNORM;
+   if (devinfo->ver >= 12)
+      return true;
 
    /* The compression used by CCS is not dependent on the actual data encoding
     * of the format but only depends on the bit-layout of the channels.

@@ -160,6 +160,14 @@ public:
       aco_ptr<Instruction> get_ptr() const {
         return aco_ptr<Instruction>(instr);
       }
+
+      Instruction * operator * () const {
+         return instr;
+      }
+
+      Instruction * operator -> () const {
+         return instr;
+      }
    };
 
    struct Op {

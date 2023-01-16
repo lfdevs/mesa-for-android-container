@@ -606,14 +606,6 @@ nvc0_get_sample_locations(unsigned sample_count)
       { 0x3, 0xd }, { 0x7, 0xb },   /* (0,1), (1,1) */
       { 0x9, 0x5 }, { 0xf, 0x1 },   /* (2,0), (3,0) */
       { 0xb, 0xf }, { 0xd, 0x9 } }; /* (2,1), (3,1) */
-#if 0
-   /* NOTE: there are alternative modes for MS2 and MS8, currently not used */
-   static const uint8_t ms8_alt[8][2] = {
-      { 0x9, 0x5 }, { 0x7, 0xb },   /* (2,0), (1,1) */
-      { 0xd, 0x9 }, { 0x5, 0x3 },   /* (3,1), (1,0) */
-      { 0x3, 0xd }, { 0x1, 0x7 },   /* (0,1), (0,0) */
-      { 0xb, 0xf }, { 0xf, 0x1 } }; /* (2,1), (3,0) */
-#endif
 
    const uint8_t (*ptr)[2];
 

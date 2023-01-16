@@ -5196,7 +5196,7 @@ emit_tcs_input_declarations(struct svga_shader_emitter_v10 *emit)
 {
    unsigned i;
    unsigned size = emit->key.tcs.vertices_per_patch;
-   unsigned indicesMask = 0;
+   UNUSED unsigned indicesMask = 0;
    boolean addSignature = TRUE;
 
    if (!emit->tcs.control_point_phase)

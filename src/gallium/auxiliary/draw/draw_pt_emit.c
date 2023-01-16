@@ -257,7 +257,7 @@ draw_pt_emit_linear(struct pt_emit *emit,
 
    if (0) {
       for (unsigned i = 0; i < count; i++) {
-         debug_printf("\n\n%s vertex %d:\n", __FUNCTION__, i);
+         debug_printf("\n\n%s vertex %d:\n", __func__, i);
          draw_dump_emitted_vertex(emit->vinfo,
                                   (const uint8_t *)hw_verts +
                                   translate->key.output_stride * i);

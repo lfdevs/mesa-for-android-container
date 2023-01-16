@@ -573,8 +573,6 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         }
         if (job->msaa) {
                 key->msaa = v3d->rasterizer->base.multisample;
-                key->sample_coverage = (v3d->rasterizer->base.multisample &&
-                                        v3d->sample_mask != (1 << V3D_MAX_SAMPLES) - 1);
                 key->sample_alpha_to_coverage = v3d->blend->base.alpha_to_coverage;
                 key->sample_alpha_to_one = v3d->blend->base.alpha_to_one;
         }

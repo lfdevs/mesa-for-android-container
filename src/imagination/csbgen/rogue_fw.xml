@@ -1,0 +1,69 @@
+<?xml version="1.0" ?>
+
+<!--
+Copyright © 2022 Imagination Technologies Ltd.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next
+paragraph) shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+
+<!--
+These definitions are based on the ones for the firmware streams found
+in the fwif header (pvr_rogue_fwif_stream.h).
+
+TODO: Once the kernel driver is merged upstream, check to see if this comment
+needs updating.
+-->
+
+<csbgen name="ROGUE" prefix="FW">
+
+  <define name="STREAM_EXTHDR_DATA_MASK" value="0xFFFFFFF"/>
+
+  <enum name="STREAM_EXTHDR_TYPE_COMPUTE">
+    <value name="0" value="0"/>
+  </enum>
+
+  <enum name="STREAM_EXTHDR_TYPE_GEOM">
+    <value name="0" value="0"/>
+  </enum>
+
+  <enum name="STREAM_EXTHDR_TYPE_FRAG">
+    <value name="0" value="0"/>
+  </enum>
+
+  <struct name="STREAM_EXTHDR_COMPUTE0" length="1">
+    <field name="type" start="29" end="31" type="STREAM_EXTHDR_TYPE_COMPUTE" default="0"/>
+    <field name="continuation" start="28" end="28" type="bool"/>
+    <field name="has_brn49927" start="0" end="0" type="bool"/>
+  </struct>
+
+  <struct name="STREAM_EXTHDR_FRAG0" length="1">
+    <field name="type" start="29" end="31" type="STREAM_EXTHDR_TYPE_FRAG" default="0"/>
+    <field name="continuation" start="28" end="28" type="bool"/>
+    <field name="has_brn49927" start="1" end="1" type="bool"/>
+    <field name="has_brn47217" start="0" end="0" type="bool"/>
+  </struct>
+
+  <struct name="STREAM_EXTHDR_GEOM0" length="1">
+    <field name="type" start="29" end="31" type="STREAM_EXTHDR_TYPE_GEOM" default="0"/>
+    <field name="continuation" start="28" end="28" type="bool"/>
+    <field name="has_brn49927" start="0" end="0" type="bool"/>
+  </struct>
+
+</csbgen>

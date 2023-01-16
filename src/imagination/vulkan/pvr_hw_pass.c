@@ -1009,7 +1009,7 @@ static void pvr_dereference_surface(struct pvr_renderpass_context *ctx,
          pvr_free_surface_storage(ctx, int_attach);
    }
 
-   if (int_attach->attachment->has_stencil) {
+   if (int_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       assert(int_attach->stencil_remaining_count > 0U);
       int_attach->stencil_remaining_count--;
    }
@@ -1149,7 +1149,7 @@ static VkResult pvr_close_render(const struct pvr_device *device,
                              link) {
       assert(int_attach->resource.type != USC_MRT_RESOURCE_TYPE_INVALID);
       assert(int_attach->remaining_count > 0U);
-      if (int_attach->attachment->has_stencil)
+      if (int_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT)
          assert(int_attach->stencil_remaining_count > 0U);
 
       /* Copy the location of the source data for this attachment. */
@@ -1385,7 +1385,7 @@ pvr_depth_zls_conflict(struct pvr_renderpass_context *ctx,
       return true;
    }
 
-   if (ctx->int_ds_attach->attachment->has_stencil &&
+   if (ctx->int_ds_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT &&
        ctx->int_ds_attach->stencil_remaining_count > 0U) {
       return true;
    }
@@ -1396,7 +1396,7 @@ pvr_depth_zls_conflict(struct pvr_renderpass_context *ctx,
    if (int_ds_attach->load_op == VK_ATTACHMENT_LOAD_OP_LOAD)
       return true;
 
-   if (int_ds_attach->attachment->has_stencil &&
+   if (int_ds_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT &&
        int_ds_attach->stencil_load_op == VK_ATTACHMENT_LOAD_OP_LOAD) {
       return true;
    }
@@ -1488,7 +1488,8 @@ pvr_enable_z_replicate(struct pvr_renderpass_context *ctx,
       struct pvr_render_subpass *input_subpass = subpass->input_subpass;
 
       /* If the subpass writes to the attachment then enable z replication. */
-      if (*input_subpass->depth_stencil_attachment == replicate_attach_idx &&
+      if (input_subpass->depth_stencil_attachment &&
+          *input_subpass->depth_stencil_attachment == replicate_attach_idx &&
           !subpass->z_replicate) {
          subpass->z_replicate = true;
 
@@ -1866,12 +1867,13 @@ pvr_can_combine_with_render(const struct pvr_device_info *dev_info,
     * attachment.
     */
    if (sp_depth->existing_ds_is_input &&
-       ctx->int_ds_attach->attachment->has_stencil) {
+       ctx->int_ds_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       return false;
    }
 
    if (sp_depth->incoming_ds_is_input && int_ds_attach &&
-       int_ds_attach->attachment->has_stencil && ctx->hw_render) {
+       int_ds_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT &&
+       ctx->hw_render) {
       return false;
    }
 
@@ -2110,7 +2112,7 @@ pvr_merge_subpass(const struct pvr_device *device,
          hw_subpass->depth_initop = VK_ATTACHMENT_LOAD_OP_CLEAR;
       }
 
-      if (int_ds_attach->attachment->has_stencil) {
+      if (int_ds_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
          if (int_ds_attach->stencil_load_op == VK_ATTACHMENT_LOAD_OP_LOAD) {
             stencil_load = true;
             setup_render_ds = true;
@@ -2337,7 +2339,7 @@ static VkResult pvr_schedule_subpass(const struct pvr_device *device,
             pvr_free_surface_storage(ctx, int_depth_attach);
       }
 
-      if (int_depth_attach->attachment->has_stencil) {
+      if (int_depth_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
          assert(int_depth_attach->stencil_remaining_count > 0U);
          int_depth_attach->stencil_remaining_count--;
       }
@@ -2575,7 +2577,7 @@ VkResult pvr_create_renderpass_hwsetup(
             int_attach->remaining_count++;
       }
 
-      if (int_attach->attachment->has_stencil) {
+      if (int_attach->attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
          int_attach->stencil_remaining_count = int_attach->remaining_count;
          if (pass->attachments[i].stencil_store_op ==
              VK_ATTACHMENT_STORE_OP_STORE) {

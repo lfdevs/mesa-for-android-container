@@ -35,7 +35,7 @@
 
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 
 struct pipe_resource;
 struct pipe_surface;

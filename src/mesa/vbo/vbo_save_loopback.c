@@ -27,7 +27,7 @@
 
 #include <stdio.h>
 #include "main/context.h"
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/enums.h"
 #include "main/mesa_private.h"
 #include "main/dispatch.h"
@@ -139,7 +139,7 @@ append_attr(GLuint *nr, struct loopback_attr la[], int i, int shift,
 {
    la[*nr].index = shift + i;
    la[*nr].offset = vao->VertexAttrib[i].RelativeOffset;
-   la[*nr].func = vert_attrfunc[vao->VertexAttrib[i].Format.Size - 1];
+   la[*nr].func = vert_attrfunc[vao->VertexAttrib[i].Format.User.Size - 1];
    (*nr)++;
 }
 

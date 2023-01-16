@@ -135,21 +135,3 @@ vk_shader_module_to_nir(struct vk_device *device,
                                           spirv_options, nir_options,
                                           mem_ctx, nir_out);
 }
-
-struct vk_shader_module *
-vk_shader_module_clone(void *mem_ctx, const struct vk_shader_module *src)
-{
-   struct vk_shader_module *dst =
-      ralloc_size(mem_ctx, sizeof(struct vk_shader_module) + src->size);
-
-   vk_object_base_init(src->base.device, &dst->base, VK_OBJECT_TYPE_SHADER_MODULE);
-
-   dst->nir = NULL;
-
-   memcpy(dst->sha1, src->sha1, sizeof(src->sha1));
-
-   dst->size = src->size;
-   memcpy(dst->data, src->data, src->size);
-
-   return dst;
-}

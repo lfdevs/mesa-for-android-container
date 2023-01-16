@@ -56,6 +56,7 @@
 #include "state_tracker/st_cb_eglimage.h"
 #include "state_tracker/st_context.h"
 #include "state_tracker/st_format.h"
+#include "state_tracker/st_util.h"
 
 /**
  * Notes:
@@ -1291,6 +1292,7 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
    fb->_HasAttachments = true;
    fb->_IntegerBuffers = 0;
    fb->_BlendForceAlphaToOne = 0;
+   fb->_IsRGB = 0;
    fb->_FP32Buffers = 0;
 
    /* Start at -2 to more easily loop over all attachment points.
@@ -1450,6 +1452,9 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
          /* check if integer color */
          if (_mesa_is_format_integer_color(attFormat))
             fb->_IntegerBuffers |= (1 << i);
+
+         if (baseFormat == GL_RGB)
+            fb->_IsRGB |= (1 << i);
 
          if ((baseFormat == GL_RGB && ctx->st->needs_rgb_dst_alpha_override) ||
              (baseFormat == GL_LUMINANCE && !util_format_is_luminance(attFormat)) ||
@@ -5733,7 +5738,7 @@ _mesa_EvaluateDepthValuesARB(void)
       return;
    }
 
-   st_validate_state(st_context(ctx), ST_PIPELINE_UPDATE_FRAMEBUFFER);
+   st_validate_state(st_context(ctx), ST_PIPELINE_UPDATE_FB_STATE_MASK);
 
    ctx->pipe->evaluate_depth_buffer(ctx->pipe);
 }

@@ -34,7 +34,7 @@ initramfs) for trace replay testing.  Given that we need networking already, and
 our dEQP/Piglit/etc. payload is large, we use NFS from the x86 runner system
 rather than initramfs.
 
-See `src/freedreno/ci/gitlab-ci.yml` for an example of fastboot on DB410c and
+See ``src/freedreno/ci/gitlab-ci.yml`` for an example of fastboot on DB410c and
 DB820c (freedreno-a306 and freedreno-a530).
 
 Requirements (Servo)
@@ -74,7 +74,7 @@ call "servo"::
   dhcp-option=tag:cheza1,option:root-path,/srv/nfs/cheza1
   dhcp-option=tag:cheza2,option:root-path,/srv/nfs/cheza2
 
-See `src/freedreno/ci/gitlab-ci.yml` for an example of Servo on cheza.  Note
+See ``src/freedreno/ci/gitlab-ci.yml`` for an example of Servo on cheza.  Note
 that other Servo boards in CI are managed using LAVA.
 
 Requirements (POE)
@@ -124,12 +124,12 @@ With that set up, you should be able to power on/off a port with something like:
 Note that the "1.3.6..." SNMP OID changes between switches.  The last digit
 above is the interface id (port number).  You can probably find the right OID by
 google, that was easier than figuring it out from finding the switch's MIB
-database.  You can query the POE status from the switch serial using the `show
-power inline` command.
+database.  You can query the POE status from the switch serial using the ``show
+power inline`` command.
 
 Other than that, find the dnsmasq/tftp/NFS setup for your boards "servo" above.
 
-See `src/broadcom/ci/gitlab-ci.yml` and `src/nouveau/ci/gitlab-ci.yml` for an
+See ``src/broadcom/ci/gitlab-ci.yml`` and ``src/nouveau/ci/gitlab-ci.yml`` for an
 examples of POE for Raspberry Pi 3/4, and Jetson Nano.
 
 Setup

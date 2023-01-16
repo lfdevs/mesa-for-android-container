@@ -28,8 +28,8 @@
 
 #include "pipe/p_video_codec.h"
 #include "util/u_memory.h"
+#include "util/vl_vlc.h"
 
-#include "vl_vlc.h"
 #include "vl_mpeg12_bitstream.h"
 
 enum {

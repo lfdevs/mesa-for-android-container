@@ -363,6 +363,13 @@ set_yuv_layer(struct vl_compositor_state *s, struct vl_compositor *c,
           s->layers[layer].cs = (y) ? c->cs_yuv.bob.y : c->cs_yuv.bob.uv;
       break;
 
+   case VL_COMPOSITOR_NONE:
+      if (c->pipe_cs_composit_supported) {
+          s->layers[layer].cs = (y) ? c->cs_yuv.progressive.y : c->cs_yuv.progressive.uv;
+          break;
+      }
+      FALLTHROUGH;
+
    default:
       if (c->pipe_gfx_supported)
           s->layers[layer].fs = (y) ? c->fs_yuv.weave.y : c->fs_yuv.weave.uv;

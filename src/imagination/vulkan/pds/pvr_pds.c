@@ -891,7 +891,7 @@ pvr_pds_vertex_shader(struct pvr_pds_vertex_shader_program *restrict program,
     * instanced stream.
     */
    if (direct_writes_needed || any_instanced_stream ||
-       program->instance_ID_modifier) {
+       program->instance_id_modifier) {
       if (program->iterate_vtx_id) {
          vertex_id_control_word_const32 =
             pvr_pds_get_bank_based_constants(program->num_streams,
@@ -900,8 +900,8 @@ pvr_pds_vertex_shader(struct pvr_pds_vertex_shader_program *restrict program,
                                              &consts_size);
       }
 
-      if (program->iterate_instance_id || program->instance_ID_modifier) {
-         if (program->instance_ID_modifier == 0) {
+      if (program->iterate_instance_id || program->instance_id_modifier) {
+         if (program->instance_id_modifier == 0) {
             instance_id_control_word_const32 =
                pvr_pds_get_bank_based_constants(program->num_streams,
                                                 &next_constant,
@@ -948,7 +948,7 @@ pvr_pds_vertex_shader(struct pvr_pds_vertex_shader_program *restrict program,
       }
    }
 
-   if (program->instance_ID_modifier != 0) {
+   if (program->instance_id_modifier != 0) {
       /* This instanceID modifier is used when a draw array instanced call
        * sourcing from client data cannot fit into vertex buffer and needs to
        * be broken down into several draw calls.
@@ -959,7 +959,7 @@ pvr_pds_vertex_shader(struct pvr_pds_vertex_shader_program *restrict program,
       if (gen_mode == PDS_GENERATE_DATA_SEGMENT) {
          pvr_pds_write_constant32(buffer,
                                   instance_id_modifier_word_const32,
-                                  program->instance_ID_modifier);
+                                  program->instance_id_modifier);
       } else if (gen_mode == PDS_GENERATE_CODE_SEGMENT) {
          *buffer++ = pvr_pds_inst_encode_add32(
             /* cc */ 0x0,
@@ -986,7 +986,7 @@ pvr_pds_vertex_shader(struct pvr_pds_vertex_shader_program *restrict program,
       }
 
       if (program->draw_indirect) {
-         assert((program->instance_ID_modifier == 0) &&
+         assert((program->instance_id_modifier == 0) &&
                 (program->base_instance == 0));
 
          base_instance_register = PVR_ROGUE_PDSINST_REGS32_PTEMP32_LOWER + 1;

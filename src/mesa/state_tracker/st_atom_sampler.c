@@ -258,6 +258,7 @@ update_shader_samplers(struct st_context *st,
       case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P012:
       case PIPE_FORMAT_P016:
+      case PIPE_FORMAT_P030:
       case PIPE_FORMAT_Y210:
       case PIPE_FORMAT_Y212:
       case PIPE_FORMAT_Y216:

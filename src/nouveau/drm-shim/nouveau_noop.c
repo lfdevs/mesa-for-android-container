@@ -27,9 +27,12 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <nouveau_drm.h>
+#include "nouveau/nvif/ioctl.h"
+#include "nouveau/nvif/cl0080.h"
 #include "drm-shim/drm_shim.h"
 #include "util//u_math.h"
 
+#include "../gallium/drivers/nouveau/nv_object.xml.h"
 bool drm_shim_driver_prefers_first_render_node = true;
 
 struct nouveau_device {
@@ -169,7 +172,7 @@ nouveau_ioctl_get_param(int fd, unsigned long request, void *arg)
       gp->value = 1;
       return 0;
    case NOUVEAU_GETPARAM_GRAPH_UNITS:
-      gp->value = 0x01000001;
+      gp->value = 0x01000101;
       return 0;
    default:
       fprintf(stderr, "Unknown DRM_IOCTL_NOUVEAU_GETPARAM %llu\n",
@@ -178,8 +181,206 @@ nouveau_ioctl_get_param(int fd, unsigned long request, void *arg)
    }
 }
 
+static int
+nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
+{
+   struct {
+      struct nvif_ioctl_v0 ioctl;
+   } *args = arg;
+
+   switch (args->ioctl.type) {
+   case NVIF_IOCTL_V0_MTHD: {
+      struct {
+         struct nvif_ioctl_v0 ioctl;
+         struct nvif_ioctl_mthd_v0 mthd;
+      } *mthd = (void *)args;
+      switch (mthd->mthd.method) {
+      case NV_DEVICE_V0_INFO: {
+         struct nv_device_info_v0 *info = (void *)&mthd->mthd.data;
+         info->chipset = device_info.chip_id;
+         break;
+      }
+      default:
+         break;
+      }
+      break;
+   }
+   case NVIF_IOCTL_V0_SCLASS: {
+      struct {
+         struct nvif_ioctl_v0 ioctl;
+         struct nvif_ioctl_sclass_v0 sclass;
+      } *sclass = (void *)args;
+
+      if (sclass->sclass.count == 0) {
+         sclass->sclass.count = device_info.chip_id >= 0xe0 ? 4 : 3;
+         return 0;
+      }
+      int idx = 0;
+      /* m2mf */
+      switch (device_info.chip_id & ~0xf) {
+      case 0x170:
+      case 0x160:
+      case 0x140:
+      case 0x130:
+      case 0x120:
+      case 0x110:
+      case 0x100:
+      case 0xf0:
+         sclass->sclass.oclass[idx].oclass = NVF0_P2MF_CLASS;
+         break;
+      case 0xe0:
+         sclass->sclass.oclass[idx].oclass = NVE4_P2MF_CLASS;
+         break;
+      default:
+         sclass->sclass.oclass[idx].oclass = NVC0_M2MF_CLASS;
+         break;
+      }
+      sclass->sclass.oclass[idx].minver = -1;
+      sclass->sclass.oclass[idx].maxver = -1;
+      idx++;
+      if (device_info.chip_id >= 0xe0) {
+         switch (device_info.chip_id & ~0xf) {
+         case 0x170:
+            sclass->sclass.oclass[idx].oclass = AMPERE_DMA_COPY_A;
+            break;
+         case 0x160:
+            sclass->sclass.oclass[idx].oclass = TURING_DMA_COPY_A;
+            break;
+         case 0x140:
+            sclass->sclass.oclass[idx].oclass = VOLTA_DMA_COPY_A;
+            break;
+         case 0x130:
+            sclass->sclass.oclass[idx].oclass = PASCAL_DMA_COPY_A;
+            break;
+         case 0x120:
+         case 0x110:
+            sclass->sclass.oclass[idx].oclass = MAXWELL_DMA_COPY_A;
+            break;
+         case 0x100:
+         case 0xf0:
+         case 0xe0:
+            sclass->sclass.oclass[idx].oclass = KEPLER_DMA_COPY_A;
+            break;
+         }
+         sclass->sclass.oclass[idx].minver = -1;
+         sclass->sclass.oclass[idx].maxver = -1;
+         idx++;
+      }
+      /* 3d */
+      switch (device_info.chip_id & ~0xf) {
+      case 0x170:
+         sclass->sclass.oclass[idx].oclass = GA102_3D_CLASS;
+         break;
+      case 0x160:
+         sclass->sclass.oclass[idx].oclass = TU102_3D_CLASS;
+         break;
+      case 0x140:
+         sclass->sclass.oclass[idx].oclass = GV100_3D_CLASS;
+         break;
+      case 0x130:
+         switch (device_info.chip_id) {
+         case 0x130:
+         case 0x13b:
+            sclass->sclass.oclass[idx].oclass = GP100_3D_CLASS;
+            break;
+         default:
+            sclass->sclass.oclass[idx].oclass = GP102_3D_CLASS;
+            break;
+         }
+         break;
+      case 0x120:
+         sclass->sclass.oclass[idx].oclass = GM200_3D_CLASS;
+         break;
+      case 0x110:
+         sclass->sclass.oclass[idx].oclass = GM107_3D_CLASS;
+         break;
+      case 0x100:
+      case 0xf0:
+         sclass->sclass.oclass[idx].oclass = NVF0_3D_CLASS;
+         break;
+      case 0xe0:
+         switch (device_info.chip_id) {
+         case 0xea:
+            sclass->sclass.oclass[idx].oclass = NVEA_3D_CLASS;
+            break;
+         default:
+            sclass->sclass.oclass[idx].oclass = NVE4_3D_CLASS;
+            break;
+         }
+         break;
+      case 0xd0:
+         sclass->sclass.oclass[idx].oclass = NVC8_3D_CLASS;
+         break;
+      default:
+      case 0xc0:
+         switch (device_info.chip_id) {
+         case 0xc8:
+            sclass->sclass.oclass[idx].oclass = NVC8_3D_CLASS;
+            break;
+         case 0xc1:
+            sclass->sclass.oclass[idx].oclass = NVC1_3D_CLASS;
+            break;
+         default:
+            sclass->sclass.oclass[idx].oclass = NVC0_3D_CLASS;
+            break;
+         }
+         break;
+      }
+      sclass->sclass.oclass[idx].minver = -1;
+      sclass->sclass.oclass[idx].maxver = -1;
+      idx++;
+      switch (device_info.chip_id & ~0xf) {
+      case 0x170:
+         sclass->sclass.oclass[idx].oclass = GA102_COMPUTE_CLASS;
+         break;
+      case 0x160:
+         sclass->sclass.oclass[idx].oclass = TU102_COMPUTE_CLASS;
+         break;
+      case 0x140:
+         sclass->sclass.oclass[idx].oclass = GV100_COMPUTE_CLASS;
+         break;
+      case 0x130:
+         switch (device_info.chip_id) {
+         case 0x130:
+         case 0x13b:
+            sclass->sclass.oclass[idx].oclass = GP100_COMPUTE_CLASS;
+            break;
+         default:
+            sclass->sclass.oclass[idx].oclass = GP104_COMPUTE_CLASS;
+            break;
+         }
+         break;
+      case 0x120:
+         sclass->sclass.oclass[idx].oclass = GM200_COMPUTE_CLASS;
+         break;
+      case 0x110:
+         sclass->sclass.oclass[idx].oclass = GM107_COMPUTE_CLASS;
+         break;
+      case 0x100:
+      case 0xf0:
+         sclass->sclass.oclass[idx].oclass = NVF0_COMPUTE_CLASS;
+         break;
+      case 0xe0:
+         sclass->sclass.oclass[idx].oclass = NVE4_COMPUTE_CLASS;
+         break;
+      default:
+         sclass->sclass.oclass[idx].oclass = NVC0_COMPUTE_CLASS;
+         break;
+      }
+      sclass->sclass.oclass[idx].minver = -1;
+      sclass->sclass.oclass[idx].maxver = -1;
+      break;
+   }
+   default:
+      break;
+   }
+
+   return 0;
+}
+
 static ioctl_fn_t driver_ioctls[] = {
    [DRM_NOUVEAU_GETPARAM] = nouveau_ioctl_get_param,
+   [DRM_NOUVEAU_NVIF] = nouveau_ioctl_nvif,
    [DRM_NOUVEAU_CHANNEL_ALLOC] = nouveau_ioctl_channel_alloc,
    [DRM_NOUVEAU_CHANNEL_FREE] = nouveau_ioctl_noop,
    [DRM_NOUVEAU_GROBJ_ALLOC] = nouveau_ioctl_noop,
@@ -213,7 +414,7 @@ drm_shim_driver_init(void)
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
    shim_device.version_major = 1;
-   shim_device.version_minor = 0;
+   shim_device.version_minor = 3;
    shim_device.version_patchlevel = 1;
 
    nouveau_driver_get_device_info();

@@ -335,7 +335,7 @@ Shader::allocate_registers_from_string(std::istream& is, Pin pin)
          auto regs = value_factory().dest_vec4_from_string(reg_str, swz, pin);
          for (int i = 0; i < 4; ++i) {
             if (swz[i] < 4 && pin == pin_fully) {
-               regs[i]->pin_live_range(true, false);
+               regs[i]->set_flag(Register::pin_start);
             }
          }
       }
@@ -520,6 +520,8 @@ Shader::allocate_local_registers(const exec_list *registers)
 {
    if (value_factory().allocate_registers(registers))
       m_indirect_files |= 1 << TGSI_FILE_TEMPORARY;
+   m_required_registers = value_factory().next_register_index() ?
+                             value_factory().next_register_index() - 1 : 0;
 }
 
 bool
@@ -693,36 +695,12 @@ Shader::process_if(nir_if *if_stmt)
 {
    SFN_TRACE_FUNC(SfnLog::flow, "IF");
 
-   if (!emit_if_start(if_stmt))
-      return false;
-
-   foreach_list_typed(nir_cf_node, n, node, &if_stmt->then_list)
-   {
-      SFN_TRACE_FUNC(SfnLog::flow, "IF-then");
-      if (!process_cf_node(n))
-         return false;
-   }
-
-   if (!child_block_empty(if_stmt->else_list)) {
-      if (!emit_control_flow(ControlFlowInstr::cf_else))
-         return false;
-      foreach_list_typed(nir_cf_node,
-                         n,
-                         node,
-                         &if_stmt->else_list) if (!process_cf_node(n)) return false;
-   }
-
-   if (!emit_control_flow(ControlFlowInstr::cf_endif))
-      return false;
-
-   return true;
-}
-
-bool
-Shader::emit_if_start(nir_if *if_stmt)
-{
    auto value = value_factory().src(if_stmt->condition, 0);
-   AluInstr *pred = new AluInstr(op2_pred_setne_int,
+
+   EAluOp op = child_block_empty(if_stmt->then_list) ? op2_prede_int :
+                                                       op2_pred_setne_int;
+
+   AluInstr *pred = new AluInstr(op,
                                  value_factory().temp_register(),
                                  value,
                                  value_factory().zero(),
@@ -734,6 +712,35 @@ Shader::emit_if_start(nir_if *if_stmt)
    IfInstr *ir = new IfInstr(pred);
    emit_instruction(ir);
    start_new_block(1);
+
+   if (!child_block_empty(if_stmt->then_list)) {
+      foreach_list_typed(nir_cf_node, n, node, &if_stmt->then_list)
+      {
+         SFN_TRACE_FUNC(SfnLog::flow, "IF-then");
+         if (!process_cf_node(n))
+            return false;
+      }
+      if (!child_block_empty(if_stmt->else_list)) {
+         if (!emit_control_flow(ControlFlowInstr::cf_else))
+            return false;
+         foreach_list_typed(nir_cf_node,
+                            n,
+                            node,
+                            &if_stmt->else_list)
+               if (!process_cf_node(n)) return false;
+      }
+   } else {
+      assert(!child_block_empty(if_stmt->else_list));
+      foreach_list_typed(nir_cf_node,
+                         n,
+                         node,
+                         &if_stmt->else_list)
+            if (!process_cf_node(n)) return false;
+   }
+
+   if (!emit_control_flow(ControlFlowInstr::cf_endif))
+      return false;
+
    return true;
 }
 

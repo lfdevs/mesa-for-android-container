@@ -26,7 +26,7 @@
 #include "ac_perfcounter.h"
 
 #include "util/u_memory.h"
-#include "macros.h"
+#include "util/macros.h"
 
 /* cik_CB */
 static unsigned cik_CB_select0[] = {

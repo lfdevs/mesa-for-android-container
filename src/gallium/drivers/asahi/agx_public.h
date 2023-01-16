@@ -31,8 +31,8 @@ struct pipe_screen;
 struct sw_winsys;
 struct renderonly;
 
-struct pipe_screen *
-agx_screen_create(int fd, struct renderonly *ro, struct sw_winsys *winsys);
+struct pipe_screen *agx_screen_create(int fd, struct renderonly *ro,
+                                      struct sw_winsys *winsys);
 
 #ifdef __cplusplus
 }

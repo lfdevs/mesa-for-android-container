@@ -45,7 +45,7 @@ struct pipe_screen;
 
 #if VMW_DEBUG
 #define vmw_printf debug_printf
-#define VMW_FUNC  debug_printf("%s\n", __FUNCTION__)
+#define VMW_FUNC  debug_printf("%s\n", __func__)
 #else
 #define VMW_FUNC
 #define vmw_printf(...)

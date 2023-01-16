@@ -31,7 +31,7 @@
 
 #include <inttypes.h>  /* for PRIx64 macro */
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 
 #include "prog_instruction.h"

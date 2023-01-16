@@ -54,6 +54,6 @@
 /* for conditionally setting boolean flag(s): */
 #define COND(bool, val) ((bool) ? (val) : 0)
 
-#define BIT(bit) BITFIELD_BIT(bit)
+#define BIT(bit) BITFIELD64_BIT(bit)
 
 #endif /* FREEDRENO_COMMON_H_ */

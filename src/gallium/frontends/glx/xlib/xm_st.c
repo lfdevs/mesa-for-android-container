@@ -32,7 +32,11 @@
 #include "util/u_atomic.h"
 #include "util/u_memory.h"
 
+#include "state_tracker/st_context.h"
+
 struct xmesa_st_framebuffer {
+   struct pipe_frontend_drawable base;
+
    XMesaDisplay display;
    XMesaBuffer buffer;
    struct pipe_screen *screen;
@@ -48,9 +52,9 @@ struct xmesa_st_framebuffer {
 
 
 static inline struct xmesa_st_framebuffer *
-xmesa_st_framebuffer(struct st_framebuffer_iface *stfbi)
+xmesa_st_framebuffer(struct pipe_frontend_drawable *drawable)
 {
-   return (struct xmesa_st_framebuffer *) stfbi->st_manager_private;
+   return (struct xmesa_st_framebuffer *)drawable;
 }
 
 
@@ -58,15 +62,15 @@ xmesa_st_framebuffer(struct st_framebuffer_iface *stfbi)
  * Display (present) an attachment to the xlib_drawable of the framebuffer.
  */
 static bool
-xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
-                             struct st_context_iface *stctx,
+xmesa_st_framebuffer_display(struct pipe_frontend_drawable *drawable,
+                             struct st_context *st,
                              enum st_attachment_type statt,
                              struct pipe_box *box)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    struct pipe_resource *ptex = xstfb->textures[statt];
    struct pipe_resource *pres;
-   struct pipe_context *pctx = stctx ? stctx->pipe : NULL;
+   struct pipe_context *pctx = st ? st->pipe : NULL;
 
    if (!ptex)
       return true;
@@ -87,13 +91,13 @@ xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
  * Copy the contents between the attachments.
  */
 static void
-xmesa_st_framebuffer_copy_textures(struct st_framebuffer_iface *stfbi,
+xmesa_st_framebuffer_copy_textures(struct pipe_frontend_drawable *drawable,
                                    enum st_attachment_type src_statt,
                                    enum st_attachment_type dst_statt,
                                    unsigned x, unsigned y,
                                    unsigned width, unsigned height)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    struct pipe_resource *src_ptex = xstfb->textures[src_statt];
    struct pipe_resource *dst_ptex = xstfb->textures[dst_statt];
    struct pipe_box src_box;
@@ -102,7 +106,7 @@ xmesa_st_framebuffer_copy_textures(struct st_framebuffer_iface *stfbi,
    if (!src_ptex || !dst_ptex)
       return;
 
-   pipe = xmesa_get_context(stfbi);
+   pipe = xmesa_get_context(drawable);
 
    u_box_2d(x, y, width, height, &src_box);
 
@@ -117,11 +121,11 @@ xmesa_st_framebuffer_copy_textures(struct st_framebuffer_iface *stfbi,
  * This is a helper used during framebuffer validation.
  */
 bool
-xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
+xmesa_st_framebuffer_validate_textures(struct pipe_frontend_drawable *drawable,
                                        unsigned width, unsigned height,
                                        unsigned mask)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    struct pipe_resource templ;
    enum st_attachment_type i;
 
@@ -193,20 +197,20 @@ xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
 /**
  * Check that a framebuffer's attachments match the window's size.
  *
- * Called via st_framebuffer_iface::validate()
+ * Called via pipe_frontend_drawable::validate()
  *
  * \param statts  array of framebuffer attachments
  * \param count  number of framebuffer attachments in statts[]
  * \param out  returns resources for each of the attachments
  */
 static bool
-xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
-                              struct st_framebuffer_iface *stfbi,
+xmesa_st_framebuffer_validate(struct st_context *st,
+                              struct pipe_frontend_drawable *drawable,
                               const enum st_attachment_type *statts,
                               unsigned count,
                               struct pipe_resource **out)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    unsigned statt_mask, new_mask, i;
    bool resized;
    bool ret;
@@ -230,7 +234,7 @@ xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
 
    /* revalidate textures */
    if (resized || new_mask) {
-      ret = xmesa_st_framebuffer_validate_textures(stfbi,
+      ret = xmesa_st_framebuffer_validate_textures(drawable,
                   xstfb->buffer->width, xstfb->buffer->height, statt_mask);
       if (!ret)
          return ret;
@@ -244,7 +248,7 @@ xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
          if ((statt_mask & (1 << back)) &&
              (new_mask & (1 << front)) &&
              !(new_mask & (1 << back))) {
-            xmesa_st_framebuffer_copy_textures(stfbi, back, front,
+            xmesa_st_framebuffer_copy_textures(drawable, back, front,
                   0, 0, xstfb->texture_width, xstfb->texture_height);
          }
       }
@@ -258,20 +262,20 @@ xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
 
 
 /**
- * Called via st_framebuffer_iface::flush_front()
+ * Called via pipe_frontend_drawable::flush_front()
  */
 static bool
-xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
-                                 struct st_framebuffer_iface *stfbi,
+xmesa_st_framebuffer_flush_front(struct st_context *st,
+                                 struct pipe_frontend_drawable *drawable,
                                  enum st_attachment_type statt)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    bool ret;
 
    if (statt != ST_ATTACHMENT_FRONT_LEFT)
       return false;
 
-   ret = xmesa_st_framebuffer_display(stfbi, stctx, statt, NULL);
+   ret = xmesa_st_framebuffer_display(drawable, st, statt, NULL);
 
    if (ret && xmesa_strict_invalidate())
       xmesa_check_buffer_size(xstfb->buffer);
@@ -279,20 +283,17 @@ xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
    return ret;
 }
 
-static uint32_t xmesa_stfbi_ID = 0;
+static uint32_t xmesa_drawable_ID = 0;
 
-struct st_framebuffer_iface *
+struct pipe_frontend_drawable *
 xmesa_create_st_framebuffer(XMesaDisplay xmdpy, XMesaBuffer b)
 {
-   struct st_framebuffer_iface *stfbi;
    struct xmesa_st_framebuffer *xstfb;
 
    assert(xmdpy->display == b->xm_visual->display);
 
-   stfbi = CALLOC_STRUCT(st_framebuffer_iface);
    xstfb = CALLOC_STRUCT(xmesa_st_framebuffer);
-   if (!stfbi || !xstfb) {
-      free(stfbi);
+   if (!xstfb) {
       free(xstfb);
       return NULL;
    }
@@ -306,22 +307,21 @@ xmesa_create_st_framebuffer(XMesaDisplay xmdpy, XMesaBuffer b)
    else
       xstfb->target = PIPE_TEXTURE_RECT;
 
-   stfbi->visual = &xstfb->stvis;
-   stfbi->flush_front = xmesa_st_framebuffer_flush_front;
-   stfbi->validate = xmesa_st_framebuffer_validate;
-   stfbi->ID = p_atomic_inc_return(&xmesa_stfbi_ID);
-   stfbi->state_manager = xmdpy->smapi;
-   p_atomic_set(&stfbi->stamp, 1);
-   stfbi->st_manager_private = (void *) xstfb;
+   xstfb->base.visual = &xstfb->stvis;
+   xstfb->base.flush_front = xmesa_st_framebuffer_flush_front;
+   xstfb->base.validate = xmesa_st_framebuffer_validate;
+   xstfb->base.ID = p_atomic_inc_return(&xmesa_drawable_ID);
+   xstfb->base.fscreen = xmdpy->fscreen;
+   p_atomic_set(&xstfb->base.stamp, 1);
 
-   return stfbi;
+   return &xstfb->base;
 }
 
 
 void
-xmesa_destroy_st_framebuffer(struct st_framebuffer_iface *stfbi)
+xmesa_destroy_st_framebuffer(struct pipe_frontend_drawable *drawable)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    int i;
 
    pipe_resource_reference(&xstfb->display_resource, NULL);
@@ -330,7 +330,6 @@ xmesa_destroy_st_framebuffer(struct st_framebuffer_iface *stfbi)
       pipe_resource_reference(&xstfb->textures[i], NULL);
 
    free(xstfb);
-   free(stfbi);
 }
 
 
@@ -339,21 +338,21 @@ xmesa_destroy_st_framebuffer(struct st_framebuffer_iface *stfbi)
  * framebuffer attachment.
  */
 struct pipe_resource *
-xmesa_get_framebuffer_resource(struct st_framebuffer_iface *stfbi,
+xmesa_get_framebuffer_resource(struct pipe_frontend_drawable *drawable,
                                enum st_attachment_type att)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    return xstfb->textures[att];
 }
 
 
 void
-xmesa_swap_st_framebuffer(struct st_framebuffer_iface *stfbi)
+xmesa_swap_st_framebuffer(struct pipe_frontend_drawable *drawable)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    bool ret;
 
-   ret = xmesa_st_framebuffer_display(stfbi, NULL, ST_ATTACHMENT_BACK_LEFT, NULL);
+   ret = xmesa_st_framebuffer_display(drawable, NULL, ST_ATTACHMENT_BACK_LEFT, NULL);
    if (ret) {
       struct pipe_resource **front, **back, *tmp;
 
@@ -377,12 +376,12 @@ xmesa_swap_st_framebuffer(struct st_framebuffer_iface *stfbi)
 
 
 void
-xmesa_copy_st_framebuffer(struct st_framebuffer_iface *stfbi,
+xmesa_copy_st_framebuffer(struct pipe_frontend_drawable *drawable,
                           enum st_attachment_type src,
                           enum st_attachment_type dst,
                           int x, int y, int w, int h)
 {
-   xmesa_st_framebuffer_copy_textures(stfbi, src, dst, x, y, w, h);
+   xmesa_st_framebuffer_copy_textures(drawable, src, dst, x, y, w, h);
    if (dst == ST_ATTACHMENT_FRONT_LEFT) {
       struct pipe_box box = {};
 
@@ -390,16 +389,16 @@ xmesa_copy_st_framebuffer(struct st_framebuffer_iface *stfbi,
       box.y = y;
       box.width = w;
       box.height = h;
-      xmesa_st_framebuffer_display(stfbi, NULL, src, &box);
+      xmesa_st_framebuffer_display(drawable, NULL, src, &box);
    }
 }
 
 
 struct pipe_resource*
-xmesa_get_attachment(struct st_framebuffer_iface *stfbi,
+xmesa_get_attachment(struct pipe_frontend_drawable *drawable,
                      enum st_attachment_type st_attachment)
 {
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    struct pipe_resource *res;
 
    res = xstfb->textures[st_attachment];
@@ -408,10 +407,10 @@ xmesa_get_attachment(struct st_framebuffer_iface *stfbi,
 
 
 struct pipe_context*
-xmesa_get_context(struct st_framebuffer_iface *stfbi)
+xmesa_get_context(struct pipe_frontend_drawable *drawable)
 {
    struct pipe_context *pipe;
-   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
+   struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
 
    pipe = xstfb->display->pipe;
    if (!pipe) {

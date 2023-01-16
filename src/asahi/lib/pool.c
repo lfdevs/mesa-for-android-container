@@ -23,9 +23,9 @@
  *
  */
 
+#include "pool.h"
 #include "agx_bo.h"
 #include "agx_device.h"
-#include "pool.h"
 
 /* Transient command stream pooling: command stream uploads try to simply copy
  * into whereever we left off. If there isn't space, we allocate a new entry
@@ -36,8 +36,8 @@
 static struct agx_bo *
 agx_pool_alloc_backing(struct agx_pool *pool, size_t bo_sz)
 {
-   struct agx_bo *bo = agx_bo_create(pool->dev, bo_sz,
-                            pool->create_flags);
+   struct agx_bo *bo =
+      agx_bo_create(pool->dev, bo_sz, pool->create_flags, "Pool");
 
    util_dynarray_append(&pool->bos, struct agx_bo *, bo);
    pool->transient_bo = bo;
@@ -48,7 +48,7 @@ agx_pool_alloc_backing(struct agx_pool *pool, size_t bo_sz)
 
 void
 agx_pool_init(struct agx_pool *pool, struct agx_device *dev,
-                   unsigned create_flags, bool prealloc)
+              unsigned create_flags, bool prealloc)
 {
    memset(pool, 0, sizeof(*pool));
    pool->dev = dev;
@@ -63,7 +63,7 @@ void
 agx_pool_cleanup(struct agx_pool *pool)
 {
    util_dynarray_foreach(&pool->bos, struct agx_bo *, bo) {
-	   agx_bo_unreference(*bo);
+      agx_bo_unreference(*bo);
    }
 
    util_dynarray_fini(&pool->bos);
@@ -79,9 +79,9 @@ agx_pool_get_bo_handles(struct agx_pool *pool, uint32_t *handles)
 }
 
 struct agx_ptr
-agx_pool_alloc_aligned(struct agx_pool *pool, size_t sz, unsigned alignment)
+agx_pool_alloc_aligned_with_bo(struct agx_pool *pool, size_t sz,
+                               unsigned alignment, struct agx_bo **out_bo)
 {
-	alignment = MAX2(alignment, 4096);
    assert(alignment == util_next_power_of_two(alignment));
 
    /* Find or create a suitable BO */
@@ -91,7 +91,7 @@ agx_pool_alloc_aligned(struct agx_pool *pool, size_t sz, unsigned alignment)
    /* If we don't fit, allocate a new backing */
    if (unlikely(bo == NULL || (offset + sz) >= POOL_SLAB_SIZE)) {
       bo = agx_pool_alloc_backing(pool,
-            ALIGN_POT(MAX2(POOL_SLAB_SIZE, sz), 4096));
+                                  ALIGN_POT(MAX2(POOL_SLAB_SIZE, sz), 4096));
       offset = 0;
    }
 
@@ -101,6 +101,9 @@ agx_pool_alloc_aligned(struct agx_pool *pool, size_t sz, unsigned alignment)
       .cpu = bo->ptr.cpu + offset,
       .gpu = bo->ptr.gpu + offset,
    };
+
+   if (out_bo)
+      *out_bo = bo;
 
    return ret;
 }
@@ -112,10 +115,12 @@ agx_pool_upload(struct agx_pool *pool, const void *data, size_t sz)
 }
 
 uint64_t
-agx_pool_upload_aligned(struct agx_pool *pool, const void *data, size_t sz, unsigned alignment)
+agx_pool_upload_aligned_with_bo(struct agx_pool *pool, const void *data,
+                                size_t sz, unsigned alignment,
+                                struct agx_bo **bo)
 {
-	alignment = MAX2(alignment, 4096);
-   struct agx_ptr transfer = agx_pool_alloc_aligned(pool, sz, alignment);
+   struct agx_ptr transfer =
+      agx_pool_alloc_aligned_with_bo(pool, sz, alignment, bo);
    memcpy(transfer.cpu, data, sz);
    return transfer.gpu;
 }

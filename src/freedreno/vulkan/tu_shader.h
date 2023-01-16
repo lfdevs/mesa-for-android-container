@@ -12,6 +12,22 @@
 
 #include "tu_common.h"
 
+struct tu_inline_ubo
+{
+   /* Push the data at BINDLESS_BASE[base] + offset */
+   unsigned base;
+   unsigned offset;
+
+   /* If true, push the base address instead */
+   bool push_address;
+
+   /* Push it to this location in the const file, in vec4s */
+   unsigned const_offset_vec4;
+
+   /* How much to push */
+   unsigned size_vec4;
+};
+
 struct tu_push_constant_range
 {
    uint32_t lo;
@@ -22,6 +38,8 @@ struct tu_const_state
 {
    struct tu_push_constant_range push_consts;
    uint32_t dynamic_offset_loc;
+   unsigned num_inline_ubos;
+   struct tu_inline_ubo ubos[MAX_INLINE_UBOS];
 };
 
 struct tu_shader

@@ -56,7 +56,7 @@ FUNC(FUNC_VARS)
    /* prim, prim_flags, count, and last_vertex_last should have been defined */
    if (0) {
       debug_printf("%s: prim 0x%x, prim_flags 0x%x, count %d, last_vertex_last %d\n",
-            __FUNCTION__, prim, prim_flags, count, last_vertex_last);
+            __func__, prim, prim_flags, count, last_vertex_last);
    }
 
    switch (prim) {

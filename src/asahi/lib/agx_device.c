@@ -22,8 +22,8 @@
  * SOFTWARE.
  */
 
-#include <inttypes.h>
 #include "agx_device.h"
+#include <inttypes.h>
 #include "agx_bo.h"
 #include "decode.h"
 
@@ -37,9 +37,8 @@ agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
 #if __APPLE__
    const uint64_t handle = bo->handle;
 
-   kern_return_t ret = IOConnectCallScalarMethod(dev->fd,
-                       AGX_SELECTOR_FREE_MEM,
-                       &handle, 1, NULL, NULL);
+   kern_return_t ret = IOConnectCallScalarMethod(dev->fd, AGX_SELECTOR_FREE_MEM,
+                                                 &handle, 1, NULL, NULL);
 
    if (ret)
       fprintf(stderr, "error freeing BO mem: %u\n", ret);
@@ -55,10 +54,9 @@ void
 agx_shmem_free(struct agx_device *dev, unsigned handle)
 {
 #if __APPLE__
-	const uint64_t input = handle;
-   kern_return_t ret = IOConnectCallScalarMethod(dev->fd,
-                       AGX_SELECTOR_FREE_SHMEM,
-                       &input, 1, NULL, NULL);
+   const uint64_t input = handle;
+   kern_return_t ret = IOConnectCallScalarMethod(
+      dev->fd, AGX_SELECTOR_FREE_SHMEM, &input, 1, NULL, NULL);
 
    if (ret)
       fprintf(stderr, "error freeing shmem: %u\n", ret);
@@ -80,16 +78,16 @@ agx_shmem_alloc(struct agx_device *dev, size_t size, bool cmdbuf)
       cmdbuf ? 1 : 0 // 2 - error reporting, 1 - no error reporting
    };
 
-   kern_return_t ret = IOConnectCallMethod(dev->fd,
-                                           AGX_SELECTOR_CREATE_SHMEM, inputs, 2, NULL, 0, NULL,
-                                           NULL, &out, &out_sz);
+   kern_return_t ret =
+      IOConnectCallMethod(dev->fd, AGX_SELECTOR_CREATE_SHMEM, inputs, 2, NULL,
+                          0, NULL, NULL, &out, &out_sz);
 
    assert(ret == 0);
    assert(out_sz == sizeof(out));
    assert(out.size == size);
    assert(out.map != 0);
 
-   bo = (struct agx_bo) {
+   bo = (struct agx_bo){
       .type = cmdbuf ? AGX_ALLOC_CMDBUF : AGX_ALLOC_MEMMAP,
       .handle = out.id,
       .ptr.cpu = out.map,
@@ -97,7 +95,7 @@ agx_shmem_alloc(struct agx_device *dev, size_t size, bool cmdbuf)
       .guid = 0, /* TODO? */
    };
 #else
-   bo = (struct agx_bo) {
+   bo = (struct agx_bo){
       .type = cmdbuf ? AGX_ALLOC_CMDBUF : AGX_ALLOC_MEMMAP,
       .handle = AGX_FAKE_HANDLE++,
       .ptr.cpu = calloc(1, size),
@@ -113,8 +111,7 @@ agx_shmem_alloc(struct agx_device *dev, size_t size, bool cmdbuf)
 }
 
 static struct agx_bo *
-agx_bo_alloc(struct agx_device *dev, size_t size,
-             uint32_t flags)
+agx_bo_alloc(struct agx_device *dev, size_t size, uint32_t flags)
 {
    struct agx_bo *bo;
    unsigned handle = 0;
@@ -122,18 +119,18 @@ agx_bo_alloc(struct agx_device *dev, size_t size,
 #if __APPLE__
    uint32_t mode = 0x430; // shared, ?
 
-   uint32_t args_in[24] = { 0 };
-   args_in[4] = 0x4000101; //0x1000101; // unk
+   uint32_t args_in[24] = {0};
+   args_in[4] = 0x4000101; // 0x1000101; // unk
    args_in[5] = mode;
    args_in[16] = size;
    args_in[20] = flags;
 
-   uint64_t out[10] = { 0 };
+   uint64_t out[10] = {0};
    size_t out_sz = sizeof(out);
 
-   kern_return_t ret = IOConnectCallMethod(dev->fd,
-                                           AGX_SELECTOR_ALLOCATE_MEM, NULL, 0, args_in,
-                                           sizeof(args_in), NULL, 0, out, &out_sz);
+   kern_return_t ret =
+      IOConnectCallMethod(dev->fd, AGX_SELECTOR_ALLOCATE_MEM, NULL, 0, args_in,
+                          sizeof(args_in), NULL, 0, out, &out_sz);
 
    assert(ret == 0);
    assert(out_sz == sizeof(out));
@@ -148,7 +145,7 @@ agx_bo_alloc(struct agx_device *dev, size_t size,
    pthread_mutex_unlock(&dev->bo_map_lock);
 
    /* Fresh handle */
-   assert(!memcmp(bo, &((struct agx_bo) {}), sizeof(*bo)));
+   assert(!memcmp(bo, &((struct agx_bo){}), sizeof(*bo)));
 
    bo->type = AGX_ALLOC_REGULAR;
    bo->size = size;
@@ -160,7 +157,7 @@ agx_bo_alloc(struct agx_device *dev, size_t size,
 
 #if __APPLE__
    bo->ptr.gpu = out[0];
-   bo->ptr.cpu = (void *) out[1];
+   bo->ptr.cpu = (void *)out[1];
    bo->guid = out[5];
 #else
    if (lo) {
@@ -171,13 +168,170 @@ agx_bo_alloc(struct agx_device *dev, size_t size,
       AGX_FAKE_HI += bo->size;
    }
 
-   bo->ptr.gpu = (((uint64_t) bo->handle) << (lo ? 16 : 24));
+   bo->ptr.gpu = (((uint64_t)bo->handle) << (lo ? 16 : 24));
    bo->ptr.cpu = calloc(1, bo->size);
 #endif
 
    assert(bo->ptr.gpu < (1ull << (lo ? 32 : 40)));
 
    return bo;
+}
+
+/* Helper to calculate the bucket index of a BO */
+static unsigned
+agx_bucket_index(unsigned size)
+{
+   /* Round down to POT to compute a bucket index */
+   unsigned bucket_index = util_logbase2(size);
+
+   /* Clamp to supported buckets. Huge allocations use the largest bucket */
+   bucket_index = CLAMP(bucket_index, MIN_BO_CACHE_BUCKET, MAX_BO_CACHE_BUCKET);
+
+   /* Reindex from 0 */
+   return (bucket_index - MIN_BO_CACHE_BUCKET);
+}
+
+static struct list_head *
+agx_bucket(struct agx_device *dev, unsigned size)
+{
+   return &dev->bo_cache.buckets[agx_bucket_index(size)];
+}
+
+static bool
+agx_bo_wait(struct agx_bo *bo, int64_t timeout_ns)
+{
+   /* TODO: When we allow parallelism we'll need to implement this for real */
+   return true;
+}
+
+static void
+agx_bo_cache_remove_locked(struct agx_device *dev, struct agx_bo *bo)
+{
+   simple_mtx_assert_locked(&dev->bo_cache.lock);
+   list_del(&bo->bucket_link);
+   list_del(&bo->lru_link);
+   dev->bo_cache.size -= bo->size;
+}
+
+/* Tries to fetch a BO of sufficient size with the appropriate flags from the
+ * BO cache. If it succeeds, it returns that BO and removes the BO from the
+ * cache. If it fails, it returns NULL signaling the caller to allocate a new
+ * BO. */
+
+static struct agx_bo *
+agx_bo_cache_fetch(struct agx_device *dev, size_t size, uint32_t flags,
+                   const bool dontwait)
+{
+   simple_mtx_lock(&dev->bo_cache.lock);
+   struct list_head *bucket = agx_bucket(dev, size);
+   struct agx_bo *bo = NULL;
+
+   /* Iterate the bucket looking for something suitable */
+   list_for_each_entry_safe(struct agx_bo, entry, bucket, bucket_link) {
+      if (entry->size < size || entry->flags != flags)
+         continue;
+
+      /* If the oldest BO in the cache is busy, likely so is
+       * everything newer, so bail. */
+      if (!agx_bo_wait(entry, dontwait ? 0 : INT64_MAX))
+         break;
+
+      /* This one works, use it */
+      agx_bo_cache_remove_locked(dev, entry);
+      bo = entry;
+      break;
+   }
+   simple_mtx_unlock(&dev->bo_cache.lock);
+
+   return bo;
+}
+
+static void
+agx_bo_cache_evict_stale_bos(struct agx_device *dev)
+{
+   struct timespec time;
+
+   clock_gettime(CLOCK_MONOTONIC, &time);
+   list_for_each_entry_safe(struct agx_bo, entry, &dev->bo_cache.lru,
+                            lru_link) {
+      /* We want all entries that have been used more than 1 sec ago to be
+       * dropped, others can be kept.  Note the <= 2 check and not <= 1. It's
+       * here to account for the fact that we're only testing ->tv_sec, not
+       * ->tv_nsec.  That means we might keep entries that are between 1 and 2
+       * seconds old, but we don't really care, as long as unused BOs are
+       * dropped at some point.
+       */
+      if (time.tv_sec - entry->last_used <= 2)
+         break;
+
+      agx_bo_cache_remove_locked(dev, entry);
+      agx_bo_free(dev, entry);
+   }
+}
+
+static void
+agx_bo_cache_put_locked(struct agx_bo *bo)
+{
+   struct agx_device *dev = bo->dev;
+   struct list_head *bucket = agx_bucket(dev, bo->size);
+   struct timespec time;
+
+   /* Add us to the bucket */
+   list_addtail(&bo->bucket_link, bucket);
+
+   /* Add us to the LRU list and update the last_used field. */
+   list_addtail(&bo->lru_link, &dev->bo_cache.lru);
+   clock_gettime(CLOCK_MONOTONIC, &time);
+   bo->last_used = time.tv_sec;
+
+   /* Update statistics */
+   dev->bo_cache.size += bo->size;
+
+   if (0) {
+      printf("BO cache: %zu KiB (+%zu KiB from %s, hit/miss %" PRIu64
+             "/%" PRIu64 ")\n",
+             DIV_ROUND_UP(dev->bo_cache.size, 1024),
+             DIV_ROUND_UP(bo->size, 1024), bo->label, dev->bo_cache.hits,
+             dev->bo_cache.misses);
+   }
+
+   /* Update label for debug */
+   bo->label = "Unused (BO cache)";
+
+   /* Let's do some cleanup in the BO cache while we hold the lock. */
+   agx_bo_cache_evict_stale_bos(dev);
+}
+
+/* Tries to add a BO to the cache. Returns if it was successful */
+static bool
+agx_bo_cache_put(struct agx_bo *bo)
+{
+   struct agx_device *dev = bo->dev;
+
+   if (bo->flags & AGX_BO_SHARED) {
+      return false;
+   } else {
+      simple_mtx_lock(&dev->bo_cache.lock);
+      agx_bo_cache_put_locked(bo);
+      simple_mtx_unlock(&dev->bo_cache.lock);
+
+      return true;
+   }
+}
+
+static void
+agx_bo_cache_evict_all(struct agx_device *dev)
+{
+   simple_mtx_lock(&dev->bo_cache.lock);
+   for (unsigned i = 0; i < ARRAY_SIZE(dev->bo_cache.buckets); ++i) {
+      struct list_head *bucket = &dev->bo_cache.buckets[i];
+
+      list_for_each_entry_safe(struct agx_bo, entry, bucket, bucket_link) {
+         agx_bo_cache_remove_locked(dev, entry);
+         agx_bo_free(dev, entry);
+      }
+   }
+   simple_mtx_unlock(&dev->bo_cache.lock);
 }
 
 void
@@ -210,30 +364,65 @@ agx_bo_unreference(struct agx_bo *bo)
       if (dev->debug & AGX_DBG_TRACE)
          agxdecode_track_free(bo);
 
-      /* TODO: cache */
-      agx_bo_free(dev, bo);
-
+      if (!agx_bo_cache_put(bo))
+         agx_bo_free(dev, bo);
    }
+
    pthread_mutex_unlock(&dev->bo_map_lock);
 }
 
 struct agx_bo *
-agx_bo_create(struct agx_device *dev, unsigned size, unsigned flags)
+agx_bo_import(struct agx_device *dev, int fd)
+{
+   unreachable("Linux UAPI not yet upstream");
+}
+
+int
+agx_bo_export(struct agx_bo *bo)
+{
+   bo->flags |= AGX_BO_SHARED;
+
+   unreachable("Linux UAPI not yet upstream");
+}
+
+struct agx_bo *
+agx_bo_create(struct agx_device *dev, unsigned size, unsigned flags,
+              const char *label)
 {
    struct agx_bo *bo;
    assert(size > 0);
 
    /* To maximize BO cache usage, don't allocate tiny BOs */
-   size = ALIGN_POT(size, 4096);
+   size = ALIGN_POT(size, 16384);
 
-   /* TODO: Cache fetch */
-   bo = agx_bo_alloc(dev, size, flags);
+   /* See if we have a BO already in the cache */
+   bo = agx_bo_cache_fetch(dev, size, flags, true);
+
+   /* Update stats based on the first attempt to fetch */
+   if (bo != NULL)
+      dev->bo_cache.hits++;
+   else
+      dev->bo_cache.misses++;
+
+   /* Otherwise, allocate a fresh BO. If allocation fails, we can try waiting
+    * for something in the cache. But if there's no nothing suitable, we should
+    * flush the cache to make space for the new allocation.
+    */
+   if (!bo)
+      bo = agx_bo_alloc(dev, size, flags);
+   if (!bo)
+      bo = agx_bo_cache_fetch(dev, size, flags, false);
+   if (!bo) {
+      agx_bo_cache_evict_all(dev);
+      bo = agx_bo_alloc(dev, size, flags);
+   }
 
    if (!bo) {
       fprintf(stderr, "BO creation failed\n");
       return NULL;
    }
 
+   bo->label = label;
    p_atomic_set(&bo->refcnt, 1);
 
    if (dev->debug & AGX_DBG_TRACE)
@@ -249,9 +438,8 @@ agx_get_global_ids(struct agx_device *dev)
    uint64_t out[2] = {};
    size_t out_sz = sizeof(out);
 
-   ASSERTED kern_return_t ret = IOConnectCallStructMethod(dev->fd,
-                       AGX_SELECTOR_GET_GLOBAL_IDS,
-                       NULL, 0, &out, &out_sz);
+   ASSERTED kern_return_t ret = IOConnectCallStructMethod(
+      dev->fd, AGX_SELECTOR_GET_GLOBAL_IDS, NULL, 0, &out, &out_sz);
 
    assert(ret == 0);
    assert(out_sz == sizeof(out));
@@ -296,7 +484,7 @@ agx_open_device(void *memctx, struct agx_device *dev)
       return false;
 
    const char *api = "Equestria";
-   char in[16] = { 0 };
+   char in[16] = {0};
    assert(strlen(api) < sizeof(in));
    memcpy(in, api, strlen(api));
 
@@ -311,8 +499,15 @@ agx_open_device(void *memctx, struct agx_device *dev)
    dev->memctx = memctx;
    util_sparse_array_init(&dev->bo_map, sizeof(struct agx_bo), 512);
 
+   simple_mtx_init(&dev->bo_cache.lock, mtx_plain);
+   list_inithead(&dev->bo_cache.lru);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dev->bo_cache.buckets); ++i)
+      list_inithead(&dev->bo_cache.buckets[i]);
+
    dev->queue = agx_create_command_queue(dev);
-   dev->cmdbuf = agx_shmem_alloc(dev, 0x4000, true); // length becomes kernelCommandDataSize
+   dev->cmdbuf = agx_shmem_alloc(dev, 0x4000,
+                                 true); // length becomes kernelCommandDataSize
    dev->memmap = agx_shmem_alloc(dev, 0x10000, false);
    agx_get_global_ids(dev);
 
@@ -322,6 +517,7 @@ agx_open_device(void *memctx, struct agx_device *dev)
 void
 agx_close_device(struct agx_device *dev)
 {
+   agx_bo_cache_evict_all(dev);
    util_sparse_array_finish(&dev->bo_map);
 
 #if __APPLE__
@@ -340,9 +536,9 @@ agx_create_notification_queue(mach_port_t connection)
    size_t resp_size = sizeof(resp);
    assert(resp_size == 0x10);
 
-   ASSERTED kern_return_t ret = IOConnectCallStructMethod(connection,
-                       AGX_SELECTOR_CREATE_NOTIFICATION_QUEUE,
-                       NULL, 0, &resp, &resp_size);
+   ASSERTED kern_return_t ret = IOConnectCallStructMethod(
+      connection, AGX_SELECTOR_CREATE_NOTIFICATION_QUEUE, NULL, 0, &resp,
+      &resp_size);
 
    assert(resp_size == sizeof(resp));
    assert(ret == 0);
@@ -350,11 +546,9 @@ agx_create_notification_queue(mach_port_t connection)
    mach_port_t notif_port = IODataQueueAllocateNotificationPort();
    IOConnectSetNotificationPort(connection, 0, notif_port, resp.unk2);
 
-   return (struct agx_notification_queue) {
-      .port = notif_port,
-      .queue = resp.queue,
-      .id = resp.unk2
-   };
+   return (struct agx_notification_queue){.port = notif_port,
+                                          .queue = resp.queue,
+                                          .id = resp.unk2};
 }
 #endif
 
@@ -365,7 +559,7 @@ agx_create_command_queue(struct agx_device *dev)
    struct agx_command_queue queue = {};
 
    {
-      uint8_t buffer[1024 + 8] = { 0 };
+      uint8_t buffer[1024 + 8] = {0};
       const char *path = "/tmp/a.out";
       assert(strlen(path) < 1022);
       memcpy(buffer + 0, path, strlen(path));
@@ -381,10 +575,9 @@ agx_create_command_queue(struct agx_device *dev)
       struct agx_create_command_queue_resp out = {};
       size_t out_sz = sizeof(out);
 
-      ASSERTED kern_return_t ret = IOConnectCallStructMethod(dev->fd,
-                          AGX_SELECTOR_CREATE_COMMAND_QUEUE,
-                          buffer, sizeof(buffer),
-                          &out, &out_sz);
+      ASSERTED kern_return_t ret =
+         IOConnectCallStructMethod(dev->fd, AGX_SELECTOR_CREATE_COMMAND_QUEUE,
+                                   buffer, sizeof(buffer), &out, &out_sz);
 
       assert(ret == 0);
       assert(out_sz == sizeof(out));
@@ -396,41 +589,32 @@ agx_create_command_queue(struct agx_device *dev)
    queue.notif = agx_create_notification_queue(dev->fd);
 
    {
-      uint64_t scalars[2] = {
-         queue.id,
-         queue.notif.id
-      };
+      uint64_t scalars[2] = {queue.id, queue.notif.id};
 
-      ASSERTED kern_return_t ret = IOConnectCallScalarMethod(dev->fd,
-                          0x1D,
-                          scalars, 2, NULL, NULL);
+      ASSERTED kern_return_t ret =
+         IOConnectCallScalarMethod(dev->fd, 0x1D, scalars, 2, NULL, NULL);
 
       assert(ret == 0);
    }
 
    {
-      uint64_t scalars[2] = {
-         queue.id,
-         0x1ffffffffull
-      };
+      uint64_t scalars[2] = {queue.id, 0x1ffffffffull};
 
-      ASSERTED kern_return_t ret = IOConnectCallScalarMethod(dev->fd,
-                          0x31,
-                          scalars, 2, NULL, NULL);
+      ASSERTED kern_return_t ret =
+         IOConnectCallScalarMethod(dev->fd, 0x31, scalars, 2, NULL, NULL);
 
       assert(ret == 0);
    }
 
    return queue;
 #else
-   return (struct agx_command_queue) {
-      0
-   };
+   return (struct agx_command_queue){0};
 #endif
 }
 
 void
-agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf, unsigned mappings, uint64_t scalar)
+agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf, unsigned mappings,
+                  uint64_t scalar)
 {
 #if __APPLE__
    struct agx_submit_cmdbuf_req req = {
@@ -441,11 +625,9 @@ agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf, unsigned mappings, ui
       .notify_2 = 0x1234,
    };
 
-   ASSERTED kern_return_t ret = IOConnectCallMethod(dev->fd,
-                                           AGX_SELECTOR_SUBMIT_COMMAND_BUFFERS,
-                                           &scalar, 1,
-                                           &req, sizeof(req),
-                                           NULL, 0, NULL, 0);
+   ASSERTED kern_return_t ret =
+      IOConnectCallMethod(dev->fd, AGX_SELECTOR_SUBMIT_COMMAND_BUFFERS, &scalar,
+                          1, &req, sizeof(req), NULL, 0, NULL, 0);
    assert(ret == 0);
    return;
 #endif
@@ -469,17 +651,19 @@ agx_wait_queue(struct agx_command_queue queue)
    uint64_t data[4];
    unsigned sz = sizeof(data);
    unsigned message_id = 0;
-   uint64_t magic_numbers[2] = { 0xABCD, 0x1234 };
+   uint64_t magic_numbers[2] = {0xABCD, 0x1234};
 
    while (message_id < 2) {
-      IOReturn ret = IODataQueueWaitForAvailableData(queue.notif.queue, queue.notif.port);
+      IOReturn ret =
+         IODataQueueWaitForAvailableData(queue.notif.queue, queue.notif.port);
 
       if (ret) {
          fprintf(stderr, "Error waiting for available data\n");
          return;
       }
 
-      while (IODataQueueDequeue(queue.notif.queue, data, &sz) == kIOReturnSuccess) {
+      while (IODataQueueDequeue(queue.notif.queue, data, &sz) ==
+             kIOReturnSuccess) {
          assert(sz == sizeof(data));
          assert(data[0] == magic_numbers[message_id]);
          message_id++;

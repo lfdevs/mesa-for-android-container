@@ -244,12 +244,19 @@ DECL_TYPE(vimage3D, GL_IMAGE_3D, GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_3D, 0, 0, GLS
 DECL_TYPE(vimage1DArray, GL_IMAGE_1D_ARRAY, GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_1D, 0, 1, GLSL_TYPE_VOID)
 DECL_TYPE(vimage2DArray, GL_IMAGE_2D_ARRAY, GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_2D, 0, 1, GLSL_TYPE_VOID)
 
-DECL_TYPE(subpassInput,    0,                                          GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_FLOAT)
-DECL_TYPE(subpassInputMS,  0,                                          GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_FLOAT)
-DECL_TYPE(isubpassInput,   0,                                          GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_INT)
-DECL_TYPE(isubpassInputMS, 0,                                          GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_INT)
-DECL_TYPE(usubpassInput,   0,                                          GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_UINT)
-DECL_TYPE(usubpassInputMS, 0,                                          GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_UINT)
+DECL_TYPE(subpassInput,           0,                                   GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_FLOAT)
+DECL_TYPE(subpassInputMS,         0,                                   GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_FLOAT)
+DECL_TYPE(isubpassInput,          0,                                   GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_INT)
+DECL_TYPE(isubpassInputMS,        0,                                   GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_INT)
+DECL_TYPE(usubpassInput,          0,                                   GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_UINT)
+DECL_TYPE(usubpassInputMS,        0,                                   GLSL_TYPE_IMAGE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_UINT)
+DECL_TYPE(textureSubpassInput,    0,                                 GLSL_TYPE_TEXTURE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_FLOAT)
+DECL_TYPE(textureSubpassInputMS,  0,                                 GLSL_TYPE_TEXTURE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_FLOAT)
+DECL_TYPE(itextureSubpassInput,   0,                                 GLSL_TYPE_TEXTURE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_INT)
+DECL_TYPE(itextureSubpassInputMS, 0,                                 GLSL_TYPE_TEXTURE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_INT)
+DECL_TYPE(utextureSubpassInput,   0,                                 GLSL_TYPE_TEXTURE, GLSL_SAMPLER_DIM_SUBPASS,    0, 0, GLSL_TYPE_UINT)
+DECL_TYPE(utextureSubpassInputMS, 0,                                 GLSL_TYPE_TEXTURE, GLSL_SAMPLER_DIM_SUBPASS_MS, 0, 0, GLSL_TYPE_UINT)
+
 
 DECL_TYPE(atomic_uint, GL_UNSIGNED_INT_ATOMIC_COUNTER, GLSL_TYPE_ATOMIC_UINT, 1, 1)
 

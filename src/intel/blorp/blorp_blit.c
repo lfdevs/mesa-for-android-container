@@ -217,8 +217,7 @@ blorp_nir_txf_ms(nir_builder *b, struct brw_blorp_blit_vars *v,
                  nir_ssa_def *pos, nir_ssa_def *mcs, nir_alu_type dst_type)
 {
    nir_tex_instr *tex =
-      blorp_create_nir_tex_instr(b, v, nir_texop_txf_ms, pos,
-                                 mcs != NULL ? 3 : 2, dst_type);
+      blorp_create_nir_tex_instr(b, v, nir_texop_txf_ms, pos, 3, dst_type);
 
    tex->sampler_dim = GLSL_SAMPLER_DIM_MS;
 
@@ -230,10 +229,11 @@ blorp_nir_txf_ms(nir_builder *b, struct brw_blorp_blit_vars *v,
       tex->src[1].src = nir_src_for_ssa(nir_channel(b, pos, 2));
    }
 
-   if (mcs) {
-      tex->src[2].src_type = nir_tex_src_ms_mcs_intel;
-      tex->src[2].src = nir_src_for_ssa(mcs);
-   }
+   if (!mcs)
+      mcs = nir_imm_zero(b, 4, 32);
+
+   tex->src[2].src_type = nir_tex_src_ms_mcs_intel;
+   tex->src[2].src = nir_src_for_ssa(mcs);
 
    nir_builder_instr_insert(b, &tex->instr);
 
@@ -1527,9 +1527,6 @@ brw_blorp_get_blit_kernel_fs(struct blorp_batch *batch,
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
-   wm_key.base.tex.compressed_multisample_layout_mask =
-      isl_aux_usage_has_mcs(key->tex_aux_usage);
-   wm_key.base.tex.msaa_16 = key->tex_samples == 16;
    wm_key.multisample_fbo = key->rt_samples > 1;
 
    program = blorp_compile_fs(blorp, mem_ctx, nir, &wm_key, false,
@@ -1569,9 +1566,6 @@ brw_blorp_get_blit_kernel_cs(struct blorp_batch *batch,
 
    struct brw_cs_prog_key cs_key;
    brw_blorp_init_cs_prog_key(&cs_key);
-   cs_key.base.tex.compressed_multisample_layout_mask =
-      prog_key->tex_aux_usage == ISL_AUX_USAGE_MCS;
-   cs_key.base.tex.msaa_16 = prog_key->tex_samples == 16;
    assert(prog_key->rt_samples == 1);
 
    program = blorp_compile_cs(blorp, mem_ctx, nir, &cs_key, &prog_data);
@@ -2728,6 +2722,9 @@ get_ccs_compatible_copy_format(const struct isl_format_layout *fmtl)
    case ISL_FORMAT_R32_FLOAT:
    case ISL_FORMAT_R32_UNORM:
    case ISL_FORMAT_R32_SNORM:
+      return ISL_FORMAT_R32_UINT;
+
+   case ISL_FORMAT_R11G11B10_FLOAT:
       return ISL_FORMAT_R32_UINT;
 
    case ISL_FORMAT_B10G10R10A2_UNORM:

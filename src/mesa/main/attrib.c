@@ -23,7 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "glheader.h"
+#include "util/glheader.h"
 
 #include "accum.h"
 #include "arrayobj.h"
@@ -1205,14 +1205,10 @@ copy_array_object(struct gl_context *ctx,
    /* Enabled must be the same than on push */
    dest->Enabled = src->Enabled;
    dest->_EnabledWithMapMode = src->_EnabledWithMapMode;
-   dest->_EffEnabledVBO = src->_EffEnabledVBO;
-   dest->_EffEnabledNonZeroDivisor = src->_EffEnabledNonZeroDivisor;
    /* The bitmask of bound VBOs needs to match the VertexBinding array */
    dest->VertexAttribBufferMask = src->VertexAttribBufferMask;
    dest->NonZeroDivisorMask = src->NonZeroDivisorMask;
    dest->_AttributeMapMode = src->_AttributeMapMode;
-   dest->NewVertexBuffers = src->NewVertexBuffers;
-   dest->NewVertexElements = src->NewVertexElements;
    /* skip NumUpdates and IsDynamic because they can only increase, not decrease */
 }
 
@@ -1309,15 +1305,14 @@ restore_array_attrib(struct gl_context *ctx,
       copy_array_attrib(ctx, dest, src, true, 0);
    }
 
-   /* Invalidate array state. It will be updated during the next draw. */
-   _mesa_set_draw_vao(ctx, ctx->Array._EmptyVAO, 0);
-
    if (is_vao_name_zero || !src->VAO->IndexBufferObj ||
        _mesa_IsBuffer(src->VAO->IndexBufferObj->Name)) {
       _mesa_BindBuffer(GL_ELEMENT_ARRAY_BUFFER_ARB,
                        src->VAO->IndexBufferObj ?
                           src->VAO->IndexBufferObj->Name : 0);
    }
+
+   _mesa_update_edgeflag_state_vao(ctx);
 }
 
 

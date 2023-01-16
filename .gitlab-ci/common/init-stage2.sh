@@ -45,6 +45,16 @@ set -ex
     echo -n $HWCI_KERNEL_MODULES | xargs -d, -n1 /usr/sbin/modprobe
 }
 
+# Set up ZRAM
+HWCI_ZRAM_SIZE=2G
+if zramctl --find --size $HWCI_ZRAM_SIZE -a zstd; then
+    mkswap /dev/zram0
+    swapon /dev/zram0
+    echo "zram: $HWCI_ZRAM_SIZE activated"
+else
+    echo "zram: skipping, not supported"
+fi
+
 #
 # Load the KVM module specific to the detected CPU virtualization extensions:
 # - vmx for Intel VT
@@ -118,6 +128,7 @@ BACKGROUND_PIDS="$! $BACKGROUND_PIDS"
 if [ -n "$HWCI_START_XORG" ]; then
   echo "touch /xorg-started; sleep 100000" > /xorg-script
   env \
+    VK_ICD_FILENAMES=/install/share/vulkan/icd.d/${VK_DRIVER}_icd.`uname -m`.json \
     xinit /bin/sh /xorg-script -- /usr/bin/Xorg -noreset -s 0 -dpms -logfile /Xorg.0.log &
   BACKGROUND_PIDS="$! $BACKGROUND_PIDS"
 
@@ -129,6 +140,21 @@ if [ -n "$HWCI_START_XORG" ]; then
     sleep 5
   done
   export DISPLAY=:0
+fi
+
+if [ -n "$HWCI_START_WESTON" ]; then
+  export XDG_RUNTIME_DIR=/run/user
+  mkdir -p $XDG_RUNTIME_DIR
+
+  # Xwayland to be used when HWCI_START_XORG is not set
+  export DISPLAY=:0
+  mkdir -p /tmp/.X11-unix
+
+  env \
+    VK_ICD_FILENAMES=/install/share/vulkan/icd.d/${VK_DRIVER}_icd.`uname -m`.json \
+    weston -Bheadless-backend.so --use-gl -Swayland-0 --xwayland &
+  export WAYLAND_DISPLAY=wayland-0
+  sleep 1
 fi
 
 RESULT=fail

@@ -74,23 +74,18 @@ TCSShader::do_allocate_reserved_registers()
 {
    if (m_sv_values.test(es_primitive_id)) {
       m_primitive_id = value_factory().allocate_pinned_register(0, 0);
-      m_primitive_id->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_invocation_id)) {
       m_invocation_id = value_factory().allocate_pinned_register(0, 2);
-      m_invocation_id->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_rel_patch_id)) {
       m_rel_patch_id = value_factory().allocate_pinned_register(0, 1);
-      ;
-      m_rel_patch_id->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_tess_factor_base)) {
       m_tess_factor_base = value_factory().allocate_pinned_register(0, 3);
-      m_tess_factor_base->pin_live_range(true);
    }
 
    return value_factory().next_register_index();
@@ -119,27 +114,7 @@ TCSShader::process_stage_intrinsic(nir_intrinsic_instr *instr)
 bool
 TCSShader::store_tess_factor(nir_intrinsic_instr *instr)
 {
-   bool two_parts = nir_src_num_components(instr->src[0]) == 4;
-
-   auto value0 = value_factory().temp_vec4(pin_group, {0, 1, 7, 7});
-   emit_instruction(new AluInstr(
-      op1_mov, value0[0], value_factory().src(instr->src[0], 0), AluInstr::write));
-   emit_instruction(new AluInstr(op1_mov,
-                                 value0[1],
-                                 value_factory().src(instr->src[0], 1),
-                                 two_parts ? AluInstr::write : AluInstr::last_write));
-
-   if (two_parts) {
-      auto value1 = value_factory().temp_vec4(pin_group, {2, 3, 7, 7});
-      emit_instruction(new AluInstr(
-         op1_mov, value1[0], value_factory().src(instr->src[0], 2), AluInstr::write));
-      emit_instruction(new AluInstr(op1_mov,
-                                    value1[1],
-                                    value_factory().src(instr->src[0], 3),
-                                    AluInstr::last_write));
-      emit_instruction(new WriteTFInstr(value1));
-   }
-
+   auto value0 = value_factory().src_vec4(instr->src[0], pin_group, {0, 1, 7, 7});
    emit_instruction(new WriteTFInstr(value0));
    return true;
 }
@@ -253,19 +228,15 @@ TESShader::do_allocate_reserved_registers()
 {
    if (m_sv_values.test(es_tess_coord)) {
       m_tess_coord[0] = value_factory().allocate_pinned_register(0, 0);
-      m_tess_coord[0]->pin_live_range(true);
       m_tess_coord[1] = value_factory().allocate_pinned_register(0, 1);
-      m_tess_coord[1]->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_rel_patch_id)) {
       m_rel_patch_id = value_factory().allocate_pinned_register(0, 2);
-      m_rel_patch_id->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_primitive_id) || m_vs_as_gs_a) {
       m_primitive_id = value_factory().allocate_pinned_register(0, 3);
-      m_primitive_id->pin_live_range(true);
    }
    return value_factory().next_register_index();
 }

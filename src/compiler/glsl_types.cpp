@@ -29,7 +29,7 @@
 #include "util/u_string.h"
 
 
-mtx_t glsl_type::hash_mutex = _MTX_INITIALIZER_NP;
+simple_mtx_t glsl_type::hash_mutex = SIMPLE_MTX_INITIALIZER;
 hash_table *glsl_type::explicit_matrix_types = NULL;
 hash_table *glsl_type::array_types = NULL;
 hash_table *glsl_type::struct_types = NULL;
@@ -519,20 +519,20 @@ hash_free_type_function(struct hash_entry *entry)
 void
 glsl_type_singleton_init_or_ref()
 {
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    glsl_type_users++;
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 }
 
 void
 glsl_type_singleton_decref()
 {
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);
 
    /* Do not release glsl_types if they are still used. */
    if (--glsl_type_users) {
-      mtx_unlock(&glsl_type::hash_mutex);
+      simple_mtx_unlock(&glsl_type::hash_mutex);
       return;
    }
 
@@ -567,7 +567,7 @@ glsl_type_singleton_decref()
       glsl_type::subroutine_types = NULL;
    }
 
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 }
 
 
@@ -687,7 +687,7 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns,
       snprintf(name, sizeof(name), "%sx%ua%uB%s", bare_type->name,
                explicit_stride, explicit_alignment, row_major ? "RM" : "");
 
-      mtx_lock(&glsl_type::hash_mutex);
+      simple_mtx_lock(&glsl_type::hash_mutex);
       assert(glsl_type_users > 0);
 
       if (explicit_matrix_types == NULL) {
@@ -717,7 +717,7 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns,
 
       const glsl_type *t = (const glsl_type *) entry->data;
 
-      mtx_unlock(&glsl_type::hash_mutex);
+      simple_mtx_unlock(&glsl_type::hash_mutex);
 
       return t;
    }
@@ -974,9 +974,9 @@ glsl_type::get_texture_instance(enum glsl_sampler_dim dim,
       case GLSL_SAMPLER_DIM_MS:
          return (array ? texture2DMSArray_type : texture2DMS_type);
       case GLSL_SAMPLER_DIM_SUBPASS:
-         return subpassInput_type;
+         return textureSubpassInput_type;
       case GLSL_SAMPLER_DIM_SUBPASS_MS:
-         return subpassInputMS_type;
+         return textureSubpassInputMS_type;
       case GLSL_SAMPLER_DIM_EXTERNAL:
          if (array)
             return error_type;
@@ -1006,9 +1006,9 @@ glsl_type::get_texture_instance(enum glsl_sampler_dim dim,
       case GLSL_SAMPLER_DIM_MS:
          return (array ? itexture2DMSArray_type : itexture2DMS_type);
       case GLSL_SAMPLER_DIM_SUBPASS:
-         return isubpassInput_type;
+         return itextureSubpassInput_type;
       case GLSL_SAMPLER_DIM_SUBPASS_MS:
-         return isubpassInputMS_type;
+         return itextureSubpassInputMS_type;
       case GLSL_SAMPLER_DIM_EXTERNAL:
          return error_type;
       }
@@ -1035,9 +1035,9 @@ glsl_type::get_texture_instance(enum glsl_sampler_dim dim,
       case GLSL_SAMPLER_DIM_MS:
          return (array ? utexture2DMSArray_type : utexture2DMS_type);
       case GLSL_SAMPLER_DIM_SUBPASS:
-         return usubpassInput_type;
+         return utextureSubpassInput_type;
       case GLSL_SAMPLER_DIM_SUBPASS_MS:
-         return usubpassInputMS_type;
+         return utextureSubpassInputMS_type;
       case GLSL_SAMPLER_DIM_EXTERNAL:
          return error_type;
       }
@@ -1241,7 +1241,7 @@ glsl_type::get_array_instance(const glsl_type *base,
    snprintf(key, sizeof(key), "%p[%u]x%uB", (void *) base, array_size,
             explicit_stride);
 
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);
 
    if (array_types == NULL) {
@@ -1264,7 +1264,7 @@ glsl_type::get_array_instance(const glsl_type *base,
 
    glsl_type *t = (glsl_type *) entry->data;
 
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 
    return t;
 }
@@ -1453,7 +1453,7 @@ glsl_type::get_struct_instance(const glsl_struct_field *fields,
 {
    const glsl_type key(fields, num_fields, name, packed, explicit_alignment);
 
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);
 
    if (struct_types == NULL) {
@@ -1478,7 +1478,7 @@ glsl_type::get_struct_instance(const glsl_struct_field *fields,
 
    glsl_type *t = (glsl_type *) entry->data;
 
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 
    return t;
 }
@@ -1493,7 +1493,7 @@ glsl_type::get_interface_instance(const glsl_struct_field *fields,
 {
    const glsl_type key(fields, num_fields, packing, row_major, block_name);
 
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);
 
    if (interface_types == NULL) {
@@ -1516,7 +1516,7 @@ glsl_type::get_interface_instance(const glsl_struct_field *fields,
 
    glsl_type *t = (glsl_type *) entry->data;
 
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 
    return t;
 }
@@ -1526,7 +1526,7 @@ glsl_type::get_subroutine_instance(const char *subroutine_name)
 {
    const glsl_type key(subroutine_name);
 
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);
 
    if (subroutine_types == NULL) {
@@ -1547,7 +1547,7 @@ glsl_type::get_subroutine_instance(const char *subroutine_name)
 
    glsl_type *t = (glsl_type *) entry->data;
 
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 
    return t;
 }
@@ -1582,7 +1582,7 @@ glsl_type::get_function_instance(const glsl_type *return_type,
 {
    const glsl_type key(return_type, params, num_params);
 
-   mtx_lock(&glsl_type::hash_mutex);
+   simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);
 
    if (function_types == NULL) {
@@ -1602,7 +1602,7 @@ glsl_type::get_function_instance(const glsl_type *return_type,
    assert(t->base_type == GLSL_TYPE_FUNCTION);
    assert(t->length == num_params);
 
-   mtx_unlock(&glsl_type::hash_mutex);
+   simple_mtx_unlock(&glsl_type::hash_mutex);
 
    return t;
 }
@@ -3333,7 +3333,7 @@ glsl_type::cl_alignment() const
    if (this->is_scalar() || this->is_vector())
       return this->cl_size();
    else if (this->is_array())
-      return this->without_array()->cl_alignment();
+      return this->fields.array->cl_alignment();
    else if (this->is_struct()) {
       /* Packed Structs are 0x1 aligned despite their size. */
       if (this->packed)
@@ -3356,7 +3356,7 @@ glsl_type::cl_size() const
       return util_next_power_of_two(this->vector_elements) *
              explicit_type_scalar_byte_size(this);
    } else if (this->is_array()) {
-      unsigned size = this->without_array()->cl_size();
+      unsigned size = this->fields.array->cl_size();
       return size * this->length;
    } else if (this->is_struct()) {
       unsigned size = 0;

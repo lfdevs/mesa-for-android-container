@@ -56,7 +56,6 @@ lvp_create_cmd_buffer(struct vk_command_pool *pool,
 
    cmd_buffer->device = device;
 
-   cmd_buffer->status = LVP_CMD_BUFFER_STATUS_INITIAL;
    *cmd_buffer_out = &cmd_buffer->vk;
 
    return VK_SUCCESS;
@@ -66,12 +65,7 @@ static void
 lvp_reset_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer,
                      UNUSED VkCommandBufferResetFlags flags)
 {
-   struct lvp_cmd_buffer *cmd_buffer =
-      container_of(vk_cmd_buffer, struct lvp_cmd_buffer, vk);
-
-   vk_command_buffer_reset(&cmd_buffer->vk);
-
-   cmd_buffer->status = LVP_CMD_BUFFER_STATUS_INITIAL;
+   vk_command_buffer_reset(vk_cmd_buffer);
 }
 
 const struct vk_command_buffer_ops lvp_cmd_buffer_ops = {
@@ -85,9 +79,9 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BeginCommandBuffer(
    const VkCommandBufferBeginInfo*             pBeginInfo)
 {
    LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
-   if (cmd_buffer->status != LVP_CMD_BUFFER_STATUS_INITIAL)
-      lvp_reset_cmd_buffer(&cmd_buffer->vk, 0);
-   cmd_buffer->status = LVP_CMD_BUFFER_STATUS_RECORDING;
+
+   vk_command_buffer_begin(&cmd_buffer->vk, pBeginInfo);
+
    return VK_SUCCESS;
 }
 
@@ -95,13 +89,8 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_EndCommandBuffer(
    VkCommandBuffer                             commandBuffer)
 {
    LVP_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
-   VkResult result = vk_command_buffer_get_record_result(&cmd_buffer->vk);
 
-   cmd_buffer->status = result == VK_SUCCESS ?
-      LVP_CMD_BUFFER_STATUS_EXECUTABLE :
-      LVP_CMD_BUFFER_STATUS_INVALID;
-
-   return result;
+   return vk_command_buffer_end(&cmd_buffer->vk);
 }
 
 static void

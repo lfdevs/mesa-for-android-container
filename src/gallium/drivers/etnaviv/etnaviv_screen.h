@@ -31,7 +31,7 @@
 #include "etnaviv_internal.h"
 #include "etnaviv_perfmon.h"
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "pipe/p_screen.h"
 #include "renderonly/renderonly.h"
 #include "util/set.h"

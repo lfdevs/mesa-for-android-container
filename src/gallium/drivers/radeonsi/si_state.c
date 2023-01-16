@@ -2522,12 +2522,8 @@ static void si_initialize_color_surface(struct si_context *sctx, struct si_surfa
    unsigned blend_clamp = 0, blend_bypass = 0;
 
    desc = util_format_description(surf->base.format);
-   for (firstchan = 0; firstchan < 4; firstchan++) {
-      if (desc->channel[firstchan].type != UTIL_FORMAT_TYPE_VOID) {
-         break;
-      }
-   }
-   if (firstchan == 4 || desc->channel[firstchan].type == UTIL_FORMAT_TYPE_FLOAT) {
+   firstchan = util_format_get_first_non_void_channel(surf->base.format);
+   if (firstchan == -1 || desc->channel[firstchan].type == UTIL_FORMAT_TYPE_FLOAT) {
       ntype = V_028C70_NUMBER_FLOAT;
    } else {
       ntype = V_028C70_NUMBER_UNORM;
@@ -4875,6 +4871,15 @@ static void *si_create_vertex_elements(struct pipe_context *ctx, unsigned count,
                                        const struct pipe_vertex_element *elements)
 {
    struct si_screen *sscreen = (struct si_screen *)ctx->screen;
+
+   if (sscreen->debug_flags & DBG(VERTEX_ELEMENTS)) {
+      for (int i = 0; i < count; ++i) {
+         const struct pipe_vertex_element *e = elements + i;
+         fprintf(stderr, "elements[%d]: offset %2d, buffer_index %d, dual_slot %d, format %3d, divisor %u\n",
+                i, e->src_offset, e->vertex_buffer_index, e->dual_slot, e->src_format, e->instance_divisor);
+      }
+   }
+
    struct si_vertex_elements *v = CALLOC_STRUCT(si_vertex_elements);
    struct si_fast_udiv_info32 divisor_factors[SI_MAX_ATTRIBS] = {};
    STATIC_ASSERT(sizeof(struct si_fast_udiv_info32) == 16);

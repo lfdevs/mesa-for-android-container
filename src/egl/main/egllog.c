@@ -41,6 +41,7 @@
 #include <string.h>
 #include "c11/threads.h"
 #include "util/macros.h"
+#include "util/simple_mtx.h"
 #include "util/u_string.h"
 
 #include "egllog.h"
@@ -60,12 +61,12 @@
 
 
 static struct {
-   mtx_t mutex;
+   simple_mtx_t mutex;
 
    EGLBoolean initialized;
    EGLint level;
 } logging = {
-   .mutex = _MTX_INITIALIZER_NP,
+   .mutex = SIMPLE_MTX_INITIALIZER,
    .initialized = EGL_FALSE,
    .level = FALLBACK_LOG_LEVEL,
 };
@@ -160,7 +161,7 @@ _eglLog(EGLint level, const char *fmtStr, ...)
    if (level > logging.level || level < 0)
       return;
 
-   mtx_lock(&logging.mutex);
+   simple_mtx_lock(&logging.mutex);
 
    va_start(args, fmtStr);
    ret = vsnprintf(msg, MAXSTRING, fmtStr, args);
@@ -170,7 +171,7 @@ _eglLog(EGLint level, const char *fmtStr, ...)
 
    _eglDefaultLogger(level, msg);
 
-   mtx_unlock(&logging.mutex);
+   simple_mtx_unlock(&logging.mutex);
 
    if (level == _EGL_FATAL)
       exit(1); /* or abort()? */

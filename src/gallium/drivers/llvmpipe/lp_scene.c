@@ -199,7 +199,7 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
 {
    const struct pipe_framebuffer_state *fb = &scene->fb;
 
-   //LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+   //LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
    for (unsigned i = 0; i < scene->fb.nr_cbufs; i++) {
       struct pipe_surface *cbuf = scene->fb.cbufs[i];
@@ -219,10 +219,8 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
 void
 lp_scene_end_rasterization(struct lp_scene *scene)
 {
-   int i;
-
    /* Unmap color buffers */
-   for (i = 0; i < scene->fb.nr_cbufs; i++) {
+   for (unsigned i = 0; i < scene->fb.nr_cbufs; i++) {
       if (scene->cbufs[i].map) {
          struct pipe_surface *cbuf = scene->fb.cbufs[i];
          if (llvmpipe_resource_is_texture(cbuf->texture)) {
@@ -290,7 +288,7 @@ lp_scene_end_rasterization(struct lp_scene *scene)
     */
    j = 0;
    for (struct shader_ref *ref = scene->frag_shaders; ref; ref = ref->next) {
-      for (i = 0; i < ref->count; i++) {
+      for (int i = 0; i < ref->count; i++) {
          if (LP_DEBUG & DEBUG_SETUP)
             debug_printf("shader %d: %p\n", j, (void *) ref->variant[i]);
          j++;
@@ -354,7 +352,7 @@ struct data_block *
 lp_scene_new_data_block(struct lp_scene *scene)
 {
    if (scene->scene_size + DATA_BLOCK_SIZE > LP_SCENE_MAX_SIZE) {
-      if (0) debug_printf("%s: failed\n", __FUNCTION__);
+      if (0) debug_printf("%s: failed\n", __func__);
       scene->alloc_failed = TRUE;
       return NULL;
    } else {

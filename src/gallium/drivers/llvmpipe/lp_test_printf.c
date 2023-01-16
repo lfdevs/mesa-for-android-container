@@ -84,7 +84,7 @@ add_printf_test(struct gallivm_state *gallivm)
 }
 
 
-PIPE_ALIGN_STACK
+UTIL_ALIGN_STACK
 static boolean
 test_printf(unsigned verbose, FILE *fp,
             const struct printf_test_case *testcase)

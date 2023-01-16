@@ -1,5 +1,6 @@
 # piglit
 
+glx@glx-multithread-texture
 glx@glx-visuals-depth -pixmap
 glx@glx-visuals-stencil -pixmap
 spec@egl_mesa_configless_context@basic

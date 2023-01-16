@@ -121,8 +121,6 @@ typedef struct
 {
    volatile uintptr_t status;
 } once_flag;
-// FIXME: temporary non-standard hack to ease transition
-#  define _MTX_INITIALIZER_NP {(void*)-1, -1, 0, 0, 0, 0}
 #  define ONCE_FLAG_INIT {0}
 #  define TSS_DTOR_ITERATIONS 1
 #elif defined(HAVE_PTHREAD)

@@ -461,7 +461,7 @@ emit_const_range(struct svga_context *svga,
           */
          if (SVGA_DEBUG & DEBUG_CONSTS)
             debug_printf("%s %s %d: %f %f %f %f\n",
-                         __FUNCTION__,
+                         __func__,
                          shader == PIPE_SHADER_VERTEX ? "VERT" : "FRAG",
                          offset + i,
                          values[i][0],
@@ -480,7 +480,7 @@ emit_const_range(struct svga_context *svga,
 
             if (SVGA_DEBUG & DEBUG_CONSTS)
                debug_printf("%s %s %d: %f %f %f %f\n",
-                            __FUNCTION__,
+                            __func__,
                             shader == PIPE_SHADER_VERTEX ? "VERT" : "FRAG",
                             offset + j,
                             values[j][0],

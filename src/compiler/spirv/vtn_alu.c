@@ -840,7 +840,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    case SpvOpFConvert:
    case SpvOpSatConvertSToU:
    case SpvOpSatConvertUToS: {
-      unsigned src_bit_size = glsl_get_bit_size(vtn_src[0]->type);
+      unsigned src_bit_size = src[0]->bit_size;
       unsigned dst_bit_size = glsl_get_bit_size(dest_type);
       nir_alu_type src_type = convert_op_src_type(opcode) | src_bit_size;
       nir_alu_type dst_type = convert_op_dst_type(opcode) | dst_bit_size;
@@ -856,9 +856,8 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
 
       if (b->shader->info.stage == MESA_SHADER_KERNEL) {
          if (opts.rounding_mode == nir_rounding_mode_undef && !opts.saturate) {
-            nir_op op = nir_type_conversion_op(src_type, dst_type,
-                                               nir_rounding_mode_undef);
-            dest->def = nir_build_alu(&b->nb, op, src[0], NULL, NULL, NULL);
+            dest->def = nir_type_convert(&b->nb, src[0], src_type, dst_type,
+                                         nir_rounding_mode_undef);
          } else {
             dest->def = nir_convert_alu_types(&b->nb, dst_bit_size, src[0],
                                               src_type, dst_type,
@@ -869,9 +868,8 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
                      dst_type != nir_type_float16,
                      "Rounding modes are only allowed on conversions to "
                      "16-bit float types");
-         nir_op op = nir_type_conversion_op(src_type, dst_type,
-                                            opts.rounding_mode);
-         dest->def = nir_build_alu(&b->nb, op, src[0], NULL, NULL, NULL);
+         dest->def = nir_type_convert(&b->nb, src[0], src_type, dst_type,
+                                      opts.rounding_mode);
       }
       break;
    }
@@ -929,7 +927,7 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
       /* bit_count always returns int32, but the SPIR-V opcode just says the return
        * value needs to be big enough to store the number of bits.
        */
-      dest->def = nir_u2u(&b->nb, nir_bit_count(&b->nb, src[0]), glsl_get_bit_size(dest_type));
+      dest->def = nir_u2uN(&b->nb, nir_bit_count(&b->nb, src[0]), glsl_get_bit_size(dest_type));
       break;
    }
 
@@ -1104,34 +1102,26 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
    nir_ssa_def *dest = NULL;
 
    if (src[0]->num_components > 1) {
-      const nir_op s_conversion_op =
-         nir_type_conversion_op(nir_type_int, nir_type_int | dest_size,
-                                nir_rounding_mode_undef);
-
-      const nir_op u_conversion_op =
-         nir_type_conversion_op(nir_type_uint, nir_type_uint | dest_size,
-                                nir_rounding_mode_undef);
-
-      nir_op src0_conversion_op;
-      nir_op src1_conversion_op;
+      nir_ssa_def *(*src0_conversion)(nir_builder *, nir_ssa_def *, unsigned);
+      nir_ssa_def *(*src1_conversion)(nir_builder *, nir_ssa_def *, unsigned);
 
       switch (opcode) {
       case SpvOpSDotKHR:
       case SpvOpSDotAccSatKHR:
-         src0_conversion_op = s_conversion_op;
-         src1_conversion_op = s_conversion_op;
+         src0_conversion = nir_i2iN;
+         src1_conversion = nir_i2iN;
          break;
 
       case SpvOpUDotKHR:
       case SpvOpUDotAccSatKHR:
-         src0_conversion_op = u_conversion_op;
-         src1_conversion_op = u_conversion_op;
+         src0_conversion = nir_u2uN;
+         src1_conversion = nir_u2uN;
          break;
 
       case SpvOpSUDotKHR:
       case SpvOpSUDotAccSatKHR:
-         src0_conversion_op = s_conversion_op;
-         src1_conversion_op = u_conversion_op;
+         src0_conversion = nir_i2iN;
+         src1_conversion = nir_u2uN;
          break;
 
       default:
@@ -1153,12 +1143,10 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
 
       for (unsigned i = 0; i < vector_components; i++) {
          nir_ssa_def *const src0 =
-            nir_build_alu(&b->nb, src0_conversion_op,
-                          nir_channel(&b->nb, src[0], i), NULL, NULL, NULL);
+            src0_conversion(&b->nb, nir_channel(&b->nb, src[0], i), dest_size);
 
          nir_ssa_def *const src1 =
-            nir_build_alu(&b->nb, src1_conversion_op,
-                          nir_channel(&b->nb, src[1], i), NULL, NULL, NULL);
+            src1_conversion(&b->nb, nir_channel(&b->nb, src[1], i), dest_size);
 
          nir_ssa_def *const mul_result = nir_imul(&b->nb, src0, src1);
 
@@ -1270,12 +1258,12 @@ vtn_handle_integer_dot(struct vtn_builder *b, SpvOp opcode,
           */
          if (num_inputs == 3) {
             dest = is_signed
-               ? nir_iadd_sat(&b->nb, nir_i2i(&b->nb, dest, dest_size), src[2])
-               : nir_uadd_sat(&b->nb, nir_u2u(&b->nb, dest, dest_size), src[2]);
+               ? nir_iadd_sat(&b->nb, nir_i2iN(&b->nb, dest, dest_size), src[2])
+               : nir_uadd_sat(&b->nb, nir_u2uN(&b->nb, dest, dest_size), src[2]);
          } else {
             dest = is_signed
-               ? nir_i2i(&b->nb, dest, dest_size)
-               : nir_u2u(&b->nb, dest, dest_size);
+               ? nir_i2iN(&b->nb, dest, dest_size)
+               : nir_u2uN(&b->nb, dest, dest_size);
          }
       }
    }

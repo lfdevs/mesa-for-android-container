@@ -52,6 +52,7 @@
 #include "util/u_blitter.h"
 #include "util/u_draw.h"
 #include "util/u_helpers.h"
+#include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_upload_mgr.h"
@@ -544,6 +545,18 @@ etna_context_force_flush(struct etna_cmd_stream *stream, void *priv)
 
    pctx->flush(pctx, NULL, 0);
 
+}
+
+void
+etna_context_add_flush_resource(struct etna_context *ctx,
+                                struct pipe_resource *rsc)
+{
+   bool found;
+
+   _mesa_set_search_or_add(ctx->flush_resources, rsc, &found);
+
+   if (!found)
+      pipe_reference(NULL, &rsc->reference);
 }
 
 static void

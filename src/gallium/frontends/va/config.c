@@ -428,7 +428,10 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
       supported_rt_formats = VA_RT_FORMAT_YUV420 | VA_RT_FORMAT_YUV422;
       if (!vl_codec_supported(pscreen, p, false)) {
          FREE(config);
-         return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
+         if (!vl_codec_supported(pscreen, p, true))
+            return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+         else
+            return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
       }
 
       config->entrypoint = PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
@@ -438,7 +441,10 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
       supported_rt_formats = VA_RT_FORMAT_YUV420;
       if (!vl_codec_supported(pscreen, p, true)) {
          FREE(config);
-         return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
+         if (!vl_codec_supported(pscreen, p, false))
+            return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+         else
+            return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
       }
 
       config->entrypoint = PIPE_VIDEO_ENTRYPOINT_ENCODE;
@@ -446,7 +452,11 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
 
    default:
       FREE(config);
-      return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
+      if (!vl_codec_supported(pscreen, p, false) &&
+          !vl_codec_supported(pscreen, p, true))
+         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+      else
+         return VA_STATUS_ERROR_UNSUPPORTED_ENTRYPOINT;
    }
 
    config->profile = p;

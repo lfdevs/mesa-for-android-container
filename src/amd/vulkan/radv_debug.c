@@ -114,7 +114,8 @@ radv_dump_mmapped_reg(struct radv_device *device, FILE *f, unsigned offset)
    uint32_t value;
 
    if (ws->read_registers(ws, offset, 1, &value))
-      ac_dump_reg(f, device->physical_device->rad_info.gfx_level, offset, value, ~0);
+      ac_dump_reg(f, device->physical_device->rad_info.gfx_level,
+                  device->physical_device->rad_info.family, offset, value, ~0);
 }
 
 static void
@@ -151,43 +152,47 @@ radv_dump_debug_registers(struct radv_device *device, FILE *f)
 }
 
 static void
-radv_dump_buffer_descriptor(enum amd_gfx_level gfx_level, const uint32_t *desc, FILE *f)
+radv_dump_buffer_descriptor(enum amd_gfx_level gfx_level, enum radeon_family family,
+                            const uint32_t *desc, FILE *f)
 {
    fprintf(f, COLOR_CYAN "    Buffer:" COLOR_RESET "\n");
    for (unsigned j = 0; j < 4; j++)
-      ac_dump_reg(f, gfx_level, R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, desc[j], 0xffffffff);
+      ac_dump_reg(f, gfx_level, family, R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, desc[j], 0xffffffff);
 }
 
 static void
-radv_dump_image_descriptor(enum amd_gfx_level gfx_level, const uint32_t *desc, FILE *f)
+radv_dump_image_descriptor(enum amd_gfx_level gfx_level, enum radeon_family family,
+                           const uint32_t *desc, FILE *f)
 {
    unsigned sq_img_rsrc_word0 =
       gfx_level >= GFX10 ? R_00A000_SQ_IMG_RSRC_WORD0 : R_008F10_SQ_IMG_RSRC_WORD0;
 
    fprintf(f, COLOR_CYAN "    Image:" COLOR_RESET "\n");
    for (unsigned j = 0; j < 8; j++)
-      ac_dump_reg(f, gfx_level, sq_img_rsrc_word0 + j * 4, desc[j], 0xffffffff);
+      ac_dump_reg(f, gfx_level, family, sq_img_rsrc_word0 + j * 4, desc[j], 0xffffffff);
 
    fprintf(f, COLOR_CYAN "    FMASK:" COLOR_RESET "\n");
    for (unsigned j = 0; j < 8; j++)
-      ac_dump_reg(f, gfx_level, sq_img_rsrc_word0 + j * 4, desc[8 + j], 0xffffffff);
+      ac_dump_reg(f, gfx_level, family, sq_img_rsrc_word0 + j * 4, desc[8 + j], 0xffffffff);
 }
 
 static void
-radv_dump_sampler_descriptor(enum amd_gfx_level gfx_level, const uint32_t *desc, FILE *f)
+radv_dump_sampler_descriptor(enum amd_gfx_level gfx_level, enum radeon_family family,
+                             const uint32_t *desc, FILE *f)
 {
    fprintf(f, COLOR_CYAN "    Sampler state:" COLOR_RESET "\n");
    for (unsigned j = 0; j < 4; j++) {
-      ac_dump_reg(f, gfx_level, R_008F30_SQ_IMG_SAMP_WORD0 + j * 4, desc[j], 0xffffffff);
+      ac_dump_reg(f, gfx_level, family, R_008F30_SQ_IMG_SAMP_WORD0 + j * 4, desc[j], 0xffffffff);
    }
 }
 
 static void
-radv_dump_combined_image_sampler_descriptor(enum amd_gfx_level gfx_level, const uint32_t *desc,
+radv_dump_combined_image_sampler_descriptor(enum amd_gfx_level gfx_level,
+                                            enum radeon_family family, const uint32_t *desc,
                                             FILE *f)
 {
-   radv_dump_image_descriptor(gfx_level, desc, f);
-   radv_dump_sampler_descriptor(gfx_level, desc + 16, f);
+   radv_dump_image_descriptor(gfx_level, family, desc, f);
+   radv_dump_sampler_descriptor(gfx_level, family, desc + 16, f);
 }
 
 static void
@@ -195,6 +200,7 @@ radv_dump_descriptor_set(struct radv_device *device, struct radv_descriptor_set 
                          FILE *f)
 {
    enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
+   enum radeon_family family = device->physical_device->rad_info.family;
    const struct radv_descriptor_set_layout *layout;
    int i;
 
@@ -210,18 +216,18 @@ radv_dump_descriptor_set(struct radv_device *device, struct radv_descriptor_set 
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
       case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-         radv_dump_buffer_descriptor(gfx_level, desc, f);
+         radv_dump_buffer_descriptor(gfx_level, family, desc, f);
          break;
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-         radv_dump_image_descriptor(gfx_level, desc, f);
+         radv_dump_image_descriptor(gfx_level, family, desc, f);
          break;
       case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-         radv_dump_combined_image_sampler_descriptor(gfx_level, desc, f);
+         radv_dump_combined_image_sampler_descriptor(gfx_level, family, desc, f);
          break;
       case VK_DESCRIPTOR_TYPE_SAMPLER:
-         radv_dump_sampler_descriptor(gfx_level, desc, f);
+         radv_dump_sampler_descriptor(gfx_level, family, desc, f);
          break;
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
@@ -527,20 +533,26 @@ radv_dump_queue_state(struct radv_queue *queue, const char *dump_dir, FILE *f)
 
    pipeline = radv_get_saved_pipeline(queue->device, ring);
    if (pipeline) {
-      struct radv_graphics_pipeline *graphics_pipeline = radv_pipeline_to_graphics(pipeline);
       VkShaderStageFlags active_stages;
 
       if (pipeline->type == RADV_PIPELINE_GRAPHICS) {
+         struct radv_graphics_pipeline *graphics_pipeline =
+            radv_pipeline_to_graphics(pipeline);
          active_stages = graphics_pipeline->active_stages;
+         radv_dump_vs_prolog(pipeline, f);
       } else {
          active_stages = VK_SHADER_STAGE_COMPUTE_BIT;
       }
 
-      radv_dump_vs_prolog(pipeline, f);
       radv_dump_shaders(pipeline, active_stages, dump_dir, f);
       if (!(queue->device->instance->debug_flags & RADV_DEBUG_NO_UMR))
          radv_dump_annotated_shaders(pipeline, active_stages, f);
-      radv_dump_vertex_descriptors(graphics_pipeline, f);
+
+      if (pipeline->type == RADV_PIPELINE_GRAPHICS) {
+         struct radv_graphics_pipeline *graphics_pipeline =
+            radv_pipeline_to_graphics(pipeline);
+         radv_dump_vertex_descriptors(graphics_pipeline, f);
+      }
       radv_dump_descriptors(queue->device, f);
    }
 }
@@ -967,26 +979,28 @@ struct radv_sq_hw_reg {
 static void
 radv_dump_sq_hw_regs(struct radv_device *device)
 {
+   enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
+   enum radeon_family family = device->physical_device->rad_info.family;
    struct radv_sq_hw_reg *regs = (struct radv_sq_hw_reg *)&device->tma_ptr[6];
 
    fprintf(stderr, "\nHardware registers:\n");
    if (device->physical_device->rad_info.gfx_level >= GFX10) {
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_000408_SQ_WAVE_STATUS,
+      ac_dump_reg(stderr, gfx_level, family, R_000408_SQ_WAVE_STATUS,
                   regs->status, ~0);
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_00040C_SQ_WAVE_TRAPSTS,
+      ac_dump_reg(stderr, gfx_level, family, R_00040C_SQ_WAVE_TRAPSTS,
                   regs->trap_sts, ~0);
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_00045C_SQ_WAVE_HW_ID1,
+      ac_dump_reg(stderr, gfx_level, family, R_00045C_SQ_WAVE_HW_ID1,
                   regs->hw_id, ~0);
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_00041C_SQ_WAVE_IB_STS,
+      ac_dump_reg(stderr, gfx_level, family, R_00041C_SQ_WAVE_IB_STS,
                   regs->ib_sts, ~0);
    } else {
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_000048_SQ_WAVE_STATUS,
+      ac_dump_reg(stderr, gfx_level, family, R_000048_SQ_WAVE_STATUS,
                   regs->status, ~0);
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_00004C_SQ_WAVE_TRAPSTS,
+      ac_dump_reg(stderr, gfx_level, family, R_00004C_SQ_WAVE_TRAPSTS,
                   regs->trap_sts, ~0);
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_000050_SQ_WAVE_HW_ID,
+      ac_dump_reg(stderr, gfx_level, family, R_000050_SQ_WAVE_HW_ID,
                   regs->hw_id, ~0);
-      ac_dump_reg(stderr, device->physical_device->rad_info.gfx_level, R_00005C_SQ_WAVE_IB_STS,
+      ac_dump_reg(stderr, gfx_level, family, R_00005C_SQ_WAVE_IB_STS,
                   regs->ib_sts, ~0);
    }
    fprintf(stderr, "\n\n");

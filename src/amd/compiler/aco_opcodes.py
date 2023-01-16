@@ -315,8 +315,20 @@ opcode("p_demote_to_helper")
 opcode("p_is_helper")
 opcode("p_exit_early_if")
 
-# simulates proper bpermute behavior when it's unsupported, eg. GFX10 wave64
-opcode("p_bpermute")
+# simulates proper bpermute behavior on GFX6
+# definitions: result VGPR, temp EXEC, clobbered VCC
+# operands: index, input data
+opcode("p_bpermute_gfx6")
+
+# simulates proper bpermute behavior on GFX10
+# definitions: result VGPR, temp EXEC, clobbered SCC
+# operands: index * 4, input data, same half (bool)
+opcode("p_bpermute_gfx10w64")
+
+# simulates proper bpermute behavior on GFX11
+# definitions: result VGPR, temp EXEC, clobbered SCC
+# operands: linear VGPR, index * 4, input data, same half (bool)
+opcode("p_bpermute_gfx11w64")
 
 # creates a lane mask where only the first active lane is selected
 opcode("p_elect")
@@ -588,12 +600,12 @@ SOPP = {
    (  -1,   -1,   -1,   -1, 0x1f, 0x1f, "s_code_end"),
    (  -1,   -1,   -1,   -1, 0x20, 0x04, "s_inst_prefetch"), #s_set_inst_prefetch_distance in GFX11
    (  -1,   -1,   -1,   -1, 0x21, 0x05, "s_clause"),
-   (  -1,   -1,   -1,   -1, 0x22, 0x0a, "s_wait_idle"),
-   (  -1,   -1,   -1,   -1, 0x23, 0x08, "s_waitcnt_depctr"),
+   (  -1,   -1,   -1,   -1, 0x22, 0x0a, "s_wait_idle", InstrClass.Waitcnt),
+   (  -1,   -1,   -1,   -1, 0x23, 0x08, "s_waitcnt_depctr", InstrClass.Waitcnt),
    (  -1,   -1,   -1,   -1, 0x24, 0x11, "s_round_mode"),
    (  -1,   -1,   -1,   -1, 0x25, 0x12, "s_denorm_mode"),
    (  -1,   -1,   -1,   -1, 0x26, 0x3b, "s_ttracedata_imm"),
-   (  -1,   -1,   -1,   -1,   -1, 0x07, "s_delay_alu"),
+   (  -1,   -1,   -1,   -1,   -1, 0x07, "s_delay_alu", InstrClass.Waitcnt),
    (  -1,   -1,   -1,   -1,   -1, 0x0b, "s_wait_event"),
 }
 for (gfx6, gfx7, gfx8, gfx9, gfx10, gfx11, name, cls) in default_class(SOPP, InstrClass.Salu):
@@ -883,6 +895,7 @@ VOP1 = {
    (  -1,   -1,   -1,   -1,   -1, 0x69, "v_not_b16", False, False),
    (  -1,   -1,   -1,   -1,   -1, 0x6a, "v_cvt_i32_i16", False, False),
    (  -1,   -1,   -1,   -1,   -1, 0x6b, "v_cvt_u32_u16", False, False),
+   (  -1,   -1,   -1,   -1,   -1, 0x1c, "v_mov_b16", True, False),
 }
 for (gfx6, gfx7, gfx8, gfx9, gfx10, gfx11, name, in_mod, out_mod, cls) in default_class(VOP1, InstrClass.Valu32):
    opcode(name, gfx7, gfx9, gfx10, gfx11, Format.VOP1, cls, in_mod, out_mod)

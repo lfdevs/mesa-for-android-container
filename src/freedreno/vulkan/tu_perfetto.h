@@ -23,6 +23,8 @@ struct tu_u_trace_submission_data;
 struct tu_perfetto_stage {
    int stage_id;
    uint64_t start_ts;
+   const void* payload;
+   void* start_payload_function;
 };
 
 struct tu_perfetto_state {

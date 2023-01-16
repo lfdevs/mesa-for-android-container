@@ -136,12 +136,22 @@ fd6_zsa_state_create(struct pipe_context *pctx,
          so->lrz.direction = FD_LRZ_LESS;
          break;
 
-      /* TODO revisit these: */
-      case PIPE_FUNC_EQUAL:
-      case PIPE_FUNC_NOTEQUAL:
       case PIPE_FUNC_ALWAYS:
+      case PIPE_FUNC_NOTEQUAL:
+         if (cso->depth_writemask) {
+            perf_debug_ctx(ctx, "Invalidating LRZ due to ALWAYS/NOTEQUAL with depth write");
+            so->lrz.write = false;
+            so->invalidate_lrz = true;
+         } else {
+            perf_debug_ctx(ctx, "Skipping LRZ due to ALWAYS/NOTEQUAL");
+            so->lrz.enable = false;
+            so->lrz.write = false;
+         }
+         break;
+
+      case PIPE_FUNC_EQUAL:
+         so->lrz.enable = false;
          so->lrz.write = false;
-         so->invalidate_lrz = true;
          break;
       }
    }
@@ -156,7 +166,7 @@ fd6_zsa_state_create(struct pipe_context *pctx,
        * stencil test we don't really know what the updates to the
        * depth buffer will be.
        */
-      update_lrz_stencil(so, s->func, !!s->writemask);
+      update_lrz_stencil(so, s->func, util_writes_stencil(s));
 
       so->rb_stencil_control |=
          A6XX_RB_STENCIL_CONTROL_STENCIL_READ |
@@ -172,7 +182,7 @@ fd6_zsa_state_create(struct pipe_context *pctx,
       if (cso->stencil[1].enabled) {
          const struct pipe_stencil_state *bs = &cso->stencil[1];
 
-         update_lrz_stencil(so, bs->func, !!bs->writemask);
+         update_lrz_stencil(so, bs->func, util_writes_stencil(bs));
 
          so->rb_stencil_control |=
             A6XX_RB_STENCIL_CONTROL_STENCIL_ENABLE_BF |

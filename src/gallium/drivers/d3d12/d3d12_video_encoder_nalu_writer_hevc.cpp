@@ -386,7 +386,7 @@ d3d12_video_nalu_writer_hevc::wrap_rbsp_into_nalu(d3d12_video_encoder_bitstream 
                     d3d12_video_encoder_bitstream *pRBSP,
                     HEVCNaluHeader *pHeader)
 {
-    bool isAligned = pRBSP->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
+    ASSERTED bool isAligned = pRBSP->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
     assert(isAligned);
 
     int32_t iBytesWritten = pNALU->get_byte_count();
@@ -454,7 +454,7 @@ d3d12_video_nalu_writer_hevc::rbsp_trailing(d3d12_video_encoder_bitstream *pBits
         pBitstream->put_bits(iLeft, 0);
     }
 
-    bool isAligned = pBitstream->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
+    ASSERTED bool isAligned = pBitstream->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
     assert(isAligned);
 }
 

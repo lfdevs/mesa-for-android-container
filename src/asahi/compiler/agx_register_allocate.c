@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#include "agx_compiler.h"
 #include "agx_builder.h"
+#include "agx_compiler.h"
 
 /* SSA-based register allocator */
 
@@ -33,6 +33,9 @@ struct ra_ctx {
    uint8_t *ncomps;
    BITSET_WORD *visited;
    BITSET_WORD *used_regs;
+
+   /* For affinities */
+   agx_instr **src_to_collect;
 
    /* Maximum number of registers that RA is allowed to use */
    unsigned bound;
@@ -49,16 +52,19 @@ agx_write_registers(agx_instr *I, unsigned d)
       assert(1 <= I->channels && I->channels <= 4);
       return I->channels * size;
 
-   case AGX_OPCODE_DEVICE_LOAD:
    case AGX_OPCODE_TEXTURE_LOAD:
    case AGX_OPCODE_TEXTURE_SAMPLE:
+      /* Even when masked out, these clobber 4 registers */
+      return 4 * size;
+
+   case AGX_OPCODE_DEVICE_LOAD:
    case AGX_OPCODE_LD_TILE:
       return util_bitcount(I->mask) * size;
 
    case AGX_OPCODE_LDCF:
       return 6;
    case AGX_OPCODE_COLLECT:
-      return I->nr_srcs * size;
+      return I->nr_srcs * agx_size_align_16(I->src[0].size);
    default:
       return size;
    }
@@ -70,7 +76,7 @@ agx_split_width(const agx_instr *I)
    enum agx_size width = ~0;
 
    agx_foreach_dest(I, d) {
-      if (agx_is_null(I->dest[d]))
+      if (I->dest[d].type == AGX_INDEX_NULL)
          continue;
       else if (width != ~0)
          assert(width == I->dest[d].size);
@@ -82,21 +88,100 @@ agx_split_width(const agx_instr *I)
    return width;
 }
 
-static unsigned
-agx_assign_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned max)
+unsigned
+agx_read_registers(agx_instr *I, unsigned s)
 {
-   for (unsigned reg = 0; reg < max; reg += align) {
-      bool conflict = false;
+   unsigned size = agx_size_align_16(I->src[s].size);
 
-      for (unsigned j = 0; j < count; ++j)
-         conflict |= BITSET_TEST(used_regs, reg + j);
+   switch (I->op) {
+   case AGX_OPCODE_SPLIT:
+      return I->nr_dests * agx_size_align_16(agx_split_width(I));
 
-      if (!conflict) {
-         for (unsigned j = 0; j < count; ++j)
-            BITSET_SET(used_regs, reg + j);
+   case AGX_OPCODE_DEVICE_STORE:
+   case AGX_OPCODE_ST_TILE:
+      if (s == 0)
+         return util_bitcount(I->mask) * size;
+      else
+         return size;
 
-         return reg;
+   case AGX_OPCODE_ZS_EMIT:
+      if (s == 1) {
+         /* Depth (bit 0) is fp32, stencil (bit 1) is u16 in the hw but we pad
+          * up to u32 for simplicity
+          */
+         return 2 * (!!(I->zs & 1) + !!(I->zs & 2));
+      } else {
+         return 1;
       }
+
+   case AGX_OPCODE_TEXTURE_LOAD:
+   case AGX_OPCODE_TEXTURE_SAMPLE:
+      if (s == 0) {
+         /* Coordinates. We internally handle sample index as 32-bit */
+         switch (I->dim) {
+         case AGX_DIM_1D:
+            return 2 * 1;
+         case AGX_DIM_1D_ARRAY:
+            return 2 * 2;
+         case AGX_DIM_2D:
+            return 2 * 2;
+         case AGX_DIM_2D_ARRAY:
+            return 2 * 3;
+         case AGX_DIM_2D_MS:
+            return 2 * 3;
+         case AGX_DIM_3D:
+            return 2 * 3;
+         case AGX_DIM_CUBE:
+            return 2 * 3;
+         case AGX_DIM_CUBE_ARRAY:
+            return 2 * 4;
+         case AGX_DIM_2D_MS_ARRAY:
+            return 2 * 4;
+         }
+
+         unreachable("Invalid texture dimension");
+      } else if (s == 1) {
+         /* LOD */
+         if (I->lod_mode == AGX_LOD_MODE_LOD_GRAD) {
+            switch (I->dim) {
+            case AGX_DIM_1D:
+            case AGX_DIM_1D_ARRAY:
+               return 2 * 2 * 1;
+            case AGX_DIM_2D:
+            case AGX_DIM_2D_ARRAY:
+            case AGX_DIM_2D_MS_ARRAY:
+            case AGX_DIM_2D_MS:
+               return 2 * 2 * 2;
+            case AGX_DIM_CUBE:
+            case AGX_DIM_CUBE_ARRAY:
+            case AGX_DIM_3D:
+               return 2 * 2 * 3;
+            }
+
+            unreachable("Invalid texture dimension");
+         } else {
+            return 1;
+         }
+      } else if (s == 4) {
+         /* Compare/offset */
+         return 2 * ((!!I->shadow) + (!!I->offset));
+      } else {
+         return size;
+      }
+
+   default:
+      return size;
+   }
+}
+
+static unsigned
+find_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned max)
+{
+   assert(count >= 1);
+
+   for (unsigned reg = 0; reg < max; reg += align) {
+      if (!BITSET_TEST_RANGE(used_regs, reg, reg + count - 1))
+         return reg;
    }
 
    /* Couldn't find a free register, dump the state of the register file */
@@ -123,15 +208,131 @@ agx_assign_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned
 static void
 reserve_live_in(struct ra_ctx *rctx)
 {
-      int i;
-      BITSET_FOREACH_SET(i, rctx->block->live_in, rctx->shader->alloc) {
-         /* Skip values defined in loops when processing the loop header */
-         if (!BITSET_TEST(rctx->visited, i))
+   int i;
+   BITSET_FOREACH_SET(i, rctx->block->live_in, rctx->shader->alloc) {
+      /* Skip values defined in loops when processing the loop header */
+      if (!BITSET_TEST(rctx->visited, i))
+         continue;
+
+      for (unsigned j = 0; j < rctx->ncomps[i]; ++j)
+         BITSET_SET(rctx->used_regs, rctx->ssa_to_reg[i] + j);
+   }
+}
+
+static void
+assign_regs(struct ra_ctx *rctx, agx_index v, unsigned reg)
+{
+   assert(v.type == AGX_INDEX_NORMAL && "only SSA gets registers allocated");
+   rctx->ssa_to_reg[v.value] = reg;
+
+   assert(!BITSET_TEST(rctx->visited, v.value) && "SSA violated");
+   BITSET_SET(rctx->visited, v.value);
+
+   assert(rctx->ncomps[v.value] >= 1);
+   unsigned end = reg + rctx->ncomps[v.value] - 1;
+   assert(!BITSET_TEST_RANGE(rctx->used_regs, reg, end) && "no interference");
+   BITSET_SET_RANGE(rctx->used_regs, reg, end);
+}
+
+static unsigned
+affinity_base_of_collect(struct ra_ctx *rctx, agx_instr *collect, unsigned src)
+{
+   unsigned src_reg = rctx->ssa_to_reg[collect->src[src].value];
+   unsigned src_offset = src * agx_size_align_16(collect->src[src].size);
+
+   if (src_reg >= src_offset)
+      return src_reg - src_offset;
+   else
+      return ~0;
+}
+
+static unsigned
+pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
+{
+   agx_index idx = I->dest[d];
+   assert(idx.type == AGX_INDEX_NORMAL);
+
+   unsigned count = agx_write_registers(I, d);
+   unsigned align = agx_size_align_16(idx.size);
+   assert(count >= 1);
+
+   /* Try to allocate collects compatibly with their sources */
+   if (I->op == AGX_OPCODE_COLLECT) {
+      agx_foreach_ssa_src(I, s) {
+         assert(BITSET_TEST(rctx->visited, I->src[s].value) &&
+                "registers assigned in an order compatible with dominance "
+                "and this is not a phi node, so we have assigned a register");
+
+         unsigned base = affinity_base_of_collect(rctx, I, s);
+         if (base >= rctx->bound || (base + count) > rctx->bound)
             continue;
 
-         for (unsigned j = 0; j < rctx->ncomps[i]; ++j)
-            BITSET_SET(rctx->used_regs, rctx->ssa_to_reg[i] + j);
+         /* Unaligned destinations can happen when dest size > src size */
+         if (base % align)
+            continue;
+
+         if (!BITSET_TEST_RANGE(rctx->used_regs, base, base + count - 1))
+            return base;
       }
+   }
+
+   /* Try to allocate sources of collects contiguously */
+   if (rctx->src_to_collect[idx.value] != NULL) {
+      agx_instr *collect = rctx->src_to_collect[idx.value];
+
+      assert(count == align && "collect sources are scalar");
+
+      /* Find our offset in the collect. If our source is repeated in the
+       * collect, this may not be unique. We arbitrarily choose the first.
+       */
+      unsigned our_source = ~0;
+      agx_foreach_ssa_src(collect, s) {
+         if (agx_is_equiv(collect->src[s], idx)) {
+            our_source = s;
+            break;
+         }
+      }
+
+      assert(our_source < collect->nr_srcs && "source must be in the collect");
+
+      /* See if we can allocate compatibly with any source of the collect */
+      agx_foreach_ssa_src(collect, s) {
+         if (!BITSET_TEST(rctx->visited, collect->src[s].value))
+            continue;
+
+         /* Determine where the collect should start relative to the source */
+         unsigned base = affinity_base_of_collect(rctx, collect, s);
+         if (base >= rctx->bound)
+            continue;
+
+         unsigned our_reg = base + (our_source * align);
+
+         /* Don't allocate past the end of the register file */
+         if ((our_reg + align) > rctx->bound)
+            continue;
+
+         /* If those registers are free, then choose them */
+         if (!BITSET_TEST_RANGE(rctx->used_regs, our_reg, our_reg + align - 1))
+            return our_reg;
+      }
+
+      /* Try to respect the alignment requirement of the collect destination,
+       * which may be greater than the sources (e.g. pack_64_2x32_split). Look
+       * for a register for the source such that the collect base is aligned.
+       */
+      unsigned collect_align = agx_size_align_16(collect->dest[0].size);
+      if (collect_align > align) {
+         unsigned offset = our_source * align;
+
+         for (unsigned reg = offset; reg < rctx->bound; reg += collect_align) {
+            if (!BITSET_TEST_RANGE(rctx->used_regs, reg, reg + count - 1))
+               return reg;
+         }
+      }
+   }
+
+   /* Default to any contiguous sequence of registers */
+   return find_regs(rctx->used_regs, count, align, rctx->bound);
 }
 
 /** Assign registers to SSA values in a block. */
@@ -139,7 +340,7 @@ reserve_live_in(struct ra_ctx *rctx)
 static void
 agx_ra_assign_local(struct ra_ctx *rctx)
 {
-   BITSET_DECLARE(used_regs, AGX_NUM_REGS) = { 0 };
+   BITSET_DECLARE(used_regs, AGX_NUM_REGS) = {0};
 
    agx_block *block = rctx->block;
    uint8_t *ssa_to_reg = rctx->ssa_to_reg;
@@ -160,99 +361,49 @@ agx_ra_assign_local(struct ra_ctx *rctx)
        */
       if (I->op == AGX_OPCODE_SPLIT && I->src[0].kill) {
          unsigned reg = ssa_to_reg[I->src[0].value];
-         unsigned length = ncomps[I->src[0].value];
          unsigned width = agx_size_align_16(agx_split_width(I));
-         unsigned count = length / width;
 
          agx_foreach_dest(I, d) {
-            /* Skip excess components */
-            if (d >= count) {
-               assert(agx_is_null(I->dest[d]));
-               continue;
-            }
+            /* Free up the source */
+            unsigned offset_reg = reg + (d * width);
+            BITSET_CLEAR_RANGE(used_regs, offset_reg, offset_reg + width - 1);
 
-            /* The source of the split is killed. If a destination of the split
-             * is null, that channel is killed. Free it.
-             */
-            if (agx_is_null(I->dest[d])) {
-               for (unsigned i = 0; i < width; ++i)
-                  BITSET_CLEAR(used_regs, reg + (width * d) + i);
-
-               continue;
-            }
-
-            /* Otherwise, transfer the liveness */
-            unsigned offset = d * width;
-
-            assert(I->dest[d].type == AGX_INDEX_NORMAL);
-            assert(offset < length);
-
-            ssa_to_reg[I->dest[d].value] = reg + offset;
-            BITSET_SET(rctx->visited, I->dest[d].value);
+            /* Assign the destination where the source was */
+            if (!agx_is_null(I->dest[d]))
+               assign_regs(rctx, I->dest[d], offset_reg);
          }
 
          continue;
       } else if (I->op == AGX_OPCODE_PRELOAD) {
          /* We must coalesce all preload moves */
-         assert(I->dest[0].type == AGX_INDEX_NORMAL);
          assert(I->dest[0].size == I->src[0].size);
          assert(I->src[0].type == AGX_INDEX_REGISTER);
 
-         unsigned base = I->src[0].value;
-
-         for (unsigned i = 0; i < agx_size_align_16(I->src[0].size); ++i) {
-            assert(!BITSET_TEST(used_regs, base + i));
-            BITSET_SET(used_regs, base + i);
-         }
-
-         ssa_to_reg[I->dest[0].value] = base;
-         BITSET_SET(rctx->visited, I->dest[0].value);
+         assign_regs(rctx, I->dest[0], I->src[0].value);
          continue;
       }
 
       /* First, free killed sources */
-      agx_foreach_src(I, s) {
-         if (I->src[s].type == AGX_INDEX_NORMAL && I->src[s].kill) {
+      agx_foreach_ssa_src(I, s) {
+         if (I->src[s].kill) {
             unsigned reg = ssa_to_reg[I->src[s].value];
             unsigned count = ncomps[I->src[s].value];
 
-            for (unsigned i = 0; i < count; ++i)
-               BITSET_CLEAR(used_regs, reg + i);
+            assert(count >= 1);
+            BITSET_CLEAR_RANGE(used_regs, reg, reg + count - 1);
          }
       }
 
       /* Next, assign destinations one at a time. This is always legal
        * because of the SSA form.
        */
-      agx_foreach_dest(I, d) {
-         if (I->dest[d].type == AGX_INDEX_NORMAL) {
-            unsigned count = agx_write_registers(I, d);
-            unsigned align = agx_size_align_16(I->dest[d].size);
-            unsigned reg = agx_assign_regs(used_regs, count, align, rctx->bound);
-
-            ssa_to_reg[I->dest[d].value] = reg;
-            BITSET_SET(rctx->visited, I->dest[d].value);
-         }
+      agx_foreach_ssa_dest(I, d) {
+         assign_regs(rctx, I->dest[d], pick_regs(rctx, I, d));
       }
    }
 
    STATIC_ASSERT(sizeof(block->regs_out) == sizeof(used_regs));
    memcpy(block->regs_out, used_regs, sizeof(used_regs));
-}
-
-/*
- * Resolve an agx_index of type NORMAL or REGISTER to a physical register, once
- * registers have been allocated for all SSA values.
- */
-static unsigned
-agx_index_to_reg(uint8_t *ssa_to_reg, agx_index idx)
-{
-   if (idx.type == AGX_INDEX_NORMAL) {
-      return ssa_to_reg[idx.value];
-   } else {
-      assert(idx.type == AGX_INDEX_REGISTER);
-      return idx.value;
-   }
 }
 
 /*
@@ -303,10 +454,9 @@ agx_insert_parallel_copies(agx_context *ctx, agx_block *block)
          assert(src.type == AGX_INDEX_REGISTER);
          assert(dest.size == src.size);
 
-         copies[i++] = (struct agx_copy) {
+         copies[i++] = (struct agx_copy){
             .dest = dest.value,
-            .src = src.value,
-            .size = src.size
+            .src = src,
          };
       }
 
@@ -324,12 +474,18 @@ agx_ra(agx_context *ctx)
    agx_compute_liveness(ctx);
    uint8_t *ssa_to_reg = calloc(ctx->alloc, sizeof(uint8_t));
    uint8_t *ncomps = calloc(ctx->alloc, sizeof(uint8_t));
+   agx_instr **src_to_collect = calloc(ctx->alloc, sizeof(agx_instr *));
    BITSET_WORD *visited = calloc(BITSET_WORDS(ctx->alloc), sizeof(BITSET_WORD));
 
    agx_foreach_instr_global(ctx, I) {
-      agx_foreach_dest(I, d) {
-         if (I->dest[d].type != AGX_INDEX_NORMAL) continue;
+      /* Record collects so we can coalesce when assigning */
+      if (I->op == AGX_OPCODE_COLLECT) {
+         agx_foreach_ssa_src(I, s) {
+            src_to_collect[I->src[s].value] = I;
+         }
+      }
 
+      agx_foreach_ssa_dest(I, d) {
          unsigned v = I->dest[d].value;
          assert(ncomps[v] == 0 && "broken SSA");
          ncomps[v] = agx_write_registers(I, d);
@@ -340,13 +496,14 @@ agx_ra(agx_context *ctx)
     * to a NIR invariant, so we do not need special handling for this.
     */
    agx_foreach_block(ctx, block) {
-      agx_ra_assign_local(&(struct ra_ctx) {
+      agx_ra_assign_local(&(struct ra_ctx){
          .shader = ctx,
          .block = block,
          .ssa_to_reg = ssa_to_reg,
+         .src_to_collect = src_to_collect,
          .ncomps = ncomps,
          .visited = visited,
-         .bound = AGX_NUM_REGS
+         .bound = AGX_NUM_REGS,
       });
    }
 
@@ -355,19 +512,22 @@ agx_ra(agx_context *ctx)
          ctx->max_reg = MAX2(ctx->max_reg, ssa_to_reg[i] + ncomps[i] - 1);
    }
 
+   /* Vertex shaders preload the vertex/instance IDs (r5, r6) even if the shader
+    * don't use them. Account for that so the preload doesn't clobber GPRs.
+    */
+   if (ctx->nir->info.stage == MESA_SHADER_VERTEX)
+      ctx->max_reg = MAX2(ctx->max_reg, 6 * 2);
+
    agx_foreach_instr_global(ctx, ins) {
-      agx_foreach_src(ins, s) {
-         if (ins->src[s].type == AGX_INDEX_NORMAL) {
-            unsigned v = ssa_to_reg[ins->src[s].value];
-            ins->src[s] = agx_replace_index(ins->src[s], agx_register(v, ins->src[s].size));
-         }
+      agx_foreach_ssa_src(ins, s) {
+         unsigned v = ssa_to_reg[ins->src[s].value];
+         agx_replace_src(ins, s, agx_register(v, ins->src[s].size));
       }
 
-      agx_foreach_dest(ins, d) {
-         if (ins->dest[d].type == AGX_INDEX_NORMAL) {
-            unsigned v = ssa_to_reg[ins->dest[d].value];
-            ins->dest[d] = agx_replace_index(ins->dest[d], agx_register(v, ins->dest[d].size));
-         }
+      agx_foreach_ssa_dest(ins, d) {
+         unsigned v = ssa_to_reg[ins->dest[d].value];
+         ins->dest[d] =
+            agx_replace_index(ins->dest[d], agx_register(v, ins->dest[d].size));
       }
    }
 
@@ -376,24 +536,22 @@ agx_ra(agx_context *ctx)
       agx_builder b = agx_init_builder(ctx, agx_after_instr(ins));
 
       if (ins->op == AGX_OPCODE_COLLECT) {
-         unsigned base = agx_index_to_reg(ssa_to_reg, ins->dest[0]);
-         unsigned width = agx_size_align_16(ins->dest[0].size);
+         assert(ins->dest[0].type == AGX_INDEX_REGISTER);
+         unsigned base = ins->dest[0].value;
+         unsigned width = agx_size_align_16(ins->src[0].size);
 
          struct agx_copy *copies = alloca(sizeof(copies[0]) * ins->nr_srcs);
          unsigned n = 0;
 
          /* Move the sources */
          agx_foreach_src(ins, i) {
-            if (agx_is_null(ins->src[i])) continue;
-            assert(ins->src[i].size == ins->dest[0].size);
+            if (agx_is_null(ins->src[i]) || ins->src[i].type == AGX_INDEX_UNDEF)
+               continue;
+            assert(ins->src[i].size == ins->src[0].size);
 
-            bool is_uniform = ins->src[i].type == AGX_INDEX_UNIFORM;
-
-            copies[n++] = (struct agx_copy) {
+            copies[n++] = (struct agx_copy){
                .dest = base + (i * width),
-               .is_uniform = is_uniform,
-               .src = is_uniform ? ins->src[i].value : agx_index_to_reg(ssa_to_reg, ins->src[i]),
-               .size = ins->src[i].size
+               .src = ins->src[i],
             };
          }
 
@@ -401,7 +559,8 @@ agx_ra(agx_context *ctx)
          agx_remove_instruction(ins);
          continue;
       } else if (ins->op == AGX_OPCODE_SPLIT) {
-         unsigned base = agx_index_to_reg(ssa_to_reg, ins->src[0]);
+         assert(ins->src[0].type == AGX_INDEX_REGISTER);
+         unsigned base = ins->src[0].value;
          unsigned width = agx_size_align_16(agx_split_width(ins));
 
          struct agx_copy copies[4];
@@ -411,12 +570,12 @@ agx_ra(agx_context *ctx)
 
          /* Move the sources */
          agx_foreach_dest(ins, i) {
-            if (agx_is_null(ins->dest[i])) continue;
+            if (ins->dest[i].type != AGX_INDEX_REGISTER)
+               continue;
 
-            copies[n++] = (struct agx_copy) {
-               .dest = agx_index_to_reg(ssa_to_reg, ins->dest[i]),
-               .src = base + (i * width),
-               .size = ins->dest[i].size
+            copies[n++] = (struct agx_copy){
+               .dest = ins->dest[i].value,
+               .src = agx_register(base + (i * width), ins->dest[i].size),
             };
          }
 
@@ -426,8 +585,6 @@ agx_ra(agx_context *ctx)
          agx_remove_instruction(ins);
          continue;
       }
-
-
    }
 
    /* Insert parallel copies lowering phi nodes */
@@ -439,7 +596,6 @@ agx_ra(agx_context *ctx)
       switch (I->op) {
       /* Pseudoinstructions for RA must be removed now */
       case AGX_OPCODE_PHI:
-      case AGX_OPCODE_LOGICAL_END:
       case AGX_OPCODE_PRELOAD:
          agx_remove_instruction(I);
          break;
@@ -468,6 +624,7 @@ agx_ra(agx_context *ctx)
       }
    }
 
+   free(src_to_collect);
    free(ssa_to_reg);
    free(ncomps);
    free(visited);

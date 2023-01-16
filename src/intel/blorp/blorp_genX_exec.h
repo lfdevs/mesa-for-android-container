@@ -141,6 +141,7 @@ _blorp_combine_address(struct blorp_batch *batch, void *location,
 #define __gen_combine_address _blorp_combine_address
 
 #include "genxml/genX_pack.h"
+#include "common/intel_genX_state.h"
 
 #define _blorp_cmd_length(cmd) cmd ## _length
 #define _blorp_cmd_length_bias(cmd) cmd ## _length_bias
@@ -593,6 +594,10 @@ blorp_emit_vertex_elements(struct blorp_batch *batch,
       sgvs.InstanceIDElementOffset = 0;
    }
 
+#if GFX_VER >= 11
+   blorp_emit(batch, GENX(3DSTATE_VF_SGVS_2), sgvs);
+#endif
+
    for (unsigned i = 0; i < num_elements; i++) {
       blorp_emit(batch, GENX(3DSTATE_VF_INSTANCING), vf) {
          vf.VertexElementIndex = i;
@@ -837,9 +842,9 @@ blorp_emit_ps_config(struct blorp_batch *batch,
     * configure the WM state whether or not there is a WM program.
     */
 
+#if GFX_VER >= 8
    const struct intel_device_info *devinfo = batch->blorp->compiler->devinfo;
 
-#if GFX_VER >= 8
    blorp_emit(batch, GENX(3DSTATE_WM), wm);
 
    blorp_emit(batch, GENX(3DSTATE_PS), ps) {
@@ -855,11 +860,8 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          ps.SamplerCount = 0;
 
       if (prog_data) {
-         brw_fs_get_dispatch_enables(devinfo, prog_data,
-                                     params->num_samples,
-                                     &ps._8PixelDispatchEnable,
-                                     &ps._16PixelDispatchEnable,
-                                     &ps._32PixelDispatchEnable);
+         intel_set_ps_dispatch_state(&ps, devinfo, prog_data,
+                                     params->num_samples);
 
          ps.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 0);
@@ -931,6 +933,7 @@ blorp_emit_ps_config(struct blorp_batch *batch,
    }
 
 #elif GFX_VER >= 7
+   const struct intel_device_info *devinfo = batch->blorp->compiler->devinfo;
 
    blorp_emit(batch, GENX(3DSTATE_WM), wm) {
       switch (params->hiz_op) {
@@ -977,11 +980,8 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #endif
 
       if (prog_data) {
-         brw_fs_get_dispatch_enables(devinfo, prog_data,
-                                     params->num_samples,
-                                     &ps._8PixelDispatchEnable,
-                                     &ps._16PixelDispatchEnable,
-                                     &ps._32PixelDispatchEnable);
+         intel_set_ps_dispatch_state(&ps, devinfo, prog_data,
+                                     params->num_samples);
 
          ps.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 0);
@@ -1047,11 +1047,9 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       if (prog_data) {
          wm.ThreadDispatchEnable = true;
 
-         brw_fs_get_dispatch_enables(devinfo, prog_data,
-                                     params->num_samples,
-                                     &wm._8PixelDispatchEnable,
-                                     &wm._16PixelDispatchEnable,
-                                     &wm._32PixelDispatchEnable);
+         wm._8PixelDispatchEnable = prog_data->dispatch_8;
+         wm._16PixelDispatchEnable = prog_data->dispatch_16;
+         wm._32PixelDispatchEnable = prog_data->dispatch_32;
 
          wm.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(prog_data, wm, 0);

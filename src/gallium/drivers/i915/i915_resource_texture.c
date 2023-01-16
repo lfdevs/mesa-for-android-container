@@ -155,7 +155,7 @@ i915_texture_set_image_offset(struct i915_texture *tex, unsigned level,
    tex->image_offset[level][img].nblocksy = nblocksy;
 
 #if DEBUG_TEXTURES
-   debug_printf("%s: %p level %u, img %u (%u, %u)\n", __FUNCTION__, tex, level,
+   debug_printf("%s: %p level %u, img %u (%u, %u)\n", __func__, tex, level,
                 img, x, y);
 #endif
 }
@@ -209,8 +209,8 @@ i9x5_scanout_layout(struct i915_texture *tex)
    i915_texture_set_image_offset(tex, 0, 0, 0, 0);
 
 
-#if DEBUG_TEXTURE
-   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __FUNCTION__,
+#if DEBUG_TEXTURES
+   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __func__,
                 pt->width0, pt->height0, util_format_get_blocksize(pt->format),
                 tex->stride, tex->total_nblocksy,
                 tex->stride * tex->total_nblocksy);
@@ -241,8 +241,8 @@ i9x5_display_target_layout(struct i915_texture *tex)
    tex->total_nblocksy = align_nblocksy(pt->format, pt->height0, 8);
    tex->tiling = I915_TILE_X;
 
-#if DEBUG_TEXTURE
-   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __FUNCTION__,
+#if DEBUG_TEXTURES
+   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __func__,
                 pt->width0, pt->height0, util_format_get_blocksize(pt->format),
                 tex->stride, tex->total_nblocksy,
                 tex->stride * tex->total_nblocksy);

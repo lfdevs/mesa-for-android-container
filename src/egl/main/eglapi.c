@@ -2265,7 +2265,7 @@ eglDupNativeFenceFDANDROID(EGLDisplay dpy, EGLSync sync)
 {
    _EGLDisplay *disp = _eglLockDisplay(dpy);
    _EGLSync *s = _eglLookupSync(sync, disp);
-   EGLint ret;
+   EGLint ret = EGL_NO_NATIVE_FENCE_FD_ANDROID;
 
    _EGL_FUNC_START(disp, EGL_OBJECT_SYNC_KHR, s);
 
@@ -2649,7 +2649,7 @@ eglDebugMessageControlKHR(EGLDEBUGPROCKHR callback,
             // On error, set the last error code, call the current
             // debug callback, and return the error code.
             simple_mtx_unlock(_eglGlobal.Mutex);
-            _eglReportError(EGL_BAD_ATTRIBUTE, NULL,
+            _eglDebugReport(EGL_BAD_ATTRIBUTE, NULL, EGL_DEBUG_MSG_ERROR_KHR,
                   "Invalid attribute 0x%04lx", (unsigned long) attrib_list[i]);
             return EGL_BAD_ATTRIBUTE;
          }
@@ -2690,7 +2690,7 @@ eglQueryDebugKHR(EGLint attribute, EGLAttrib *value)
       break;
    default:
       simple_mtx_unlock(_eglGlobal.Mutex);
-      _eglReportError(EGL_BAD_ATTRIBUTE, NULL,
+      _eglDebugReport(EGL_BAD_ATTRIBUTE, NULL, EGL_DEBUG_MSG_ERROR_KHR,
                       "Invalid attribute 0x%04lx", (unsigned long) attribute);
       return EGL_FALSE;
    }

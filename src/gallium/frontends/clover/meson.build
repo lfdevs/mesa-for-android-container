@@ -164,5 +164,5 @@ libclover = static_library(
   ],
   gnu_symbol_visibility : 'hidden',
   link_with : [libclllvm, libclspirv, libclnir],
-  dependencies : idep_mesautil,
+  dependencies : [idep_mesautil, idep_nir],
 )

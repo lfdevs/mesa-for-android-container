@@ -90,6 +90,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
    unsigned layer = templat->u.tex.first_layer;
    unsigned level = templat->u.tex.level;
    struct etna_resource *rsc = etna_render_handle_incompatible(pctx, prsc, level);
+   struct etna_resource_level *lev = &rsc->levels[level];
    struct etna_surface *surf = CALLOC_STRUCT(etna_surface);
 
    if (!surf)
@@ -119,7 +120,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
        /* Multi-layer resources would need to keep much more state (TS valid and
         * clear color per layer) and are unlikely to profit from TS usage. */
        prsc->depth0 == 1 && prsc->array_size == 1) {
-      etna_screen_resource_alloc_ts(pctx->screen, rsc);
+      etna_screen_resource_alloc_ts(pctx->screen, rsc, 0);
    }
 
    surf->base.format = templat->format;
@@ -127,22 +128,15 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
    surf->base.height = rsc->levels[level].height;
    surf->base.writable = templat->writable; /* what is this for anyway */
    surf->base.u = templat->u;
-
-   surf->level = &rsc->levels[level]; /* Keep pointer to actual level to set
-                                       * clear color on underlying resource
-                                       * instead of surface */
-   surf->surf = rsc->levels [level];  /* Make copy of level to narrow down
-                                       * address to layer */
+   surf->level = lev;
 
    /* XXX we don't really need a copy but it's convenient */
-   surf->surf.offset += layer * surf->surf.layer_stride;
-
-   struct etna_resource_level *lev = &rsc->levels[level];
+   surf->offset = lev->offset + layer * lev->layer_stride;
 
    /* Setup template relocations for this surface */
    for (unsigned pipe = 0; pipe < screen->specs.pixel_pipes; ++pipe) {
       surf->reloc[pipe].bo = rsc->bo;
-      surf->reloc[pipe].offset = surf->surf.offset;
+      surf->reloc[pipe].offset = surf->offset;
       surf->reloc[pipe].flags = 0;
    }
 
@@ -151,17 +145,16 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
     * point halfway the image vertically.
     */
    if (rsc->layout & ETNA_LAYOUT_BIT_MULTI)
-      surf->reloc[1].offset = surf->surf.offset + lev->stride * lev->padded_height / 2;
+      surf->reloc[1].offset = surf->offset + lev->stride * lev->padded_height / 2;
 
-   if (surf->surf.ts_size) {
-      unsigned int layer_offset = layer * surf->surf.ts_layer_stride;
-      assert(layer_offset < surf->surf.ts_size);
+   if (surf->level->ts_size) {
+      unsigned int layer_offset = layer * lev->ts_layer_stride;
+      assert(layer_offset < surf->level->ts_size);
 
-      surf->surf.ts_offset += layer_offset;
-      surf->surf.ts_valid = false;
+      surf->ts_offset = surf->level->ts_offset + layer_offset;
 
       surf->ts_reloc.bo = rsc->ts_bo;
-      surf->ts_reloc.offset = surf->surf.ts_offset;
+      surf->ts_reloc.offset = surf->ts_offset;
       surf->ts_reloc.flags = 0;
 
       if (!screen->specs.use_blt) {
@@ -173,7 +166,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
             .source_format = RS_FORMAT_A8R8G8B8,
             .dest_format = RS_FORMAT_A8R8G8B8,
             .dest = ts_bo,
-            .dest_offset = surf->surf.ts_offset,
+            .dest_offset = surf->ts_offset,
             .dest_stride = 0x40,
             .dest_tiling = ETNA_LAYOUT_TILED,
             .dither = {0xffffffff, 0xffffffff},

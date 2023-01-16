@@ -34,6 +34,8 @@ traces:
   civilization-v/CivilizationV-trim--s705-761-f762-v20201203-v2.trace:
     freedreno-a630:
       label: [skip, flakes]
+      checksum: 282b0fdb96624977fa656d93745c1037
+      text: https://gitlab.freedesktop.org/mesa/mesa/-/issues/7491
   golf-with-your-friends/GolfWithYourFriends-trim--f1070-v20201203-v2.trace:
     freedreno-a630:
       checksum: cd01820de77063f0397f26d6cd747d1c

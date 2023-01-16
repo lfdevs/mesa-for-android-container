@@ -30,7 +30,7 @@
 #include "util/u_memory.h"
 #include "util/u_framebuffer.h"
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_screen.h"
 
 #include "tr_dump.h"
@@ -2300,6 +2300,28 @@ static void trace_context_set_global_binding(struct pipe_context *_pipe,
    trace_dump_call_end();
 }
 
+static void
+trace_context_set_hw_atomic_buffers(struct pipe_context *_pipe,
+                                    unsigned start_slot, unsigned count,
+                                    const struct pipe_shader_buffer *buffers)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "set_global_binding");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(uint, start_slot);
+   trace_dump_arg(uint, count);
+
+   trace_dump_arg_begin("buffers");
+   trace_dump_struct_array(shader_buffer, buffers, count);
+   trace_dump_arg_end();
+
+   pipe->set_hw_atomic_buffers(pipe, start_slot, count, buffers);
+
+   trace_dump_call_end();
+}
+
 struct pipe_context *
 trace_context_create(struct trace_screen *tr_scr,
                      struct pipe_context *pipe)
@@ -2434,6 +2456,8 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(set_context_param);
    TR_CTX_INIT(set_debug_callback);
    TR_CTX_INIT(set_global_binding);
+   TR_CTX_INIT(set_hw_atomic_buffers);
+
 
 #undef TR_CTX_INIT
 

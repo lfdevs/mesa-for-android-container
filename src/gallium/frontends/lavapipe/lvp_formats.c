@@ -22,7 +22,7 @@
  */
 
 #include "lvp_private.h"
-#include "pipe/p_config.h"
+#include "util/detect.h"
 #include "pipe/p_defines.h"
 #include "util/format/u_format.h"
 #include "util/u_math.h"

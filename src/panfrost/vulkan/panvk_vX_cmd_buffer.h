@@ -32,6 +32,8 @@
 #include <vulkan/vulkan.h>
 #include "compiler/shader_enums.h"
 
+extern const struct vk_command_buffer_ops panvk_per_arch(cmd_buffer_ops);
+
 void
 panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf);
 

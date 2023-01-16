@@ -131,8 +131,6 @@ VkResult pvr_CreateImage(VkDevice _device,
    PVR_FROM_HANDLE(pvr_device, device, _device);
    struct pvr_image *image;
 
-   pvr_finishme("Review whether all inputs are handled\n");
-
    image =
       vk_image_create(&device->vk, pCreateInfo, pAllocator, sizeof(*image));
    if (!image)

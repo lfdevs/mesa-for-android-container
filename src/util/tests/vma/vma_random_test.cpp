@@ -44,7 +44,7 @@
    } while (0);
 #endif
 
-#include "vma.h"
+#include "util/vma.h"
 
 namespace {
 

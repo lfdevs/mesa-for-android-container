@@ -344,7 +344,6 @@ struct pvr_device_quirks {
    bool has_brn51764 : 1;
    bool has_brn52354 : 1;
    bool has_brn52942 : 1;
-   bool has_brn56279 : 1;
    bool has_brn58839 : 1;
    bool has_brn62269 : 1;
    bool has_brn66011 : 1;
@@ -360,6 +359,7 @@ struct pvr_device_info {
 
 struct pvr_device_runtime_info {
    uint64_t min_free_list_size;
+   uint64_t max_free_list_size;
    uint64_t reserved_shared_size;
    uint64_t total_reserved_partition_size;
    uint64_t num_phantoms;

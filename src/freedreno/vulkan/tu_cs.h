@@ -375,6 +375,40 @@ tu_cs_emit_call(struct tu_cs *cs, const struct tu_cs *target)
       tu_cs_emit_ib(cs, target->entries + i);
 }
 
+/**
+ * Emit a CP_NOP with a string tail into the command stream.
+ */
+void
+tu_cs_emit_debug_string(struct tu_cs *cs, const char *string, int len);
+
+void
+tu_cs_emit_debug_magic_strv(struct tu_cs *cs,
+                            uint32_t magic,
+                            const char *fmt,
+                            va_list args);
+
+__attribute__((format(printf, 2, 3))) void
+tu_cs_emit_debug_msg(struct tu_cs *cs, const char *fmt, ...);
+
+/**
+ * Emit a single message into the CS that denote the calling function and any
+ * optional printf-style parameters when utrace markers are enabled.
+ */
+#define TU_CS_DEBUG_MSG(CS, FORMAT_STRING, ...)                              \
+   do {                                                                      \
+      if (unlikely(u_trace_markers_enabled(&(CS)->device->trace_context)))   \
+         tu_cs_emit_debug_msg(CS, "%s(" FORMAT_STRING ")", __func__,         \
+                              ## __VA_ARGS__);                               \
+   } while (0)
+
+typedef struct tu_cs *tu_debug_scope;
+
+__attribute__((format(printf, 2, 3))) void
+tu_cs_trace_start(void *cs, const char *fmt, ...);
+
+__attribute__((format(printf, 2, 3))) void
+tu_cs_trace_end(void *cs, const char *fmt, ...);
+
 /* Helpers for bracketing a large sequence of commands of unknown size inside
  * a CP_COND_REG_EXEC packet.
  */
@@ -423,6 +457,7 @@ struct tu_reg_value {
    bool bo_write;
    uint32_t bo_offset;
    uint32_t bo_shift;
+   uint32_t bo_low;
 };
 
 #define fd_reg_pair tu_reg_value
@@ -445,6 +480,7 @@ struct tu_reg_value {
          if (regs[i].bo) {                                      \
             uint64_t v = regs[i].bo->iova + regs[i].bo_offset;  \
             v >>= regs[i].bo_shift;                             \
+            v <<= regs[i].bo_low;                               \
             v |= regs[i].value;                                 \
                                                                 \
             *p++ = v;                                           \

@@ -286,16 +286,16 @@ lower_shader_call_instr(struct nir_builder *b, nir_instr *instr, void *data)
 bool
 brw_nir_lower_shader_calls(nir_shader *shader, struct brw_bs_prog_key *key)
 {
-   return
-      nir_shader_instructions_pass(shader,
-                                   lower_shader_trace_ray_instr,
-                                   nir_metadata_none,
-                                   key) |
-      nir_shader_instructions_pass(shader,
-                                   lower_shader_call_instr,
-                                   nir_metadata_block_index |
-                                   nir_metadata_dominance,
-                                   NULL);
+   bool a = nir_shader_instructions_pass(shader,
+                                         lower_shader_trace_ray_instr,
+                                         nir_metadata_none,
+                                         key);
+   bool b = nir_shader_instructions_pass(shader,
+                                         lower_shader_call_instr,
+                                         nir_metadata_block_index |
+                                         nir_metadata_dominance,
+                                         NULL);
+   return a || b;
 }
 
 /** Creates a trivial return shader

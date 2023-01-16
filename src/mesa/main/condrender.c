@@ -30,7 +30,7 @@
  * \author Brian Paul
  */
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "condrender.h"
 #include "enums.h"
 #include "mtypes.h"
@@ -206,7 +206,7 @@ end_conditional_render(struct gl_context *ctx)
 }
 
 
-void APIENTRY
+void GLAPIENTRY
 _mesa_EndConditionalRender_no_error(void)
 {
    GET_CURRENT_CONTEXT(ctx);
@@ -214,7 +214,7 @@ _mesa_EndConditionalRender_no_error(void)
 }
 
 
-void APIENTRY
+void GLAPIENTRY
 _mesa_EndConditionalRender(void)
 {
    GET_CURRENT_CONTEXT(ctx);

@@ -27,9 +27,8 @@ popd
 # Building libva
 git clone https://github.com/intel/libva
 pushd libva/
-# Checking out commit hash with libva-win32 support
-# This feature will be released with libva version 2.17
-git checkout 2579eb0f77897dc01a02c1e43defc63c40fd2988
+# libva-win32 is released with libva version 2.17 (see https://github.com/intel/libva/releases/tag/2.17.0)
+git checkout 2.17.0
 popd
 # libva already has a build dir in their repo, use builddir instead
 mkdir -p libva/builddir

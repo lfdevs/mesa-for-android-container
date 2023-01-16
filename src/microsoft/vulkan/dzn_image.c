@@ -68,14 +68,39 @@ dzn_image_create(struct dzn_device *device,
                  const VkAllocationCallbacks *pAllocator,
                  VkImage *out)
 {
-   struct dzn_image *image =
-      vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*image), 8,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    struct dzn_physical_device *pdev =
       container_of(device->vk.physical, struct dzn_physical_device, vk);
+   VkFormat *compat_formats = NULL;
+   uint32_t compat_format_count = 0;
 
-   if (!image)
+   if (pdev->options12.RelaxedFormatCastingSupported) {
+      VkResult ret =
+         vk_image_create_get_format_list(&device->vk, pCreateInfo, pAllocator,
+                                         &compat_formats, &compat_format_count);
+      if (ret != VK_SUCCESS)
+         return ret;
+   }
+
+   VK_MULTIALLOC(ma);
+   VK_MULTIALLOC_DECL(&ma, struct dzn_image, image, 1);
+   VK_MULTIALLOC_DECL(&ma, DXGI_FORMAT, castable_formats, compat_format_count);
+
+   if (!vk_multialloc_zalloc2(&ma, &device->vk.alloc, pAllocator, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT)) {
+      vk_free2(&device->vk.alloc, pAllocator, compat_formats);
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
+   image->castable_formats = castable_formats;
+   image->castable_format_count = 0;
+   for (uint32_t i = 0; i < compat_format_count; i++) {
+      castable_formats[image->castable_format_count] =
+         dzn_image_get_dxgi_format(compat_formats[i], pCreateInfo->usage, 0);
+
+      if (castable_formats[image->castable_format_count] != DXGI_FORMAT_UNKNOWN)
+         image->castable_format_count++;
+   }
+
+   vk_free2(&device->vk.alloc, pAllocator, compat_formats);
 
 #if 0
     VkExternalMemoryHandleTypeFlags supported =
@@ -101,6 +126,8 @@ dzn_image_create(struct dzn_device *device,
 
    vk_image_init(&device->vk, &image->vk, pCreateInfo);
    enum pipe_format pfmt = vk_format_to_pipe_format(image->vk.format);
+
+   image->valid_access = D3D12_BARRIER_ACCESS_COPY_SOURCE | D3D12_BARRIER_ACCESS_COPY_DEST;
 
    if (image->vk.tiling == VK_IMAGE_TILING_LINEAR) {
       /* Treat linear images as buffers: they should only be used as copy
@@ -153,6 +180,8 @@ dzn_image_create(struct dzn_device *device,
       image->desc.MipLevels = 1;
       image->desc.SampleDesc.Count = 1;
       image->desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+      image->castable_formats = NULL;
+      image->castable_format_count = 0;
    } else {
       image->desc.Format =
          dzn_image_get_dxgi_format(pCreateInfo->format,
@@ -167,9 +196,13 @@ dzn_image_create(struct dzn_device *device,
       image->desc.MipLevels = pCreateInfo->mipLevels;
       image->desc.SampleDesc.Count = pCreateInfo->samples;
       image->desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+      image->valid_access |= D3D12_BARRIER_ACCESS_RESOLVE_DEST |
+         D3D12_BARRIER_ACCESS_SHADER_RESOURCE |
+         (pCreateInfo->samples > 1 ? D3D12_BARRIER_ACCESS_RESOLVE_SOURCE : 0);
    }
 
-   if (image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
+   if ((image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
+       !pdev->options12.RelaxedFormatCastingSupported)
       image->desc.Format = dzn_get_typeless_dxgi_format(image->desc.Format);
 
    if (image->desc.SampleDesc.Count > 1)
@@ -181,38 +214,53 @@ dzn_image_create(struct dzn_device *device,
 
    image->desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-   if (image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+   if (image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
       image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+      image->valid_access |= D3D12_BARRIER_ACCESS_RENDER_TARGET;
+   }
 
    if (image->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
       image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+      image->valid_access |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ |
+                             D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE;
 
       if (!(image->vk.usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
                                VK_IMAGE_USAGE_STORAGE_BIT |
                                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT)))
+                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT))) {
          image->desc.Flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
+         image->valid_access &= ~D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
+      }
+   } else if (image->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+      image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+      image->valid_access |= D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
    }
 
    /* Images with TRANSFER_DST can be cleared or passed as a blit/resolve
     * destination. Both operations require the RT or DS cap flags.
     */
    if ((image->vk.usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
-       image->vk.tiling == VK_IMAGE_TILING_OPTIMAL) {
+       image->vk.tiling == VK_IMAGE_TILING_OPTIMAL &&
+       (image->desc.Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                             D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) == D3D12_RESOURCE_FLAG_NONE) {
 
       D3D12_FEATURE_DATA_FORMAT_SUPPORT dfmt_info =
          dzn_physical_device_get_format_support(pdev, pCreateInfo->format);
       if (dfmt_info.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) {
          image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+         image->valid_access |= D3D12_BARRIER_ACCESS_RENDER_TARGET;
       } else if (dfmt_info.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) {
          image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+         image->valid_access |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE;
       } else if (dfmt_info.Support1 & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) {
          image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+         image->valid_access |= D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
       }
    }
 
-   if (image->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT)
-      image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+   if (pCreateInfo->sharingMode == VK_SHARING_MODE_CONCURRENT &&
+       !(image->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
+      image->desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
 
    *out = dzn_image_to_handle(image);
    return VK_SUCCESS;
@@ -585,6 +633,66 @@ dzn_image_layout_to_state(const struct dzn_image *image,
    }
 }
 
+D3D12_BARRIER_LAYOUT
+dzn_vk_layout_to_d3d_layout(VkImageLayout layout,
+                            D3D12_COMMAND_LIST_TYPE type,
+                            VkImageAspectFlags aspect)
+{
+   if (type == D3D12_COMMAND_LIST_TYPE_COPY)
+      return D3D12_BARRIER_LAYOUT_COMMON;
+
+   switch (layout) {
+   case VK_IMAGE_LAYOUT_UNDEFINED:
+      return D3D12_BARRIER_LAYOUT_UNDEFINED;
+   case VK_IMAGE_LAYOUT_PREINITIALIZED:
+      return D3D12_BARRIER_LAYOUT_COMMON;
+   case VK_IMAGE_LAYOUT_GENERAL:
+   case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+      switch (type) {
+      case D3D12_COMMAND_LIST_TYPE_DIRECT: return D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COMMON;
+      case D3D12_COMMAND_LIST_TYPE_COMPUTE: return D3D12_BARRIER_LAYOUT_COMPUTE_QUEUE_COMMON;
+      default: return D3D12_BARRIER_LAYOUT_COMMON;
+      }
+   case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL:
+   case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+   case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
+   case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
+   case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+   case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+      switch (type) {
+      case D3D12_COMMAND_LIST_TYPE_DIRECT: return D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_GENERIC_READ;
+      case D3D12_COMMAND_LIST_TYPE_COMPUTE: return D3D12_BARRIER_LAYOUT_COMPUTE_QUEUE_GENERIC_READ;
+      default: return D3D12_BARRIER_LAYOUT_GENERIC_READ;
+      }
+   case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+      return D3D12_BARRIER_LAYOUT_RENDER_TARGET;
+   case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+   case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+   case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
+      return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE;
+   case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+      return aspect == VK_IMAGE_ASPECT_DEPTH_BIT ?
+         dzn_vk_layout_to_d3d_layout(VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, type, aspect) :
+         D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE;
+   case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+      return aspect == VK_IMAGE_ASPECT_DEPTH_BIT ?
+         D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE :
+         dzn_vk_layout_to_d3d_layout(VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, type, aspect);
+   case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL:
+      return aspect == VK_IMAGE_ASPECT_COLOR_BIT ?
+         D3D12_BARRIER_LAYOUT_RENDER_TARGET : D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE;
+   case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+   case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
+      return D3D12_BARRIER_LAYOUT_PRESENT;
+   case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+      return D3D12_BARRIER_LAYOUT_SHADING_RATE_SOURCE;
+   default:
+      assert(!"Unexpected layout");
+      return D3D12_BARRIER_LAYOUT_COMMON;
+   }
+}
+
 bool
 dzn_image_formats_are_compatible(const struct dzn_device *device,
                                  VkFormat orig_fmt, VkFormat new_fmt,
@@ -708,13 +816,45 @@ dzn_BindImageMemory2(VkDevice dev,
       if (!did_bind) {
          image->mem = mem;
          image->mem_offset = bind_info->memoryOffset;
-         if (FAILED(ID3D12Device1_CreatePlacedResource(device->dev, mem->heap,
+
+         HRESULT hres = S_OK;
+
+         if (mem->swapchain_res) {
+            image->res = mem->swapchain_res;
+            ID3D12Resource_AddRef(image->res);
+         } else if (device->dev10 && image->castable_format_count > 0) {
+            D3D12_RESOURCE_DESC1 desc = {
+               .Dimension = image->desc.Dimension,
+               .Alignment = image->desc.Alignment,
+               .Width = image->desc.Width,
+               .Height = image->desc.Height,
+               .DepthOrArraySize = image->desc.DepthOrArraySize,
+               .MipLevels = image->desc.MipLevels,
+               .Format = image->desc.Format,
+               .SampleDesc = image->desc.SampleDesc,
+               .Layout = image->desc.Layout,
+               .Flags = image->desc.Flags,
+            };
+
+            hres = ID3D12Device10_CreatePlacedResource2(device->dev10, mem->heap,
+                                                        bind_info->memoryOffset,
+                                                        &desc,
+                                                        D3D12_BARRIER_LAYOUT_COMMON,
+                                                        NULL,
+                                                        image->castable_format_count,
+                                                        image->castable_formats,
+                                                        &IID_ID3D12Resource,
+                                                        (void **)&image->res);
+         } else {
+            hres = ID3D12Device1_CreatePlacedResource(device->dev, mem->heap,
                                                       bind_info->memoryOffset,
                                                       &image->desc,
-                                                      mem->initial_state,
+                                                      D3D12_RESOURCE_STATE_COMMON,
                                                       NULL,
                                                       &IID_ID3D12Resource,
-                                                      (void **)&image->res)))
+                                                      (void **)&image->res);
+         }
+         if (FAILED(hres))
             return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
          did_bind = true;
       }
@@ -754,7 +894,7 @@ dzn_GetImageMemoryRequirements2(VkDevice _device,
       }
    }
 
-   D3D12_RESOURCE_ALLOCATION_INFO info = dzn_ID3D12Device2_GetResourceAllocationInfo(device->dev, 0, 1, &image->desc);
+   D3D12_RESOURCE_ALLOCATION_INFO info = dzn_ID3D12Device4_GetResourceAllocationInfo(device->dev, 0, 1, &image->desc);
 
    pMemoryRequirements->memoryRequirements = (VkMemoryRequirements) {
       .size = info.SizeInBytes,
@@ -847,7 +987,7 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
       (iview->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE ||
        iview->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY) ?
       6 : 1;
-   bool use_array = (iview->vk.base_array_layer / layers_per_elem) > 0 ||
+   bool use_array = iview->vk.base_array_layer > 0 ||
                     (iview->vk.layer_count / layers_per_elem) > 1;
 
    iview->srv_desc = (D3D12_SHADER_RESOURCE_VIEW_DESC) {
@@ -877,6 +1017,14 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
 
       for (uint32_t i = 0; i < ARRAY_SIZE(swz); i++)
          swz[i] = bgra4_remap[swz[i]];
+   } else if (iview->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
+      /* D3D puts stencil in G, not R. Requests for R should be routed to G and vice versa. */
+      for (uint32_t i = 0; i < ARRAY_SIZE(swz); i++) {
+         if (swz[i] == D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_0)
+            swz[i] = D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1;
+         else if (swz[i] == D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1)
+            swz[i] = D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_0;
+      }
    }
 
    iview->srv_desc.Shader4ComponentMapping =
@@ -891,10 +1039,12 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
          iview->srv_desc.Texture1DArray.MipLevels = iview->vk.level_count;
          iview->srv_desc.Texture1DArray.FirstArraySlice = iview->vk.base_array_layer;
          iview->srv_desc.Texture1DArray.ArraySize = iview->vk.layer_count;
+         iview->srv_desc.Texture1DArray.ResourceMinLODClamp = 0.0f;
       } else {
          iview->srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE1D;
          iview->srv_desc.Texture1D.MostDetailedMip = iview->vk.base_mip_level;
          iview->srv_desc.Texture1D.MipLevels = iview->vk.level_count;
+         iview->srv_desc.Texture1D.ResourceMinLODClamp = 0.0f;
       }
       break;
 
@@ -911,6 +1061,7 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
          iview->srv_desc.Texture2DArray.FirstArraySlice = iview->vk.base_array_layer;
          iview->srv_desc.Texture2DArray.ArraySize = iview->vk.layer_count;
          iview->srv_desc.Texture2DArray.PlaneSlice = plane_slice;
+         iview->srv_desc.Texture2DArray.ResourceMinLODClamp = 0.0f;
       } else if (!use_array && ms) {
          iview->srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
       } else {
@@ -918,6 +1069,7 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
          iview->srv_desc.Texture2D.MostDetailedMip = iview->vk.base_mip_level;
          iview->srv_desc.Texture2D.MipLevels = iview->vk.level_count;
          iview->srv_desc.Texture2D.PlaneSlice = plane_slice;
+         iview->srv_desc.Texture2D.ResourceMinLODClamp = 0.0f;
       }
       break;
 
@@ -929,10 +1081,12 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
          iview->srv_desc.TextureCubeArray.MipLevels = iview->vk.level_count;
          iview->srv_desc.TextureCubeArray.First2DArrayFace = iview->vk.base_array_layer;
          iview->srv_desc.TextureCubeArray.NumCubes = iview->vk.layer_count / 6;
+         iview->srv_desc.TextureCubeArray.ResourceMinLODClamp = 0.0f;
       } else {
          iview->srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
          iview->srv_desc.TextureCube.MostDetailedMip = iview->vk.base_mip_level;
          iview->srv_desc.TextureCube.MipLevels = iview->vk.level_count;
+         iview->srv_desc.TextureCube.ResourceMinLODClamp = 0.0f;
       }
       break;
 
@@ -940,6 +1094,7 @@ dzn_image_view_prepare_srv_desc(struct dzn_image_view *iview)
       iview->srv_desc.ViewDimension =  D3D12_SRV_DIMENSION_TEXTURE3D;
       iview->srv_desc.Texture3D.MostDetailedMip = iview->vk.base_mip_level;
       iview->srv_desc.Texture3D.MipLevels = iview->vk.level_count;
+      iview->srv_desc.Texture3D.ResourceMinLODClamp = 0.0f;
       break;
 
    default: unreachable("Invalid view type");

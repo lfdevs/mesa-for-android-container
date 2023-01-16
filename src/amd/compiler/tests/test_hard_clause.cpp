@@ -32,8 +32,7 @@ static void create_mubuf(Temp desc=Temp(0, s8), unsigned vtx_binding=0)
    desc_op.setFixed(PhysReg(0));
    bld.mubuf(aco_opcode::buffer_load_dword, Definition(PhysReg(256), v1), desc_op,
              Operand(PhysReg(256), v1), Operand::zero(), 0, false)
-      .instr->mubuf()
-      .vtx_binding = vtx_binding;
+      ->mubuf().vtx_binding = vtx_binding;
 }
 
 static void create_mubuf_store()
@@ -49,8 +48,7 @@ static void create_mtbuf(Temp desc=Temp(0, s8), unsigned vtx_binding=0)
    bld.mtbuf(aco_opcode::tbuffer_load_format_x, Definition(PhysReg(256), v1), desc_op,
              Operand(PhysReg(256), v1), Operand::zero(), V_008F0C_BUF_DATA_FORMAT_32,
              V_008F0C_BUF_NUM_FORMAT_FLOAT, 0, false)
-      .instr->mtbuf()
-      .vtx_binding = vtx_binding;
+      ->mtbuf().vtx_binding = vtx_binding;
 }
 
 static void create_flat()

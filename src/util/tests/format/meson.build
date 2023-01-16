@@ -7,6 +7,6 @@ foreach t : ['srgb', 'u_format_test', 'u_format_compatible_test']
       dependencies : idep_mesautil,
     ),
     suite : 'format',
-    should_fail : meson.get_cross_property('xfail', '').contains(t),
+    should_fail : meson.get_external_property('xfail', '').contains(t),
   )
 endforeach

@@ -1205,12 +1205,20 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
-# see https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/730
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgb_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt5_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt3_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt5_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_s3tc_dxt1_ext,Fail
-spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt3_ext,Fail
+# Creating OpenGL ES 2 context
+# Pass
+# Creating OpenGL ES 3 context
+# Fail, context: 0x00000000, error: EGL_BAD_MATCH
+# eglBindAPI(EGL_OPENVG_API) failed, skipping
+wayland-dEQP-EGL.functional.create_context.no_config,Fail
+
+# EGL_BAD_DISPLAY is generated if display is not an EGL display connection
+# eglCreatePixmapSurface(0, 0x00000000, 0x00000000, { EGL_NONE });
+# // 0x00000000 returned
+# eglCreatePixmapSurface(0xffffffff, 0x00000000, 0x00000000, { EGL_NONE });
+# // 0x00000000 returned
+# EGL_BAD_CONFIG or EGL_BAD_PARAMETER is generated if config is not an EGL frame buffer configuration or if the PixmapSurface call is not supported
+# eglCreatePixmapSurface(0x245b4d8, 0xffffffff, 0x00000000, { EGL_NONE });
+# // 0x00000000 returned
+# // ERROR expected: EGL_BAD_CONFIG or EGL_BAD_PARAMETER, Got: EGL_BAD_NATIVE_PIXMAP
+wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail

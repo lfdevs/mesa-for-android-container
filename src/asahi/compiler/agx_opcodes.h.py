@@ -82,6 +82,7 @@ struct agx_opcode_info {
    struct agx_encoding encoding_16;
    bool is_float : 1;
    bool can_eliminate : 1;
+   bool can_reorder : 1;
 };
 
 extern const struct agx_opcode_info agx_opcodes_info[AGX_NUM_OPCODES];

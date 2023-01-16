@@ -165,7 +165,7 @@ static struct reg_value ** get_reg_valuep(struct schedule_state * s,
 		return NULL;
 
 	if (index >= RC_REGISTER_MAX_INDEX) {
-		rc_error(s->C, "%s: index %i out of bounds\n", __FUNCTION__, index);
+		rc_error(s->C, "%s: index %i out of bounds\n", __func__, index);
 		return NULL;
 	}
 
@@ -898,6 +898,16 @@ static int convert_rgb_to_alpha(
 	if (sched_inst->GlobalReaders.Abort)
 		return 0;
 
+	/* Even though we checked that we can convert to alpha previously, it is
+	 * possible that another rgb source of the reader instructions was already
+	 * converted to alpha and we thus have no longer free alpha sources.
+	 */
+	for(i = 0; i < sched_inst->GlobalReaders.ReaderCount; i++) {
+		struct rc_reader reader = sched_inst->GlobalReaders.Readers[i];
+		if (reader.Inst->U.P.Alpha.Src[2].Used)
+			return 0;
+	}
+
 	if (!pair_inst->RGB.WriteMask)
 		return 0;
 
@@ -1203,7 +1213,7 @@ static void scan_read(void * data, struct rc_instruction * inst,
 	(*v)->NumReaders++;
 
 	if (s->Current->NumReadValues >= 12) {
-		rc_error(s->C, "%s: NumReadValues overflow\n", __FUNCTION__);
+		rc_error(s->C, "%s: NumReadValues overflow\n", __func__);
 	} else {
 		s->Current->ReadValues[s->Current->NumReadValues++] = *v;
 	}
@@ -1237,7 +1247,7 @@ static void scan_write(void * data, struct rc_instruction * inst,
 	*pv = newv;
 
 	if (s->Current->NumWriteValues >= 4) {
-		rc_error(s->C, "%s: NumWriteValues overflow\n", __FUNCTION__);
+		rc_error(s->C, "%s: NumWriteValues overflow\n", __func__);
 	} else {
 		s->Current->WriteValues[s->Current->NumWriteValues++] = newv;
 	}

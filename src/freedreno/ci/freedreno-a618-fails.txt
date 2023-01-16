@@ -1,9 +1,416 @@
+# Shader compilation error log: 0:6(1): error: invalid stream specified 1 is larger than MAX_VERTEX_STREAMS - 1
+KHR-GL45.transform_feedback.draw_xfb_stream_instanced_test,Fail
+
+KHR-GL45.gpu_shader_fp64.fp64.max_uniform_components,Fail
+KHR-GL45.gpu_shader_fp64.builtin.mod_dvec2,Fail
+KHR-GL45.gpu_shader_fp64.builtin.mod_dvec3,Fail
+KHR-GL45.gpu_shader_fp64.builtin.mod_dvec4,Fail
+KHR-GL45.shader_subroutine.control_flow_and_returned_subroutine_values_used_as_subroutine_input,Fail
+KHR-GL45.shader_image_load_store.basic-allFormats-store,Fail
+KHR-GL45.shader_image_load_store.basic-allTargets-store,Fail
+KHR-GL45.shading_language_420pack.binding_images,Fail
+KHR-GL45.compute_shader.conditional-dispatching,Fail
+KHR-GL45.vertex_attrib_binding.advanced-largeStrideAndOffsetsNewAndLegacyAPI,Fail
+KHR-GL45.buffer_storage.map_persistent_draw,Fail
+
+# Lots of errors like "[279] Check failed. Received: [3,0,0,2] instead of: [5,0,0,2]"
+KHR-GLES31.core.geometry_shader.layered_framebuffer.depth_support,Fail
+KHR-GL45.geometry_shader.layered_framebuffer.depth_support,Fail
+
+KHR-GLES31.core.geometry_shader.layered_framebuffer.stencil_support,Fail
+KHR-GL45.geometry_shader.layered_framebuffer.stencil_support,Fail
+
+# "Invalid value returned: expected:[1, 1, 1, 1] retrieved: [0, 0, 0, 0
+#  Invalid rendering result at esextcTessellationShaderBarrier.cpp:504"
+KHR-GLES31.core.tessellation_shader.tessellation_shader_tc_barriers.barrier_guarded_read_calls,Fail
+
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/5582
+KHR-GLES31.core.texture_cube_map_array.color_depth_attachments,Fail
+KHR-GL45.texture_cube_map_array.color_depth_attachments,Fail
+
+#
+# new fails with gl45:
+#
+
+# Various limits we cannot or do not support:
+KHR-GL45.limits.max_vertex_streams,Fail
+
+# Shader compile fails:
+KHR-GL45.shader_atomic_counter_ops_tests.ShaderAtomicCounterOpsExchangeTestCase,Fail
+KHR-GL45.shader_atomic_counter_ops_tests.ShaderAtomicCounterOpsMinMaxTestCase,Fail
+KHR-GL45.shader_atomic_counter_ops_tests.ShaderAtomicCounterOpsAdditionSubstractionTestCase,Fail
+KHR-GL45.shader_atomic_counter_ops_tests.ShaderAtomicCounterOpsBitwiseTestCase,Fail
+
+# MESA: warning: sample averaging on fallback z24s8 blit when we shouldn't.
+KHR-GL45.direct_state_access.renderbuffers_storage_multisample,Fail
+
+KHR-GL45.multi_bind.dispatch_bind_image_textures,Fail
+
+# Unhandled intrinsic type: image_samples
+KHR-GL45.shader_texture_image_samples_tests.image_functional_test,Crash
+
+
+# rendering errors in ~4x4 blocks around the bottom side of the diagonal for the quad
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.colorburn,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.colordodge,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.darken,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.difference,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.exclusion,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.hardlight,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_color,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_hue,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_luminosity,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.hsl_saturation,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.lighten,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.multiply,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.overlay,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.screen,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.msaa.softlight,Fail
+
+bypass-dEQP-GLES31.functional.blend_equation_advanced.basic.colorburn,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.basic.screen,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.barrier.screen,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.barrier.hardlight,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.barrier.hsl_luminosity,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.barrier.lighten,Fail
+bypass-dEQP-GLES31.functional.blend_equation_advanced.barrier.softlight,Fail
+
 # Fails when TU_DEBUG=forcebin is set
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_geom,Fail
 gmem-dEQP-VK.spirv_assembly.instruction.graphics.variable_pointers.graphics.writes_two_buffers_vert,Fail
 
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3590
-dEQP-VK.api.info.get_physical_device_properties2.memory_properties,Fail
+glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
+glx@glx_arb_create_context_no_error@no error,Fail
+glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
+glx@glx_ext_import_context@free context,Fail
+glx@glx_ext_import_context@get context id,Fail
+glx@glx_ext_import_context@get current display,Fail
+glx@glx_ext_import_context@import context- multi process,Fail
+glx@glx_ext_import_context@import context- single process,Fail
+glx@glx_ext_import_context@imported context has same context id,Fail
+glx@glx_ext_import_context@make current- multi process,Fail
+glx@glx_ext_import_context@make current- single process,Fail
+glx@glx_ext_import_context@query context info,Fail
+glx@glx-swap-pixmap-bad,Fail
+glx@glx-visuals-depth -pixmap,Crash
+glx@glx-visuals-stencil -pixmap,Crash
+
+# "../src/freedreno/ir3/ir3_shader.h:968:ir3_link_add: Assertion `i < ARRAY_SIZE(l->var)' failed."
+shaders@glsl-max-varyings >max_varying_components,Crash
+
+# "MESA: error: unknown vertex shader output name: VARYING_SLOT_EDGE
+#  gl-2.0-edgeflag: ../src/freedreno/ir3/ir3_context.c:411: ir3_context_error: Assertion `!""' failed."
+shaders@point-vertex-id divisor,Crash
+shaders@point-vertex-id gl_instanceid,Crash
+shaders@point-vertex-id gl_instanceid divisor,Crash
+shaders@point-vertex-id gl_vertexid,Crash
+shaders@point-vertex-id gl_vertexid divisor,Crash
+shaders@point-vertex-id gl_vertexid gl_instanceid,Crash
+shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Crash
+spec@!opengl 2.0@gl-2.0-edgeflag,Crash
+spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Crash
+spec@!opengl 1.0@gl-1.0-edgeflag,Crash
+spec@!opengl 1.0@gl-1.0-edgeflag-quads,Crash
+
+
+spec@arb_arrays_of_arrays@execution@sampler@fs-nested-struct-arrays-nonconst-nested-array,Fail
+# Skips prior to exposing gl45, now fails for same reason as above test
+spec@arb_gl_spirv@execution@uniform@sampler2d-nonconst-nested-array,Fail
+
+spec@arb_depth_buffer_float@fbo-clear-formats stencil,Fail
+spec@arb_depth_buffer_float@fbo-clear-formats stencil@GL_DEPTH32F_STENCIL8,Fail
+spec@arb_depth_buffer_float@fbo-generatemipmap-formats,Fail
+spec@arb_depth_buffer_float@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32F,Fail
+spec@arb_depth_buffer_float@fbo-generatemipmap-formats@GL_DEPTH_COMPONENT32F NPOT,Fail
+
+spec@arb_occlusion_query@occlusion_query_order,Fail
+spec@arb_point_sprite@arb_point_sprite-interactions 1.0,Fail
+spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
+spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
+spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2' on GL_PROGRAM_INPUT,Fail
+spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceiv,Fail
+spec@arb_program_interface_query@arb_program_interface_query-resource-query,Fail
+spec@arb_program_interface_query@arb_program_interface_query-resource-query@GL_ATOMIC_COUNTER_BUFFER,Fail
+spec@arb_program_interface_query@arb_program_interface_query-resource-query@GL_BUFFER_VARIABLE,Fail
+spec@arb_program_interface_query@arb_program_interface_query-resource-query@GL_SHADER_STORAGE_BLOCK,Fail
+spec@arb_sample_shading@samplemask 2@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2 all@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2 all@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2 all,Fail
+spec@arb_sample_shading@samplemask 2 all@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2 all@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2,Fail
+spec@arb_sample_shading@samplemask 2@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 2@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4@0.250000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4 all@0.250000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4 all@0.500000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4 all@1.000000 mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4 all,Fail
+spec@arb_sample_shading@samplemask 4 all@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4 all@sample mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4,Fail
+spec@arb_sample_shading@samplemask 4@noms mask_in_one,Fail
+spec@arb_sample_shading@samplemask 4@sample mask_in_one,Fail
+
+# Same results w/ zink-on-tu as with freedreno:
+spec@arb_sample_shading@samplemask 2 all@noms partition,Fail
+spec@arb_sample_shading@samplemask 2@noms partition,Fail
+spec@arb_sample_shading@samplemask 4 all@noms partition,Fail
+spec@arb_sample_shading@samplemask 4@noms partition,Fail
+
+spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
+
+# These 3 fails started to happen after piglit uprev with commit
+# 0ef03f824d1833a853d1a20b4be121089bb9246c
+spec@arb_shader_image_load_store@qualifiers,Fail
+spec@arb_shader_image_load_store@qualifiers@r8/permissive layout qualifiers/permissive access qualifiers/permissive binding test,Fail
+spec@arb_shader_image_load_store@qualifiers@r8/strict layout qualifiers/permissive access qualifiers/permissive binding test,Fail
+
+spec@arb_shader_storage_buffer_object@array-ssbo-auto-binding,Fail
+spec@arb_shader_storage_buffer_object@linker@instance-matching-shader-storage-blocks-member-array-size-mismatch,Fail
+
+# Test bug: https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/601#note_1154259
+# "Failed to link:
+#  error: Too many tessellation control shader atomic counters"
+spec@arb_tessellation_shader@execution@invocation-counting-even,Fail
+spec@arb_tessellation_shader@execution@invocation-counting-odd,Fail
+
+# Test bug: https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/601#note_1154259
+# "Failed to link:
+#  error: Too many tessellation control shader atomic counters"
+spec@arb_tessellation_shader@execution@tcs-output-unmatched,Fail
+spec@arb_tessellation_shader@execution@tcs-primitiveid,Fail
+
+# Test bug: https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/601#note_1154259
+# "Failed to link:
+#  error: Too many tessellation control shader atomic counters"
+spec@arb_tessellation_shader@execution@tes-primitiveid,Fail
+
+# ir3_nir_lower_tess.c:251: lower_block_to_explicit_output: Assertion `util_is_power_of_two_nonzero(nir_intrinsic_write_mask(intr) + 1)' failed.
+spec@arb_tessellation_shader@execution@tcs-input-read-mat,Crash
+
+# Some 64b not getting lowered to 32b:
+spec@arb_tessellation_shader@execution@variable-indexing@vs-output-array-dvec4-index-wr-before-tcs,Crash
+
+spec@arb_texture_rectangle@1-1-linear-texture,Fail
+
+spec@arb_timer_query@timestamp-get,Fail
+
+spec@arb_vertex_type_2_10_10_10_rev@attrib-p-type-size-match,Fail
+
+# fails unrelated to GL_ARB_enhanced_layouts
+spec@arb_enhanced_layouts@execution@component-layout@vs-fs-array-dvec3,Crash
+spec@arb_enhanced_layouts@gs-stream-location-aliasing,Fail
+
+spec@egl 1.4@eglterminate then unbind context,Fail
+spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
+spec@egl_chromium_sync_control@conformance,Fail
+spec@egl_ext_protected_content@conformance,Fail
+spec@egl_khr_surfaceless_context@viewport,Fail
+spec@egl_mesa_configless_context@basic,Fail
+
+# D32S8 skips (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT), others fail.
+# The test is importing a z buffer from tu, and rendering a blue fullscreen quad
+# in gl that zfails to leave the green clear color in the middle.
+#
+# TU sysmem mode gets green on the bottom half-ish with some noise at the boundary.
+# TU gmem mode gets fullscreen green.
+spec@ext_external_objects@vk-depth-display,Fail
+spec@ext_external_objects@vk-depth-display@D16,Fail
+spec@ext_external_objects@vk-depth-display@D24S8,Fail
+
+# "Failed to submit queue." from the test some of the time.  No validation failures.
+# When it doesn't fail with that message, gets a set of corrupted colors (supposed
+# to be vertical stripes).
+spec@ext_external_objects@vk-image-display,Fail
+spec@ext_external_objects@vk-image-display-muliple-textures,Fail
+spec@ext_external_objects@vk-image-display-overwrite,Fail
+
+# Linear cases seem to do fine, optimal tiling fails.
+spec@ext_external_objects@vk-image-overwrite,Fail
+spec@ext_external_objects@vk-image-overwrite@RGB 10 A2 UINT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGB 10 A2 UNORM optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGB 5 A1 UNORM optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 16 INT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 16 SFLOAT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 16 UINT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 32 INT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 32 UINT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 4 UNORM optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 INT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 SRGB optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 UINT optimal: Failed to initialize OpenGL FBO/RBO,Fail
+spec@ext_external_objects@vk-image-overwrite@RGBA 8 UNORM optimal: Failed to initialize OpenGL FBO/RBO,Fail
+
+spec@ext_external_objects@vk-semaphores,Fail
+spec@ext_external_objects@vk-semaphores-2,Fail
+
+# D32S8 skips (GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT), D24S8 fails.
+spec@ext_external_objects@vk-stencil-display,Fail
+spec@ext_external_objects@vk-stencil-display@D24S8,Fail
+
+spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
+
+spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 2,Fail
+spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 4,Fail
+spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 2,Fail
+spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 4,Fail
+spec@ext_framebuffer_multisample@draw-buffers-alpha-to-coverage 2,Fail
+spec@ext_framebuffer_multisample@draw-buffers-alpha-to-coverage 4,Fail
+spec@ext_framebuffer_multisample@enable-flag,Fail
+spec@ext_framebuffer_multisample@interpolation 2 centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 2 centroid-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 2 non-centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 2 non-centroid-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 4 centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 4 centroid-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 4 non-centroid-deriv-disabled,Fail
+spec@ext_framebuffer_multisample@interpolation 4 non-centroid-disabled,Fail
+spec@ext_framebuffer_multisample@sample-alpha-to-coverage 2 color,Fail
+spec@ext_framebuffer_multisample@sample-alpha-to-coverage 2 depth,Fail
+spec@ext_framebuffer_multisample@sample-alpha-to-coverage 4 color,Fail
+spec@ext_framebuffer_multisample@sample-alpha-to-coverage 4 depth,Fail
+spec@ext_framebuffer_object@fbo-alphatest-nocolor,Fail
+spec@ext_framebuffer_object@fbo-alphatest-nocolor-ff,Fail
+spec@ext_packed_float@query-rgba-signed-components,Fail
+
+spec@ext_texture_integer@multisample-formats 4 gl_ext_texture_integer,Fail
+
+# These failures go away with FD_MESA_DEBUG=noblit, but don't seem to be related
+# to the actual mipmap generation blits (which we do fall back on)
+spec@ext_texture_snorm@fbo-generatemipmap-formats,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_ALPHA16_SNORM,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_ALPHA16_SNORM NPOT,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY_SNORM,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY_SNORM NPOT,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY8_SNORM,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY8_SNORM NPOT,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY16_SNORM,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_INTENSITY16_SNORM NPOT,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_ALPHA16_SNORM,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_ALPHA16_SNORM NPOT,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_SNORM,Fail
+spec@ext_texture_snorm@fbo-generatemipmap-formats@GL_LUMINANCE16_SNORM NPOT,Fail
+
+spec@ext_texture_snorm@multisample-formats 2 gl_ext_texture_snorm,Fail
+spec@ext_texture_snorm@multisample-formats 4 gl_ext_texture_snorm,Fail
+spec@ext_transform_feedback@intervening-read prims_generated,Fail
+spec@ext_transform_feedback@intervening-read prims_generated use_gs,Fail
+spec@ext_transform_feedback@structs struct-array-elem run,Fail
+spec@ext_transform_feedback@structs struct-array-elem run interface,Fail
+spec@ext_transform_feedback@tessellation triangle_fan flat_first,Fail
+spec@ext_transform_feedback@tessellation triangle_strip flat_first,Fail
+spec@glsl-1.30@execution@texelfetch fs sampler3d 1x129x9-98x129x9,Fail
+spec@glsl-1.30@execution@texelfetch fs sampler3d 98x1x9-98x129x9,Fail
+
+spec@glsl-1.50@execution@compatibility@vs-gs-texcoord-array-2,Crash
+spec@glsl-1.50@execution@compatibility@vs-gs-texcoord-array,Crash
+
+spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
+spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
+
+# "ir3_shader.h:923:ir3_link_add: Assertion `i < ARRAY_SIZE(l->var)' failed"
+spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Crash
+
+spec@glsl-1.50@gs-max-output-components,Fail
+spec@intel_performance_query@intel_performance_query-issue_2235,Fail
+spec@khr_texture_compression_astc@array-gl@12x12 Block Dim,Fail
+spec@khr_texture_compression_astc@array-gl@5x5 Block Dim,Fail
+spec@khr_texture_compression_astc@array-gles@12x12 Block Dim,Fail
+spec@khr_texture_compression_astc@array-gles@5x5 Block Dim,Fail
+spec@khr_texture_compression_astc@array-gles,Fail
+spec@khr_texture_compression_astc@array-gl,Fail
+spec@khr_texture_compression_astc@miptree-gles hdr,Fail
+spec@khr_texture_compression_astc@miptree-gles hdr@HDR Profile,Fail
+spec@khr_texture_compression_astc@miptree-gles ldr,Fail
+spec@khr_texture_compression_astc@miptree-gles ldr@LDR Profile,Fail
+spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
+spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail
+spec@khr_texture_compression_astc@miptree-gles srgb-sd,Fail
+spec@khr_texture_compression_astc@miptree-gles srgb-sd@sRGB skip decode,Fail
+spec@khr_texture_compression_astc@miptree-gl hdr,Fail
+spec@khr_texture_compression_astc@miptree-gl hdr@HDR Profile,Fail
+spec@khr_texture_compression_astc@miptree-gl ldr,Fail
+spec@khr_texture_compression_astc@miptree-gl ldr@LDR Profile,Fail
+spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
+spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
+spec@khr_texture_compression_astc@miptree-gl srgb-sd,Fail
+spec@khr_texture_compression_astc@miptree-gl srgb-sd@sRGB skip decode,Fail
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles hdr,Fail
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles hdr@HDR Profile,Fail
+spec@khr_texture_compression_astc@sliced-3d-miptree-gl hdr,Fail
+spec@khr_texture_compression_astc@sliced-3d-miptree-gl hdr@HDR Profile,Fail
+
+spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageStore,Fail
+spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3,Fail
+
+# "Failure with Polygon Stipple set to fail mode."
+spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
+
+spec@!opengl 1.0@gl-1.0-spot-light,Fail
+
+# crash in tgsi exec doing st_freedback_draw_vbo().
+spec@!opengl 1.0@rasterpos,Crash
+
+spec@!opengl 1.1@linestipple@Factor 2x,Fail
+spec@!opengl 1.1@linestipple@Factor 3x,Fail
+spec@!opengl 1.1@linestipple,Fail
+spec@!opengl 1.1@linestipple@Line loop,Fail
+spec@!opengl 1.1@linestipple@Line strip,Fail
+spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
+spec@!opengl 1.1@polygon-mode-facing,Fail
+spec@!opengl 1.1@polygon-mode,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on bottom edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on left edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on right edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on top edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 1: Expected blue pixel in center,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 2: Expected blue pixel in center,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 2: Expected white pixel on right edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 2: Expected white pixel on top edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 5: Expected blue pixel in center,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 6: Expected blue pixel in center,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on right edge,Fail
+spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,Fail
+spec@!opengl 1.1@polygon-mode-offset,Fail
+spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
+
+
+spec@!opengl 2.1@pbo,Fail
+spec@!opengl 2.1@pbo@test_polygon_stip,Fail
+spec@!opengl 2.1@polygon-stipple-fs,Fail
+spec@!opengl 3.0@clearbuffer-depth-cs-probe,Timeout
+spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
+spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
+spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
+spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
+spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
+
+spec@!opengl 1.0@depth-clear-precision-check,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth24,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth24_stencil8,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
+
+# timestamp/time-elapsed qbo tests fail due to lack of way to convert
+# from ticks to ns on the CP (ie. we'd need to spin up a compute shader
+# or something equally drastic)
+spec@arb_query_buffer_object@qbo,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-ASYNC_CPU_READ_AFTER-GL_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-ASYNC_CPU_READ_AFTER-GL_UNSIGNED_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-ASYNC_CPU_READ_AFTER-GL_UNSIGNED_INT64_ARB,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_UNSIGNED_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIMESTAMP-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_UNSIGNED_INT64_ARB,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIME_ELAPSED-ASYNC_CPU_READ_AFTER-GL_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIME_ELAPSED-ASYNC_CPU_READ_AFTER-GL_UNSIGNED_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIME_ELAPSED-ASYNC_CPU_READ_AFTER-GL_UNSIGNED_INT64_ARB,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIME_ELAPSED-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIME_ELAPSED-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_UNSIGNED_INT,Fail
+spec@arb_query_buffer_object@qbo@query-GL_TIME_ELAPSED-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_UNSIGNED_INT64_ARB,Fail
 
 # https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3759
 # deqp-vk: ../src/freedreno/vulkan/tu_pipeline.c:3894: tu_pipeline_builder_init_graphics: Assertion `subpass->color_count == 0 || !create_info->pColorBlendState || subpass->color_count == create_info->pColorBlendState->attachmentCount' failed
@@ -58,3 +465,6 @@ gmem-dEQP-VK.pipeline.fast_linked_library.color_write_enable_maxa.cwe_after_bind
 
 spill-dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_bool,Fail
 spill-dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_bool_requiredsubgroupsize128,Fail
+
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7152
+spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail

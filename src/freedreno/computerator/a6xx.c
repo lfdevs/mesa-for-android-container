@@ -317,8 +317,9 @@ cs_ibo_emit(struct fd_ringbuffer *ring, struct fd_submit *submit,
 
       OUT_RING(state, A6XX_TEX_CONST_0_FMT(FMT6_32_UINT) | A6XX_TEX_CONST_0_TILE_MODE(0));
       OUT_RING(state, A6XX_TEX_CONST_1_WIDTH(width) | A6XX_TEX_CONST_1_HEIGHT(height));
-      OUT_RING(state, A6XX_TEX_CONST_2_PITCH(0) | A6XX_TEX_CONST_2_BUFFER |
-                         A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER));
+      OUT_RING(state, A6XX_TEX_CONST_2_PITCH(0) |
+                      A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
+                      A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER));
       OUT_RING(state, A6XX_TEX_CONST_3_ARRAY_PITCH(0));
       OUT_RELOC(state, kernel->bufs[i], 0, 0, 0);
       OUT_RING(state, 0x00000000);

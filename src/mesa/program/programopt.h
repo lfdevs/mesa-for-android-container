@@ -26,7 +26,7 @@
 #ifndef PROGRAMOPT_H
 #define PROGRAMOPT_H 1
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "prog_parameter.h"
 
 

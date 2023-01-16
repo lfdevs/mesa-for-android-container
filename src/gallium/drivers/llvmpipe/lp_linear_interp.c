@@ -26,7 +26,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #include "util/u_math.h"
 #include "util/u_cpu_detect.h"
@@ -41,7 +41,7 @@
 #include "lp_linear_priv.h"
 
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
 
 #define FIXED15_ONE 0x7fff
 
@@ -228,7 +228,7 @@ lp_linear_init_interp(struct lp_linear_interp *interp,
    return TRUE;
 }
 
-#else //PIPE_ARCH_SSE
+#else //DETECT_ARCH_SSE
 
 boolean
 lp_linear_init_interp(struct lp_linear_interp *interp,
@@ -243,4 +243,4 @@ lp_linear_init_interp(struct lp_linear_interp *interp,
    return FALSE;
 }
 
-#endif //PIPE_ARCH_SSE
+#endif //DETECT_ARCH_SSE

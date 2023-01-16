@@ -490,7 +490,8 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     r300->hyperz_time_of_last_flush = os_time_get();
 
     /* Register allocator state */
-    rc_init_regalloc_state(&r300->fs_regalloc_state);
+    rc_init_regalloc_state(&r300->fs_regalloc_state, RC_FRAGMENT_PROGRAM);
+    rc_init_regalloc_state(&r300->vs_regalloc_state, RC_VERTEX_PROGRAM);
 
     /* Print driver info. */
 #ifdef DEBUG

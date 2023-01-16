@@ -112,13 +112,6 @@ find_and_remove_unused(struct ir3 *ir, struct ir3_shader_variant *so)
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
          if (instr->opc == OPC_META_INPUT) {
-            /* special case, if pre-fs texture fetch used, we cannot
-             * eliminate the barycentric i/j input
-             */
-            if (so->num_sampler_prefetch &&
-                instr->input.sysval == SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL)
-               continue;
-
             /* Without GS header geometry shader is never invoked. */
             if (instr->input.sysval == SYSTEM_VALUE_GS_HEADER_IR3)
                continue;

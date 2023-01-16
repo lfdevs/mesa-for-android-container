@@ -548,8 +548,8 @@ anv_image_init_from_gralloc(struct anv_device *device,
                                      &mem_reqs);
 
    VkDeviceSize aligned_image_size =
-      align_u64(mem_reqs.memoryRequirements.size,
-                mem_reqs.memoryRequirements.alignment);
+      align64(mem_reqs.memoryRequirements.size,
+              mem_reqs.memoryRequirements.alignment);
 
    if (bo->size < aligned_image_size) {
       result = vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,

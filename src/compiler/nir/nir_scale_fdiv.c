@@ -36,24 +36,26 @@ nir_scale_fdiv_instr(nir_builder *b, nir_instr *instr, UNUSED void *_data)
 
    b->cursor = nir_before_instr(&alu->instr);
 
-   nir_ssa_def *fabs = nir_fabs(b, alu->src[1].src.ssa);
+   nir_ssa_def *orig_a = nir_ssa_for_alu_src(b, alu, 0);
+   nir_ssa_def *orig_b = nir_ssa_for_alu_src(b, alu, 1);
+   nir_ssa_def *fabs = nir_fabs(b, orig_b);
    nir_ssa_def *big = nir_flt(b, nir_imm_int(b, 0x7e800000), fabs);
    nir_ssa_def *small = nir_flt(b, fabs, nir_imm_int(b, 0x00800000));
 
-   nir_ssa_def *scaled_down_a = nir_fmul_imm(b, alu->src[0].src.ssa, 0.25);
-   nir_ssa_def *scaled_down_b = nir_fmul_imm(b, alu->src[1].src.ssa, 0.25);
-   nir_ssa_def *scaled_up_a = nir_fmul_imm(b, alu->src[0].src.ssa, 16777216.0);
-   nir_ssa_def *scaled_up_b = nir_fmul_imm(b, alu->src[1].src.ssa, 16777216.0);
+   nir_ssa_def *scaled_down_a = nir_fmul_imm(b, orig_a, 0.25);
+   nir_ssa_def *scaled_down_b = nir_fmul_imm(b, orig_b, 0.25);
+   nir_ssa_def *scaled_up_a = nir_fmul_imm(b, orig_a, 16777216.0);
+   nir_ssa_def *scaled_up_b = nir_fmul_imm(b, orig_b, 16777216.0);
 
    nir_ssa_def *final_a =
       nir_bcsel(b, big, scaled_down_a,
-     (nir_bcsel(b, small, scaled_up_a, alu->src[0].src.ssa)));
+     (nir_bcsel(b, small, scaled_up_a, orig_a)));
    nir_ssa_def *final_b =
       nir_bcsel(b, big, scaled_down_b,
-     (nir_bcsel(b, small, scaled_up_b, alu->src[1].src.ssa)));
+     (nir_bcsel(b, small, scaled_up_b, orig_b)));
 
-   nir_instr_rewrite_src_ssa(instr, &alu->src[0].src, final_a);
-   nir_instr_rewrite_src_ssa(instr, &alu->src[1].src, final_b);
+   nir_ssa_def *new_div = nir_fdiv(b, final_a, final_b);
+   nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, new_div);
 
    return true;
 }

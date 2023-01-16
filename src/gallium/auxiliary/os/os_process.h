@@ -29,16 +29,16 @@
 #ifndef OS_PROCESS_H
 #define OS_PROCESS_H
 
+#include <stdbool.h>
 
-#include "pipe/p_compiler.h"
-
-
-extern boolean
-os_get_process_name(char *str, size_t size);
+#include "util/u_process.h"
 
 
-extern boolean
-os_get_command_line(char *cmdline, size_t size);
+static inline bool
+os_get_process_name(char *str, size_t size)
+{
+   return util_get_process_name_may_override("GALLIUM_PROCESS_NAME", str, size);
+}
 
 
 #endif /* OS_PROCESS_H */

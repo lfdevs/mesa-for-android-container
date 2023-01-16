@@ -39,6 +39,9 @@ extern "C" {
 #include <sys/ioctl.h>
 
 #include "intel_engine.h"
+#include "util/macros.h"
+
+#define RCS_TIMESTAMP 0x2358
 
 static inline uint64_t
 intel_canonical_address(uint64_t v)
@@ -158,16 +161,34 @@ intel_i915_query_alloc(int fd, uint64_t query_id, int32_t *query_length)
 
 bool intel_gem_supports_syncobj_wait(int fd);
 
-int intel_gem_create_context_engines(int fd,
-                                     const struct intel_query_engine_info *info,
-                                     int num_engines, enum intel_engine_class *engine_classes);
+bool intel_gem_create_context(int fd, uint32_t *context_id);
+bool intel_gem_destroy_context(int fd, uint32_t context_id);
+bool
+intel_gem_create_context_engines(int fd,
+                                 const struct intel_query_engine_info *info,
+                                 int num_engines, enum intel_engine_class *engine_classes,
+                                 uint32_t *context_id);
+bool
+intel_gem_set_context_param(int fd, uint32_t context, uint32_t param,
+                            uint64_t value);
+bool
+intel_gem_get_context_param(int fd, uint32_t context, uint32_t param,
+                            uint64_t *value);
 
 bool intel_gem_read_render_timestamp(int fd, uint64_t *value);
+bool intel_gem_get_param(int fd, uint32_t param, int *value);
+bool intel_gem_can_render_on_fd(int fd);
 
 #ifdef __cplusplus
 }
 #endif
 
+enum intel_gem_create_context_flags {
+   INTEL_GEM_CREATE_CONTEXT_EXT_RECOVERABLE_FLAG = BITFIELD_BIT(0),
+   INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG   = BITFIELD_BIT(1),
+};
+bool intel_gem_create_context_ext(int fd, enum intel_gem_create_context_flags flags,
+                                  uint32_t *ctx_id);
 bool intel_gem_supports_protected_context(int fd);
 
 static inline void

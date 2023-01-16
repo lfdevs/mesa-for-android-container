@@ -23,6 +23,8 @@
 #ifndef _NIR_RANGE_ANALYSIS_H_
 #define _NIR_RANGE_ANALYSIS_H_
 
+#include "nir.h"
+
 enum PACKED ssa_ranges {
    unknown = 0,
    lt_zero,

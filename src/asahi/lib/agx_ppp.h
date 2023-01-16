@@ -24,6 +24,7 @@
 #define AGX_PPP_H
 
 #include "asahi/lib/agx_pack.h"
+#include "pool.h"
 
 /* Opaque structure representing a PPP update */
 struct agx_ppp_update {
@@ -41,7 +42,9 @@ agx_ppp_update_size(struct AGX_PPP_HEADER *present)
 {
    size_t size = AGX_PPP_HEADER_LENGTH;
 
-#define PPP_CASE(x, y) if (present->x) size += AGX_ ## y ##_LENGTH;
+#define PPP_CASE(x, y)                                                         \
+   if (present->x)                                                             \
+      size += AGX_##y##_LENGTH;
    PPP_CASE(fragment_control, FRAGMENT_CONTROL);
    PPP_CASE(fragment_control_2, FRAGMENT_CONTROL_2);
    PPP_CASE(fragment_front_face, FRAGMENT_FACE);
@@ -84,16 +87,17 @@ agx_ppp_validate(struct agx_ppp_update *ppp, size_t size)
    return true;
 }
 
-#define agx_ppp_push(ppp, T, name) \
-   for (bool it = agx_ppp_validate((ppp), AGX_##T##_LENGTH); it; it = false, \
-        (ppp)->head += AGX_##T##_LENGTH) \
+#define agx_ppp_push(ppp, T, name)                                             \
+   for (bool it = agx_ppp_validate((ppp), AGX_##T##_LENGTH); it;               \
+        it = false, (ppp)->head += AGX_##T##_LENGTH)                           \
       agx_pack((ppp)->head, T, name)
 
-#define agx_ppp_push_packed(ppp, src, T) do { \
-      agx_ppp_validate((ppp), AGX_##T##_LENGTH); \
-      memcpy((ppp)->head, src, AGX_##T##_LENGTH); \
-      (ppp)->head += AGX_##T##_LENGTH; \
-   } while(0) \
+#define agx_ppp_push_packed(ppp, src, T)                                       \
+   do {                                                                        \
+      agx_ppp_validate((ppp), AGX_##T##_LENGTH);                               \
+      memcpy((ppp)->head, src, AGX_##T##_LENGTH);                              \
+      (ppp)->head += AGX_##T##_LENGTH;                                         \
+   } while (0)
 
 static inline struct agx_ppp_update
 agx_new_ppp_update(struct agx_pool *pool, struct AGX_PPP_HEADER present)
@@ -110,7 +114,9 @@ agx_new_ppp_update(struct agx_pool *pool, struct AGX_PPP_HEADER present)
 #endif
    };
 
-   agx_ppp_push(&ppp, PPP_HEADER, cfg) { cfg = present; }
+   agx_ppp_push(&ppp, PPP_HEADER, cfg) {
+      cfg = present;
+   }
 
    return ppp;
 }
@@ -131,7 +137,7 @@ agx_ppp_fini(uint8_t **out, struct agx_ppp_update *ppp)
 
    agx_pack(*out, PPP_STATE, cfg) {
       cfg.pointer_hi = (ppp->gpu_base >> 32);
-      cfg.pointer_lo = (uint32_t) ppp->gpu_base;
+      cfg.pointer_lo = (uint32_t)ppp->gpu_base;
       cfg.size_words = size_words;
    };
 

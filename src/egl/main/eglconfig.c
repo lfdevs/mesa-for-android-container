@@ -497,7 +497,7 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria)
 }
 
 static inline EGLBoolean
-_eglIsConfigAttribValid(_EGLConfig *conf, EGLint attr)
+_eglIsConfigAttribValid(const _EGLConfig *conf, EGLint attr)
 {
    if (_eglOffsetOfConfig(attr) < 0)
       return EGL_FALSE;
@@ -815,7 +815,7 @@ _eglChooseConfig(_EGLDisplay *disp, const EGLint *attrib_list,
  * Fallback for eglGetConfigAttrib.
  */
 EGLBoolean
-_eglGetConfigAttrib(_EGLDisplay *disp, _EGLConfig *conf,
+_eglGetConfigAttrib(const _EGLDisplay *disp, const _EGLConfig *conf,
                     EGLint attribute, EGLint *value)
 {
    if (!_eglIsConfigAttribValid(conf, attribute))

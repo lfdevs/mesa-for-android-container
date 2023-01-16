@@ -36,7 +36,7 @@ FUNC(FUNC_VARS)
    if (0) {
       debug_printf("%s: prim 0x%x, start %d, count %d, max_count_simple %d, "
                    "max_count_loop %d, max_count_fan %d\n",
-                   __FUNCTION__, prim, start, count, max_count_simple,
+                   __func__, prim, start, count, max_count_simple,
                    max_count_loop, max_count_fan);
    }
 

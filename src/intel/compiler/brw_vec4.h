@@ -113,8 +113,6 @@ public:
    brw_analysis<brw::vec4_live_variables, backend_shader> live_analysis;
    brw_analysis<brw::performance, vec4_visitor> performance_analysis;
 
-   bool need_all_constants_in_pull_buffer;
-
    /* Regs for vertex results.  Generated at ir_variable visiting time
     * for the ir->location's used.
     */
@@ -122,8 +120,6 @@ public:
    unsigned output_num_components[VARYING_SLOT_TESS_MAX][4];
    const char *output_reg_annotation[VARYING_SLOT_TESS_MAX];
    int uniforms;
-
-   src_reg shader_start_time;
 
    bool run();
    void fail(const char *msg, ...);
@@ -136,7 +132,6 @@ public:
    int choose_spill_reg(struct ra_graph *g);
    void spill_reg(unsigned spill_reg);
    void move_grf_array_access_to_scratch();
-   void move_uniform_array_access_to_pull_constants();
    void split_uniform_registers();
    void setup_push_ranges();
    virtual void invalidate_analysis(brw::analysis_dependency_class c);

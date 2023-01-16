@@ -6,8 +6,6 @@ glx@glx-visuals-stencil -pixmap,Crash
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
 glx@glx_arb_create_context_robustness@invalid reset notification strategy,Fail
-glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero,Fail
-glx@glx_arb_sync_control@waitformsc,Fail
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
 glx@glx_ext_import_context@get current display,Fail

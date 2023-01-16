@@ -49,7 +49,7 @@
 /* CSMT headers */
 #include "nine_queue.h"
 #include "nine_csmt_helper.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #define DBG_CHANNEL DBG_DEVICE
 

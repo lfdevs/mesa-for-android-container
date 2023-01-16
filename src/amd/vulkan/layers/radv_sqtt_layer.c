@@ -408,9 +408,10 @@ radv_handle_thread_trace(VkQueue _queue)
 VKAPI_ATTR VkResult VKAPI_CALL
 sqtt_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
 {
+   RADV_FROM_HANDLE(radv_queue, queue, _queue);
    VkResult result;
 
-   result = wsi_QueuePresentKHR(_queue, pPresentInfo);
+   result = queue->device->layer_dispatch.rgp.QueuePresentKHR(_queue, pPresentInfo);
    if (result != VK_SUCCESS)
       return result;
 
@@ -423,7 +424,7 @@ sqtt_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);                                   \
    radv_write_begin_general_api_marker(cmd_buffer, ApiCmd##api_name);                              \
    cmd_buffer->state.current_event_type = EventCmd##event_name;                                    \
-   radv_Cmd##cmd_name(__VA_ARGS__);                                                                \
+   cmd_buffer->device->layer_dispatch.rgp.Cmd##cmd_name(__VA_ARGS__);                              \
    cmd_buffer->state.current_event_type = EventInternalUnknown;                                    \
    radv_write_end_general_api_marker(cmd_buffer, ApiCmd##api_name);
 
@@ -484,7 +485,7 @@ sqtt_CmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer,
 VKAPI_ATTR void VKAPI_CALL
 sqtt_CmdDispatch(VkCommandBuffer commandBuffer, uint32_t x, uint32_t y, uint32_t z)
 {
-   EVENT_MARKER(Dispatch, commandBuffer, x, y, z);
+   EVENT_MARKER_ALIAS(DispatchBase, Dispatch, commandBuffer, 0, 0, 0, x, y, z);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -683,7 +684,7 @@ sqtt_CmdCopyMemoryToAccelerationStructureKHR(VkCommandBuffer commandBuffer,
 #define API_MARKER_ALIAS(cmd_name, api_name, ...)                                                  \
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);                                   \
    radv_write_begin_general_api_marker(cmd_buffer, ApiCmd##api_name);                              \
-   radv_Cmd##cmd_name(__VA_ARGS__);                                                                \
+   cmd_buffer->device->layer_dispatch.rgp.Cmd##cmd_name(__VA_ARGS__);                              \
    radv_write_end_general_api_marker(cmd_buffer, ApiCmd##api_name);
 
 #define API_MARKER(cmd_name, ...) API_MARKER_ALIAS(cmd_name, cmd_name, __VA_ARGS__);
@@ -887,7 +888,7 @@ sqtt_CmdBeginDebugUtilsLabelEXT(VkCommandBuffer commandBuffer,
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    radv_write_user_event_marker(cmd_buffer, UserEventPush, pLabelInfo->pLabelName);
 
-   vk_common_CmdBeginDebugUtilsLabelEXT(commandBuffer, pLabelInfo);
+   cmd_buffer->device->layer_dispatch.rgp.CmdBeginDebugUtilsLabelEXT(commandBuffer, pLabelInfo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -896,7 +897,7 @@ sqtt_CmdEndDebugUtilsLabelEXT(VkCommandBuffer commandBuffer)
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    radv_write_user_event_marker(cmd_buffer, UserEventPop, NULL);
 
-   vk_common_CmdEndDebugUtilsLabelEXT(commandBuffer);
+   cmd_buffer->device->layer_dispatch.rgp.CmdEndDebugUtilsLabelEXT(commandBuffer);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -906,7 +907,7 @@ sqtt_CmdInsertDebugUtilsLabelEXT(VkCommandBuffer commandBuffer,
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    radv_write_user_event_marker(cmd_buffer, UserEventTrigger, pLabelInfo->pLabelName);
 
-   vk_common_CmdInsertDebugUtilsLabelEXT(commandBuffer, pLabelInfo);
+   cmd_buffer->device->layer_dispatch.rgp.CmdInsertDebugUtilsLabelEXT(commandBuffer, pLabelInfo);
 }
 
 /* Pipelines */
@@ -1103,8 +1104,8 @@ sqtt_CreateGraphicsPipelines(VkDevice _device, VkPipelineCache pipelineCache, ui
    RADV_FROM_HANDLE(radv_device, device, _device);
    VkResult result;
 
-   result = radv_CreateGraphicsPipelines(_device, pipelineCache, count, pCreateInfos, pAllocator,
-                                         pPipelines);
+   result = device->layer_dispatch.rgp.CreateGraphicsPipelines(
+      _device, pipelineCache, count, pCreateInfos, pAllocator, pPipelines);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1137,8 +1138,8 @@ sqtt_CreateComputePipelines(VkDevice _device, VkPipelineCache pipelineCache, uin
    RADV_FROM_HANDLE(radv_device, device, _device);
    VkResult result;
 
-   result = radv_CreateComputePipelines(_device, pipelineCache, count, pCreateInfos, pAllocator,
-                                        pPipelines);
+   result = device->layer_dispatch.rgp.CreateComputePipelines(_device, pipelineCache, count,
+                                                              pCreateInfos, pAllocator, pPipelines);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1172,8 +1173,8 @@ sqtt_CreateRayTracingPipelinesKHR(VkDevice _device, VkDeferredOperationKHR defer
    RADV_FROM_HANDLE(radv_device, device, _device);
    VkResult result;
 
-   result = radv_CreateRayTracingPipelinesKHR(_device, deferredOperation, pipelineCache, count,
-                                              pCreateInfos, pAllocator, pPipelines);
+   result = device->layer_dispatch.rgp.CreateRayTracingPipelinesKHR(
+      _device, deferredOperation, pipelineCache, count, pCreateInfos, pAllocator, pPipelines);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1210,7 +1211,7 @@ sqtt_DestroyPipeline(VkDevice _device, VkPipeline _pipeline,
 
    radv_unregister_pipeline(device, pipeline);
 
-   radv_DestroyPipeline(_device, _pipeline, pAllocator);
+   device->layer_dispatch.rgp.DestroyPipeline(_device, _pipeline, pAllocator);
 }
 
 #undef API_MARKER

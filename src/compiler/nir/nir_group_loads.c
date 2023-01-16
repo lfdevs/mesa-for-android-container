@@ -91,6 +91,9 @@ get_intrinsic_resource(nir_intrinsic_instr *intr)
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_bindless_image_sparse_load:
    case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_image_fragment_mask_load_amd:
+   case nir_intrinsic_image_deref_fragment_mask_load_amd:
+   case nir_intrinsic_bindless_image_fragment_mask_load_amd:
       return intr->src[0].ssa->parent_instr;
    default:
       return NULL;

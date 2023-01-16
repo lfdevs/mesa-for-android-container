@@ -25,8 +25,9 @@
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
-#include "genxml/gen_rt_pack.h"
+#include "genxml/genX_rt_pack.h"
 
+#include "common/intel_genX_state.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_sample_positions.h"
 #include "nir/nir_xfb_info.h"
@@ -193,7 +194,9 @@ emit_vertex_input(struct anv_graphics_pipeline *pipeline,
    }
 
    const uint32_t id_slot = elem_count;
+   const uint32_t drawid_slot = elem_count + needs_svgs_elem;
    if (needs_svgs_elem) {
+#if GFX_VER < 11
       /* From the Broadwell PRM for the 3D_Vertex_Component_Control enum:
        *    "Within a VERTEX_ELEMENT_STATE structure, if a Component
        *    Control field is set to something other than VFCOMP_STORE_SRC,
@@ -206,13 +209,20 @@ emit_vertex_input(struct anv_graphics_pipeline *pipeline,
       uint32_t base_ctrl = (vs_prog_data->uses_firstvertex ||
                             vs_prog_data->uses_baseinstance) ?
                            VFCOMP_STORE_SRC : VFCOMP_STORE_0;
+#endif
 
       struct GENX(VERTEX_ELEMENT_STATE) element = {
          .VertexBufferIndex = ANV_SVGS_VB_INDEX,
          .Valid = true,
          .SourceElementFormat = ISL_FORMAT_R32G32_UINT,
+#if GFX_VER >= 11
+         /* On gen11, these are taken care of by extra parameter slots */
+         .Component0Control = VFCOMP_STORE_0,
+         .Component1Control = VFCOMP_STORE_0,
+#else
          .Component0Control = base_ctrl,
          .Component1Control = base_ctrl,
+#endif
          .Component2Control = VFCOMP_STORE_0,
          .Component3Control = VFCOMP_STORE_0,
       };
@@ -232,13 +242,38 @@ emit_vertex_input(struct anv_graphics_pipeline *pipeline,
       sgvs.InstanceIDElementOffset     = id_slot;
    }
 
-   const uint32_t drawid_slot = elem_count + needs_svgs_elem;
+#if GFX_VER >= 11
+   anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_VF_SGVS_2), sgvs) {
+      /* gl_BaseVertex */
+      sgvs.XP0Enable                   = vs_prog_data->uses_firstvertex;
+      sgvs.XP0SourceSelect             = XP0_PARAMETER;
+      sgvs.XP0ComponentNumber          = 0;
+      sgvs.XP0ElementOffset            = id_slot;
+
+      /* gl_BaseInstance */
+      sgvs.XP1Enable                   = vs_prog_data->uses_baseinstance;
+      sgvs.XP1SourceSelect             = StartingInstanceLocation;
+      sgvs.XP1ComponentNumber          = 1;
+      sgvs.XP1ElementOffset            = id_slot;
+
+      /* gl_DrawID */
+      sgvs.XP2Enable                   = vs_prog_data->uses_drawid;
+      sgvs.XP2ComponentNumber          = 0;
+      sgvs.XP2ElementOffset            = drawid_slot;
+   }
+#endif
+
    if (vs_prog_data->uses_drawid) {
       struct GENX(VERTEX_ELEMENT_STATE) element = {
          .VertexBufferIndex = ANV_DRAWID_VB_INDEX,
          .Valid = true,
          .SourceElementFormat = ISL_FORMAT_R32_UINT,
+#if GFX_VER >= 11
+         /* On gen11, this is taken care of by extra parameter slots */
+         .Component0Control = VFCOMP_STORE_0,
+#else
          .Component0Control = VFCOMP_STORE_SRC,
+#endif
          .Component1Control = VFCOMP_STORE_0,
          .Component2Control = VFCOMP_STORE_0,
          .Component3Control = VFCOMP_STORE_0,
@@ -639,7 +674,7 @@ genX(rasterization_mode)(VkPolygonMode raster_mode,
        */
       switch (line_mode) {
       case VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT:
-         *api_mode = DX100;
+         *api_mode = DX101;
 #if GFX_VER <= 9
          /* Prior to ICL, the algorithm the HW uses to draw wide lines
           * doesn't quite match what the CTS expects, at least for rectangular
@@ -662,7 +697,7 @@ genX(rasterization_mode)(VkPolygonMode raster_mode,
          unreachable("Unsupported line rasterization mode");
       }
    } else {
-      *api_mode = DX100;
+      *api_mode = DX101;
       *msaa_rasterization_enable = true;
    }
 }
@@ -724,6 +759,7 @@ emit_rs_state(struct anv_graphics_pipeline *pipeline,
 
    raster.ConservativeRasterizationEnable =
       rs->conservative_mode != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
+   raster.APIMode = DX101;
 
    GENX(3DSTATE_SF_pack)(NULL, pipeline->gfx8.sf, &sf);
    GENX(3DSTATE_RASTER_pack)(NULL, pipeline->gfx8.raster, &raster);
@@ -1079,6 +1115,8 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
    };
 
    if (xfb_info) {
+      pipeline->uses_xfb = true;
+
       so.SOFunctionEnable = true;
       so.SOStatisticsEnable = true;
 
@@ -1487,11 +1525,8 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PS), ps) {
-      brw_fs_get_dispatch_enables(devinfo, wm_prog_data,
-                                  ms != NULL ? ms->rasterization_samples : 1,
-                                  &ps._8PixelDispatchEnable,
-                                  &ps._16PixelDispatchEnable,
-                                  &ps._32PixelDispatchEnable);
+      intel_set_ps_dispatch_state(&ps, devinfo, wm_prog_data,
+                                  ms != NULL ? ms->rasterization_samples : 1);
 
       ps.KernelStartPointer0 = fs_bin->kernel.offset +
                                brw_wm_prog_data_prog_offset(wm_prog_data, ps, 0);
@@ -1771,7 +1806,7 @@ emit_mesh_state(struct anv_graphics_pipeline *pipeline)
       mesh.LocalXMaximum                     = mesh_dispatch.group_size - 1;
       mesh.EmitLocalIDX                      = true;
 
-      mesh.MaximumPrimitiveCount             = mesh_prog_data->map.max_primitives - 1;
+      mesh.MaximumPrimitiveCount             = MAX2(mesh_prog_data->map.max_primitives, 1) - 1;
       mesh.OutputTopology                    = output_topology;
       mesh.PerVertexDataPitch                = mesh_prog_data->map.per_vertex_pitch_dw / 8;
       mesh.PerPrimitiveDataPresent           = mesh_prog_data->map.per_primitive_pitch_dw > 0;
@@ -1977,28 +2012,28 @@ genX(ray_tracing_pipeline_emit)(struct anv_ray_tracing_pipeline *pipeline)
 
       switch (group->type) {
       case VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR: {
-         struct GFX_RT_GENERAL_SBT_HANDLE sh = {};
+         struct GENX(RT_GENERAL_SBT_HANDLE) sh = {};
          sh.General = anv_shader_bin_get_bsr(group->general, 32);
-         GFX_RT_GENERAL_SBT_HANDLE_pack(NULL, group->handle, &sh);
+         GENX(RT_GENERAL_SBT_HANDLE_pack)(NULL, group->handle, &sh);
          break;
       }
 
       case VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR: {
-         struct GFX_RT_TRIANGLES_SBT_HANDLE sh = {};
+         struct GENX(RT_TRIANGLES_SBT_HANDLE) sh = {};
          if (group->closest_hit)
             sh.ClosestHit = anv_shader_bin_get_bsr(group->closest_hit, 32);
          if (group->any_hit)
             sh.AnyHit = anv_shader_bin_get_bsr(group->any_hit, 24);
-         GFX_RT_TRIANGLES_SBT_HANDLE_pack(NULL, group->handle, &sh);
+         GENX(RT_TRIANGLES_SBT_HANDLE_pack)(NULL, group->handle, &sh);
          break;
       }
 
       case VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR: {
-         struct GFX_RT_PROCEDURAL_SBT_HANDLE sh = {};
+         struct GENX(RT_PROCEDURAL_SBT_HANDLE) sh = {};
          if (group->closest_hit)
             sh.ClosestHit = anv_shader_bin_get_bsr(group->closest_hit, 32);
          sh.Intersection = anv_shader_bin_get_bsr(group->intersection, 24);
-         GFX_RT_PROCEDURAL_SBT_HANDLE_pack(NULL, group->handle, &sh);
+         GENX(RT_PROCEDURAL_SBT_HANDLE_pack)(NULL, group->handle, &sh);
          break;
       }
 

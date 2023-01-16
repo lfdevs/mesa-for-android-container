@@ -30,7 +30,7 @@
 #include "xa_tracker.h"
 #include "xa_priv.h"
 #include "pipe/p_state.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe-loader/pipe_loader.h"
 #include "frontend/drm_driver.h"
 #include "util/u_inlines.h"

@@ -473,20 +473,10 @@ struct lvp_query_pool {
    struct pipe_query *queries[0];
 };
 
-enum lvp_cmd_buffer_status {
-   LVP_CMD_BUFFER_STATUS_INVALID,
-   LVP_CMD_BUFFER_STATUS_INITIAL,
-   LVP_CMD_BUFFER_STATUS_RECORDING,
-   LVP_CMD_BUFFER_STATUS_EXECUTABLE,
-   LVP_CMD_BUFFER_STATUS_PENDING,
-};
-
 struct lvp_cmd_buffer {
    struct vk_command_buffer vk;
 
    struct lvp_device *                          device;
-
-   enum lvp_cmd_buffer_status status;
 
    uint8_t push_constants[MAX_PUSH_CONSTANTS_SIZE];
 };

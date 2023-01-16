@@ -28,7 +28,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
-#include "os/os_mman.h"
+#include "util/os_mman.h"
 #include "util/os_file.h"
 #include "util/os_time.h"
 #include "util/u_memory.h"

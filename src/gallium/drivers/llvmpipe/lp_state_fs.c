@@ -170,8 +170,6 @@ static inline void
 lp_mem_type_from_format_desc(const struct util_format_description *format_desc,
                              struct lp_type* type)
 {
-   unsigned i;
-
    if (format_expands_to_float_soa(format_desc)) {
       /* just make this a uint with width of block */
       type->floating = false;
@@ -183,11 +181,7 @@ lp_mem_type_from_format_desc(const struct util_format_description *format_desc,
       return;
    }
 
-   for (i = 0; i < 4; i++) {
-      if (format_desc->channel[i].type != UTIL_FORMAT_TYPE_VOID)
-         break;
-   }
-   unsigned chan = i;
+   int chan = util_format_get_first_non_void_channel(format_desc->format);
 
    memset(type, 0, sizeof(struct lp_type));
    type->floating = format_desc->channel[chan].type == UTIL_FORMAT_TYPE_FLOAT;
@@ -1730,11 +1724,7 @@ lp_blend_type_from_format_desc(const struct util_format_description *format_desc
       return;
    }
 
-   unsigned i;
-   for (i = 0; i < 4; i++)
-      if (format_desc->channel[i].type != UTIL_FORMAT_TYPE_VOID)
-         break;
-   const unsigned chan = i;
+   const int chan = util_format_get_first_non_void_channel(format_desc->format);
 
    memset(type, 0, sizeof(struct lp_type));
    type->floating = format_desc->channel[chan].type == UTIL_FORMAT_TYPE_FLOAT;

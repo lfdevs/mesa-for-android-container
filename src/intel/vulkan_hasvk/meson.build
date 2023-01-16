@@ -27,6 +27,7 @@ anv_hasvk_entrypoints = custom_target(
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'anv',
     '--device-prefix', 'gfx7', '--device-prefix', 'gfx75',
     '--device-prefix', 'gfx8',
+    '--device-prefix', 'doom64',
   ],
   depend_files : vk_entrypoints_gen_depend_files,
 )
@@ -98,6 +99,7 @@ foreach g : [['70', ['gfx7_cmd_buffer.c']],
 endforeach
 
 libanv_files = files(
+  'layers/anv_doom64.c',
   'anv_allocator.c',
   'anv_android.h',
   'anv_batch_chain.c',
@@ -112,7 +114,6 @@ libanv_files = files(
   'anv_measure.c',
   'anv_measure.h',
   'anv_nir.h',
-  'anv_nir_add_base_work_group_id.c',
   'anv_nir_apply_pipeline_layout.c',
   'anv_nir_compute_push_layout.c',
   'anv_nir_lower_multiview.c',

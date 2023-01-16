@@ -26,7 +26,7 @@
  **************************************************************************/
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/shader_types.h"
 
 #include "main/shaderobj.h"

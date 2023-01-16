@@ -79,12 +79,12 @@ struct draw_vs_variant {
                       unsigned stride,
                       unsigned max_stride);
 
-   void (PIPE_CDECL *run_linear)(struct draw_vs_variant *shader,
+   void (UTIL_CDECL *run_linear)(struct draw_vs_variant *shader,
                                  unsigned start,
                                  unsigned count,
                                  void *output_buffer);
 
-   void (PIPE_CDECL *run_elts)(struct draw_vs_variant *shader,
+   void (UTIL_CDECL *run_elts)(struct draw_vs_variant *shader,
                                const unsigned *elts,
                                unsigned count,
                                void *output_buffer);

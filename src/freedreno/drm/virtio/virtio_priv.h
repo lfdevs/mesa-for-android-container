@@ -131,12 +131,6 @@ struct virtio_pipe {
    struct slab_parent_pool ring_pool;
 
    /**
-    * If we *ever* see an in-fence-fd, assume that userspace is
-    * not relying on implicit fences.
-    */
-   bool no_implicit_sync;
-
-   /**
     * We know that the kernel allocated fence seqno's sequentially per-
     * submitqueue in a range 1..INT_MAX, which is incremented *after* any
     * point where the submit ioctl could be restarted.  So we just *guess*

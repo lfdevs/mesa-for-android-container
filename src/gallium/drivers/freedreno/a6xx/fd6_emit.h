@@ -49,7 +49,6 @@ enum fd6_state_id {
    FD6_GROUP_PROG_INTERP,
    FD6_GROUP_PROG_FB_RAST,
    FD6_GROUP_LRZ,
-   FD6_GROUP_LRZ_BINNING,
    FD6_GROUP_VTXSTATE,
    FD6_GROUP_VBO,
    FD6_GROUP_CONST,
@@ -67,6 +66,12 @@ enum fd6_state_id {
    FD6_GROUP_BLEND_COLOR,
    FD6_GROUP_SO,
    FD6_GROUP_IBO,
+
+   /*
+    * Virtual state-groups, which don't turn into a CP_SET_DRAW_STATE group
+    */
+
+   FD6_GROUP_PROG_KEY,  /* Set for any state which could change shader key */
    FD6_GROUP_NON_GROUP, /* placeholder group for state emit in IB2, keep last */
 };
 
@@ -84,67 +89,95 @@ struct fd6_state_group {
    uint32_t enable_mask;
 };
 
+struct fd6_state {
+   struct fd6_state_group groups[32];
+   unsigned num_groups;
+};
+
+static inline void
+fd6_state_emit(struct fd6_state *state, struct fd_ringbuffer *ring)
+{
+   if (!state->num_groups)
+      return;
+
+   OUT_PKT7(ring, CP_SET_DRAW_STATE, 3 * state->num_groups);
+   for (unsigned i = 0; i < state->num_groups; i++) {
+      struct fd6_state_group *g = &state->groups[i];
+      unsigned n = g->stateobj ? fd_ringbuffer_size(g->stateobj) / 4 : 0;
+
+      assert((g->enable_mask & ~ENABLE_ALL) == 0);
+
+      if (n == 0) {
+         OUT_RING(ring, CP_SET_DRAW_STATE__0_COUNT(0) |
+                        CP_SET_DRAW_STATE__0_DISABLE | g->enable_mask |
+                        CP_SET_DRAW_STATE__0_GROUP_ID(g->group_id));
+         OUT_RING(ring, 0x00000000);
+         OUT_RING(ring, 0x00000000);
+      } else {
+         OUT_RING(ring, CP_SET_DRAW_STATE__0_COUNT(n) | g->enable_mask |
+                        CP_SET_DRAW_STATE__0_GROUP_ID(g->group_id));
+         OUT_RB(ring, g->stateobj);
+      }
+
+      if (g->stateobj)
+         fd_ringbuffer_del(g->stateobj);
+   }
+}
+
+static inline void
+fd6_state_take_group(struct fd6_state *state, struct fd_ringbuffer *stateobj,
+                     enum fd6_state_id group_id)
+{
+   static const unsigned enable_mask[32] = {
+         [FD6_GROUP_PROG] = ENABLE_DRAW,
+         [FD6_GROUP_PROG_BINNING] = CP_SET_DRAW_STATE__0_BINNING,
+         [FD6_GROUP_PROG_INTERP] = ENABLE_DRAW,
+         [FD6_GROUP_FS_TEX] = ENABLE_DRAW,
+   };
+   assert(state->num_groups < ARRAY_SIZE(state->groups));
+   struct fd6_state_group *g = &state->groups[state->num_groups++];
+   g->stateobj = stateobj;
+   g->group_id = group_id;
+   g->enable_mask = enable_mask[group_id] ? enable_mask[group_id] : ENABLE_ALL;
+}
+
+static inline void
+fd6_state_add_group(struct fd6_state *state, struct fd_ringbuffer *stateobj,
+                    enum fd6_state_id group_id)
+{
+   fd6_state_take_group(state, fd_ringbuffer_ref(stateobj), group_id);
+}
+
 /* grouped together emit-state for prog/vertex/state emit: */
 struct fd6_emit {
    struct fd_context *ctx;
-   const struct fd_vertex_state *vtx;
    const struct pipe_draw_info *info;
-   unsigned drawid_offset;
    const struct pipe_draw_indirect_info *indirect;
    const struct pipe_draw_start_count_bias *draw;
-   struct ir3_cache_key key;
-   enum fd_dirty_3d_state dirty;
    uint32_t dirty_groups;
 
    uint32_t sprite_coord_enable; /* bitmask */
-   bool sprite_coord_mode;
-   bool rasterflat;
-   bool primitive_restart;
+   bool sprite_coord_mode : 1;
+   bool rasterflat : 1;
+   bool primitive_restart : 1;
+   uint8_t streamout_mask;
 
    /* cached to avoid repeated lookups: */
    const struct fd6_program_state *prog;
 
-   struct ir3_shader_variant *bs;
    struct ir3_shader_variant *vs;
    struct ir3_shader_variant *hs;
    struct ir3_shader_variant *ds;
    struct ir3_shader_variant *gs;
    struct ir3_shader_variant *fs;
 
-   unsigned streamout_mask;
-
-   struct fd6_state_group groups[32];
-   unsigned num_groups;
+   struct fd6_state state;
 };
 
 static inline const struct fd6_program_state *
 fd6_emit_get_prog(struct fd6_emit *emit)
 {
-   if (!emit->prog) {
-      struct ir3_program_state *s = ir3_cache_lookup(
-         emit->ctx->shader_cache, &emit->key, &emit->ctx->debug);
-      emit->prog = fd6_program_state(s);
-   }
    return emit->prog;
-}
-
-static inline void
-fd6_emit_take_group(struct fd6_emit *emit, struct fd_ringbuffer *stateobj,
-                    enum fd6_state_id group_id, unsigned enable_mask)
-{
-   assert(emit->num_groups < ARRAY_SIZE(emit->groups));
-   struct fd6_state_group *g = &emit->groups[emit->num_groups++];
-   g->stateobj = stateobj;
-   g->group_id = group_id;
-   g->enable_mask = enable_mask;
-}
-
-static inline void
-fd6_emit_add_group(struct fd6_emit *emit, struct fd_ringbuffer *stateobj,
-                   enum fd6_state_id group_id, unsigned enable_mask)
-{
-   fd6_emit_take_group(emit, fd_ringbuffer_ref(stateobj), group_id,
-                       enable_mask);
 }
 
 static inline unsigned
@@ -277,13 +310,13 @@ fd6_gl2spacing(enum gl_tess_spacing spacing)
    }
 }
 
-bool fd6_emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
+void fd6_emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
                        enum pipe_shader_type type,
-                       struct fd_texture_stateobj *tex, unsigned bcolor_offset,
+                       struct fd_texture_stateobj *tex,
                        const struct ir3_shader_variant *v) assert_dt;
 
-void fd6_emit_state(struct fd_ringbuffer *ring,
-                    struct fd6_emit *emit) assert_dt;
+void fd6_emit_3d_state(struct fd_ringbuffer *ring,
+                       struct fd6_emit *emit) assert_dt;
 
 void fd6_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
                        struct ir3_shader_variant *cp) assert_dt;

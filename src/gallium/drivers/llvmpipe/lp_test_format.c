@@ -133,7 +133,7 @@ add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
 }
 
 
-PIPE_ALIGN_STACK
+UTIL_ALIGN_STACK
 static boolean
 test_format_float(unsigned verbose, FILE *fp,
                   const struct util_format_description *desc,
@@ -237,7 +237,7 @@ test_format_float(unsigned verbose, FILE *fp,
 }
 
 
-PIPE_ALIGN_STACK
+UTIL_ALIGN_STACK
 static boolean
 test_format_unorm8(unsigned verbose, FILE *fp,
                    const struct util_format_description *desc,

@@ -38,7 +38,9 @@ nir_lower_pstipple_fs(struct nir_shader *shader,
                       bool fs_pos_is_sysval);
 
 void
-nir_lower_aaline_fs(struct nir_shader *shader, int *varying);
+nir_lower_aaline_fs(struct nir_shader *shader, int *varying,
+                    nir_variable *stipple_counter,
+                    nir_variable *stipple_pattern);
 
 void
 nir_lower_aapoint_fs(struct nir_shader *shader, int *varying);

@@ -818,6 +818,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 	int have_mova = 0, have_rel = 0;
 	int max_slots = bc->gfx_level == CAYMAN ? 4 : 5;
 
+   bool has_dot = false;
+
 	r = assign_alu_units(bc, alu_prev, prev);
 	if (r)
 		return r;
@@ -828,6 +830,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 			      return 0;
 		      if (is_alu_once_inst(prev[i]))
 			      return 0;
+				has_dot |= prev[i]->op == ALU_OP2_DOT || prev[i]->op == ALU_OP2_DOT_IEEE;
+
 
                       if (prev[i]->op == ALU_OP1_INTERP_LOAD_P0)
                          interp_xz |= 3;
@@ -840,6 +844,8 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 			if (slots[i]->pred_sel)
 				return 0;
 			if (is_alu_once_inst(slots[i]))
+				return 0;
+         has_dot |= slots[i]->op == ALU_OP2_DOT || slots[i]->op == ALU_OP2_DOT_IEEE;
 				return 0;
                         if (slots[i]->op == ALU_OP1_INTERP_LOAD_P0)
                            interp_xz |= 3;
@@ -889,7 +895,7 @@ static int merge_inst_groups(struct r600_bytecode *bc, struct r600_bytecode_alu 
 			result[i] = prev[i];
 			continue;
 		} else if (prev[i] && slots[i]) {
-			if (max_slots == 5 && result[4] == NULL && prev[4] == NULL && slots[4] == NULL) {
+			if (max_slots == 5 && !has_dot && result[4] == NULL && prev[4] == NULL && slots[4] == NULL) {
 				/* Trans unit is still free try to use it. */
 				if (is_alu_any_unit_inst(bc, slots[i]) && !alu_uses_lds(slots[i])) {
 					result[i] = prev[i];
@@ -2166,6 +2172,62 @@ static int print_indent(int p, int c)
 	return o;
 }
 
+const char *rat_instr_name[] = {
+   "NOP",
+   "STORE_TYPED",
+   "STORE_RAW",
+   "STORE_RAW_FDENORM",
+   "CMP_XCHG_INT",
+   "CMP_XCHG_FLT",
+   "CMP_XCHG_FDENORM",
+   "ADD",
+   "SUB",
+   "RSUB",
+   "MIN_INT",
+   "MIN_UINT",
+   "MAX_INT",
+   "MAX_UINT",
+   "AND",
+   "OR",
+   "XOR",
+   "MSKOR",
+   "INC_UINT",
+   "DEC_UINT",
+   "RESERVED20",
+   "RESERVED21",
+   "RESERVED22",
+   "RESERVED23",
+   "RESERVED24",
+   "RESERVED25",
+   "RESERVED26",
+   "RESERVED27",
+   "RESERVED28",
+   "RESERVED29",
+   "RESERVED30",
+   "RESERVED31",
+   "NOP_RTN",
+   "RESERVED33",
+   "XCHG_RTN",
+   "XCHG_FDENORM_RTN",
+   "CMPXCHG_INT_RTN",
+   "CMPXCHG_FLT_RTN",
+   "CMPXCHG_FDENORM_RTN",
+   "ADD_RTN",
+   "SUB_RTN",
+   "RSUB_RTN",
+   "MIN_INT_RTN",
+   "MIN_UINT_RTN",
+   "MAX_INT_RTN",
+   "MAX_UINT_RTN",
+   "AND_RTN",
+   "OR_RTN",
+   "XOR_RTN",
+   "MSKOR_RTN",
+   "INC_UINT_RTN",
+   "DEC_UINT_RTN",
+};
+
+
 void r600_bytecode_disasm(struct r600_bytecode *bc)
 {
 	const char *index_mode[] = {"CF_INDEX_NONE", "CF_INDEX_0", "CF_INDEX_1"};
@@ -2292,7 +2354,8 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 					if (cf->rat.index_mode) {
 						o += fprintf(stderr, "[IDX%d]", cf->rat.index_mode - 1);
 					}
-					o += fprintf(stderr, " INST: %d ", cf->rat.inst);
+               assert(ARRAY_SIZE(rat_instr_name) > cf->rat.inst);
+					o += fprintf(stderr, " %s ", rat_instr_name[cf->rat.inst]);
 				}
 
 				if (cf->output.burst_count > 1) {
@@ -2315,7 +2378,7 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 
 				if (cf->output.type == V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND ||
 				    cf->output.type == V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_READ_IND)
-					o += fprintf(stderr, " R%d", cf->output.index_gpr);
+					o += fprintf(stderr, " R%d.xyz", cf->output.index_gpr);
 
 				o += print_indent(o, 67);
 
@@ -2525,7 +2588,7 @@ void r600_bytecode_disasm(struct r600_bytecode *bc)
 		}
 
 		LIST_FOR_EACH_ENTRY(gds, &cf->gds, list) {
-			int o = 0;
+			UNUSED int o = 0;
 			o += fprintf(stderr, " %04d %08X %08X %08X   ", id, bc->bytecode[id],
 					bc->bytecode[id + 1], bc->bytecode[id + 2]);
 
@@ -2600,12 +2663,7 @@ void r600_vertex_data_type(enum pipe_format pformat,
 		goto out_unknown;
 	}
 
-	/* Find the first non-VOID channel. */
-	for (i = 0; i < 4; i++) {
-		if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-			break;
-		}
-	}
+	i = util_format_get_first_non_void_channel(pformat);
 
 	*endian = r600_endian_swap(desc->channel[i].size);
 

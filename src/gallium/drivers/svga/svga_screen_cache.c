@@ -159,7 +159,7 @@ svga_screen_cache_lookup(struct svga_screen *svgascreen,
    mtx_unlock(&cache->mutex);
 
    if (SVGA_DEBUG & DEBUG_DMA)
-      debug_printf("%s: cache %s after %u tries (bucket %d)\n", __FUNCTION__,
+      debug_printf("%s: cache %s after %u tries (bucket %d)\n", __func__,
                    handle ? "hit" : "miss", tries, bucket);
 
    return handle;
@@ -499,7 +499,7 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
 
    SVGA_DBG(DEBUG_CACHE|DEBUG_DMA,
             "%s sz %dx%dx%d mips %d faces %d arraySize %d cachable %d\n",
-            __FUNCTION__,
+            __func__,
             key->size.width,
             key->size.height,
             key->size.depth,

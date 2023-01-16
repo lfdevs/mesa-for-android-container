@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#include "pan_ir.h"
 #include "compiler/nir/nir_builder.h"
+#include "pan_ir.h"
 
 /* OpenCL uses 64-bit types for some intrinsic functions, including
  * global_invocation_id(). This could be worked around during conversion to
@@ -36,43 +36,41 @@
 static bool
 nir_lower_64bit_intrin_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-        if (instr->type != nir_instr_type_intrinsic)
-                return false;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-        nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
-        switch (intr->intrinsic) {
-        case nir_intrinsic_load_global_invocation_id:
-        case nir_intrinsic_load_global_invocation_id_zero_base:
-        case nir_intrinsic_load_workgroup_id:
-        case nir_intrinsic_load_num_workgroups:
-                break;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_global_invocation_id:
+   case nir_intrinsic_load_global_invocation_id_zero_base:
+   case nir_intrinsic_load_workgroup_id:
+   case nir_intrinsic_load_num_workgroups:
+      break;
 
-        default:
-                return false;
-        }
+   default:
+      return false;
+   }
 
-        if (nir_dest_bit_size(intr->dest) != 64)
-                return false;
+   if (nir_dest_bit_size(intr->dest) != 64)
+      return false;
 
-        b->cursor = nir_after_instr(instr);
+   b->cursor = nir_after_instr(instr);
 
-        assert(intr->dest.is_ssa);
-        intr->dest.ssa.bit_size = 32;
+   assert(intr->dest.is_ssa);
+   intr->dest.ssa.bit_size = 32;
 
-        nir_ssa_def *conv = nir_u2u64(b, &intr->dest.ssa);
+   nir_ssa_def *conv = nir_u2u64(b, &intr->dest.ssa);
 
-        nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, conv,
-                                       conv->parent_instr);
+   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, conv, conv->parent_instr);
 
-        return true;
+   return true;
 }
 
 bool
 pan_nir_lower_64bit_intrin(nir_shader *shader)
 {
-        return nir_shader_instructions_pass(shader,
-                                            nir_lower_64bit_intrin_instr,
-                                            nir_metadata_block_index | nir_metadata_dominance,
-                                            NULL);
+   return nir_shader_instructions_pass(
+      shader, nir_lower_64bit_intrin_instr,
+      nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

@@ -871,13 +871,14 @@ clc_spirv_to_dxil(struct clc_libclc *lib,
 
    NIR_PASS_V(nir, nir_lower_variable_initializers, ~(nir_var_function_temp | nir_var_shader_temp));
 
-   // Lower memcpy
-   NIR_PASS_V(nir, dxil_nir_lower_memcpy_deref);
-
    // Ensure the printf struct has explicit types, but we'll throw away the scratch size, because we haven't
    // necessarily removed all temp variables (e.g. the printf struct itself) at this point, so we'll rerun this later
    assert(nir->scratch_size == 0);
    NIR_PASS_V(nir, nir_lower_vars_to_explicit_types, nir_var_function_temp, glsl_get_cl_type_size_align);
+
+   // Lower memcpy
+   NIR_PASS_V(nir, nir_opt_memcpy);
+   NIR_PASS_V(nir, nir_lower_memcpy);
 
    nir_lower_printf_options printf_options = {
       .treat_doubles_as_floats = true,

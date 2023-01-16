@@ -13,3 +13,13 @@ glx@glx-copy-sub-buffer samples=16
 #  Serial number of failed request:  41
 #  Current serial number in output stream:  45
 glx@glx-multi-context-ib-1
+
+glx@glx-swap-copy
+
+# The following two case are xfails, but sometimes pass.
+spec@egl_chromium_sync_control@conformance
+# piglit: error: SBC did not change after second SwapBuffers: 0
+spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+
+# See the https://gitlab.freedesktop.org/mesa/mesa/-/issues/7547
+spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear

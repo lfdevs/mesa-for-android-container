@@ -105,7 +105,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
    /* apparently gfx702 also has 16-bank LDS but I can't find a family for that */
    program->dev.has_16bank_lds = family == CHIP_KABINI || family == CHIP_STONEY;
 
-   program->dev.vgpr_limit = gfx_level >= GFX11 ? 128 : 256; //TODO: fix encoding for 16-bit v128+
+   program->dev.vgpr_limit = 256;
    program->dev.physical_vgprs = 256;
    program->dev.vgpr_alloc_granule = 4;
 
@@ -137,6 +137,8 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
       program->dev.sgpr_limit = 104;
    }
 
+   program->dev.scratch_alloc_granule = gfx_level >= GFX11 ? 256 : 1024;
+
    program->dev.max_wave64_per_simd = 10;
    if (program->gfx_level >= GFX10_3)
       program->dev.max_wave64_per_simd = 16;
@@ -158,7 +160,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
    default: break;
    }
 
-   program->dev.sram_ecc_enabled = program->family == CHIP_ARCTURUS;
+   program->dev.sram_ecc_enabled = program->family == CHIP_MI100;
    /* apparently gfx702 also has fast v_fma_f32 but I can't find a family for that */
    program->dev.has_fast_fma32 = program->gfx_level >= GFX9;
    if (program->family == CHIP_TAHITI || program->family == CHIP_CARRIZO ||
@@ -168,7 +170,7 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
 
    program->dev.fused_mad_mix = program->gfx_level >= GFX10;
    if (program->family == CHIP_VEGA12 || program->family == CHIP_VEGA20 ||
-       program->family == CHIP_ARCTURUS || program->family == CHIP_ALDEBARAN)
+       program->family == CHIP_MI100 || program->family == CHIP_MI200)
       program->dev.fused_mad_mix = true;
 
    if (program->gfx_level >= GFX11) {
@@ -341,7 +343,7 @@ can_use_DPP(const aco_ptr<Instruction>& instr, bool pre_ra, bool dpp8)
    if (instr->operands.size() && instr->operands[0].isLiteral())
       return false;
 
-   if (instr->isSDWA())
+   if (instr->isSDWA() || instr->isVOP3P())
       return false;
 
    if (!pre_ra && (instr->isVOPC() || instr->definitions.size() > 1) &&
@@ -366,6 +368,8 @@ can_use_DPP(const aco_ptr<Instruction>& instr, bool pre_ra, bool dpp8)
    /* there are more cases but those all take 64-bit inputs */
    return instr->opcode != aco_opcode::v_madmk_f32 && instr->opcode != aco_opcode::v_madak_f32 &&
           instr->opcode != aco_opcode::v_madmk_f16 && instr->opcode != aco_opcode::v_madak_f16 &&
+          instr->opcode != aco_opcode::v_fmamk_f32 && instr->opcode != aco_opcode::v_fmaak_f32 &&
+          instr->opcode != aco_opcode::v_fmamk_f16 && instr->opcode != aco_opcode::v_fmaak_f16 &&
           instr->opcode != aco_opcode::v_readfirstlane_b32 &&
           instr->opcode != aco_opcode::v_cvt_f64_i32 &&
           instr->opcode != aco_opcode::v_cvt_f64_f32 && instr->opcode != aco_opcode::v_cvt_f64_u32;
@@ -503,6 +507,7 @@ instr_is_16bit(amd_gfx_level gfx_level, aco_opcode op)
    case aco_opcode::v_fmaak_f16:
    /* VOP1 */
    case aco_opcode::v_cvt_f16_f32:
+   case aco_opcode::p_cvt_f16_f32_rtne:
    case aco_opcode::v_cvt_f16_u16:
    case aco_opcode::v_cvt_f16_i16:
    case aco_opcode::v_rcp_f16:
@@ -518,15 +523,119 @@ instr_is_16bit(amd_gfx_level gfx_level, aco_opcode op)
    case aco_opcode::v_rndne_f16:
    case aco_opcode::v_fract_f16:
    case aco_opcode::v_sin_f16:
-   case aco_opcode::v_cos_f16: return gfx_level >= GFX10;
-   // TODO: confirm whether these write 16 or 32 bit on GFX10+
-   // case aco_opcode::v_cvt_u16_f16:
-   // case aco_opcode::v_cvt_i16_f16:
-   // case aco_opcode::p_cvt_f16_f32_rtne:
-   // case aco_opcode::v_cvt_norm_i16_f16:
-   // case aco_opcode::v_cvt_norm_u16_f16:
+   case aco_opcode::v_cos_f16:
+   case aco_opcode::v_cvt_u16_f16:
+   case aco_opcode::v_cvt_i16_f16:
+   case aco_opcode::v_cvt_norm_i16_f16:
+   case aco_opcode::v_cvt_norm_u16_f16: return gfx_level >= GFX10;
    /* on GFX10, all opsel instructions preserve the high bits */
    default: return gfx_level >= GFX10 && can_use_opsel(gfx_level, op, -1);
+   }
+}
+
+/* On GFX11, for some instructions, bit 7 of the destination/operand vgpr is opsel and the field
+ * only supports v0-v127.
+ */
+// TODO: take advantage of this functionality in the RA and assembler
+uint8_t
+get_gfx11_true16_mask(aco_opcode op)
+{
+   switch (op) {
+   case aco_opcode::v_ceil_f16:
+   case aco_opcode::v_cos_f16:
+   case aco_opcode::v_cvt_f16_i16:
+   case aco_opcode::v_cvt_f16_u16:
+   case aco_opcode::v_cvt_i16_f16:
+   case aco_opcode::v_cvt_u16_f16:
+   case aco_opcode::v_cvt_norm_i16_f16:
+   case aco_opcode::v_cvt_norm_u16_f16:
+   case aco_opcode::v_exp_f16:
+   case aco_opcode::v_floor_f16:
+   case aco_opcode::v_fract_f16:
+   case aco_opcode::v_frexp_exp_i16_f16:
+   case aco_opcode::v_frexp_mant_f16:
+   case aco_opcode::v_log_f16:
+   case aco_opcode::v_not_b16:
+   case aco_opcode::v_rcp_f16:
+   case aco_opcode::v_rndne_f16:
+   case aco_opcode::v_rsq_f16:
+   case aco_opcode::v_sin_f16:
+   case aco_opcode::v_sqrt_f16:
+   case aco_opcode::v_trunc_f16:
+   case aco_opcode::v_mov_b16: return 0x1 | 0x8;
+   case aco_opcode::v_add_f16:
+   case aco_opcode::v_fmaak_f16:
+   case aco_opcode::v_fmac_f16:
+   case aco_opcode::v_fmamk_f16:
+   case aco_opcode::v_ldexp_f16:
+   case aco_opcode::v_max_f16:
+   case aco_opcode::v_min_f16:
+   case aco_opcode::v_mul_f16:
+   case aco_opcode::v_sub_f16:
+   case aco_opcode::v_subrev_f16:
+   case aco_opcode::v_and_b16:
+   case aco_opcode::v_or_b16:
+   case aco_opcode::v_xor_b16: return 0x3 | 0x8;
+   case aco_opcode::v_cmp_class_f16:
+   case aco_opcode::v_cmpx_class_f16:
+   case aco_opcode::v_cvt_f32_f16:
+   case aco_opcode::v_cvt_i32_i16:
+   case aco_opcode::v_cvt_u32_u16: return 0x1;
+   case aco_opcode::v_cmp_eq_f16:
+   case aco_opcode::v_cmp_eq_i16:
+   case aco_opcode::v_cmp_eq_u16:
+   case aco_opcode::v_cmp_ge_f16:
+   case aco_opcode::v_cmp_ge_i16:
+   case aco_opcode::v_cmp_ge_u16:
+   case aco_opcode::v_cmp_gt_f16:
+   case aco_opcode::v_cmp_gt_i16:
+   case aco_opcode::v_cmp_gt_u16:
+   case aco_opcode::v_cmp_le_f16:
+   case aco_opcode::v_cmp_le_i16:
+   case aco_opcode::v_cmp_le_u16:
+   case aco_opcode::v_cmp_lg_f16:
+   case aco_opcode::v_cmp_lg_i16:
+   case aco_opcode::v_cmp_lg_u16:
+   case aco_opcode::v_cmp_lt_f16:
+   case aco_opcode::v_cmp_lt_i16:
+   case aco_opcode::v_cmp_lt_u16:
+   case aco_opcode::v_cmp_neq_f16:
+   case aco_opcode::v_cmp_nge_f16:
+   case aco_opcode::v_cmp_ngt_f16:
+   case aco_opcode::v_cmp_nle_f16:
+   case aco_opcode::v_cmp_nlg_f16:
+   case aco_opcode::v_cmp_nlt_f16:
+   case aco_opcode::v_cmp_o_f16:
+   case aco_opcode::v_cmp_u_f16:
+   case aco_opcode::v_cmpx_eq_f16:
+   case aco_opcode::v_cmpx_eq_i16:
+   case aco_opcode::v_cmpx_eq_u16:
+   case aco_opcode::v_cmpx_ge_f16:
+   case aco_opcode::v_cmpx_ge_i16:
+   case aco_opcode::v_cmpx_ge_u16:
+   case aco_opcode::v_cmpx_gt_f16:
+   case aco_opcode::v_cmpx_gt_i16:
+   case aco_opcode::v_cmpx_gt_u16:
+   case aco_opcode::v_cmpx_le_f16:
+   case aco_opcode::v_cmpx_le_i16:
+   case aco_opcode::v_cmpx_le_u16:
+   case aco_opcode::v_cmpx_lg_f16:
+   case aco_opcode::v_cmpx_lg_i16:
+   case aco_opcode::v_cmpx_lg_u16:
+   case aco_opcode::v_cmpx_lt_f16:
+   case aco_opcode::v_cmpx_lt_i16:
+   case aco_opcode::v_cmpx_lt_u16:
+   case aco_opcode::v_cmpx_neq_f16:
+   case aco_opcode::v_cmpx_nge_f16:
+   case aco_opcode::v_cmpx_ngt_f16:
+   case aco_opcode::v_cmpx_nle_f16:
+   case aco_opcode::v_cmpx_nlg_f16:
+   case aco_opcode::v_cmpx_nlt_f16:
+   case aco_opcode::v_cmpx_o_f16:
+   case aco_opcode::v_cmpx_u_f16: return 0x3;
+   case aco_opcode::v_cvt_f16_f32:
+   case aco_opcode::v_sat_pk_u8_i16: return 0x8;
+   default: return 0x0;
    }
 }
 
@@ -979,6 +1088,13 @@ dealloc_vgprs(Program* program)
    }
 
    return true;
+}
+
+bool
+Instruction::isTrans() const noexcept
+{
+   return instr_info.classes[(int)opcode] == instr_class::valu_transcendental32 ||
+          instr_info.classes[(int)opcode] == instr_class::valu_double_transcendental;
 }
 
 } // namespace aco

@@ -126,6 +126,7 @@ struct nvc0_screen {
    struct nouveau_object *eng3d; /* sqrt(1/2)|kepler> + sqrt(1/2)|fermi> */
    struct nouveau_object *eng2d;
    struct nouveau_object *m2mf;
+   struct nouveau_object *copy;
    struct nouveau_object *compute;
    struct nouveau_object *nvsw;
 };

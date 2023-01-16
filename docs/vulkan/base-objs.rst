@@ -26,7 +26,7 @@ The root base struct for all Vulkan objects is
 the Vulkan API *must* inherit from :cpp:struct:`vk_object_base` by having a
 :cpp:struct:`vk_object_base` or some struct that inherits from
 :cpp:struct:`vk_object_base` as the driver struct's first member.  Even
-though we have `container_of()` and use it liberally, the
+though we have ``container_of()`` and use it liberally, the
 :cpp:struct:`vk_object_base` should be the first member as there are a few
 places, particularly in the logging framework, where we use void pointers
 to avoid casting and this only works if the address of the driver struct is

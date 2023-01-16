@@ -40,7 +40,6 @@
 #include "draw/draw_context.h"
 #include "draw/draw_vbuf.h"
 #include "util/u_debug.h"
-#include "util/u_fifo.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -246,7 +245,7 @@ i915_vbuf_render_map_vertices(struct vbuf_render *render)
    struct i915_context *i915 = i915_render->i915;
 
    if (i915->vbo_flushed)
-      debug_printf("%s bad vbo flush occurred stalling on hw\n", __FUNCTION__);
+      debug_printf("%s bad vbo flush occurred stalling on hw\n", __func__);
 
    return (unsigned char *)i915_render->vbo_ptr + i915_render->vbo_sw_offset;
 }

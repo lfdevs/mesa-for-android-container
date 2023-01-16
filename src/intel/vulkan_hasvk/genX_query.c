@@ -125,8 +125,8 @@ VkResult genX(CreateQueryPool)(
 
       uint64s_per_slot = 2; /* availability + marker */
       /* Align to the requirement of the layout */
-      uint64s_per_slot = align_u32(uint64s_per_slot,
-                                   DIV_ROUND_UP(layout->alignment, sizeof(uint64_t)));
+      uint64s_per_slot = align(uint64s_per_slot,
+                               DIV_ROUND_UP(layout->alignment, sizeof(uint64_t)));
       data_offset = uint64s_per_slot * sizeof(uint64_t);
       /* Add the query data for begin & end commands */
       uint64s_per_slot += 2 * DIV_ROUND_UP(layout->size, sizeof(uint64_t));
@@ -149,8 +149,8 @@ VkResult genX(CreateQueryPool)(
                              n_passes);
       uint64s_per_slot = 4 /* availability + small batch */;
       /* Align to the requirement of the layout */
-      uint64s_per_slot = align_u32(uint64s_per_slot,
-                                   DIV_ROUND_UP(layout->alignment, sizeof(uint64_t)));
+      uint64s_per_slot = align(uint64s_per_slot,
+                               DIV_ROUND_UP(layout->alignment, sizeof(uint64_t)));
       data_offset = uint64s_per_slot * sizeof(uint64_t);
       /* Add the query data for begin & end commands */
       uint64s_per_slot += 2 * DIV_ROUND_UP(layout->size, sizeof(uint64_t));

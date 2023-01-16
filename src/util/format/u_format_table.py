@@ -61,9 +61,9 @@ type_map = {
 
 def bool_map(value):
     if value:
-        return "TRUE"
+        return "true"
     else:
-        return "FALSE"
+        return "false"
 
 
 swizzle_map = {
@@ -90,6 +90,7 @@ def has_access(format):
         'p010',
         'p012',
         'p016',
+        'p030',
         'y210',
         'y212',
         'y216',

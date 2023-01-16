@@ -132,7 +132,7 @@ fd6_build_tess_consts(struct fd6_emit *emit)
     * size is dwords, since that's what LDG/STG use.
     */
    unsigned num_vertices = emit->hs
-                              ? emit->key.patch_vertices
+                              ? ctx->patch_vertices
                               : emit->gs->gs.vertices_in;
 
    uint32_t vs_params[4] = {
@@ -146,7 +146,7 @@ fd6_build_tess_consts(struct fd6_emit *emit)
       uint32_t hs_params[4] = {
          emit->vs->output_size * num_vertices * 4, /* vs primitive stride */
          emit->vs->output_size * 4,                /* vs vertex stride */
-         emit->hs->output_size, emit->key.patch_vertices};
+         emit->hs->output_size, ctx->patch_vertices};
 
       emit_stage_tess_consts(constobj, emit->hs, hs_params,
                              ARRAY_SIZE(hs_params));

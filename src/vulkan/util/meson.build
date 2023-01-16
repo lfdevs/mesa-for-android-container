@@ -54,6 +54,10 @@ vk_cmd_queue_gen = files('vk_cmd_queue_gen.py')
 vk_dispatch_trampolines_gen = files('vk_dispatch_trampolines_gen.py')
 
 files_vulkan_util = files(
+  'rmv/vk_rmv_common.c',
+  'rmv/vk_rmv_common.h',
+  'rmv/vk_rmv_exporter.c',
+  'rmv/vk_rmv_tokens.h',
   'vk_alloc.c',
   'vk_alloc.h',
   'vk_format.c',

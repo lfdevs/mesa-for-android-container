@@ -9,7 +9,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#if defined(PIPE_ARCH_X86_64) || defined(PIPE_ARCH_PPC_64) || defined(PIPE_ARCH_AARCH64) || defined(PIPE_ARCH_MIPS64)
+#if DETECT_ARCH_X86_64 || DETECT_ARCH_PPC_64 || DETECT_ARCH_AARCH64 || DETECT_ARCH_MIPS64
 #define NUM_QUERIES 5000
 #else
 #define NUM_QUERIES 500

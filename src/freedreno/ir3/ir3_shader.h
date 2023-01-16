@@ -263,6 +263,7 @@ struct ir3_stream_output_info {
  */
 struct ir3_sampler_prefetch {
    uint8_t src;
+   bool bindless;
    uint8_t samp_id;
    uint8_t tex_id;
    uint16_t samp_bindless_id;
@@ -270,7 +271,7 @@ struct ir3_sampler_prefetch {
    uint8_t dst;
    uint8_t wrmask;
    uint8_t half_precision;
-   uint8_t cmd;
+   opc_t tex_opc;
 };
 
 /* Configuration key used to identify a shader variant.. different
@@ -695,6 +696,8 @@ struct ir3_shader_variant {
    bool has_kill;
 
    bool per_samp;
+
+   bool post_depth_coverage;
 
    /* Are we using split or merged register file? */
    bool mergedregs;

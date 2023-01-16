@@ -72,13 +72,6 @@ u_rect_find_intersection(const struct u_rect *a,
    if (b->y1 > a->y1) b->y1 = a->y1;
 }
 
-
-static inline int
-u_rect_area(const struct u_rect *r)
-{
-   return (r->x1 - r->x0) * (r->y1 - r->y0);
-}
-
 static inline void
 u_rect_possible_intersection(const struct u_rect *a,
                              struct u_rect *b)

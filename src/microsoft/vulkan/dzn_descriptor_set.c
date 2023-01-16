@@ -645,7 +645,7 @@ dzn_pipeline_layout_create(struct dzn_device *device,
    D3D12_ROOT_PARAMETER1 root_params[MAX_ROOT_PARAMS] = { 0 };
    D3D12_DESCRIPTOR_RANGE1 *range_ptr = ranges;
    D3D12_ROOT_PARAMETER1 *root_param;
-   uint32_t root_dwords = 0;
+   ASSERTED uint32_t root_dwords = 0;
 
    for (uint32_t i = 0; i < MAX_SHADER_VISIBILITIES; i++) {
       dzn_foreach_pool_type (type) {
@@ -878,6 +878,7 @@ dzn_descriptor_heap_write_image_view_desc(struct dzn_descriptor_heap *heap,
       D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = iview->srv_desc;
       srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
       srv_desc.Texture2DArray.PlaneSlice = 0;
+      srv_desc.Texture2DArray.ResourceMinLODClamp = 0.0f;
       if (iview->srv_desc.ViewDimension == D3D12_SRV_DIMENSION_TEXTURECUBEARRAY) {
          srv_desc.Texture2DArray.MostDetailedMip =
             iview->srv_desc.TextureCubeArray.MostDetailedMip;

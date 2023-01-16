@@ -1999,7 +1999,8 @@ radv_GetDeviceImageSparseMemoryRequirements(VkDevice device,
     * creating an image.
     * TODO: Avoid creating an image.
     */
-   result = radv_CreateImage(device, pInfo->pCreateInfo, NULL, &image);
+   result = radv_image_create(
+      device, &(struct radv_image_create_info){.vk_info = pInfo->pCreateInfo}, NULL, &image, true);
    assert(result == VK_SUCCESS);
 
    VkImageSparseMemoryRequirementsInfo2 info2 = {
@@ -2056,13 +2057,8 @@ static void
 radv_get_dcc_channel_type(const struct util_format_description *desc, enum dcc_channel_type *type,
                           unsigned *size)
 {
-   int i;
-
-   /* Find the first non-void channel. */
-   for (i = 0; i < desc->nr_channels; i++)
-      if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID)
-         break;
-   if (i == desc->nr_channels) {
+   int i = util_format_get_first_non_void_channel(desc->format);
+   if (i == -1) {
       *type = dcc_channel_incompatible;
       return;
    }

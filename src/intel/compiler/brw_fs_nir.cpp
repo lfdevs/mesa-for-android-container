@@ -191,6 +191,7 @@ emit_system_values_block(nir_block *block, fs_visitor *v)
          break;
 
       case nir_intrinsic_load_workgroup_id:
+      case nir_intrinsic_load_workgroup_id_zero_base:
          assert(gl_shader_stage_uses_workgroup(v->stage));
          reg = &v->nir_system_values[SYSTEM_VALUE_WORKGROUP_ID];
          if (reg->file == BAD_FILE)
@@ -1316,28 +1317,23 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
    case nir_op_imul_32x16:
    case nir_op_umul_32x16: {
       const bool ud = instr->op == nir_op_umul_32x16;
-
-      assert(nir_dest_bit_size(instr->dest.dest) == 32);
-
-      /* Before Gfx7, the order of the 32-bit source and the 16-bit source was
-       * swapped.  The extension isn't enabled on those platforms, so don't
-       * pretend to support the differences.
-       */
-      assert(devinfo->ver >= 7);
-
-      if (op[1].file == IMM)
-         op[1] = ud ? brw_imm_uw(op[1].ud) : brw_imm_w(op[1].d);
-      else {
-         const enum brw_reg_type word_type =
-            ud ? BRW_REGISTER_TYPE_UW : BRW_REGISTER_TYPE_W;
-
-         op[1] = subscript(op[1], word_type, 0);
-      }
-
+      const enum brw_reg_type word_type =
+         ud ? BRW_REGISTER_TYPE_UW : BRW_REGISTER_TYPE_W;
       const enum brw_reg_type dword_type =
          ud ? BRW_REGISTER_TYPE_UD : BRW_REGISTER_TYPE_D;
 
-      bld.MUL(result, retype(op[0], dword_type), op[1]);
+      assert(nir_dest_bit_size(instr->dest.dest) == 32);
+
+      /* Before copy propagation there are no immediate values. */
+      assert(op[0].file != IMM && op[1].file != IMM);
+
+      op[1] = subscript(op[1], word_type, 0);
+
+      if (devinfo->ver >= 7)
+         bld.MUL(result, retype(op[0], dword_type), op[1]);
+      else
+         bld.MUL(result, op[1], retype(op[0], dword_type));
+
       break;
    }
 
@@ -1573,23 +1569,14 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       inst = bld.emit(SHADER_OPCODE_RSQ, result, op[0]);
       break;
 
-   case nir_op_i2b32:
    case nir_op_f2b32: {
       uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
       if (bit_size == 64) {
          /* two-argument instructions can't take 64-bit immediates */
-         fs_reg zero;
-         fs_reg tmp;
+         fs_reg zero = vgrf(glsl_type::double_type);
+         fs_reg tmp = vgrf(glsl_type::double_type);
 
-         if (instr->op == nir_op_f2b32) {
-            zero = vgrf(glsl_type::double_type);
-            tmp = vgrf(glsl_type::double_type);
-            bld.MOV(zero, setup_imm_df(bld, 0.0));
-         } else {
-            zero = vgrf(glsl_type::int64_t_type);
-            tmp = vgrf(glsl_type::int64_t_type);
-            bld.MOV(zero, brw_imm_q(0));
-         }
+         bld.MOV(zero, setup_imm_df(bld, 0.0));
 
          /* A SIMD16 execution needs to be split in two instructions, so use
           * a vgrf instead of the flag register as dst so instruction splitting
@@ -1600,11 +1587,10 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       } else {
          fs_reg zero;
          if (bit_size == 32) {
-            zero = instr->op == nir_op_f2b32 ? brw_imm_f(0.0f) : brw_imm_d(0);
+            zero = brw_imm_f(0.0f);
          } else {
             assert(bit_size == 16);
-            zero = instr->op == nir_op_f2b32 ?
-               retype(brw_imm_w(0), BRW_REGISTER_TYPE_HF) : brw_imm_w(0);
+            zero = retype(brw_imm_w(0), BRW_REGISTER_TYPE_HF);
          }
          bld.CMP(result, op[0], zero, BRW_CONDITIONAL_NZ);
       }
@@ -2122,24 +2108,6 @@ fs_visitor::get_nir_dest(const nir_dest &dest)
       assert(dest.reg.indirect == NULL);
       return offset(nir_locals[dest.reg.reg->index], bld,
                     dest.reg.base_offset * dest.reg.reg->num_components);
-   }
-}
-
-void
-fs_visitor::emit_percomp(const fs_builder &bld, const fs_inst &inst,
-                         unsigned wr_mask)
-{
-   for (unsigned i = 0; i < 4; i++) {
-      if (!((wr_mask >> i) & 1))
-         continue;
-
-      fs_inst *new_inst = new(mem_ctx) fs_inst(inst);
-      new_inst->dst = offset(new_inst->dst, bld, i);
-      for (unsigned j = 0; j < new_inst->sources; j++)
-         if (new_inst->src[j].file == VGRF)
-            new_inst->src[j] = offset(new_inst->src[j], bld, i);
-
-      bld.emit(new_inst);
    }
 }
 
@@ -3764,10 +3732,18 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
       cs_payload().load_subgroup_id(bld, dest);
       break;
 
-   case nir_intrinsic_load_local_invocation_id:
-   case nir_intrinsic_load_workgroup_id: {
-      gl_system_value sv = nir_system_value_from_intrinsic(instr->intrinsic);
-      fs_reg val = nir_system_values[sv];
+   case nir_intrinsic_load_local_invocation_id: {
+      fs_reg val = nir_system_values[SYSTEM_VALUE_LOCAL_INVOCATION_ID];
+      assert(val.file != BAD_FILE);
+      dest.type = val.type;
+      for (unsigned i = 0; i < 3; i++)
+         bld.MOV(offset(dest, bld, i), offset(val, bld, i));
+      break;
+   }
+
+   case nir_intrinsic_load_workgroup_id:
+   case nir_intrinsic_load_workgroup_id_zero_base: {
+      fs_reg val = nir_system_values[SYSTEM_VALUE_WORKGROUP_ID];
       assert(val.file != BAD_FILE);
       dest.type = val.type;
       for (unsigned i = 0; i < 3; i++)
@@ -6411,8 +6387,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
    if (srcs[TEX_LOGICAL_SRC_MCS].file == BAD_FILE &&
        (instr->op == nir_texop_txf_ms ||
         instr->op == nir_texop_samples_identical)) {
-      if (devinfo->ver >= 7 &&
-          key_tex->compressed_multisample_layout_mask & (1 << texture)) {
+      if (devinfo->ver >= 7) {
          srcs[TEX_LOGICAL_SRC_MCS] =
             emit_mcs_fetch(srcs[TEX_LOGICAL_SRC_COORDINATE],
                            instr->coord_components,
@@ -6451,7 +6426,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
        */
       if (devinfo->verx10 >= 125)
          opcode = SHADER_OPCODE_TXF_CMS_W_GFX12_LOGICAL;
-      else if ((key_tex->msaa_16 & (1 << sampler)))
+      else if (devinfo->ver >= 9)
          opcode = SHADER_OPCODE_TXF_CMS_W_LOGICAL;
       else
          opcode = SHADER_OPCODE_TXF_CMS_LOGICAL;
@@ -6483,7 +6458,7 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
        */
       if (srcs[TEX_LOGICAL_SRC_MCS].file == BRW_IMMEDIATE_VALUE) {
          bld.MOV(dst, brw_imm_ud(0u));
-      } else if ((key_tex->msaa_16 & (1 << sampler))) {
+      } else if (devinfo->ver >= 9) {
          fs_reg tmp = vgrf(glsl_type::uint_type);
          bld.OR(tmp, srcs[TEX_LOGICAL_SRC_MCS],
                 offset(srcs[TEX_LOGICAL_SRC_MCS], bld, 1));

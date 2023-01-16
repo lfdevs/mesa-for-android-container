@@ -84,10 +84,6 @@ spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
-spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
-spec@glsl-1.20@execution@fs-nan-builtin-min,Fail
-spec@glsl-1.20@execution@vs-nan-builtin-max,Fail
-spec@glsl-1.20@execution@vs-nan-builtin-min,Fail
 spec@glsl-4.00@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@glsl-4.00@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
 spec@glsl-4.00@execution@conversion@frag-conversion-explicit-dmat2x4-mat2x4,Fail
@@ -138,7 +134,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full 
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
-spec@arb_viewport_array@display-list,Fail
 spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail
 
 # glcts failures

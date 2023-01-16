@@ -34,8 +34,6 @@
    .lower_scmp = true,                                                        \
    .lower_flrp16 = true,                                                      \
    .lower_fmod = true,                                                        \
-   .lower_bitfield_extract = true,                                            \
-   .lower_bitfield_insert = true,                                             \
    .lower_uadd_carry = true,                                                  \
    .lower_usub_borrow = true,                                                 \
    .lower_flrp64 = true,                                                      \
@@ -75,7 +73,8 @@
    .divergence_analysis_options =                                             \
       (nir_divergence_single_prim_per_subgroup |                              \
        nir_divergence_single_patch_per_tcs_subgroup |                         \
-       nir_divergence_single_patch_per_tes_subgroup)
+       nir_divergence_single_patch_per_tes_subgroup |                         \
+       nir_divergence_shader_record_ptr_uniform)
 
 static const struct nir_shader_compiler_options scalar_nir_options = {
    COMMON_OPTIONS,
@@ -181,6 +180,11 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_options->lower_ffma64 = devinfo->ver < 6;
       nir_options->lower_flrp32 = devinfo->ver < 6 || devinfo->ver >= 11;
       nir_options->lower_fpow = devinfo->ver >= 12;
+
+      nir_options->lower_bitfield_extract = devinfo->ver >= 7;
+      nir_options->lower_bitfield_extract_to_shifts = devinfo->ver < 7;
+      nir_options->lower_bitfield_insert = devinfo->ver >= 7;
+      nir_options->lower_bitfield_insert_to_shifts = devinfo->ver < 7;
 
       nir_options->lower_rotate = devinfo->ver < 11;
       nir_options->lower_bitfield_reverse = devinfo->ver < 7;

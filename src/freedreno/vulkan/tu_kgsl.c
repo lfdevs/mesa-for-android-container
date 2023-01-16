@@ -185,6 +185,11 @@ tu_bo_map(struct tu_device *dev, struct tu_bo *bo)
 }
 
 void
+tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo)
+{
+}
+
+void
 tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
 {
    assert(bo->gem_handle);

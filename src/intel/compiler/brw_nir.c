@@ -643,6 +643,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_combine_stores, nir_var_all);
 
       OPT(nir_opt_ray_queries);
+      OPT(nir_opt_ray_query_ranges);
 
       if (is_scalar) {
          OPT(nir_lower_alu_to_scalar, NULL, NULL);
@@ -957,7 +958,11 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    brw_nir_optimize(nir, compiler, is_scalar, true);
 
    OPT(nir_lower_doubles, opts->softfp64, nir->options->lower_doubles_options);
-   OPT(nir_lower_int64);
+   if (OPT(nir_lower_int64)) {
+      OPT(nir_opt_algebraic);
+      OPT(nir_lower_doubles, opts->softfp64,
+          nir->options->lower_doubles_options);
+   }
 
    OPT(nir_lower_bit_size, lower_bit_size_callback, (void *)compiler);
 
@@ -976,7 +981,10 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    }
 
    OPT(nir_lower_system_values);
-   OPT(nir_lower_compute_system_values, NULL);
+   nir_lower_compute_system_values_options lower_csv_options = {
+      .has_base_workgroup_id = nir->info.stage == MESA_SHADER_COMPUTE,
+   };
+   OPT(nir_lower_compute_system_values, &lower_csv_options);
 
    const nir_lower_subgroups_options subgroups_options = {
       .ballot_bit_size = 32,
@@ -1125,7 +1133,7 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
    }
 }
 
-static bool
+bool
 brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                              unsigned bit_size,
                              unsigned num_components,
@@ -1289,6 +1297,9 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(brw_nir_opt_peephole_ffma);
    }
 
+   if (is_scalar)
+      OPT(brw_nir_opt_peephole_imul32x16);
+
    if (OPT(nir_opt_comparison_pre)) {
       OPT(nir_copy_prop);
       OPT(nir_opt_dce);
@@ -1446,19 +1457,6 @@ brw_nir_apply_sampler_key(nir_shader *nir,
 
    /* Prior to Haswell, we have to lower gradients on shadow samplers */
    tex_options.lower_txd_shadow = devinfo->verx10 <= 70;
-
-   tex_options.lower_y_uv_external = key_tex->y_uv_image_mask;
-   tex_options.lower_y_u_v_external = key_tex->y_u_v_image_mask;
-   tex_options.lower_yx_xuxv_external = key_tex->yx_xuxv_image_mask;
-   tex_options.lower_xy_uxvx_external = key_tex->xy_uxvx_image_mask;
-   tex_options.lower_ayuv_external = key_tex->ayuv_image_mask;
-   tex_options.lower_xyuv_external = key_tex->xyuv_image_mask;
-   tex_options.bt709_external = key_tex->bt709_mask;
-   tex_options.bt2020_external = key_tex->bt2020_mask;
-
-   /* Setup array of scaling factors for each texture. */
-   memcpy(&tex_options.scale_factors, &key_tex->scale_factors,
-          sizeof(tex_options.scale_factors));
 
    return nir_lower_tex(nir, &tex_options);
 }
@@ -1697,9 +1695,10 @@ brw_type_for_nir_type(const struct intel_device_info *devinfo,
 
 nir_shader *
 brw_nir_create_passthrough_tcs(void *mem_ctx, const struct brw_compiler *compiler,
-                               const nir_shader_compiler_options *options,
                                const struct brw_tcs_prog_key *key)
 {
+   const nir_shader_compiler_options *options =
+      compiler->nir_options[MESA_SHADER_TESS_CTRL];
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL,
                                                   options, "passthrough TCS");
    ralloc_steal(mem_ctx, b.shader);

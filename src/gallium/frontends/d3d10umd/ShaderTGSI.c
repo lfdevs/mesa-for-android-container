@@ -2236,7 +2236,7 @@ Shader_tgsi_translate(const unsigned *code,
                   shader_dumped = TRUE;
                }
                debug_printf("%s: unsupported opcode %i\n",
-                            __FUNCTION__, ox->type);
+                            __func__, ox->type);
                assert(ox->tgsi_opcode != TGSI_LOG_UNSUPPORTED);
             }
 

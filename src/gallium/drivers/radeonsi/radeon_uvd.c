@@ -94,9 +94,16 @@ struct ruvd_decoder {
 };
 
 /* flush IB to the hardware */
-static int flush(struct ruvd_decoder *dec, unsigned flags)
+static int flush(struct ruvd_decoder *dec, unsigned flags, struct pipe_fence_handle **fence)
 {
-   return dec->ws->cs_flush(&dec->cs, flags, NULL);
+   return dec->ws->cs_flush(&dec->cs, flags, fence);
+}
+
+static int ruvd_dec_get_decoder_fence(struct pipe_video_codec *decoder,
+                                      struct pipe_fence_handle *fence,
+                                      uint64_t timeout) {
+   struct ruvd_decoder *dec = (struct ruvd_decoder *)decoder;
+   return dec->ws->fence_wait(dec->ws, fence, timeout);
 }
 
 /* add a new set register command to the IB */
@@ -981,7 +988,7 @@ static void ruvd_destroy(struct pipe_video_codec *decoder)
    dec->msg->stream_handle = dec->stream_handle;
    send_msg_buf(dec);
 
-   flush(dec, 0);
+   flush(dec, 0, NULL);
 
    dec->ws->cs_destroy(&dec->cs);
 
@@ -1198,7 +1205,7 @@ static void ruvd_end_frame(struct pipe_video_codec *decoder, struct pipe_video_b
                FB_BUFFER_OFFSET + dec->fb_size, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
    set_reg(dec, dec->reg.cntl, 1);
 
-   flush(dec, PIPE_FLUSH_ASYNC);
+   flush(dec, PIPE_FLUSH_ASYNC, picture->fence);
    next_buffer(dec);
 }
 
@@ -1262,6 +1269,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
    dec->base.decode_bitstream = ruvd_decode_bitstream;
    dec->base.end_frame = ruvd_end_frame;
    dec->base.flush = ruvd_flush;
+   dec->base.get_decoder_fence = ruvd_dec_get_decoder_fence;
 
    dec->stream_type = profile2stream_type(dec, sctx->family);
    dec->set_dtb = set_dtb;
@@ -1347,7 +1355,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
    dec->msg->body.create.height_in_samples = dec->base.height;
    dec->msg->body.create.dpb_size = dpb_size;
    send_msg_buf(dec);
-   r = flush(dec, 0);
+   r = flush(dec, 0, NULL);
    if (r)
       goto error;
 

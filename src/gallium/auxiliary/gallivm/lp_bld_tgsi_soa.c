@@ -36,7 +36,7 @@
  * Brian Paul, and others.
  */
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 #include "pipe/p_shader_tokens.h"
 #include "util/u_debug.h"
 #include "util/u_math.h"

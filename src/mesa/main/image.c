@@ -30,7 +30,7 @@
  */
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "colormac.h"
 #include "glformats.h"
 #include "image.h"

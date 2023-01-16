@@ -36,54 +36,54 @@ extern FILE *pandecode_dump_stream;
 void pandecode_dump_file_open(void);
 
 struct pandecode_mapped_memory {
-        struct rb_node node;
-        size_t length;
-        void *addr;
-        uint64_t gpu_va;
-        bool ro;
-        char name[32];
+   struct rb_node node;
+   size_t length;
+   void *addr;
+   uint64_t gpu_va;
+   bool ro;
+   char name[32];
 };
 
 char *pointer_as_memory_reference(uint64_t ptr);
 
-struct pandecode_mapped_memory *pandecode_find_mapped_gpu_mem_containing(uint64_t addr);
+struct pandecode_mapped_memory *
+pandecode_find_mapped_gpu_mem_containing(uint64_t addr);
 
 void pandecode_map_read_write(void);
 
 void pandecode_dump_mappings(void);
 
 static inline void *
-__pandecode_fetch_gpu_mem(uint64_t gpu_va, size_t size,
-                          int line, const char *filename)
+__pandecode_fetch_gpu_mem(uint64_t gpu_va, size_t size, int line,
+                          const char *filename)
 {
-        const struct pandecode_mapped_memory *mem =
-                pandecode_find_mapped_gpu_mem_containing(gpu_va);
+   const struct pandecode_mapped_memory *mem =
+      pandecode_find_mapped_gpu_mem_containing(gpu_va);
 
-        if (!mem) {
-                fprintf(stderr, "Access to unknown memory %" PRIx64 " in %s:%d\n",
-                        gpu_va, filename, line);
-                assert(0);
-        }
+   if (!mem) {
+      fprintf(stderr, "Access to unknown memory %" PRIx64 " in %s:%d\n", gpu_va,
+              filename, line);
+      assert(0);
+   }
 
-        assert(size + (gpu_va - mem->gpu_va) <= mem->length);
+   assert(size + (gpu_va - mem->gpu_va) <= mem->length);
 
-        return mem->addr + gpu_va - mem->gpu_va;
+   return mem->addr + gpu_va - mem->gpu_va;
 }
 
-#define pandecode_fetch_gpu_mem(gpu_va, size) \
-	__pandecode_fetch_gpu_mem(gpu_va, size, __LINE__, __FILE__)
+#define pandecode_fetch_gpu_mem(gpu_va, size)                                  \
+   __pandecode_fetch_gpu_mem(gpu_va, size, __LINE__, __FILE__)
 
 /* Returns a validated pointer to mapped GPU memory with the given pointer type,
  * size automatically determined from the pointer type
  */
-#define PANDECODE_PTR(gpu_va, type) \
-	((type*)(__pandecode_fetch_gpu_mem(gpu_va, sizeof(type), \
-					 __LINE__, __FILE__)))
+#define PANDECODE_PTR(gpu_va, type)                                            \
+   ((type *)(__pandecode_fetch_gpu_mem(gpu_va, sizeof(type), __LINE__,         \
+                                       __FILE__)))
 
 /* Usage: <variable type> PANDECODE_PTR_VAR(name, gpu_va) */
-#define PANDECODE_PTR_VAR(name, gpu_va) \
-	name = __pandecode_fetch_gpu_mem(gpu_va, sizeof(*name), \
-				       __LINE__, __FILE__)
+#define PANDECODE_PTR_VAR(name, gpu_va)                                        \
+   name = __pandecode_fetch_gpu_mem(gpu_va, sizeof(*name), __LINE__, __FILE__)
 
 /* Forward declare for all supported gens to permit thunking */
 void pandecode_jc_v4(mali_ptr jc_gpu_va, unsigned gpu_id);
@@ -101,44 +101,44 @@ void pandecode_abort_on_fault_v9(mali_ptr jc_gpu_va);
 static inline void
 pan_hexdump(FILE *fp, const uint8_t *hex, size_t cnt, bool with_strings)
 {
-        for (unsigned i = 0; i < cnt; ++i) {
-                if ((i & 0xF) == 0)
-                        fprintf(fp, "%06X  ", i);
+   for (unsigned i = 0; i < cnt; ++i) {
+      if ((i & 0xF) == 0)
+         fprintf(fp, "%06X  ", i);
 
-                uint8_t v = hex[i];
+      uint8_t v = hex[i];
 
-                if (v == 0 && (i & 0xF) == 0) {
-                        /* Check if we're starting an aligned run of zeroes */
-                        unsigned zero_count = 0;
+      if (v == 0 && (i & 0xF) == 0) {
+         /* Check if we're starting an aligned run of zeroes */
+         unsigned zero_count = 0;
 
-                        for (unsigned j = i; j < cnt; ++j) {
-                                if (hex[j] == 0)
-                                        zero_count++;
-                                else
-                                        break;
-                        }
+         for (unsigned j = i; j < cnt; ++j) {
+            if (hex[j] == 0)
+               zero_count++;
+            else
+               break;
+         }
 
-                        if (zero_count >= 32) {
-                                fprintf(fp, "*\n");
-                                i += (zero_count & ~0xF) - 1;
-                                continue;
-                        }
-                }
+         if (zero_count >= 32) {
+            fprintf(fp, "*\n");
+            i += (zero_count & ~0xF) - 1;
+            continue;
+         }
+      }
 
-                fprintf(fp, "%02X ", hex[i]);
-                if ((i & 0xF) == 0xF && with_strings) {
-                        fprintf(fp, " | ");
-                        for (unsigned j = i & ~0xF; j <= i; ++j) {
-                                uint8_t c = hex[j];
-                                fputc((c < 32 || c > 128) ? '.' : c, fp);
-                        }
-                }
+      fprintf(fp, "%02X ", hex[i]);
+      if ((i & 0xF) == 0xF && with_strings) {
+         fprintf(fp, " | ");
+         for (unsigned j = i & ~0xF; j <= i; ++j) {
+            uint8_t c = hex[j];
+            fputc((c < 32 || c > 128) ? '.' : c, fp);
+         }
+      }
 
-                if ((i & 0xF) == 0xF)
-                        fprintf(fp, "\n");
-        }
+      if ((i & 0xF) == 0xF)
+         fprintf(fp, "\n");
+   }
 
-        fprintf(fp, "\n");
+   fprintf(fp, "\n");
 }
 
 #endif /* __MMAP_TRACE_H__ */

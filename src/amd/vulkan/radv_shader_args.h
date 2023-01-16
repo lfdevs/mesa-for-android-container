@@ -46,6 +46,7 @@ struct radv_shader_args {
 
    /* NGG */
    struct ac_arg ngg_query_state;
+   struct ac_arg ngg_provoking_vtx;
 
    /* NGG GS */
    struct ac_arg ngg_culling_settings;

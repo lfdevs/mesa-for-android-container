@@ -3,7 +3,7 @@ Amber Branch
 
 After Mesa 21.3, all non-Gallium DRI drivers were removed from the Mesa
 source-tree. These drivers are still being maintained to some degree,
-but only on the 21.3.x branch, and only for critical fixes.
+but only on the ``amber`` branch, and only for critical fixes.
 
 These drivers include:
 
@@ -39,8 +39,8 @@ enable that logic, you need to pass the ``-Damber=true`` flag to Meson.
 Documentation
 -------------
 
-On `docs.mesa3d.org <https://docs.mesa3d.org/>`, we currently only
+On `docs.mesa3d.org <https://docs.mesa3d.org/>`__, we currently only
 publish the documentation from our main branch. But you can view the
 documentation for the Amber branch `here
-<https://gitlab.freedesktop.org/mesa/mesa/-/tree/21.3/docs>`_.
+<https://gitlab.freedesktop.org/mesa/mesa/-/tree/amber/docs>`__.
 

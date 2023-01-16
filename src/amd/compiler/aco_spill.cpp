@@ -1856,8 +1856,7 @@ assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
    }
 
    /* update required scratch memory */
-   ctx.program->config->scratch_bytes_per_wave +=
-      align(ctx.vgpr_spill_slots * 4 * ctx.program->wave_size, 1024);
+   ctx.program->config->scratch_bytes_per_wave += ctx.vgpr_spill_slots * 4 * ctx.program->wave_size;
 
    /* SSA elimination inserts copies for logical phis right before p_logical_end
     * So if a linear vgpr is used between that p_logical_end and the branch,

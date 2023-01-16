@@ -17,7 +17,7 @@ somewhat dated, unfortunately.
    Mesa.
 -  The `Mesa <https://www.mesa3d.org>`__ website and Git repository are
    hosted by `freedesktop.org <https://freedesktop.org/>`__.
--  `alt.software <http://web.archive.org/web/20131110021426/http://www.altsoftware.com/>`__
+-  `alt.software <https://web.archive.org/web/20131110021426/http://www.altsoftware.com/>`__
    contributed the Direct3D driver.
 -  **Bernd Barsuhn** wrote the evaluator code for (splines, patches) in
    Mesa.
@@ -25,7 +25,7 @@ somewhat dated, unfortunately.
 -  **Bogdan Sikorski** wrote the GLU NURBS and polygon tessellator in
    Mesa.
 -  **Charlie Wallace** wrote the MS-DOS driver.
--  **CJ Beyer** was the `www.mesa3d.org <https://www.mesa3d.org>`
+-  **CJ Beyer** was the `www.mesa3d.org <https://www.mesa3d.org>`__
    webmaster.
 -  **Darren Abbott** provided the OS/2 driver.
 -  **David Bucciarelli** wrote and maintained the 3Dfx Glide driver.
@@ -34,7 +34,7 @@ somewhat dated, unfortunately.
    superseded by SGI SI GLU).
 -  **Holger Waechtler** contributed AMD 3DNow! assembly code which
    accelerates vertex transformation in Mesa 3.1. Holger also
-   implemented the GL_EXT_texture_env_combine extension.
+   implemented the :ext:`GL_EXT_texture_env_combine` extension.
 -  **Jeroen van der Zijp** and **Thorsten Ohl** contributed the Xt/Motif
    widget code.
 -  **John Stone** provided the multi-threading support in Mesa 3.0.

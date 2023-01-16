@@ -28,11 +28,11 @@
 #ifndef LP_BLD_BLEND_H
 #define LP_BLD_BLEND_H
 
-
+#include "pipe/p_defines.h"
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_init.h"
  
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 
 
 struct pipe_blend_state;

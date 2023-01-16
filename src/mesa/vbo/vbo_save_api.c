@@ -100,7 +100,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/arrayobj.h"
 #include "main/bufferobj.h"
 #include "main/context.h"
@@ -318,14 +318,14 @@ compare_vao(gl_vertex_processing_mode mode,
       const struct gl_array_attributes *attrib = &vao->VertexAttrib[attr];
       if (attrib->RelativeOffset + vao->BufferBinding[0].Offset != off)
          return false;
-      if (attrib->Format.Type != tp)
+      if (attrib->Format.User.Type != tp)
          return false;
-      if (attrib->Format.Size != size[vbo_attr])
+      if (attrib->Format.User.Size != size[vbo_attr])
          return false;
-      assert(attrib->Format.Format == GL_RGBA);
-      assert(attrib->Format.Normalized == GL_FALSE);
-      assert(attrib->Format.Integer == vbo_attrtype_to_integer_flag(tp));
-      assert(attrib->Format.Doubles == vbo_attrtype_to_double_flag(tp));
+      assert(!attrib->Format.User.Bgra);
+      assert(attrib->Format.User.Normalized == GL_FALSE);
+      assert(attrib->Format.User.Integer == vbo_attrtype_to_integer_flag(tp));
+      assert(attrib->Format.User.Doubles == vbo_attrtype_to_double_flag(tp));
       assert(attrib->BufferBindingIndex == 0);
    }
 
@@ -881,7 +881,7 @@ compile_vertex_list(struct gl_context *ctx)
    /* The other info fields will be updated in vbo_save_playback_vertex_list */
    node->cold->info.index_size = 4;
    node->cold->info.instance_count = 1;
-   node->cold->info.index.gl_bo = node->cold->ib.obj;
+   node->cold->info.index.resource = node->cold->ib.obj->buffer;
    if (merged_prim_count == 1) {
       node->cold->info.mode = merged_prims[0].mode;
       node->start_count.start = merged_prims[0].start;
@@ -1175,7 +1175,9 @@ upgrade_vertex(struct gl_context *ctx, GLuint attr, GLuint newsz)
       grow_vertex_storage(ctx, save->copied.nr);
       fi_type *dest = save->vertex_store->buffer_in_ram;
 
-      /* Need to note this and fix up at runtime (or loopback):
+      /* Need to note this and fix up later. This can be done in
+       * ATTR_UNION (by copying the new attribute values to the
+       * vertices we're copying here) or at runtime (or loopback).
        */
       if (attr != VBO_ATTRIB_POS && save->currentsz[attr][0] == 0) {
          assert(oldsz == 0);
@@ -1234,13 +1236,14 @@ upgrade_vertex(struct gl_context *ctx, GLuint attr, GLuint newsz)
  * For example, after seeing one or more glTexCoord2f() calls we
  * get a glTexCoord4f() or glTexCoord1f() call.
  */
-static void
+static bool
 fixup_vertex(struct gl_context *ctx, GLuint attr,
              GLuint sz, GLenum newType)
 {
    struct vbo_save_context *save = &vbo_context(ctx)->save;
+   bool new_attr_is_bigger = sz > save->attrsz[attr];
 
-   if (sz > save->attrsz[attr] ||
+   if (new_attr_is_bigger ||
        newType != save->attrtype[attr]) {
       /* New size is larger.  Need to flush existing vertices and get
        * an enlarged vertex format.
@@ -1261,6 +1264,8 @@ fixup_vertex(struct gl_context *ctx, GLuint attr,
    save->active_sz[attr] = sz;
 
    grow_vertex_storage(ctx, 1);
+
+   return new_attr_is_bigger;
 }
 
 
@@ -1314,8 +1319,31 @@ do {                                                            \
    struct vbo_save_context *save = &vbo_context(ctx)->save;     \
    int sz = (sizeof(C) / sizeof(GLfloat));                      \
                                                                 \
-   if (save->active_sz[A] != N)                                 \
-      fixup_vertex(ctx, A, N * sz, T);                          \
+   if (save->active_sz[A] != N) {                               \
+      bool had_dangling_ref = save->dangling_attr_ref;          \
+      fi_type *dest = save->vertex_store->buffer_in_ram;        \
+      if (fixup_vertex(ctx, A, N * sz, T) &&                    \
+          !had_dangling_ref && save->dangling_attr_ref &&       \
+          A != VBO_ATTRIB_POS) {                                \
+         /* Copy the new attr values to the already copied      \
+          * vertices.                                           \
+          */                                                    \
+         for (int i = 0; i < save->copied.nr; i++) {            \
+            GLbitfield64 enabled = save->enabled;               \
+            while (enabled) {                                   \
+               const int j = u_bit_scan64(&enabled);            \
+               if (j == A) {                                    \
+                  if (N>0) ((C*) dest)[0] = V0;                 \
+                  if (N>1) ((C*) dest)[1] = V1;                 \
+                  if (N>2) ((C*) dest)[2] = V2;                 \
+                  if (N>3) ((C*) dest)[3] = V3;                 \
+               }                                                \
+               dest += save->attrsz[j];                         \
+            }                                                   \
+         }                                                      \
+         save->dangling_attr_ref = false;                       \
+      }                                                         \
+   }                                                            \
                                                                 \
    {                                                            \
       C *dest = (C *)save->attrptr[A];                          \
@@ -2027,10 +2055,8 @@ current_init(struct gl_context *ctx)
    GLint i;
 
    for (i = VBO_ATTRIB_POS; i <= VBO_ATTRIB_EDGEFLAG; i++) {
-      const GLuint j = i - VBO_ATTRIB_POS;
-      assert(j < VERT_ATTRIB_MAX);
-      save->currentsz[i] = &ctx->ListState.ActiveAttribSize[j];
-      save->current[i] = (fi_type *) ctx->ListState.CurrentAttrib[j];
+      save->currentsz[i] = &ctx->ListState.ActiveAttribSize[i];
+      save->current[i] = (fi_type *) ctx->ListState.CurrentAttrib[i];
    }
 
    for (i = VBO_ATTRIB_FIRST_MATERIAL; i <= VBO_ATTRIB_LAST_MATERIAL; i++) {

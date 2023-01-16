@@ -340,6 +340,11 @@ void virgl_encode_decode_bitstream(struct virgl_context *ctx,
                                    struct virgl_video_buffer *buf,
                                    void *desc, uint32_t desc_size);
 
+void virgl_encode_encode_bitstream(struct virgl_context *ctx,
+                                   struct virgl_video_codec *cdc,
+                                   struct virgl_video_buffer *buf,
+                                   struct virgl_resource *tgt);
+
 void virgl_encode_end_frame(struct virgl_context *ctx,
                             struct virgl_video_codec *cdc,
                             struct virgl_video_buffer *buf);

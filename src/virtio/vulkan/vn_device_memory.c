@@ -196,6 +196,9 @@ vn_device_memory_should_suballocate(const struct vn_device *dev,
    const struct vn_instance *instance = dev->physical_device->instance;
    const struct vn_renderer_info *renderer = &instance->renderer->info;
 
+   if (VN_PERF(NO_MEMORY_SUBALLOC))
+      return false;
+
    if (renderer->has_guest_vram)
       return false;
 

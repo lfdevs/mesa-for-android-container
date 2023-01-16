@@ -31,7 +31,7 @@
   *   Brian Paul
   */
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/macros.h"
 #include "main/context.h"
 #include "st_context.h"

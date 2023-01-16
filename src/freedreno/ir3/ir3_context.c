@@ -84,6 +84,7 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
     * in ir3_optimize_nir():
     */
    bool progress = false;
+   bool needs_late_alg = false;
    NIR_PASS(progress, ctx->s, nir_lower_locals_to_regs);
 
    /* we could need cleanup after lower_locals_to_regs */
@@ -91,6 +92,7 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
       progress = false;
       NIR_PASS(progress, ctx->s, nir_opt_algebraic);
       NIR_PASS(progress, ctx->s, nir_opt_constant_folding);
+      needs_late_alg = true;
    }
 
    /* We want to lower nir_op_imul as late as possible, to catch also
@@ -107,6 +109,13 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
       NIR_PASS(progress, ctx->s, nir_opt_dead_write_vars);
       NIR_PASS(progress, ctx->s, nir_opt_dce);
       NIR_PASS(progress, ctx->s, nir_opt_constant_folding);
+      needs_late_alg = true;
+   }
+
+   /* nir_opt_algebraic() above would have unfused our ffmas, re-fuse them. */
+   if (needs_late_alg) {
+      NIR_PASS(progress, ctx->s, nir_opt_algebraic_late);
+      NIR_PASS(progress, ctx->s, nir_opt_dce);
    }
 
    /* Enable the texture pre-fetch feature only a4xx onwards.  But

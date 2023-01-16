@@ -26,7 +26,7 @@
  **************************************************************************/
 
 #include "util/u_handle_table.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "vdpau_private.h"
 
 static struct handle_table *htab = NULL;

@@ -24,7 +24,7 @@
 #ifndef R300_TEXTURE_DESC_H
 #define R300_TEXTURE_DESC_H
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "r300_context.h"
 
 struct pipe_resource;

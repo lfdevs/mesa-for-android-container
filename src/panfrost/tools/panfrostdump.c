@@ -37,16 +37,16 @@
  * or times out after 5min)
  */
 
-#include <stdbool.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <stdint.h>
 #include <endian.h>
+#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include <drm-uapi/panfrost_drm.h>
 
@@ -81,7 +81,7 @@ struct panfrost_dump_object_header_ho {
 };
 
 #define MAX_BODUMP_FILENAME 32
-#define GPU_PAGE_SIZE 4096
+#define GPU_PAGE_SIZE       4096
 
 static bool
 read_header(FILE *fp, struct panfrost_dump_object_header_ho *pdoh)
@@ -109,7 +109,7 @@ read_header(FILE *fp, struct panfrost_dump_object_header_ho *pdoh)
    pdoh->file_offset = le32toh(doh_le.file_offset);
    pdoh->file_size = le32toh(doh_le.file_size);
 
-   switch(pdoh->type) {
+   switch (pdoh->type) {
    case PANFROSTDUMP_BUF_REG:
       pdoh->reghdr.jc = le64toh(doh_le.reghdr.jc);
       pdoh->reghdr.gpu_id = le32toh(doh_le.reghdr.gpu_id);
@@ -224,15 +224,17 @@ main(int argc, char *argv[])
       return EXIT_FAILURE;
    }
 
+   /* clang-format off */
    const struct option longopts[] = {
       { "addr", no_argument, (int *) &print_addr, true },
       { "regs", no_argument, (int *) &print_reg, true },
       { "help", no_argument, NULL, 'h' },
       { NULL, 0, NULL, 0 }
    };
+   /* clang-format on */
 
    while ((c = getopt_long(argc, argv, "arh", longopts, NULL)) != -1) {
-      switch(c) {
+      switch (c) {
       case 'h':
          print_help(argv[0], stderr);
          return EXIT_SUCCESS;
@@ -324,7 +326,8 @@ main(int argc, char *argv[])
             }
 
             if (print_addr) {
-               printf("BO(%u) VA(%"PRIX64") SZ(%"PRIX32") page addresses:\n",
+               printf("BO(%u) VA(%" PRIX64 ") SZ(%" PRIX32
+                      ") page addresses:\n",
                       j, doh.bomap.iova, doh.file_size);
 
                for (k = 0; k < (doh.file_size / GPU_PAGE_SIZE); k++) {
@@ -341,8 +344,7 @@ main(int argc, char *argv[])
             char bodump_filename[MAX_BODUMP_FILENAME];
             FILE *bodump;
 
-            snprintf(bodump_filename, MAX_BODUMP_FILENAME,
-                     "bodump-%u.dump", j);
+            snprintf(bodump_filename, MAX_BODUMP_FILENAME, "bodump-%u.dump", j);
 
             if ((bodump = fopen(bodump_filename, "wb"))) {
                if (fseek(data_fp, doh.file_offset, SEEK_SET)) {
@@ -365,16 +367,14 @@ main(int argc, char *argv[])
                }
                nbytes = fwrite(bos[j], 1, doh.file_size, bodump);
                if (nbytes < doh.file_size) {
-                  fprintf(stderr,
-                          "Failed to write BO contents into file: %u\n",
+                  fprintf(stderr, "Failed to write BO contents into file: %u\n",
                           errno);
                   return EXIT_FAILURE;
                }
 
                fclose(bodump);
 
-               pandecode_inject_mmap(doh.bomap.iova,
-                                     bos[j],doh.file_size,
+               pandecode_inject_mmap(doh.bomap.iova, bos[j], doh.file_size,
                                      NULL);
 
             } else {

@@ -44,6 +44,7 @@
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/os_time.h"
+#include "util/timespec.h"
 
 #include "vk_device.h"
 #include "vk_fence.h"
@@ -139,6 +140,7 @@ struct wsi_display_image {
    uint32_t                     fb_id;
    uint32_t                     buffer[4];
    uint64_t                     flip_sequence;
+   uint64_t                     present_id;
 };
 
 struct wsi_display_swapchain {
@@ -147,6 +149,12 @@ struct wsi_display_swapchain {
    VkIcdSurfaceDisplay          *surface;
    uint64_t                     flip_sequence;
    VkResult                     status;
+
+   pthread_mutex_t              present_id_mutex;
+   pthread_cond_t               present_id_cond;
+   uint64_t                     present_id;
+   VkResult                     present_id_error;
+
    struct wsi_display_image     images[0];
 };
 
@@ -957,25 +965,41 @@ wsi_display_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
    return result;
 }
 
-static const struct {
-   VkFormat     format;
-   uint32_t     drm_format;
-} available_surface_formats[] = {
-   { .format = VK_FORMAT_B8G8R8A8_SRGB, .drm_format = DRM_FORMAT_XRGB8888 },
-   { .format = VK_FORMAT_B8G8R8A8_UNORM, .drm_format = DRM_FORMAT_XRGB8888 },
+struct wsi_display_surface_format {
+   VkSurfaceFormatKHR surface_format;
+   uint32_t           drm_format;
+};
+
+static const struct wsi_display_surface_format
+ available_surface_formats[] = {
+   {
+      .surface_format = {
+         .format = VK_FORMAT_B8G8R8A8_SRGB,
+         .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+      },
+      .drm_format = DRM_FORMAT_XRGB8888
+   },
+   {
+      .surface_format = {
+         .format = VK_FORMAT_B8G8R8A8_UNORM,
+         .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+      },
+      .drm_format = DRM_FORMAT_XRGB8888
+   },
 };
 
 static void
-get_sorted_vk_formats(struct wsi_device *wsi_device, VkFormat *sorted_formats)
+get_sorted_vk_formats(struct wsi_device *wsi_device, VkSurfaceFormatKHR *sorted_formats)
 {
    for (unsigned i = 0; i < ARRAY_SIZE(available_surface_formats); i++)
-      sorted_formats[i] = available_surface_formats[i].format;
+      sorted_formats[i] = available_surface_formats[i].surface_format;
 
    if (wsi_device->force_bgra8_unorm_first) {
       for (unsigned i = 0; i < ARRAY_SIZE(available_surface_formats); i++) {
-         if (sorted_formats[i] == VK_FORMAT_B8G8R8A8_UNORM) {
+         if (sorted_formats[i].format == VK_FORMAT_B8G8R8A8_UNORM) {
+            VkSurfaceFormatKHR tmp = sorted_formats[i];
             sorted_formats[i] = sorted_formats[0];
-            sorted_formats[0] = VK_FORMAT_B8G8R8A8_UNORM;
+            sorted_formats[0] = tmp;
             break;
          }
       }
@@ -991,13 +1015,12 @@ wsi_display_surface_get_formats(VkIcdSurfaceBase *icd_surface,
    VK_OUTARRAY_MAKE_TYPED(VkSurfaceFormatKHR, out,
                           surface_formats, surface_format_count);
 
-   VkFormat sorted_formats[ARRAY_SIZE(available_surface_formats)];
+   VkSurfaceFormatKHR sorted_formats[ARRAY_SIZE(available_surface_formats)];
    get_sorted_vk_formats(wsi_device, sorted_formats);
 
    for (unsigned i = 0; i < ARRAY_SIZE(sorted_formats); i++) {
       vk_outarray_append_typed(VkSurfaceFormatKHR, &out, f) {
-         f->format = sorted_formats[i];
-         f->colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+         *f = sorted_formats[i];
       }
    }
 
@@ -1014,14 +1037,13 @@ wsi_display_surface_get_formats2(VkIcdSurfaceBase *surface,
    VK_OUTARRAY_MAKE_TYPED(VkSurfaceFormat2KHR, out,
                           surface_formats, surface_format_count);
 
-   VkFormat sorted_formats[ARRAY_SIZE(available_surface_formats)];
+   VkSurfaceFormatKHR sorted_formats[ARRAY_SIZE(available_surface_formats)];
    get_sorted_vk_formats(wsi_device, sorted_formats);
 
    for (unsigned i = 0; i < ARRAY_SIZE(sorted_formats); i++) {
       vk_outarray_append_typed(VkSurfaceFormat2KHR, &out, f) {
          assert(f->sType == VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
-         f->surfaceFormat.format = sorted_formats[i];
-         f->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+         f->surfaceFormat = sorted_formats[i];
       }
    }
 
@@ -1086,7 +1108,8 @@ wsi_display_image_init(VkDevice device_h,
    uint32_t drm_format = 0;
 
    for (unsigned i = 0; i < ARRAY_SIZE(available_surface_formats); i++) {
-      if (create_info->imageFormat == available_surface_formats[i].format) {
+      if (create_info->imageFormat == available_surface_formats[i].surface_format.format &&
+          create_info->imageColorSpace == available_surface_formats[i].surface_format.colorSpace) {
          drm_format = available_surface_formats[i].drm_format;
          break;
       }
@@ -1165,6 +1188,9 @@ wsi_display_swapchain_destroy(struct wsi_swapchain *drv_chain,
    for (uint32_t i = 0; i < chain->base.image_count; i++)
       wsi_display_image_finish(drv_chain, allocator, &chain->images[i]);
 
+   pthread_mutex_destroy(&chain->present_id_mutex);
+   pthread_cond_destroy(&chain->present_id_cond);
+
    wsi_swapchain_finish(&chain->base);
    vk_free(allocator, chain);
    return VK_SUCCESS;
@@ -1200,6 +1226,30 @@ static VkResult
 _wsi_display_queue_next(struct wsi_swapchain *drv_chain);
 
 static void
+wsi_display_present_complete(struct wsi_display_swapchain *swapchain,
+                             struct wsi_display_image *image)
+{
+   if (image->present_id) {
+      pthread_mutex_lock(&swapchain->present_id_mutex);
+      if (image->present_id > swapchain->present_id) {
+         swapchain->present_id = image->present_id;
+         pthread_cond_broadcast(&swapchain->present_id_cond);
+      }
+      pthread_mutex_unlock(&swapchain->present_id_mutex);
+   }
+}
+
+static void
+wsi_display_surface_error(struct wsi_display_swapchain *swapchain, VkResult result)
+{
+   pthread_mutex_lock(&swapchain->present_id_mutex);
+   swapchain->present_id = UINT64_MAX;
+   swapchain->present_id_error = result;
+   pthread_cond_broadcast(&swapchain->present_id_cond);
+   pthread_mutex_unlock(&swapchain->present_id_mutex);
+}
+
+static void
 wsi_display_page_flip_handler2(int fd,
                                unsigned int frame,
                                unsigned int sec,
@@ -1213,6 +1263,8 @@ wsi_display_page_flip_handler2(int fd,
    wsi_display_debug("image %ld displayed at %d\n",
                      image - &(image->chain->images[0]), frame);
    image->state = WSI_IMAGE_DISPLAYING;
+   wsi_display_present_complete(chain, image);
+
    wsi_display_idle_old_displaying(image);
    VkResult result = _wsi_display_queue_next(&(chain->base));
    if (result != VK_SUCCESS)
@@ -1386,6 +1438,7 @@ wsi_display_acquire_next_image(struct wsi_swapchain *drv_chain,
 
       if (ret && ret != ETIMEDOUT) {
          result = VK_ERROR_SURFACE_LOST_KHR;
+         wsi_display_surface_error(chain, result);
          goto done;
       }
    }
@@ -1799,8 +1852,10 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
       wsi_display_mode_from_handle(surface->displayMode);
    wsi_display_connector *connector = display_mode->connector;
 
-   if (wsi->fd < 0)
+   if (wsi->fd < 0) {
+      wsi_display_surface_error(chain, VK_ERROR_SURFACE_LOST_KHR);
       return VK_ERROR_SURFACE_LOST_KHR;
+   }
 
    if (display_mode != connector->current_mode)
       connector->active = false;
@@ -1872,6 +1927,7 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
              * previous image is now idle.
              */
             image->state = WSI_IMAGE_DISPLAYING;
+            wsi_display_present_complete(chain, image);
             wsi_display_idle_old_displaying(image);
             connector->active = true;
             return VK_SUCCESS;
@@ -1881,6 +1937,7 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
       if (ret != -EACCES) {
          connector->active = false;
          image->state = WSI_IMAGE_IDLE;
+         wsi_display_surface_error(chain, VK_ERROR_SURFACE_LOST_KHR);
          return VK_ERROR_SURFACE_LOST_KHR;
       }
 
@@ -1895,6 +1952,7 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
 static VkResult
 wsi_display_queue_present(struct wsi_swapchain *drv_chain,
                           uint32_t image_index,
+                          uint64_t present_id,
                           const VkPresentRegionKHR *damage)
 {
    struct wsi_display_swapchain *chain =
@@ -1907,10 +1965,16 @@ wsi_display_queue_present(struct wsi_swapchain *drv_chain,
    if (chain->status != VK_SUCCESS)
       return chain->status;
 
+   image->present_id = present_id;
+
    assert(image->state == WSI_IMAGE_DRAWING);
    wsi_display_debug("present %d\n", image_index);
 
    pthread_mutex_lock(&wsi->wait_mutex);
+
+   /* Make sure that the page flip handler is processed in finite time if using present wait. */
+   if (present_id)
+      wsi_display_start_wait_thread(wsi);
 
    image->flip_sequence = ++chain->flip_sequence;
    image->state = WSI_IMAGE_QUEUED;
@@ -1925,6 +1989,48 @@ wsi_display_queue_present(struct wsi_swapchain *drv_chain,
       return result;
 
    return chain->status;
+}
+
+static VkResult
+wsi_display_wait_for_present(struct wsi_swapchain *wsi_chain,
+                             uint64_t waitValue,
+                             uint64_t timeout)
+{
+   struct wsi_display_swapchain *chain = (struct wsi_display_swapchain *)wsi_chain;
+   struct timespec abs_timespec;
+   uint64_t abs_timeout = 0;
+
+   if (timeout != 0)
+      abs_timeout = os_time_get_absolute_timeout(timeout);
+
+   /* Need to observe that the swapchain semaphore has been unsignalled,
+    * as this is guaranteed when a present is complete. */
+   VkResult result = wsi_swapchain_wait_for_present_semaphore(
+      &chain->base, waitValue, timeout);
+   if (result != VK_SUCCESS)
+      return result;
+
+   timespec_from_nsec(&abs_timespec, abs_timeout);
+
+   pthread_mutex_lock(&chain->present_id_mutex);
+   while (chain->present_id < waitValue) {
+      int ret = pthread_cond_timedwait(&chain->present_id_cond,
+                                       &chain->present_id_mutex,
+                                       &abs_timespec);
+      if (ret == ETIMEDOUT) {
+         result = VK_TIMEOUT;
+         break;
+      }
+      if (ret) {
+         result = VK_ERROR_DEVICE_LOST;
+         break;
+      }
+   }
+
+   if (result == VK_SUCCESS && chain->present_id_error)
+      result = chain->present_id_error;
+   pthread_mutex_unlock(&chain->present_id_mutex);
+   return result;
 }
 
 static VkResult
@@ -1955,10 +2061,25 @@ wsi_display_surface_create_swapchain(
       .same_gpu = true,
    };
 
+   int ret = pthread_mutex_init(&chain->present_id_mutex, NULL);
+   if (ret != 0) {
+      vk_free(allocator, chain);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
+   bool bret = wsi_init_pthread_cond_monotonic(&chain->present_id_cond);
+   if (!bret) {
+      pthread_mutex_destroy(&chain->present_id_mutex);
+      vk_free(allocator, chain);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+
    VkResult result = wsi_swapchain_init(wsi_device, &chain->base, device,
                                         create_info, &image_params.base,
                                         allocator);
    if (result != VK_SUCCESS) {
+      pthread_cond_destroy(&chain->present_id_cond);
+      pthread_mutex_destroy(&chain->present_id_mutex);
       vk_free(allocator, chain);
       return result;
    }
@@ -1967,6 +2088,7 @@ wsi_display_surface_create_swapchain(
    chain->base.get_wsi_image = wsi_display_get_wsi_image;
    chain->base.acquire_next_image = wsi_display_acquire_next_image;
    chain->base.queue_present = wsi_display_queue_present;
+   chain->base.wait_for_present = wsi_display_wait_for_present;
    chain->base.present_mode = wsi_swapchain_get_present_mode(wsi_device, create_info);
    chain->base.image_count = num_images;
 
@@ -1985,6 +2107,8 @@ wsi_display_surface_create_swapchain(
             wsi_display_image_finish(&chain->base, allocator,
                                      &chain->images[image]);
          }
+         pthread_cond_destroy(&chain->present_id_cond);
+         pthread_mutex_destroy(&chain->present_id_mutex);
          wsi_swapchain_finish(&chain->base);
          vk_free(allocator, chain);
          goto fail_init_images;
@@ -1998,31 +2122,6 @@ wsi_display_surface_create_swapchain(
 fail_init_images:
    return result;
 }
-
-static bool
-wsi_init_pthread_cond_monotonic(pthread_cond_t *cond)
-{
-   pthread_condattr_t condattr;
-   bool ret = false;
-
-   if (pthread_condattr_init(&condattr) != 0)
-      goto fail_attr_init;
-
-   if (pthread_condattr_setclock(&condattr, CLOCK_MONOTONIC) != 0)
-      goto fail_attr_set;
-
-   if (pthread_cond_init(cond, &condattr) != 0)
-      goto fail_cond_init;
-
-   ret = true;
-
-fail_cond_init:
-fail_attr_set:
-   pthread_condattr_destroy(&condattr);
-fail_attr_init:
-   return ret;
-}
-
 
 /*
  * Local version fo the libdrm helper. Added to avoid depending on bleeding

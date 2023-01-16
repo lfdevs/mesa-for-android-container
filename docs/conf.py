@@ -89,8 +89,9 @@ todo_include_todos = False
 
 # Disable highlighting unless a language is specified, otherwise we'll get
 # python keywords highlit in literal blocks.
-highlight_language = "none"
+highlight_language = 'none'
 
+default_role = 'c:expr'
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -99,7 +100,7 @@ highlight_language = "none"
 #
 html_theme = 'sphinx_rtd_theme'
 
-html_favicon = "favicon.ico"
+html_favicon = 'favicon.ico'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -137,6 +138,19 @@ html_extra_path = [
 html_redirects = [
   ('webmaster', 'https://www.mesa3d.org/website/'),
 ]
+
+
+# -- Options for linkcheck ------------------------------------------------
+
+linkcheck_ignore = [
+  r'specs/.*\.spec', # gets copied during the build process
+  r'news:.*', # seems linkcheck doesn't like the news: URI-scheme...
+  r'http://mesa-ci-results.jf.intel.com', # only available for Intel employees
+  r'https://gitlab.com/.*#.*', # needs JS eval
+  r'https://gitlab.freedesktop.org/.*#.*', # needs JS eval
+  r'https://github.com/.*#.*', # needs JS eval
+]
+linkcheck_exclude_documents = [r'relnotes/.*']
 
 
 # -- Options for HTMLHelp output ------------------------------------------

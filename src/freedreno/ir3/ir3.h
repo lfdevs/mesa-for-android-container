@@ -2393,7 +2393,8 @@ INSTR1(QUAD_SHUFFLE_VERT)
 INSTR1(QUAD_SHUFFLE_DIAG)
 INSTR2NODST(LDC_K)
 INSTR2NODST(STC)
-#if GPU >= 600
+#ifndef GPU
+#elif GPU >= 600
 INSTR3NODST(STIB);
 INSTR2(LDIB);
 INSTR5(LDG_A);
@@ -2445,7 +2446,7 @@ INSTR0(BAR)
 INSTR0(FENCE)
 
 /* ************************************************************************* */
-#include "bitset.h"
+#include "util/bitset.h"
 
 #define MAX_REG 256
 

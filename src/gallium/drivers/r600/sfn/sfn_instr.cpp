@@ -227,7 +227,7 @@ InstrWithVectorResult::InstrWithVectorResult(const RegisterVec4& dest,
 void
 InstrWithVectorResult::print_dest(std::ostream& os) const
 {
-   os << (m_dest[0]->is_ssa() ? 'S' : 'R') << m_dest.sel();
+   os << (m_dest[0]->has_flag(Register::ssa) ? 'S' : 'R') << m_dest.sel();
    os << ".";
    for (int i = 0; i < 4; ++i)
       os << VirtualValue::chanchar[m_dest_swizzle[i]];

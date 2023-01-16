@@ -76,6 +76,7 @@ tu_spirv_to_nir(struct tu_device *dev,
          .subgroup_shuffle = true,
          .subgroup_arithmetic = true,
          .physical_storage_buffer_address = true,
+         .post_depth_coverage = true,
       },
    };
 
@@ -119,9 +120,8 @@ tu_spirv_to_nir(struct tu_device *dev,
    NIR_PASS_V(nir, nir_opt_copy_prop_vars);
    NIR_PASS_V(nir, nir_opt_combine_stores, nir_var_all);
 
-   NIR_PASS_V(nir, nir_lower_is_helper_invocation);
-
    NIR_PASS_V(nir, nir_lower_system_values);
+   NIR_PASS_V(nir, nir_lower_is_helper_invocation);
 
    NIR_PASS_V(nir, nir_lower_frexp);
 
@@ -178,6 +178,9 @@ lower_vulkan_resource_index(nir_builder *b, nir_intrinsic_instr *instr,
       &set_layout->binding[binding];
    nir_ssa_def *base;
 
+   if (binding_layout->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
+      return;
+
    shader->active_desc_sets |= 1u << set;
 
    switch (binding_layout->type) {
@@ -205,16 +208,9 @@ lower_vulkan_resource_index(nir_builder *b, nir_intrinsic_instr *instr,
       break;
    }
 
-   nir_ssa_def *shift;
-
-   if (binding_layout->type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
-      /* Inline uniform blocks cannot have arrays so the stride is unused */
-      shift = nir_imm_int(b, 0);
-   } else {
-      unsigned stride = binding_layout->size / (4 * A6XX_TEX_CONST_DWORDS);
-      assert(util_is_power_of_two_nonzero(stride));
-      shift = nir_imm_int(b, util_logbase2(stride));
-   }
+   unsigned stride = binding_layout->size / (4 * A6XX_TEX_CONST_DWORDS);
+   assert(util_is_power_of_two_nonzero(stride));
+   nir_ssa_def *shift = nir_imm_int(b, util_logbase2(stride));
 
    nir_ssa_def *def = nir_vec3(b, nir_imm_int(b, set),
                                nir_iadd(b, base,
@@ -608,6 +604,81 @@ lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
    }
 }
 
+/* Since we always push inline uniforms into constant memory, lower loads of
+ * them to load_uniform which turns into constant memory loads.
+ */
+static bool
+lower_inline_ubo(nir_builder *b, nir_instr *instr, void *cb_data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   if (intrin->intrinsic != nir_intrinsic_load_ubo)
+      return false;
+
+   struct lower_instr_params *params = cb_data;
+   struct tu_shader *shader = params->shader;
+   const struct tu_pipeline_layout *layout = params->layout;
+
+   nir_binding binding = nir_chase_binding(intrin->src[0]);
+
+   if (!binding.success)
+      return false;
+
+   struct tu_descriptor_set_layout *set_layout = layout->set[binding.desc_set].layout;
+   struct tu_descriptor_set_binding_layout *binding_layout =
+      &set_layout->binding[binding.binding];
+
+   if (binding_layout->type != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
+      return false;
+
+   /* lookup the const offset of the inline UBO */
+   struct tu_const_state *const_state = &shader->const_state;
+
+   unsigned base = UINT_MAX;
+   bool use_load = false;
+   for (unsigned i = 0; i < const_state->num_inline_ubos; i++) {
+      if (const_state->ubos[i].base == binding.desc_set &&
+          const_state->ubos[i].offset == binding_layout->offset) {
+         base = const_state->ubos[i].const_offset_vec4 * 4;
+         use_load = const_state->ubos[i].push_address;
+         break;
+      }
+   }
+
+   if (base == UINT_MAX) {
+      /* Assume we're loading out-of-bounds from a 0-sized inline uniform
+       * filtered out below.
+       */
+      nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+                               nir_ssa_undef(b, intrin->num_components,
+                                             intrin->dest.ssa.bit_size));
+      return true;
+   }
+
+   nir_ssa_def *offset = intrin->src[1].ssa;
+
+   b->cursor = nir_before_instr(instr);
+   nir_ssa_def *val;
+
+   if (use_load) {
+      nir_ssa_def *base_addr =
+         nir_load_uniform(b, 2, 32, nir_imm_int(b, 0), .base = base);
+      val = nir_load_global_ir3(b, intrin->num_components,
+                                intrin->dest.ssa.bit_size,
+                                base_addr, nir_ishr_imm(b, offset, 2));
+   } else {
+      val = nir_load_uniform(b, intrin->num_components,
+                             intrin->dest.ssa.bit_size,
+                             nir_ishr_imm(b, offset, 2), .base = base);
+   }
+
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, val);
+   nir_instr_remove(instr);
+   return true;
+}
+
 /* Figure out the range of push constants that we're actually going to push to
  * the shader, and tell the backend to reserve this range when pushing UBO
  * constants.
@@ -678,6 +749,68 @@ tu_lower_io(nir_shader *shader, struct tu_device *dev,
       const_state->dynamic_offset_loc = UINT32_MAX;
    }
 
+   /* Reserve space for inline uniforms, so we can always load them from
+    * constants and not setup a UBO descriptor for them.
+    */
+   for (unsigned set = 0; set < layout->num_sets; set++) {
+      const struct tu_descriptor_set_layout *desc_layout =
+         layout->set[set].layout;
+
+      if (!desc_layout || !desc_layout->has_inline_uniforms)
+         continue;
+
+      for (unsigned b = 0; b < desc_layout->binding_count; b++) {
+         const struct tu_descriptor_set_binding_layout *binding =
+            &desc_layout->binding[b];
+
+         if (binding->type != VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK)
+            continue;
+         if (!(binding->shader_stages &
+               mesa_to_vk_shader_stage(shader->info.stage)))
+            continue;
+
+         /* Workaround a CTS bug by ignoring zero-sized inline uniform
+          * blocks that aren't being properly filtered out when creating the
+          * descriptor set layout, see
+          * https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4115
+          */
+         if (binding->size == 0)
+            continue;
+
+         /* If we don't know the size at compile time due to a variable
+          * descriptor count, then with descriptor buffers we cannot know
+          * how much space the real inline uniform has. In this case we fall
+          * back to pushing the address and using ldg, which is slower than
+          * setting up a descriptor but setting up our own descriptor with
+          * descriptor_buffer is also painful and has to be done on the GPU
+          * and doesn't avoid the UBO getting pushed anyway and faulting if a
+          * out-of-bounds access is hidden behind an if and not dynamically
+          * executed. Given the small max size, there shouldn't be much reason
+          * to use variable size anyway.
+          */
+         bool push_address = desc_layout->has_variable_descriptors &&
+            b == desc_layout->binding_count - 1;
+
+         if (push_address) {
+            perf_debug(dev,
+                       "falling back to ldg for variable-sized inline "
+                       "uniform block");
+         }
+
+         assert(const_state->num_inline_ubos < ARRAY_SIZE(const_state->ubos));
+         unsigned size_vec4 = push_address ? 1 : DIV_ROUND_UP(binding->size, 16);
+         const_state->ubos[const_state->num_inline_ubos++] = (struct tu_inline_ubo) {
+            .base = set,
+            .offset = binding->offset,
+            .const_offset_vec4 = reserved_consts_vec4,
+            .size_vec4 = size_vec4,
+            .push_address = push_address,
+         };
+
+         reserved_consts_vec4 += align(size_vec4, dev->compiler->const_upload_unit);
+      }
+   }
+
    tu_shader->reserved_user_consts_vec4 = reserved_consts_vec4;
 
    struct lower_instr_params params = {
@@ -686,10 +819,18 @@ tu_lower_io(nir_shader *shader, struct tu_device *dev,
       .layout = layout,
    };
 
-   bool progress = nir_shader_instructions_pass(shader,
-                                                lower_instr,
-                                                nir_metadata_none,
-                                                &params);
+   bool progress = false;
+   if (const_state->num_inline_ubos) {
+      progress |= nir_shader_instructions_pass(shader,
+                                               lower_inline_ubo,
+                                               nir_metadata_none,
+                                               &params);
+   }
+
+   progress |= nir_shader_instructions_pass(shader,
+                                            lower_instr,
+                                            nir_metadata_none,
+                                            &params);
 
    /* Remove now-unused variables so that when we gather the shader info later
     * they won't be counted.

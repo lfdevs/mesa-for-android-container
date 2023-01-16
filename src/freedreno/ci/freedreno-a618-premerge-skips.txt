@@ -4,6 +4,8 @@
 
 # Timeouts, passes otherwise
 KHR-GL45.texture_swizzle.smoke
+KHR-GL45.gpu_shader_fp64.builtin.inverse_dmat4
+KHR-GL45.gpu_shader_fp64.fp64.varyings
 
 # These generally take near 15 seconds.  The time is spent inside dEQP.
 dEQP-VK.tessellation.invariance.inner_triangle_set.quads_equal_spacing

@@ -37,6 +37,20 @@
 
 #include <dxguids/dxguids.h>
 
+
+unsigned d3d12_sampler_desc_table_key_hash(const void* key)
+{
+   const d3d12_sampler_desc_table_key* table = (d3d12_sampler_desc_table_key*)key;
+
+   return _mesa_hash_data(table->descs, sizeof(table->descs[0]) * table->count);
+}
+bool d3d12_sampler_desc_table_key_equals(const void* a, const void* b)
+{
+   const d3d12_sampler_desc_table_key* table_a = (d3d12_sampler_desc_table_key*)a;
+   const d3d12_sampler_desc_table_key* table_b = (d3d12_sampler_desc_table_key*)b;
+   return table_a->count == table_b->count && memcmp(table_a->descs, table_b->descs, sizeof(table_a->descs[0]) * table_a->count) == 0;
+}
+
 bool
 d3d12_init_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
 {
@@ -44,6 +58,8 @@ d3d12_init_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
 
    batch->bos = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
                                         _mesa_key_pointer_equal);
+   batch->sampler_tables = _mesa_hash_table_create(NULL, d3d12_sampler_desc_table_key_hash,
+                                                   d3d12_sampler_desc_table_key_equals);
    batch->sampler_views = _mesa_set_create(NULL, _mesa_hash_pointer,
                                            _mesa_key_pointer_equal);
    batch->surfaces = _mesa_set_create(NULL, _mesa_hash_pointer,
@@ -52,7 +68,7 @@ d3d12_init_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
                                      _mesa_hash_pointer,
                                      _mesa_key_pointer_equal);
 
-   if (!batch->bos || !batch->sampler_views || !batch->surfaces || !batch->objects)
+   if (!batch->bos || !batch->sampler_tables || !batch->sampler_views || !batch->surfaces || !batch->objects)
       return false;
 
    util_dynarray_init(&batch->zombie_samplers, NULL);
@@ -61,18 +77,17 @@ d3d12_init_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
                                                   IID_PPV_ARGS(&batch->cmdalloc))))
       return false;
 
-
    batch->sampler_heap =
       d3d12_descriptor_heap_new(screen->dev,
                                 D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
                                 D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-                                128);
+                              1024);
 
    batch->view_heap =
       d3d12_descriptor_heap_new(screen->dev,
                                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
                                 D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-                                1024);
+                                8096);
 
    if (!batch->sampler_heap && !batch->view_heap)
       return false;
@@ -85,6 +100,13 @@ delete_bo(hash_entry *entry)
 {
    struct d3d12_bo *bo = (struct d3d12_bo *)entry->key;
    d3d12_bo_unreference(bo);
+}
+
+static void
+delete_sampler_view_table(hash_entry *entry)
+{
+   FREE((void*)entry->key);
+   FREE(entry->data);
 }
 
 static void
@@ -122,6 +144,7 @@ d3d12_reset_batch(struct d3d12_context *ctx, struct d3d12_batch *batch, uint64_t
    }
 
    _mesa_hash_table_clear(batch->bos, delete_bo);
+   _mesa_hash_table_clear(batch->sampler_tables, delete_sampler_view_table);
    _mesa_set_clear(batch->sampler_views, delete_sampler_view);
    _mesa_set_clear(batch->surfaces, delete_surface);
    _mesa_set_clear(batch->objects, delete_object);
@@ -150,6 +173,7 @@ d3d12_destroy_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
    d3d12_descriptor_heap_free(batch->sampler_heap);
    d3d12_descriptor_heap_free(batch->view_heap);
    _mesa_hash_table_destroy(batch->bos, NULL);
+   _mesa_hash_table_destroy(batch->sampler_tables, NULL);
    _mesa_set_destroy(batch->sampler_views, NULL);
    _mesa_set_destroy(batch->surfaces, NULL);
    _mesa_set_destroy(batch->objects, NULL);
@@ -223,7 +247,13 @@ d3d12_end_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
       count_to_execute--;
    }
    screen->cmdqueue->ExecuteCommandLists(count_to_execute, to_execute);
+
    batch->fence = d3d12_create_fence(screen);
+
+   util_dynarray_foreach(&ctx->ended_queries, struct d3d12_query*, query) {
+      (*query)->fence_value = screen->fence_value;
+   }
+   util_dynarray_clear(&ctx->ended_queries);
 
    mtx_unlock(&screen->submit_mutex);
 }

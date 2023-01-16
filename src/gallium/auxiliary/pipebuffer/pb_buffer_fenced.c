@@ -34,9 +34,9 @@
  */
 
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
-#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS)
+#if DETECT_OS_LINUX || DETECT_OS_BSD || DETECT_OS_SOLARIS
 #include <unistd.h>
 #include <sched.h>
 #endif
@@ -45,7 +45,7 @@
 #include "pipe/p_compiler.h"
 #include "pipe/p_defines.h"
 #include "util/u_debug.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_memory.h"
 #include "util/list.h"
 
@@ -979,7 +979,7 @@ fenced_bufmgr_destroy(struct pb_manager *mgr)
    /* Wait on outstanding fences. */
    while (fenced_mgr->num_fenced) {
       mtx_unlock(&fenced_mgr->mutex);
-#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_BSD) || defined(PIPE_OS_SOLARIS)
+#if DETECT_OS_LINUX || DETECT_OS_BSD || DETECT_OS_SOLARIS
       sched_yield();
 #endif
       mtx_lock(&fenced_mgr->mutex);

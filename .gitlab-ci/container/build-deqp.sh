@@ -40,6 +40,12 @@ cmake -S /VK-GL-CTS -B . -G Ninja \
 ninja modules/egl/deqp-egl
 cp /deqp/modules/egl/deqp-egl /deqp/modules/egl/deqp-egl-x11
 
+cmake -S /VK-GL-CTS -B . -G Ninja \
+      -DDEQP_TARGET=wayland \
+      -DCMAKE_BUILD_TYPE=Release \
+      $EXTRA_CMAKE_ARGS
+ninja modules/egl/deqp-egl
+cp /deqp/modules/egl/deqp-egl /deqp/modules/egl/deqp-egl-wayland
 
 cmake -S /VK-GL-CTS -B . -G Ninja \
       -DDEQP_TARGET=${DEQP_TARGET:-x11_glx} \

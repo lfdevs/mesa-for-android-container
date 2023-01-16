@@ -36,7 +36,7 @@ Basic formatting guidelines
 
 -  Use comments wherever you think it would be helpful for other
    developers. Several specific cases and style examples follow. Note
-   that we roughly follow `Doxygen <http://www.doxygen.nl>`__
+   that we roughly follow `Doxygen <https://www.doxygen.nl>`__
    conventions.
 
    Single-line comments:

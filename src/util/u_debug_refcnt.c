@@ -106,7 +106,7 @@ debug_serial_delete(void *p)
 }
 
 
-#if defined(PIPE_OS_WINDOWS)
+#if DETECT_OS_WINDOWS
 #define STACK_LEN 60
 #else
 #define STACK_LEN 64

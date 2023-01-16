@@ -24,7 +24,7 @@
  **********************************************************/
 
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"

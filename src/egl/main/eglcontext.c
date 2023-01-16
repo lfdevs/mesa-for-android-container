@@ -597,7 +597,7 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *disp,
  */
 EGLBoolean
 _eglInitContext(_EGLContext *ctx, _EGLDisplay *disp, _EGLConfig *conf,
-                const EGLint *attrib_list)
+                _EGLContext *share_list, const EGLint *attrib_list)
 {
    const EGLenum api = eglQueryAPI();
    EGLint err;
@@ -630,6 +630,31 @@ _eglInitContext(_EGLContext *ctx, _EGLDisplay *disp, _EGLConfig *conf,
    }
    if (err != EGL_SUCCESS)
       return _eglError(err, "eglCreateContext");
+
+   /* The EGL_EXT_create_context_robustness spec says:
+    *
+    *    "Add to the eglCreateContext context creation errors: [...]
+    *
+    *     * If the reset notification behavior of <share_context> and the
+    *       newly created context are different then an EGL_BAD_MATCH error is
+    *       generated."
+    */
+   if (share_list && share_list->ResetNotificationStrategy !=
+                     ctx->ResetNotificationStrategy) {
+      return _eglError(EGL_BAD_MATCH,
+                       "eglCreateContext() share list notification strategy mismatch");
+   }
+
+   /* The EGL_KHR_create_context_no_error spec says:
+    *
+    *    "BAD_MATCH is generated if the value of EGL_CONTEXT_OPENGL_NO_ERROR_KHR
+    *    used to create <share_context> does not match the value of
+    *    EGL_CONTEXT_OPENGL_NO_ERROR_KHR for the context being created."
+    */
+   if (share_list && share_list->NoError != ctx->NoError) {
+      return _eglError(EGL_BAD_MATCH,
+                       "eglCreateContext() share list no-error mismatch");
+   }
 
    return EGL_TRUE;
 }

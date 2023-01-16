@@ -109,11 +109,6 @@ rustfmt:
   variables:
     DEQP_VER: vk
 
-.skqp-test:
-  variables:
-    HWCI_START_XORG: 1
-    HWCI_TEST_SCRIPT: "/install/skqp-runner.sh"
-
 .fossilize-test:
   script:
     - ./install/fossilize-runner.sh
@@ -135,6 +130,8 @@ rustfmt:
     # improve it even more (see https://docs.mesa3d.org/ci/bare-metal.html for
     # setup).
     - echo -e "\e[0Ksection_start:$(date +%s):artifacts_download[collapsed=true]\r\e[0KDownloading artifacts from minio"
+    # Note: Build dir (and thus install) may be dirty due to GIT_STRATEGY
+    - rm -rf install
     - wget ${FDO_HTTP_CACHE_URI:-}https://${PIPELINE_ARTIFACTS_BASE}/${MINIO_ARTIFACT_NAME}.tar.zst -S --progress=dot:giga -O- | tar --zstd -x
     - echo -e "\e[0Ksection_end:$(date +%s):artifacts_download\r\e[0K"
   artifacts:
@@ -152,12 +149,12 @@ rustfmt:
 .baremetal-test-armhf:
   extends:
     - .baremetal-test
-    - .use-debian/arm_test
+    - .use-debian/armhf_test
   variables:
     BM_ROOTFS: /rootfs-armhf
     MINIO_ARTIFACT_NAME: mesa-armhf
   needs:
-    - debian/arm_test
+    - debian/armhf_test
     - job: debian-armhf
       artifacts: false
 
@@ -165,12 +162,12 @@ rustfmt:
 .baremetal-test-arm64:
   extends:
     - .baremetal-test
-    - .use-debian/arm_test
+    - .use-debian/arm64_test
   variables:
     BM_ROOTFS: /rootfs-arm64
     MINIO_ARTIFACT_NAME: mesa-arm64
   needs:
-    - debian/arm_test
+    - debian/arm64_test
     - job: debian-arm64
       artifacts: false
 
@@ -178,12 +175,12 @@ rustfmt:
 .baremetal-arm64-asan-test:
   extends:
     - .baremetal-test
-    - .use-debian/arm_test
+    - .use-debian/arm64_test
   variables:
     DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.6:/install/lib/libdlclose-skip.so"
     MINIO_ARTIFACT_NAME: mesa-arm64-asan
   needs:
-    - debian/arm_test
+    - debian/arm64_test
     - job: debian-arm64-asan
       artifacts: false
 
@@ -204,13 +201,13 @@ rustfmt:
   # like FDO_DISTRIBUTION_TAG for *the* image, there is no way to
   # depend on more than one image per job. So, the job container is
   # built as part of the CI in the boot2container project.
-  image: registry.freedesktop.org/mupuf/valve-infra/mesa-trigger:2022-03-03.2
+  image: registry.freedesktop.org/mupuf/valve-infra/mesa-trigger:2022-12-08.1
   timeout: 1h 40m
   variables:
     # No need by default to pull the whole repo
     GIT_STRATEGY: none
     # boot2container initrd configuration parameters.
-    B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/valve-infra/-/package_files/144/download'  # 5.17.1
+    B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/valve-infra/-/package_files/519/download'  # Linux 6.1
     B2C_INITRAMFS_URL: 'https://gitlab.freedesktop.org/mupuf/boot2container/-/releases/v0.9.8/downloads/initramfs.linux_amd64.cpio.xz'
     B2C_JOB_SUCCESS_REGEX: '\[.*\]: Execution is over, pipeline status: 0\r$'
     B2C_JOB_WARN_REGEX: '\*ERROR\* ring .* timeout, but soft recovered'
@@ -239,9 +236,11 @@ rustfmt:
     GENERATE_ENV_SCRIPT: "${CI_COMMON_SCRIPTS}/generate-env.sh"
     B2C_JOB_TEMPLATE: "${CI_B2C_ARTIFACTS}/b2c.yml.jinja2.jinja2"
     JOB_FOLDER: "job_folder"
+
   before_script:
     # We don't want the tarball unpacking of .test, but will take the JWT bits.
     - !reference [default, before_script]
+
     - |
       set -x
 
@@ -321,7 +320,6 @@ rustfmt:
       env PYTHONUNBUFFERED=1 executorctl \
           run -w b2c.yml.jinja2 -j $(slugify "$CI_JOB_NAME") -s ${JOB_FOLDER}
 
-      ls -l
       # Anything our job places in results/ will be collected by the
       # Gitlab coordinator for status presentation. results/junit.xml
       # will be parsed by the UI for more detailed explanations of
@@ -332,7 +330,7 @@ rustfmt:
     paths:
       - ${JOB_FOLDER}/results
     reports:
-      junit: ${JOB_FOLDER}/results/junit.xml
+      junit: ${JOB_FOLDER}/results/**/junit.xml
 
 .b2c-test-vk:
   extends:

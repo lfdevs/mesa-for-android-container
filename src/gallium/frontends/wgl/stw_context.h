@@ -34,12 +34,12 @@
 
 struct hud_context;
 struct stw_framebuffer;
-struct st_context_iface;
-struct st_manager;
+struct st_context;
+struct pipe_frontend_screen;
 
 struct stw_context
 {
-   struct st_context_iface *st;
+   struct st_context *st;
    DHGLRC dhglrc;
    const struct stw_pixelformat_info *pfi;
    HDC hDrawDC;
@@ -54,7 +54,7 @@ struct stw_context
 
 struct stw_context *stw_create_context_attribs(HDC hdc, INT iLayerPlane,
                                                struct stw_context *shareCtx,
-                                               struct st_manager *smapi,
+                                               struct pipe_frontend_screen *fscreen,
                                                int majorVersion, int minorVersion,
                                                int contextFlags, int profileMask,
                                                const struct stw_pixelformat_info *pfi,

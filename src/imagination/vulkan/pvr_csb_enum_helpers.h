@@ -31,6 +31,21 @@
 #include "rogue/rogue.h"
 #include "util/macros.h"
 
+static const char *
+pvr_cmd_stream_type_to_str(const enum pvr_cmd_stream_type stream_type)
+{
+   switch (stream_type) {
+   case PVR_CMD_STREAM_TYPE_INVALID:
+      return "INVALID";
+   case PVR_CMD_STREAM_TYPE_GRAPHICS:
+      return "GRAPHICS";
+   case PVR_CMD_STREAM_TYPE_COMPUTE:
+      return "COMPUTE";
+   default:
+      return NULL;
+   }
+}
+
 /******************************************************************************
    CR
  ******************************************************************************/
@@ -128,6 +143,27 @@ static inline enum PVRX(TEXSTATE_CMP_MODE) pvr_texstate_cmpmode(VkCompareOp op)
 {
    /* enum values are identical, so we can just cast the input directly. */
    return (enum PVRX(TEXSTATE_CMP_MODE))op;
+}
+
+/******************************************************************************
+   VDMCTRL
+ ******************************************************************************/
+
+/* clang-format off */
+static inline uint32_t
+pvr_vdmctrl_index_size_nr_bytes(enum PVRX(VDMCTRL_INDEX_SIZE) index_size)
+/* clang-format on */
+{
+   switch (index_size) {
+   case PVRX(VDMCTRL_INDEX_SIZE_B8):
+      return 1;
+   case PVRX(VDMCTRL_INDEX_SIZE_B16):
+      return 2;
+   case PVRX(VDMCTRL_INDEX_SIZE_B32):
+      return 4;
+   default:
+      return 0;
+   }
 }
 
 #endif /* PVR_CSB_ENUM_HELPERS_H */

@@ -151,7 +151,9 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-      return 11; // D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION == 2^10
+      static_assert(D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION == (1 << 11),
+                    "D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION");
+      return 12;
 
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
       return D3D12_REQ_MIP_LEVELS;

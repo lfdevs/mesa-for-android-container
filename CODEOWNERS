@@ -123,8 +123,8 @@ meson.build @dbaker @eric
 /src/gallium/drivers/freedreno/ @robclark
 
 # Imagination
-/include/drm-uapi/pvr_drm.h @CreativeCylon @frankbinns
-/src/imagination/ @CreativeCylon @frankbinns
+/include/drm-uapi/pvr_drm.h @CreativeCylon @frankbinns @MTCoster
+/src/imagination/ @CreativeCylon @frankbinns @MTCoster
 /src/imagination/rogue/ @simon-perretta-img
 
 # Intel

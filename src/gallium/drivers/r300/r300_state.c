@@ -34,7 +34,7 @@
 
 #include "tgsi/tgsi_parse.h"
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #include "r300_cb.h"
 #include "r300_context.h"
@@ -919,7 +919,7 @@ r300_set_framebuffer_state(struct pipe_context* pipe,
 
     if (state->width > max_width || state->height > max_height) {
         fprintf(stderr, "r300: Implementation error: Render targets are too "
-        "big in %s, refusing to bind framebuffer state!\n", __FUNCTION__);
+        "big in %s, refusing to bind framebuffer state!\n", __func__);
         return;
     }
 

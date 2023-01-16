@@ -34,13 +34,8 @@ radv_translate_format_to_hw(struct radeon_info *info, VkFormat format, unsigned 
    const struct util_format_description *desc = vk_format_description(format);
    *hw_fmt = radv_translate_colorformat(format);
 
-   int firstchan;
-   for (firstchan = 0; firstchan < 4; firstchan++) {
-      if (desc->channel[firstchan].type != UTIL_FORMAT_TYPE_VOID) {
-         break;
-      }
-   }
-   if (firstchan == 4 || desc->channel[firstchan].type == UTIL_FORMAT_TYPE_FLOAT) {
+   int firstchan = vk_format_get_first_non_void_channel(format);
+   if (firstchan == -1 || desc->channel[firstchan].type == UTIL_FORMAT_TYPE_FLOAT) {
       *hw_type = V_028C70_NUMBER_FLOAT;
    } else {
       *hw_type = V_028C70_NUMBER_UNORM;

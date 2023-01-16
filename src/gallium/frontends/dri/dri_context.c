@@ -41,17 +41,16 @@
 #include "util/u_memory.h"
 #include "util/u_debug.h"
 
-GLboolean
-dri_create_context(gl_api api, const struct gl_config * visual,
-                   __DRIcontext * cPriv,
+struct dri_context *
+dri_create_context(struct dri_screen *screen,
+                   gl_api api, const struct gl_config *visual,
                    const struct __DriverContextConfig *ctx_config,
                    unsigned *error,
-                   void *sharedContextPrivate)
+                   struct dri_context *sharedContextPrivate,
+                   void *loaderPrivate)
 {
-   __DRIscreen *sPriv = cPriv->driScreenPriv;
-   struct dri_screen *screen = dri_screen(sPriv);
    struct dri_context *ctx = NULL;
-   struct st_context_iface *st_share = NULL;
+   struct st_context *st_share = NULL;
    struct st_context_attribs attribs;
    enum st_context_error ctx_err = 0;
    unsigned allowed_flags = __DRI_CTX_FLAG_DEBUG |
@@ -61,7 +60,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       __DRIVER_CONTEXT_ATTRIB_RELEASE_BEHAVIOR |
       __DRIVER_CONTEXT_ATTRIB_NO_ERROR;
    const __DRIbackgroundCallableExtension *backgroundCallable =
-      screen->sPriv->dri2.backgroundCallable;
+      screen->dri2.backgroundCallable;
    const struct driOptionCache *optionCache = &screen->dev->option_cache;
 
    if (screen->has_reset_status_query) {
@@ -85,18 +84,18 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    memset(&attribs, 0, sizeof(attribs));
    switch (api) {
    case API_OPENGLES:
-      attribs.profile = ST_PROFILE_OPENGL_ES1;
+      attribs.profile = API_OPENGLES;
       break;
    case API_OPENGLES2:
-      attribs.profile = ST_PROFILE_OPENGL_ES2;
+      attribs.profile = API_OPENGLES2;
       break;
    case API_OPENGL_COMPAT:
    case API_OPENGL_CORE:
       if (driQueryOptionb(optionCache, "force_compat_profile")) {
-         attribs.profile = ST_PROFILE_DEFAULT;
+         attribs.profile = API_OPENGL_COMPAT;
       } else {
-         attribs.profile = api == API_OPENGL_COMPAT ? ST_PROFILE_DEFAULT
-                                                    : ST_PROFILE_OPENGL_CORE;
+         attribs.profile = api == API_OPENGL_COMPAT ? API_OPENGL_COMPAT
+                                                    : API_OPENGL_CORE;
       }
 
       attribs.major = ctx_config->major_version;
@@ -114,11 +113,11 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
 
    if (ctx_config->flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS)
-      attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
+      attribs.context_flags |= PIPE_CONTEXT_ROBUST_BUFFER_ACCESS;
 
    if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY)
       if (ctx_config->reset_strategy != __DRI_CTX_RESET_NO_NOTIFICATION)
-         attribs.flags |= ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED;
+         attribs.context_flags |= PIPE_CONTEXT_LOSE_CONTEXT_ON_RESET;
 
    if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_NO_ERROR)
       attribs.flags |= ctx_config->no_error ? ST_CONTEXT_FLAG_NO_ERROR : 0;
@@ -126,10 +125,10 @@ dri_create_context(gl_api api, const struct gl_config * visual,
    if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PRIORITY) {
       switch (ctx_config->priority) {
       case __DRI_CTX_PRIORITY_LOW:
-         attribs.flags |= ST_CONTEXT_FLAG_LOW_PRIORITY;
+         attribs.context_flags |= PIPE_CONTEXT_LOW_PRIORITY;
          break;
       case __DRI_CTX_PRIORITY_HIGH:
-         attribs.flags |= ST_CONTEXT_FLAG_HIGH_PRIORITY;
+         attribs.context_flags |= PIPE_CONTEXT_HIGH_PRIORITY;
          break;
       default:
          break;
@@ -141,7 +140,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       attribs.flags |= ST_CONTEXT_FLAG_RELEASE_NONE;
 
    if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PROTECTED)
-      attribs.flags |= ST_CONTEXT_FLAG_PROTECTED;
+      attribs.context_flags |= PIPE_CONTEXT_PROTECTED;
 
    struct dri_context *share_ctx = NULL;
    if (sharedContextPrivate) {
@@ -155,9 +154,8 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       goto fail;
    }
 
-   cPriv->driverPrivate = ctx;
-   ctx->cPriv = cPriv;
-   ctx->sPriv = sPriv;
+   ctx->screen = screen;
+   ctx->loaderPrivate = loaderPrivate;
 
    /* KHR_no_error is likely to crash, overflow memory, etc if an application
     * has errors so don't enable it for setuid processes.
@@ -181,70 +179,55 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       case ST_CONTEXT_ERROR_NO_MEMORY:
 	 *error = __DRI_CTX_ERROR_NO_MEMORY;
 	 break;
-      case ST_CONTEXT_ERROR_BAD_API:
-	 *error = __DRI_CTX_ERROR_BAD_API;
-	 break;
       case ST_CONTEXT_ERROR_BAD_VERSION:
 	 *error = __DRI_CTX_ERROR_BAD_VERSION;
-	 break;
-      case ST_CONTEXT_ERROR_BAD_FLAG:
-	 *error = __DRI_CTX_ERROR_BAD_FLAG;
-	 break;
-      case ST_CONTEXT_ERROR_UNKNOWN_ATTRIBUTE:
-	 *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
-	 break;
-      case ST_CONTEXT_ERROR_UNKNOWN_FLAG:
-	 *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
 	 break;
       }
       goto fail;
    }
-   ctx->st->st_manager_private = (void *) ctx;
+   ctx->st->frontend_context = (void *) ctx;
 
    if (ctx->st->cso_context) {
       ctx->pp = pp_init(ctx->st->pipe, screen->pp_enabled, ctx->st->cso_context,
-                        ctx->st);
-      ctx->hud = hud_create(ctx->st->cso_context, ctx->st,
-                            share_ctx ? share_ctx->hud : NULL);
+                        ctx->st, st_context_invalidate_state);
+      ctx->hud = hud_create(ctx->st->cso_context,
+                            share_ctx ? share_ctx->hud : NULL,
+                            ctx->st, st_context_invalidate_state);
    }
 
    /* Do this last. */
-   if (ctx->st->start_thread &&
-       driQueryOptionb(&screen->dev->option_cache, "mesa_glthread")) {
+   if (driQueryOptionb(&screen->dev->option_cache, "mesa_glthread")) {
       bool safe = true;
 
       /* This is only needed by X11/DRI2, which can be unsafe. */
       if (backgroundCallable &&
           backgroundCallable->base.version >= 2 &&
           backgroundCallable->isThreadSafe &&
-          !backgroundCallable->isThreadSafe(cPriv->loaderPrivate))
+          !backgroundCallable->isThreadSafe(loaderPrivate))
          safe = false;
 
       if (safe)
-         ctx->st->start_thread(ctx->st);
+         _mesa_glthread_init(ctx->st->ctx);
    }
 
    *error = __DRI_CTX_ERROR_SUCCESS;
-   return GL_TRUE;
+   return ctx;
 
  fail:
    if (ctx && ctx->st)
-      ctx->st->destroy(ctx->st);
+      st_destroy_context(ctx->st);
 
    free(ctx);
-   return GL_FALSE;
+   return NULL;
 }
 
 void
-dri_destroy_context(__DRIcontext * cPriv)
+dri_destroy_context(struct dri_context *ctx)
 {
-   struct dri_context *ctx = dri_context(cPriv);
-
    /* Wait for glthread to finish because we can't use pipe_context from
     * multiple threads.
     */
-   if (ctx->st->thread_finish)
-      ctx->st->thread_finish(ctx->st);
+   _mesa_glthread_finish(ctx->st->ctx);
 
    if (ctx->hud) {
       hud_destroy(ctx->hud, ctx->st->cso_context);
@@ -258,22 +241,20 @@ dri_destroy_context(__DRIcontext * cPriv)
     * to avoid having to add code elsewhere to cope with flushing a
     * partially destroyed context.
     */
-   ctx->st->flush(ctx->st, 0, NULL, NULL, NULL);
-   ctx->st->destroy(ctx->st);
+   st_context_flush(ctx->st, 0, NULL, NULL, NULL);
+   st_destroy_context(ctx->st);
    free(ctx);
 }
 
 /* This is called inside MakeCurrent to unbind the context. */
 GLboolean
-dri_unbind_context(__DRIcontext * cPriv)
+dri_unbind_context(struct dri_context *ctx)
 {
    /* dri_util.c ensures cPriv is not null */
-   struct dri_context *ctx = dri_context(cPriv);
-   struct st_context_iface *st = ctx->st;
+   struct st_context *st = ctx->st;
 
    if (st == st_api_get_current()) {
-      if (st->thread_finish)
-         st->thread_finish(st);
+      _mesa_glthread_finish(st->ctx);
 
       /* Record HUD queries for the duration the context was "current". */
       if (ctx->hud)
@@ -281,40 +262,57 @@ dri_unbind_context(__DRIcontext * cPriv)
 
       st_api_make_current(NULL, NULL, NULL);
    }
-   ctx->dPriv = NULL;
-   ctx->rPriv = NULL;
+
+   if (ctx->draw || ctx->read) {
+      assert(ctx->draw);
+
+      dri_put_drawable(ctx->draw);
+
+      if (ctx->read != ctx->draw)
+          dri_put_drawable(ctx->read);
+
+      ctx->draw = NULL;
+      ctx->read = NULL;
+   }
 
    return GL_TRUE;
 }
 
 GLboolean
-dri_make_current(__DRIcontext * cPriv,
-		 __DRIdrawable * driDrawPriv,
-		 __DRIdrawable * driReadPriv)
+dri_make_current(struct dri_context *ctx,
+		 struct dri_drawable *draw,
+		 struct dri_drawable *read)
 {
-   /* dri_util.c ensures cPriv is not null */
-   struct dri_context *ctx = dri_context(cPriv);
-   struct dri_drawable *draw = dri_drawable(driDrawPriv);
-   struct dri_drawable *read = dri_drawable(driReadPriv);
+   /* dri_unbind_context() is always called before this, so drawables are
+    * always NULL here.
+    */
+   assert(!ctx->draw);
+   assert(!ctx->read);
+
+   if ((draw && !read) || (!draw && read))
+      return GL_FALSE; /* only both non-NULL or both NULL are allowed */
 
    /* Wait for glthread to finish because we can't use st_context from
     * multiple threads.
     */
-   if (ctx->st->thread_finish)
-      ctx->st->thread_finish(ctx->st);
+   _mesa_glthread_finish(ctx->st->ctx);
 
+   /* There are 2 cases that can occur here. Either we bind drawables, or we
+    * bind NULL for configless and surfaceless contexts.
+    */
    if (!draw && !read)
       return st_api_make_current(ctx->st, NULL, NULL);
-   else if (!draw || !read)
-      return GL_FALSE;
 
-   if (ctx->dPriv != driDrawPriv) {
-      ctx->dPriv = driDrawPriv;
-      draw->texture_stamp = driDrawPriv->lastStamp - 1;
-   }
-   if (ctx->rPriv != driReadPriv) {
-      ctx->rPriv = driReadPriv;
-      read->texture_stamp = driReadPriv->lastStamp - 1;
+   /* Bind drawables to the context */
+   ctx->draw = draw;
+   ctx->read = read;
+
+   dri_get_drawable(draw);
+   draw->texture_stamp = draw->lastStamp - 1;
+
+   if (draw != read) {
+      dri_get_drawable(read);
+      read->texture_stamp = read->lastStamp - 1;
    }
 
    st_api_make_current(ctx->st, &draw->base, &read->base);
@@ -328,11 +326,11 @@ dri_make_current(__DRIcontext * cPriv,
 }
 
 struct dri_context *
-dri_get_current(__DRIscreen *sPriv)
+dri_get_current(void)
 {
-   struct st_context_iface *st = st_api_get_current();
+   struct st_context *st = st_api_get_current();
 
-   return (struct dri_context *) st ? st->st_manager_private : NULL;
+   return (struct dri_context *) st ? st->frontend_context : NULL;
 }
 
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

@@ -29,7 +29,6 @@
 
 #include "anv_private.h"
 
-#include "common/intel_aux_map.h"
 #include "util/anon_file.h"
 #include "util/futex.h"
 
@@ -230,8 +229,7 @@ anv_state_table_grow(struct anv_state_table *table)
 {
    VkResult result = VK_SUCCESS;
 
-   uint32_t used = align_u32(table->state.next * ANV_STATE_ENTRY_SIZE,
-                             PAGE_SIZE);
+   uint32_t used = align(table->state.next * ANV_STATE_ENTRY_SIZE, PAGE_SIZE);
    uint32_t old_size = table->size;
 
    /* The block pool is always initialized to a nonzero size and this function
@@ -373,12 +371,6 @@ anv_block_pool_init(struct anv_block_pool *pool,
                     uint32_t initial_size)
 {
    VkResult result;
-
-   if (device->info->verx10 >= 125) {
-      /* Make sure VMA addresses are 2MiB aligned for the block pool */
-      assert(anv_is_aligned(start_address, 2 * 1024 * 1024));
-      assert(anv_is_aligned(initial_size, 2 * 1024 * 1024));
-   }
 
    pool->name = name;
    pool->device = device;
@@ -643,8 +635,8 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state,
     * We align to a page size because it makes it easier to do our
     * calculations later in such a way that we state page-aigned.
     */
-   uint32_t back_used = align_u32(pool->back_state.next, PAGE_SIZE);
-   uint32_t front_used = align_u32(pool->state.next, PAGE_SIZE);
+   uint32_t back_used = align(pool->back_state.next, PAGE_SIZE);
+   uint32_t front_used = align(pool->state.next, PAGE_SIZE);
    uint32_t total_used = front_used + back_used;
 
    assert(state == &pool->state || back_used > 0);
@@ -844,8 +836,6 @@ anv_state_pool_init(struct anv_state_pool *pool,
    assert(start_offset < INT32_MAX - (int32_t)BLOCK_POOL_MEMFD_SIZE);
 
    uint32_t initial_size = block_size * 16;
-   if (device->info->verx10 >= 125)
-      initial_size = MAX2(initial_size, 2 * 1024 * 1024);
 
    VkResult result = anv_block_pool_init(&pool->block_pool, device, name,
                                          base_address + start_offset,
@@ -1248,7 +1238,7 @@ anv_state_stream_alloc(struct anv_state_stream *stream,
 
    assert(alignment <= PAGE_SIZE);
 
-   uint32_t offset = align_u32(stream->next, alignment);
+   uint32_t offset = align(stream->next, alignment);
    if (offset + size > stream->block.alloc_size) {
       uint32_t block_size = stream->block_size;
       if (block_size < size)
@@ -1432,13 +1422,6 @@ anv_scratch_pool_finish(struct anv_device *device, struct anv_scratch_pool *pool
             anv_device_release_bo(device, pool->bos[i][s]);
       }
    }
-
-   for (unsigned i = 0; i < 16; i++) {
-      if (pool->surf_states[i].map != NULL) {
-         anv_state_pool_free(&device->surface_state_pool,
-                             pool->surf_states[i]);
-      }
-   }
 }
 
 struct anv_bo *
@@ -1454,14 +1437,6 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    assert(stage < ARRAY_SIZE(pool->bos));
 
    const struct intel_device_info *devinfo = device->info;
-
-   /* On GFX version 12.5, scratch access changed to a surface-based model.
-    * Instead of each shader type having its own layout based on IDs passed
-    * from the relevant fixed-function unit, all scratch access is based on
-    * thread IDs like it always has been for compute.
-    */
-   if (devinfo->verx10 >= 125)
-      stage = MESA_SHADER_COMPUTE;
 
    struct anv_bo *bo = p_atomic_read(&pool->bos[scratch_size_log2][stage]);
 
@@ -1488,10 +1463,8 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     *
     * so nothing will ever touch the top page.
     */
-   const enum anv_bo_alloc_flags alloc_flags =
-      devinfo->verx10 < 125 ? ANV_BO_ALLOC_32BIT_ADDRESS : 0;
    VkResult result = anv_device_alloc_bo(device, "scratch", size,
-                                         alloc_flags,
+                                         ANV_BO_ALLOC_32BIT_ADDRESS,
                                          0 /* explicit_address */,
                                          &bo);
    if (result != VK_SUCCESS)
@@ -1504,50 +1477,6 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
       return current_bo;
    } else {
       return bo;
-   }
-}
-
-uint32_t
-anv_scratch_pool_get_surf(struct anv_device *device,
-                          struct anv_scratch_pool *pool,
-                          unsigned per_thread_scratch)
-{
-   if (per_thread_scratch == 0)
-      return 0;
-
-   unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
-   assert(scratch_size_log2 < 16);
-
-   uint32_t surf = p_atomic_read(&pool->surfs[scratch_size_log2]);
-   if (surf > 0)
-      return surf;
-
-   struct anv_bo *bo =
-      anv_scratch_pool_alloc(device, pool, MESA_SHADER_COMPUTE,
-                             per_thread_scratch);
-   struct anv_address addr = { .bo = bo };
-
-   struct anv_state state =
-      anv_state_pool_alloc(&device->surface_state_pool,
-                           device->isl_dev.ss.size, 64);
-
-   isl_buffer_fill_state(&device->isl_dev, state.map,
-                         .address = anv_address_physical(addr),
-                         .size_B = bo->size,
-                         .mocs = anv_mocs(device, bo, 0),
-                         .format = ISL_FORMAT_RAW,
-                         .swizzle = ISL_SWIZZLE_IDENTITY,
-                         .stride_B = per_thread_scratch,
-                         .is_scratch = true);
-
-   uint32_t current = p_atomic_cmpxchg(&pool->surfs[scratch_size_log2],
-                                       0, state.offset);
-   if (current) {
-      anv_state_pool_free(&device->surface_state_pool, state);
-      return current;
-   } else {
-      pool->surf_states[scratch_size_log2] = state;
-      return state.offset;
    }
 }
 
@@ -1611,7 +1540,7 @@ static void
 anv_bo_finish(struct anv_device *device, struct anv_bo *bo)
 {
    if (bo->offset != 0 && anv_bo_is_pinned(bo) && !bo->has_fixed_address)
-      anv_vma_free(device, bo->offset, bo->size + bo->_ccs_size);
+      anv_vma_free(device, bo->offset, bo->size);
 
    if (bo->map && !bo->from_host_ptr)
       anv_device_unmap_bo(device, bo, bo->map, bo->size);
@@ -1631,21 +1560,11 @@ anv_bo_vma_alloc_or_close(struct anv_device *device,
 
    uint32_t align = 4096;
 
-   /* Gen12 CCS surface addresses need to be 64K aligned. */
-   if (device->info->ver >= 12 && (alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS))
-      align = 64 * 1024;
-
-   /* For XeHP, lmem and smem cannot share a single PDE, which means they
-    * can't live in the same 2MiB aligned region.
-    */
-   if (device->info->verx10 >= 125)
-       align = 2 * 1024 * 1024;
-
    if (alloc_flags & ANV_BO_ALLOC_FIXED_ADDRESS) {
       bo->has_fixed_address = true;
       bo->offset = explicit_address;
    } else {
-      bo->offset = anv_vma_alloc(device, bo->size + bo->_ccs_size,
+      bo->offset = anv_vma_alloc(device, bo->size,
                                  align, alloc_flags, explicit_address);
       if (bo->offset == 0) {
          anv_bo_finish(device, bo);
@@ -1665,28 +1584,14 @@ anv_device_alloc_bo(struct anv_device *device,
                     uint64_t explicit_address,
                     struct anv_bo **bo_out)
 {
-   if (!device->physical->has_implicit_ccs)
-      assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS));
-
    const uint32_t bo_flags =
       anv_bo_alloc_flags_to_bo_flags(device, alloc_flags);
    assert(bo_flags == (bo_flags & ANV_BO_CACHE_SUPPORTED_FLAGS));
 
    /* The kernel is going to give us whole pages anyway */
-   size = align_u64(size, 4096);
+   size = align64(size, 4096);
 
-   uint64_t ccs_size = 0;
-   if (device->info->has_aux_map && (alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS)) {
-      /* Align the size up to the next multiple of 64K so we don't have any
-       * AUX-TT entries pointing from a 64K page to itself.
-       */
-      size = align_u64(size, 64 * 1024);
-
-      /* See anv_bo::_ccs_size */
-      ccs_size = align_u64(DIV_ROUND_UP(size, INTEL_AUX_MAP_GFX12_CCS_SCALE), 4096);
-   }
-
-   uint32_t gem_handle = anv_gem_create(device, size + ccs_size);
+   uint32_t gem_handle = anv_gem_create(device, size);
    if (gem_handle == 0)
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
@@ -1696,12 +1601,10 @@ anv_device_alloc_bo(struct anv_device *device,
       .refcount = 1,
       .offset = -1,
       .size = size,
-      ._ccs_size = ccs_size,
       .flags = bo_flags,
       .is_external = (alloc_flags & ANV_BO_ALLOC_EXTERNAL),
       .has_client_visible_address =
          (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
-      .has_implicit_ccs = ccs_size > 0 || device->info->verx10 >= 125,
    };
 
    if (alloc_flags & ANV_BO_ALLOC_MAPPED) {
@@ -1741,14 +1644,6 @@ anv_device_alloc_bo(struct anv_device *device,
          return result;
    } else {
       assert(!new_bo.has_client_visible_address);
-   }
-
-   if (new_bo._ccs_size > 0) {
-      assert(device->info->has_aux_map);
-      intel_aux_map_add_mapping(device->aux_map_ctx,
-                                intel_canonical_address(new_bo.offset),
-                                intel_canonical_address(new_bo.offset + new_bo.size),
-                                new_bo.size, 0 /* format_bits */);
    }
 
    assert(new_bo.gem_handle);
@@ -1807,9 +1702,6 @@ anv_device_import_bo_from_host_ptr(struct anv_device *device,
    assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
                            ANV_BO_ALLOC_SNOOPED |
                            ANV_BO_ALLOC_FIXED_ADDRESS)));
-
-   assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS) ||
-          (device->physical->has_implicit_ccs && device->info->has_aux_map));
 
    struct anv_bo_cache *cache = &device->bo_cache;
    const uint32_t bo_flags =
@@ -1897,9 +1789,6 @@ anv_device_import_bo(struct anv_device *device,
    assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
                            ANV_BO_ALLOC_SNOOPED |
                            ANV_BO_ALLOC_FIXED_ADDRESS)));
-
-   assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS) ||
-          (device->physical->has_implicit_ccs && device->info->has_aux_map));
 
    struct anv_bo_cache *cache = &device->bo_cache;
    const uint32_t bo_flags =
@@ -1994,7 +1883,6 @@ anv_device_import_bo(struct anv_device *device,
       };
 
       if (anv_bo_is_pinned(&new_bo)) {
-         assert(new_bo._ccs_size == 0);
          VkResult result = anv_bo_vma_alloc_or_close(device, &new_bo,
                                                      alloc_flags,
                                                      client_address);
@@ -2113,15 +2001,6 @@ anv_device_release_bo(struct anv_device *device,
       return;
    }
    assert(bo->refcount == 0);
-
-   if (bo->_ccs_size > 0) {
-      assert(device->physical->has_implicit_ccs);
-      assert(device->info->has_aux_map);
-      assert(bo->has_implicit_ccs);
-      intel_aux_map_unmap_range(device->aux_map_ctx,
-                                intel_canonical_address(bo->offset),
-                                bo->size);
-   }
 
    /* Memset the BO just in case.  The refcount being zero should be enough to
     * prevent someone from assuming the data is valid but it's safer to just

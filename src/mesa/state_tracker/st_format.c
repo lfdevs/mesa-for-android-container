@@ -1247,7 +1247,7 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
 success:
    if (0) {
       debug_printf("%s(fmt=%s, type=%s, intFmt=%s) = %s\n",
-                   __FUNCTION__,
+                   __func__,
                    _mesa_enum_to_string(format),
                    _mesa_enum_to_string(type),
                    _mesa_enum_to_string(internalFormat),

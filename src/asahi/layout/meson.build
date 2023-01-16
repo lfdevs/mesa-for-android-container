@@ -39,6 +39,9 @@ if with_tests
       'asahi_layout_tests',
       files(
         'tests/test-layout.cpp',
+        'tests/test-miptree.cpp',
+        'tests/test-comp-twiddled.cpp',
+        'tests/test-uncomp-twiddled.cpp',
       ),
       c_args : [c_msvc_compat_args, no_override_init_args],
       gnu_symbol_visibility : 'hidden',

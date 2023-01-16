@@ -343,7 +343,7 @@ sp_tile_cache_flush_clear(struct softpipe_tile_cache *tc, int layer)
    const uint w = tc->transfer[layer]->box.width;
    const uint h = tc->transfer[layer]->box.height;
    uint x, y;
-   uint numCleared = 0;
+   UNUSED uint numCleared = 0;
 
    assert(pt->resource);
 
@@ -414,11 +414,11 @@ sp_flush_tile(struct softpipe_tile_cache* tc, unsigned pos)
 void
 sp_flush_tile_cache(struct softpipe_tile_cache *tc)
 {
-   int inuse = 0, pos;
+   UNUSED int inuse = 0;
    int i;
    if (tc->num_maps) {
       /* caching a drawing transfer */
-      for (pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
+      for (int pos = 0; pos < ARRAY_SIZE(tc->entries); pos++) {
          struct softpipe_cached_tile *tile = tc->entries[pos];
          if (!tile)
          {

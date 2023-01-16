@@ -253,7 +253,7 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
           !ctx->gfx_pipeline_state.render_pass &&
           /* TODO: is sample shading even possible to handle with GPL? */
           !ctx->gfx_stages[MESA_SHADER_FRAGMENT]->nir->info.fs.uses_sample_shading &&
-          !zink_get_fs_key(ctx)->fbfetch_ms &&
+          !zink_get_fs_base_key(ctx)->fbfetch_ms &&
           !ctx->gfx_pipeline_state.force_persample_interp &&
           !ctx->gfx_pipeline_state.min_samples) {
          /* this is the graphics pipeline library path: find/construct all partial pipelines */
@@ -395,7 +395,7 @@ get_gfx_pipeline_stage_eq_func(struct zink_gfx_program *prog, bool optimal_keys)
 {
    unsigned vertex_stages = prog->stages_present & BITFIELD_MASK(MESA_SHADER_FRAGMENT);
    if (vertex_stages & BITFIELD_BIT(MESA_SHADER_TESS_CTRL)) {
-      if (prog->shaders[MESA_SHADER_TESS_CTRL]->tcs.is_generated)
+      if (prog->shaders[MESA_SHADER_TESS_CTRL]->non_fs.is_generated)
          vertex_stages &= ~BITFIELD_BIT(MESA_SHADER_TESS_CTRL);
    }
    if (vertex_stages & BITFIELD_BIT(MESA_SHADER_TESS_CTRL)) {

@@ -23,3 +23,7 @@ spec@!opengl 1.0@rasterpos@glsl_vs_uniforms
 # Sometimes fail when run along with other tests, never when run by themselves
 spec@!opengl 1.1@copypixels-sync
 spec@!opengl 1.1@copypixels-draw-sync
+spec@!opengl 1.1@draw-copypixels-sync
+
+# 2022-12-29
+dEQP-EGL.functional.color_clears.multi_context.gles2.rgba8888_pbuffer

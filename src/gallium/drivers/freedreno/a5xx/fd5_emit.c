@@ -198,19 +198,7 @@ setup_border_colors(struct fd_texture_stateobj *tex,
 
       bc = &sampler->border_color;
 
-      /*
-       * XXX HACK ALERT XXX
-       *
-       * The border colors need to be swizzled in a particular
-       * format-dependent order. Even though samplers don't know about
-       * formats, we can assume that with a GL state tracker, there's a
-       * 1:1 correspondence between sampler and texture. Take advantage
-       * of that knowledge.
-       */
-      if ((i >= tex->num_textures) || !tex->textures[i])
-         continue;
-
-      enum pipe_format format = tex->textures[i]->format;
+      enum pipe_format format = sampler->border_color_format;
       const struct util_format_description *desc =
          util_format_description(format);
 

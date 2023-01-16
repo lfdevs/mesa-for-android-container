@@ -23,7 +23,7 @@
 #ifndef ST_ATIFS_TO_TGSI_H
 #define ST_ATIFS_TO_TGSI_H
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "pipe/p_defines.h"
 #include "compiler/nir/nir.h"
 

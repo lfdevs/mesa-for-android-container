@@ -68,6 +68,7 @@ void pvr_srv_winsys_render_ctx_destroy(struct pvr_winsys_render_ctx *ctx);
 VkResult pvr_srv_winsys_render_submit(
    const struct pvr_winsys_render_ctx *ctx,
    const struct pvr_winsys_render_submit_info *submit_info,
+   const struct pvr_device_info *dev_info,
    struct vk_sync *signal_sync_geom,
    struct vk_sync *signal_sync_frag);
 

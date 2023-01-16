@@ -101,6 +101,7 @@ struct fd_dev_info {
          bool depth_bounds_require_depth_test_quirk;
 
          bool has_tex_filter_cubic;
+         bool has_separate_chroma_filter;
 
          bool has_sample_locations;
 
@@ -153,6 +154,7 @@ struct fd_dev_info {
             uint32_t UCHE_CLIENT_PF;
             uint32_t PC_MODE_CNTL;
             uint32_t SP_DBG_ECO_CNTL;
+            uint32_t RB_DBG_ECO_CNTL;
             uint32_t RB_DBG_ECO_CNTL_blit;
             uint32_t HLSQ_DBG_ECO_CNTL;
             uint32_t RB_UNKNOWN_8E01;

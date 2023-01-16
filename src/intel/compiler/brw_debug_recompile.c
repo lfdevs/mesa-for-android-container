@@ -63,20 +63,10 @@ debug_sampler_recompile(const struct brw_compiler *c, void *log,
    bool found = false;
 
    found |= check("gather channel quirk", gather_channel_quirk_mask);
-   found |= check("compressed multisample layout",
-                  compressed_multisample_layout_mask);
-   found |= check("16x msaa", msaa_16);
-   found |= check("y_uv image bound", y_uv_image_mask);
-   found |= check("y_u_v image bound", y_u_v_image_mask);
-   found |= check("yx_xuxv image bound", yx_xuxv_image_mask);
-   found |= check("xy_uxvx image bound", xy_uxvx_image_mask);
-   found |= check("ayuv image bound", ayuv_image_mask);
-   found |= check("xyuv image bound", xyuv_image_mask);
 
    for (unsigned i = 0; i < BRW_MAX_SAMPLERS; i++) {
       found |= check("EXT_texture_swizzle or DEPTH_TEXTURE_MODE", swizzles[i]);
       found |= check("textureGather workarounds", gfx6_gather_wa[i]);
-      found |= check_float("scale factor", scale_factors[i]);
    }
 
    for (unsigned i = 0; i < 3; i++) {

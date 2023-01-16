@@ -66,7 +66,7 @@ WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 }
 
 struct stw_framebuffer *
-stw_pbuffer_create(const struct stw_pixelformat_info *pfi, int iWidth, int iHeight, struct st_manager *smapi)
+stw_pbuffer_create(const struct stw_pixelformat_info *pfi, int iWidth, int iHeight, struct pipe_frontend_screen *fscreen)
 {
    static boolean first = TRUE;
 
@@ -143,7 +143,7 @@ stw_pbuffer_create(const struct stw_pixelformat_info *pfi, int iWidth, int iHeig
    assert(rect.bottom - rect.top == iHeight);
 #endif
 
-   return stw_framebuffer_create(hWnd, pfi, STW_FRAMEBUFFER_PBUFFER, smapi);
+   return stw_framebuffer_create(hWnd, pfi, STW_FRAMEBUFFER_PBUFFER, fscreen);
 }
 
 
@@ -242,7 +242,7 @@ wglCreatePbufferARB(HDC hCurrentDC,
     * We can't pass non-displayable pixel formats to GDI, which is why we
     * create the framebuffer object before calling SetPixelFormat().
     */
-   fb = stw_pbuffer_create(pfi, iWidth, iHeight, stw_dev->smapi);
+   fb = stw_pbuffer_create(pfi, iWidth, iHeight, stw_dev->fscreen);
    if (!fb) {
       SetLastError(ERROR_NO_SYSTEM_RESOURCES);
       return NULL;

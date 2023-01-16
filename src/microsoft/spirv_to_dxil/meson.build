@@ -24,6 +24,7 @@ libspirv_to_dxil = both_libraries(
   [
     files(
       'dxil_spirv_nir.c',
+      'dxil_spirv_nir.h',
       'spirv_to_dxil.c',
       'spirv_to_dxil.h',
     ),
@@ -44,8 +45,6 @@ spirv_to_dxil = executable(
   'spirv2dxil',
   files(
     'spirv2dxil.c',
-    'dxil_validation.h',
-    'dxil_validation.cpp',
   ),
   dependencies : [idep_nir, idep_libdxil_compiler, idep_getopt, idep_libspirv_to_dxil],
   include_directories : [inc_include, inc_src, inc_compiler, inc_gallium],

@@ -78,7 +78,7 @@ TEST(u_debug_stack_test, basics)
    debug_backtrace_dump(stored_backtrace, 16);
 }
 
-#if _POSIX_C_SOURCE >= 200809L
+#if defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE >= 200809L)
 
 TEST(u_debug_stack_test, capture_not_overwritten)
 {

@@ -53,6 +53,7 @@
 #define RENCODE_IB_PARAM_VIDEO_BITSTREAM_BUFFER    0x0000000e
 #define RENCODE_IB_PARAM_FEEDBACK_BUFFER           0x00000010
 #define RENCODE_IB_PARAM_DIRECT_OUTPUT_NALU        0x00000020
+#define RENCODE_IB_PARAM_ENCODE_STATISTICS         0x00000024
 
 #define RENCODE_HEVC_IB_PARAM_SLICE_CONTROL        0x00100001
 #define RENCODE_HEVC_IB_PARAM_SPEC_MISC            0x00100002
@@ -1243,6 +1244,18 @@ static void radeon_enc_encode_params_h264(struct radeon_encoder *enc)
    RADEON_ENC_END();
 }
 
+static void radeon_enc_encode_statistics(struct radeon_encoder *enc)
+{
+   if (!enc->stats) return;
+
+   enc->enc_pic.enc_statistics.encode_stats_type = RENCODE_STATISTICS_TYPE_0;
+
+   RADEON_ENC_BEGIN(enc->cmd.enc_statistics);
+   RADEON_ENC_CS(enc->enc_pic.enc_statistics.encode_stats_type);
+   RADEON_ENC_WRITE(enc->stats, RADEON_DOMAIN_GTT, 0);
+   RADEON_ENC_END();
+}
+
 static void radeon_enc_op_init(struct radeon_encoder *enc)
 {
    RADEON_ENC_BEGIN(RENCODE_IB_OP_INITIALIZE);
@@ -1493,6 +1506,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->op_preset = radeon_enc_op_preset;
    enc->encode_params = radeon_enc_encode_params;
    enc->session_init = radeon_enc_session_init;
+   enc->encode_statistics = radeon_enc_encode_statistics;
    enc->nalu_aud = radeon_enc_nalu_aud;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
@@ -1540,6 +1554,7 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->cmd.spec_misc_h264 = RENCODE_H264_IB_PARAM_SPEC_MISC;
    enc->cmd.enc_params_h264 = RENCODE_H264_IB_PARAM_ENCODE_PARAMS;
    enc->cmd.deblocking_filter_h264 = RENCODE_H264_IB_PARAM_DEBLOCKING_FILTER;
+   enc->cmd.enc_statistics = RENCODE_IB_PARAM_ENCODE_STATISTICS;
 
    enc->enc_pic.session_info.interface_version =
       ((RENCODE_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |

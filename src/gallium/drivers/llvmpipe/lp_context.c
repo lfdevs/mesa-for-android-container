@@ -49,12 +49,6 @@
 #include "lp_screen.h"
 #include "lp_fence.h"
 
-/* This is only safe if there's just one concurrent context */
-#ifdef EMBEDDED_DEVICE
-#define USE_GLOBAL_LLVM_CONTEXT
-#endif
-
-
 static void
 llvmpipe_destroy(struct pipe_context *pipe)
 {
@@ -123,7 +117,7 @@ do_flush(struct pipe_context *pipe,
          struct pipe_fence_handle **fence,
          unsigned flags)
 {
-   llvmpipe_flush(pipe, fence, __FUNCTION__);
+   llvmpipe_flush(pipe, fence, __func__);
 }
 
 

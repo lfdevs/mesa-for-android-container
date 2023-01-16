@@ -5,27 +5,27 @@ Almost every variable, function parameter, or struct field in ISL that carries
 a numeric value has explicit units associated with it.  The units used in ISL
 are as follows:
 
- * Pixels (px)
- * Samples (sa)
- * Elements (el)
- * Tiles (tl)
- * Bytes (B)
- * Rows of some other unit size (<unit>_rows)
+ * Pixels (*px*)
+ * Samples (*sa*)
+ * Elements (*el*)
+ * Tiles (*tl*)
+ * Bytes (*B*)
+ * Rows of some other unit size (*<unit>_rows*)
 
 These units are fundamental to ISL because they allow us to specify information
 about a surface in a canonical way that isn't dependent on hardware generation.
 Each field in an ISL data structure that stores any sort of dimension has a
-suffix that declares the units for that particular value: ":c:expr:`_el`" for
-elements, ":c:expr:`_sa`" for samples, etc.  If the units of the particular
-field aren't quite what is wanted by the hardware, we do the conversion when we
-emit :c:expr:`RENDER_SURFACE_STATE`.
+suffix that declares the units for that particular value: "`_el`" for elements,
+"`_sa`" for samples, etc.  If the units of the particular field aren't quite
+what is wanted by the hardware, we do the conversion when we emit
+`RENDER_SURFACE_STATE`.
 
 This is one of the primary differences between ISL and the old miptree code and
 one of the core design principles of ISL.  In the old miptree code, we tried to
 keep everything in the same units as the hardware expects but this lead to
 unnecessary complications as the hardware evolved.  One example of this
 difference is QPitch which specifies the distance between array slices.  On
-Broadwell and earlier, QPitch field in :c:expr:`RENDER_SURFACE_STATE` was in
+Broadwell and earlier, QPitch field in `RENDER_SURFACE_STATE` was in
 rows of samples.  For block-compressed images, this meant it had to be
 a multiple of the block height.  On Skylake, it changed to always being in rows
 of elements so you have to divide the pitch in samples by the compression

@@ -48,6 +48,12 @@ extern "C" {
 /* The number of keys that can be stored in the index. */
 #define CACHE_INDEX_MAX_KEYS (1 << CACHE_INDEX_KEY_BITS)
 
+enum disk_cache_type {
+   DISK_CACHE_MULTI_FILE,
+   DISK_CACHE_SINGLE_FILE,
+   DISK_CACHE_DATABASE,
+};
+
 struct disk_cache {
    /* The path to the cache directory. */
    char *path;
@@ -60,7 +66,7 @@ struct disk_cache {
 
    struct mesa_cache_db cache_db;
 
-   bool use_cache_db;
+   enum disk_cache_type type;
 
    /* Seed for rand, which is used to pick a random directory */
    uint64_t seed_xorshift128plus[2];
@@ -87,6 +93,15 @@ struct disk_cache {
 
    /* Don't compress cached data. This is for testing purposes only. */
    bool compression_disabled;
+
+   struct {
+      bool enabled;
+      unsigned hits;
+      unsigned misses;
+   } stats;
+
+   /* Internal RO FOZ cache for combined use of RO and RW caches. */
+   struct disk_cache *foz_ro_cache;
 };
 
 struct cache_entry_file_data {
@@ -112,7 +127,8 @@ struct disk_cache_put_job {
 
 char *
 disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
-                              const char *driver_id);
+                              const char *driver_id,
+                              enum disk_cache_type cache_type);
 
 void
 disk_cache_evict_lru_item(struct disk_cache *cache);

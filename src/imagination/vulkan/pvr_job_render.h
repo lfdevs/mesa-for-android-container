@@ -51,6 +51,9 @@ struct pvr_render_job {
    bool disable_compute_overlap;
    bool enable_bg_tag;
    bool process_empty_tiles;
+   bool get_vis_results;
+   bool has_depth_attachment;
+   bool has_stencil_attachment;
 
    uint32_t pds_pixel_event_data_offset;
 
@@ -60,25 +63,31 @@ struct pvr_render_job {
    pvr_dev_addr_t depth_bias_table_addr;
    pvr_dev_addr_t scissor_table_addr;
 
-   pvr_dev_addr_t depth_addr;
-   uint32_t depth_stride;
-   uint32_t depth_height;
-   uint32_t depth_physical_width;
-   uint32_t depth_physical_height;
-   uint32_t depth_layer_size;
-   float depth_clear_value;
-   VkFormat depth_vk_format;
-   /* FIXME: This should be of type 'enum pvr_memlayout', but this is defined
-    * in pvr_private.h, which causes a circular include dependency. For now,
-    * treat it has a uint32_t. A couple of ways to possibly fix this:
-    *
-    *   1. Merge the contents of this header file into pvr_private.h.
-    *   2. Move 'enum pvr_memlayout' into it a new header that can be included
-    *      by both this header and pvr_private.h.
+   /* Unless VK_KHR_dynamic_rendering or core 1.3 is supported, Vulkan does not
+    * allow for separate depth and stencil attachments. We don't bother storing
+    * separate parameters for them here (yet). If both has_depth_attachment and
+    * has_stencil_attachment are false, the contents are undefined.
     */
-   uint32_t depth_memlayout;
+   struct pvr_ds_attachment {
+      pvr_dev_addr_t addr;
+      uint32_t stride;
+      uint32_t height;
+      uint32_t physical_width;
+      uint32_t physical_height;
+      uint32_t layer_size;
+      VkFormat vk_format;
+      /* FIXME: This should be of type 'enum pvr_memlayout', but this is defined
+       * in pvr_private.h, which causes a circular include dependency. For now,
+       * treat it as a uint32_t. A couple of ways to possibly fix this:
+       *
+       *   1. Merge the contents of this header file into pvr_private.h.
+       *   2. Move 'enum pvr_memlayout' into it a new header that can be
+       *      included by both this header and pvr_private.h.
+       */
+      uint32_t memlayout;
+   } ds;
 
-   pvr_dev_addr_t stencil_addr;
+   VkClearDepthStencilValue ds_clear_value;
 
    uint32_t samples;
 

@@ -77,7 +77,7 @@ llvmpipe_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
     */
    if (pq->fence) {
       if (!lp_fence_issued(pq->fence))
-         llvmpipe_flush(pipe, NULL, __FUNCTION__);
+         llvmpipe_flush(pipe, NULL, __func__);
 
       if (!lp_fence_signalled(pq->fence))
          lp_fence_wait(pq->fence);
@@ -104,7 +104,7 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
       /* only have a fence if there was a scene */
       if (!lp_fence_signalled(pq->fence)) {
          if (!lp_fence_issued(pq->fence))
-            llvmpipe_flush(pipe, NULL, __FUNCTION__);
+            llvmpipe_flush(pipe, NULL, __func__);
 
          if (!wait)
             return false;
@@ -219,7 +219,7 @@ llvmpipe_get_query_result_resource(struct pipe_context *pipe,
       /* only have a fence if there was a scene */
       if (!lp_fence_signalled(pq->fence)) {
          if (!lp_fence_issued(pq->fence))
-            llvmpipe_flush(pipe, NULL, __FUNCTION__);
+            llvmpipe_flush(pipe, NULL, __func__);
 
          if (flags & PIPE_QUERY_WAIT)
             lp_fence_wait(pq->fence);
@@ -389,7 +389,7 @@ llvmpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
     * frame of rendering.
     */
    if (pq->fence && !lp_fence_issued(pq->fence)) {
-      llvmpipe_finish(pipe, __FUNCTION__);
+      llvmpipe_finish(pipe, __func__);
    }
 
    memset(pq->start, 0, sizeof(pq->start));

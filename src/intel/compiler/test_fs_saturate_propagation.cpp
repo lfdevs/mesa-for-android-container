@@ -802,3 +802,42 @@ TEST_F(saturate_propagation_test, larger_exec_size_consumer)
    EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 1)->opcode);
    EXPECT_TRUE(instruction(block0, 1)->saturate);
 }
+
+TEST_F(saturate_propagation_test, offset_source_barrier)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dst0 = v->vgrf(glsl_type::float_type);
+   fs_reg dst1 = v->vgrf(glsl_type::float_type);
+   fs_reg dst2 = v->vgrf(glsl_type::float_type);
+   fs_reg src0 = v->vgrf(glsl_type::float_type);
+   fs_reg src1 = v->vgrf(glsl_type::float_type);
+   bld.group(16, 0).ADD(dst0, src0, src1);
+   bld.group(1, 0).ADD(dst1, component(dst0, 8), brw_imm_f(1.0f));
+   set_saturate(true, bld.group(16, 0).MOV(dst2, dst0));
+
+   /* = Before =
+    *
+    * 0: add(16)       dst0  src0   src1
+    * 0: add(1)        dst1  dst0+8 1.0f
+    * 1: mov.sat(16)   dst2  dst0
+    *
+    * = After =
+    * (no changes)
+    */
+
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+
+   EXPECT_FALSE(saturate_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(2, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 1)->opcode);
+   EXPECT_FALSE(instruction(block0, 0)->saturate);
+   EXPECT_FALSE(instruction(block0, 1)->saturate);
+   EXPECT_EQ(BRW_OPCODE_MOV, instruction(block0, 2)->opcode);
+   EXPECT_TRUE(instruction(block0, 2)->saturate);
+}

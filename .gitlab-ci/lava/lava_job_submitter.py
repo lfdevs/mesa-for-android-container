@@ -20,11 +20,11 @@ import traceback
 import urllib.parse
 import xmlrpc.client
 from datetime import datetime, timedelta
+from io import StringIO
 from os import getenv
 from typing import Any, Optional
 
 import lavacli
-import yaml
 from lava.exceptions import (
     MesaCIException,
     MesaCIKnownIssueException,
@@ -42,7 +42,7 @@ from lava.utils import (
     hide_sensitive_data,
     print_log,
 )
-from lavacli.utils import loader
+from lavacli.utils import flow_yaml as lava_yaml
 
 # Timeout in seconds to decide if the device from the dispatched LAVA job has
 # hung or not due to the lack of new log output.
@@ -62,7 +62,7 @@ NUMBER_OF_RETRIES_TIMEOUT_DETECTION = int(getenv("LAVA_NUMBER_OF_RETRIES_TIMEOUT
 NUMBER_OF_ATTEMPTS_LAVA_BOOT = int(getenv("LAVA_NUMBER_OF_ATTEMPTS_LAVA_BOOT", 3))
 
 
-def generate_lava_yaml(args):
+def generate_lava_yaml_payload(args) -> dict[str, Any]:
     # General metadata and permissions, plus also inexplicably kernel arguments
     values = {
         'job_name': 'mesa: {}'.format(args.pipeline_info),
@@ -74,11 +74,20 @@ def generate_lava_yaml(args):
         },
         "timeouts": {
             "job": {"minutes": args.job_timeout},
-            "action": {"minutes": 3},
             "actions": {
+                "depthcharge-retry": {
+                    # Could take between 1 and 1.5 min in slower boots
+                    "minutes": 2
+                },
+                "depthcharge-start": {
+                    # Should take less than 1 min.
+                    "minutes": 1,
+                },
                 "depthcharge-action": {
-                    "minutes": 3 * NUMBER_OF_ATTEMPTS_LAVA_BOOT,
-                }
+                    # This timeout englobes the entire depthcharge timing,
+                    # including retries
+                    "minutes": 2 * NUMBER_OF_ATTEMPTS_LAVA_BOOT,
+                },
             }
         },
     }
@@ -147,8 +156,13 @@ def generate_lava_yaml(args):
     #   - fetch and unpack per-job environment from lava-submit.sh
     #   - exec .gitlab-ci/common/init-stage2.sh
 
-    with open(args.first_stage_init, 'r') as init_sh:
-      run_steps += [ x.rstrip() for x in init_sh if not x.startswith('#') and x.rstrip() ]
+    with open(args.first_stage_init, "r") as init_sh:
+        run_steps += [
+            x.rstrip() for x in init_sh if not x.startswith("#") and x.rstrip()
+        ]
+        run_steps.append(
+            f"wget -S --progress=dot:giga -O- {args.job_rootfs_overlay_url} | tar -xz -C /",
+        )
 
     if args.jwt_file:
         with open(args.jwt_file) as jwt_file:
@@ -167,7 +181,6 @@ def generate_lava_yaml(args):
     run_steps += [
       'mkdir -p {}'.format(args.ci_project_dir),
       'wget -S --progress=dot:giga -O- {} | tar --zstd -x -C {}'.format(args.build_url, args.ci_project_dir),
-      'wget -S --progress=dot:giga -O- {} | tar -xz -C /'.format(args.job_rootfs_overlay_url),
 
       # Sleep a bit to give time for bash to dump shell xtrace messages into
       # console which may cause interleaving with LAVA_SIGNAL_STARTTC in some
@@ -185,7 +198,7 @@ def generate_lava_yaml(args):
       { 'test': test },
     ]
 
-    return yaml.dump(values, width=10000000)
+    return values
 
 
 def setup_lava_proxy():
@@ -272,8 +285,12 @@ class LAVAJob:
 
     def _load_log_from_data(self, data) -> list[str]:
         lines = []
+        if isinstance(data, xmlrpc.client.Binary):
+            # We are dealing with xmlrpc.client.Binary
+            # Let's extract the data
+            data = data.data
         # When there is no new log data, the YAML is empty
-        if loaded_lines := yaml.load(str(data), Loader=loader(False)):
+        if loaded_lines := lava_yaml.load(data):
             lines = loaded_lines
             self.last_log_line += len(lines)
         return lines
@@ -338,7 +355,7 @@ def find_exception_from_metadata(metadata, job_id):
 def find_lava_error(job) -> None:
     # Look for infrastructure errors and retry if we see them.
     results_yaml = _call_proxy(job.proxy.results.get_testjob_results_yaml, job.job_id)
-    results = yaml.load(results_yaml, Loader=loader(False))
+    results = lava_yaml.load(results_yaml)
     for res in results:
         metadata = res["metadata"]
         find_exception_from_metadata(metadata, job.job_id)
@@ -348,16 +365,17 @@ def find_lava_error(job) -> None:
     job.status = "fail"
 
 
-def show_job_data(job):
+def show_job_data(job, colour=f"{CONSOLE_LOG['BOLD']}{CONSOLE_LOG['FG_GREEN']}"):
     with GitlabSection(
         "job_data",
         "LAVA job info",
         type=LogSectionType.LAVA_POST_PROCESSING,
         start_collapsed=True,
+        colour=colour,
     ):
         show = _call_proxy(job.proxy.scheduler.jobs.show, job.job_id)
         for field, value in show.items():
-            print("{}\t: {}".format(field, value))
+            print(f"{field:<15}: {value}")
 
 
 def fetch_logs(job, max_idle_time, log_follower) -> None:
@@ -433,8 +451,6 @@ def follow_job_execution(job):
         while not job.is_finished:
             fetch_logs(job, max_idle_time, lf)
 
-    show_job_data(job)
-
     # Mesa Developers expect to have a simple pass/fail job result.
     # If this does not happen, it probably means a LAVA infrastructure error
     # happened.
@@ -453,6 +469,7 @@ def print_job_final_status(job):
         f"{CONSOLE_LOG['RESET']}"
     )
 
+    show_job_data(job, colour=f"{CONSOLE_LOG['BOLD']}{color}")
 
 def retriable_follow_job(proxy, job_definition) -> LAVAJob:
     retry_count = NUMBER_OF_RETRIES_TIMEOUT_DETECTION
@@ -505,7 +522,9 @@ def main(args):
     # script section timeout with a reasonable delay.
     GL_SECTION_TIMEOUTS[LogSectionType.TEST_CASE] = timedelta(minutes=args.job_timeout)
 
-    job_definition = generate_lava_yaml(args)
+    job_definition_stream = StringIO()
+    lava_yaml.dump(generate_lava_yaml_payload(args), job_definition_stream)
+    job_definition = job_definition_stream.getvalue()
 
     if args.dump_yaml:
         with GitlabSection(

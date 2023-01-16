@@ -56,6 +56,8 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
                          struct tu_cs *cs,
                          uint32_t a,
                          uint32_t gmem_a,
+                         uint32_t layers,
+                         uint32_t layer_mask,
                          bool cond_exec_allowed);
 
 void

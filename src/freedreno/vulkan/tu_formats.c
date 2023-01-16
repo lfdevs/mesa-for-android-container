@@ -272,18 +272,23 @@ tu_physical_device_get_format_properties(
       optimal |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                  VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT |
-                 VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT |
-                 VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT;
+                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
 
       /* no blit src bit for YUYV/NV12/I420 formats */
       if (desc->layout != UTIL_FORMAT_LAYOUT_SUBSAMPLED &&
           desc->layout != UTIL_FORMAT_LAYOUT_PLANAR2 &&
-          desc->layout != UTIL_FORMAT_LAYOUT_PLANAR3)
+          desc->layout != UTIL_FORMAT_LAYOUT_PLANAR3) {
          optimal |= VK_FORMAT_FEATURE_BLIT_SRC_BIT;
+      } else {
+         optimal |= VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT;
 
-      if (desc->layout != UTIL_FORMAT_LAYOUT_SUBSAMPLED)
-         optimal |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
+         if (desc->layout != UTIL_FORMAT_LAYOUT_SUBSAMPLED) {
+            optimal |= VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT |
+                       VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
+            if (physical_device->info->a6xx.has_separate_chroma_filter)
+               optimal |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT;
+         }
+      }
 
       if (!vk_format_is_int(vk_format)) {
          optimal |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;

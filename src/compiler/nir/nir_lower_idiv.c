@@ -99,8 +99,8 @@ convert_instr_small(nir_builder *b, nir_op op,
    nir_alu_type int_type = nir_op_infos[op].output_type | sz;
    nir_alu_type float_type = nir_type_float | (options->allow_fp16 ? sz * 2 : 32);
 
-   nir_ssa_def *p = nir_type_convert(b, numer, int_type, float_type);
-   nir_ssa_def *q = nir_type_convert(b, denom, int_type, float_type);
+   nir_ssa_def *p = nir_type_convert(b, numer, int_type, float_type, nir_rounding_mode_undef);
+   nir_ssa_def *q = nir_type_convert(b, denom, int_type, float_type, nir_rounding_mode_undef);
 
    /* Take 1/q but offset mantissa by 1 to correct for rounding. This is
     * needed for correct results and has been checked exhaustively for
@@ -111,7 +111,7 @@ convert_instr_small(nir_builder *b, nir_op op,
    nir_ssa_def *res = nir_fmul(b, p, rcp);
 
    /* Convert back to integer space with rounding inferred by type */
-   res = nir_type_convert(b, res, float_type, int_type);
+   res = nir_type_convert(b, res, float_type, int_type, nir_rounding_mode_undef);
 
    /* Get remainder given the quotient */
    if (op == nir_op_umod || op == nir_op_imod || op == nir_op_irem)

@@ -45,7 +45,8 @@ setup_reduce_temp(Program* program)
    std::vector<bool> hasReductions(program->blocks.size());
    for (Block& block : program->blocks) {
       for (aco_ptr<Instruction>& instr : block.instructions) {
-         if (instr->opcode == aco_opcode::p_interp_gfx11) {
+         if (instr->opcode == aco_opcode::p_interp_gfx11 ||
+             instr->opcode == aco_opcode::p_bpermute_gfx11w64) {
             maxSize = MAX2(maxSize, 1);
             hasReductions[block.index] = true;
          } else if (instr->format == Format::PSEUDO_REDUCTION) {
@@ -95,7 +96,8 @@ setup_reduce_temp(Program* program)
       for (it = block.instructions.begin(); it != block.instructions.end(); ++it) {
          Instruction* instr = (*it).get();
          if (instr->format != Format::PSEUDO_REDUCTION &&
-             instr->opcode != aco_opcode::p_interp_gfx11)
+             instr->opcode != aco_opcode::p_interp_gfx11 &&
+             instr->opcode != aco_opcode::p_bpermute_gfx11w64)
             continue;
 
          reduceTmp_in_loop |= block.loop_nest_depth > 0;
@@ -169,7 +171,8 @@ setup_reduce_temp(Program* program)
             if (need_vtmp)
                instr->operands[2] = Operand(vtmp);
          } else {
-            assert(instr->opcode == aco_opcode::p_interp_gfx11);
+            assert(instr->opcode == aco_opcode::p_interp_gfx11 ||
+                   instr->opcode == aco_opcode::p_bpermute_gfx11w64);
             instr->operands[0] = Operand(reduceTmp);
             instr->operands[0].setLateKill(true);
          }

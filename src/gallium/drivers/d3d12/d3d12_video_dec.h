@@ -77,6 +77,13 @@ d3d12_video_decoder_end_frame(struct pipe_video_codec * codec,
 void
 d3d12_video_decoder_flush(struct pipe_video_codec *codec);
 
+/**
+ * Get decoder fence.
+ */
+int d3d12_video_decoder_get_decoder_fence(struct pipe_video_codec *codec,
+                                          struct pipe_fence_handle *fence,
+                                          uint64_t timeout);
+
 ///
 /// Pipe video interface ends
 ///

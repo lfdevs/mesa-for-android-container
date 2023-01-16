@@ -23,12 +23,12 @@ With the Fall 2018 Workstation 15 / Fusion 11 releases, additional
 features are supported in the driver:
 
 -  Multisample antialiasing (2x, 4x)
--  GL_ARB/AMD_draw_buffers_blend
--  GL_ARB_sample_shading
--  GL_ARB_texture_cube_map_array
--  GL_ARB_texture_gather
--  GL_ARB_texture_query_lod
--  GL_EXT/OES_draw_buffers_indexed
+-  :ext:`GL_ARB_draw_buffers_blend` / :ext:`GL_AMD_draw_buffers_blend`
+-  :ext:`GL_ARB_sample_shading`
+-  :ext:`GL_ARB_texture_cube_map_array`
+-  :ext:`GL_ARB_texture_gather`
+-  :ext:`GL_ARB_texture_query_lod`
+-  :ext:`GL_EXT_draw_buffers_indexed` / :ext:`GL_OES_draw_buffers_indexed`
 
 This requires version 2.15.0 or later of the vmwgfx kernel module and
 the VM must be configured for hardware version 16 or later.
@@ -62,8 +62,8 @@ The components involved in this include:
 
 All of these components reside in the guest Linux virtual machine. On
 the host, all you're doing is running VMware
-`Workstation <https://www.vmware.com/products/workstation/>`__ or
-`Fusion <https://www.vmware.com/products/fusion/>`__.
+`Workstation Pro <https://www.vmware.com/products/workstation-pro.html>`__ or
+`Fusion <https://www.vmware.com/products/fusion.html>`__.
 
 Prerequisites
 -------------

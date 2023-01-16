@@ -67,6 +67,7 @@ struct vn_physical_device_properties {
    VkPhysicalDeviceCustomBorderColorPropertiesEXT custom_border_color;
    VkPhysicalDeviceLineRasterizationPropertiesEXT line_rasterization;
    VkPhysicalDeviceMultiDrawPropertiesEXT multi_draw;
+   VkPhysicalDevicePCIBusInfoPropertiesEXT pci_bus_info;
    VkPhysicalDeviceProvokingVertexPropertiesEXT provoking_vertex;
    VkPhysicalDeviceRobustness2PropertiesEXT robustness_2;
    VkPhysicalDeviceTransformFeedbackPropertiesEXT transform_feedback;

@@ -35,15 +35,6 @@ extern "C" {
 
 struct blob;
 
-enum dxil_sysvalue_type {
-   DXIL_NO_SYSVALUE = 0,
-   DXIL_SYSVALUE,
-   DXIL_GENERATED_SYSVALUE
-};
-
-enum dxil_sysvalue_type
-nir_var_to_dxil_sysvalue_type(nir_variable *var, uint64_t other_stage_mask);
-
 /* Controls how resource decls/accesses are handled. Common to all:
  *   Images, textures, and samplers map to D3D UAV, SRV, and sampler types
  *   Shared is lowered to explicit I/O and then to a DXIL-specific intrinsic for 4-byte indices instead of byte addressing

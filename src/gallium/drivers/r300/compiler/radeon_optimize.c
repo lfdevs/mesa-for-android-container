@@ -88,11 +88,26 @@ static void copy_propagate_scan_read(void * data, struct rc_instruction * inst,
 		return;
 	}
 
+	/* R300/R400 is unhappy about propagating
+	 *  0: MOV temp[1], -none.1111;
+	 *  1: KIL temp[1];
+	 * to
+	 *  0: KIL -none.1111;
+	 *
+	 * R500 is fine with it.
+	 */
+	if (!reader_data->C->is_r500 && inst->U.I.Opcode == RC_OPCODE_KIL &&
+		reader_data->Writer->U.I.SrcReg[0].File == RC_FILE_NONE) {
+		reader_data->Abort = 1;
+		return;
+	}
+
 	/* These instructions cannot read from the constants file.
 	 * see radeonTransformTEX()
 	 */
 	if(reader_data->Writer->U.I.SrcReg[0].File != RC_FILE_TEMPORARY &&
 			reader_data->Writer->U.I.SrcReg[0].File != RC_FILE_INPUT &&
+			reader_data->Writer->U.I.SrcReg[0].File != RC_FILE_NONE &&
 				(inst->U.I.Opcode == RC_OPCODE_TEX ||
 				inst->U.I.Opcode == RC_OPCODE_TXB ||
 				inst->U.I.Opcode == RC_OPCODE_TXP ||
@@ -1336,7 +1351,7 @@ void rc_optimize(struct radeon_compiler * c, void *user)
 	/* Merge MOVs to same source in different channels using the constant
 	 * swizzles.
 	 */
-	if (c->is_r500) {
+	if (c->is_r500 || c->type == RC_VERTEX_PROGRAM) {
 		inst = c->Program.Instructions.Next;
 		while(inst != &c->Program.Instructions) {
 			struct rc_instruction * cur = inst;

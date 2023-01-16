@@ -781,7 +781,7 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
 {
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
 
-   uint32_t bt_size = align_u32(entries * 4, 32);
+   uint32_t bt_size = align(entries * 4, 32);
 
    struct anv_state state = cmd_buffer->bt_next;
    if (bt_size > state.alloc_size)
@@ -792,16 +792,8 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
    cmd_buffer->bt_next.map += bt_size;
    cmd_buffer->bt_next.alloc_size -= bt_size;
 
-   if (cmd_buffer->device->info->verx10 >= 125) {
-      /* We're using 3DSTATE_BINDING_TABLE_POOL_ALLOC to change the binding
-       * table address independently from surface state base address.  We no
-       * longer need any sort of offsetting.
-       */
-      *state_offset = 0;
-   } else {
-      assert(bt_block->offset < 0);
-      *state_offset = -bt_block->offset;
-   }
+   assert(bt_block->offset < 0);
+   *state_offset = -bt_block->offset;
 
    return state;
 }
@@ -2419,7 +2411,7 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
     */
    assert(vk_queue_is_empty(&queue->vk));
 
-   uint32_t batch_size = align_u32(batch->next - batch->start, 8);
+   uint32_t batch_size = align(batch->next - batch->start, 8);
 
    struct anv_bo *batch_bo = NULL;
    result = anv_bo_pool_alloc(&device->batch_bo_pool, batch_size, &batch_bo);

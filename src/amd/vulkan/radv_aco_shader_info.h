@@ -35,16 +35,6 @@
 #define ASSIGN_FIELD_CP(x) memcpy(&aco_info->x, &radv->x, sizeof(radv->x))
 
 static inline void
-radv_aco_convert_shader_so_info(struct aco_shader_info *aco_info,
-                       const struct radv_shader_info *radv)
-{
-   ASSIGN_FIELD(so.num_outputs);
-   ASSIGN_FIELD_CP(so.outputs);
-   ASSIGN_FIELD_CP(so.strides);
-   /* enabled_stream_buffers_mask unused */
-}
-
-static inline void
 radv_aco_convert_shader_vp_info(struct aco_vp_output_info *aco_info,
 				const struct radv_vs_output_info *radv)
 {
@@ -97,7 +87,6 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
    ASSIGN_FIELD(ps.num_interp);
    ASSIGN_FIELD(ps.spi_ps_input);
    ASSIGN_FIELD(cs.subgroup_size);
-   radv_aco_convert_shader_so_info(aco_info, radv);
    aco_info->gfx9_gs_ring_lds_size = radv->gs_ring_info.lds_size;
 }
 
@@ -135,6 +124,7 @@ static inline void
 radv_aco_convert_pipe_key(struct aco_stage_input *aco_info,
                           const struct radv_pipeline_key *radv)
 {
+   radv_aco_convert_ps_epilog_key(&aco_info->ps.epilog, &radv->ps.epilog);
    ASSIGN_FIELD(optimisations_disabled);
    ASSIGN_FIELD(image_2d_view_of_3d);
    ASSIGN_FIELD(vs.instance_rate_inputs);
@@ -145,9 +135,7 @@ radv_aco_convert_pipe_key(struct aco_stage_input *aco_info,
    ASSIGN_FIELD_CP(vs.vertex_attribute_strides);
    ASSIGN_FIELD_CP(vs.vertex_binding_align);
    ASSIGN_FIELD(tcs.tess_input_vertices);
-   ASSIGN_FIELD(ps.col_format);
    ASSIGN_FIELD(ps.alpha_to_coverage_via_mrtz);
-   ASSIGN_FIELD(ps.mrt0_is_dual_src);
 }
 
 static inline void
@@ -161,6 +149,7 @@ radv_aco_convert_opts(struct aco_compiler_options *aco_info,
    ASSIGN_FIELD(record_ir);
    ASSIGN_FIELD(record_stats);
    ASSIGN_FIELD(has_ls_vgpr_init_bug);
+   ASSIGN_FIELD(enable_mrt_output_nan_fixup);
    ASSIGN_FIELD(wgp_mode);
    ASSIGN_FIELD(family);
    ASSIGN_FIELD(gfx_level);

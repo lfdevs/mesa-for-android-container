@@ -200,36 +200,9 @@ struct brw_sampler_prog_key_data {
    uint32_t gather_channel_quirk_mask;
 
    /**
-    * Whether this sampler uses the compressed multisample surface layout.
-    */
-   uint32_t compressed_multisample_layout_mask;
-
-   /**
-    * Whether this sampler is using 16x multisampling. If so fetching from
-    * this sampler will be handled with a different instruction, ld2dms_w
-    * instead of ld2dms.
-    */
-   uint32_t msaa_16;
-
-   /**
     * For Sandybridge, which shader w/a we need for gather quirks.
     */
    enum gfx6_gather_sampler_wa gfx6_gather_wa[BRW_MAX_SAMPLERS];
-
-   /**
-    * Texture units that have a YUV image bound.
-    */
-   uint32_t y_u_v_image_mask;
-   uint32_t y_uv_image_mask;
-   uint32_t yx_xuxv_image_mask;
-   uint32_t xy_uxvx_image_mask;
-   uint32_t ayuv_image_mask;
-   uint32_t xyuv_image_mask;
-   uint32_t bt709_mask;
-   uint32_t bt2020_mask;
-
-   /* Scale factor for each texture. */
-   float scale_factors[BRW_MAX_SAMPLERS];
 };
 
 struct brw_base_prog_key {
@@ -982,65 +955,6 @@ brw_fs_simd_width_for_ksp(unsigned ksp_idx, bool simd8_enabled,
    default:
       unreachable("Invalid KSP index");
    }
-}
-
-static inline void
-brw_fs_get_dispatch_enables(const struct intel_device_info *devinfo,
-                            const struct brw_wm_prog_data *prog_data,
-                            unsigned rasterization_samples,
-                            bool *enable_8,
-                            bool *enable_16,
-                            bool *enable_32)
-{
-   assert(rasterization_samples != 0);
-
-   *enable_8  = prog_data->dispatch_8;
-   *enable_16 = prog_data->dispatch_16;
-   *enable_32 = prog_data->dispatch_32;
-
-   if (prog_data->persample_dispatch) {
-      /* TGL PRMs, Volume 2d: Command Reference: Structures:
-       *    3DSTATE_PS_BODY::32 Pixel Dispatch Enable:
-       *
-       *    "Must not be enabled when dispatch rate is sample AND NUM_MULTISAMPLES > 1."
-       */
-      if (devinfo->ver >= 12 && rasterization_samples > 1)
-         *enable_32 = false;
-
-      /* Starting with SandyBridge (where we first get MSAA), the different
-       * pixel dispatch combinations are grouped into classifications A
-       * through F (SNB PRM Vol. 2 Part 1 Section 7.7.1).  On most hardware
-       * generations, the only configurations supporting persample dispatch
-       * are those in which only one dispatch width is enabled.
-       *
-       * The Gfx12 hardware spec has a similar dispatch grouping table, but
-       * the following conflicting restriction applies (from the page on
-       * "Structure_3DSTATE_PS_BODY"), so we need to keep the SIMD16 shader:
-       *
-       *  "SIMD32 may only be enabled if SIMD16 or (dual)SIMD8 is also
-       *   enabled."
-       */
-      if (*enable_32 || *enable_16)
-         *enable_8 = false;
-      if (devinfo->ver < 12 && *enable_32)
-         *enable_16 = false;
-   }
-
-   /* The docs for 3DSTATE_PS::32 Pixel Dispatch Enable say:
-    *
-    *    "When NUM_MULTISAMPLES = 16 or FORCE_SAMPLE_COUNT = 16,
-    *     SIMD32 Dispatch must not be enabled for PER_PIXEL dispatch
-    *     mode."
-    *
-    * 16x MSAA only exists on Gfx9+, so we can skip this on Gfx8.
-    */
-   if (devinfo->ver >= 9 && rasterization_samples == 16 &&
-       !prog_data->persample_dispatch) {
-      assert(*enable_8 || *enable_16);
-      *enable_32 = false;
-   }
-
-   assert(*enable_8 || *enable_16 || *enable_32);
 }
 
 #define brw_wm_state_simd_width_for_ksp(wm_state, ksp_idx) \

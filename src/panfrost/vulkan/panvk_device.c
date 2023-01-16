@@ -894,14 +894,17 @@ panvk_CreateDevice(VkPhysicalDevice physicalDevice,
       return vk_error(physical_device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    const struct vk_device_entrypoint_table *dev_entrypoints;
+   const struct vk_command_buffer_ops *cmd_buffer_ops;
    struct vk_device_dispatch_table dispatch_table;
 
    switch (physical_device->pdev.arch) {
    case 6:
       dev_entrypoints = &panvk_v6_device_entrypoints;
+      cmd_buffer_ops = &panvk_v6_cmd_buffer_ops;
       break;
    case 7:
       dev_entrypoints = &panvk_v7_device_entrypoints;
+      cmd_buffer_ops = &panvk_v7_cmd_buffer_ops;
       break;
    default:
       unreachable("Unsupported architecture");
@@ -947,6 +950,7 @@ panvk_CreateDevice(VkPhysicalDevice physicalDevice,
     * whole struct.
     */
    device->vk.command_dispatch_table = &device->cmd_dispatch;
+   device->vk.command_buffer_ops = cmd_buffer_ops;
 
    device->instance = physical_device->instance;
    device->physical_device = physical_device;
@@ -1645,19 +1649,4 @@ panvk_GetPhysicalDeviceExternalFenceProperties(VkPhysicalDevice physicalDevice,
    pExternalFenceProperties->exportFromImportedHandleTypes = 0;
    pExternalFenceProperties->compatibleHandleTypes = 0;
    pExternalFenceProperties->externalFenceFeatures = 0;
-}
-
-void
-panvk_GetDeviceGroupPeerMemoryFeatures(VkDevice device,
-                                       uint32_t heapIndex,
-                                       uint32_t localDeviceIndex,
-                                       uint32_t remoteDeviceIndex,
-                                       VkPeerMemoryFeatureFlags *pPeerMemoryFeatures)
-{
-   assert(localDeviceIndex == remoteDeviceIndex);
-
-   *pPeerMemoryFeatures = VK_PEER_MEMORY_FEATURE_COPY_SRC_BIT |
-                          VK_PEER_MEMORY_FEATURE_COPY_DST_BIT |
-                          VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT |
-                          VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
 }

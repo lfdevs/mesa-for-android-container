@@ -68,9 +68,6 @@ spec@ext_external_objects_fd@semaphore-api-errors
 spec@ext_external_objects_fd@memory-object-api-errors
 spec@ext_external_objects@vk-vert-buf-reuse
 
-# Causes OOM
-spec@arb_texture_buffer_object@texture-buffer-size-clamp
-
 # More time outs
 glx@glx-swap-event_async
 glx@glx-swap-event_interval

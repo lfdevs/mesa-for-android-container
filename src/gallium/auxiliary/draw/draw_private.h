@@ -588,21 +588,4 @@ draw_clamp_viewport_idx(int idx)
    return ((PIPE_MAX_VIEWPORTS > idx && idx >= 0) ? idx : 0);
 }
 
-
-/**
- * Adds two unsigned integers and if the addition
- * overflows then it returns the value from
- * the overflow_value variable.
- */
-static inline unsigned
-draw_overflow_uadd(unsigned a, unsigned b,
-                   unsigned overflow_value)
-{
-   unsigned res = a + b;
-   if (res < a) {
-      res = overflow_value;
-   }
-   return res;
-}
-
 #endif /* DRAW_PRIVATE_H */

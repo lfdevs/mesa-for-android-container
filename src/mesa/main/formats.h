@@ -33,10 +33,11 @@
 #define FORMATS_H
 
 
-#include <GL/gl.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "gallium/include/pipe/p_format.h"
+
+#include "util/glheader.h"
+#include "util/format/u_formats.h"
 #include "util/u_endian.h"
 
 #ifdef __cplusplus
@@ -239,7 +240,7 @@ _mesa_format_is_mesa_array_format(uint32_t f)
 
 /**
  * Mesa texture/renderbuffer image formats.  These are just other names of the
- * gallium p_format.h formats.
+ * util/format/u_formats.h formats.
  */
 typedef enum pipe_format mesa_format;
 

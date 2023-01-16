@@ -1,7 +1,7 @@
 #ifndef __NV30_CONTEXT_H__
 #define __NV30_CONTEXT_H__
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "util/u_blitter.h"
 
 #include "nv30/nv30_screen.h"

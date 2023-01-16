@@ -309,7 +309,7 @@ CreateElementLayout(
 
    /* XXX: What do we do when there's a gap? */
    if (max_elements != num_elements) {
-      DebugPrintf("%s: gap\n", __FUNCTION__);
+      DebugPrintf("%s: gap\n", __func__);
    }
 
    pElementLayout->handle =

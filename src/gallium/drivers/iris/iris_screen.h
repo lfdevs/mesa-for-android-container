@@ -199,7 +199,7 @@ struct iris_screen {
     */
    uint64_t last_seqno;
 
-   struct intel_device_info devinfo;
+   const struct intel_device_info *devinfo;
    struct isl_device isl_dev;
    struct iris_bufmgr *bufmgr;
    struct brw_compiler *compiler;

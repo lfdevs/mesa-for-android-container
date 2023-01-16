@@ -46,8 +46,10 @@ public:
 
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;
+   bool replace_dest(PRegister new_dest, AluInstr *move_instr) override;
 
    AluInstr *split(std::vector<AluInstr *>& out_block, AluInstr *last_lds_instr);
+
    bool is_equal_to(const LDSReadInstr& lhs) const;
 
    static auto from_string(std::istream& is, ValueFactory& value_factory) -> Pointer;

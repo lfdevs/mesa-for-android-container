@@ -231,7 +231,24 @@ class Enum(Node):
         if element.name in self._values:
             raise RuntimeError("Value is being redefined. Value: '%s'" % element.name)
 
+        if element.value in self._values.values():
+            raise RuntimeError("Ambiguous enum value detected. Value: '%s'" % element.value)
+
         self._values[element.name] = element
+
+    def _emit_to_str(self) -> None:
+        print(textwrap.dedent("""\
+            static const char *
+            %s_to_str(const enum %s value)
+            {""") % (self.full_name, self.full_name))
+
+        print("    switch (value) {")
+        for value in self._values.values():
+            print("    case %s: return \"%s\";" % (value.full_name, value.name))
+        print("    default: return NULL;")
+        print("    }")
+
+        print("}\n")
 
     def emit(self) -> None:
         # This check is invalid if tags other than Value can be nested within an enum.
@@ -242,6 +259,8 @@ class Enum(Node):
         for value in self._values.values():
             value.emit()
         print("};\n")
+
+        self._emit_to_str()
 
 
 class Value(Node):

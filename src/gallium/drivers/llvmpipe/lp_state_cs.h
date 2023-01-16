@@ -26,7 +26,6 @@
 #ifndef LP_STATE_CS_H
 #define LP_STATE_CS_H
 
-#include "os/os_thread.h"
 #include "util/u_thread.h"
 #include "pipe/p_state.h"
 

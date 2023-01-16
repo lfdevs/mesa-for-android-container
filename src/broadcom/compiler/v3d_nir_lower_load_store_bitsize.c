@@ -113,8 +113,7 @@ init_scalar_intrinsic(nir_builder *b,
 }
 
 static bool
-lower_load_bitsize(struct v3d_compile *c,
-                   nir_builder *b,
+lower_load_bitsize(nir_builder *b,
                    nir_intrinsic_instr *intr)
 {
         uint32_t bit_size = nir_dest_bit_size(intr->dest);
@@ -169,9 +168,8 @@ lower_load_bitsize(struct v3d_compile *c,
 }
 
 static bool
-lower_store_bitsize(struct v3d_compile *c,
-                   nir_builder *b,
-                   nir_intrinsic_instr *intr)
+lower_store_bitsize(nir_builder *b,
+                    nir_intrinsic_instr *intr)
 {
         /* No need to split if it is already scalar */
         int value_idx = value_src(intr->intrinsic);
@@ -233,8 +231,6 @@ lower_store_bitsize(struct v3d_compile *c,
 static bool
 lower_load_store_bitsize(nir_builder *b, nir_instr *instr, void *data)
 {
-        struct v3d_compile *c = (struct v3d_compile *) data;
-
         if (instr->type != nir_instr_type_intrinsic)
                 return false;
         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
@@ -245,12 +241,12 @@ lower_load_store_bitsize(nir_builder *b, nir_instr *instr, void *data)
         case nir_intrinsic_load_uniform:
         case nir_intrinsic_load_scratch:
         case nir_intrinsic_load_global_2x32:
-               return lower_load_bitsize(c, b, intr);
+               return lower_load_bitsize(b, intr);
 
         case nir_intrinsic_store_ssbo:
         case nir_intrinsic_store_scratch:
         case nir_intrinsic_store_global_2x32:
-                return lower_store_bitsize(c, b, intr);
+                return lower_store_bitsize(b, intr);
 
         default:
                 return false;
@@ -258,11 +254,11 @@ lower_load_store_bitsize(nir_builder *b, nir_instr *instr, void *data)
 }
 
 bool
-v3d_nir_lower_load_store_bitsize(nir_shader *s, struct v3d_compile *c)
+v3d_nir_lower_load_store_bitsize(nir_shader *s)
 {
         return nir_shader_instructions_pass(s,
                                             lower_load_store_bitsize,
                                             nir_metadata_block_index |
                                             nir_metadata_dominance,
-                                            c);
+                                            NULL);
 }

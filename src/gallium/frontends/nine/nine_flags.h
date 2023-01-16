@@ -9,6 +9,6 @@
  * We need to realign them to be able to use
  * SSE and to work with other libraries (llvm, etc)
  */
-#define NINE_WINAPI WINAPI PIPE_ALIGN_STACK
+#define NINE_WINAPI WINAPI UTIL_ALIGN_STACK
 
 #endif /* _NINE_FLAGS_H_ */

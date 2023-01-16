@@ -103,9 +103,6 @@ bool
 d3d12_lower_image_casts(nir_shader *s, struct d3d12_image_format_conversion_info *info);
 
 bool
-d3d12_lower_sample_pos(nir_shader *s);
-
-bool
 d3d12_disable_multisampling(nir_shader *s);
 
 bool

@@ -156,7 +156,7 @@ static bool layout_symbols(struct ac_rtld_symbol *symbols, unsigned num_symbols,
       s->offset = total_size;
 
       if (total_size + s->size < total_size) {
-         report_errorf("%s: size overflow", __FUNCTION__);
+         report_errorf("%s: size overflow", __func__);
          return false;
       }
 
@@ -454,7 +454,7 @@ bool ac_rtld_open(struct ac_rtld_binary *binary, struct ac_rtld_open_info i)
     */
    unsigned prefetch_distance = 0;
 
-   if (!i.info->has_graphics && i.info->family >= CHIP_ALDEBARAN)
+   if (!i.info->has_graphics && i.info->family >= CHIP_MI200)
       prefetch_distance = 16;
    else if (i.info->gfx_level >= GFX10)
       prefetch_distance = 3;

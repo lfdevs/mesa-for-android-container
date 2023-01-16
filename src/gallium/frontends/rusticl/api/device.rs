@@ -89,7 +89,9 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_IMAGE3D_MAX_HEIGHT => cl_prop::<usize>(dev.image_3d_size()),
             CL_DEVICE_IMAGE3D_MAX_WIDTH => cl_prop::<usize>(dev.image_3d_size()),
             CL_DEVICE_IMAGE3D_MAX_DEPTH => cl_prop::<usize>(dev.image_3d_size()),
-            CL_DEVICE_LATEST_CONFORMANCE_VERSION_PASSED => cl_prop::<&str>("v0000-01-01-00"),
+            CL_DEVICE_LATEST_CONFORMANCE_VERSION_PASSED => {
+                cl_prop::<&CStr>(dev.screen().cl_cts_version())
+            }
             CL_DEVICE_LINKER_AVAILABLE => cl_prop::<bool>(true),
             CL_DEVICE_LOCAL_MEM_SIZE => cl_prop::<cl_ulong>(dev.local_mem_size()),
             // TODO add query for CL_LOCAL vs CL_GLOBAL

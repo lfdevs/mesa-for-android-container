@@ -763,9 +763,25 @@ v3d_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
         int i;
         int num_modifiers = ARRAY_SIZE(v3d_available_modifiers);
 
-        /* Expose DRM_FORMAT_MOD_BROADCOM_SAND128 only for PIPE_FORMAT_NV12 */
-        if (format != PIPE_FORMAT_NV12)
+        switch (format) {
+        case PIPE_FORMAT_P030:
+                /* Expose SAND128, but not LINEAR or UIF */
+                *count = 1;
+                if (modifiers && max > 0) {
+                        modifiers[0] = DRM_FORMAT_MOD_BROADCOM_SAND128;
+                        if (external_only)
+                                external_only[0] = true;
+                }
+                return;
+
+        case PIPE_FORMAT_NV12:
+                /* Expose UIF, LINEAR and SAND128 */
+                break;
+
+        default:
+                /* Expose UIF and LINEAR, but not SAND128 */
                 num_modifiers--;
+        }
 
         if (!modifiers) {
                 *count = num_modifiers;
@@ -787,18 +803,21 @@ v3d_screen_is_dmabuf_modifier_supported(struct pipe_screen *pscreen,
                                         bool *external_only)
 {
         int i;
-        bool is_sand_col128 = (format == PIPE_FORMAT_NV12) &&
+        bool is_sand_col128 = (format == PIPE_FORMAT_NV12 || format == PIPE_FORMAT_P030) &&
                 (fourcc_mod_broadcom_mod(modifier) == DRM_FORMAT_MOD_BROADCOM_SAND128);
 
         if (is_sand_col128) {
                 if (external_only)
                         *external_only = true;
                 return true;
+        } else if (format == PIPE_FORMAT_P030) {
+                /* For PIPE_FORMAT_P030 we don't expose LINEAR or UIF. */
+                return false;
         }
 
         /* We don't want to generally allow DRM_FORMAT_MOD_BROADCOM_SAND128
          * modifier, that is the last v3d_available_modifiers. We only accept
-         * it in the case of having a PIPE_FORMAT_NV12.
+         * it in the case of having a PIPE_FORMAT_NV12 or PIPE_FORMAT_P030.
          */
         assert(v3d_available_modifiers[ARRAY_SIZE(v3d_available_modifiers) - 1] ==
                DRM_FORMAT_MOD_BROADCOM_SAND128);

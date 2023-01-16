@@ -41,7 +41,7 @@ iris_is_color_fast_clear_compatible(struct iris_context *ice,
                                     const union isl_color_value color)
 {
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
 
    if (isl_format_has_int_channel(format)) {
       perf_debug(&ice->dbg, "Integer fast clear not enabled for %s\n",
@@ -168,7 +168,7 @@ fast_clear_color(struct iris_context *ice,
                  union isl_color_value color)
 {
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
    struct pipe_resource *p_res = (void *) res;
 
    bool color_changed = res->aux.clear_color_unknown ||
@@ -315,7 +315,7 @@ clear_color(struct iris_context *ice,
    struct iris_resource *res = (void *) p_res;
 
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
    enum blorp_batch_flags blorp_flags = iris_blorp_flags_for_batch(batch);
 
    if (render_condition_enabled) {
@@ -384,7 +384,7 @@ can_fast_clear_depth(struct iris_context *ice,
    struct pipe_resource *p_res = (void *) res;
    struct pipe_context *ctx = (void *) ice;
    struct iris_screen *screen = (void *) ctx->screen;
-   const struct intel_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = screen->devinfo;
 
    if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
       return false;
@@ -677,7 +677,7 @@ iris_clear_texture(struct pipe_context *ctx,
 {
    struct iris_context *ice = (void *) ctx;
    struct iris_screen *screen = (void *) ctx->screen;
-   const struct intel_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = screen->devinfo;
 
    if (util_format_is_depth_or_stencil(p_res->format)) {
       const struct util_format_unpack_description *unpack =

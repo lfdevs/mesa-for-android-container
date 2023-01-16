@@ -847,6 +847,331 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 }
 
 
+/**
+ * Creates the VS of the custom blit shader to convert YUV plane from
+ * the P030 format with BROADCOM_SAND_COL128 modifier to UIF tiled P010
+ * format.
+ * This vertex shader is mostly a pass-through VS.
+ */
+static void *
+v3d_get_sand30_vs(struct pipe_context *pctx)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+        struct pipe_screen *pscreen = pctx->screen;
+
+        if (v3d->sand30_blit_vs)
+                return v3d->sand30_blit_vs;
+
+        const struct nir_shader_compiler_options *options =
+                pscreen->get_compiler_options(pscreen,
+                                              PIPE_SHADER_IR_NIR,
+                                              PIPE_SHADER_VERTEX);
+
+        nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX,
+                                                       options,
+                                                       "sand30_blit_vs");
+
+        const struct glsl_type *vec4 = glsl_vec4_type();
+        nir_variable *pos_in = nir_variable_create(b.shader,
+                                                   nir_var_shader_in,
+                                                   vec4, "pos");
+
+        nir_variable *pos_out = nir_variable_create(b.shader,
+                                                    nir_var_shader_out,
+                                                    vec4, "gl_Position");
+        pos_out->data.location = VARYING_SLOT_POS;
+        nir_store_var(&b, pos_out, nir_load_var(&b, pos_in), 0xf);
+
+        struct pipe_shader_state shader_tmpl = {
+                .type = PIPE_SHADER_IR_NIR,
+                .ir.nir = b.shader,
+        };
+
+        v3d->sand30_blit_vs = pctx->create_vs_state(pctx, &shader_tmpl);
+
+        return v3d->sand30_blit_vs;
+}
+
+/**
+ * Given an uvec2 value with rgb10a2 components, it extracts four 10-bit
+ * components, then converts them from unorm10 to unorm16 and returns them
+ * in an uvec4. The start parameter defines where the sequence of 4 values
+ * begins.
+ */
+static nir_ssa_def *
+extract_unorm_2xrgb10a2_component_to_4xunorm16(nir_builder *b,
+                                               nir_ssa_def *value,
+                                               nir_ssa_def *start)
+{
+        const unsigned mask = BITFIELD_MASK(10);
+
+        nir_ssa_def *shiftw0 = nir_imul_imm(b, start, 10);
+        nir_ssa_def *word0 = nir_iand_imm(b, nir_channel(b, value, 0),
+                                          BITFIELD_MASK(30));
+        nir_ssa_def *finalword0 = nir_ushr(b, word0, shiftw0);
+        nir_ssa_def *word1 = nir_channel(b, value, 1);
+        nir_ssa_def *shiftw0tow1 = nir_isub(b, nir_imm_int(b, 30), shiftw0);
+        nir_ssa_def *word1toword0 =  nir_ishl(b, word1, shiftw0tow1);
+        finalword0 = nir_ior(b, finalword0, word1toword0);
+        nir_ssa_def *finalword1 = nir_ushr(b, word1, shiftw0);
+
+        nir_ssa_def *val0 = nir_ishl_imm(b, nir_iand_imm(b, finalword0,
+                                                         mask), 6);
+        nir_ssa_def *val1 = nir_ishr_imm(b, nir_iand_imm(b, finalword0,
+                                                         mask << 10), 4);
+        nir_ssa_def *val2 = nir_ishr_imm(b, nir_iand_imm(b, finalword0,
+                                                         mask << 20), 14);
+        nir_ssa_def *val3 = nir_ishl_imm(b, nir_iand_imm(b, finalword1,
+                                                         mask), 6);
+
+        return nir_vec4(b, val0, val1, val2, val3);
+}
+
+/**
+ * Creates the FS of the custom blit shader to convert YUV plane from
+ * the P030 format with BROADCOM_SAND_COL128 modifier to UIF tiled P10
+ * format a 16-bit representation per component.
+ *
+ * The result texture is equivalent to a chroma (cpp=4) or luma (cpp=2)
+ * plane for a P010 format without the SAND128 modifier.
+ */
+static void *
+v3d_get_sand30_fs(struct pipe_context *pctx)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+        struct pipe_screen *pscreen = pctx->screen;
+
+        if (v3d->sand30_blit_fs)
+                return  v3d->sand30_blit_fs;
+
+        const struct nir_shader_compiler_options *options =
+                pscreen->get_compiler_options(pscreen,
+                                              PIPE_SHADER_IR_NIR,
+                                              PIPE_SHADER_FRAGMENT);
+
+        nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,
+                                                       options,
+                                                       "sand30_blit_fs");
+        b.shader->info.num_ubos = 1;
+        b.shader->num_outputs = 1;
+        b.shader->num_inputs = 1;
+        b.shader->num_uniforms = 1;
+
+        const struct glsl_type *vec4 = glsl_vec4_type();
+
+        const struct glsl_type *glsl_uint = glsl_uint_type();
+        const struct glsl_type *glsl_uvec4 = glsl_vector_type(GLSL_TYPE_UINT,
+                                                              4);
+
+        nir_variable *color_out = nir_variable_create(b.shader,
+                                                      nir_var_shader_out,
+                                                      glsl_uvec4, "f_color");
+        color_out->data.location = FRAG_RESULT_COLOR;
+
+        nir_variable *pos_in =
+                nir_variable_create(b.shader, nir_var_shader_in, vec4, "pos");
+        pos_in->data.location = VARYING_SLOT_POS;
+        nir_ssa_def *pos = nir_load_var(&b, pos_in);
+
+        nir_ssa_def *zero = nir_imm_int(&b, 0);
+        nir_ssa_def *three = nir_imm_int(&b, 3);
+
+        /* With a SAND128 stripe, in 128-bytes with rgb10a2 format we have 96
+         * 10-bit values. So, it represents 96 pixels for Y plane and 48 pixels
+         * for UV frame, but as we are reading 4 10-bit-values at a time we
+         * will have 24 groups (pixels) of 4 10-bit values.
+         */
+        nir_ssa_def *pixels_stripe = nir_imm_int(&b, 24);
+
+        nir_ssa_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
+        nir_ssa_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
+
+        /* UIF tiled format is composed by UIF blocks. Each block has four 64
+         * byte microtiles. Inside each microtile pixels are stored in raster
+         * format. But microtiles have different dimensions based in the bits
+         * per pixel of the image.
+         *
+         *  16bpp microtile dimensions are 8x4
+         *  32bpp microtile dimensions are 4x4
+         *  64bpp microtile dimensions are 4x2
+         *
+         * As we are reading and writing with 64bpp to optimize the number of
+         * texture operations during the blit, we adjust the offsets so when
+         * the microtile is sampled using the 16bpp (luma) and the 32bpp
+         * (chroma) the expected pixels are in the correct position, that
+         * would be different if we were using a 64bpp sampling.
+         *
+         * For luma 8x4 16bpp and chroma 4x4 32bpp luma raster order is
+         * incompatible with 4x2 64bpp. 16bpp has 16 bytes per line, 32bpp has
+         * also 16byte per line. But 64bpp has 32 bytes per line. So if we
+         * read a 16bpp or 32bpp texture that was written as 64bpp texture,
+         * pixels would be misplaced.
+         *
+         * inter/intra_utile_x_offsets takes care of mapping the offsets
+         * between microtiles to deal with this issue for luma and chroma
+         * planes.
+         *
+         * We reduce the luma and chroma planes to the same blit case
+         * because 16bpp and 32bpp have compatible microtile raster layout.
+         * So just doubling the width of the chroma plane before calling the
+         * blit makes them equivalent.
+         */
+        nir_variable *stride_in =
+                nir_variable_create(b.shader, nir_var_uniform,
+                                    glsl_uint, "sand30_stride");
+        nir_ssa_def *stride =
+                nir_load_uniform(&b, 1, 32, zero,
+                                 .base = stride_in->data.driver_location,
+                                 .range = 4,
+                                 .dest_type = nir_type_uint32);
+
+        nir_ssa_def *real_x = nir_ior(&b, nir_iand_imm(&b, x, 1),
+                                      nir_ishl_imm(&b,nir_ushr_imm(&b, x, 2),
+                                      1));
+        nir_ssa_def *x_pos_in_stripe = nir_umod(&b, real_x, pixels_stripe);
+        nir_ssa_def *component = nir_umod(&b, real_x, three);
+        nir_ssa_def *intra_utile_x_offset = nir_ishl_imm(&b, component, 2);
+
+        nir_ssa_def *inter_utile_x_offset =
+                nir_ishl_imm(&b, nir_udiv_imm(&b, x_pos_in_stripe, 3), 4);
+
+        nir_ssa_def *stripe_offset=
+                nir_ishl_imm(&b,
+                             nir_imul(&b,
+                                      nir_udiv(&b, real_x, pixels_stripe),
+                                      stride),
+                             7);
+
+        nir_ssa_def *x_offset = nir_iadd(&b, stripe_offset,
+                                         nir_iadd(&b, intra_utile_x_offset,
+                                                  inter_utile_x_offset));
+        nir_ssa_def *y_offset =
+                nir_iadd(&b, nir_ishl_imm(&b, nir_iand_imm(&b, x, 2), 6),
+                         nir_ishl_imm(&b, y, 8));
+        nir_ssa_def *ubo_offset = nir_iadd(&b, x_offset, y_offset);
+
+        nir_ssa_def *load = nir_load_ubo(&b, 2, 32, zero, ubo_offset,
+                                         .align_mul = 8,
+                                         .align_offset = 0,
+                                         .range_base = 0,
+                                         .range = ~0);
+        nir_ssa_def *output =
+                extract_unorm_2xrgb10a2_component_to_4xunorm16(&b, load,
+                                                               component);
+        nir_store_var(&b, color_out,
+                      output,
+                      0xf);
+        struct pipe_shader_state shader_tmpl = {
+                .type = PIPE_SHADER_IR_NIR,
+                .ir.nir = b.shader,
+        };
+
+        v3d->sand30_blit_fs = pctx->create_fs_state(pctx, &shader_tmpl);
+
+        return v3d->sand30_blit_fs;
+}
+
+/**
+ * Turns P030 with SAND30 format modifier from raster-order with interleaved
+ * luma and chroma 128-byte-wide-columns to a P010 UIF tiled format for luma
+ * and chroma.
+ */
+static void
+v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+        struct v3d_resource *src = v3d_resource(info->src.resource);
+        ASSERTED struct v3d_resource *dst = v3d_resource(info->dst.resource);
+
+        if (!src->sand_col128_stride)
+                return;
+        if (src->tiled)
+                return;
+        if (src->base.format != PIPE_FORMAT_R16_UNORM &&
+            src->base.format != PIPE_FORMAT_R16G16_UNORM)
+                return;
+        if (!(info->mask & PIPE_MASK_RGBA))
+                return;
+
+        assert(dst->base.format == src->base.format);
+        assert(dst->tiled);
+
+        assert(info->src.box.x == 0 && info->dst.box.x == 0);
+        assert(info->src.box.y == 0 && info->dst.box.y == 0);
+        assert(info->src.box.width == info->dst.box.width);
+        assert(info->src.box.height == info->dst.box.height);
+
+        v3d_blitter_save(v3d, true);
+
+        struct pipe_surface dst_tmpl;
+        util_blitter_default_dst_texture(&dst_tmpl, info->dst.resource,
+                                         info->dst.level, info->dst.box.z);
+
+        dst_tmpl.format = PIPE_FORMAT_R16G16B16A16_UINT;
+
+        struct pipe_surface *dst_surf =
+                pctx->create_surface(pctx, info->dst.resource, &dst_tmpl);
+        if (!dst_surf) {
+                fprintf(stderr, "Failed to create YUV dst surface\n");
+                util_blitter_unset_running_flag(v3d->blitter);
+                return;
+        }
+
+        uint32_t sand30_stride = src->sand_col128_stride;
+
+        /* Adjust the dimensions of dst luma/chroma to match src
+         * size now we are using a cpp=8 format. Next dimension take into
+         * account the UIF microtile layouts.
+         */
+        dst_surf->height /= 2;
+        dst_surf->width = align(dst_surf->width, 8);
+        if (src->cpp == 2)
+                dst_surf->width /= 2;
+        /* Set the constant buffer. */
+        struct pipe_constant_buffer cb_uniforms = {
+                .user_buffer = &sand30_stride,
+                .buffer_size = sizeof(sand30_stride),
+        };
+
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, false,
+                                  &cb_uniforms);
+
+        struct pipe_constant_buffer saved_fs_cb1 = { 0 };
+        pipe_resource_reference(&saved_fs_cb1.buffer,
+                                v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1].buffer);
+        memcpy(&saved_fs_cb1, &v3d->constbuf[PIPE_SHADER_FRAGMENT].cb[1],
+               sizeof(struct pipe_constant_buffer));
+        struct pipe_constant_buffer cb_src = {
+                .buffer = info->src.resource,
+                .buffer_offset = src->slices[info->src.level].offset,
+                .buffer_size = (src->bo->size -
+                                src->slices[info->src.level].offset),
+        };
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, false,
+                                  &cb_src);
+        /* Unbind the textures, to make sure we don't try to recurse into the
+         * shadow blit.
+         */
+        pctx->set_sampler_views(pctx, PIPE_SHADER_FRAGMENT, 0, 0, 0, false,
+                                NULL);
+        pctx->bind_sampler_states(pctx, PIPE_SHADER_FRAGMENT, 0, 0, NULL);
+
+        util_blitter_custom_shader(v3d->blitter, dst_surf,
+                                   v3d_get_sand30_vs(pctx),
+                                   v3d_get_sand30_fs(pctx));
+
+        util_blitter_restore_textures(v3d->blitter);
+        util_blitter_restore_constant_buffer_state(v3d->blitter);
+
+        /* Restore cb1 (util_blitter doesn't handle this one). */
+        pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 1, true,
+                                  &saved_fs_cb1);
+        pipe_surface_reference(&dst_surf, NULL);
+
+        info->mask &= ~PIPE_MASK_RGBA;
+        return;
+}
+
 /* Optimal hardware path for blitting pixels.
  * Scaling, format conversion, up- and downsampling (resolve) are allowed.
  */
@@ -855,6 +1180,8 @@ v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 {
         struct v3d_context *v3d = v3d_context(pctx);
         struct pipe_blit_info info = *blit_info;
+
+        v3d_sand30_blit(pctx, &info);
 
         v3d_sand8_blit(pctx, &info);
 

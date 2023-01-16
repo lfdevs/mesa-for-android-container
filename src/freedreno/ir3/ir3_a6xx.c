@@ -379,11 +379,11 @@ emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
    struct ir3_instruction *load;
 
    bool const_offset_in_bounds = nir_src_is_const(intr->src[1]) &&
-                                 nir_src_as_int(intr->src[1]) < (1 << 13) &&
-                                 nir_src_as_int(intr->src[1]) > -(1 << 13);
+                                 nir_src_as_int(intr->src[1]) < (1 << 10) &&
+                                 nir_src_as_int(intr->src[1]) > -(1 << 10);
 
    if (const_offset_in_bounds) {
-      load = ir3_LDG(b, addr, 0, create_immed(b, nir_src_as_int(intr->src[1])),
+      load = ir3_LDG(b, addr, 0, create_immed(b, nir_src_as_int(intr->src[1]) * 4),
                      0, create_immed(b, dest_components), 0);
    } else {
       offset = ir3_get_src(ctx, &intr->src[1])[0];
@@ -417,12 +417,12 @@ emit_intrinsic_store_global_ir3(struct ir3_context *ctx,
    struct ir3_instruction *stg;
 
    bool const_offset_in_bounds = nir_src_is_const(intr->src[2]) &&
-                                 nir_src_as_int(intr->src[2]) < (1 << 13) &&
-                                 nir_src_as_int(intr->src[2]) > -(1 << 13);
+                                 nir_src_as_int(intr->src[2]) < (1 << 10) &&
+                                 nir_src_as_int(intr->src[2]) > -(1 << 10);
 
    if (const_offset_in_bounds) {
       stg = ir3_STG(b, addr, 0,
-                    create_immed(b, nir_src_as_int(intr->src[2])), 0,
+                    create_immed(b, nir_src_as_int(intr->src[2]) * 4), 0,
                     value, 0,
                     create_immed(b, ncomp), 0);
    } else {

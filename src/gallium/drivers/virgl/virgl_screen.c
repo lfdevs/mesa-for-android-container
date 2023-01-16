@@ -62,7 +62,7 @@ DEBUG_GET_ONCE_FLAGS_OPTION(virgl_debug, "VIRGL_DEBUG", virgl_debug_options, 0)
 static const char *
 virgl_get_vendor(struct pipe_screen *screen)
 {
-   return "Mesa/X.org";
+   return "Mesa";
 }
 
 
@@ -473,6 +473,7 @@ virgl_get_video_param(struct pipe_screen *screen,
                       enum pipe_video_cap param)
 {
    unsigned i;
+   bool drv_supported;
    struct virgl_video_caps *vcaps = NULL;
    struct virgl_screen *vscreen;
 
@@ -483,11 +484,26 @@ virgl_get_video_param(struct pipe_screen *screen,
    if (vscreen->caps.caps.v2.num_video_caps > ARRAY_SIZE(vscreen->caps.caps.v2.video_caps))
        return 0;
 
-   for (i = 0;  i < vscreen->caps.caps.v2.num_video_caps; i++) {
-       if (vscreen->caps.caps.v2.video_caps[i].profile == profile &&
-           vscreen->caps.caps.v2.video_caps[i].entrypoint == entrypoint) {
-           vcaps = &vscreen->caps.caps.v2.video_caps[i];
-           break;
+   /* Profiles and entrypoints supported by the driver */
+   switch (u_reduce_video_profile(profile)) {
+   case PIPE_VIDEO_FORMAT_MPEG4_AVC: /* fall through */
+   case PIPE_VIDEO_FORMAT_HEVC:
+       drv_supported = (entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
+                        entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE);
+       break;
+   default:
+       drv_supported = false;
+       break;
+   }
+
+   if (drv_supported) {
+       /* Check if the device supports it, vcaps is NULL means not supported */
+       for (i = 0;  i < vscreen->caps.caps.v2.num_video_caps; i++) {
+           if (vscreen->caps.caps.v2.video_caps[i].profile == profile &&
+               vscreen->caps.caps.v2.video_caps[i].entrypoint == entrypoint) {
+               vcaps = &vscreen->caps.caps.v2.video_caps[i];
+               break;
+           }
        }
    }
 
@@ -659,14 +675,8 @@ virgl_is_vertex_format_supported(struct pipe_screen *screen,
       return true;
    }
 
-   /* Find the first non-VOID channel. */
-   for (i = 0; i < 4; i++) {
-      if (format_desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-         break;
-      }
-   }
-
-   if (i == 4)
+   i = util_format_get_first_non_void_channel(format);
+   if (i == -1)
       return false;
 
    if (format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN)
@@ -859,14 +869,8 @@ virgl_is_format_supported( struct pipe_screen *screen,
      goto out_lookup;
    }
 
-   /* Find the first non-VOID channel. */
-   for (i = 0; i < 4; i++) {
-      if (format_desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-         break;
-      }
-   }
-
-   if (i == 4)
+   i = util_format_get_first_non_void_channel(format);
+   if (i == -1)
       return false;
 
    /* no L4A4 */
@@ -1174,6 +1178,8 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
       screen->compiler_options.lower_ffloor = true;
       screen->compiler_options.lower_fneg = true;
    }
+   screen->compiler_options.lower_ffma32 = true;
+   screen->compiler_options.fuse_ffma32 = false;
 
    slab_create_parent(&screen->transfer_pool, sizeof(struct virgl_transfer), 16);
 

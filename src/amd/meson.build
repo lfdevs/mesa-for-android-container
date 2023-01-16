@@ -20,12 +20,14 @@
 
 inc_amd = include_directories('.')
 
-subdir('addrlib')
-subdir('common')
-if with_llvm
-  subdir('llvm')
-else
-  libamd_common_llvm = []
+if with_amd_vk or with_gallium_radeonsi
+  subdir('addrlib')
+  subdir('common')
+  if with_llvm
+    subdir('llvm')
+  else
+    libamd_common_llvm = []
+  endif
 endif
 if with_amd_vk
   subdir('compiler')

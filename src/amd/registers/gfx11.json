@@ -2368,6 +2368,12 @@
   },
   {
    "chips": ["gfx11"],
+   "map": {"at": 46344, "to": "mm"},
+   "name": "GL1C_UTCL0_CNTL1",
+   "type_ref": "GL1C_UTCL0_CNTL1"
+  },
+  {
+   "chips": ["gfx11"],
    "map": {"at": 46348, "to": "mm"},
    "name": "GL1C_UTCL0_CNTL2",
    "type_ref": "GL1C_UTCL0_CNTL2"
@@ -12462,6 +12468,22 @@
     {"bits": [26, 26], "name": "TAG_EVICT"},
     {"bits": [27, 30], "name": "TAG_REQUEST_STATE_OPERATION"},
     {"bits": [31, 31], "name": "TRACKER_LAST_SET_MATCHES_CURRENT_SET"}
+   ]
+  },
+  "GL1C_UTCL0_CNTL1": {
+   "fields": [
+    {"bits": [0, 0], "name": "FORCE_4K_L2_RESP"},
+    {"bits": [1, 1], "name": "GPUVM_64K_DEF"},
+    {"bits": [2, 2], "name": "GPUVM_PERM_MODE"},
+    {"bits": [3, 4], "name": "RESP_MODE"},
+    {"bits": [5, 6], "name": "RESP_FAULT_MODE"},
+    {"bits": [7, 15], "name": "CLIENTID"},
+    {"bits": [19, 22], "name": "REG_INV_VMID"},
+    {"bits": [24, 24], "name": "REG_INV_TOGGLE"},
+    {"bits": [26, 26], "name": "FORCE_MISS"},
+    {"bits": [27, 28], "name": "FORCE_IN_ORDER"},
+    {"bits": [28, 29], "name": "REDUCE_FIFO_DEPTH_BY_2"},
+    {"bits": [30, 31], "name": "REDUCE_CACHE_SIZE_BY_2"}
    ]
   },
   "GL1C_UTCL0_CNTL2": {

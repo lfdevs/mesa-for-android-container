@@ -123,7 +123,7 @@ tgsi_fetch_gs_outputs(struct draw_geometry_shader *shader,
 }
 
 
-/*#define DEBUG_INPUTS 1*/
+#define DEBUG_INPUTS 0
 static void
 tgsi_fetch_gs_input(struct draw_geometry_shader *shader,
                     unsigned *indices,
@@ -612,7 +612,7 @@ draw_geometry_shader_run(struct draw_geometry_shader *shader,
 
 #if 0
    debug_printf("%s count = %d (in prims # = %d, invocs = %d, streams = %d)\n",
-                __FUNCTION__, num_input_verts, num_in_primitives,
+                __func__, num_input_verts, num_in_primitives,
                 shader->num_invocations, shader->num_vertex_streams);
    debug_printf("\tlinear = %d, prim_info->count = %d\n",
                 input_prim->linear, input_prim->count);

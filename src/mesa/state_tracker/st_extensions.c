@@ -628,6 +628,9 @@ void st_init_limits(struct pipe_screen *screen,
 
    c->HardwareAcceleratedSelect =
       screen->get_param(screen, PIPE_CAP_HARDWARE_GL_SELECT);
+
+   c->AllowGLThreadBufferSubDataOpt =
+      screen->get_param(screen, PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT);
 }
 
 

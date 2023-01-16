@@ -1,30 +1,18 @@
-/*******************************************************************************
- * Copyright (c) 2008-2015 The Khronos Group Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and/or associated documentation files (the
- * "Materials"), to deal in the Materials without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Materials, and to
- * permit persons to whom the Materials are furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice shall be included
- * in all copies or substantial portions of the Materials.
- *
- * MODIFICATIONS TO THIS FILE MAY MEAN IT NO LONGER ACCURATELY REFLECTS
- * KHRONOS STANDARDS. THE UNMODIFIED, NORMATIVE VERSIONS OF KHRONOS
- * SPECIFICATIONS AND HEADER INFORMATION ARE LOCATED AT
- *    https://www.khronos.org/registry/
- *
- * THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
- * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
- * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
- ******************************************************************************/
+//
+// Copyright (c) 2008-2020 The Khronos Group Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 /*! \file
  *
@@ -246,9 +234,12 @@
 #ifdef CL_USE_INLINE
 #define CL_WEAK_ATTRIB_PREFIX inline
 #define CL_WEAK_ATTRIB_SUFFIX
-#elif _WIN32
+#elif defined(_MSC_VER)
 #define CL_WEAK_ATTRIB_PREFIX __declspec(selectany)
 #define CL_WEAK_ATTRIB_SUFFIX
+#elif defined(__MINGW32__)
+#define CL_WEAK_ATTRIB_PREFIX
+#define CL_WEAK_ATTRIB_SUFFIX __attribute__((selectany))
 #else // GCC, CLANG, etc.
 #define CL_WEAK_ATTRIB_PREFIX
 #define CL_WEAK_ATTRIB_SUFFIX __attribute__((weak))
@@ -2125,7 +2116,7 @@ public:
     }
 
     //! \brief Wrapper for clGetDeviceInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_device_info name> typename
     detail::param_traits<detail::cl_device_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -2241,7 +2232,7 @@ public:
     }
 
     //! \brief Wrapper for clGetPlatformInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_platform_info name> typename
     detail::param_traits<detail::cl_platform_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -2267,17 +2258,21 @@ public:
             return detail::errHandler(CL_INVALID_ARG_VALUE, __GET_DEVICE_IDS_ERR);
         }
         cl_int err = ::clGetDeviceIDs(object_, type, 0, NULL, &n);
-        if (err != CL_SUCCESS) {
+        if (err != CL_SUCCESS && err != CL_DEVICE_NOT_FOUND) {
             return detail::errHandler(err, __GET_DEVICE_IDS_ERR);
         }
 
-        cl_device_id* ids = (cl_device_id*) alloca(n * sizeof(cl_device_id));
-        err = ::clGetDeviceIDs(object_, type, n, ids, NULL);
-        if (err != CL_SUCCESS) {
-            return detail::errHandler(err, __GET_DEVICE_IDS_ERR);
+        if (n > 0) {
+                cl_device_id* ids = (cl_device_id*) alloca(n * sizeof(cl_device_id));
+                err = ::clGetDeviceIDs(object_, type, n, ids, NULL);
+                if (err != CL_SUCCESS) {
+                    return detail::errHandler(err, __GET_DEVICE_IDS_ERR);
+                }
+        
+                devices->assign(&ids[0], &ids[n]);
+        } else {
+            devices->clear();
         }
-
-        devices->assign(&ids[0], &ids[n]);
         return CL_SUCCESS;
     }
 
@@ -2763,7 +2758,7 @@ public:
     }
 
     //! \brief Wrapper for clGetContextInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_context_info name> typename
     detail::param_traits<detail::cl_context_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -2899,7 +2894,7 @@ public:
     }
 
     //! \brief Wrapper for clGetEventInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_event_info name> typename
     detail::param_traits<detail::cl_event_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -2922,7 +2917,7 @@ public:
     }
 
     //! \brief Wrapper for clGetEventProfilingInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_profiling_info name> typename
     detail::param_traits<detail::cl_profiling_info, name>::param_type
     getProfilingInfo(cl_int* err = NULL) const
     {
@@ -3108,7 +3103,7 @@ public:
     }
 
     //! \brief Wrapper for clGetMemObjectInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_mem_info name> typename
     detail::param_traits<detail::cl_mem_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -3640,7 +3635,7 @@ public:
     }
     
     //! \brief Wrapper for clGetImageInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_image_info name> typename
     detail::param_traits<detail::cl_image_info, name>::param_type
     getImageInfo(cl_int* err = NULL) const
     {
@@ -4744,7 +4739,7 @@ public:
     }
 
     //! \brief Wrapper for clGetSamplerInfo() that returns by value.
-    template <cl_int name> typename
+    template <cl_sampler_info name> typename
     detail::param_traits<detail::cl_sampler_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -4936,7 +4931,7 @@ public:
             __GET_KERNEL_INFO_ERR);
     }
 
-    template <cl_int name> typename
+    template <cl_kernel_info name> typename
     detail::param_traits<detail::cl_kernel_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -4958,7 +4953,7 @@ public:
             __GET_KERNEL_ARG_INFO_ERR);
     }
 
-    template <cl_int name> typename
+    template <cl_kernel_arg_info name> typename
     detail::param_traits<detail::cl_kernel_arg_info, name>::param_type
     getArgInfo(cl_uint argIndex, cl_int* err = NULL) const
     {
@@ -4982,7 +4977,7 @@ public:
                 __GET_KERNEL_WORK_GROUP_INFO_ERR);
     }
 
-    template <cl_int name> typename
+    template <cl_kernel_work_group_info name> typename
     detail::param_traits<detail::cl_kernel_work_group_info, name>::param_type
         getWorkGroupInfo(const Device& device, cl_int* err = NULL) const
     {
@@ -5332,7 +5327,7 @@ public:
             __GET_PROGRAM_INFO_ERR);
     }
 
-    template <cl_int name> typename
+    template <cl_program_info name> typename
     detail::param_traits<detail::cl_program_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {
@@ -5355,7 +5350,7 @@ public:
                 __GET_PROGRAM_BUILD_INFO_ERR);
     }
 
-    template <cl_int name> typename
+    template <cl_program_build_info name> typename
     detail::param_traits<detail::cl_program_build_info, name>::param_type
     getBuildInfo(const Device& device, cl_int* err = NULL) const
     {
@@ -5700,7 +5695,7 @@ public:
                 __GET_COMMAND_QUEUE_INFO_ERR);
     }
 
-    template <cl_int name> typename
+    template <cl_command_queue_info name> typename
     detail::param_traits<detail::cl_command_queue_info, name>::param_type
     getInfo(cl_int* err = NULL) const
     {

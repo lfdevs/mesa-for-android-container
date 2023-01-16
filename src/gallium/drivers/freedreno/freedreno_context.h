@@ -399,8 +399,11 @@ struct fd_context {
    struct pipe_stencil_ref stencil_ref dt;
    unsigned sample_mask dt;
    unsigned min_samples dt;
+
    /* local context fb state, for when ctx->batch is null: */
    struct pipe_framebuffer_state framebuffer dt;
+   uint32_t all_mrt_channel_mask dt;
+
    struct pipe_poly_stipple stipple dt;
    struct pipe_viewport_state viewport[PIPE_MAX_VIEWPORTS] dt;
    struct pipe_scissor_state viewport_scissor[PIPE_MAX_VIEWPORTS] dt;

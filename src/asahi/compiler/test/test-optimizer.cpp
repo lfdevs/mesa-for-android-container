@@ -32,12 +32,19 @@ agx_optimize_and_dce(agx_context *ctx)
    agx_dce(ctx);
 }
 
-#define CASE(instr, expected, size) INSTRUCTION_CASE(\
-      { UNUSED agx_index out = agx_temp(b->shader, AGX_SIZE_ ## size); \
-        instr; agx_unit_test(b, out); }, \
-      { UNUSED agx_index out = agx_temp(b->shader, AGX_SIZE_ ## size); \
-        expected; agx_unit_test(b, out); }, \
-        agx_optimize_and_dce)
+#define CASE(instr, expected, size)                                            \
+   INSTRUCTION_CASE(                                                           \
+      {                                                                        \
+         UNUSED agx_index out = agx_temp(b->shader, AGX_SIZE_##size);          \
+         instr;                                                                \
+         agx_unit_test(b, out);                                                \
+      },                                                                       \
+      {                                                                        \
+         UNUSED agx_index out = agx_temp(b->shader, AGX_SIZE_##size);          \
+         expected;                                                             \
+         agx_unit_test(b, out);                                                \
+      },                                                                       \
+      agx_optimize_and_dce)
 
 #define NEGCASE(instr, size) CASE(instr, instr, size)
 
@@ -50,26 +57,28 @@ agx_optimize_and_dce(agx_context *ctx)
 static inline agx_index
 agx_fmov(agx_builder *b, agx_index s0)
 {
-    agx_index tmp = agx_temp(b->shader, s0.size);
-    agx_fmov_to(b, tmp, s0);
-    return tmp;
+   agx_index tmp = agx_temp(b->shader, s0.size);
+   agx_fmov_to(b, tmp, s0);
+   return tmp;
 }
 
 class Optimizer : public testing::Test {
-protected:
-   Optimizer() {
+ protected:
+   Optimizer()
+   {
       mem_ctx = ralloc_context(NULL);
 
-      wx     = agx_register(0, AGX_SIZE_32);
-      wy     = agx_register(2, AGX_SIZE_32);
-      wz     = agx_register(4, AGX_SIZE_32);
+      wx = agx_register(0, AGX_SIZE_32);
+      wy = agx_register(2, AGX_SIZE_32);
+      wz = agx_register(4, AGX_SIZE_32);
 
-      hx     = agx_register(0, AGX_SIZE_16);
-      hy     = agx_register(1, AGX_SIZE_16);
-      hz     = agx_register(2, AGX_SIZE_16);
+      hx = agx_register(0, AGX_SIZE_16);
+      hy = agx_register(1, AGX_SIZE_16);
+      hz = agx_register(2, AGX_SIZE_16);
    }
 
-   ~Optimizer() {
+   ~Optimizer()
+   {
       ralloc_free(mem_ctx);
    }
 
@@ -113,29 +122,30 @@ TEST_F(Optimizer, FusedFnegCancel)
 
 TEST_F(Optimizer, FmulFsatF2F16)
 {
-   CASE16({
+   CASE16(
+      {
          agx_index tmp = agx_temp(b->shader, AGX_SIZE_32);
          agx_fmov_to(b, tmp, agx_fmul(b, wx, wy))->saturate = true;
          agx_fmov_to(b, out, tmp);
-   }, {
-         agx_fmul_to(b, out, wx, wy)->saturate = true;
-   });
+      },
+      { agx_fmul_to(b, out, wx, wy)->saturate = true; });
 }
 
 TEST_F(Optimizer, Copyprop)
 {
    CASE32(agx_fmul_to(b, out, wx, agx_mov(b, wy)), agx_fmul_to(b, out, wx, wy));
-   CASE32(agx_fmul_to(b, out, agx_mov(b, wx), agx_mov(b, wy)), agx_fmul_to(b, out, wx, wy));
+   CASE32(agx_fmul_to(b, out, agx_mov(b, wx), agx_mov(b, wy)),
+          agx_fmul_to(b, out, wx, wy));
 }
 
 TEST_F(Optimizer, InlineHazards)
 {
    NEGCASE32({
-         agx_instr *I = agx_collect_to(b, out, 4);
-         I->src[0] = agx_mov_imm(b, AGX_SIZE_32, 0);
-         I->src[1] = wy;
-         I->src[2] = wz;
-         I->src[3] = wz;
+      agx_instr *I = agx_collect_to(b, out, 4);
+      I->src[0] = agx_mov_imm(b, AGX_SIZE_32, 0);
+      I->src[1] = wy;
+      I->src[2] = wz;
+      I->src[3] = wz;
    });
 }
 
@@ -153,23 +163,22 @@ TEST_F(Optimizer, CopypropRespectsAbsNeg)
 
 TEST_F(Optimizer, IntCopyprop)
 {
-   CASE32(agx_xor_to(b, out, agx_mov(b, wx), wy),
-          agx_xor_to(b, out, wx, wy));
+   CASE32(agx_xor_to(b, out, agx_mov(b, wx), wy), agx_xor_to(b, out, wx, wy));
 }
 
 TEST_F(Optimizer, IntCopypropDoesntConvert)
 {
    NEGCASE32({
-         agx_index cvt = agx_temp(b->shader, AGX_SIZE_32);
-         agx_mov_to(b, cvt, hx);
-         agx_xor_to(b, out, cvt, wy);
+      agx_index cvt = agx_temp(b->shader, AGX_SIZE_32);
+      agx_mov_to(b, cvt, hx);
+      agx_xor_to(b, out, cvt, wy);
    });
 }
 
 TEST_F(Optimizer, SkipPreloads)
 {
    NEGCASE32({
-         agx_index preload = agx_preload(b, agx_register(0, AGX_SIZE_32));
-         agx_xor_to(b, out, preload, wy);
+      agx_index preload = agx_preload(b, agx_register(0, AGX_SIZE_32));
+      agx_xor_to(b, out, preload, wy);
    });
 }

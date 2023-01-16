@@ -656,7 +656,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
       if (gallivm_debug & GALLIVM_DEBUG_PERF && !type.floating) {
          debug_printf("%s: unpacking %s with floating point\n",
-                      __FUNCTION__, format_desc->short_name);
+                      __func__, format_desc->short_name);
       }
 
       conv_type = lp_float32_vec4_type();
@@ -813,7 +813,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
       if (gallivm_debug & GALLIVM_DEBUG_PERF) {
          debug_printf("%s: falling back to util_format_%s_fetch_rgba_8unorm\n",
-                      __FUNCTION__, format_desc->short_name);
+                      __func__, format_desc->short_name);
       }
 
       /*
@@ -919,7 +919,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
       if (gallivm_debug & GALLIVM_DEBUG_PERF) {
          debug_printf("%s: falling back to util_format_%s_fetch_rgba_float\n",
-                      __FUNCTION__, format_desc->short_name);
+                      __func__, format_desc->short_name);
       }
 
       /*

@@ -77,7 +77,7 @@ foreach arch : ['6', '7']
       inc_include,
       inc_src,
       inc_compiler,
-      inc_gallium, # XXX: pipe/p_format.h
+      inc_gallium, # XXX: util/format/u_formats.h
       inc_gallium_aux, # XXX: renderonly
       inc_panfrost,
     ],
@@ -95,7 +95,7 @@ foreach arch : ['6', '7']
 endforeach
 
 if with_platform_wayland
-  panvk_deps += [dep_wayland_client, dep_wl_protocols]
+  panvk_deps += dep_wayland_client
   libpanvk_files += [wayland_drm_client_protocol_h, wayland_drm_protocol_c]
 endif
 
@@ -106,7 +106,7 @@ libvulkan_panfrost = shared_library(
     inc_include,
     inc_src,
     inc_compiler,
-    inc_gallium, # XXX: pipe/p_format.h
+    inc_gallium, # XXX: util/format/u_formats.h
     inc_gallium_aux, # XXX: renderonly
     inc_panfrost,
   ],

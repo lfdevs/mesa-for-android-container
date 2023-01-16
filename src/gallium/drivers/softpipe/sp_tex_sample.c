@@ -1190,7 +1190,7 @@ img_filter_2d_linear_repeat_POT(const struct sp_sampler_view *sp_sview,
    }
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1225,7 +1225,7 @@ img_filter_2d_nearest_repeat_POT(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1268,7 +1268,7 @@ img_filter_2d_nearest_clamp_POT(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1299,7 +1299,7 @@ img_filter_1d_nearest(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1331,7 +1331,7 @@ img_filter_1d_array_nearest(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1365,7 +1365,7 @@ img_filter_2d_nearest(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1400,7 +1400,7 @@ img_filter_2d_array_nearest(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1444,7 +1444,7 @@ img_filter_cube_nearest(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -1479,7 +1479,7 @@ img_filter_cube_array_nearest(const struct sp_sampler_view *sp_sview,
       rgba[TGSI_NUM_CHANNELS*c] = out[c];
 
    if (DEBUG_TEX) {
-      print_sample(__FUNCTION__, rgba);
+      print_sample(__func__, rgba);
    }
 }
 
@@ -2137,7 +2137,7 @@ mip_filter_linear(const struct sp_sampler_view *sp_sview,
    }
 
    if (DEBUG_TEX) {
-      print_sample_4(__FUNCTION__, rgba);
+      print_sample_4(__func__, rgba);
    }
 }
 
@@ -2204,7 +2204,7 @@ mip_filter_nearest(const struct sp_sampler_view *sp_sview,
    }
 
    if (DEBUG_TEX) {
-      print_sample_4(__FUNCTION__, rgba);
+      print_sample_4(__func__, rgba);
    }
 }
 
@@ -2653,7 +2653,7 @@ mip_filter_linear_aniso(const struct sp_sampler_view *sp_sview,
    }
 
    if (DEBUG_TEX) {
-      print_sample_4(__FUNCTION__, rgba);
+      print_sample_4(__func__, rgba);
    }
 }
 
@@ -2728,7 +2728,7 @@ mip_filter_linear_2d_linear_repeat_POT(
    }
 
    if (DEBUG_TEX) {
-      print_sample_4(__FUNCTION__, rgba);
+      print_sample_4(__func__, rgba);
    }
 }
 

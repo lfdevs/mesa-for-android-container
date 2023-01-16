@@ -26,7 +26,7 @@
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
 #include "util/u_upload_mgr.h"
-#include "indices/u_indices.h"
+#include "util/indices/u_indices.h"
 
 #include "svga_cmd.h"
 #include "svga_draw.h"

@@ -27,6 +27,7 @@
 #include "sha1/sha1.h"
 #include "mesa-sha1.h"
 #include <string.h>
+#include <inttypes.h>
 
 void
 _mesa_sha1_compute(const void *data, size_t size, unsigned char result[20])
@@ -83,9 +84,7 @@ _mesa_sha1_print(FILE *f, const uint8_t sha1[SHA1_DIGEST_LENGTH])
    sha1_to_uint32(sha1, u32);
 
    for (unsigned i = 0; i < SHA1_DIGEST_LENGTH32; i++) {
-      fprintf(f, "0x%08x", u32[i]);
-      if (i < SHA1_DIGEST_LENGTH32 - 1)
-         fprintf(f, ", ");
+      fprintf(f, i ? ", 0x%08" PRIx32 : "0x%08" PRIx32, u32[i]);
    }
 }
 

@@ -26,8 +26,8 @@ vc4-rpi3-egl:armhf:
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     HWCI_START_XORG: 1
-    DEQP_RUNNER_OPTIONS: "--tests-per-group 250"
-    DEQP_VER: egl
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: broadcom-rpi3-egl
 
 .vc4-rpi3-piglit:armhf:
   extends:
@@ -57,9 +57,6 @@ vc4-rpi3-piglit-quick_gl:armhf:
     HWCI_KERNEL_MODULES: v3d,vc4
   script:
     - ./install/bare-metal/poe-powered.sh
-  needs:
-    - debian/arm_test
-    - debian-armhf
   tags:
     - igalia-rpi4
 
@@ -75,7 +72,8 @@ v3d-rpi4-egl:armhf:
     - .v3d-rpi4-test:armhf
   variables:
     HWCI_START_XORG: 1
-    DEQP_VER: egl
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: broadcom-rpi4-egl
 
 v3d-rpi4-piglit:armhf:
   extends:
@@ -87,24 +85,6 @@ v3d-rpi4-piglit:armhf:
     HWCI_START_XORG: 1
     PIGLIT_PLATFORM: mixed_glx_egl
     PIGLIT_PROFILES: all
-
-.v3d-rpi4-test:armhf:
-  extends:
-    - .baremetal-test-armhf
-    - .v3d-rules
-  variables:
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
-    BM_BOOTFS: /boot/raspberrypi_armhf
-    FLAKES_CHANNEL: "#videocore-ci"
-    GPU_VERSION: broadcom-rpi4
-    HWCI_KERNEL_MODULES: v3d,vc4
-  script:
-    - ./install/bare-metal/poe-powered.sh
-  needs:
-    - debian/arm_test
-    - debian-armhf
-  tags:
-    - igalia-rpi4
 
 v3d-rpi4-traces:arm64:
   extends:
@@ -122,9 +102,6 @@ v3d-rpi4-traces:arm64:
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-broadcom.yml"
     PIGLIT_REPLAY_DEVICE_NAME: "broadcom-rpi4"
     PIGLIT_RESULTS: "broadcom-rpi4-replay"
-  artifacts:
-    reports:
-      junit: results/junit.xml
   script:
     - ./install/bare-metal/poe-powered.sh
   tags:

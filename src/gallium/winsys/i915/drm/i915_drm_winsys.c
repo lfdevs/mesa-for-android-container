@@ -9,6 +9,7 @@
 #include "i915_drm_public.h"
 #include "util/u_memory.h"
 
+#include "intel/common/intel_gem.h"
 
 /*
  * Helper functions
@@ -18,14 +19,8 @@
 static void
 i915_drm_get_device_id(int fd, unsigned int *device_id)
 {
-   int ret;
-   struct drm_i915_getparam gp;
-
-   gp.param = I915_PARAM_CHIPSET_ID;
-   gp.value = (int *)device_id;
-
-   ret = ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gp, sizeof(gp));
-   assert(ret == 0);
+   ASSERTED bool ret = intel_gem_get_param(fd, I915_PARAM_CHIPSET_ID, (int *)device_id);
+   assert(ret);
 }
 
 static int
@@ -53,7 +48,7 @@ struct i915_winsys *
 i915_drm_winsys_create(int drmFD)
 {
    struct i915_drm_winsys *idws;
-   unsigned int deviceID;
+   unsigned int deviceID = 0;
 
    idws = CALLOC_STRUCT(i915_drm_winsys);
    if (!idws)

@@ -42,7 +42,7 @@
 
 #include "util/u_debug.h"
 #include "util/u_rect.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "vl/vl_video_buffer.h"
 #include "vl/vl_bicubic_filter.h"

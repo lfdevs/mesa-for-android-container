@@ -45,11 +45,11 @@ private:
    void do_get_shader_info(r600_shader *sh_info) override;
    bool store_tess_factor(nir_intrinsic_instr *instr);
 
-   bool load_input(nir_intrinsic_instr *intr) override
+   bool load_input(UNUSED nir_intrinsic_instr *intr) override
    {
       unreachable("load_input must be lowered in TCS");
    };
-   bool store_output(nir_intrinsic_instr *intr) override
+   bool store_output(UNUSED nir_intrinsic_instr *intr) override
    {
       unreachable("load_output must be lowered in TCS");
    };

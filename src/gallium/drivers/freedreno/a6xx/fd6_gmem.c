@@ -101,8 +101,6 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
       struct pipe_surface *psurf = pfb->cbufs[i];
       enum pipe_format pformat = psurf->format;
       rsc = fd_resource(psurf->texture);
-      if (!rsc->bo)
-         continue;
 
       uint32_t base = gmem ? gmem->cbuf_base[i] : 0;
       slice = fd_resource_slice(rsc, psurf->u.tex.level);
@@ -274,24 +272,33 @@ patch_fb_read_gmem(struct fd_batch *batch)
    fdl6_format_swiz(psurf->format, false, swiz);
 
    /* always TILE6_2 mode in GMEM, which also means no swap: */
-   uint32_t texconst0 = A6XX_TEX_CONST_0_FMT(fd6_texture_format(format, rsc->layout.tile_mode)) |
-          A6XX_TEX_CONST_0_SAMPLES(fd_msaa_samples(prsc->nr_samples)) |
-          A6XX_TEX_CONST_0_SWAP(WZYX) |
-          A6XX_TEX_CONST_0_TILE_MODE(TILE6_2) |
-          COND(util_format_is_srgb(format), A6XX_TEX_CONST_0_SRGB) |
-          A6XX_TEX_CONST_0_SWIZ_X(fdl6_swiz(swiz[0])) |
-          A6XX_TEX_CONST_0_SWIZ_Y(fdl6_swiz(swiz[1])) |
-          A6XX_TEX_CONST_0_SWIZ_Z(fdl6_swiz(swiz[2])) |
-          A6XX_TEX_CONST_0_SWIZ_W(fdl6_swiz(swiz[3]));
+   uint32_t descriptor[FDL6_TEX_CONST_DWORDS] = {
+         A6XX_TEX_CONST_0_FMT(fd6_texture_format(format, rsc->layout.tile_mode)) |
+         A6XX_TEX_CONST_0_SAMPLES(fd_msaa_samples(prsc->nr_samples)) |
+         A6XX_TEX_CONST_0_SWAP(WZYX) |
+         A6XX_TEX_CONST_0_TILE_MODE(TILE6_2) |
+         COND(util_format_is_srgb(format), A6XX_TEX_CONST_0_SRGB) |
+         A6XX_TEX_CONST_0_SWIZ_X(fdl6_swiz(swiz[0])) |
+         A6XX_TEX_CONST_0_SWIZ_Y(fdl6_swiz(swiz[1])) |
+         A6XX_TEX_CONST_0_SWIZ_Z(fdl6_swiz(swiz[2])) |
+         A6XX_TEX_CONST_0_SWIZ_W(fdl6_swiz(swiz[3])),
+
+         A6XX_TEX_CONST_1_WIDTH(pfb->width) |
+         A6XX_TEX_CONST_1_HEIGHT(pfb->height),
+
+         A6XX_TEX_CONST_2_PITCH(gmem->bin_w * gmem->cbuf_cpp[0]) |
+         A6XX_TEX_CONST_2_TYPE(A6XX_TEX_2D),
+
+         A6XX_TEX_CONST_3_ARRAY_PITCH(rsc->layout.layer_size),
+         A6XX_TEX_CONST_4_BASE_LO(screen->gmem_base),
+
+         A6XX_TEX_CONST_5_BASE_HI(screen->gmem_base >> 32) |
+         A6XX_TEX_CONST_5_DEPTH(1)
+   };
 
    for (unsigned i = 0; i < num_patches; i++) {
       struct fd_cs_patch *patch = fd_patch_element(&batch->fb_read_patches, i);
-      patch->cs[0] = texconst0;
-      patch->cs[2] = A6XX_TEX_CONST_2_PITCH(gmem->bin_w * gmem->cbuf_cpp[0]) |
-                     A6XX_TEX_CONST_2_TYPE(A6XX_TEX_2D);
-      patch->cs[4] = A6XX_TEX_CONST_4_BASE_LO(screen->gmem_base);
-      patch->cs[5] = A6XX_TEX_CONST_5_BASE_HI(screen->gmem_base >> 32) |
-                     A6XX_TEX_CONST_5_DEPTH(1);
+      memcpy(patch->cs, descriptor, FDL6_TEX_CONST_DWORDS * 4);
    }
    util_dynarray_clear(&batch->fb_read_patches);
 }
@@ -369,8 +376,6 @@ update_render_cntl(struct fd_batch *batch, struct pipe_framebuffer_state *pfb,
 
       struct pipe_surface *psurf = pfb->cbufs[i];
       struct fd_resource *rsc = fd_resource(psurf->texture);
-      if (!rsc->bo)
-         continue;
 
       if (fd_resource_ubwc_enabled(rsc, psurf->u.tex.level))
          mrts_ubwc_enable |= 1 << i;

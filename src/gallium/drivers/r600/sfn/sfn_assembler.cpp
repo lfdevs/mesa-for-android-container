@@ -48,7 +48,7 @@ extern const std::map<ESDOp, int> ds_opcode_map;
 
 class AssamblerVisitor : public ConstInstrVisitor {
 public:
-   AssamblerVisitor(r600_shader *sh, const r600_shader_key& key);
+   AssamblerVisitor(r600_shader *sh, const r600_shader_key& key, bool legacy_math_rules);
 
    void visit(const AluInstr& instr) override;
    void visit(const AluGroup& instr) override;
@@ -92,6 +92,8 @@ public:
    void emit_alu_op(const AluInstr& ai);
    void emit_lds_op(const AluInstr& lds);
 
+   auto translate_for_mathrules(EAluOp op) -> EAluOp;
+
    void emit_wait_ack();
 
    /* Start initialized in constructor */
@@ -118,12 +120,13 @@ public:
    bool m_has_pos_output{false};
    bool m_last_op_was_barrier{false};
    bool m_result{true};
+   bool m_legacy_math_rules{false};
 };
 
 bool
 Assembler::lower(Shader *shader)
 {
-   AssamblerVisitor ass(m_sh, m_key);
+   AssamblerVisitor ass(m_sh, m_key, shader->has_flag(Shader::sh_legacy_math_rules));
 
    auto& blocks = shader->func();
    for (auto b : blocks) {
@@ -137,13 +140,15 @@ Assembler::lower(Shader *shader)
    return ass.m_result;
 }
 
-AssamblerVisitor::AssamblerVisitor(r600_shader *sh, const r600_shader_key& key):
+AssamblerVisitor::AssamblerVisitor(r600_shader *sh, const r600_shader_key& key,
+                                   bool legacy_math_rules):
     m_key(key),
     m_shader(sh),
 
     m_bc(&sh->bc),
     m_callstack(sh->bc),
-    ps_alpha_to_one(key.ps.alpha_to_one)
+    ps_alpha_to_one(key.ps.alpha_to_one),
+    m_legacy_math_rules(legacy_math_rules)
 {
    if (m_shader->processor_type == PIPE_SHADER_FRAGMENT)
       m_max_color_exports = MAX2(m_key.ps.nr_cbufs, 1);
@@ -260,25 +265,44 @@ AssamblerVisitor::emit_lds_op(const AluInstr& lds)
       m_result = false;
 }
 
+auto AssamblerVisitor::translate_for_mathrules(EAluOp op) -> EAluOp
+{
+   switch (op) {
+   case op2_dot_ieee: return op2_dot;
+   case op2_dot4_ieee: return op2_dot4;
+   case op2_mul_ieee: return op2_mul;
+   case op3_muladd_ieee : return op2_mul_ieee;
+   default:
+      return op;
+   }
+}
+
 void
 AssamblerVisitor::emit_alu_op(const AluInstr& ai)
 {
    struct r600_bytecode_alu alu;
    memset(&alu, 0, sizeof(alu));
 
-   if (opcode_map.find(ai.opcode()) == opcode_map.end()) {
+   auto opcode = ai.opcode();
+
+   if (m_legacy_math_rules)
+       opcode = translate_for_mathrules(opcode);
+
+   auto hw_opcode = opcode_map.find(opcode);
+
+   if (hw_opcode == opcode_map.end()) {
       std::cerr << "Opcode not handled for " << ai << "\n";
       m_result = false;
       return;
    }
 
    // skip multiple barriers
-   if (m_last_op_was_barrier && ai.opcode() == op0_group_barrier)
+   if (m_last_op_was_barrier && opcode == op0_group_barrier)
       return;
 
-   m_last_op_was_barrier = ai.opcode() == op0_group_barrier;
+   m_last_op_was_barrier = opcode == op0_group_barrier;
 
-   alu.op = opcode_map.at(ai.opcode());
+   alu.op = hw_opcode->second;
 
    auto dst = ai.dest();
    if (dst) {
@@ -951,13 +975,12 @@ AssamblerVisitor::visit(const GDSInstr& instr)
    memset(&gds, 0, sizeof(struct r600_bytecode_gds));
 
    gds.op = ds_opcode_map.at(instr.opcode());
-   gds.dst_gpr = instr.dest()->sel();
    gds.uav_id = instr.resource_base();
    gds.uav_index_mode = indirect ? bim_one : bim_none;
    gds.src_gpr = instr.src().sel();
 
    gds.src_sel_x = instr.src()[0]->chan() < 7 ? instr.src()[0]->chan() : 4;
-   gds.src_sel_y = instr.src()[1]->chan();
+   gds.src_sel_y = instr.src()[1]->chan() < 7 ? instr.src()[1]->chan() : 4;
    gds.src_sel_z = instr.src()[2]->chan() < 7 ? instr.src()[2]->chan() : 4;
 
    gds.dst_sel_x = 7;
@@ -965,18 +988,21 @@ AssamblerVisitor::visit(const GDSInstr& instr)
    gds.dst_sel_z = 7;
    gds.dst_sel_w = 7;
 
-   switch (instr.dest()->chan()) {
-   case 0:
-      gds.dst_sel_x = 0;
-      break;
-   case 1:
-      gds.dst_sel_y = 0;
-      break;
-   case 2:
-      gds.dst_sel_z = 0;
-      break;
-   case 3:
-      gds.dst_sel_w = 0;
+   if (instr.dest()) {
+      gds.dst_gpr = instr.dest()->sel();
+      switch (instr.dest()->chan()) {
+      case 0:
+         gds.dst_sel_x = 0;
+         break;
+      case 1:
+         gds.dst_sel_y = 0;
+         break;
+      case 2:
+         gds.dst_sel_z = 0;
+         break;
+      case 3:
+         gds.dst_sel_w = 0;
+      }
    }
 
    gds.src_gpr2 = 0;

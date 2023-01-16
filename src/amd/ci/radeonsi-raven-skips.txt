@@ -68,6 +68,3 @@ spec@ext_external_objects_fd@semaphore-api-errors
 spec@ext_external_objects_fd@memory-object-api-errors
 spec@ext_external_objects@vk-vert-buf-reuse
 glx@glx-swap-copy
-
-# Causes OOM
-spec@arb_texture_buffer_object@texture-buffer-size-clamp

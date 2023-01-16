@@ -24,6 +24,7 @@
 #ifndef PVR_TYPES_H
 #define PVR_TYPES_H
 
+#include <inttypes.h>
 #include <stdint.h>
 
 /*****************************************************************************
@@ -37,5 +38,8 @@ typedef struct pvr_dev_addr {
 #define PVR_DEV_ADDR(addr_) ((pvr_dev_addr_t){ .addr = (addr_) })
 #define PVR_DEV_ADDR_OFFSET(base, offset) PVR_DEV_ADDR((base).addr + (offset))
 #define PVR_DEV_ADDR_INVALID PVR_DEV_ADDR(0)
+
+/* All currently supported devices use a 40-bit virtual address space. */
+#define PVR_DEV_ADDR_FMT "0x%010" PRIx64
 
 #endif /* PVR_TYPES_H */

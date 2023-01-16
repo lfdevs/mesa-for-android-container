@@ -186,8 +186,14 @@ def brkt(subexp):
 def splice_bitwise_and(args):
     return brkt(args[1]) + " & " + brkt(args[0])
 
+def splice_bitwise_or(args):
+    return brkt(args[1]) + " | " + brkt(args[0])
+
 def splice_logical_and(args):
     return brkt(args[1]) + " && " + brkt(args[0])
+
+def splice_umul(args):
+    return brkt(args[1]) + " * " + brkt(args[0])
 
 def splice_ult(args):
     return brkt(args[1]) + " < " + brkt(args[0])
@@ -201,26 +207,41 @@ def splice_ulte(args):
 def splice_ugt(args):
     return brkt(args[1]) + " > " + brkt(args[0])
 
+def splice_lshft(args):
+    return brkt(args[1]) + " << " + brkt(args[0])
+
+def splice_equal(args):
+    return brkt(args[1]) + " == " + brkt(args[0])
+
 exp_ops = {}
 #                 (n operands, splicer)
 exp_ops["AND"]  = (2, splice_bitwise_and)
+exp_ops["OR"]   = (2, splice_bitwise_or)
 exp_ops["UGTE"] = (2, splice_ugte)
 exp_ops["ULT"]  = (2, splice_ult)
 exp_ops["&&"]   = (2, splice_logical_and)
+exp_ops["UMUL"] = (2, splice_umul)
+exp_ops["<<"]   = (2, splice_lshft)
+exp_ops["=="]   = (2, splice_equal)
 
 
 hw_vars = {}
 hw_vars["$EuCoresTotalCount"] = "perf->sys_vars.n_eus"
+hw_vars["$VectorEngineTotalCount"] = "perf->sys_vars.n_eus"
 hw_vars["$EuSlicesTotalCount"] = "perf->sys_vars.n_eu_slices"
 hw_vars["$EuSubslicesTotalCount"] = "perf->sys_vars.n_eu_sub_slices"
+hw_vars["$XeCoreTotalCount"] = "perf->sys_vars.n_eu_sub_slices"
 hw_vars["$EuDualSubslicesTotalCount"] = "perf->sys_vars.n_eu_sub_slices"
 hw_vars["$EuDualSubslicesSlice0123Count"] = "perf->sys_vars.n_eu_slice0123"
 hw_vars["$EuThreadsCount"] = "perf->devinfo.num_thread_per_eu"
+hw_vars["$VectorEngineThreadsCount"] = "perf->devinfo.num_thread_per_eu"
 hw_vars["$SliceMask"] = "perf->sys_vars.slice_mask"
+hw_vars["$SliceTotalCount"] = "perf->sys_vars.n_eu_slices"
 # subslice_mask is interchangeable with subslice/dual-subslice since Gfx12+
 # only has dual subslices which can be assimilated with 16EUs subslices.
 hw_vars["$SubsliceMask"] = "perf->sys_vars.subslice_mask"
 hw_vars["$DualSubsliceMask"] = "perf->sys_vars.subslice_mask"
+hw_vars["$XeCoreMask"] = "perf->sys_vars.subslice_mask"
 hw_vars["$GpuTimestampFrequency"] = "perf->devinfo.timestamp_frequency"
 hw_vars["$GpuMinFrequency"] = "perf->sys_vars.gt_min_freq"
 hw_vars["$GpuMaxFrequency"] = "perf->sys_vars.gt_max_freq"
@@ -233,7 +254,7 @@ def resolve_variable(name, set, allow_counters):
     m = re.search('\$GtSlice([0-9]+)$', name)
     if m:
         return 'intel_device_info_slice_available(&perf->devinfo, {0})'.format(m.group(1))
-    m = re.search('\$GtSlice([0-9]+)DualSubslice([0-9]+)$', name)
+    m = re.search('\$GtSlice([0-9]+)XeCore([0-9]+)$', name)
     if m:
         return 'intel_device_info_subslice_available(&perf->devinfo, {0}, {1})'.format(m.group(1), m.group(2))
     if allow_counters and name in set.counter_vars:
@@ -282,7 +303,7 @@ def output_rpn_equation_code(set, counter, equation):
 
     c("\nreturn " + value + ";")
 
-def splice_rpn_expression(set, counter, expression):
+def splice_rpn_expression(set, counter_name, expression):
     tokens = expression.split()
     stack = []
 
@@ -297,7 +318,7 @@ def splice_rpn_expression(set, counter, expression):
                 if operand[0] == "$":
                     resolved_variable = resolve_variable(operand, set, False)
                     if resolved_variable == None:
-                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter.get('name'))
+                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter_name)
                     operand = resolved_variable
                 args.append(operand)
 
@@ -307,7 +328,7 @@ def splice_rpn_expression(set, counter, expression):
 
     if len(stack) != 1:
         raise Exception("Spurious empty rpn expression for " + set.name + " :: " +
-                counter.get('name') + ".\nThis is probably due to some unhandled RPN operation, in the expression \"" +
+                counter_name + ".\nThis is probably due to some unhandled RPN operation, in the expression \"" +
                 expression + "\"")
 
     value = stack[-1]
@@ -315,7 +336,7 @@ def splice_rpn_expression(set, counter, expression):
     if value[0] == "$":
         resolved_variable = resolve_variable(value, set, False)
         if resolved_variable == None:
-            raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter.get('name'))
+            raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.name + " :: " + counter_name)
         value = resolved_variable
 
     return value
@@ -436,6 +457,7 @@ units_map = {
     "threads" : True,
     "us" : True,
     "utilization" : False,
+    "gbps" : True,
     }
 
 
@@ -942,6 +964,8 @@ def main():
 
             if gen.chipset == "hsw":
                 c("struct intel_perf_query_info *query = hsw_query_alloc(perf, %u);\n" % len(counters))
+            elif gen.chipset.startswith("acm"):
+                c("struct intel_perf_query_info *query = xehp_query_alloc(perf, %u);\n" % len(counters))
             else:
                 c("struct intel_perf_query_info *query = bdw_query_alloc(perf, %u);\n" % len(counters))
             c("\n")

@@ -7,3 +7,14 @@ dEQP-VK.dynamic_rendering.basic.*
 #
 # See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/7220
 dEQP-VK.draw.renderpass.linear_interpolation.no_offset_8_samples
+
+# Came with the split of the test lists in CI
+dEQP-VK.memory.mapping.dedicated_alloc.image.full.1048577.*
+dEQP-VK.memory.mapping.dedicated_alloc.image.sub.1048577.*
+
+dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.separate.view_type.2d_array.format.r4g4b4a4_unorm_pack16.count_4.size.32x16_array_of_6
+
+# Seem to have been introduced with !19442, and can only be reproduced on
+# Steam Deck 2 at Martin Roukala (mupuf)'s farm. Investigation is under way.
+dEQP-VK.query_pool.statistics_query.geometry_shader_primitives.*
+dEQP-VK.query_pool.statistics_query.host_query_reset.geometry_shader_primitives.*

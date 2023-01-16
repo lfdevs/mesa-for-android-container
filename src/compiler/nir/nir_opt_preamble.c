@@ -145,6 +145,7 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_pipeline_stat_query_enabled_amd:
    case nir_intrinsic_load_prim_gen_query_enabled_amd:
    case nir_intrinsic_load_prim_xfb_query_enabled_amd:
+   case nir_intrinsic_load_clamp_vertex_color_amd:
    case nir_intrinsic_load_cull_front_face_enabled_amd:
    case nir_intrinsic_load_cull_back_face_enabled_amd:
    case nir_intrinsic_load_cull_ccw_amd:
@@ -152,6 +153,8 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_cull_any_enabled_amd:
    case nir_intrinsic_load_cull_small_prim_precision_amd:
    case nir_intrinsic_load_texture_base_agx:
+   case nir_intrinsic_load_ubo_base_agx:
+   case nir_intrinsic_load_vbo_base_agx:
       return true;
 
    /* Intrinsics which can be moved depending on hardware */
@@ -194,6 +197,7 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_masked_swizzle_amd:
    case nir_intrinsic_load_ssbo_address:
    case nir_intrinsic_bindless_resource_ir3:
+   case nir_intrinsic_load_constant_agx:
       return can_move_srcs(&instr->instr, ctx);
 
    /* Image/SSBO loads can be moved if they are CAN_REORDER and their

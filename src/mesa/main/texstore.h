@@ -36,7 +36,7 @@
 #define TEXSTORE_H
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "formats.h"
 #include "util/macros.h"
 

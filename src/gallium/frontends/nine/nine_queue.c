@@ -21,7 +21,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "nine_queue.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/macros.h"
 #include "nine_helpers.h"
 

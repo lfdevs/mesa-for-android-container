@@ -30,7 +30,7 @@
  */
 
 #include <stdbool.h>
-#include "glheader.h"
+#include "util/glheader.h"
 #include "bufferobj.h"
 #include "context.h"
 #include "enums.h"

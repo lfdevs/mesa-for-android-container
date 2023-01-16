@@ -30,7 +30,7 @@
 #define PROG_CACHE_H
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 
 
 #ifdef __cplusplus

@@ -227,7 +227,7 @@ _eglChooseConfig(_EGLDisplay *disp, const EGLint *attrib_list, EGLConfig *config
 
 
 extern EGLBoolean
-_eglGetConfigAttrib(_EGLDisplay *disp, _EGLConfig *conf, EGLint attribute, EGLint *value);
+_eglGetConfigAttrib(const _EGLDisplay *disp, const _EGLConfig *conf, EGLint attribute, EGLint *value);
 
 
 extern EGLBoolean

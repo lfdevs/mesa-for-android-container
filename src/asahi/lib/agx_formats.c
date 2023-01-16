@@ -21,21 +21,23 @@
  * SOFTWARE.
  */
 
-#include "agx_pack.h"
 #include "agx_formats.h"
+#include "agx_internal_formats.h"
+#include "agx_pack.h"
 
-#define T true
-#define F false
-#define AGX_FORMAT__ 0
+#define T                     true
+#define F                     false
+#define AGX_INTERNAL_FORMAT__ PIPE_FORMAT_NONE
 
-#define AGX_FMT(pipe, channels_, type_, is_renderable, internal_fmt) \
-   [PIPE_FORMAT_ ## pipe] = { \
-      .channels = AGX_CHANNELS_ ## channels_, \
-      .type = AGX_TEXTURE_TYPE_ ## type_, \
-      .renderable = is_renderable, \
-      .internal = AGX_FORMAT_ ## internal_fmt,\
+#define AGX_FMT(pipe, channels_, type_, is_renderable, internal_fmt)           \
+   [PIPE_FORMAT_##pipe] = {                                                    \
+      .channels = AGX_CHANNELS_##channels_,                                    \
+      .type = AGX_TEXTURE_TYPE_##type_,                                        \
+      .renderable = is_renderable,                                             \
+      .internal = (enum pipe_format)AGX_INTERNAL_FORMAT_##internal_fmt,        \
    }
 
+/* clang-format off */
 const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(R8_UNORM,                R8,            UNORM,  T, U8NORM),
    AGX_FMT(R8G8_UNORM,              R8G8,          UNORM,  T, U8NORM),
@@ -43,10 +45,17 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(A8R8G8B8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
    AGX_FMT(A8B8G8R8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
    AGX_FMT(B8G8R8A8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
+   AGX_FMT(R8G8B8X8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
+   AGX_FMT(X8R8G8B8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
+   AGX_FMT(X8B8G8R8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
+   AGX_FMT(B8G8R8X8_UNORM,          R8G8B8A8,      UNORM,  T, U8NORM),
 
    AGX_FMT(R16_UNORM,               R16,           UNORM,  T, U16NORM),
    AGX_FMT(R16G16_UNORM,            R16G16,        UNORM,  T, U16NORM),
    AGX_FMT(R16G16B16A16_UNORM,      R16G16B16A16,  UNORM,  T, U16NORM),
+   AGX_FMT(R16_SNORM,               R16,           SNORM,  T, S16NORM),
+   AGX_FMT(R16G16_SNORM,            R16G16,        SNORM,  T, S16NORM),
+   AGX_FMT(R16G16B16A16_SNORM,      R16G16B16A16,  SNORM,  T, S16NORM),
 
    AGX_FMT(R8_SRGB,                 R8,            UNORM,  T, SRGBA8),
    AGX_FMT(R8G8_SRGB,               R8G8,          UNORM,  T, SRGBA8),
@@ -54,6 +63,10 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(A8R8G8B8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
    AGX_FMT(A8B8G8R8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
    AGX_FMT(B8G8R8A8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
+   AGX_FMT(R8G8B8X8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
+   AGX_FMT(X8R8G8B8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
+   AGX_FMT(X8B8G8R8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
+   AGX_FMT(B8G8R8X8_SRGB,           R8G8B8A8,      UNORM,  T, SRGBA8),
 
    AGX_FMT(R8_SNORM,                R8,            SNORM,  T, S8NORM),
    AGX_FMT(R8G8_SNORM,              R8G8,          SNORM,  T, S8NORM),
@@ -61,6 +74,10 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(A8R8G8B8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
    AGX_FMT(A8B8G8R8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
    AGX_FMT(B8G8R8A8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
+   AGX_FMT(R8G8B8X8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
+   AGX_FMT(X8R8G8B8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
+   AGX_FMT(X8B8G8R8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
+   AGX_FMT(B8G8R8X8_SNORM,          R8G8B8A8,      SNORM,  T, S8NORM),
 
    AGX_FMT(R16_FLOAT,               R16,           FLOAT,  T, F16),
    AGX_FMT(R16G16_FLOAT,            R16G16,        FLOAT,  T, F16),
@@ -97,19 +114,23 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(Z16_UNORM,               R16,           UNORM,  F, _),
    AGX_FMT(Z32_FLOAT,               R32,           FLOAT,  F, _),
    AGX_FMT(Z32_FLOAT_S8X24_UINT,    R32,           FLOAT,  F, _),
+   AGX_FMT(S8_UINT,                 R8,            UINT,   F, _),
 
-   /* These must be lowered by u_transfer_helper to Z32F */
+   /* The stencil part of Z32F + S8 is just S8 */
+   AGX_FMT(X32_S8X24_UINT,          R8,            UINT,   F, _),
+
+   /* These must be lowered by u_transfer_helper to Z32F + S8 */
    AGX_FMT(Z24X8_UNORM,             R32,           FLOAT,  F, _),
    AGX_FMT(Z24_UNORM_S8_UINT,       R32,           FLOAT,  F, _),
 
    AGX_FMT(R10G10B10A2_UNORM,       R10G10B10A2,   UNORM,  T, RGB10A2),
    AGX_FMT(B10G10R10A2_UNORM,       R10G10B10A2,   UNORM,  T, RGB10A2),
 
-   AGX_FMT(R10G10B10A2_UINT,        R10G10B10A2,   UINT,   T, _),
-   AGX_FMT(B10G10R10A2_UINT,        R10G10B10A2,   UINT,   T, _),
+   AGX_FMT(R10G10B10A2_UINT,        R10G10B10A2,   UINT,   T, I16),
+   AGX_FMT(B10G10R10A2_UINT,        R10G10B10A2,   UINT,   T, I16),
 
-   AGX_FMT(R10G10B10A2_SINT,        R10G10B10A2,   SINT,   T, _),
-   AGX_FMT(B10G10R10A2_SINT,        R10G10B10A2,   SINT,   T, _),
+   AGX_FMT(R10G10B10A2_SINT,        R10G10B10A2,   SINT,   T, I16),
+   AGX_FMT(B10G10R10A2_SINT,        R10G10B10A2,   SINT,   T, I16),
 
    AGX_FMT(R11G11B10_FLOAT,         R11G11B10,     FLOAT,  T, RG11B10F),
    AGX_FMT(R9G9B9E5_FLOAT,          R9G9B9E5,      FLOAT,  F, RGB9E5),
@@ -155,70 +176,22 @@ const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT] = {
    AGX_FMT(ASTC_10x10_SRGB,         ASTC_10X10,    UNORM,  F, _),
    AGX_FMT(ASTC_12x10_SRGB,         ASTC_12X10,    UNORM,  F, _),
    AGX_FMT(ASTC_12x12_SRGB,         ASTC_12X12,    UNORM,  F, _),
+
+   AGX_FMT(DXT1_RGB,                BC1,           UNORM,  F, _),
+   AGX_FMT(DXT1_RGBA,               BC1,           UNORM,  F, _),
+   AGX_FMT(DXT1_SRGB,               BC1,           UNORM,  F, _),
+   AGX_FMT(DXT1_SRGBA,              BC1,           UNORM,  F, _),
+   AGX_FMT(DXT3_RGBA,               BC2,           UNORM,  F, _),
+   AGX_FMT(DXT3_SRGBA,              BC2,           UNORM,  F, _),
+   AGX_FMT(DXT5_RGBA,               BC3,           UNORM,  F, _),
+   AGX_FMT(DXT5_SRGBA,              BC3,           UNORM,  F, _),
+   AGX_FMT(RGTC1_UNORM,             BC4,           UNORM,  F, _),
+   AGX_FMT(RGTC1_SNORM,             BC4,           SNORM,  F, _),
+   AGX_FMT(RGTC2_UNORM,             BC5,           UNORM,  F, _),
+   AGX_FMT(RGTC2_SNORM,             BC5,           SNORM,  F, _),
+   AGX_FMT(BPTC_RGB_FLOAT,          BC6H,          FLOAT,  F, _),
+   AGX_FMT(BPTC_RGB_UFLOAT,         BC6H_UFLOAT,   FLOAT,  F, _),
+   AGX_FMT(BPTC_RGBA_UNORM,         BC7,           UNORM,  F, _),
+   AGX_FMT(BPTC_SRGBA,              BC7,           UNORM,  F, _),
 };
-
-const enum agx_format
-agx_vertex_format[PIPE_FORMAT_COUNT] = {
-   [PIPE_FORMAT_R32_FLOAT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32_SINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32_FLOAT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32_SINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32_FLOAT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32_SINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32A32_FLOAT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32A32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32A32_SINT] = AGX_FORMAT_I32,
-
-   [PIPE_FORMAT_R8_UNORM] = AGX_FORMAT_U8NORM,
-   [PIPE_FORMAT_R8G8_UNORM] = AGX_FORMAT_U8NORM,
-   [PIPE_FORMAT_R8G8B8_UNORM] = AGX_FORMAT_U8NORM,
-   [PIPE_FORMAT_R8G8B8A8_UNORM] = AGX_FORMAT_U8NORM,
-
-   [PIPE_FORMAT_R8_SNORM] = AGX_FORMAT_S8NORM,
-   [PIPE_FORMAT_R8G8_SNORM] = AGX_FORMAT_S8NORM,
-   [PIPE_FORMAT_R8G8B8_SNORM] = AGX_FORMAT_S8NORM,
-   [PIPE_FORMAT_R8G8B8A8_SNORM] = AGX_FORMAT_S8NORM,
-
-   [PIPE_FORMAT_R16_UNORM] = AGX_FORMAT_U16NORM,
-   [PIPE_FORMAT_R16G16_UNORM] = AGX_FORMAT_U16NORM,
-   [PIPE_FORMAT_R16G16B16_UNORM] = AGX_FORMAT_U16NORM,
-   [PIPE_FORMAT_R16G16B16A16_UNORM] = AGX_FORMAT_U16NORM,
-
-   [PIPE_FORMAT_R16_SNORM] = AGX_FORMAT_S16NORM,
-   [PIPE_FORMAT_R16G16_SNORM] = AGX_FORMAT_S16NORM,
-   [PIPE_FORMAT_R16G16B16_SNORM] = AGX_FORMAT_S16NORM,
-   [PIPE_FORMAT_R16G16B16A16_SNORM] = AGX_FORMAT_S16NORM,
-
-   [PIPE_FORMAT_R8_UINT] = AGX_FORMAT_I8,
-   [PIPE_FORMAT_R8G8_UINT] = AGX_FORMAT_I8,
-   [PIPE_FORMAT_R8G8B8_UINT] = AGX_FORMAT_I8,
-   [PIPE_FORMAT_R8G8B8A8_UINT] = AGX_FORMAT_I8,
-
-   [PIPE_FORMAT_R8_SINT] = AGX_FORMAT_I8,
-   [PIPE_FORMAT_R8G8_SINT] = AGX_FORMAT_I8,
-   [PIPE_FORMAT_R8G8B8_SINT] = AGX_FORMAT_I8,
-   [PIPE_FORMAT_R8G8B8A8_SINT] = AGX_FORMAT_I8,
-
-   [PIPE_FORMAT_R16_UINT] = AGX_FORMAT_I16,
-   [PIPE_FORMAT_R16G16_UINT] = AGX_FORMAT_I16,
-   [PIPE_FORMAT_R16G16B16_UINT] = AGX_FORMAT_I16,
-   [PIPE_FORMAT_R16G16B16A16_UINT] = AGX_FORMAT_I16,
-
-   [PIPE_FORMAT_R16_SINT] = AGX_FORMAT_I16,
-   [PIPE_FORMAT_R16G16_SINT] = AGX_FORMAT_I16,
-   [PIPE_FORMAT_R16G16B16_SINT] = AGX_FORMAT_I16,
-   [PIPE_FORMAT_R16G16B16A16_SINT] = AGX_FORMAT_I16,
-
-   [PIPE_FORMAT_R32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32_UINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32A32_UINT] = AGX_FORMAT_I32,
-
-   [PIPE_FORMAT_R32_SINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32_SINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32_SINT] = AGX_FORMAT_I32,
-   [PIPE_FORMAT_R32G32B32A32_SINT] = AGX_FORMAT_I32,
-};
+/* clang-format on */

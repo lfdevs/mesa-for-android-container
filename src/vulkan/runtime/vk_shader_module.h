@@ -62,9 +62,6 @@ vk_shader_module_to_nir(struct vk_device *device,
                         const struct nir_shader_compiler_options *nir_options,
                         void *mem_ctx, struct nir_shader **nir_out);
 
-struct vk_shader_module *vk_shader_module_clone(void *mem_ctx,
-                                                const struct vk_shader_module *src);
-
 /* this should only be used for stack-allocated, temporary objects */
 #define vk_shader_module_handle_from_nir(_nir) \
    ((VkShaderModule)(uintptr_t)&(struct vk_shader_module) { \

@@ -350,7 +350,7 @@ d3d12_enable_gpu_validation(struct util_dl_library *d3d12_mod, ID3D12DeviceFacto
    }
 }
 
-ID3D12Device2 *
+ID3D12Device4 *
 d3d12_create_device(struct util_dl_library *d3d12_mod, IUnknown *adapter, ID3D12DeviceFactory *factory, bool experimental_features)
 {
 #ifdef _WIN32
@@ -373,12 +373,12 @@ d3d12_create_device(struct util_dl_library *d3d12_mod, IUnknown *adapter, ID3D12
       }
    }
 
-   ID3D12Device2 *dev;
+   ID3D12Device4 *dev;
    if (factory) {
       ID3D12DeviceFactory_SetFlags(factory, D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_EXISTING_DEVICE |
                                             D3D12_DEVICE_FACTORY_FLAG_ALLOW_RETURNING_INCOMPATIBLE_EXISTING_DEVICE);
       if (FAILED(ID3D12DeviceFactory_CreateDevice(factory, adapter, D3D_FEATURE_LEVEL_11_0,
-                                                  &IID_ID3D12Device2,
+                                                  &IID_ID3D12Device4,
                                                   (void **)&dev))) {
          mesa_loge("ID3D12DeviceFactory::CreateDevice failed\n");
          return NULL;
@@ -394,7 +394,7 @@ d3d12_create_device(struct util_dl_library *d3d12_mod, IUnknown *adapter, ID3D12
       }
 
       if (FAILED(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_11_0,
-                                   &IID_ID3D12Device2,
+                                   &IID_ID3D12Device4,
                                    (void **)&dev))) {
          mesa_loge("D3D12CreateDevice failed\n");
          return NULL;

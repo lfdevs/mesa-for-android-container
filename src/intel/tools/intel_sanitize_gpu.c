@@ -185,11 +185,13 @@ padding_is_good(int fd, uint32_t handle)
    }
 
    mapped = (uint8_t*) (uintptr_t) mmap_arg.addr_ptr;
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
    /* bah-humbug, we need to see the latest contents and
     * if the bo is not cache coherent we likely need to
     * invalidate the cache lines to get it.
     */
    intel_invalidate_range(mapped, PADDING_SIZE);
+#endif
 
    expected_value = handle & 0xFF;
    for (uint32_t i = 0; i < PADDING_SIZE; ++i) {

@@ -388,6 +388,17 @@ fd6_emit_tess_bos(struct fd_screen *screen, struct fd_ringbuffer *ring,
    OUT_RELOC(ring, screen->tess_bo, 0, 0, 0);
 }
 
+static enum a6xx_tex_prefetch_cmd
+tex_opc_to_prefetch_cmd(opc_t tex_opc)
+{
+   switch (tex_opc) {
+   case OPC_SAM:
+      return TEX_PREFETCH_SAM;
+   default:
+      unreachable("Unknown tex opc for prefeth cmd");
+   }
+}
+
 static void
 setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
                struct fd6_program_state *state,
@@ -411,7 +422,13 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
    uint8_t clip0_loc, clip1_loc;
    int i, j;
 
-   static const struct ir3_shader_variant dummy_fs = {0};
+   static const struct ir3_shader_variant dummy_fs = {
+         .info = {
+               .max_half_reg = -1,
+               .max_reg = -1,
+               .max_const = -1,
+         },
+   };
    const struct ir3_shader_variant *vs = binning_pass ? state->bs : state->vs;
    const struct ir3_shader_variant *hs = state->hs;
    const struct ir3_shader_variant *ds = state->ds;
@@ -509,13 +526,10 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
       ij_regid[i] =
          ir3_find_sysval_regid(fs, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL + i);
 
-   /* If we have pre-dispatch texture fetches, then ij_pix should not
-    * be DCE'd, even if not actually used in the shader itself:
-    */
    if (fs->num_sampler_prefetch > 0) {
-      assert(VALIDREG(ij_regid[IJ_PERSP_PIXEL]));
-      /* also, it seems like ij_pix is *required* to be r0.x */
-      assert(ij_regid[IJ_PERSP_PIXEL] == regid(0, 0));
+      /* It seems like ij_pix is *required* to be r0.x */
+      assert(!VALIDREG(ij_regid[IJ_PERSP_PIXEL]) ||
+             ij_regid[IJ_PERSP_PIXEL] == regid(0, 0));
    }
 
    /* we can't write gl_SampleMask for !msaa..  if b0 is zero then we
@@ -533,8 +547,8 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
 
    OUT_PKT4(ring, REG_A6XX_SP_FS_PREFETCH_CNTL, 1 + fs->num_sampler_prefetch);
    OUT_RING(ring, A6XX_SP_FS_PREFETCH_CNTL_COUNT(fs->num_sampler_prefetch) |
-                     A6XX_SP_FS_PREFETCH_CNTL_UNK4(regid(63, 0)) |
-                     0x7000); // XXX
+                     COND(!VALIDREG(ij_regid[IJ_PERSP_PIXEL]),
+                          A6XX_SP_FS_PREFETCH_CNTL_IJ_WRITE_DISABLE));
    for (int i = 0; i < fs->num_sampler_prefetch; i++) {
       const struct ir3_sampler_prefetch *prefetch = &fs->sampler_prefetch[i];
       OUT_RING(ring,
@@ -544,7 +558,9 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
                   A6XX_SP_FS_PREFETCH_CMD_DST(prefetch->dst) |
                   A6XX_SP_FS_PREFETCH_CMD_WRMASK(prefetch->wrmask) |
                   COND(prefetch->half_precision, A6XX_SP_FS_PREFETCH_CMD_HALF) |
-                  A6XX_SP_FS_PREFETCH_CMD_CMD(prefetch->cmd));
+                  COND(prefetch->bindless, A6XX_SP_FS_PREFETCH_CMD_BINDLESS) |
+                  A6XX_SP_FS_PREFETCH_CMD_CMD(
+                     tex_opc_to_prefetch_cmd(prefetch->tex_opc)));
    }
 
    OUT_PKT4(ring, REG_A6XX_SP_UNKNOWN_A9A8, 1);

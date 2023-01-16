@@ -22,7 +22,6 @@
  */
 
 #include <gtest/gtest.h>
-#include "../../../mesa/main/glheader.h"
 
 #include "glapi/glapi.h"
 #include "glapitable.h"

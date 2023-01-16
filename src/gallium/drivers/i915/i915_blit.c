@@ -38,7 +38,7 @@ i915_fill_blit(struct i915_context *i915, unsigned cpp, unsigned rgba_mask,
 {
    unsigned BR13, CMD;
 
-   I915_DBG(DBG_BLIT, "%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n", __FUNCTION__,
+   I915_DBG(DBG_BLIT, "%s dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n", __func__,
             dst_buffer, dst_pitch, dst_offset, x, y, w, h);
 
    if (!i915_winsys_validate_buffers(i915->batch, &dst_buffer, 1)) {
@@ -90,7 +90,7 @@ i915_copy_blit(struct i915_context *i915, unsigned cpp,
 
    I915_DBG(DBG_BLIT,
             "%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
-            __FUNCTION__, src_buffer, src_pitch, src_offset, src_x, src_y,
+            __func__, src_buffer, src_pitch, src_offset, src_x, src_y,
             dst_buffer, dst_pitch, dst_offset, dst_x, dst_y, w, h);
 
    if (!i915_winsys_validate_buffers(i915->batch, buffers, 2)) {

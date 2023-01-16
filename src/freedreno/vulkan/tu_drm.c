@@ -515,6 +515,14 @@ tu_bo_map(struct tu_device *dev, struct tu_bo *bo)
 }
 
 void
+tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo)
+{
+   mtx_lock(&dev->bo_mutex);
+   dev->bo_list[bo->bo_list_idx].flags |= MSM_SUBMIT_BO_DUMP;
+   mtx_unlock(&dev->bo_mutex);
+}
+
+void
 tu_bo_finish(struct tu_device *dev, struct tu_bo *bo)
 {
    assert(bo->gem_handle);
@@ -974,7 +982,7 @@ tu_queue_submit_create_locked(struct tu_queue *queue,
 {
    VkResult result;
 
-   bool u_trace_enabled = u_trace_context_actively_tracing(&queue->device->trace_context);
+   bool u_trace_enabled = u_trace_should_process(&queue->device->trace_context);
    bool has_trace_points = false;
 
    struct vk_command_buffer **vk_cmd_buffers = vk_submit->command_buffers;

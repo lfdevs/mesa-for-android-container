@@ -38,10 +38,13 @@
 #include "compiler/glsl/list.h"
 #include "dev/intel_device_info.h"
 #include "util/bitscan.h"
+#include "util/bitset.h"
 #include "util/hash_table.h"
 #include "util/ralloc.h"
 
 #include "drm-uapi/i915_drm.h"
+
+#define INTEL_PERF_MAX_METRIC_SETS (1500)
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +75,7 @@ enum PACKED intel_perf_counter_data_type {
 enum PACKED intel_perf_counter_units {
    /* size */
    INTEL_PERF_COUNTER_UNITS_BYTES,
+   INTEL_PERF_COUNTER_UNITS_GBPS,
 
    /* frequency */
    INTEL_PERF_COUNTER_UNITS_HZ,
@@ -307,7 +311,7 @@ struct intel_perf_query_field_layout {
 struct intel_perf_query_counter_info {
    struct intel_perf_query_counter *counter;
 
-   uint64_t query_mask;
+   BITSET_DECLARE(query_mask, INTEL_PERF_MAX_METRIC_SETS);
 
    /**
     * Each counter can be a part of many groups, each time at different index.
@@ -411,7 +415,6 @@ struct intel_perf_config {
 struct intel_perf_counter_pass {
    struct intel_perf_query_info *query;
    struct intel_perf_query_counter *counter;
-   uint32_t pass;
 };
 
 /** Initialize the intel_perf_config object for a given device.
@@ -453,7 +456,7 @@ uint64_t intel_perf_store_configuration(struct intel_perf_config *perf_cfg, int 
 static inline unsigned
 intel_perf_query_counter_info_first_query(const struct intel_perf_query_counter_info *counter_info)
 {
-   return ffsll(counter_info->query_mask);
+   return BITSET_FFS(counter_info->query_mask);
 }
 
 /** Read the slice/unslice frequency from 2 OA reports and store then into

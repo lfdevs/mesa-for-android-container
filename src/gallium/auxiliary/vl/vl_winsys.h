@@ -39,7 +39,7 @@
 #include <windows.h>
 #endif
 #include "pipe/p_defines.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 
 struct pipe_screen;
 struct pipe_surface;

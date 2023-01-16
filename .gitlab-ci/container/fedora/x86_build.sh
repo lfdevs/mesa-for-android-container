@@ -31,7 +31,6 @@ dnf install -y --setopt=install_weak_deps=False \
     glslang \
     kernel-headers \
     llvm-devel \
-    clang-devel \
     meson \
     "pkgconfig(dri2proto)" \
     "pkgconfig(expat)" \
@@ -63,8 +62,6 @@ dnf install -y --setopt=install_weak_deps=False \
     "pkgconfig(xxf86vm)" \
     "pkgconfig(zlib)" \
     python-unversioned-command \
-    python3-devel \
-    python3-mako \
     python3-devel \
     python3-mako \
     python3-ply \

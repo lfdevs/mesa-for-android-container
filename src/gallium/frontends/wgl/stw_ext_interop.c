@@ -21,12 +21,11 @@
 * IN THE SOFTWARE.
 */
 
+#include "state_tracker/st_interop.h"
 #include "stw_ext_interop.h"
 
 #include "stw_context.h"
 #include "stw_device.h"
-
-#include "state_tracker/st_interop.h"
 
 int
 wglMesaGLInteropQueryDeviceInfo(HDC dpy, HGLRC context,

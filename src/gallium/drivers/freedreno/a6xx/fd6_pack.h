@@ -34,6 +34,7 @@ struct fd_reg_pair {
    bool bo_write;
    uint32_t bo_offset;
    uint32_t bo_shift;
+   uint32_t bo_low;
 };
 
 #define __bo_type struct fd_bo *
@@ -62,8 +63,9 @@ struct fd_reg_pair {
          __assert_eq(regs[0].reg + i, regs[i].reg);                            \
          if (regs[i].bo) {                                                     \
             uint64_t *p64 = (uint64_t *)p;                                     \
-            *p64 = __reloc_iova(regs[i].bo, regs[i].bo_offset, regs[i].value,  \
-                                regs[i].bo_shift);                             \
+            *p64 = (__reloc_iova(regs[i].bo, regs[i].bo_offset, 0,             \
+                                -regs[i].bo_shift) << regs[i].bo_low) |        \
+                   regs[i].value;                                              \
             p += 2;                                                            \
             fd_ringbuffer_attach_bo(ring, regs[i].bo);                         \
          } else {                                                              \

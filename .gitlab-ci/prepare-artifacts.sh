@@ -10,7 +10,7 @@ rm -rf install/bin install/include
 
 # Strip the drivers in the artifacts to cut 80% of the artifacts size.
 if [ -n "$CROSS" ]; then
-    STRIP=`sed -n -E "s/strip\s*=\s*'(.*)'/\1/p" "$CROSS_FILE"`
+    STRIP=$(sed -n -E "s/strip\s*=\s*\[?'(.*)'\]?/\1/p" "$CROSS_FILE")
     if [ -z "$STRIP" ]; then
         echo "Failed to find strip command in cross file"
         exit 1

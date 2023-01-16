@@ -942,7 +942,7 @@ download_texture_compute(struct st_context *st,
             assert(async->nir && !async->cs);
             struct pipe_compute_state state = {0};
             state.ir_type = PIPE_SHADER_IR_NIR;
-            state.req_local_mem = async->nir->info.shared_size;
+            state.static_shared_mem = async->nir->info.shared_size;
             state.prog = async->nir;
             async->nir = NULL;
             async->cs = pipe->create_compute_state(pipe, &state);
@@ -957,7 +957,7 @@ download_texture_compute(struct st_context *st,
                if (!spec->cs) {
                   struct pipe_compute_state state = {0};
                   state.ir_type = PIPE_SHADER_IR_NIR;
-                  state.req_local_mem = spec->nir->info.shared_size;
+                  state.static_shared_mem = spec->nir->info.shared_size;
                   state.prog = spec->nir;
                   spec->nir = NULL;
                   spec->cs = pipe->create_compute_state(pipe, &state);
@@ -1173,9 +1173,9 @@ fail:
    st->state.num_sampler_views[PIPE_SHADER_COMPUTE] = 0;
    pipe->set_shader_buffers(pipe, PIPE_SHADER_COMPUTE, 0, 1, NULL, 0);
 
-   st->dirty |= ST_NEW_CS_CONSTANTS |
-                ST_NEW_CS_SSBOS |
-                ST_NEW_CS_SAMPLER_VIEWS;
+   st->ctx->NewDriverState |= ST_NEW_CS_CONSTANTS |
+                              ST_NEW_CS_SSBOS |
+                              ST_NEW_CS_SAMPLER_VIEWS;
 
    return dst;
 }

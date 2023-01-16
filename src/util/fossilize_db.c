@@ -40,6 +40,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "util/u_debug.h"
+
 #include "crc32.h"
 #include "hash_table.h"
 #include "mesa-sha1.h"
@@ -270,28 +272,32 @@ foz_prepare(struct foz_db *foz_db, char *cache_path)
 {
    char *filename = NULL;
    char *idx_filename = NULL;
-   if (!create_foz_db_filenames(cache_path, "foz_cache", &filename, &idx_filename))
-      return false;
-
-   /* Open the default foz dbs for read/write. If the files didn't already exist
-    * create them.
-    */
-   foz_db->file[0] = fopen(filename, "a+b");
-   foz_db->db_idx = fopen(idx_filename, "a+b");
-
-   free(filename);
-   free(idx_filename);
-
-   if (!check_files_opened_successfully(foz_db->file[0], foz_db->db_idx))
-      return false;
 
    simple_mtx_init(&foz_db->mtx, mtx_plain);
    simple_mtx_init(&foz_db->flock_mtx, mtx_plain);
    foz_db->mem_ctx = ralloc_context(NULL);
    foz_db->index_db = _mesa_hash_table_u64_create(NULL);
 
-   if (!load_foz_dbs(foz_db, foz_db->db_idx, 0, false))
-      return false;
+   /* Open the default foz dbs for read/write. If the files didn't already exist
+    * create them.
+    */
+   if (debug_get_bool_option("MESA_DISK_CACHE_SINGLE_FILE", false)) {
+      if (!create_foz_db_filenames(cache_path, "foz_cache",
+                                   &filename, &idx_filename))
+         goto fail;
+
+      foz_db->file[0] = fopen(filename, "a+b");
+      foz_db->db_idx = fopen(idx_filename, "a+b");
+
+      free(filename);
+      free(idx_filename);
+
+      if (!check_files_opened_successfully(foz_db->file[0], foz_db->db_idx))
+         goto fail;
+
+      if (!load_foz_dbs(foz_db, foz_db->db_idx, 0, false))
+         goto fail;
+   }
 
    uint8_t file_idx = 1;
    char *foz_dbs = getenv("MESA_DISK_CACHE_READ_ONLY_FOZ_DBS");
@@ -327,7 +333,7 @@ foz_prepare(struct foz_db *foz_db, char *cache_path)
 
       if (!load_foz_dbs(foz_db, db_idx, file_idx, true)) {
          fclose(db_idx);
-         return false;
+         goto fail;
       }
 
       fclose(db_idx);
@@ -338,6 +344,11 @@ foz_prepare(struct foz_db *foz_db, char *cache_path)
    }
 
    return true;
+
+fail:
+   foz_destroy(foz_db);
+
+   return false;
 }
 
 void
@@ -356,6 +367,8 @@ foz_destroy(struct foz_db *foz_db)
       simple_mtx_destroy(&foz_db->flock_mtx);
       simple_mtx_destroy(&foz_db->mtx);
    }
+
+   memset(foz_db, 0, sizeof(*foz_db));
 }
 
 /* Here we lookup a cache entry in the index hash table. If an entry is found
@@ -376,7 +389,7 @@ foz_read_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
 
    struct foz_db_entry *entry =
       _mesa_hash_table_u64_search(foz_db->index_db, hash);
-   if (!entry) {
+   if (!entry && foz_db->db_idx) {
       update_foz_index(foz_db, foz_db->db_idx, 0);
       entry = _mesa_hash_table_u64_search(foz_db->index_db, hash);
    }
@@ -437,7 +450,7 @@ foz_write_entry(struct foz_db *foz_db, const uint8_t *cache_key_160bit,
 {
    uint64_t hash = truncate_hash_to_64bits(cache_key_160bit);
 
-   if (!foz_db->alive)
+   if (!foz_db->alive || !foz_db->file[0])
       return false;
 
    /* The flock is per-fd, not per thread, we do it outside of the main mutex to avoid having to

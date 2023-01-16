@@ -29,7 +29,16 @@
 #include "nir.h"
 
 void
-dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir);
+dxil_spirv_nir_prep(nir_shader *nir);
+
+/* The pipeline will require runtime data if, and only if, any of the multiple reported
+ * runtime data required flags is true.
+ */
+
+void
+dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
+                    const struct dxil_spirv_runtime_conf *conf,
+                    bool *requires_runtime_data);
 
 void
 dxil_spirv_nir_passes(nir_shader *nir,

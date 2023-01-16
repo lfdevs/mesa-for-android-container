@@ -25,6 +25,7 @@
 #define PVR_STATIC_SHADERS_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /* TODO: Remove this once compiler is integrated. */
 #define PVR_INVALID_INST (~0)
@@ -152,6 +153,1532 @@ static const struct pvr_shader_factory_info
 
 static const struct pvr_shader_factory_info *const reset_query_collection[1] = {
    &reset_query_info,
+};
+
+static const uint8_t clear_attachments_1_dw_0_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_0_offt_out_reg_const_dest[6] = {
+   0
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_0_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_0_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_0_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_0_offt_out_mem_shader_code[8] = {
+   0,
+};
+static const uint32_t clear_attachments_1_dw_0_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_0_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_0_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_0_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_0_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_0_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_0_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_0_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_0_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_0_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_0_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_0_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_0_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_0_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_0_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_0_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_0_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_0_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_0_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_0_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_0_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_0_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_0_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_0_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_0_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_0_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_0_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_0_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_0_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_0_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_0_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_0_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_0_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_0_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_1_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_1_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_1_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_1_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_1_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_1_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_1_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_1_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_1_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_1_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_1_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_1_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_1_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_1_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_1_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_1_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_1_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_1_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_1_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_1_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_1_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_1_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_1_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_1_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_1_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_1_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_1_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_1_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_1_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_1_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_1_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_1_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_1_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_1_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_1_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_1_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_1_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_1_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_1_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_1_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_2_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_2_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_2_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_2_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_2_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_2_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_2_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_2_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_2_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_2_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_2_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_2_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_2_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_2_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_2_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_2_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_2_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_2_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_2_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_2_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_2_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_2_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_2_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_2_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_2_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_2_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_2_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_2_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_2_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_2_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_2_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_2_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_2_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_2_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_2_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_2_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_2_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_2_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_2_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_2_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_3_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_3_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_3_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_3_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_3_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_3_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_3_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_3_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_3_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_3_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_3_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_3_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_3_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_3_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_3_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_3_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_3_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_3_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_3_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_3_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_3_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_3_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_3_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_3_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_3_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_3_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_3_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_3_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_3_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_3_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_3_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_3_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_3_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_3_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_3_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_3_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_3_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_3_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_3_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_3_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_4_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_4_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_4_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_4_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_4_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_4_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_4_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_4_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_4_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_4_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_4_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_4_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_4_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_4_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_4_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_4_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_4_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_4_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_4_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_4_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_4_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_4_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_4_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_4_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_4_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_4_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_4_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_4_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_4_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_4_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_4_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_4_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_4_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_4_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_4_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_4_dw_4_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_4_dw_4_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_4_dw_4_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_4_dw_4_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_4_dw_4_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_5_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_5_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_5_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_5_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_5_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_5_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_5_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_5_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_5_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_5_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_5_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_5_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_5_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_5_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_5_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_5_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_5_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_5_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_5_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_5_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_5_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_5_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_5_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_5_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_5_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_3_dw_5_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_3_dw_5_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_3_dw_5_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_3_dw_5_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_3_dw_5_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_6_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_6_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_6_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_6_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_6_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_6_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_6_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_6_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_6_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_6_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_6_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_6_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_6_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_6_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_6_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_2_dw_6_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_2_dw_6_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_2_dw_6_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_2_dw_6_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_2_dw_6_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_7_offt_out_reg_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_7_offt_out_reg_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_7_offt_out_reg_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_7_offt_out_reg_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_7_offt_out_reg_const_dest,
+      0,
+      NULL,
+      0,
+   };
+
+static const uint8_t clear_attachments_1_dw_7_offt_out_mem_shader_code[8] = {
+   0
+};
+static const uint32_t clear_attachments_1_dw_7_offt_out_mem_const_dest[6] = {
+   0,
+};
+static const struct pvr_shader_factory_info
+   clear_attachments_1_dw_7_offt_out_mem_info = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      clear_attachments_1_dw_7_offt_out_mem_shader_code,
+      0,
+      0,
+      NULL,
+      0,
+      0,
+      clear_attachments_1_dw_7_offt_out_mem_const_dest,
+      0,
+      NULL,
+      0,
+   };
+static struct {
+   const uint8_t *code;
+   const uint32_t size;
+   const struct pvr_shader_factory_info *info;
+} const clear_attachment_collection[64] = {
+   { clear_attachments_1_dw_0_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_0_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_0_offt_out_reg_info },
+   { clear_attachments_1_dw_0_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_0_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_0_offt_out_mem_info },
+   { clear_attachments_1_dw_1_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_1_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_1_offt_out_reg_info },
+   { clear_attachments_1_dw_1_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_1_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_1_offt_out_mem_info },
+   { clear_attachments_1_dw_2_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_2_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_2_offt_out_reg_info },
+   { clear_attachments_1_dw_2_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_2_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_2_offt_out_mem_info },
+   { clear_attachments_1_dw_3_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_3_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_3_offt_out_reg_info },
+   { clear_attachments_1_dw_3_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_3_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_3_offt_out_mem_info },
+   { clear_attachments_1_dw_4_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_4_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_4_offt_out_reg_info },
+   { clear_attachments_1_dw_4_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_4_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_4_offt_out_mem_info },
+   { clear_attachments_1_dw_5_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_5_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_5_offt_out_reg_info },
+   { clear_attachments_1_dw_5_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_5_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_5_offt_out_mem_info },
+   { clear_attachments_1_dw_6_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_6_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_6_offt_out_reg_info },
+   { clear_attachments_1_dw_6_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_6_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_6_offt_out_mem_info },
+   { clear_attachments_1_dw_7_offt_out_reg_shader_code,
+     sizeof(clear_attachments_1_dw_7_offt_out_reg_shader_code),
+     &clear_attachments_1_dw_7_offt_out_reg_info },
+   { clear_attachments_1_dw_7_offt_out_mem_shader_code,
+     sizeof(clear_attachments_1_dw_7_offt_out_mem_shader_code),
+     &clear_attachments_1_dw_7_offt_out_mem_info },
+   { clear_attachments_2_dw_0_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_0_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_0_offt_out_reg_info },
+   { clear_attachments_2_dw_0_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_0_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_0_offt_out_mem_info },
+   { clear_attachments_2_dw_1_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_1_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_1_offt_out_reg_info },
+   { clear_attachments_2_dw_1_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_1_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_1_offt_out_mem_info },
+   { clear_attachments_2_dw_2_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_2_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_2_offt_out_reg_info },
+   { clear_attachments_2_dw_2_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_2_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_2_offt_out_mem_info },
+   { clear_attachments_2_dw_3_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_3_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_3_offt_out_reg_info },
+   { clear_attachments_2_dw_3_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_3_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_3_offt_out_mem_info },
+   { clear_attachments_2_dw_4_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_4_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_4_offt_out_reg_info },
+   { clear_attachments_2_dw_4_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_4_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_4_offt_out_mem_info },
+   { clear_attachments_2_dw_5_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_5_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_5_offt_out_reg_info },
+   { clear_attachments_2_dw_5_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_5_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_5_offt_out_mem_info },
+   { clear_attachments_2_dw_6_offt_out_reg_shader_code,
+     sizeof(clear_attachments_2_dw_6_offt_out_reg_shader_code),
+     &clear_attachments_2_dw_6_offt_out_reg_info },
+   { clear_attachments_2_dw_6_offt_out_mem_shader_code,
+     sizeof(clear_attachments_2_dw_6_offt_out_mem_shader_code),
+     &clear_attachments_2_dw_6_offt_out_mem_info },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { clear_attachments_3_dw_0_offt_out_reg_shader_code,
+     sizeof(clear_attachments_3_dw_0_offt_out_reg_shader_code),
+     &clear_attachments_3_dw_0_offt_out_reg_info },
+   { clear_attachments_3_dw_0_offt_out_mem_shader_code,
+     sizeof(clear_attachments_3_dw_0_offt_out_mem_shader_code),
+     &clear_attachments_3_dw_0_offt_out_mem_info },
+   { clear_attachments_3_dw_1_offt_out_reg_shader_code,
+     sizeof(clear_attachments_3_dw_1_offt_out_reg_shader_code),
+     &clear_attachments_3_dw_1_offt_out_reg_info },
+   { clear_attachments_3_dw_1_offt_out_mem_shader_code,
+     sizeof(clear_attachments_3_dw_1_offt_out_mem_shader_code),
+     &clear_attachments_3_dw_1_offt_out_mem_info },
+   { clear_attachments_3_dw_2_offt_out_reg_shader_code,
+     sizeof(clear_attachments_3_dw_2_offt_out_reg_shader_code),
+     &clear_attachments_3_dw_2_offt_out_reg_info },
+   { clear_attachments_3_dw_2_offt_out_mem_shader_code,
+     sizeof(clear_attachments_3_dw_2_offt_out_mem_shader_code),
+     &clear_attachments_3_dw_2_offt_out_mem_info },
+   { clear_attachments_3_dw_3_offt_out_reg_shader_code,
+     sizeof(clear_attachments_3_dw_3_offt_out_reg_shader_code),
+     &clear_attachments_3_dw_3_offt_out_reg_info },
+   { clear_attachments_3_dw_3_offt_out_mem_shader_code,
+     sizeof(clear_attachments_3_dw_3_offt_out_mem_shader_code),
+     &clear_attachments_3_dw_3_offt_out_mem_info },
+   { clear_attachments_3_dw_4_offt_out_reg_shader_code,
+     sizeof(clear_attachments_3_dw_4_offt_out_reg_shader_code),
+     &clear_attachments_3_dw_4_offt_out_reg_info },
+   { clear_attachments_3_dw_4_offt_out_mem_shader_code,
+     sizeof(clear_attachments_3_dw_4_offt_out_mem_shader_code),
+     &clear_attachments_3_dw_4_offt_out_mem_info },
+   { clear_attachments_3_dw_5_offt_out_reg_shader_code,
+     sizeof(clear_attachments_3_dw_5_offt_out_reg_shader_code),
+     &clear_attachments_3_dw_5_offt_out_reg_info },
+   { clear_attachments_3_dw_5_offt_out_mem_shader_code,
+     sizeof(clear_attachments_3_dw_5_offt_out_mem_shader_code),
+     &clear_attachments_3_dw_5_offt_out_mem_info },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { clear_attachments_4_dw_0_offt_out_reg_shader_code,
+     sizeof(clear_attachments_4_dw_0_offt_out_reg_shader_code),
+     &clear_attachments_4_dw_0_offt_out_reg_info },
+   { clear_attachments_4_dw_0_offt_out_mem_shader_code,
+     sizeof(clear_attachments_4_dw_0_offt_out_mem_shader_code),
+     &clear_attachments_4_dw_0_offt_out_mem_info },
+   { clear_attachments_4_dw_1_offt_out_reg_shader_code,
+     sizeof(clear_attachments_4_dw_1_offt_out_reg_shader_code),
+     &clear_attachments_4_dw_1_offt_out_reg_info },
+   { clear_attachments_4_dw_1_offt_out_mem_shader_code,
+     sizeof(clear_attachments_4_dw_1_offt_out_mem_shader_code),
+     &clear_attachments_4_dw_1_offt_out_mem_info },
+   { clear_attachments_4_dw_2_offt_out_reg_shader_code,
+     sizeof(clear_attachments_4_dw_2_offt_out_reg_shader_code),
+     &clear_attachments_4_dw_2_offt_out_reg_info },
+   { clear_attachments_4_dw_2_offt_out_mem_shader_code,
+     sizeof(clear_attachments_4_dw_2_offt_out_mem_shader_code),
+     &clear_attachments_4_dw_2_offt_out_mem_info },
+   { clear_attachments_4_dw_3_offt_out_reg_shader_code,
+     sizeof(clear_attachments_4_dw_3_offt_out_reg_shader_code),
+     &clear_attachments_4_dw_3_offt_out_reg_info },
+   { clear_attachments_4_dw_3_offt_out_mem_shader_code,
+     sizeof(clear_attachments_4_dw_3_offt_out_mem_shader_code),
+     &clear_attachments_4_dw_3_offt_out_mem_info },
+   { clear_attachments_4_dw_4_offt_out_reg_shader_code,
+     sizeof(clear_attachments_4_dw_4_offt_out_reg_shader_code),
+     &clear_attachments_4_dw_4_offt_out_reg_info },
+   { clear_attachments_4_dw_4_offt_out_mem_shader_code,
+     sizeof(clear_attachments_4_dw_4_offt_out_mem_shader_code),
+     &clear_attachments_4_dw_4_offt_out_mem_info },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
+   { NULL, 0, NULL },
 };
 
 #endif /* PVR_STATIC_SHADERS_H */

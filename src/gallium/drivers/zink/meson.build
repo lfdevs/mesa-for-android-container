@@ -49,7 +49,7 @@ zink_device_info = custom_target(
   input : ['zink_device_info.py'],
   output : ['zink_device_info.h', 'zink_device_info.c'],
   command : [
-    prog_python, '@INPUT@', '@OUTPUT@', join_paths(meson.source_root(), 'src/vulkan/registry/vk.xml')
+    prog_python, '@INPUT@', '@OUTPUT@', vk_api_xml
   ]
 )
 
@@ -58,7 +58,7 @@ zink_instance = custom_target(
   input : ['zink_instance.py'],
   output : ['zink_instance.h', 'zink_instance.c'],
   command : [
-    prog_python, '@INPUT@', '@OUTPUT@', join_paths(meson.source_root(), 'src/vulkan/registry/vk.xml')
+    prog_python, '@INPUT@', '@OUTPUT@', vk_api_xml
   ]
 )
 
@@ -76,11 +76,18 @@ zink_nir_algebraic_c = custom_target(
 zink_c_args = []
 inc_zink_vk = []
 
-# MoltenVK options
-if with_moltenvk_dir != ''
-  inc_zink_vk  = [inc_zink_vk, include_directories( join_paths(with_moltenvk_dir, 'include') )]
+if host_machine.system() == 'darwin'
+
+  # MoltenVK options
+  if with_moltenvk_dir != ''
+    inc_zink_vk += include_directories(join_paths(with_moltenvk_dir, 'include'))
+  else
+    error('moltenvk-dir is required but not set.')
+  endif
+
   zink_c_args += ['-x','objective-c'] # Put compiler into objective-C mode to allow for MacOS types, like IOSurface and CAMetalLayer
   zink_c_args += ['-iframework' , 'Foundation']
+
 endif
 
 libzink = static_library(

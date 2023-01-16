@@ -359,7 +359,7 @@ static inline void
 fd_batch_needs_flush(struct fd_batch *batch)
 {
    batch->needs_flush = true;
-   fd_fence_ref(&batch->ctx->last_fence, NULL);
+   fd_pipe_fence_ref(&batch->ctx->last_fence, NULL);
 }
 
 /* Since we reorder batches and can pause/resume queries (notably for disabling

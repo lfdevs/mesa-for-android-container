@@ -26,10 +26,15 @@ files_libintel_common = files(
   'intel_decoder.h',
   'intel_disasm.c',
   'intel_disasm.h',
+  'intel_engine_i915.c',
+  'intel_engine_i915.h',
   'intel_engine.c',
   'intel_engine.h',
+  'intel_gem_i915.c',
+  'intel_gem_i915.h',
   'intel_gem.c',
   'intel_gem.h',
+  'intel_genX_state.h',
   'intel_guardband.h',
   'intel_l3_config.c',
   'intel_l3_config.h',
@@ -93,7 +98,7 @@ if with_tests and not with_platform_android
     depend_files: gen_pack_header_deps
   )
 
-  genxml_path = join_paths(meson.source_root(),
+  genxml_path = join_paths(dir_source_root,
                            '@0@'.format(gentest_xml[0]))
 
   test(
@@ -124,7 +129,7 @@ if with_tests and not with_platform_android
       ],
       gnu_symbol_visibility : 'hidden',
       include_directories : [inc_include, inc_src, inc_intel],
-      link_with : [libintel_dev],
+      link_with : [libintel_dev, libintel_common],
       dependencies : [dep_libdrm, idep_gtest, idep_genxml, idep_mesautil],
       install : install_intel_gpu_tests,
     )

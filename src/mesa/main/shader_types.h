@@ -32,7 +32,7 @@
 #define SHADER_TYPES_H
 
 #include "main/config.h" /* for MAX_FEEDBACK_BUFFERS */
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/menums.h"
 #include "util/mesa-sha1.h"
 #include "compiler/shader_info.h"
@@ -604,16 +604,9 @@ struct gl_program
           */
          GLubyte ImageUnits[MAX_IMAGE_UNIFORMS];
 
-         /**
-          * Access qualifier specified in the shader for each image uniform
-          * index.  Either \c GL_READ_ONLY, \c GL_WRITE_ONLY, \c
-          * GL_READ_WRITE, or \c GL_NONE to indicate both read-only and
-          * write-only.
-          *
-          * It may be different, though only more strict than the value of
-          * \c gl_image_unit::Access for the corresponding image unit.
+         /** Access qualifier from linked shader
           */
-         GLenum16 ImageAccess[MAX_IMAGE_UNIFORMS];
+         enum gl_access_qualifier image_access[MAX_IMAGE_UNIFORMS];
 
          GLuint NumUniformBlocks;
          struct gl_uniform_block **UniformBlocks;
@@ -924,10 +917,9 @@ struct gl_bindless_image
    /** Whether this bindless image is bound to a unit. */
    GLboolean bound;
 
-   /** Access qualifier (GL_READ_WRITE, GL_READ_ONLY, GL_WRITE_ONLY, or
-    * GL_NONE to indicate both read-only and write-only)
+   /** Access qualifier from linked shader
     */
-   GLenum16 access;
+   enum gl_access_qualifier image_access;
 
    /** Pointer to the base of the data. */
    GLvoid *data;

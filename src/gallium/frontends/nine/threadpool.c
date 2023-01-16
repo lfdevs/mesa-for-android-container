@@ -34,7 +34,7 @@
 #include "hud/hud_context.h"
 #include "frontend/drm_driver.h"
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "threadpool.h"
 
 /* POSIX thread function */

@@ -34,9 +34,13 @@
 #include "util/blob.h"
 #include "util/format/u_format.h"
 #include "util/macros.h"
+#include "util/simple_mtx.h"
 
 #ifdef __cplusplus
 #include "mesa/main/config.h"
+#include "mesa/main/menums.h" /* for gl_texture_index, C++'s enum rules are broken */
+#include "util/glheader.h"
+#include "util/ralloc.h"
 #endif
 
 struct glsl_type;
@@ -289,10 +293,10 @@ enum {
 
 #ifdef __cplusplus
 } /* extern "C" */
+#endif
 
-#include "GL/gl.h"
-#include "util/ralloc.h"
-#include "mesa/main/menums.h" /* for gl_texture_index, C++'s enum rules are broken */
+/* C++ struct types for glsl */
+#ifdef __cplusplus
 
 struct glsl_type {
    GLenum gl_type;
@@ -1286,7 +1290,7 @@ public:
 
 private:
 
-   static mtx_t hash_mutex;
+   static simple_mtx_t hash_mutex;
 
    /**
     * ralloc context for the type itself.

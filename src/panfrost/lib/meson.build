@@ -59,10 +59,7 @@ endforeach
 foreach ver : ['7']
   libpanfrost_per_arch += static_library(
     'pan-arch-indirect-v' + ver,
-    [
-      'pan_indirect_dispatch.c',
-      'pan_indirect_draw.c',
-    ],
+    'pan_indirect_dispatch.c',
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_panfrost_hw],
     c_args : ['-DPAN_ARCH=' + ver],
     gnu_symbol_visibility : 'hidden',

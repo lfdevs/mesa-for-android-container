@@ -87,7 +87,7 @@ vmw_winsys_screen_deinit_mksstat(struct vmw_winsys_screen *vws)
       uint32_t expected = __atomic_load_n(&vws->mksstat_tls[i].pid, __ATOMIC_ACQUIRE);
 
       if (expected == -1U) {
-         fprintf(stderr, "%s encountered locked mksstat TLS entry at index %lu.\n", __FUNCTION__, i);
+         fprintf(stderr, "%s encountered locked mksstat TLS entry at index %lu.\n", __func__, i);
          continue;
       }
 
@@ -103,12 +103,12 @@ vmw_winsys_screen_deinit_mksstat(struct vmw_winsys_screen *vws)
          assert(vws->mksstat_tls[i].stat_id != -1UL);
 
          if (drmCommandWrite(vws->ioctl.drm_fd, DRM_VMW_MKSSTAT_REMOVE, &arg, sizeof(arg))) {
-            fprintf(stderr, "%s could not ioctl: %s\n", __FUNCTION__, strerror(errno));
+            fprintf(stderr, "%s could not ioctl: %s\n", __func__, strerror(errno));
          } else if (munmap(vws->mksstat_tls[i].stat_pages, vmw_svga_winsys_stats_len())) {
-            fprintf(stderr, "%s could not munmap: %s\n", __FUNCTION__, strerror(errno));
+            fprintf(stderr, "%s could not munmap: %s\n", __func__, strerror(errno));
          }
       } else {
-         fprintf(stderr, "%s encountered volatile mksstat TLS entry at index %lu.\n", __FUNCTION__, i);
+         fprintf(stderr, "%s encountered volatile mksstat TLS entry at index %lu.\n", __func__, i);
       }
    }
 }

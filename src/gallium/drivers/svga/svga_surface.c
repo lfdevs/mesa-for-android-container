@@ -28,7 +28,7 @@
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_bitmask.h"
 #include "util/format/u_format.h"
 #include "util/u_math.h"

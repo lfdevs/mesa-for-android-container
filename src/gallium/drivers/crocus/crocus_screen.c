@@ -223,6 +223,7 @@ crocus_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DOUBLES:
    case PIPE_CAP_MEMOBJ:
    case PIPE_CAP_IMAGE_STORE_FORMATTED:
+   case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
       return devinfo->ver >= 7;
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:

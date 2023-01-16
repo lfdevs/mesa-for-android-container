@@ -184,7 +184,7 @@ iris_emit_buffer_barrier_for(struct iris_batch *batch,
                              struct iris_bo *bo,
                              enum iris_domain access)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
    const struct brw_compiler *compiler = batch->screen->compiler;
 
    const bool access_via_l3 = iris_domain_is_l3_coherent(devinfo, access);

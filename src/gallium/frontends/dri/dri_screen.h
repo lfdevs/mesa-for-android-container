@@ -39,7 +39,7 @@
 #include "pipe/p_state.h"
 #include "frontend/api.h"
 #include "frontend/opencl_interop.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "postprocess/filters.h"
 #include "kopper_interface.h"
 
@@ -50,10 +50,46 @@ struct pipe_loader_device;
 struct dri_screen
 {
    /* st_api */
-   struct st_manager base;
+   struct pipe_frontend_screen base;
 
    /* dri */
-   __DRIscreen *sPriv;
+   /* Current screen's number */
+   int myNum;
+
+   void *loaderPrivate;
+
+   int max_gl_core_version;
+   int max_gl_compat_version;
+   int max_gl_es1_version;
+   int max_gl_es2_version;
+
+   const __DRIextension **extensions;
+
+   const __DRIswrastLoaderExtension *swrast_loader;
+   const __DRIkopperLoaderExtension *kopper_loader;
+
+   struct {
+       /* Flag to indicate that this is a DRI2 screen.  Many of the above
+        * fields will not be valid or initializaed in that case. */
+       const __DRIdri2LoaderExtension *loader;
+       const __DRIimageLookupExtension *image;
+       const __DRIuseInvalidateExtension *useInvalidate;
+       const __DRIbackgroundCallableExtension *backgroundCallable;
+   } dri2;
+
+   struct {
+       const __DRIimageLoaderExtension *loader;
+   } image;
+
+   struct {
+      const __DRImutableRenderBufferLoaderExtension *loader;
+   } mutableRenderBuffer;
+
+   driOptionCache optionInfo;
+   driOptionCache optionCache;
+
+   unsigned int api_mask;
+
    boolean throttle;
 
    struct st_config_options options;
@@ -95,19 +131,43 @@ struct dri_screen
    opencl_dri_event_release_t opencl_dri_event_release;
    opencl_dri_event_wait_t opencl_dri_event_wait;
    opencl_dri_event_get_fence_t opencl_dri_event_get_fence;
+
+   /* kopper */
+   struct pipe_screen *unwrapped_screen;
+   bool has_dmabuf;
+   bool has_modifiers;
+   bool is_sw;
+
+   struct dri_drawable *(*create_drawable)(struct dri_screen *screen,
+                                           const struct gl_config *glVis,
+                                           GLboolean pixmapBuffer,
+                                           void *loaderPrivate);
+
+   __DRIbuffer *(*allocate_buffer)(struct dri_screen *screen,
+                                   unsigned int attachment,
+                                   unsigned int format,
+                                   int width, int height);
+
+   void (*release_buffer)(__DRIbuffer *buffer);
 };
 
 /** cast wrapper */
 static inline struct dri_screen *
 dri_screen(__DRIscreen * sPriv)
 {
-   return (struct dri_screen *)sPriv->driverPrivate;
+   return (struct dri_screen *)sPriv;
+}
+
+static inline __DRIscreen *
+opaque_dri_screen(struct dri_screen *screen)
+{
+   return (__DRIscreen *)screen;
 }
 
 static inline const __DRIkopperLoaderExtension *
 dri_screen_get_kopper(struct dri_screen *screen)
 {
-   return screen->sPriv->kopper_loader;
+   return screen->kopper_loader;
 }
 
 struct __DRIimageRec {
@@ -137,14 +197,13 @@ struct __DRIimageRec {
    enum __DRIChromaSiting horizontal_siting;
    enum __DRIChromaSiting vertical_siting;
 
-   /* DRI loader screen */
-   __DRIscreen *sPriv;
+   struct dri_screen *screen;
 };
 
 static inline boolean
-dri_with_format(__DRIscreen * sPriv)
+dri_with_format(struct dri_screen *screen)
 {
-   const __DRIdri2LoaderExtension *loader = sPriv->dri2.loader;
+   const __DRIdri2LoaderExtension *loader = screen->dri2.loader;
 
    return loader
        && (loader->base.version >= 3)
@@ -167,7 +226,7 @@ void
 dri_destroy_screen_helper(struct dri_screen * screen);
 
 void
-dri_destroy_screen(__DRIscreen * sPriv);
+dri_destroy_screen(struct dri_screen *screen);
 
 extern const struct __DriverAPIRec dri_swrast_kms_driver_api;
 extern const __DRIextension *dri_swrast_kms_driver_extensions[];

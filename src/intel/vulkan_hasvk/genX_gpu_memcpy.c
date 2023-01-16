@@ -79,11 +79,6 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
       sbe.ForceVertexURBEntryReadLength = true;
       sbe.ForceVertexURBEntryReadOffset = true;
 #endif
-
-#if GFX_VER >= 9
-      for (unsigned i = 0; i < 32; i++)
-         sbe.AttributeActiveComponentFormat[i] = ACF_XYZW;
-#endif
    }
 
    /* Emit URB setup.  We tell it that the VS is active because we want it to
@@ -94,11 +89,6 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 
    genX(emit_urb_setup)(device, batch, l3_config,
                         VK_SHADER_STAGE_VERTEX_BIT, entry_size, NULL);
-
-#if GFX_VER >= 12
-   /* Disable Primitive Replication. */
-   anv_batch_emit(batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
-#endif
 
 #if GFX_VER >= 8
    anv_batch_emit(batch, GENX(3DSTATE_VF_TOPOLOGY), topo) {
@@ -138,9 +128,6 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
          .BufferStartingAddress = src,
          .BufferPitch = bs,
          .MOCS = anv_mocs(device, src.bo, 0),
-#if GFX_VER >= 12
-         .L3BypassDisable = true,
-#endif
 #if (GFX_VER >= 8)
          .BufferSize = size,
 #else
@@ -163,12 +150,7 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 
 
    anv_batch_emit(batch, GENX(3DSTATE_SO_BUFFER), sob) {
-#if GFX_VER < 12
       sob.SOBufferIndex = 0;
-#else
-      sob._3DCommandOpcode = 0;
-      sob._3DCommandSubOpcode = SO_BUFFER_INDEX_0_CMD;
-#endif
       sob.MOCS = anv_mocs(device, dst.bo, 0),
       sob.SurfaceBaseAddress = dst;
 
@@ -248,10 +230,6 @@ genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
    genX(emit_l3_config)(batch, device, cfg);
 
    anv_batch_emit(batch, GENX(PIPELINE_SELECT), ps) {
-#if GFX_VER >= 9
-      ps.MaskBits = GFX_VER >= 12 ? 0x13 : 3;
-      ps.MediaSamplerDOPClockGateEnable = GFX_VER >= 12;
-#endif
       ps.PipelineSelection = _3D;
    }
 
@@ -275,8 +253,7 @@ genX(emit_so_memcpy)(struct anv_memcpy_state *state,
                      struct anv_address dst, struct anv_address src,
                      uint32_t size)
 {
-   if (GFX_VER >= 8 && GFX_VER <= 9 &&
-       !anv_use_relocations(state->device->physical) &&
+   if (GFX_VER >= 8 && !anv_use_relocations(state->device->physical) &&
        anv_gfx8_9_vb_cache_range_needs_workaround(&state->vb_bound,
                                                   &state->vb_dirty,
                                                   src, size)) {

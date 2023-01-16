@@ -23,6 +23,9 @@ struct vn_queue {
    uint32_t index;
    uint32_t flags;
 
+   /* only used if renderer supports multiple timelines */
+   uint32_t ring_idx;
+
    /* wait fence used for vn_QueueWaitIdle */
    VkFence wait_fence;
 
@@ -64,6 +67,11 @@ struct vn_fence {
    } feedback;
 
    bool is_external;
+
+   /* ring_idx of the last queue submission (only used for permanent
+    * payload of external fences)
+    */
+   uint32_t ring_idx;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_fence,
                                base.base,
@@ -81,6 +89,11 @@ struct vn_semaphore {
    struct vn_sync_payload temporary;
 
    bool is_external;
+
+   /* ring_idx of the last queue submission (only used for permanent
+    * payload of external semaphores)
+    */
+   uint32_t ring_idx;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_semaphore,
                                base.base,

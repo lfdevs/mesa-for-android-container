@@ -1498,6 +1498,9 @@ build_explicit_io_load(nir_builder *b, nir_intrinsic_instr *intrin,
    if (op == nir_intrinsic_load_constant) {
       nir_intrinsic_set_base(load, 0);
       nir_intrinsic_set_range(load, b->shader->constant_data_size);
+   } else if (op == nir_intrinsic_load_kernel_input) {
+      nir_intrinsic_set_base(load, 0);
+      nir_intrinsic_set_range(load, b->shader->num_uniforms);
    } else if (mode == nir_var_mem_push_const) {
       /* Push constants are required to be able to be chased back to the
        * variable so we can provide a base/range.
@@ -1699,7 +1702,7 @@ build_explicit_io_store(nir_builder *b, nir_intrinsic_instr *intrin,
           mode == nir_var_function_temp)
          value = nir_b2b32(b, value);
       else
-         value = nir_b2i(b, value, 32);
+         value = nir_b2iN(b, value, 32);
    }
 
    store->src[0] = nir_src_for_ssa(value);
@@ -1879,9 +1882,9 @@ nir_explicit_io_address_from_deref(nir_builder *b, nir_deref_instr *deref,
        */
       if (deref->arr.in_bounds && deref->deref_type == nir_deref_type_array) {
          index = nir_u2u32(b, index);
-         offset = nir_u2u(b, nir_amul_imm(b, index, stride), offset_bit_size);
+         offset = nir_u2uN(b, nir_amul_imm(b, index, stride), offset_bit_size);
       } else {
-         index = nir_i2i(b, index, offset_bit_size);
+         index = nir_i2iN(b, index, offset_bit_size);
          offset = nir_amul_imm(b, index, stride);
       }
 

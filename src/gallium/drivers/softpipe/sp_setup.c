@@ -369,7 +369,7 @@ setup_sort_vertices(struct setup_context *setup,
 
       /*
       debug_printf("%s one-over-area %f  area %f  det %f\n",
-                   __FUNCTION__, setup->oneoverarea, area, det );
+                   __func__, setup->oneoverarea, area, det );
       */
       if (util_is_inf_or_nan(setup->oneoverarea))
          return FALSE;
@@ -677,7 +677,7 @@ subtriangle(struct setup_context *setup,
    finish_y -= sy;
 
    /*
-   debug_printf("%s %d %d\n", __FUNCTION__, start_y, finish_y);
+   debug_printf("%s %d %d\n", __func__, start_y, finish_y);
    */
 
    for (y = start_y; y < finish_y; y++) {
@@ -765,7 +765,7 @@ sp_setup_tri(struct setup_context *setup,
    
    det = calc_det(v0, v1, v2);
    /*
-   debug_printf("%s\n", __FUNCTION__ );
+   debug_printf("%s\n", __func__ );
    */
 
 #if DEBUG_FRAGS

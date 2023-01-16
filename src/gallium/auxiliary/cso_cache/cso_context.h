@@ -42,6 +42,18 @@ extern "C" {
 struct cso_context;
 struct u_vbuf;
 
+struct cso_context_base {
+   struct pipe_context *pipe;
+
+   /* This is equal to either pipe_context::draw_vbo or u_vbuf_draw_vbo. */
+   void (*draw_vbo)(struct pipe_context *pipe,
+                    const struct pipe_draw_info *info,
+                    unsigned drawid_offset,
+                    const struct pipe_draw_indirect_info *indirect,
+                    const struct pipe_draw_start_count_bias *draws,
+                    unsigned num_draws);
+};
+
 #define CSO_NO_USER_VERTEX_BUFFERS (1 << 0)
 #define CSO_NO_64B_VERTEX_BUFFERS  (1 << 1)
 #define CSO_NO_VBUF  (1 << 2)
@@ -54,9 +66,6 @@ cso_unbind_context(struct cso_context *ctx);
 
 void
 cso_destroy_context(struct cso_context *cso);
-
-struct pipe_context *
-cso_get_pipe_context(struct cso_context *cso);
 
 enum pipe_error
 cso_set_blend(struct cso_context *cso, const struct pipe_blend_state *blend);
@@ -210,27 +219,49 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
                                     const struct pipe_vertex_buffer *vbuffers);
 
 void
-cso_draw_vbo(struct cso_context *cso,
-             const struct pipe_draw_info *info,
-             unsigned drawid_offset,
-             const struct pipe_draw_indirect_info *indirect,
-             const struct pipe_draw_start_count_bias draw);
-
-/* info->draw_id can be changed by the callee if increment_draw_id is true. */
-void
-cso_multi_draw(struct cso_context *cso,
-               struct pipe_draw_info *info,
-               unsigned drawid_offset,
-               const struct pipe_draw_start_count_bias *draws,
-               unsigned num_draws);
-
-void
 cso_draw_arrays_instanced(struct cso_context *cso, uint mode,
                           uint start, uint count,
                           uint start_instance, uint instance_count);
 
 void
 cso_draw_arrays(struct cso_context *cso, uint mode, uint start, uint count);
+
+/* Inline functions. */
+
+static inline struct pipe_context *
+cso_get_pipe_context(struct cso_context *cso)
+{
+   struct cso_context_base *cso_base = (struct cso_context_base *)cso;
+
+   return cso_base->pipe;
+}
+
+static ALWAYS_INLINE void
+cso_draw_vbo(struct cso_context *cso,
+             struct pipe_draw_info *info,
+             unsigned drawid_offset,
+             const struct pipe_draw_indirect_info *indirect,
+             const struct pipe_draw_start_count_bias *draws,
+             unsigned num_draws)
+{
+   /* We can't have both indirect drawing and SO-vertex-count drawing */
+   assert(!indirect ||
+          indirect->buffer == NULL ||
+          indirect->count_from_stream_output == NULL);
+
+   /* We can't have SO-vertex-count drawing with an index buffer */
+   assert(info->index_size == 0 ||
+          !indirect ||
+          indirect->count_from_stream_output == NULL);
+
+   /* Indirect only uses indirect->draw_count, not num_draws. */
+   assert(!indirect || num_draws == 1);
+
+   struct cso_context_base *cso_base = (struct cso_context_base *)cso;
+
+   cso_base->draw_vbo(cso_base->pipe, info, drawid_offset, indirect, draws,
+                      num_draws);
+}
 
 #ifdef __cplusplus
 }

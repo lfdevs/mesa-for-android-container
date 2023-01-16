@@ -45,7 +45,6 @@ STABLE_EPHEMERAL=" \
       python3-setuptools \
       python3-wheel \
       software-properties-common \
-      wget \
       wine64-tools \
       xz-utils \
       "
@@ -57,6 +56,7 @@ apt-get install -y --no-remove --no-install-recommends \
       pciutils \
       python3-lxml \
       python3-simplejson \
+      wget \
       xinit \
       xserver-xorg-video-amdgpu \
       xserver-xorg-video-ati

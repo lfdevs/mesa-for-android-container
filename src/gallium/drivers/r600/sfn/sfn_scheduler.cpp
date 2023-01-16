@@ -806,8 +806,8 @@ BlockSheduler::collect_ready_alu_vec(std::list<AluInstr *>& ready,
    }
 
    int max_check = 0;
-   while (i != e && max_check++ < 32) {
-      if (ready.size() < 32 && (*i)->ready()) {
+   while (i != e && max_check++ < 64) {
+      if (ready.size() < 64 && (*i)->ready()) {
 
          int priority = 0;
          /* LDS fetches that use static offsets are usually ready ery fast,
@@ -870,43 +870,43 @@ template <typename T> struct type_char {
 };
 
 template <> struct type_char<AluInstr> {
-   static const char value() { return 'A';};
+   static char value() { return 'A';};
 };
 
 template <> struct type_char<AluGroup> {
-   static const char value() { return 'G';};
+   static char value() { return 'G';};
 };
 
 template <> struct type_char<ExportInstr> {
-   static const char value() { return 'E';};
+   static char value() { return 'E';};
 };
 
 template <> struct type_char<TexInstr> {
-   static const char value() { return 'T';};
+   static char value() { return 'T';};
 };
 
 template <> struct type_char<FetchInstr> {
-   static const char value() { return 'F';};
+   static char value() { return 'F';};
 };
 
 template <> struct type_char<WriteOutInstr> {
-   static const char value() { return 'M';};
+   static char value() { return 'M';};
 };
 
 template <> struct type_char<MemRingOutInstr> {
-   static const char value() { return 'R';};
+   static char value() { return 'R';};
 };
 
 template <> struct type_char<WriteTFInstr> {
-   static const char value() { return 'X';};
+   static char value() { return 'X';};
 };
 
 template <> struct type_char<GDSInstr> {
-   static const char value() { return 'S';};
+   static char value() { return 'S';};
 };
 
 template <> struct type_char<RatInstr> {
-   static const char value() { return 'I';};
+   static char value() { return 'I';};
 };
 
 template <typename T>

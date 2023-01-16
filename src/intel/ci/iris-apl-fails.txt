@@ -1,1 +1,16 @@
-dEQP-EGL.functional.sharing.gles2.multithread.random.images.copyteximage2d.12,Crash
+# EGL_BAD_DISPLAY is generated if display is not an EGL display connection
+# eglCreatePixmapSurface(0, 0x0000000000000000, 0x0000000000000000, { EGL_NONE });
+# // 0x0000000000000000 returned
+# eglCreatePixmapSurface(0xffffffffffffffff, 0x0000000000000000, 0x0000000000000000, { EGL_NONE });
+# // 0x0000000000000000 returned
+# EGL_BAD_CONFIG or EGL_BAD_PARAMETER is generated if config is not an EGL frame buffer configuration or if the PixmapSurface call is not supported
+# eglCreatePixmapSurface(0xaaab01f31100, 0xffffffffffffffff, 0x0000000000000000, { EGL_NONE });
+# // 0x0000000000000000 returned
+# // ERROR expected: EGL_BAD_CONFIG or EGL_BAD_PARAMETER, Got: EGL_BAD_NATIVE_PIXMAP
+wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail
+# Excerpt:
+# Image comparison failed: reference = -0.000488281, expected = 0:0:0:0, result = 0:0:0:3
+# Image comparison failed: reference = 0, expected = 0:0:0:0, result = 0:0:0:3
+# Image comparison failed: reference = 0.000488281, expected = 0:1:0:0, result = 0:1:0:3
+# Image comparison failed: reference = 0.000976562, expected = 1:1:0:0, result = 1:1:0:3
+wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail

@@ -5,7 +5,7 @@ Downloading
 -----------
 
 You can download the released versions of Mesa via
-`HTTPS <https://mesa.freedesktop.org/archive/>`__ or
+`HTTPS <https://archive.mesa3d.org/>`__ or
 `FTP <ftp://ftp.freedesktop.org/pub/mesa/>`__.
 
 Our release tarballs are GPG-signed, and the public keys are available

@@ -114,8 +114,14 @@ vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target)
       return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
-   if (!surf->feedback) {
-      // No outstanding operation: nothing to do.
+   /* This is checked before getting the context below as
+    * surf->ctx is only set in begin_frame
+    * and not when the surface is created
+    * Some apps try to sync/map the surface right after creation and
+    * would get VA_STATUS_ERROR_INVALID_CONTEXT
+    */
+   if ((!surf->feedback) && (!surf->fence)) {
+      // No outstanding encode/decode operation: nothing to do.
       mtx_unlock(&drv->mutex);
       return VA_STATUS_SUCCESS;
    }
@@ -126,7 +132,18 @@ vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
 
-   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
+   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
+      int ret = 0;
+
+      if (context->decoder->get_decoder_fence)
+         ret = context->decoder->get_decoder_fence(context->decoder,
+                                                   surf->fence,
+                                                   PIPE_DEFAULT_DECODER_FEEDBACK_TIMEOUT_NS);
+
+      mtx_unlock(&drv->mutex);
+      // Assume that the GPU has hung otherwise.
+      return ret ? VA_STATUS_SUCCESS : VA_STATUS_ERROR_TIMEDOUT;
+   } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
       if (!drv->pipe->screen->get_video_param(drv->pipe->screen,
                               context->decoder->profile,
                               context->decoder->entrypoint,
@@ -176,6 +193,19 @@ vlVaQuerySurfaceStatus(VADriverContextP ctx, VASurfaceID render_target, VASurfac
       return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
+   /* This is checked before getting the context below as
+    * surf->ctx is only set in begin_frame
+    * and not when the surface is created
+    * Some apps try to sync/map the surface right after creation and
+    * would get VA_STATUS_ERROR_INVALID_CONTEXT
+    */
+   if ((!surf->feedback) && (!surf->fence)) {
+      // No outstanding encode/decode operation: nothing to do.
+      *status = VASurfaceReady;
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_SUCCESS;
+   }
+
    context = handle_table_get(drv->htab, surf->ctx);
    if (!context) {
       mtx_unlock(&drv->mutex);
@@ -187,6 +217,25 @@ vlVaQuerySurfaceStatus(VADriverContextP ctx, VASurfaceID render_target, VASurfac
          *status=VASurfaceReady;
       else
          *status=VASurfaceRendering;
+   } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
+      int ret = 0;
+
+      if (context->decoder->get_decoder_fence)
+         ret = context->decoder->get_decoder_fence(context->decoder,
+                                                   surf->fence, 0);
+
+      if (ret)
+         *status = VASurfaceReady;
+      else
+      /* An approach could be to just tell the client that this is not
+       * implemented, but this breaks other code.  Compromise by at least
+       * conservatively setting the status to VASurfaceRendering if we can't
+       * query the hardware.  Note that we _must_ set the status here, otherwise
+       * it comes out of the function unchanged. As we are returning
+       * VA_STATUS_SUCCESS, the client would be within his/her rights to use a
+       * potentially uninitialized/invalid status value unknowingly.
+       */
+         *status = VASurfaceRendering;
    }
 
    mtx_unlock(&drv->mutex);
@@ -489,36 +538,52 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
          }
       }
    }
-   if (config->rt_format & VA_RT_FORMAT_YUV420) {
+   if (config->profile == PIPE_VIDEO_PROFILE_AV1_MAIN &&
+         config->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
       attribs[i].type = VASurfaceAttribPixelFormat;
       attribs[i].value.type = VAGenericValueTypeInteger;
       attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
       attribs[i].value.value.i = VA_FOURCC_NV12;
       i++;
-   }
-
-   if (config->rt_format & VA_RT_FORMAT_YUV400) {
       attribs[i].type = VASurfaceAttribPixelFormat;
       attribs[i].value.type = VAGenericValueTypeInteger;
       attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
-      attribs[i].value.value.i = VA_FOURCC_Y800;
+      attribs[i].value.value.i = VA_FOURCC_P010;
       i++;
-   }
+   } else {
+      if (config->rt_format & VA_RT_FORMAT_YUV420) {
+         attribs[i].type = VASurfaceAttribPixelFormat;
+         attribs[i].value.type = VAGenericValueTypeInteger;
+         attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
+         attribs[i].value.value.i = VA_FOURCC_NV12;
+         i++;
+      }
 
-   if (config->rt_format & VA_RT_FORMAT_YUV422) {
-      attribs[i].type = VASurfaceAttribPixelFormat;
-      attribs[i].value.type = VAGenericValueTypeInteger;
-      attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
-      attribs[i].value.value.i = VA_FOURCC_YUY2;
-      i++;
-   }
+      if (config->profile == PIPE_VIDEO_PROFILE_JPEG_BASELINE) {
+         if (config->rt_format & VA_RT_FORMAT_YUV400) {
+            attribs[i].type = VASurfaceAttribPixelFormat;
+            attribs[i].value.type = VAGenericValueTypeInteger;
+            attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
+            attribs[i].value.value.i = VA_FOURCC_Y800;
+            i++;
+         }
 
-   if (config->rt_format & VA_RT_FORMAT_YUV444) {
-      attribs[i].type = VASurfaceAttribPixelFormat;
-      attribs[i].value.type = VAGenericValueTypeInteger;
-      attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
-      attribs[i].value.value.i = VA_FOURCC_444P;
-      i++;
+         if (config->rt_format & VA_RT_FORMAT_YUV422) {
+            attribs[i].type = VASurfaceAttribPixelFormat;
+            attribs[i].value.type = VAGenericValueTypeInteger;
+            attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
+            attribs[i].value.value.i = VA_FOURCC_YUY2;
+            i++;
+         }
+
+         if (config->rt_format & VA_RT_FORMAT_YUV444) {
+            attribs[i].type = VASurfaceAttribPixelFormat;
+            attribs[i].value.type = VAGenericValueTypeInteger;
+            attribs[i].flags = VA_SURFACE_ATTRIB_GETTABLE | VA_SURFACE_ATTRIB_SETTABLE;
+            attribs[i].value.value.i = VA_FOURCC_444P;
+            i++;
+         }
+      }
    }
 
    if (config->rt_format & VA_RT_FORMAT_YUV420_10 ||

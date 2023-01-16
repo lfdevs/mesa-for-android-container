@@ -131,37 +131,12 @@ glx_dri3_flush_drawable(struct loader_dri3_drawable *draw, unsigned flags)
    loader_dri3_flush(draw, flags, __DRI2_THROTTLE_SWAPBUFFER);
 }
 
-static void
-glx_dri3_show_fps(struct loader_dri3_drawable *draw, uint64_t current_ust)
-{
-   struct dri3_drawable *priv = loader_drawable_to_dri3_drawable(draw);
-   const uint64_t interval =
-      ((struct dri3_screen *) priv->base.psc)->show_fps_interval;
-
-   if (!interval)
-      return;
-
-   priv->frames++;
-
-   /* DRI3+Present together uses microseconds for UST. */
-   if (priv->previous_ust + interval * 1000000 <= current_ust) {
-      if (priv->previous_ust) {
-         fprintf(stderr, "libGL: FPS = %.2f\n",
-                 ((uint64_t) priv->frames * 1000000) /
-                 (double)(current_ust - priv->previous_ust));
-      }
-      priv->frames = 0;
-      priv->previous_ust = current_ust;
-   }
-}
-
 static const struct loader_dri3_vtable glx_dri3_vtable = {
    .set_drawable_size = glx_dri3_set_drawable_size,
    .in_current_context = glx_dri3_in_current_context,
    .get_dri_context = glx_dri3_get_dri_context,
    .get_dri_screen = glx_dri3_get_dri_screen,
    .flush_drawable = glx_dri3_flush_drawable,
-   .show_fps = glx_dri3_show_fps,
 };
 
 
@@ -176,7 +151,7 @@ dri3_destroy_context(struct glx_context *context)
 
    free((char *) context->extensions);
 
-   (*psc->core->destroyContext) (context->driContext);
+   psc->core->destroyContext(context->driContext);
 
    free(context);
 }
@@ -204,7 +179,7 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
    else if (read != None)
       return GLXBadDrawable;
 
-   if (!(*psc->core->bindContext) (context->driContext, dri_draw, dri_read))
+   if (!psc->core->bindContext(context->driContext, dri_draw, dri_read))
       return GLXBadContext;
 
    if (dri_draw)
@@ -220,7 +195,7 @@ dri3_unbind_context(struct glx_context *context, struct glx_context *new)
 {
    struct dri3_screen *psc = (struct dri3_screen *) context->psc;
 
-   (*psc->core->unbindContext) (context->driContext);
+   psc->core->unbindContext(context->driContext);
 }
 
 static struct glx_context *
@@ -309,7 +284,7 @@ dri3_create_context_attribs(struct glx_screen *base,
    pcp->renderType = dca.render_type;
 
    pcp->driContext =
-      (*psc->image_driver->createContextAttribs) (psc->driScreen,
+      psc->image_driver->createContextAttribs(psc->driScreen,
                                                   dca.api,
                                                   config ? config->driConfig
                                                          : NULL,
@@ -618,12 +593,12 @@ dri3_destroy_screen(struct glx_screen *base)
    if (psc->is_different_gpu) {
       if (psc->driScreenDisplayGPU) {
          loader_dri3_close_screen(psc->driScreenDisplayGPU);
-         (*psc->core->destroyScreen) (psc->driScreenDisplayGPU);
+         psc->core->destroyScreen(psc->driScreenDisplayGPU);
       }
       close(psc->fd_display_gpu);
    }
    loader_dri3_close_screen(psc->driScreen);
-   (*psc->core->destroyScreen) (psc->driScreen);
+   psc->core->destroyScreen(psc->driScreen);
    driDestroyConfigs(psc->driver_configs);
    close(psc->fd);
    free(psc);
@@ -678,7 +653,7 @@ dri3_bind_tex_image(__GLXDRIdrawable *base,
 
       XSync(gc->currentDpy, false);
 
-      (*psc->texBuffer->setTexBuffer2) (gc->driContext,
+      psc->texBuffer->setTexBuffer2(gc->driContext,
                                         pdraw->base.textureTarget,
                                         pdraw->base.textureFormat,
                                         pdraw->loader_drawable.dri_drawable);
@@ -697,7 +672,7 @@ dri3_release_tex_image(__GLXDRIdrawable *base, int buffer)
 
       if (psc->texBuffer->base.version >= 3 &&
           psc->texBuffer->releaseTexBuffer != NULL)
-         (*psc->texBuffer->releaseTexBuffer) (gc->driContext,
+         psc->texBuffer->releaseTexBuffer(gc->driContext,
                                               pdraw->base.textureTarget,
                                               pdraw->loader_drawable.dri_drawable);
    }
@@ -739,6 +714,7 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
 
    __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context");
    __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context_profile");
+   __glXEnableDirectExtension(&psc->base, "GLX_ARB_create_context_no_error");
    __glXEnableDirectExtension(&psc->base, "GLX_EXT_no_config_context");
 
    if ((mask & ((1 << __DRI_API_GLES) |
@@ -749,6 +725,15 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
       __glXEnableDirectExtension(&psc->base,
                                  "GLX_EXT_create_context_es2_profile");
    }
+
+   static const struct dri_extension_match exts[] = {
+       { __DRI2_RENDERER_QUERY, 1, offsetof(struct dri3_screen, rendererQuery), true },
+       { __DRI2_FLUSH, 1, offsetof(struct dri3_screen, f), true },
+       { __DRI_IMAGE, 1, offsetof(struct dri3_screen, image), true },
+       { __DRI2_INTEROP, 1, offsetof(struct dri3_screen, interop), true },
+       { __DRI2_CONFIG_QUERY, 1, offsetof(struct dri3_screen, config), true },
+   };
+   loader_bind_extensions(psc, exts, ARRAY_SIZE(exts), extensions);
 
    for (i = 0; extensions[i]; i++) {
       /* when on a different gpu than the server, the server pixmaps
@@ -761,39 +746,17 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
          __glXEnableDirectExtension(&psc->base, "GLX_EXT_texture_from_pixmap");
       }
 
-      if ((strcmp(extensions[i]->name, __DRI2_FLUSH) == 0)) {
-         psc->f = (__DRI2flushExtension *) extensions[i];
-         /* internal driver extension, no GL extension exposed */
-      }
-
-      if (strcmp(extensions[i]->name, __DRI_IMAGE) == 0)
-         psc->image = (__DRIimageExtension *) extensions[i];
-
-      if ((strcmp(extensions[i]->name, __DRI2_CONFIG_QUERY) == 0))
-         psc->config = (__DRI2configQueryExtension *) extensions[i];
-
       if (strcmp(extensions[i]->name, __DRI2_ROBUSTNESS) == 0)
          __glXEnableDirectExtension(&psc->base,
                                     "GLX_ARB_create_context_robustness");
-
-      if (strcmp(extensions[i]->name, __DRI2_RENDERER_QUERY) == 0) {
-         psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];
-         __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
-         unsigned int no_error = 0;
-         if (psc->rendererQuery->queryInteger(psc->driScreen,
-                                              __DRI2_RENDERER_HAS_NO_ERROR_CONTEXT,
-                                              &no_error) == 0 && no_error)
-             __glXEnableDirectExtension(&psc->base,
-                                        "GLX_ARB_create_context_no_error");
-      }
-
-      if (strcmp(extensions[i]->name, __DRI2_INTEROP) == 0)
-	 psc->interop = (__DRI2interopExtension*)extensions[i];
 
       if (strcmp(extensions[i]->name, __DRI2_FLUSH_CONTROL) == 0)
          __glXEnableDirectExtension(&psc->base,
                                     "GLX_ARB_context_flush_control");
    }
+
+   if (psc->rendererQuery)
+      __glXEnableDirectExtension(&psc->base, "GLX_MESA_query_renderer");
 }
 
 static char *
@@ -836,7 +799,6 @@ dri3_create_screen(int screen, struct glx_display * priv)
    __GLXDRIscreen *psp;
    struct glx_config *configs = NULL, *visuals = NULL;
    char *driverName, *driverNameDisplayGPU, *tmp;
-   int i;
 
    psc = calloc(1, sizeof *psc);
    if (psc == NULL)
@@ -881,23 +843,13 @@ dri3_create_screen(int screen, struct glx_display * priv)
    if (extensions == NULL)
       goto handle_error;
 
-   for (i = 0; extensions[i]; i++) {
-      if (strcmp(extensions[i]->name, __DRI_CORE) == 0)
-         psc->core = (__DRIcoreExtension *) extensions[i];
-      if (strcmp(extensions[i]->name, __DRI_IMAGE_DRIVER) == 0)
-         psc->image_driver = (__DRIimageDriverExtension *) extensions[i];
-   }
-
-
-   if (psc->core == NULL) {
-      ErrorMessageF("core dri driver extension not found\n");
+   static const struct dri_extension_match exts[] = {
+       { __DRI_CORE, 1, offsetof(struct dri3_screen, core), false },
+       { __DRI_IMAGE_DRIVER, 1, offsetof(struct dri3_screen, image_driver), false },
+       { __DRI_MESA, 1, offsetof(struct dri3_screen, mesa), false },
+   };
+   if (!loader_bind_extensions(psc, exts, ARRAY_SIZE(exts), extensions))
       goto handle_error;
-   }
-
-   if (psc->image_driver == NULL) {
-      ErrorMessageF("image driver extension not found\n");
-      goto handle_error;
-   }
 
    if (psc->is_different_gpu) {
       driverNameDisplayGPU = loader_get_driver_for_fd(psc->fd_display_gpu);
@@ -1043,11 +995,6 @@ dri3_create_screen(int screen, struct glx_display * priv)
    }
 
    free(driverName);
-
-   tmp = getenv("LIBGL_SHOW_FPS");
-   psc->show_fps_interval = tmp ? atoi(tmp) : 0;
-   if (psc->show_fps_interval < 0)
-      psc->show_fps_interval = 0;
 
    InfoMessageF("Using DRI3 for screen %d\n", screen);
 

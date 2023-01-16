@@ -67,9 +67,6 @@ struct fd6_context {
    struct fd_bo *control_mem;
    uint32_t seqno;
 
-   struct u_upload_mgr *border_color_uploader;
-   struct pipe_resource *border_color_buf;
-
    /* pre-backed stateobj for stream-out disable: */
    struct fd_ringbuffer *streamout_disable_stateobj;
 
@@ -82,14 +79,23 @@ struct fd6_context {
    /* cached stateobjs to avoid hashtable lookup when not dirty: */
    const struct fd6_program_state *prog;
 
+   /* We expect to see a finite # of unique border-color entry values,
+    * which are a function of the color value and (to a limited degree)
+    * the border color format.  These unique border-color entry values
+    * get populated into a global border-color buffer, and a hash-table
+    * is used to map to the matching entry in the table.
+    */
+   struct hash_table *bcolor_cache;
+   struct fd_bo *bcolor_mem;
+
    uint16_t tex_seqno;
    struct hash_table *tex_cache;
 
    struct {
-      /* previous binning/draw lrz state, which is a function of multiple
-       * gallium stateobjs, but doesn't necessarily change as frequently:
+      /* previous lrz state, which is a function of multiple gallium
+       * stateobjs, but doesn't necessarily change as frequently:
        */
-      struct fd6_lrz_state lrz[2];
+      struct fd6_lrz_state lrz;
    } last;
 };
 

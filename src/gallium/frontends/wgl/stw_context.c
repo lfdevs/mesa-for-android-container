@@ -25,6 +25,8 @@
  *
  **************************************************************************/
 
+#include "state_tracker/st_context.h"
+
 #include <windows.h>
 
 #define WGL_WGLEXT_PROTOTYPES
@@ -48,15 +50,16 @@
 #include "stw_context.h"
 #include "stw_tls.h"
 
+#include "main/context.h"
 
 struct stw_context *
 stw_current_context(void)
 {
-   struct st_context_iface *st;
+   struct st_context *st;
 
    st = (stw_dev) ? st_api_get_current() : NULL;
 
-   return (struct stw_context *) ((st) ? st->st_manager_private : NULL);
+   return (struct stw_context *) ((st) ? st->frontend_context : NULL);
 }
 
 
@@ -104,8 +107,8 @@ DrvShareLists(DHGLRC dhglrc1, DHGLRC dhglrc2)
    ctx1 = stw_lookup_context_locked( dhglrc1 );
    ctx2 = stw_lookup_context_locked( dhglrc2 );
 
-   if (ctx1 && ctx2 && ctx2->st->share) {
-      ret = ctx2->st->share(ctx2->st, ctx1->st);
+   if (ctx1 && ctx2) {
+      ret = _mesa_share_state(ctx2->st->ctx, ctx1->st->ctx);
       ctx1->shared = TRUE;
       ctx2->shared = TRUE;
    }
@@ -133,7 +136,7 @@ DrvCreateLayerContext(HDC hdc, INT iLayerPlane)
    if (!pfi)
       return 0;
 
-   struct stw_context *ctx = stw_create_context_attribs(hdc, iLayerPlane, NULL, stw_dev->smapi, 1, 0, 0,
+   struct stw_context *ctx = stw_create_context_attribs(hdc, iLayerPlane, NULL, stw_dev->fscreen, 1, 0, 0,
                                                         WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
                                                         pfi, WGL_NO_RESET_NOTIFICATION_ARB);
    if (!ctx)
@@ -152,7 +155,7 @@ DrvCreateLayerContext(HDC hdc, INT iLayerPlane)
  */
 struct stw_context *
 stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCtx,
-                           struct st_manager *smapi,
+                           struct pipe_frontend_screen *fscreen,
                            int majorVersion, int minorVersion,
                            int contextFlags, int profileMask,
                            const struct stw_pixelformat_info *pfi,
@@ -190,9 +193,9 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCt
    if (contextFlags & WGL_CONTEXT_DEBUG_BIT_ARB)
       attribs.flags |= ST_CONTEXT_FLAG_DEBUG;
    if (contextFlags & WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB)
-      attribs.flags |= ST_CONTEXT_FLAG_ROBUST_ACCESS;
+      attribs.context_flags |= PIPE_CONTEXT_ROBUST_BUFFER_ACCESS;
    if (resetStrategy != WGL_NO_RESET_NOTIFICATION_ARB)
-      attribs.flags |= ST_CONTEXT_FLAG_RESET_NOTIFICATION_ENABLED;
+      attribs.context_flags |= PIPE_CONTEXT_LOSE_CONTEXT_ON_RESET;
 
    switch (profileMask) {
    case WGL_CONTEXT_CORE_PROFILE_BIT_ARB:
@@ -204,7 +207,7 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCt
        *     of the context is determined solely by the requested version."
        */
       if (majorVersion > 3 || (majorVersion == 3 && minorVersion >= 2)) {
-         attribs.profile = ST_PROFILE_OPENGL_CORE;
+         attribs.profile = API_OPENGL_CORE;
          break;
       }
       FALLTHROUGH;
@@ -225,13 +228,13 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCt
        * GL_ARB_compatibility, so returning a core profile here does more harm
        * than good.
        */
-      attribs.profile = ST_PROFILE_DEFAULT;
+      attribs.profile = API_OPENGL_COMPAT;
       break;
    case WGL_CONTEXT_ES_PROFILE_BIT_EXT:
       if (majorVersion >= 2) {
-         attribs.profile = ST_PROFILE_OPENGL_ES2;
+         attribs.profile = API_OPENGLES2;
       } else {
-         attribs.profile = ST_PROFILE_OPENGL_ES1;
+         attribs.profile = API_OPENGLES;
       }
       break;
    default:
@@ -242,14 +245,15 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCt
    attribs.options = stw_dev->st_options;
 
    ctx->st = st_api_create_context(
-         smapi, &attribs, &ctx_err, shareCtx ? shareCtx->st : NULL);
+         fscreen, &attribs, &ctx_err, shareCtx ? shareCtx->st : NULL);
    if (ctx->st == NULL)
       goto no_st_ctx;
 
-   ctx->st->st_manager_private = (void *) ctx;
+   ctx->st->frontend_context = (void *) ctx;
 
    if (ctx->st->cso_context) {
-      ctx->hud = hud_create(ctx->st->cso_context, ctx->st, NULL);
+      ctx->hud = hud_create(ctx->st->cso_context, NULL, ctx->st,
+                            st_context_invalidate_state);
    }
 
    return ctx;
@@ -298,7 +302,7 @@ stw_destroy_context(struct stw_context *ctx)
       hud_destroy(ctx->hud, NULL);
    }
 
-   ctx->st->destroy(ctx->st);
+   st_destroy_context(ctx->st);
    FREE(ctx);
 }
 
@@ -440,20 +444,20 @@ stw_make_current(struct stw_framebuffer *fb, struct stw_framebuffer *fbRead, str
       } else {
          if (old_ctx->shared) {
             if (old_ctx->current_framebuffer) {
-               stw_st_flush(old_ctx->st, old_ctx->current_framebuffer->stfb,
+               stw_st_flush(old_ctx->st, old_ctx->current_framebuffer->drawable,
                             ST_FLUSH_FRONT | ST_FLUSH_WAIT);
             } else {
                struct pipe_fence_handle *fence = NULL;
-               old_ctx->st->flush(old_ctx->st,
-                                  ST_FLUSH_FRONT | ST_FLUSH_WAIT, &fence,
-                                  NULL, NULL);
+               st_context_flush(old_ctx->st,
+                                ST_FLUSH_FRONT | ST_FLUSH_WAIT, &fence,
+                                NULL, NULL);
             }
          } else {
             if (old_ctx->current_framebuffer)
-               stw_st_flush(old_ctx->st, old_ctx->current_framebuffer->stfb,
+               stw_st_flush(old_ctx->st, old_ctx->current_framebuffer->drawable,
                             ST_FLUSH_FRONT);
             else
-               old_ctx->st->flush(old_ctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
+               st_context_flush(old_ctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
          }
       }
    }
@@ -488,8 +492,8 @@ stw_make_current(struct stw_framebuffer *fb, struct stw_framebuffer *fbRead, str
       ctx->current_read_framebuffer = fbRead;
 
       ret = st_api_make_current(ctx->st,
-                                fb ? fb->stfb : NULL,
-                                fbRead ? fbRead->stfb : NULL);
+                                fb ? fb->drawable : NULL,
+                                fbRead ? fbRead->drawable : NULL);
 
       /* Release the old framebuffers from this context. */
       release_old_framebuffers(old_fb, old_fbRead, ctx);
@@ -539,7 +543,7 @@ get_unlocked_refd_framebuffer_from_dc(HDC hDC)
        */
       int iPixelFormat = stw_pixelformat_guess(hDC);
       if (iPixelFormat)
-         fb = stw_framebuffer_create(WindowFromDC(hDC), stw_pixelformat_get_info(iPixelFormat), STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->smapi);
+         fb = stw_framebuffer_create(WindowFromDC(hDC), stw_pixelformat_get_info(iPixelFormat), STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->fscreen);
       if (!fb)
          return NULL;
    }
@@ -610,7 +614,7 @@ stw_make_current_by_handles(HDC hDrawDC, HDC hReadDC, DHGLRC dhglrc)
 void
 stw_notify_current_locked( struct stw_framebuffer *fb )
 {
-   p_atomic_inc(&fb->stfb->stamp);
+   p_atomic_inc(&fb->drawable->stamp);
 }
 
 

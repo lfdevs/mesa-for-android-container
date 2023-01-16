@@ -234,6 +234,10 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
             sysval = nir_u2u32(b, world_ray_in.inst_leaf_ptr);
             break;
 
+         case nir_intrinsic_load_cull_mask:
+            sysval = nir_u2u32(b, world_ray_in.ray_mask);
+            break;
+
          case nir_intrinsic_load_ray_geometry_index: {
             nir_ssa_def *geometry_index_dw =
                nir_load_global(b, nir_iadd_imm(b, hit_in.prim_leaf_ptr, 4), 4,

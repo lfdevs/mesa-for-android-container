@@ -854,11 +854,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 
 	desc = util_format_description(surf->base.format);
 
-	for (i = 0; i < 4; i++) {
-		if (desc->channel[i].type != UTIL_FORMAT_TYPE_VOID) {
-			break;
-		}
-	}
+	i = util_format_get_first_non_void_channel(surf->base.format);
 
 	ntype = V_0280A0_NUMBER_UNORM;
 	if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)

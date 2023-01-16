@@ -136,6 +136,11 @@ ValueFactory::allocate_registers(const exec_list *registers)
    return has_arrays;
 }
 
+int ValueFactory::new_register_index()
+{
+   return m_next_register_index++;
+}
+
 PRegister
 ValueFactory::allocate_pinned_register(int sel, int chan)
 {
@@ -143,6 +148,8 @@ ValueFactory::allocate_pinned_register(int sel, int chan)
       m_next_register_index = sel + 1;
 
    auto reg = new Register(sel, chan, pin_fully);
+   reg->set_flag(Register::pin_start);
+   reg->set_flag(Register::ssa);
    m_pinned_registers.push_back(reg);
    return reg;
 }
@@ -154,8 +161,11 @@ ValueFactory::allocate_pinned_vec4(int sel, bool is_ssa)
       m_next_register_index = sel + 1;
 
    RegisterVec4 retval(sel, is_ssa, {0, 1, 2, 3}, pin_fully);
-   for (int i = 0; i < 4; ++i)
+   for (int i = 0; i < 4; ++i) {
+      retval[i]->set_flag(Register::pin_start);
+      retval[i]->set_flag(Register::ssa);
       m_pinned_registers.push_back(retval[i]);
+   }
    return retval;
 }
 
@@ -278,7 +288,9 @@ ValueFactory::temp_register(int pinned_channel, bool is_ssa)
    auto reg = new Register(sel, chan, pinned_channel >= 0 ? pin_chan : pin_free);
    m_channel_counts.inc_count(chan);
 
-   reg->set_is_ssa(is_ssa);
+   if (is_ssa)
+      reg->set_flag(Register::ssa);
+
    m_registers[RegisterKey(sel, chan, vp_temp)] = reg;
    return reg;
 }
@@ -295,7 +307,7 @@ ValueFactory::temp_vec4(Pin pin, const RegisterVec4::Swizzle& swizzle)
 
    for (int i = 0; i < 4; ++i) {
       vec4[i] = new Register(sel, swizzle[i], pin);
-      vec4[i]->set_is_ssa(true);
+      vec4[i]->set_flag(Register::ssa);
       m_registers[RegisterKey(sel, swizzle[i], vp_temp)] = vec4[i];
    }
    return RegisterVec4(vec4[0], vec4[1], vec4[2], vec4[3], pin);
@@ -401,7 +413,7 @@ ValueFactory::dest(const nir_ssa_def& ssa, int chan, Pin pin_channel, uint8_t ch
 
    auto vreg = new Register(sel, chan, pin_channel);
    m_channel_counts.inc_count(chan);
-   vreg->set_is_ssa(true);
+   vreg->set_flag(Register::ssa);
    m_registers[key] = vreg;
    sfn_log << SfnLog::reg << "allocate Ssa " << key << ":" << *vreg << "\n";
    return vreg;
@@ -430,7 +442,7 @@ ValueFactory::undef(int index, int chan)
 {
    RegisterKey key(index, chan, vp_ssa);
    PRegister reg = new Register(m_next_register_index++, 0, pin_free);
-   reg->set_is_ssa(true);
+   reg->set_flag(Register::ssa);
    m_registers[key] = reg;
    return reg;
 }
@@ -505,7 +517,7 @@ ValueFactory::dest_vec(const nir_dest& dst, int num_components)
    std::vector<PRegister, Allocator<PRegister>> retval;
    retval.reserve(num_components);
    for (int i = 0; i < num_components; ++i)
-      retval.push_back(dest(dst, i, num_components > 1 ? pin_chan : pin_free));
+      retval.push_back(dest(dst, i, num_components > 1 ? pin_none : pin_free));
    return retval;
 }
 
@@ -685,9 +697,10 @@ ValueFactory::dest_from_string(const std::string& s)
    auto ireg = m_registers.find(key);
    if (ireg == m_registers.end()) {
       auto reg = new Register(sel, chan, p);
-      reg->set_is_ssa(is_ssa);
+      if (s[0] == 'S')
+         reg->set_flag(Register::ssa);
       if (p == pin_fully)
-         reg->pin_live_range(true);
+         reg->set_flag(Register::pin_start);
       m_registers[key] = reg;
       return reg;
    } else if (pool == vp_ignore) {
@@ -825,7 +838,8 @@ ValueFactory::dest_vec4_from_string(const std::string& s,
          assert(!is_ssa || pool == vp_ignore);
       } else {
          v[i] = new Register(sel, i, pin);
-         v[i]->set_is_ssa(is_ssa);
+         if (is_ssa)
+            v[i]->set_flag(Register::ssa);
          m_registers[key] = v[i];
       }
    }
@@ -861,7 +875,8 @@ ValueFactory::src_vec4_from_string(const std::string& s)
    for (int i = 0; i < 4; ++i) {
       if (!v[i]) {
          v[i] = new Register(sel, swz[i], pin);
-         v[i]->set_is_ssa(is_ssa);
+         if (is_ssa)
+            v[i]->set_flag(Register::ssa);
       } else {
          if (v[i]->pin() == pin_none)
             v[i]->set_pin(pin_group);

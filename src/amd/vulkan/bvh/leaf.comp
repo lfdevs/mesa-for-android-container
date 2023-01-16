@@ -184,7 +184,82 @@ struct AccelerationStructureInstance {
 };
 TYPE(AccelerationStructureInstance, 8);
 
-/* Returns whether the instance is active. */
+bool
+build_triangle(inout radv_aabb bounds, VOID_REF dst_ptr, uint32_t global_id)
+{
+   triangle_indices indices = load_indices(args.indices, args.index_format, global_id);
+
+   triangle_vertices vertices = load_vertices(args.data, indices, args.vertex_format, args.stride);
+
+   /* An inactive triangle is one for which the first (X) component of any vertex is NaN. If any
+    * other vertex component is NaN, and the first is not, the behavior is undefined. If the vertex
+    * format does not have a NaN representation, then all triangles are considered active.
+    */
+   if (isnan(vertices.vertex[0].x) || isnan(vertices.vertex[1].x) || isnan(vertices.vertex[2].x))
+      return false;
+
+   if (args.transform != NULL) {
+      mat4 transform = mat4(1.0);
+
+      for (uint32_t col = 0; col < 4; col++)
+         for (uint32_t row = 0; row < 3; row++)
+            transform[col][row] = DEREF(INDEX(float, args.transform, col + row * 4));
+
+      for (uint32_t i = 0; i < 3; i++)
+         vertices.vertex[i] = transform * vertices.vertex[i];
+   }
+
+   REF(radv_ir_triangle_node) node = REF(radv_ir_triangle_node)(dst_ptr);
+
+   bounds.min = vec3(INFINITY);
+   bounds.max = vec3(-INFINITY);
+
+   for (uint32_t coord = 0; coord < 3; coord++)
+      for (uint32_t comp = 0; comp < 3; comp++) {
+         DEREF(node).coords[coord][comp] = vertices.vertex[coord][comp];
+         bounds.min[comp] = min(bounds.min[comp], vertices.vertex[coord][comp]);
+         bounds.max[comp] = max(bounds.max[comp], vertices.vertex[coord][comp]);
+      }
+
+   DEREF(node).base.aabb = bounds;
+   DEREF(node).base.cost = 0.0;
+
+   DEREF(node).triangle_id = global_id;
+   DEREF(node).geometry_id_and_flags = args.geometry_id;
+   DEREF(node).id = 9;
+
+   return true;
+}
+
+bool
+build_aabb(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t global_id)
+{
+   REF(radv_ir_aabb_node) node = REF(radv_ir_aabb_node)(dst_ptr);
+
+   for (uint32_t vec = 0; vec < 2; vec++)
+      for (uint32_t comp = 0; comp < 3; comp++) {
+         float coord = DEREF(INDEX(float, src_ptr, comp + vec * 3));
+
+         if (vec == 0)
+            bounds.min[comp] = coord;
+         else
+            bounds.max[comp] = coord;
+      }
+
+   /* An inactive AABB is one for which the minimum X coordinate is NaN. If any other component is
+    * NaN, and the first is not, the behavior is undefined.
+    */
+   if (isnan(bounds.min.x))
+      return false;
+
+   DEREF(node).base.aabb = bounds;
+   DEREF(node).base.cost = 0.0;
+   DEREF(node).primitive_id = global_id;
+   DEREF(node).geometry_id_and_flags = args.geometry_id;
+
+   return true;
+}
+
 bool
 build_instance(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t global_id)
 {
@@ -193,6 +268,7 @@ build_instance(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint3
    AccelerationStructureInstance instance = DEREF(REF(AccelerationStructureInstance)(src_ptr));
    DEREF(node).base_ptr = instance.accelerationStructureReference;
 
+   /* An inactive instance is one whose acceleration structure handle is VK_NULL_HANDLE. */
    if (instance.accelerationStructureReference == 0)
       return false;
 
@@ -208,6 +284,7 @@ build_instance(inout radv_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint3
    DEREF(node).instance_id = global_id;
 
    DEREF(node).base.aabb = bounds;
+   DEREF(node).base.cost = 0.0;
 
    return true;
 }
@@ -237,60 +314,12 @@ main(void)
    VOID_REF dst_ptr = OFFSET(args.bvh, dst_offset);
 
    radv_aabb bounds;
-   bool is_active = true;
+   bool is_active;
    if (args.geometry_type == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
-      triangle_indices indices = load_indices(args.indices, args.index_format, global_id);
-
-      triangle_vertices vertices =
-         load_vertices(args.data, indices, args.vertex_format, args.stride);
-
-      if (args.transform != NULL) {
-         mat4 transform = mat4(1.0);
-
-         for (uint32_t col = 0; col < 4; col++)
-            for (uint32_t row = 0; row < 3; row++)
-               transform[col][row] = DEREF(INDEX(float, args.transform, col + row * 4));
-
-         for (uint32_t i = 0; i < 3; i++)
-            vertices.vertex[i] = transform * vertices.vertex[i];
-      }
-
-      REF(radv_ir_triangle_node) node = REF(radv_ir_triangle_node)(dst_ptr);
-
-      bounds.min = vec3(INFINITY);
-      bounds.max = vec3(-INFINITY);
-
-      for (uint32_t coord = 0; coord < 3; coord++)
-         for (uint32_t comp = 0; comp < 3; comp++) {
-            DEREF(node).coords[coord][comp] = vertices.vertex[coord][comp];
-            bounds.min[comp] = min(bounds.min[comp], vertices.vertex[coord][comp]);
-            bounds.max[comp] = max(bounds.max[comp], vertices.vertex[coord][comp]);
-         }
-
-      DEREF(node).base.aabb = bounds;
-
-      DEREF(node).triangle_id = global_id;
-      DEREF(node).geometry_id_and_flags = args.geometry_id;
-      DEREF(node).id = 9;
-
+      is_active = build_triangle(bounds, dst_ptr, global_id);
    } else if (args.geometry_type == VK_GEOMETRY_TYPE_AABBS_KHR) {
       VOID_REF src_ptr = OFFSET(args.data, src_offset);
-
-      REF(radv_ir_aabb_node) node = REF(radv_ir_aabb_node)(dst_ptr);
-
-      for (uint32_t vec = 0; vec < 2; vec++)
-         for (uint32_t comp = 0; comp < 3; comp++) {
-            float coord = DEREF(INDEX(float, src_ptr, comp + vec * 3));
-
-            if (vec == 0)
-               bounds.min[comp] = coord;
-            else
-               bounds.max[comp] = coord;
-         }
-
-      DEREF(node).base.aabb = bounds;
-      DEREF(node).primitive_id = global_id;
-      DEREF(node).geometry_id_and_flags = args.geometry_id;
+      is_active = build_aabb(bounds, src_ptr, dst_ptr, global_id);
    } else {
       VOID_REF src_ptr = OFFSET(args.data, src_offset);
       /* arrayOfPointers */

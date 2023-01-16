@@ -946,6 +946,18 @@ enum gl_frag_depth_layout
 };
 
 /**
+ * \brief Layout qualifiers for AMD_shader_early_and_late_fragment_tests.
+ */
+enum gl_frag_stencil_layout
+{
+   FRAG_STENCIL_LAYOUT_NONE, /**< No layout is specified. */
+   FRAG_STENCIL_LAYOUT_ANY,
+   FRAG_STENCIL_LAYOUT_GREATER,
+   FRAG_STENCIL_LAYOUT_LESS,
+   FRAG_STENCIL_LAYOUT_UNCHANGED
+};
+
+/**
  * \brief Buffer access qualifiers
  */
 enum gl_access_qualifier
@@ -1000,6 +1012,30 @@ enum gl_access_qualifier
 
    /** Execute instruction also in helpers. */
    ACCESS_INCLUDE_HELPERS = (1 << 8),
+
+   /**
+    * Whether the address bits are swizzled by the hw. This practically means
+    * that loads can't be vectorized and must be exactly 32 bits on some chips.
+    * The swizzle amount is determined by the descriptor.
+    */
+   ACCESS_IS_SWIZZLED_AMD = (1 << 9),
+
+   /**
+    * Whether an AMD-specific buffer intrinsic uses a format conversion.
+    *
+    * If unset, the intrinsic will access raw memory without any conversion.
+    *
+    * If set, the memory opcode performs a format conversion according to
+    * the format determined by the descriptor (in a manner identical to image
+    * buffers and sampler buffers).
+    */
+   ACCESS_USES_FORMAT_AMD = (1 << 10),
+
+   /**
+    * Whether a multi sample image load intrinsic uses sample index extracted
+    * from fragment mask buffer.
+    */
+   ACCESS_FMASK_LOWERED_AMD = (1 << 11),
 };
 
 /**

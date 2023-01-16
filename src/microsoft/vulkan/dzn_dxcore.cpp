@@ -25,8 +25,8 @@
 #include <directx/dxcore.h>
 #include <dxguids/dxguids.h>
 
-#include "u_dl.h"
-#include "log.h"
+#include "util/u_dl.h"
+#include "util/log.h"
 
 VkResult
 dzn_enumerate_physical_devices_dxcore(struct dzn_instance *instance)

@@ -43,14 +43,14 @@
 #include <inttypes.h>
 
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
 #include <emmintrin.h>
 #elif defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
 #include <altivec.h>
 #include "util/u_pwr8.h"
 #endif
 
-#if !defined(PIPE_ARCH_SSE)
+#if !DETECT_ARCH_SSE
 
 static inline int
 subpixel_snap(float a)
@@ -468,7 +468,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
 
    struct lp_rast_plane *plane = GET_PLANES(tri);
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
    if (1) {
       __m128i vertx, verty;
       __m128i shufx, shufy;
@@ -750,7 +750,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
 static inline uint32_t
 floor_pot(uint32_t n)
 {
-#if defined(PIPE_CC_GCC) && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64))
+#if DETECT_CC_GCC && (DETECT_ARCH_X86 || DETECT_ARCH_X86_64)
    if (n == 0)
       return 0;
 
@@ -1026,12 +1026,12 @@ calc_fixed_position(struct lp_setup_context *setup,
 {
    float pixel_offset = setup->multisample ? 0.0 : setup->pixel_offset;
    /*
-    * The rounding may not be quite the same with PIPE_ARCH_SSE
+    * The rounding may not be quite the same with DETECT_ARCH_SSE
     * (util_iround right now only does nearest/even on x87,
     * otherwise nearest/away-from-zero).
     * Both should be acceptable, I think.
     */
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
    __m128 v0r, v1r;
    __m128 vxy0xy2, vxy1xy0;
    __m128i vxy0xy2i, vxy1xy0i;

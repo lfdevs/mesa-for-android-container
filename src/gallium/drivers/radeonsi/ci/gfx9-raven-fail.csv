@@ -31,7 +31,6 @@ spec@!opengl 1.1@read-front samples=2,Fail
 spec@!opengl 1.1@read-front samples=4,Fail
 spec@!opengl 1.1@read-front samples=6,Fail
 spec@!opengl 1.1@read-front samples=8,Fail
-spec@arb_bindless_texture@compiler@images@arith-bound-image.frag,Crash
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail

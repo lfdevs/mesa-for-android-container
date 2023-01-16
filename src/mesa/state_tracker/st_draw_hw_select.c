@@ -31,7 +31,7 @@
 #include "nir.h"
 #include "nir_builtin_builder.h"
 
-#include "u_memory.h"
+#include "util/u_memory.h"
 
 union state_key {
    struct {
@@ -659,7 +659,9 @@ bool
 st_draw_hw_select_prepare_common(struct gl_context *ctx)
 {
    struct st_context *st = st_context(ctx);
-   if (st->gp || st->tcp || st->tep) {
+   if (ctx->GeometryProgram._Current ||
+       ctx->TessCtrlProgram._Current ||
+       ctx->TessEvalProgram._Current) {
       fprintf(stderr, "HW GL_SELECT does not support user geometry/tessellation shader\n");
       return false;
    }
@@ -736,7 +738,7 @@ make_state_key(struct gl_context *ctx, int mode)
    }
 
    /* TODO: support gl_ClipDistance/gl_CullDistance, but it costs more regs */
-   struct gl_program *vp = ctx->st->vp;
+   struct gl_program *vp = ctx->VertexProgram._Current;
    if (vp->info.clip_distance_array_size || vp->info.cull_distance_array_size) {
       fprintf(stderr, "HW GL_SELECT does not support gl_ClipDistance/gl_CullDistance\n");
       return (union state_key){0};

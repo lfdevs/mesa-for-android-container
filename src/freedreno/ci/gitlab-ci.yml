@@ -129,11 +129,7 @@ a530-traces:
   extends:
     - .lava-test:arm64
   variables:
-    DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
-    DTB: sc7180-trogdor-lazor-limozeen-nots-r5
     BOOT_METHOD: depthcharge
-    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
-    VK_DRIVER: freedreno
     KERNEL_IMAGE_TYPE: ""
     # Increase the hangcheck timer for our spilling tests which bump up against
     # the .5s default.
@@ -143,8 +139,12 @@ a618_vk:
   extends:
     - .a618-test
     - .turnip-rules
-  parallel: 9
+  parallel: 12
   variables:
+    DEVICE_TYPE: sc7180-trogdor-kingoftown
+    DTB: sc7180-trogdor-kingoftown-r1
+    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-kingoftown
+    VK_DRIVER: freedreno
     DEQP_SUITE: freedreno-a618-vk
     GPU_VERSION: freedreno-a618
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
@@ -162,6 +162,18 @@ a618_vk_full:
     FDO_CI_CONCURRENT: 4
     DEQP_SUITE: freedreno-a618-vk-full
     JOB_TIMEOUT: 120
+
+a618_gl:
+  extends:
+    - .a618-test
+    - .freedreno-rules
+  parallel: 4
+  variables:
+    DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
+    DTB: sc7180-trogdor-lazor-limozeen-nots-r5
+    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
+    DEQP_SUITE: freedreno-a618
+    GPU_VERSION: freedreno-a618
 
 .a630-test:
   extends:
@@ -184,8 +196,8 @@ a630_gl:
   variables:
     DEQP_SUITE: freedreno-a630
 
-# Robustness tests may be disruptive to other tests, so we run EGL's robustness
-# tests separately.
+# Run dEQP EGL window system tests separately with the window systems available.
+# X11 takes over the screen, wayland is run headless.
 a630_egl:
   extends:
     - .baremetal-deqp-test
@@ -193,7 +205,8 @@ a630_egl:
   variables:
     DEQP_VER: egl
     HWCI_START_XORG: 1
-    HWCI_TEST_SCRIPT: "/install/bare-metal/arm64_a630_egl.sh"
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: freedreno-a630-egl
 
 a630_gles_asan:
   extends:
@@ -209,13 +222,13 @@ a630_gles_asan:
 
 a630_skqp:
   extends:
-    - .skqp-test
+    - .baremetal-deqp-test
     - .a630-test
+    # SKQP tests both the GL and VK drivers.
     - .freedreno-turnip-rules
   variables:
-    # Possible skqp backends: gl, gles, unitTest and vk
-    SKQP_BACKENDS: gl gles vk unitTest  # space separated values
-    VK_DRIVER: freedreno
+    HWCI_START_XORG: 1
+    DEQP_SUITE: freedreno-a630-skqp
 
 a630_vk:
   extends:

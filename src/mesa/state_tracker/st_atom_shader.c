@@ -195,7 +195,7 @@ st_update_vp( struct st_context *st )
    assert(vp->Target == GL_VERTEX_PROGRAM_ARB);
 
    if (st->shader_has_one_variant[MESA_SHADER_VERTEX] &&
-       !st->vertdata_edgeflags) {
+       !st->ctx->Array._PerVertexEdgeFlagsEnabled) {
       st->vp_variant = st_common_variant(vp->variants);
    } else {
       struct st_common_variant_key key;
@@ -210,7 +210,7 @@ st_update_vp( struct st_context *st )
        * the input to the output.  We'll need to use similar logic to set
        * up the extra vertex_element input for edgeflags.
        */
-      key.passthrough_edgeflags = st->vertdata_edgeflags;
+      key.passthrough_edgeflags = st->ctx->Array._PerVertexEdgeFlagsEnabled;
 
       key.clamp_color = st->clamp_vert_color_in_shader &&
                         st->ctx->Light._ClampVertexColor &&

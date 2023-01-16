@@ -32,6 +32,7 @@
 #include "d3d12_screen.h"
 #include "d3d12_surface.h"
 
+#include "util/indices/u_primconvert.h"
 #include "util/u_debug.h"
 #include "util/u_draw.h"
 #include "util/u_helpers.h"
@@ -39,10 +40,6 @@
 #include "util/u_prim.h"
 #include "util/u_prim_restart.h"
 #include "util/u_math.h"
-
-extern "C" {
-#include "indices/u_primconvert.h"
-}
 
 static const D3D12_RECT MAX_SCISSOR = { D3D12_VIEWPORT_BOUNDS_MIN,
                                         D3D12_VIEWPORT_BOUNDS_MIN,
@@ -194,13 +191,10 @@ fill_sampler_descriptors(struct d3d12_context *ctx,
 {
    const struct d3d12_shader *shader = shader_sel->current;
    struct d3d12_batch *batch = d3d12_current_batch(ctx);
-   D3D12_CPU_DESCRIPTOR_HANDLE descs[PIPE_MAX_SHADER_SAMPLER_VIEWS];
-   struct d3d12_descriptor_handle table_start;
+   struct d3d12_sampler_desc_table_key view;
 
-   d2d12_descriptor_heap_get_next_handle(batch->sampler_heap, &table_start);
-
-   for (unsigned i = shader->begin_srv_binding; i < shader->end_srv_binding; i++)
-   {
+   view.count = 0;
+   for (unsigned i = shader->begin_srv_binding; i < shader->end_srv_binding; i++, view.count++) {
       struct d3d12_sampler_state *sampler;
 
       if (i == shader->pstipple_binding) {
@@ -212,15 +206,32 @@ fill_sampler_descriptors(struct d3d12_context *ctx,
       unsigned desc_idx = i - shader->begin_srv_binding;
       if (sampler != NULL) {
          if (sampler->is_shadow_sampler && shader_sel->compare_with_lod_bias_grad)
-            descs[desc_idx] = sampler->handle_without_shadow.cpu_handle;
+            view.descs[desc_idx] = sampler->handle_without_shadow.cpu_handle;
          else
-            descs[desc_idx] = sampler->handle.cpu_handle;
+            view.descs[desc_idx] = sampler->handle.cpu_handle;
       } else
-         descs[desc_idx] = ctx->null_sampler.cpu_handle;
+         view.descs[desc_idx] = ctx->null_sampler.cpu_handle;
    }
 
-   d3d12_descriptor_heap_append_handles(batch->sampler_heap, descs, shader->end_srv_binding - shader->begin_srv_binding);
-   return table_start.gpu_handle;
+   hash_entry* sampler_entry =
+      (hash_entry*)_mesa_hash_table_search(batch->sampler_tables, &view);
+
+   if (!sampler_entry) {
+      d3d12_sampler_desc_table_key* sampler_table_key = MALLOC_STRUCT(d3d12_sampler_desc_table_key);
+      sampler_table_key->count = view.count;
+      memcpy(sampler_table_key->descs, &view.descs, view.count * sizeof(view.descs[0]));
+
+      d3d12_descriptor_handle* sampler_table_data = MALLOC_STRUCT(d3d12_descriptor_handle);
+      d2d12_descriptor_heap_get_next_handle(batch->sampler_heap, sampler_table_data);
+
+      d3d12_descriptor_heap_append_handles(batch->sampler_heap, view.descs, shader->end_srv_binding - shader->begin_srv_binding);
+
+      _mesa_hash_table_insert(batch->sampler_tables, sampler_table_key, sampler_table_data);
+
+      return sampler_table_data->gpu_handle;
+   } else
+      return ((d3d12_descriptor_handle*)sampler_entry->data)->gpu_handle;
+
 }
 
 static D3D12_UAV_DIMENSION

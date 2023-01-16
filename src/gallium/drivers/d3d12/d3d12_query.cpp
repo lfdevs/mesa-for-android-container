@@ -26,6 +26,7 @@
 #include "d3d12_context.h"
 #include "d3d12_resource.h"
 #include "d3d12_screen.h"
+#include "d3d12_fence.h"
 
 #include "util/u_dump.h"
 #include "util/u_inlines.h"
@@ -33,31 +34,6 @@
 #include "util/u_threaded_context.h"
 
 #include <dxguids/dxguids.h>
-
-constexpr unsigned MAX_SUBQUERIES = 3;
-
-struct d3d12_query_impl {
-   ID3D12QueryHeap *query_heap;
-   unsigned curr_query, num_queries;
-   size_t query_size;
-
-   D3D12_QUERY_TYPE d3d12qtype;
-
-   pipe_resource *buffer;
-   unsigned buffer_offset;
-
-   bool active;
-};
-
-struct d3d12_query {
-   struct threaded_query base;
-   enum pipe_query_type type;
-
-   struct d3d12_query_impl subqueries[MAX_SUBQUERIES];
-
-   struct list_head active_list;
-   struct d3d12_resource *predicate;
-};
 
 static unsigned
 num_sub_queries(unsigned query_type)
@@ -201,7 +177,7 @@ d3d12_destroy_query(struct pipe_context *pctx,
 static bool
 accumulate_subresult(struct d3d12_context *ctx, struct d3d12_query *q_parent,
                      unsigned sub_query,
-                     union pipe_query_result *result, bool write, bool wait)
+                     union pipe_query_result *result, bool write)
 {
    struct pipe_transfer *transfer = NULL;
    struct d3d12_screen *screen = d3d12_screen(ctx->base.screen);
@@ -211,8 +187,8 @@ accumulate_subresult(struct d3d12_context *ctx, struct d3d12_query *q_parent,
 
    if (write)
       access |= PIPE_MAP_WRITE;
-   if (!wait)
-      access |= PIPE_MAP_DONTBLOCK;
+   access |= PIPE_MAP_UNSYNCHRONIZED;
+
    results = pipe_buffer_map_range(&ctx->base, q->buffer, q->buffer_offset,
                                    q->num_queries * q->query_size,
                                    access, &transfer);
@@ -307,32 +283,32 @@ accumulate_subresult(struct d3d12_context *ctx, struct d3d12_query *q_parent,
 
 static bool
 accumulate_result(struct d3d12_context *ctx, struct d3d12_query *q,
-                  union pipe_query_result *result, bool write, bool wait)
+                  union pipe_query_result *result, bool write)
 {
    union pipe_query_result local_result;
 
    switch (q->type) {
    case PIPE_QUERY_PRIMITIVES_GENERATED:
-      if (!accumulate_subresult(ctx, q, 0, &local_result, write, wait))
+      if (!accumulate_subresult(ctx, q, 0, &local_result, write))
          return false;
       result->u64 = local_result.so_statistics.primitives_storage_needed;
 
-      if (!accumulate_subresult(ctx, q, 1, &local_result, write, wait))
+      if (!accumulate_subresult(ctx, q, 1, &local_result, write))
          return false;
       result->u64 += local_result.pipeline_statistics.gs_primitives;
 
-      if (!accumulate_subresult(ctx, q, 2, &local_result, write, wait))
+      if (!accumulate_subresult(ctx, q, 2, &local_result, write))
          return false;
       result->u64 += local_result.pipeline_statistics.ia_primitives;
       return true;
    case PIPE_QUERY_PRIMITIVES_EMITTED:
-      if (!accumulate_subresult(ctx, q, 0, &local_result, write, wait))
+      if (!accumulate_subresult(ctx, q, 0, &local_result, write))
          return false;
       result->u64 = local_result.so_statistics.num_primitives_written;
       return true;
    default:
       assert(num_sub_queries(q->type) == 1);
-      return accumulate_subresult(ctx, q, 0, result, write, wait);
+      return accumulate_subresult(ctx, q, 0, result, write);
    }
 }
 
@@ -357,6 +333,26 @@ subquery_should_be_active(struct d3d12_context *ctx, struct d3d12_query *q, unsi
    }
 }
 
+static bool 
+query_ensure_ready(struct d3d12_screen* screen, struct d3d12_context* ctx, struct d3d12_query* query, bool wait)
+{
+   // If the query is not flushed, it won't have 
+   // been submitted yet, and won't have a waitable 
+   // fence value
+   if (query->fence_value == UINT64_MAX) {
+      d3d12_flush_cmdlist(ctx);
+   }
+
+   if (screen->fence->GetCompletedValue() < query->fence_value){
+      if (!wait)
+         return false;
+
+      screen->fence->SetEventOnCompletion(query->fence_value, NULL);
+   }
+
+   return true;
+}
+
 static void
 begin_subquery(struct d3d12_context *ctx, struct d3d12_query *q_parent, unsigned sub_query)
 {
@@ -364,8 +360,14 @@ begin_subquery(struct d3d12_context *ctx, struct d3d12_query *q_parent, unsigned
    if (q->curr_query == q->num_queries) {
       union pipe_query_result result;
 
+      query_ensure_ready(d3d12_screen(ctx->base.screen), ctx, q_parent, false);
+      d3d12_foreach_submitted_batch(ctx, old_batch) {
+         if (old_batch->fence && old_batch->fence->value <= q_parent->fence_value)
+            d3d12_reset_batch(ctx, old_batch, PIPE_TIMEOUT_INFINITE);
+      }
+
       /* Accumulate current results and store in first slot */
-      accumulate_subresult(ctx, q_parent, sub_query, &result, true, true);
+      accumulate_subresult(ctx, q_parent, sub_query, &result, true);
       q->curr_query = 1;
    }
 
@@ -404,8 +406,14 @@ begin_timer_query(struct d3d12_context *ctx, struct d3d12_query *q_parent, bool 
       union pipe_query_result result;
 
       /* Accumulate current results and store in first slot */
-      d3d12_flush_cmdlist_and_wait(ctx);
-      accumulate_subresult(ctx, q_parent, 0, &result, true, true);
+
+      query_ensure_ready(d3d12_screen(ctx->base.screen), ctx, q_parent, false);
+      d3d12_foreach_submitted_batch(ctx, old_batch) {
+         if (old_batch->fence && old_batch->fence->value <= q_parent->fence_value)
+            d3d12_reset_batch(ctx, old_batch, PIPE_TIMEOUT_INFINITE);
+      }
+
+      accumulate_subresult(ctx, q_parent, 0, &result, true);
       q->curr_query = 2;
    }
 
@@ -488,6 +496,10 @@ d3d12_end_query(struct pipe_context *pctx,
    struct d3d12_context *ctx = d3d12_context(pctx);
    struct d3d12_query *query = (struct d3d12_query *)q;
 
+   // Assign the sentinel and track now that the query is ended
+   query->fence_value = UINT64_MAX;
+   util_dynarray_append(&ctx->ended_queries, d3d12_query*, query);
+
    end_query(ctx, query);
 
    if (query->type != PIPE_QUERY_TIMESTAMP &&
@@ -503,9 +515,13 @@ d3d12_get_query_result(struct pipe_context *pctx,
                       union pipe_query_result *result)
 {
    struct d3d12_context *ctx = d3d12_context(pctx);
+   struct d3d12_screen *screen = d3d12_screen(ctx->base.screen);
    struct d3d12_query *query = (struct d3d12_query *)q;
 
-   return accumulate_result(ctx, query, result, false, wait);
+   if (!query_ensure_ready(screen, ctx, query, wait))
+      return false;
+
+   return accumulate_result(ctx, query, result, false);
 }
 
 void
@@ -574,9 +590,15 @@ d3d12_render_condition(struct pipe_context *pctx,
                                                            PIPE_USAGE_DEFAULT, sizeof(uint64_t)));
 
    if (mode == PIPE_RENDER_COND_WAIT) {
-      d3d12_flush_cmdlist_and_wait(ctx);
+
+      query_ensure_ready(d3d12_screen(ctx->base.screen), ctx, query, false);
+      d3d12_foreach_submitted_batch(ctx, old_batch) {
+         if (old_batch->fence && old_batch->fence->value <= query->fence_value)
+            d3d12_reset_batch(ctx, old_batch, PIPE_TIMEOUT_INFINITE);
+      }
+
       union pipe_query_result result;
-      accumulate_result(ctx, (d3d12_query *)pquery, &result, true, true);
+      accumulate_result(ctx, (d3d12_query *)pquery, &result, true);
    }
 
    struct d3d12_resource *res = (struct d3d12_resource *)query->subqueries[0].buffer;
@@ -616,6 +638,7 @@ d3d12_context_query_init(struct pipe_context *pctx)
 {
    struct d3d12_context *ctx = d3d12_context(pctx);
    list_inithead(&ctx->active_queries);
+   util_dynarray_init(&ctx->ended_queries, NULL);
 
    u_suballocator_init(&ctx->query_allocator, &ctx->base, 4096, 0, PIPE_USAGE_STAGING,
                          0, true);

@@ -295,6 +295,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_VS_WINDOW_SPACE_POSITION:
 	case PIPE_CAP_VS_LAYER_VIEWPORT:
 	case PIPE_CAP_SAMPLE_SHADING:
+        case PIPE_CAP_MEMOBJ:
 	case PIPE_CAP_CLIP_HALFZ:
 	case PIPE_CAP_POLYGON_OFFSET_CLAMP:
 	case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
@@ -312,9 +313,10 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_CAN_BIND_CONST_BUFFER_AS_VERTEX:
 	case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
 	case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
-		return 1;
+      return 1;
 
-        case PIPE_CAP_NIR_ATOMICS_AS_DEREF:
+	case PIPE_CAP_NIR_ATOMICS_AS_DEREF:
+	case PIPE_CAP_GL_SPIRV:
 		return is_nir_enabled(&rscreen->b);
 
 	case PIPE_CAP_TEXTURE_TRANSFER_MODES:
@@ -537,6 +539,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 			return EG_MAX_ATOMIC_BUFFERS;
 		return 0;
 
+	case PIPE_CAP_VALIDATE_ALL_DIRTY_STATES:
+		return 1;
+
 	default:
 		return u_pipe_screen_get_param_defaults(pscreen, param);
 	}
@@ -683,6 +688,9 @@ static struct pipe_resource *r600_resource_create(struct pipe_screen *screen,
 	return r600_resource_create_common(screen, templ);
 }
 
+char *
+r600_finalize_nir(struct pipe_screen *screen, void *shader);
+
 struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 				       const struct pipe_screen_config *config)
 {
@@ -723,6 +731,9 @@ struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
 		FREE(rscreen);
 		return NULL;
 	}
+
+   if (is_nir_enabled(&rscreen->b))
+       rscreen->b.b.finalize_nir = r600_finalize_nir;
 
 	rscreen->b.has_streamout = true;
 

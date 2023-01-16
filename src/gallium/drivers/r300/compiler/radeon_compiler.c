@@ -45,6 +45,7 @@ void rc_init(struct radeon_compiler * c, const struct rc_regalloc_state *rs)
 	c->Program.Instructions.Next = &c->Program.Instructions;
 	c->Program.Instructions.U.I.Opcode = RC_OPCODE_ILLEGAL_OPCODE;
 	c->regalloc_state = rs;
+	c->max_temp_index = -1;
 }
 
 void rc_destroy(struct radeon_compiler * c)

@@ -92,11 +92,16 @@ REAL_FUNCTION_POINTER(fstat);
 REAL_FUNCTION_POINTER(fstat64);
 #endif
 
+static char render_node_dir[] = "/dev/dri/";
 /* Full path of /dev/dri/renderD* */
 static char *render_node_path;
 /* renderD* */
 static char *render_node_dirent_name;
+/* /sys/dev/char/major: */
+static int drm_device_path_len;
+static char *drm_device_path;
 /* /sys/dev/char/major:minor/device */
+static int device_path_len;
 static char *device_path;
 /* /sys/dev/char/major:minor/device/subsystem */
 static char *subsystem_path;
@@ -110,16 +115,23 @@ static struct file_override file_overrides[10];
 static int file_overrides_count;
 extern bool drm_shim_driver_prefers_first_render_node;
 
-#define nfasprintf(...)                         \
-   {                                            \
-      UNUSED int __ret = asprintf(__VA_ARGS__); \
-      assert(__ret >= 0);                       \
-   }
-#define nfvasprintf(...)                         \
-   {                                             \
-      UNUSED int __ret = vasprintf(__VA_ARGS__); \
-      assert(__ret >= 0);                        \
-   }
+static int
+nfvasprintf(char **restrict strp, const char *restrict fmt, va_list ap)
+{
+   int ret = vasprintf(strp, fmt, ap);
+   assert(ret >= 0);
+   return ret;
+}
+
+static int
+nfasprintf(char **restrict strp, const char *restrict fmt, ...)
+{
+   va_list ap;
+   va_start(ap, fmt);
+   int ret = nfvasprintf(strp, fmt, ap);
+   va_end(ap);
+   return ret;
+}
 
 /* Pick the minor and filename for our shimmed render node.  This can be
  * either a new one that didn't exist on the system, or if the driver wants,
@@ -238,9 +250,13 @@ init_shim(void)
               render_node_path);
    }
 
-   nfasprintf(&device_path,
-              "/sys/dev/char/%d:%d/device",
-              DRM_MAJOR, render_node_minor);
+   drm_device_path_len =
+      nfasprintf(&drm_device_path, "/sys/dev/char/%d:", DRM_MAJOR);
+
+   device_path_len =
+      nfasprintf(&device_path,
+                 "/sys/dev/char/%d:%d/device",
+                 DRM_MAJOR, render_node_minor);
 
    nfasprintf(&subsystem_path,
               "/sys/dev/char/%d:%d/device/subsystem",
@@ -249,6 +265,32 @@ init_shim(void)
    drm_shim_device_init();
 
    atexit(destroy_shim);
+}
+
+static bool hide_drm_device_path(const char *path)
+{
+   if (render_node_minor == -1)
+      return false;
+
+   /* If the path looks like our fake render node device, then don't hide it.
+    */
+   if (strncmp(path, device_path, device_path_len) == 0 ||
+       strcmp(path, render_node_path) == 0)
+      return false;
+
+   /* String starts with /sys/dev/char/226: but is not the fake render node.
+    * We want to hide all other drm devices for the shim.
+    */
+   if (strncmp(path, drm_device_path, drm_device_path_len) == 0)
+      return true;
+
+   /* String starts with /dev/dri/ but is not the fake render node. We want to
+    * hide all other drm devices for the shim.
+    */
+   if (strncmp(path, render_node_dir, sizeof(render_node_dir) - 1) == 0)
+      return true;
+
+   return false;
 }
 
 /* Override libdrm's reading of various sysfs files for device enumeration. */
@@ -281,6 +323,11 @@ PUBLIC int open(const char *path, int flags, ...)
    va_start(ap, flags);
    mode_t mode = va_arg(ap, mode_t);
    va_end(ap);
+
+   if (hide_drm_device_path(path)) {
+      errno = ENOENT;
+      return -1;
+   }
 
    if (strcmp(path, render_node_path) != 0)
       return real_open(path, flags, mode);
@@ -321,6 +368,11 @@ PUBLIC int __xstat(int ver, const char *path, struct stat *st)
    if (render_node_minor == -1)
       return real___xstat(ver, path, st);
 
+   if (hide_drm_device_path(path)) {
+      errno = ENOENT;
+      return -1;
+   }
+
    /* Fool libdrm's probe of whether the /sys dir for this char dev is
     * there.
     */
@@ -354,6 +406,11 @@ PUBLIC int __xstat64(int ver, const char *path, struct stat64 *st)
     */
    if (render_node_minor == -1)
       return real___xstat64(ver, path, st);
+
+   if (hide_drm_device_path(path)) {
+      errno = ENOENT;
+      return -1;
+   }
 
    /* Fool libdrm's probe of whether the /sys dir for this char dev is
     * there.
@@ -423,6 +480,11 @@ PUBLIC int stat(const char* path, struct stat* stat_buf)
    if (render_node_minor == -1)
       return real_stat(path, stat_buf);
 
+   if (hide_drm_device_path(path)) {
+      errno = ENOENT;
+      return -1;
+   }
+
    /* Fool libdrm's probe of whether the /sys dir for this char dev is
     * there.
     */
@@ -455,6 +517,11 @@ PUBLIC int stat64(const char* path, struct stat64* stat_buf)
     */
    if (render_node_minor == -1)
       return real_stat64(path, stat_buf);
+
+   if (hide_drm_device_path(path)) {
+      errno = ENOENT;
+      return -1;
+   }
 
    /* Fool libdrm's probe of whether the /sys dir for this char dev is
     * there.
@@ -612,6 +679,11 @@ readlink(const char *path, char *buf, size_t size)
 {
    init_shim();
 
+   if (hide_drm_device_path(path)) {
+      errno = ENOENT;
+      return -1;
+   }
+
    if (strcmp(path, subsystem_path) != 0)
       return real_readlink(path, buf, size);
 
@@ -637,6 +709,17 @@ readlink(const char *path, char *buf, size_t size)
 
    return strlen(buf) + 1;
 }
+
+#if __USE_FORTIFY_LEVEL > 0 && !defined _CLANG_FORTIFY_DISABLE
+/* Identical to readlink, but with buffer overflow check */
+PUBLIC ssize_t
+__readlink_chk(const char *path, char *buf, size_t size, size_t buflen)
+{
+   if (size > buflen)
+      abort();
+   return readlink(path, buf, size);
+}
+#endif
 
 /* Handles libdrm's realpath to figure out what kind of device we have. */
 PUBLIC char *

@@ -290,9 +290,8 @@ create_pipeline(struct radv_device *device, uint32_t samples, VkPipelineLayout l
       .resummarize_enable = op == DEPTH_RESUMMARIZE,
    };
 
-   result = radv_graphics_pipeline_create(
-      device_h, device->meta_state.cache, &pipeline_create_info,
-      &extra, &device->meta_state.alloc, pipeline);
+   result = radv_graphics_pipeline_create(device_h, device->meta_state.cache, &pipeline_create_info,
+                                          &extra, &device->meta_state.alloc, pipeline, true);
 
 cleanup:
    ralloc_free(fs_module);

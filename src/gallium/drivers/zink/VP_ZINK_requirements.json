@@ -105,7 +105,6 @@
             },
             "features": {
                 "VkPhysicalDeviceFeatures": {
-                    "occlusionQueryPrecise": true,
                     "dualSrcBlend": true
                 }
             }
@@ -154,7 +153,11 @@
             "properties": {
                 "VkPhysicalDeviceProperties": {
                     "limits": {
+                        "maxImageDimension1D": 16384,
                         "maxImageDimension2D": 16384,
+                        "maxImageDimension3D": 2048,
+                        "maxImageDimensionCube": 16384,
+                        "maxImageArrayLayers": 2048,
                         "maxViewports": 16
                     }
                 }
@@ -298,7 +301,6 @@
             "features": {
                 "VkPhysicalDeviceFeatures": {
                     "samplerAnisotropy": true,
-                    "pipelineStatisticsQuery": true,
                     "depthBiasClamp": true
                 }
             }

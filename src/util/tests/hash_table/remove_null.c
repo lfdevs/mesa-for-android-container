@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "hash_table.h"
+#include "util/hash_table.h"
 
 int
 main(int argc, char **argv)

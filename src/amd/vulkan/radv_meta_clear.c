@@ -28,6 +28,7 @@
 
 #include "util/format_rgb9e5.h"
 #include "vk_format.h"
+#include "vk_common_entrypoints.h"
 
 enum { DEPTH_CLEAR_SLOW, DEPTH_CLEAR_FAST };
 
@@ -161,7 +162,7 @@ create_pipeline(struct radv_device *device, uint32_t samples,
          .renderPass = VK_NULL_HANDLE,
          .subpass = 0,
       },
-      extra, alloc, pipeline);
+      extra, alloc, pipeline, true);
 
    ralloc_free(vs_nir);
    ralloc_free(fs_nir);
@@ -600,7 +601,7 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer, const VkClearAttachm
                             4, &clear_value.depth);
    }
 
-   uint32_t prev_reference = cmd_buffer->state.dynamic.stencil_reference.front;
+   uint32_t prev_reference = cmd_buffer->state.dynamic.vk.ds.stencil.front.reference;
    if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       radv_CmdSetStencilReference(cmd_buffer_h, VK_STENCIL_FACE_FRONT_BIT, clear_value.stencil);
    }
@@ -679,7 +680,7 @@ clear_htile_mask(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *im
    radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), state->clear_htile_mask_p_layout,
                          VK_SHADER_STAGE_COMPUTE_BIT, 0, 8, constants);
 
-   radv_CmdDispatch(radv_cmd_buffer_to_handle(cmd_buffer), block_count, 1, 1);
+   vk_common_CmdDispatch(radv_cmd_buffer_to_handle(cmd_buffer), block_count, 1, 1);
 
    radv_buffer_finish(&dst_buffer);
 
@@ -952,9 +953,9 @@ init_meta_clear_htile_mask_state(struct radv_device *device)
       .layout = state->clear_htile_mask_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        state->cache, 1,
-                                        &pipeline_info, NULL, &state->clear_htile_mask_pipeline);
+   result =
+      radv_compute_pipeline_create(radv_device_to_handle(device), state->cache, &pipeline_info,
+                                   NULL, &state->clear_htile_mask_pipeline, true);
 
 fail:
    ralloc_free(cs);
@@ -1032,9 +1033,8 @@ create_dcc_comp_to_single_pipeline(struct radv_device *device, bool is_msaa, VkP
       .layout = state->clear_dcc_comp_to_single_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        state->cache, 1,
-                                        &pipeline_info, NULL, pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), state->cache,
+                                         &pipeline_info, NULL, pipeline, true);
 
    ralloc_free(cs);
    return result;

@@ -12,9 +12,9 @@
 
 #include <stdarg.h>
 
-#include "util/u_debug.h"
 #include "util/log.h"
 #include "util/os_misc.h"
+#include "util/u_debug.h"
 #include "venus-protocol/vn_protocol_driver_info.h"
 #include "vk_enum_to_str.h"
 
@@ -38,6 +38,8 @@ static const struct debug_control vn_perf_options[] = {
    { "no_async_queue_submit", VN_PERF_NO_ASYNC_QUEUE_SUBMIT },
    { "no_event_feedback", VN_PERF_NO_EVENT_FEEDBACK },
    { "no_fence_feedback", VN_PERF_NO_FENCE_FEEDBACK },
+   { "no_memory_suballoc", VN_PERF_NO_MEMORY_SUBALLOC },
+   { "no_cmd_batching", VN_PERF_NO_CMD_BATCHING },
    { NULL, 0 },
    /* clang-format on */
 };

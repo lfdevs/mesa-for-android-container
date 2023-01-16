@@ -107,6 +107,7 @@ struct aa_transform_context {
    uint64_t tempsUsed;  /**< bitmask */
    int colorOutput; /**< which output is the primary color */
    int maxInput, maxGeneric;  /**< max input index found */
+   int numImm; /**< number of immediate regsters */
    int colorTemp, aaTemp;  /**< temp registers */
 };
 
@@ -147,6 +148,18 @@ aa_transform_decl(struct tgsi_transform_context *ctx,
    ctx->emit_declaration(ctx, decl);
 }
 
+/**
+ * TGSI immediate declaration transform callback.
+ */
+static void
+aa_immediate(struct tgsi_transform_context *ctx,
+                  struct tgsi_full_immediate *imm)
+{
+   struct aa_transform_context *aactx = (struct aa_transform_context *)ctx;
+
+   ctx->emit_immediate(ctx, imm);
+   aactx->numImm++;
+}
 
 /**
  * Find the lowest zero bit, or -1 if bitfield is all ones.
@@ -182,6 +195,9 @@ aa_transform_prolog(struct tgsi_transform_context *ctx)
    /* declare new temp regs */
    tgsi_transform_temp_decl(ctx, aactx->aaTemp);
    tgsi_transform_temp_decl(ctx, aactx->colorTemp);
+
+   /* declare new immediate reg */
+   tgsi_transform_immediate_decl(ctx, 2.0, -1.0, 0.0, 0.25);
 }
 
 
@@ -214,6 +230,26 @@ aa_transform_epilog(struct tgsi_transform_context *ctx)
       inst.Src[1].Register.Absolute = true;
       inst.Src[1].Register.Negate = true;
       ctx->emit_instruction(ctx, &inst);
+
+      /* linelength * 2 - 1 */
+      tgsi_transform_op3_swz_inst(ctx, TGSI_OPCODE_MAD,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_WRITEMASK_Y,
+                                  TGSI_FILE_INPUT, aactx->maxInput + 1,
+                                  TGSI_SWIZZLE_W, false,
+                                  TGSI_FILE_IMMEDIATE, aactx->numImm,
+                                  TGSI_SWIZZLE_X,
+                                  TGSI_FILE_IMMEDIATE, aactx->numImm,
+                                  TGSI_SWIZZLE_Y);
+
+      /* MIN height alpha */
+      tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_MIN,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_WRITEMASK_Z,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_SWIZZLE_Z,
+                                  TGSI_FILE_TEMPORARY, aactx->aaTemp,
+                                  TGSI_SWIZZLE_Y, false);
 
       /* MUL width / height alpha */
       tgsi_transform_op2_swz_inst(ctx, TGSI_OPCODE_MUL,
@@ -292,6 +328,7 @@ generate_aaline_fs(struct aaline_stage *aaline)
    transform.base.epilog = aa_transform_epilog;
    transform.base.transform_instruction = aa_transform_inst;
    transform.base.transform_declaration = aa_transform_decl;
+   transform.base.transform_immediate = aa_immediate;
 
    aaline_fs.tokens = tgsi_transform_shader(orig_fs->tokens, newLen, &transform.base);
    if (!aaline_fs.tokens)
@@ -324,7 +361,7 @@ generate_aaline_fs_nir(struct aaline_stage *aaline)
    if (!aaline_fs.ir.nir)
       return FALSE;
 
-   nir_lower_aaline_fs(aaline_fs.ir.nir, &aaline->fs->generic_attrib);
+   nir_lower_aaline_fs(aaline_fs.ir.nir, &aaline->fs->generic_attrib, NULL, NULL);
    aaline->fs->aaline_fs = aaline->driver_create_fs_state(pipe, &aaline_fs);
    if (aaline->fs->aaline_fs == NULL)
       return FALSE;
@@ -383,36 +420,13 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
    float *pos, *tex;
    float dx = header->v[1]->data[posPos][0] - header->v[0]->data[posPos][0];
    float dy = header->v[1]->data[posPos][1] - header->v[0]->data[posPos][1];
-   float a = atan2f(dy, dx);
-   float c_a = cosf(a), s_a = sinf(a);
-   float half_length;
+   float length = sqrtf(dx * dx + dy * dy);
+   float c_a = dx / length, s_a = dy / length;
+   float half_length = 0.5 * length;
    float t_l, t_w;
    uint i;
 
-   half_length = 0.5f * sqrtf(dx * dx + dy * dy);
-
-   if (half_length < 0.5f) {
-      /*
-       * The logic we use for "normal" sized segments is incorrect
-       * for very short segments (basically because we only have
-       * one value to interpolate, not a distance to each endpoint).
-       * Therefore, we calculate half_length differently, so that for
-       * original line length (near) 0, we get alpha 0 - otherwise
-       * max alpha would still be 0.5. This also prevents us from
-       * artifacts due to degenerated lines (the endpoints being
-       * identical, which would still receive anywhere from alpha
-       * 0-0.5 otherwise) (at least the pstipple stage may generate
-       * such lines due to float inaccuracies if line length is very
-       * close to a integer).
-       * Might not be fully accurate neither (because the "strength" of
-       * the line is going to be determined by how close to the pixel
-       * center those 1 or 2 fragments are) but it's probably the best
-       * we can do.
-       */
-      half_length = 2.0f * half_length;
-   } else {
-      half_length = half_length + 0.5f;
-   }
+   half_length = half_length + 0.5f;
 
    t_w = half_width;
    t_l = 0.5f;

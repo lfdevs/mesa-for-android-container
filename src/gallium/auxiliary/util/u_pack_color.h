@@ -36,7 +36,7 @@
 
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "util/format/u_format.h"
 #include "util/u_math.h"
 

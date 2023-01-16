@@ -47,7 +47,6 @@ spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-last,Fail
-spec@arb_bindless_texture@compiler@images@arith-bound-image.frag,Crash
 spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail

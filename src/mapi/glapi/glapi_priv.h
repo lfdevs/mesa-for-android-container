@@ -26,14 +26,8 @@
 #ifndef _GLAPI_PRIV_H
 #define _GLAPI_PRIV_H
 
-
-#define GL_GLEXT_PROTOTYPES
-#include "GL/gl.h"
-#include "GL/glext.h"
-
-typedef int GLclampx;
-
 #include "glapi/glapi.h"
+#include "util/glheader.h"
 
 
 #ifdef __cplusplus

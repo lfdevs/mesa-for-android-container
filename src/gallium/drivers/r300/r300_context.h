@@ -637,6 +637,8 @@ struct r300_context {
     /* Compiler state. */
     struct rc_regalloc_state fs_regalloc_state; /* Register allocator info for
                                                  * fragment shaders. */
+    struct rc_regalloc_state vs_regalloc_state; /* Register allocator info for
+                                                 * vertex shaders. */
 };
 
 #define foreach_atom(r300, atom) \

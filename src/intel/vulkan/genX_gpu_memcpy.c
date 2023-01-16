@@ -60,6 +60,9 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
       vfi.VertexElementIndex = 0;
    }
    anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS), sgvs);
+#if GFX_VER >= 11
+   anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS_2), sgvs);
+#endif
 
    /* Disable all shader stages */
    anv_batch_emit(batch, GENX(3DSTATE_VS), vs);
@@ -77,6 +80,10 @@ emit_common_so_memcpy(struct anv_batch *batch, struct anv_device *device,
       anv_batch_emit(batch, GENX(3DSTATE_MESH_CONTROL), mesh);
       anv_batch_emit(batch, GENX(3DSTATE_TASK_CONTROL), task);
    }
+
+   /* Wa_16013994831 - Disable preemption during streamout. */
+   if (intel_device_info_is_dg2(device->info))
+      genX(batch_set_preemption)(batch, false);
 #endif
 
    anv_batch_emit(batch, GENX(3DSTATE_SBE), sbe) {
@@ -236,12 +243,7 @@ genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
 
    const struct intel_l3_config *cfg = intel_get_default_l3_config(device->info);
    genX(emit_l3_config)(batch, device, cfg);
-
-   anv_batch_emit(batch, GENX(PIPELINE_SELECT), ps) {
-      ps.MaskBits = GFX_VER >= 12 ? 0x13 : 3;
-      ps.MediaSamplerDOPClockGateEnable = GFX_VER >= 12;
-      ps.PipelineSelection = _3D;
-   }
+   genX(emit_pipeline_select)(batch, _3D);
 
    emit_common_so_memcpy(batch, device, cfg);
 }
@@ -256,6 +258,9 @@ genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state)
 
    if ((state->batch->next - state->batch->start) & 4)
       anv_batch_emit(state->batch, GENX(MI_NOOP), noop);
+
+   if (intel_device_info_is_dg2(state->device->info))
+      genX(batch_set_preemption)(state->batch, true);
 }
 
 void
@@ -293,6 +298,10 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 #if GFX_VER == 9
    genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, 32, src, size);
 #endif
+
+   /* Wa_14015814527 */
+   genX(apply_task_urb_workaround)(cmd_buffer);
+
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    genX(flush_pipeline_select_3d)(cmd_buffer);

@@ -25,7 +25,7 @@
  *    Keith Whitwell <keithw@vmware.com>
  */
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 #include "main/macros.h"
 #include "math/m_eval.h"

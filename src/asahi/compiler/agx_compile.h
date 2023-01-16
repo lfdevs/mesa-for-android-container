@@ -26,7 +26,6 @@
 
 #include "compiler/nir/nir.h"
 #include "util/u_dynarray.h"
-#include "asahi/lib/agx_pack.h"
 
 enum agx_push_type {
    /* Array of 64-bit pointers to the base addresses (BASES) and array of
@@ -83,8 +82,9 @@ struct agx_push {
    };
 };
 
+/* All possible push types except VBO, plus up to 16 VBOs */
+#define AGX_MAX_PUSH_RANGES (AGX_PUSH_NUM_TYPES - 1 + 16)
 /* Arbitrary */
-#define AGX_MAX_PUSH_RANGES (16)
 #define AGX_MAX_VARYINGS (32)
 
 struct agx_varyings_vs {
@@ -173,8 +173,14 @@ struct agx_shader_info {
    /* Does the shader control the sample mask? */
    bool writes_sample_mask;
 
+   /* Depth layout, never equal to NONE */
+   enum gl_frag_depth_layout depth_layout;
+
    /* Is colour output omitted? */
    bool no_colour_output;
+
+   /* Shader is incompatible with triangle merging */
+   bool disable_tri_merging;
 
    /* Number of 16-bit registers used by the main shader and preamble
     * respectively.
@@ -183,8 +189,6 @@ struct agx_shader_info {
 };
 
 #define AGX_MAX_RTS (8)
-#define AGX_MAX_ATTRIBS (16)
-#define AGX_MAX_VBUFS (16)
 
 enum agx_format {
    AGX_FORMAT_I8 = 0,
@@ -204,59 +208,7 @@ enum agx_format {
    AGX_NUM_FORMATS,
 };
 
-/* Returns the number of bits at the bottom of the address required to be zero.
- * That is, returns the base-2 logarithm of the minimum alignment for an
- * agx_format, where the minimum alignment is 2^n where n is the result of this
- * function. The offset argument to device_load is left-shifted by this amount
- * in the hardware */
-
-static inline unsigned
-agx_format_shift(enum agx_format format)
-{
-   switch (format) {
-   case AGX_FORMAT_I8:
-   case AGX_FORMAT_U8NORM:
-   case AGX_FORMAT_S8NORM:
-   case AGX_FORMAT_SRGBA8:
-      return 0;
-
-   case AGX_FORMAT_I16:
-   case AGX_FORMAT_F16:
-   case AGX_FORMAT_U16NORM:
-   case AGX_FORMAT_S16NORM:
-      return 1;
-
-   case AGX_FORMAT_I32:
-   case AGX_FORMAT_RGB10A2:
-   case AGX_FORMAT_RG11B10F:
-   case AGX_FORMAT_RGB9E5:
-      return 2;
-
-   default:
-      unreachable("invalid format");
-   }
-}
-
-struct agx_attribute {
-   uint32_t divisor;
-
-   unsigned buf : 5;
-   unsigned src_offset : 16;
-   unsigned nr_comps_minus_1 : 2;
-   enum agx_format format : 4;
-   unsigned padding : 5;
-};
-
-struct agx_vs_shader_key {
-   unsigned num_vbufs;
-   unsigned vbuf_strides[AGX_MAX_VBUFS];
-
-   struct agx_attribute attributes[AGX_MAX_ATTRIBS];
-};
-
 struct agx_fs_shader_key {
-   enum agx_format tib_formats[AGX_MAX_RTS];
-
    /* Normally, access to the tilebuffer must be guarded by appropriate fencing
     * instructions to ensure correct results in the presence of out-of-order
     * hardware optimizations. However, specially dispatched clear shaders are
@@ -272,17 +224,16 @@ struct agx_fs_shader_key {
 
 struct agx_shader_key {
    union {
-      struct agx_vs_shader_key vs;
       struct agx_fs_shader_key fs;
    };
 };
 
-void
-agx_compile_shader_nir(nir_shader *nir,
-      struct agx_shader_key *key,
-      struct util_debug_callback *debug,
-      struct util_dynarray *binary,
-      struct agx_shader_info *out);
+void agx_preprocess_nir(nir_shader *nir);
+
+void agx_compile_shader_nir(nir_shader *nir, struct agx_shader_key *key,
+                            struct util_debug_callback *debug,
+                            struct util_dynarray *binary,
+                            struct agx_shader_info *out);
 
 static const nir_shader_compiler_options agx_nir_options = {
    .lower_fdiv = true,
@@ -292,6 +243,8 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_flrp32 = true,
    .lower_fpow = true,
    .lower_fmod = true,
+   .lower_bitfield_extract_to_shifts = true,
+   .lower_bitfield_insert_to_shifts = true,
    .lower_ifind_msb = true,
    .lower_find_lsb = true,
    .lower_uadd_carry = true,
@@ -302,6 +255,8 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_iabs = true,
    .lower_fdph = true,
    .lower_ffract = true,
+   .lower_pack_half_2x16 = true,
+   .lower_unpack_half_2x16 = true,
    .lower_pack_split = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
@@ -317,8 +272,10 @@ static const nir_shader_compiler_options agx_nir_options = {
    .max_unroll_iterations = 32,
    .lower_uniforms_to_ubo = true,
    .force_indirect_unrolling_sampler = true,
-   .force_indirect_unrolling = (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
-   .lower_int64_options = (nir_lower_int64_options) ~(nir_lower_iadd64 | nir_lower_imul_2x32_64),
+   .force_indirect_unrolling =
+      (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),
+   .lower_int64_options =
+      (nir_lower_int64_options) ~(nir_lower_iadd64 | nir_lower_imul_2x32_64),
    .lower_doubles_options = nir_lower_dmod,
 };
 

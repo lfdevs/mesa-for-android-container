@@ -28,7 +28,7 @@
 #include "../sfn_debug.h"
 #include "../sfn_valuefactory.h"
 #include "nir_builder.h"
-#include "ralloc.h"
+#include "util/ralloc.h"
 
 #include "gtest/gtest.h"
 
@@ -224,11 +224,14 @@ TEST_F(ValuefactoryTest, test_create_const)
    PVirtualValue value1 = factory->src(alu->src[0], 0);
    PVirtualValue value2 = factory->src(alu->src[1], 0);
 
-   const auto& cvalue1 = dynamic_cast<const LiteralConstant&>(*value1);
-   const auto& cvalue2 = dynamic_cast<const LiteralConstant&>(*value2);
+   const auto* cvalue1 = value1->as_literal();
+   const auto* cvalue2 = value2->as_literal();
 
-   EXPECT_EQ(cvalue1.value(), 2);
-   EXPECT_EQ(cvalue2.value(), 4);
+   ASSERT_TRUE(cvalue1);
+   ASSERT_TRUE(cvalue2);
+
+   EXPECT_EQ(cvalue1->value(), 2);
+   EXPECT_EQ(cvalue2->value(), 4);
 }
 
 TEST_F(ValuefactoryTest, test_create_sysvalue)

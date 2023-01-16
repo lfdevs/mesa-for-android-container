@@ -103,6 +103,7 @@ anv-tgl-vk:
 .iris-cml-test:
   extends:
     - .iris-test
+    - .test-manual-mr    # Devices have too often network problems and fail to boot.
   variables:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
     GPU_VERSION: iris-cml
@@ -133,7 +134,8 @@ iris-apl-egl:
   variables:
     PIGLIT_NO_WINDOW: 0
     HWCI_START_XORG: 1
-    DEQP_VER: egl
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: iris-apl-egl
 
 iris-glk-deqp:
   extends:
@@ -148,7 +150,8 @@ iris-glk-egl:
   variables:
     PIGLIT_NO_WINDOW: 0
     HWCI_START_XORG: 1
-    DEQP_VER: egl
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: iris-glk-egl
 
 iris-amly-deqp:
   extends:
@@ -191,7 +194,8 @@ iris-amly-egl:
   variables:
     PIGLIT_NO_WINDOW: 0
     HWCI_START_XORG: 1
-    DEQP_VER: egl
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: iris-amly-egl
 
 iris-kbl-piglit:
   extends:
@@ -336,20 +340,15 @@ iris-whl-traces-performance:
 intel-tgl-skqp:
   extends:
     - .intel-tgl-test
-    - .skqp-test
-    # Demoted to manual until #6565 can be resolved
-    - .test-manual-mr
   variables:
-    # Possible skqp backends: gl, gles, unitTest and vk
-    SKQP_BACKENDS: gl gles vk unitTest  # space separated values
+    DEQP_SUITE: intel-tgl-skqp
     VK_DRIVER: intel
+    HWCI_START_XORG: 1
 
 intel-whl-skqp:
   extends:
     - .intel-whl-test
-    - .skqp-test
-    - .test-manual-mr
   variables:
-    # Possible skqp backends: gl, gles, unitTest and vk
-    SKQP_BACKENDS: gl gles vk unitTest  # space separated values
+    DEQP_SUITE: intel-whl-skqp
     VK_DRIVER: intel
+    HWCI_START_XORG: 1

@@ -35,6 +35,13 @@
 #define radv_ir_node_instance 2
 #define radv_ir_node_aabb 3
 
+#define RADV_GEOMETRY_OPAQUE (1u << 31)
+
+#define RADV_INSTANCE_FORCE_OPAQUE                 (1u << 31)
+#define RADV_INSTANCE_NO_FORCE_NOT_OPAQUE          (1u << 30)
+#define RADV_INSTANCE_TRIANGLE_FACING_CULL_DISABLE (1u << 29)
+#define RADV_INSTANCE_TRIANGLE_FLIP_FACING         (1u << 28)
+
 #ifdef VULKAN
 #define VK_UUID_SIZE 16
 #else
@@ -98,6 +105,8 @@ struct radv_accel_struct_header {
 
 struct radv_ir_node {
    radv_aabb aabb;
+   /* Generic normalized cost of not merging this node. */
+   float cost;
 };
 
 #define FINAL_TREE_PRESENT 0
@@ -177,7 +186,8 @@ struct radv_bvh_aabb_node {
 };
 
 struct radv_bvh_instance_node {
-   uint64_t bvh_ptr;
+   uint64_t bvh_ptr; /* pre-shifted/masked to serve as node base */
+
    /* lower 24 bits are the custom instance index, upper 8 bits are the visibility mask */
    uint32_t custom_instance_and_mask;
    /* lower 24 bits are the sbt offset, upper 8 bits are VkGeometryInstanceFlagsKHR */

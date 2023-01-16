@@ -27,7 +27,7 @@
 #ifndef GFX10_FORMAT_TABLE_H
 #define GFX10_FORMAT_TABLE_H
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "ac_gpu_info.h"
 
 #include <stdbool.h>

@@ -82,7 +82,7 @@ iris_utrace_read_ts(struct u_trace_context *utctx,
    if (ts[idx] == U_TRACE_NO_TIMESTAMP)
       return U_TRACE_NO_TIMESTAMP;
 
-   return intel_device_info_timebase_scale(&screen->devinfo, ts[idx]);
+   return intel_device_info_timebase_scale(screen->devinfo, ts[idx]);
 }
 
 static void
@@ -114,7 +114,7 @@ void iris_utrace_init(struct iris_context *ice)
    /* We could be dealing with /dev/dri/card0 or /dev/dri/renderD128 so to get
     * a GPU ID we % 128 the minor number.
     */
-   intel_ds_device_init(&ice->ds, &screen->devinfo, screen->fd, minor % 128,
+   intel_ds_device_init(&ice->ds, screen->devinfo, screen->fd, minor % 128,
                         INTEL_DS_API_OPENGL);
    u_trace_pipe_context_init(&ice->ds.trace_context, &ice->ctx,
                              iris_utrace_record_ts,

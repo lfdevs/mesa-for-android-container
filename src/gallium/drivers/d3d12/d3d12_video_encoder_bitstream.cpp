@@ -235,7 +235,7 @@ d3d12_video_encoder_bitstream::put_bits(int32_t uiBitsCount, uint32_t iBitsVal)
 void
 d3d12_video_encoder_bitstream::flush()
 {
-   bool isAligned = is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
+   ASSERTED bool isAligned = is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
    assert(isAligned);
 
    uint32_t temp = (uint32_t)(32 - m_iBitsToGo);
@@ -257,10 +257,10 @@ d3d12_video_encoder_bitstream::flush()
 void
 d3d12_video_encoder_bitstream::append_byte_stream(d3d12_video_encoder_bitstream *pStream)
 {
-   bool isStreamAligned =
+   ASSERTED bool isStreamAligned =
       pStream->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
    assert(isStreamAligned);
-   bool isThisAligned = is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
+   ASSERTED bool isThisAligned = is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
    assert(isThisAligned);
    assert(m_iBitsToGo == 32);
 

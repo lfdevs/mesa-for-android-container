@@ -26,6 +26,8 @@
 
 #include <stdbool.h>
 
+#include "freedreno_pm4.h"
+
 enum query_mode {
    /* default mode, dump all queried regs on each draw: */
    QUERY_ALL = 0,
@@ -79,6 +81,33 @@ struct cffdec_options {
    } ibs[4];
 };
 
+/**
+ * A helper to deal with 64b registers by accumulating the lo/hi 32b
+ * dwords.  Example usage:
+ *
+ *    struct regacc r = regacc(rnn);
+ *
+ *    for (dword in dwords) {
+ *       if (regacc_push(&r, regbase, dword)) {
+ *          printf("\t%08x"PRIx64", r.value);
+ *          dump_register_val(r.regbase, r.value, 0);
+ *       }
+ *       regbase++;
+ *    }
+ *
+ * It is expected that 64b regs will come in pairs of <lo, hi>.
+ */
+struct regacc {
+   uint32_t regbase;
+   uint64_t value;
+
+   /* private: */
+   struct rnn *rnn;
+   bool has_dword_lo;
+};
+struct regacc regacc(struct rnn *rnn);
+bool regacc_push(struct regacc *regacc, uint32_t regbase, uint32_t dword);
+
 void printl(int lvl, const char *fmt, ...);
 const char *pktname(unsigned opc);
 uint32_t regbase(const char *name);
@@ -89,7 +118,44 @@ uint32_t reg_val(uint32_t regbase);
 void reg_set(uint32_t regbase, uint32_t val);
 void reset_regs(void);
 void cffdec_init(const struct cffdec_options *options);
-void dump_register_val(uint32_t regbase, uint32_t dword, int level);
+void dump_register_val(struct regacc *r, int level);
 void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
+
+/*
+ * Packets (mostly) fall into two categories, "write one or more registers"
+ * (type0 or type4 depending on generation) or "packet with opcode and
+ * opcode specific payload" (type3 or type7).  These helpers deal with
+ * the type0+type3 vs type4+type7 differences (a2xx-a4xx vs a5xx+).
+ */
+
+static inline bool
+pkt_is_regwrite(uint32_t dword, uint32_t *offset, uint32_t *size)
+{
+   if (pkt_is_type0(dword)) {
+      *size = type0_pkt_size(dword) + 1;
+      *offset = type0_pkt_offset(dword);
+      return true;
+   } if (pkt_is_type4(dword)) {
+      *size = type4_pkt_size(dword) + 1;
+      *offset = type4_pkt_offset(dword);
+      return true;
+   }
+   return false;
+}
+
+static inline bool
+pkt_is_opcode(uint32_t dword, uint32_t *opcode, uint32_t *size)
+{
+   if (pkt_is_type3(dword)) {
+      *size = type3_pkt_size(dword) + 1;
+      *opcode = cp_type3_opcode(dword);
+      return true;
+   } else if (pkt_is_type7(dword)) {
+      *size = type7_pkt_size(dword) + 1;
+      *opcode = cp_type7_opcode(dword);
+     return true;
+   }
+   return false;
+}
 
 #endif /* __CFFDEC_H__ */

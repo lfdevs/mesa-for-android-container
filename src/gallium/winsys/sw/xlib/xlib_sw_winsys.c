@@ -32,7 +32,7 @@
  *   Brian Paul
  */
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_context.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"

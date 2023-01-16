@@ -73,6 +73,7 @@ is_format_supported(struct pipe_screen *screen, enum pipe_format format,
       case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P012:
       case PIPE_FORMAT_P016:
+      case PIPE_FORMAT_P030:
          supported = screen->is_format_supported(screen, PIPE_FORMAT_R16_UNORM,
                                                  PIPE_TEXTURE_2D, nr_samples,
                                                  nr_storage_samples, usage) &&
@@ -170,14 +171,13 @@ st_get_egl_image(struct gl_context *ctx, GLeglImageOES image_handle,
 {
    struct st_context *st = st_context(ctx);
    struct pipe_screen *screen = st->screen;
-   struct st_manager *smapi =
-      (struct st_manager *) st->iface.st_context_private;
+   struct pipe_frontend_screen *fscreen = st->frontend_screen;
 
-   if (!smapi || !smapi->get_egl_image)
+   if (!fscreen || !fscreen->get_egl_image)
       return false;
 
    memset(out, 0, sizeof(*out));
-   if (!smapi->get_egl_image(smapi, (void *) image_handle, out)) {
+   if (!fscreen->get_egl_image(fscreen, (void *) image_handle, out)) {
       /* image_handle does not refer to a valid EGL image object */
       _mesa_error(ctx, GL_INVALID_VALUE, "%s(image handle not found)", error);
       return false;
@@ -312,6 +312,7 @@ st_bind_egl_image(struct gl_context *ctx,
       case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P012:
       case PIPE_FORMAT_P016:
+      case PIPE_FORMAT_P030:
          texFormat = MESA_FORMAT_R_UNORM16;
          texObj->RequiredTextureImageUnits = 2;
          break;
@@ -420,10 +421,9 @@ static GLboolean
 st_validate_egl_image(struct gl_context *ctx, GLeglImageOES image_handle)
 {
    struct st_context *st = st_context(ctx);
-   struct st_manager *smapi =
-      (struct st_manager *) st->iface.st_context_private;
+   struct pipe_frontend_screen *fscreen = st->frontend_screen;
 
-   return smapi->validate_egl_image(smapi, (void *)image_handle);
+   return fscreen->validate_egl_image(fscreen, (void *)image_handle);
 }
 
 void

@@ -26,3 +26,11 @@ spec@arb_fragment_program@no-newline
 glx@glx-destroycontext-1
 
 glx@glx-multithread-texture
+
+# big chunk of very random flakes
+# See https://gitlab.freedesktop.org/mesa/mesa/-/issues/7781
+spec@ext_framebuffer_blit@fbo-sys-blit
+spec@!opengl 1.0@gl-1.0-drawbuffer-modes
+spec@!opengl 1.0@gl-1.0-front-invalidate-back
+spec@!opengl 1.1@masked-clear
+fast_color_clear@fcc-front-buffer-distraction

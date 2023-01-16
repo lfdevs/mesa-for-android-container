@@ -24,8 +24,8 @@
  *   Alyssa Rosenzweig <alyssa.rosenzweig@collabora.com>
  */
 
-#include "util/u_math.h"
 #include "util/macros.h"
+#include "util/u_math.h"
 #include "pan_device.h"
 #include "pan_encoder.h"
 
@@ -179,7 +179,7 @@
  *      tile <= fb / (64 - 1) <= next_power_of_two(fb / (64 - 1))
  *
  * Hence we clamp up to align_pot(fb / (64 - 1)).
- 
+
  * Extending to use a selection heuristic left for future work.
  *
  * Once the tile size (w, h) is chosen, we compute the hierarchy "mask":
@@ -227,15 +227,16 @@
  * a a fixed-tile size (not any of a number of power-of-twos) */
 
 static unsigned
-pan_tile_count(unsigned width, unsigned height, unsigned tile_width, unsigned tile_height)
+pan_tile_count(unsigned width, unsigned height, unsigned tile_width,
+               unsigned tile_height)
 {
-        unsigned aligned_width = ALIGN_POT(width, tile_width);
-        unsigned aligned_height = ALIGN_POT(height, tile_height);
+   unsigned aligned_width = ALIGN_POT(width, tile_width);
+   unsigned aligned_height = ALIGN_POT(height, tile_height);
 
-        unsigned tile_count_x = aligned_width / tile_width;
-        unsigned tile_count_y = aligned_height / tile_height;
+   unsigned tile_count_x = aligned_width / tile_width;
+   unsigned tile_count_y = aligned_height / tile_height;
 
-        return tile_count_x * tile_count_y;
+   return tile_count_x * tile_count_y;
 }
 
 /* For `masked_count` of the smallest tile sizes masked out, computes how the
@@ -246,32 +247,29 @@ pan_tile_count(unsigned width, unsigned height, unsigned tile_width, unsigned ti
  * levels to find a byte count for all levels. */
 
 static unsigned
-panfrost_hierarchy_size(
-                unsigned width,
-                unsigned height,
-                unsigned mask,
-                unsigned bytes_per_tile)
+panfrost_hierarchy_size(unsigned width, unsigned height, unsigned mask,
+                        unsigned bytes_per_tile)
 {
-        unsigned size = PROLOGUE_SIZE;
+   unsigned size = PROLOGUE_SIZE;
 
-        /* Iterate hierarchy levels */
+   /* Iterate hierarchy levels */
 
-        for (unsigned b = 0; b < (MAX_TILE_SHIFT - MIN_TILE_SHIFT); ++b) {
-                /* Check if this level is enabled */
-                if (!(mask & (1 << b)))
-                        continue;
+   for (unsigned b = 0; b < (MAX_TILE_SHIFT - MIN_TILE_SHIFT); ++b) {
+      /* Check if this level is enabled */
+      if (!(mask & (1 << b)))
+         continue;
 
-                /* Shift from a level to a tile size */
-                unsigned tile_size = (1 << b) * MIN_TILE_SIZE;
+      /* Shift from a level to a tile size */
+      unsigned tile_size = (1 << b) * MIN_TILE_SIZE;
 
-                unsigned tile_count = pan_tile_count(width, height, tile_size, tile_size);
-                unsigned level_count = bytes_per_tile * tile_count;
+      unsigned tile_count = pan_tile_count(width, height, tile_size, tile_size);
+      unsigned level_count = bytes_per_tile * tile_count;
 
-                size += level_count;
-        }
+      size += level_count;
+   }
 
-        /* This size will be used as an offset, so ensure it's aligned */
-        return ALIGN_POT(size, 0x200);
+   /* This size will be used as an offset, so ensure it's aligned */
+   return ALIGN_POT(size, 0x200);
 }
 
 /* Implement the formula:
@@ -284,29 +282,32 @@ panfrost_hierarchy_size(
  */
 
 static unsigned
-panfrost_flat_size(unsigned width, unsigned height, unsigned dim, unsigned bytes_per_tile)
+panfrost_flat_size(unsigned width, unsigned height, unsigned dim,
+                   unsigned bytes_per_tile)
 {
-        /* First, extract the tile dimensions */
+   /* First, extract the tile dimensions */
 
-        unsigned tw = (1 << (dim & 0b111)) * 8;
-        unsigned th = (1 << ((dim & (0b111 << 6)) >> 6)) * 8;
+   unsigned tw = (1 << (dim & 0b111)) * 8;
+   unsigned th = (1 << ((dim & (0b111 << 6)) >> 6)) * 8;
 
-        /* tile_count is ceil(W/w) * ceil(H/h) */
-        unsigned raw = pan_tile_count(width, height, tw, th) * bytes_per_tile;
+   /* tile_count is ceil(W/w) * ceil(H/h) */
+   unsigned raw = pan_tile_count(width, height, tw, th) * bytes_per_tile;
 
-        /* Round down and add offset */
-        return 0x200 + ((raw / 0x200) * 0x200);
+   /* Round down and add offset */
+   return 0x200 + ((raw / 0x200) * 0x200);
 }
 
 /* Given a hierarchy mask and a framebuffer size, compute the header size */
 
 unsigned
-panfrost_tiler_header_size(unsigned width, unsigned height, unsigned mask, bool hierarchy)
+panfrost_tiler_header_size(unsigned width, unsigned height, unsigned mask,
+                           bool hierarchy)
 {
-        if (hierarchy)
-                return panfrost_hierarchy_size(width, height, mask, HEADER_BYTES_PER_TILE);
-        else
-                return panfrost_flat_size(width, height, mask, HEADER_BYTES_PER_TILE);
+   if (hierarchy)
+      return panfrost_hierarchy_size(width, height, mask,
+                                     HEADER_BYTES_PER_TILE);
+   else
+      return panfrost_flat_size(width, height, mask, HEADER_BYTES_PER_TILE);
 }
 
 /* The combined header/body is sized similarly (but it is significantly
@@ -315,38 +316,39 @@ panfrost_tiler_header_size(unsigned width, unsigned height, unsigned mask, bool 
  */
 
 unsigned
-panfrost_tiler_full_size(unsigned width, unsigned height, unsigned mask, bool hierarchy)
+panfrost_tiler_full_size(unsigned width, unsigned height, unsigned mask,
+                         bool hierarchy)
 {
-        if (hierarchy)
-                return panfrost_hierarchy_size(width, height, mask, FULL_BYTES_PER_TILE);
-        else
-                return panfrost_flat_size(width, height, mask, FULL_BYTES_PER_TILE);
+   if (hierarchy)
+      return panfrost_hierarchy_size(width, height, mask, FULL_BYTES_PER_TILE);
+   else
+      return panfrost_flat_size(width, height, mask, FULL_BYTES_PER_TILE);
 }
 
 /* On GPUs without hierarchical tiling, we choose a tile size directly and
  * stuff it into the field otherwise known as hierarchy mask (not a mask). */
 
 static unsigned
-panfrost_choose_tile_size(
-        unsigned width, unsigned height, unsigned vertex_count)
+panfrost_choose_tile_size(unsigned width, unsigned height,
+                          unsigned vertex_count)
 {
-        /* Figure out the ideal tile size. Eventually a heuristic should be
-         * used for this */
+   /* Figure out the ideal tile size. Eventually a heuristic should be
+    * used for this */
 
-        unsigned best_w = 16;
-        unsigned best_h = 16;
+   unsigned best_w = 16;
+   unsigned best_h = 16;
 
-        /* Clamp so there are less than 64 tiles in each direction */
+   /* Clamp so there are less than 64 tiles in each direction */
 
-        best_w = MAX2(best_w, util_next_power_of_two(width / 63));
-        best_h = MAX2(best_h, util_next_power_of_two(height / 63));
+   best_w = MAX2(best_w, util_next_power_of_two(width / 63));
+   best_h = MAX2(best_h, util_next_power_of_two(height / 63));
 
-        /* We have our ideal tile size, so encode */
+   /* We have our ideal tile size, so encode */
 
-        unsigned exp_w = util_logbase2(best_w / 16);
-        unsigned exp_h = util_logbase2(best_h / 16);
+   unsigned exp_w = util_logbase2(best_w / 16);
+   unsigned exp_h = util_logbase2(best_h / 16);
 
-        return exp_w | (exp_h << 6);
+   return exp_w | (exp_h << 6);
 }
 
 /* In the future, a heuristic to choose a tiler hierarchy mask would go here.
@@ -356,19 +358,18 @@ panfrost_choose_tile_size(
  * don't really need all the smaller levels enabled */
 
 unsigned
-panfrost_choose_hierarchy_mask(
-        unsigned width, unsigned height,
-        unsigned vertex_count, bool hierarchy)
+panfrost_choose_hierarchy_mask(unsigned width, unsigned height,
+                               unsigned vertex_count, bool hierarchy)
 {
-        /* If there is no geometry, we don't bother enabling anything */
+   /* If there is no geometry, we don't bother enabling anything */
 
-        if (!vertex_count)
-                return 0x00;
+   if (!vertex_count)
+      return 0x00;
 
-        if (!hierarchy)
-                return panfrost_choose_tile_size(width, height, vertex_count);
+   if (!hierarchy)
+      return panfrost_choose_tile_size(width, height, vertex_count);
 
-        /* Otherwise, default everything on. TODO: Proper tests */
+   /* Otherwise, default everything on. TODO: Proper tests */
 
-        return 0xFF;
+   return 0xFF;
 }

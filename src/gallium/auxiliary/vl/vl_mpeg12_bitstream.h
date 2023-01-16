@@ -29,7 +29,7 @@
 #define vl_mpeg12_bitstream_h
 
 #include "vl_defines.h"
-#include "vl_vlc.h"
+#include "util/vl_vlc.h"
 
 struct vl_mpg12_bs
 {

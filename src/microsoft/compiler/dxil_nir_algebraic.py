@@ -93,8 +93,7 @@ remove_unsupported_casts(no_16bit_conv, 16, 0xffff, 65535.0, -32768.0, 32767.0)
 
 lower_x2b = [
   (('b2b32', 'a'), ('b2i32', 'a')),
-  (('b2b1', 'a'), ('i2b1', 'a')),
-  (('i2b1', 'a'), ('ine', a, 0)),
+  (('b2b1', 'a'), ('ine', ('b2i32', a), 0)),
   (('f2b1', 'a'), ('fneu', a, 0)),
 ]
 

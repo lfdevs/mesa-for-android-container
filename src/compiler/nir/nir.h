@@ -207,10 +207,13 @@ typedef enum {
    nir_var_read_only_modes = nir_var_shader_in | nir_var_uniform |
                              nir_var_system_value | nir_var_mem_constant |
                              nir_var_mem_ubo,
-   /** Modes where vector derefs can be indexed as arrays */
+   /* Modes where vector derefs can be indexed as arrays. nir_var_shader_out is only for mesh
+    * stages.
+    */
    nir_var_vec_indexable_modes = nir_var_mem_ubo | nir_var_mem_ssbo |
                                  nir_var_mem_shared | nir_var_mem_global |
-                                 nir_var_mem_push_const,
+                                 nir_var_mem_push_const | nir_var_mem_task_payload |
+                                 nir_var_shader_out,
    nir_num_variable_modes  = 16,
    nir_var_all             = (1 << nir_num_variable_modes) - 1,
 } nir_variable_mode;
@@ -226,6 +229,30 @@ typedef enum {
    nir_rounding_mode_rd    = 3, /* round down */
    nir_rounding_mode_rtz   = 4, /* round towards zero */
 } nir_rounding_mode;
+
+/**
+ * Ray query values that can read from a RayQueryKHR object.
+ */
+typedef enum {
+   nir_ray_query_value_intersection_type,
+   nir_ray_query_value_intersection_t,
+   nir_ray_query_value_intersection_instance_custom_index,
+   nir_ray_query_value_intersection_instance_id,
+   nir_ray_query_value_intersection_instance_sbt_index,
+   nir_ray_query_value_intersection_geometry_index,
+   nir_ray_query_value_intersection_primitive_index,
+   nir_ray_query_value_intersection_barycentrics,
+   nir_ray_query_value_intersection_front_face,
+   nir_ray_query_value_intersection_object_ray_direction,
+   nir_ray_query_value_intersection_object_ray_origin,
+   nir_ray_query_value_intersection_object_to_world,
+   nir_ray_query_value_intersection_world_to_object,
+   nir_ray_query_value_intersection_candidate_aabb_opaque,
+   nir_ray_query_value_tmin,
+   nir_ray_query_value_flags,
+   nir_ray_query_value_world_ray_direction,
+   nir_ray_query_value_world_ray_origin,
+} nir_ray_query_value;
 
 typedef union {
    bool b;
@@ -1186,7 +1213,7 @@ typedef struct {
     *
     * Ignored if dest.is_ssa is true
     */
-   unsigned write_mask : NIR_MAX_VEC_COMPONENTS;
+   nir_component_mask_t write_mask;
 } nir_alu_dest;
 
 /** NIR sized and unsized types
@@ -1968,6 +1995,7 @@ nir_intrinsic_can_reorder(nir_intrinsic_instr *instr)
    if (nir_intrinsic_has_access(instr) &&
        nir_intrinsic_access(instr) & ACCESS_VOLATILE)
       return false;
+
    if (instr->intrinsic == nir_intrinsic_load_deref) {
       nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
       return nir_deref_mode_is_in_set(deref, nir_var_read_only_modes) ||
@@ -1986,6 +2014,22 @@ nir_intrinsic_can_reorder(nir_intrinsic_instr *instr)
 }
 
 bool nir_intrinsic_writes_external_memory(const nir_intrinsic_instr *instr);
+
+static inline bool
+nir_intrinsic_is_ray_query(nir_intrinsic_op intrinsic)
+{
+   switch (intrinsic) {
+   case nir_intrinsic_rq_confirm_intersection:
+   case nir_intrinsic_rq_generate_intersection:
+   case nir_intrinsic_rq_initialize:
+   case nir_intrinsic_rq_load:
+   case nir_intrinsic_rq_proceed:
+   case nir_intrinsic_rq_terminate:
+      return true;
+   default:
+      return false;
+   }
+}
 
 /** Texture instruction source type */
 typedef enum {
@@ -2155,6 +2199,7 @@ typedef enum {
    nir_texop_fragment_fetch_amd,      /**< Multisample fragment color texture fetch */
    nir_texop_fragment_mask_fetch_amd, /**< Multisample fragment mask texture fetch */
    nir_texop_descriptor_amd,     /**< Returns a buffer or image descriptor. */
+   nir_texop_sampler_descriptor_amd, /**< Returns a sampler descriptor. */
 } nir_texop;
 
 /** Represents a texture instruction */
@@ -3252,6 +3297,7 @@ typedef enum {
    nir_divergence_view_index_uniform = (1 << 3),
    nir_divergence_single_frag_shading_rate_per_subgroup = (1 << 4),
    nir_divergence_multiple_workgroup_per_compute_subgroup = (1 << 5),
+   nir_divergence_shader_record_ptr_uniform = (1 << 6),
 } nir_divergence_options;
 
 typedef enum {
@@ -4837,6 +4883,23 @@ bool nir_lower_explicit_io(nir_shader *shader,
                            nir_variable_mode modes,
                            nir_address_format);
 
+typedef bool (*nir_should_vectorize_mem_func)(unsigned align_mul,
+                                              unsigned align_offset,
+                                              unsigned bit_size,
+                                              unsigned num_components,
+                                              nir_intrinsic_instr *low, nir_intrinsic_instr *high,
+                                              void *data);
+
+typedef struct {
+   nir_should_vectorize_mem_func callback;
+   nir_variable_mode modes;
+   nir_variable_mode robust_modes;
+   void *cb_data;
+   bool has_shared2_amd;
+} nir_load_store_vectorize_options;
+
+bool nir_opt_load_store_vectorize(nir_shader *shader, const nir_load_store_vectorize_options *options);
+
 typedef struct nir_lower_shader_calls_options {
    /* Address format used for load/store operations on the call stack. */
    nir_address_format address_format;
@@ -4848,6 +4911,15 @@ typedef struct nir_lower_shader_calls_options {
     * You might want to disable combined_loads for best effects.
     */
    bool localized_loads;
+
+   /* If this function pointer is not NULL, lower_shader_calls will run
+    * nir_opt_load_store_vectorize for stack load/store operations. Otherwise
+    * the optimizaion is not run.
+    */
+   nir_should_vectorize_mem_func vectorizer_callback;
+
+   /* Data passed to vectorizer_callback */
+   void *vectorizer_data;
 } nir_lower_shader_calls_options;
 
 bool
@@ -4925,6 +4997,10 @@ nir_shader * nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *
                                              uint8_t patch_vertices);
 nir_shader * nir_create_passthrough_tcs(const nir_shader_compiler_options *options,
                                         const nir_shader *vs, uint8_t patch_vertices);
+nir_shader * nir_create_passthrough_gs(const nir_shader_compiler_options *options,
+                                       const nir_shader *prev_stage,
+                                       enum shader_prim primitive_type,
+                                       unsigned vertices);
 
 bool nir_lower_fragcolor(nir_shader *shader, unsigned max_cbufs);
 bool nir_lower_fragcoord_wtrans(nir_shader *shader);
@@ -4958,6 +5034,9 @@ bool nir_lower_subgroups(nir_shader *shader,
                          const nir_lower_subgroups_options *options);
 
 bool nir_lower_system_values(nir_shader *shader);
+
+nir_ssa_def *
+nir_build_lowered_load_helper_invocation(struct nir_builder *b);
 
 typedef struct nir_lower_compute_system_values_options {
    bool has_base_global_invocation_id:1;
@@ -5231,6 +5310,11 @@ typedef struct nir_lower_image_options {
     * If true, lower cube size operations.
     */
    bool lower_cube_size;
+
+   /**
+    * Lower multi sample image load and samples_identical to use fragment_mask_load.
+    */
+   bool lower_to_fragment_mask_load_amd;
 } nir_lower_image_options;
 
 bool nir_lower_image(nir_shader *nir,
@@ -5407,7 +5491,7 @@ struct nir_fold_tex_srcs_options {
 
 struct nir_fold_16bit_tex_image_options {
    nir_rounding_mode rounding_mode;
-   bool fold_tex_dest;
+   nir_alu_type fold_tex_dest_types;
    bool fold_image_load_store_data;
    bool fold_image_srcs;
    unsigned fold_srcs_options_count;
@@ -5497,7 +5581,7 @@ bool nir_lower_ssa_defs_to_regs_block(nir_block *block);
 bool nir_rematerialize_derefs_in_use_blocks_impl(nir_function_impl *impl);
 
 bool nir_lower_samplers(nir_shader *shader);
-bool nir_lower_cl_images(nir_shader *shader);
+bool nir_lower_cl_images(nir_shader *shader, bool lower_image_derefs, bool lower_sampler_derefs);
 bool nir_dedup_inline_samplers(nir_shader *shader);
 bool nir_lower_ssbo(nir_shader *shader);
 
@@ -5638,22 +5722,7 @@ bool nir_opt_move_discards_to_top(nir_shader *shader);
 
 bool nir_opt_ray_queries(nir_shader *shader);
 
-typedef bool (*nir_should_vectorize_mem_func)(unsigned align_mul,
-                                              unsigned align_offset,
-                                              unsigned bit_size,
-                                              unsigned num_components,
-                                              nir_intrinsic_instr *low, nir_intrinsic_instr *high,
-                                              void *data);
-
-typedef struct {
-   nir_should_vectorize_mem_func callback;
-   nir_variable_mode modes;
-   nir_variable_mode robust_modes;
-   void *cb_data;
-   bool has_shared2_amd;
-} nir_load_store_vectorize_options;
-
-bool nir_opt_load_store_vectorize(nir_shader *shader, const nir_load_store_vectorize_options *options);
+bool nir_opt_ray_query_ranges(nir_shader *shader);
 
 void nir_sweep(nir_shader *shader);
 
@@ -5704,27 +5773,6 @@ bool
 nir_addition_might_overflow(nir_shader *shader, struct hash_table *range_ht,
                             nir_ssa_scalar ssa, unsigned const_val,
                             const nir_unsigned_upper_bound_config *config);
-
-typedef enum {
-   nir_ray_query_value_intersection_type,
-   nir_ray_query_value_intersection_t,
-   nir_ray_query_value_intersection_instance_custom_index,
-   nir_ray_query_value_intersection_instance_id,
-   nir_ray_query_value_intersection_instance_sbt_index,
-   nir_ray_query_value_intersection_geometry_index,
-   nir_ray_query_value_intersection_primitive_index,
-   nir_ray_query_value_intersection_barycentrics,
-   nir_ray_query_value_intersection_front_face,
-   nir_ray_query_value_intersection_object_ray_direction,
-   nir_ray_query_value_intersection_object_ray_origin,
-   nir_ray_query_value_intersection_object_to_world,
-   nir_ray_query_value_intersection_world_to_object,
-   nir_ray_query_value_intersection_candidate_aabb_opaque,
-   nir_ray_query_value_tmin,
-   nir_ray_query_value_flags,
-   nir_ray_query_value_world_ray_direction,
-   nir_ray_query_value_world_ray_origin,
-} nir_ray_query_value;
 
 typedef struct {
    /* True if gl_DrawID is considered uniform, i.e. if the preamble is run

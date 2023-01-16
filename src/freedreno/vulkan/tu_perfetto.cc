@@ -24,6 +24,8 @@ tu_device_get_suspend_count(struct tu_device *dev,
 uint64_t
 tu_device_ticks_to_ns(struct tu_device *dev, uint64_t ts);
 
+struct u_trace_context *
+tu_device_get_u_trace(struct tu_device *device);
 }
 
 /**
@@ -193,6 +195,8 @@ stage_push(struct tu_device *dev)
    return &p->stages[p->stage_depth++];
 }
 
+typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderStageEvent *, const void*);
+
 static struct tu_perfetto_stage *
 stage_pop(struct tu_device *dev)
 {
@@ -210,7 +214,12 @@ stage_pop(struct tu_device *dev)
 }
 
 static void
-stage_start(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id)
+stage_start(struct tu_device *dev,
+            uint64_t ts_ns,
+            enum tu_stage_id stage_id,
+            const void *payload = nullptr,
+            size_t payload_size = 0,
+            trace_payload_as_extra_func payload_as_extra = nullptr)
 {
    struct tu_perfetto_stage *stage = stage_push(dev);
 
@@ -219,13 +228,22 @@ stage_start(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id)
       return;
    }
 
-   *stage = (struct tu_perfetto_stage){
+   if (payload) {
+      void* new_payload = malloc(payload_size);
+      if (new_payload)
+         memcpy(new_payload, payload, payload_size);
+      else
+         PERFETTO_ELOG("Failed to allocate payload for stage %d", stage_id);
+      payload = new_payload;
+   }
+
+   *stage = (struct tu_perfetto_stage) {
       .stage_id = stage_id,
       .start_ts = ts_ns,
+      .payload = payload,
+      .start_payload_function = (void *) payload_as_extra,
    };
 }
-
-typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderStageEvent *, const void*);
 
 static void
 stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
@@ -271,9 +289,15 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
       event->set_context((uintptr_t)dev);
       event->set_submission_id(submission_id);
 
-      if (payload && payload_as_extra) {
-         payload_as_extra(event, payload);
+      if (stage->payload) {
+         if (stage->start_payload_function)
+            ((trace_payload_as_extra_func) stage->start_payload_function)(
+               event, stage->payload);
+         free((void *)stage->payload);
       }
+
+      if (payload && payload_as_extra)
+         payload_as_extra(event, payload);
    });
 }
 
@@ -388,7 +412,7 @@ void
 tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
 {
    /* sync_timestamp isn't free */
-   if (!ut_perfetto_enabled)
+   if (!u_trace_perfetto_active(tu_device_get_u_trace(dev)))
       return;
 
    sync_timestamp(dev);
@@ -400,26 +424,29 @@ tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
  * collected.
  */
 
-#define CREATE_EVENT_CALLBACK(event_name, stage_id)                           \
-void                                                                          \
-tu_start_##event_name(struct tu_device *dev, uint64_t ts_ns,                  \
-                   const void *flush_data,                                    \
-                   const struct trace_start_##event_name *payload)            \
-{                                                                             \
-   stage_start(dev, ts_ns, stage_id);                                         \
-}                                                                             \
-                                                                              \
-void                                                                          \
-tu_end_##event_name(struct tu_device *dev, uint64_t ts_ns,                    \
-                   const void *flush_data,                                    \
-                   const struct trace_end_##event_name *payload)              \
-{                                                                             \
-   auto trace_flush_data = (const struct tu_u_trace_submission_data *) flush_data; \
-   uint32_t submission_id =                                                        \
-      tu_u_trace_submission_data_get_submit_id(trace_flush_data);                  \
-   stage_end(dev, ts_ns, stage_id, submission_id, payload,                         \
-      (trace_payload_as_extra_func) &trace_payload_as_extra_end_##event_name);     \
-}
+#define CREATE_EVENT_CALLBACK(event_name, stage_id)                                 \
+   void tu_perfetto_start_##event_name(                                             \
+      struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
+      const struct trace_start_##event_name *payload)                               \
+   {                                                                                \
+      stage_start(                                                                  \
+         dev, ts_ns, stage_id, payload,                                             \
+         sizeof(struct trace_start_##event_name),                                   \
+         (trace_payload_as_extra_func) &trace_payload_as_extra_start_##event_name); \
+   }                                                                                \
+                                                                                    \
+   void tu_perfetto_end_##event_name(                                               \
+      struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
+      const struct trace_end_##event_name *payload)                                 \
+   {                                                                                \
+      auto trace_flush_data =                                                       \
+         (const struct tu_u_trace_submission_data *) flush_data;                    \
+      uint32_t submission_id =                                                      \
+         tu_u_trace_submission_data_get_submit_id(trace_flush_data);                \
+      stage_end(                                                                    \
+         dev, ts_ns, stage_id, submission_id, payload,                              \
+         (trace_payload_as_extra_func) &trace_payload_as_extra_end_##event_name);   \
+   }
 
 CREATE_EVENT_CALLBACK(cmd_buffer, CMD_BUFFER_STAGE_ID)
 CREATE_EVENT_CALLBACK(render_pass, RENDER_PASS_STAGE_ID)

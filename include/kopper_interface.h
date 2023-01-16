@@ -35,17 +35,7 @@
 #define KOPPER_INTERFACE_H
 
 #include <GL/internal/dri_interface.h>
-#include <vulkan/vulkan.h>
-#ifdef VK_USE_PLATFORM_XCB_KHR
-#include <xcb/xcb.h>
-#include <vulkan/vulkan_xcb.h>
-#endif
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-#include <vulkan/vulkan_wayland.h>
-#endif
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-#include <vulkan/vulkan_win32.h>
-#endif
+#include <vulkan/vulkan_core.h>
 
 typedef struct __DRIkopperExtensionRec          __DRIkopperExtension;
 typedef struct __DRIkopperLoaderExtensionRec    __DRIkopperLoaderExtension;
@@ -57,8 +47,6 @@ typedef struct __DRIkopperLoaderExtensionRec    __DRIkopperLoaderExtension;
  */
 #define __DRI_KOPPER "DRI_Kopper"
 #define __DRI_KOPPER_VERSION 1
-
-struct kopper_surface;
 
 struct __DRIkopperExtensionRec {
     __DRIextension base;
@@ -82,19 +70,23 @@ struct __DRIkopperExtensionRec {
  * Kopper loader extension.
  */
 
+/**
+ * struct for storage the union of all platform depdendent
+ * Vk*SurfaceCreateInfo* type, all platform Vk*SurfaceCreateInfo* contains
+ * uint32_t flags and at most two extra pointer besides bos header.
+ * For example:
+ * VkWin32SurfaceCreateInfoKHR contains flags, hinstance and hwnd besides bos header
+ */
+
+struct kopper_vk_surface_create_storage {
+   /* First two fields are copied from VkBaseOutStructure for easily access shared properties */
+   VkStructureType sType;
+   struct VkBaseOutStructure *pNext;
+   intptr_t padding[3];
+};
+
 struct kopper_loader_info {
-   union {
-      VkBaseOutStructure bos;
-#ifdef VK_USE_PLATFORM_XCB_KHR
-      VkXcbSurfaceCreateInfoKHR xcb;
-#endif
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-      VkWaylandSurfaceCreateInfoKHR wl;
-#endif
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-      VkWin32SurfaceCreateInfoKHR win32;
-#endif
-   };
+   struct kopper_vk_surface_create_storage bos;
    int has_alpha;
    int initial_swap_interval;
 };

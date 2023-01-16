@@ -23,9 +23,6 @@
 
 #include <gtest/gtest.h>
 
-#include "GL/gl.h"
-#include "GL/glext.h"
-
 #include "program/prog_statevars.h"
 
 TEST(program_state_string, depth_range)

@@ -168,7 +168,7 @@ struct rogue_fwif_ta_regs {
    /* Only used when feature VDM_OBJECT_LEVEL_LLS present. */
    uint32_t vdm_context_resume_task3_size;
 
-   /* Only used when BRN 56279 or BRN 67381 present. */
+   /* Only used when BRN 67381 present. */
    uint32_t pds_ctrl;
 
    uint32_t view_idx;
@@ -208,7 +208,7 @@ struct rogue_fwif_cmd_ta {
     */
    struct rogue_fwif_cmd_ta_3d_shared cmd_shared;
 
-   struct rogue_fwif_ta_regs ALIGN_ATTR(8) geom_regs;
+   struct rogue_fwif_ta_regs ALIGN_ATTR(8) regs;
    uint32_t ALIGN_ATTR(8) flags;
    /**
     * Holds the TA/3D fence value to allow the 3D partial render command
@@ -425,7 +425,6 @@ struct rogue_fwif_2d_regs {
    uint64_t deprecated_1;
    uint64_t deprecated_2;
    uint64_t deprecated_3;
-   /* FIXME: HIGH: FIX_HW_BRN_57193 changes the structure's layout. */
    uint64_t brn57193_tla_cmd_stream;
 };
 

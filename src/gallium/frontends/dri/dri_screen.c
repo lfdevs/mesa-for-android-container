@@ -35,13 +35,15 @@
 
 #include "util/u_inlines.h"
 #include "pipe/p_screen.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe-loader/pipe_loader.h"
 #include "frontend/drm_driver.h"
 
 #include "util/u_debug.h"
 #include "util/u_driconf.h"
 #include "util/format/u_format_s3tc.h"
+
+#include "state_tracker/st_context.h"
 
 #define MSAA_VISUAL_MAX_SAMPLES 32
 
@@ -68,16 +70,16 @@ dri_init_options(struct dri_screen *screen)
 static unsigned
 dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
 {
-   const __DRIdri2LoaderExtension *dri2_loader = screen->sPriv->dri2.loader;
-   const __DRIimageLoaderExtension *image_loader = screen->sPriv->image.loader;
+   const __DRIdri2LoaderExtension *dri2_loader = screen->dri2.loader;
+   const __DRIimageLoaderExtension *image_loader = screen->image.loader;
 
    if (dri2_loader && dri2_loader->base.version >= 4 &&
        dri2_loader->getCapability)
-      return dri2_loader->getCapability(screen->sPriv->loaderPrivate, cap);
+      return dri2_loader->getCapability(screen->loaderPrivate, cap);
 
    if (image_loader && image_loader->base.version >= 2 &&
        image_loader->getCapability)
-      return image_loader->getCapability(screen->sPriv->loaderPrivate, cap);
+      return image_loader->getCapability(screen->loaderPrivate, cap);
 
    return 0;
 }
@@ -573,7 +575,7 @@ dri_fill_in_modes(struct dri_screen *screen)
    }
 
    if (configs == NULL) {
-      debug_printf("%s: driCreateConfigs failed\n", __FUNCTION__);
+      debug_printf("%s: driCreateConfigs failed\n", __func__);
       return NULL;
    }
 
@@ -709,11 +711,11 @@ dri_fill_st_visual(struct st_visual *stvis,
 }
 
 static bool
-dri_get_egl_image(struct st_manager *smapi,
+dri_get_egl_image(struct pipe_frontend_screen *fscreen,
                   void *egl_image,
                   struct st_egl_image *stimg)
 {
-   struct dri_screen *screen = (struct dri_screen *)smapi;
+   struct dri_screen *screen = (struct dri_screen *)fscreen;
    __DRIimage *img = NULL;
    const struct dri2_format_mapping *map;
 
@@ -751,16 +753,16 @@ dri_get_egl_image(struct st_manager *smapi,
 }
 
 static bool
-dri_validate_egl_image(struct st_manager *smapi,
+dri_validate_egl_image(struct pipe_frontend_screen *fscreen,
                        void *egl_image)
 {
-   struct dri_screen *screen = (struct dri_screen *)smapi;
+   struct dri_screen *screen = (struct dri_screen *)fscreen;
 
    return screen->validate_egl_image(screen, egl_image);
 }
 
 static int
-dri_get_param(struct st_manager *smapi,
+dri_get_param(struct pipe_frontend_screen *fscreen,
               enum st_manager_param param)
 {
    return 0;
@@ -769,8 +771,7 @@ dri_get_param(struct st_manager *smapi,
 void
 dri_destroy_screen_helper(struct dri_screen * screen)
 {
-   if (screen->base.destroy)
-      screen->base.destroy(&screen->base);
+   st_screen_destroy(&screen->base);
 
    if (screen->base.screen)
       screen->base.screen->destroy(screen->base.screen);
@@ -779,10 +780,8 @@ dri_destroy_screen_helper(struct dri_screen * screen)
 }
 
 void
-dri_destroy_screen(__DRIscreen * sPriv)
+dri_destroy_screen(struct dri_screen *screen)
 {
-   struct dri_screen *screen = dri_screen(sPriv);
-
    dri_destroy_screen_helper(screen);
 
    pipe_loader_release(&screen->dev, 1);
@@ -791,10 +790,11 @@ dri_destroy_screen(__DRIscreen * sPriv)
    free(screen->options.force_gl_renderer);
    free(screen->options.mesa_extension_override);
 
+   driDestroyOptionCache(&screen->optionCache);
+   driDestroyOptionInfo(&screen->optionInfo);
+
    /* The caller in dri_util preserves the fd ownership */
    free(screen);
-   sPriv->driverPrivate = NULL;
-   sPriv->extensions = NULL;
 }
 
 static void
@@ -809,15 +809,15 @@ dri_postprocessing_init(struct dri_screen *screen)
 }
 
 static void
-dri_set_background_context(struct st_context_iface *st,
+dri_set_background_context(struct st_context *st,
                            struct util_queue_monitoring *queue_info)
 {
-   struct dri_context *ctx = (struct dri_context *)st->st_manager_private;
+   struct dri_context *ctx = (struct dri_context *)st->frontend_context;
    const __DRIbackgroundCallableExtension *backgroundCallable =
-      ctx->sPriv->dri2.backgroundCallable;
+      ctx->screen->dri2.backgroundCallable;
 
    if (backgroundCallable)
-      backgroundCallable->setBackgroundContext(ctx->cPriv->loaderPrivate);
+      backgroundCallable->setBackgroundContext(ctx->loaderPrivate);
 
    if (ctx->hud)
       hud_add_queue_for_monitoring(ctx->hud, queue_info);
@@ -844,10 +844,10 @@ dri_init_screen_helper(struct dri_screen *screen,
 
    st_api_query_versions(&screen->base,
                          &screen->options,
-                         &screen->sPriv->max_gl_core_version,
-                         &screen->sPriv->max_gl_compat_version,
-                         &screen->sPriv->max_gl_es1_version,
-                         &screen->sPriv->max_gl_es2_version);
+                         &screen->max_gl_core_version,
+                         &screen->max_gl_compat_version,
+                         &screen->max_gl_es1_version,
+                         &screen->max_gl_es2_version);
 
    return dri_fill_in_modes(screen);
 }

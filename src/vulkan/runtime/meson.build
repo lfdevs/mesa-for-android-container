@@ -165,11 +165,22 @@ vk_physical_device_features = custom_target(
   depend_files : vk_physical_device_features_gen_depend_files,
 )
 
+vk_format_info = custom_target(
+  'vk_format_info',
+  input : ['vk_format_info_gen.py', vk_api_xml],
+  output : ['vk_format_info.c', 'vk_format_info.h'],
+  command : [
+    prog_python, '@INPUT0@', '--xml', '@INPUT1@',
+    '--out-c', '@OUTPUT0@', '--out-h', '@OUTPUT1@'
+  ],
+)
+
 libvulkan_runtime = static_library(
   'vulkan_runtime',
   [vulkan_runtime_files, vk_common_entrypoints,
    vk_cmd_queue, vk_cmd_enqueue_entrypoints,
-   vk_dispatch_trampolines, vk_physical_device_features],
+   vk_dispatch_trampolines, vk_physical_device_features,
+   vk_format_info],
   include_directories : [inc_include, inc_src, inc_gallium],
   dependencies : vulkan_runtime_deps,
   # For glsl_type_singleton

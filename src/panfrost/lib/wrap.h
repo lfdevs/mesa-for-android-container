@@ -27,11 +27,11 @@
 #ifndef __PAN_DECODE_PUBLIC_H__
 #define __PAN_DECODE_PUBLIC_H__
 
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <inttypes.h>
 
 /* Public entrypoints for the tracing infrastructure. This API should be kept
  * more or less stable. Don't feel bad if you have to change it; just feel
@@ -48,14 +48,13 @@ void pandecode_next_frame(void);
 
 void pandecode_close(void);
 
-void
-pandecode_inject_mmap(uint64_t gpu_va, void *cpu, unsigned sz, const char *name);
+void pandecode_inject_mmap(uint64_t gpu_va, void *cpu, unsigned sz,
+                           const char *name);
 
 void pandecode_inject_free(uint64_t gpu_va, unsigned sz);
 
 void pandecode_jc(uint64_t jc_gpu_va, unsigned gpu_id);
 
-void
-pandecode_abort_on_fault(uint64_t jc_gpu_va, unsigned gpu_id);
+void pandecode_abort_on_fault(uint64_t jc_gpu_va, unsigned gpu_id);
 
 #endif /* __MMAP_TRACE_H__ */

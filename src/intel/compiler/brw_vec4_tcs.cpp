@@ -365,6 +365,8 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const bool debug_enabled = INTEL_DEBUG(DEBUG_TCS);
    const unsigned *assembly;
 
+   brw_nir_clamp_per_vertex_loads(nir, key->input_vertices);
+
    vue_prog_data->base.stage = MESA_SHADER_TESS_CTRL;
    prog_data->base.base.ray_queries = nir->info.ray_queries;
    prog_data->base.base.total_scratch = 0;

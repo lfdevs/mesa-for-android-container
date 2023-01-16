@@ -19,7 +19,7 @@ NULL or point to valid and properly populated memory.
 
 When creating a pipeline, the
 :cpp:func:`vk_graphics_pipeline_state_fill()` function can be used to
-gather all of the state from the core structures as well as various `pNext`
+gather all of the state from the core structures as well as various ``pNext``
 chains into a single state structure.  Whenever an extension struct is
 missing, a reasonable default value is provided whenever possible.
 

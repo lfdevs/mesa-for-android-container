@@ -26,7 +26,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #include "util/u_math.h"
 #include "util/u_cpu_detect.h"
@@ -37,7 +37,7 @@
 #include "lp_debug.h"
 
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
 
 #include <emmintrin.h>
 

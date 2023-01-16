@@ -28,7 +28,7 @@
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_resource.h"
@@ -278,7 +278,7 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
          if (0) {
             debug_printf("%s: failed to allocate %u KB of DMA, "
                          "splitting DMA transfers\n",
-                         __FUNCTION__,
+                         __func__,
                          (sbuf->b.width0 + 1023)/1024);
          }
 
@@ -455,7 +455,7 @@ svga_resource_destroy(struct pipe_screen *screen,
       svga_sampler_view_reference(&tex->cached_view, NULL);
 
       /*
-        DBG("%s deleting %p\n", __FUNCTION__, (void *) tex);
+        DBG("%s deleting %p\n", __func__, (void *) tex);
       */
       SVGA_DBG(DEBUG_DMA, "unref sid %p (texture)\n", tex->handle);
 

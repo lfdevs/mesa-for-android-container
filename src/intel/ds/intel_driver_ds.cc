@@ -66,6 +66,11 @@ static const struct {
       INTEL_DS_QUEUE_STAGE_CMD_BUFFER,
    },
    {
+      "generate-draws",
+      false,
+      INTEL_DS_QUEUE_STAGE_GENERATE_DRAWS,
+   },
+   {
       "stall",
       false,
       INTEL_DS_QUEUE_STAGE_STALL,
@@ -417,6 +422,7 @@ CREATE_DUAL_EVENT_CALLBACK(draw_mesh_indirect, INTEL_DS_QUEUE_STAGE_DRAW_MESH)
 CREATE_DUAL_EVENT_CALLBACK(draw_mesh_indirect_count, INTEL_DS_QUEUE_STAGE_DRAW_MESH)
 CREATE_DUAL_EVENT_CALLBACK(xfb, INTEL_DS_QUEUE_STAGE_CMD_BUFFER)
 CREATE_DUAL_EVENT_CALLBACK(compute, INTEL_DS_QUEUE_STAGE_COMPUTE)
+CREATE_DUAL_EVENT_CALLBACK(generate_draws, INTEL_DS_QUEUE_STAGE_GENERATE_DRAWS)
 
 void
 intel_ds_begin_stall(struct intel_ds_device *device,
@@ -452,7 +458,7 @@ void
 intel_ds_end_submit(struct intel_ds_queue *queue,
                     uint64_t start_ts)
 {
-   if (!u_trace_context_actively_tracing(&queue->device->trace_context)) {
+   if (!u_trace_should_process(&queue->device->trace_context)) {
       queue->device->sync_gpu_ts = 0;
       queue->device->next_clock_sync_ns = 0;
       return;

@@ -20,6 +20,7 @@
 
 libfreedreno_drm_files = files(
   'freedreno_bo.c',
+  'freedreno_bo_heap.c',
   'freedreno_bo_cache.c',
   'freedreno_device.c',
   'freedreno_drmif.h',

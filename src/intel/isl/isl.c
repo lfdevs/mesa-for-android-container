@@ -107,7 +107,12 @@ isl_device_setup_mocs(struct isl_device *dev)
    dev->mocs.protected_mask = 0;
 
    if (dev->info->ver >= 12) {
-      if (intel_device_info_is_dg2(dev->info)) {
+      if (intel_device_info_is_mtl(dev->info)) {
+         /* Cached L3+L4; BSpec: 45101 */
+         dev->mocs.internal = 1 << 1;
+         /* Displayables cached to L3+L4:WT */
+         dev->mocs.external = 14 << 1;
+      } else if (intel_device_info_is_dg2(dev->info)) {
          /* L3CC=WB; BSpec: 45101 */
          dev->mocs.internal = 3 << 1;
          dev->mocs.external = 3 << 1;
@@ -1957,17 +1962,18 @@ isl_surf_init_s(const struct isl_device *dev,
       if (tiling == ISL_TILING_GFX12_CCS)
          base_alignment_B = MAX(base_alignment_B, 4096);
 
-      /* Platforms using an aux map require that images be 64K-aligned if
-       * they're going to used with CCS. This is because the Aux translation
-       * table maps main surface addresses to aux addresses at a 64K (in the
-       * main surface) granularity. Because we don't know for sure in ISL if
-       * a surface will use CCS, we have to guess based on the DISABLE_AUX
-       * usage bit. The one thing we do know is that we haven't enable CCS on
-       * linear images yet so we can avoid the extra alignment there.
+      /* Platforms using an aux map require that images be granularity-aligned
+       * if they're going to used with CCS. This is because the Aux translation
+       * table maps main surface addresses to aux addresses at a granularity in
+       * the main surface. Because we don't know for sure in ISL if a surface
+       * will use CCS, we have to guess based on the DISABLE_AUX usage bit. The
+       * one thing we do know is that we haven't enable CCS on linear images
+       * yet so we can avoid the extra alignment there.
        */
       if (dev->info->has_aux_map &&
           !(info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)) {
-         base_alignment_B = MAX(base_alignment_B, 64 * 1024);
+         base_alignment_B = MAX(base_alignment_B, dev->info->verx10 >= 125 ?
+               1024 * 1024 : 64 * 1024);
       }
    }
 

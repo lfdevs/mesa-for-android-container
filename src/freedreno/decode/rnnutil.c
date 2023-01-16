@@ -144,10 +144,20 @@ rnn_regname(struct rnn *rnn, uint32_t regbase, int color)
    return NULL;
 }
 
+/* call rnn_reginfo_free() to free the result */
 struct rnndecaddrinfo *
 rnn_reginfo(struct rnn *rnn, uint32_t regbase)
 {
    return rnndec_decodeaddr(rnn->vc, finddom(rnn, regbase), regbase, 0);
+}
+
+void
+rnn_reginfo_free(struct rnndecaddrinfo *info)
+{
+   if (!info)
+      return;
+   free(info->name);
+   free(info);
 }
 
 const char *

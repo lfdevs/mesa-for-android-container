@@ -1,7 +1,7 @@
 #ifndef __GL_CONFIG_H__
 #define __GL_CONFIG_H__
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 
 /**
  * Framebuffer configuration (aka visual / pixelformat)

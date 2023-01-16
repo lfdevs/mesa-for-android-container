@@ -34,7 +34,7 @@ d3d12_video_nalu_writer_h264::rbsp_trailing(d3d12_video_encoder_bitstream *pBits
       pBitstream->put_bits(iLeft, 0);
    }
 
-   bool isAligned = pBitstream->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
+   ASSERTED bool isAligned = pBitstream->is_byte_aligned();   // causes side-effects in object state, don't put inside assert()
    assert(isAligned);
 }
 

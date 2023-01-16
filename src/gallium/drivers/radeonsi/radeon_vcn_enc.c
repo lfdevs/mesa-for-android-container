@@ -216,6 +216,36 @@ static void radeon_vcn_enc_h264_get_slice_ctrl_param(struct radeon_encoder *enc,
    enc->enc_pic.slice_ctrl.num_mbs_per_slice = num_mbs_in_slice;
 }
 
+static void radeon_vcn_enc_h264_get_output_format_param(struct radeon_encoder *enc,
+                                                        struct pipe_h264_enc_picture_desc *pic)
+{
+   enc->enc_pic.enc_output_format.output_color_volume = RENCODE_COLOR_VOLUME_G22_BT709;
+   enc->enc_pic.enc_output_format.output_color_range = RENCODE_COLOR_RANGE_FULL;
+   enc->enc_pic.enc_output_format.output_chroma_location = RENCODE_CHROMA_LOCATION_INTERSTITIAL;
+   enc->enc_pic.enc_output_format.output_color_bit_depth = RENCODE_COLOR_BIT_DEPTH_8_BIT;
+}
+
+static void radeon_vcn_enc_get_input_format_param(struct radeon_encoder *enc,
+                                                  struct pipe_picture_desc *pic_base)
+{
+   switch (pic_base->input_format) {
+   case PIPE_FORMAT_P010:
+      enc->enc_pic.enc_input_format.input_color_bit_depth = RENCODE_COLOR_BIT_DEPTH_10_BIT;
+      enc->enc_pic.enc_input_format.input_color_packing_format = RENCODE_COLOR_PACKING_FORMAT_P010;
+      break;
+   case PIPE_FORMAT_NV12: /* FALL THROUGH */
+   default:
+      enc->enc_pic.enc_input_format.input_color_bit_depth = RENCODE_COLOR_BIT_DEPTH_8_BIT;
+      enc->enc_pic.enc_input_format.input_color_packing_format = RENCODE_COLOR_PACKING_FORMAT_NV12;
+      break;
+   }
+   enc->enc_pic.enc_input_format.input_color_volume = RENCODE_COLOR_VOLUME_G22_BT709;
+   enc->enc_pic.enc_input_format.input_color_range = RENCODE_COLOR_RANGE_FULL;
+   enc->enc_pic.enc_input_format.input_chroma_subsampling = RENCODE_CHROMA_SUBSAMPLING_4_2_0;
+   enc->enc_pic.enc_input_format.input_chroma_location = RENCODE_CHROMA_LOCATION_INTERSTITIAL;
+   enc->enc_pic.enc_input_format.input_color_space = RENCODE_COLOR_SPACE_YUV;
+}
+
 static void radeon_vcn_enc_h264_get_param(struct radeon_encoder *enc,
                                           struct pipe_h264_enc_picture_desc *pic)
 {
@@ -240,6 +270,8 @@ static void radeon_vcn_enc_h264_get_param(struct radeon_encoder *enc,
    radeon_vcn_enc_h264_get_spec_misc_param(enc, pic);
    radeon_vcn_enc_h264_get_vui_param(enc, pic);
    radeon_vcn_enc_h264_get_slice_ctrl_param(enc, pic);
+   radeon_vcn_enc_get_input_format_param(enc, &pic->base);
+   radeon_vcn_enc_h264_get_output_format_param(enc, pic);
 }
 
 static void radeon_vcn_enc_hevc_get_cropping_param(struct radeon_encoder *enc,
@@ -380,6 +412,25 @@ static void radeon_vcn_enc_hevc_get_slice_ctrl_param(struct radeon_encoder *enc,
       num_ctbs_in_slice;
 }
 
+static void radeon_vcn_enc_hevc_get_output_format_param(struct radeon_encoder *enc,
+                                                        struct pipe_h265_enc_picture_desc *pic)
+{
+   switch (enc->enc_pic.bit_depth_luma_minus8) {
+   case 2: /* 10 bits */
+      enc->enc_pic.enc_output_format.output_color_volume = RENCODE_COLOR_VOLUME_G22_BT709;
+      enc->enc_pic.enc_output_format.output_color_range = RENCODE_COLOR_RANGE_FULL;
+      enc->enc_pic.enc_output_format.output_chroma_location = RENCODE_CHROMA_LOCATION_INTERSTITIAL;
+      enc->enc_pic.enc_output_format.output_color_bit_depth = RENCODE_COLOR_BIT_DEPTH_10_BIT;
+      break;
+   default: /* 8 bits */
+      enc->enc_pic.enc_output_format.output_color_volume = RENCODE_COLOR_VOLUME_G22_BT709;
+      enc->enc_pic.enc_output_format.output_color_range = RENCODE_COLOR_RANGE_FULL;
+      enc->enc_pic.enc_output_format.output_chroma_location = RENCODE_CHROMA_LOCATION_INTERSTITIAL;
+      enc->enc_pic.enc_output_format.output_color_bit_depth = RENCODE_COLOR_BIT_DEPTH_8_BIT;
+      break;
+   }
+}
+
 static void radeon_vcn_enc_hevc_get_param(struct radeon_encoder *enc,
                                           struct pipe_h265_enc_picture_desc *pic)
 {
@@ -437,6 +488,8 @@ static void radeon_vcn_enc_hevc_get_param(struct radeon_encoder *enc,
    radeon_vcn_enc_hevc_get_rc_param(enc, pic);
    radeon_vcn_enc_hevc_get_vui_param(enc, pic);
    radeon_vcn_enc_hevc_get_slice_ctrl_param(enc, pic);
+   radeon_vcn_enc_get_input_format_param(enc, &pic->base);
+   radeon_vcn_enc_hevc_get_output_format_param(enc, pic);
 }
 
 static void radeon_vcn_enc_get_param(struct radeon_encoder *enc, struct pipe_picture_desc *picture)
@@ -608,6 +661,8 @@ static void radeon_enc_encode_bitstream(struct pipe_video_codec *encoder,
                                         struct pipe_resource *destination, void **fb)
 {
    struct radeon_encoder *enc = (struct radeon_encoder *)encoder;
+   struct vl_video_buffer *vid_buf = (struct vl_video_buffer *)source;
+
    enc->get_buffer(destination, &enc->bs_handle, NULL);
    enc->bs_size = destination->width0;
 
@@ -617,6 +672,17 @@ static void radeon_enc_encode_bitstream(struct pipe_video_codec *encoder,
       RVID_ERR("Can't create feedback buffer.\n");
       return;
    }
+
+   if (vid_buf->base.statistics_data) {
+      enc->get_buffer(vid_buf->base.statistics_data, &enc->stats, NULL);
+      if (enc->stats->size < sizeof(rvcn_encode_stats_type_0_t)) {
+         RVID_ERR("Encoder statistics output buffer is too small.\n");
+         enc->stats = NULL;
+      }
+      vid_buf->base.statistics_data = NULL;
+   }
+   else
+      enc->stats = NULL;
 
    enc->need_feedback = true;
    enc->encode(enc);

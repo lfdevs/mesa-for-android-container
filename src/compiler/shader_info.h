@@ -485,6 +485,13 @@ typedef struct shader_info {
           * shader.
           */
          unsigned advanced_blend_modes;
+
+         /**
+          * Defined by AMD_shader_early_and_late_fragment_tests.
+          */
+         bool early_and_late_fragment_tests:1;
+         enum gl_frag_stencil_layout stencil_front_layout:3;
+         enum gl_frag_stencil_layout stencil_back_layout:3;
       } fs;
 
       struct {
@@ -509,7 +516,7 @@ typedef struct shader_info {
 
       /* Applies to both TCS and TES. */
       struct {
-	 enum tess_primitive_mode _primitive_mode;
+         enum tess_primitive_mode _primitive_mode;
 
          /** The number of vertices in the TCS output patch. */
          uint8_t tcs_vertices_out;

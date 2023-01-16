@@ -27,7 +27,7 @@
 #define SVGA_FORMAT_H_
 
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "svga_context.h"
 #include "svga_types.h"
 #include "svga_reg.h"

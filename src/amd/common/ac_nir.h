@@ -64,6 +64,10 @@ nir_ssa_def *
 ac_nir_load_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg);
 
 nir_ssa_def *
+ac_nir_unpack_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg,
+                  unsigned rshift, unsigned bitwidth);
+
+nir_ssa_def *
 ac_nir_calc_io_offset(nir_builder *b,
                       nir_intrinsic_instr *intrin,
                       nir_ssa_def *base_stride,
@@ -183,16 +187,46 @@ ac_nir_lower_global_access(nir_shader *shader);
 
 bool ac_nir_lower_resinfo(nir_shader *nir, enum amd_gfx_level gfx_level);
 
+typedef struct ac_nir_gs_output_info {
+   const uint8_t *streams;
+   const uint8_t *streams_16bit_lo;
+   const uint8_t *streams_16bit_hi;
+
+   const uint8_t *usage_mask;
+   const uint8_t *usage_mask_16bit_lo;
+   const uint8_t *usage_mask_16bit_hi;
+
+   /* type for each 16bit slot component */
+   nir_alu_type (*types_16bit_lo)[4];
+   nir_alu_type (*types_16bit_hi)[4];
+
+   /* map varying slot to driver location */
+   const uint8_t *slot_to_location;
+   const uint8_t *slot_to_location_16bit;
+} ac_nir_gs_output_info;
+
 nir_shader *
 ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
-                             const struct pipe_stream_output_info *so_info, size_t num_outputs,
-                             const uint8_t *output_usage_mask, const uint8_t *output_streams,
-                             const uint8_t *output_semantics,
-                             const uint8_t num_stream_output_components[4]);
+                             bool disable_streamout,
+                             ac_nir_gs_output_info *output_info);
 
 void
-ac_nir_lower_legacy_vs(nir_shader *nir, int primitive_id_location,
-                       const struct pipe_stream_output_info *so_info);
+ac_nir_lower_legacy_vs(nir_shader *nir, int primitive_id_location, bool disable_streamout);
+
+bool
+ac_nir_gs_shader_query(nir_builder *b,
+                       bool has_gen_prim_query,
+                       bool has_pipeline_stats_query,
+                       unsigned num_vertices_per_primitive,
+                       unsigned wave_size,
+                       nir_ssa_def *vertex_count[4],
+                       nir_ssa_def *primitive_count[4]);
+
+void
+ac_nir_lower_legacy_gs(nir_shader *nir,
+                       bool has_gen_prim_query,
+                       bool has_pipeline_stats_query,
+                       ac_nir_gs_output_info *output_info);
 
 #ifdef __cplusplus
 }

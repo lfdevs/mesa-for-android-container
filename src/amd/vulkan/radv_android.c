@@ -188,7 +188,7 @@ radv_image_from_gralloc(VkDevice device_h, const VkImageCreateInfo *base_info,
                                  .no_metadata_planes = true,
                                  .bo_metadata = &md,
                               },
-                              alloc, &image_h);
+                              alloc, &image_h, false);
 
    if (result != VK_SUCCESS)
       goto fail_create_image;

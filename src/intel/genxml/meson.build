@@ -32,6 +32,10 @@ gen_xml_files = [
   'gen125.xml',
 ]
 
+gen_xml_rt_files = [
+  'gen125_rt.xml',
+]
+
 gen_pack_header_deps = files('util.py')
 
 genX_xml_h = custom_target(
@@ -73,11 +77,17 @@ genX_bits_included_symbols = [
   'CLEAR_COLOR',
   'VERTEX_BUFFER_STATE::Buffer Starting Address',
   'CPS_STATE',
+  'RT_DISPATCH_GLOBALS::Hit Group Table',
+  'RT_DISPATCH_GLOBALS::Miss Group Table',
+  'RT_DISPATCH_GLOBALS::Callable Group Table',
+  'RT_DISPATCH_GLOBALS::Launch Width',
+  'RT_DISPATCH_GLOBALS::Launch Height',
+  'RT_DISPATCH_GLOBALS::Launch Depth',
 ]
 
 genX_bits_h = custom_target(
   'genX_bits.h',
-  input : ['gen_bits_header.py', gen_xml_files],
+  input : ['gen_bits_header.py', gen_xml_files, gen_xml_rt_files],
   output : 'genX_bits.h',
   command : [prog_python, '@INPUT@', '-o', '@OUTPUT@',
              '--include-symbols', ','.join(genX_bits_included_symbols)],
@@ -85,7 +95,7 @@ genX_bits_h = custom_target(
 )
 
 gen_xml_pack = []
-foreach f : gen_xml_files + ['gen_rt.xml']
+foreach f : gen_xml_files + gen_xml_rt_files
   _name = '@0@_pack.h'.format(f.split('.')[0])
   gen_xml_pack += custom_target(
     _name,
@@ -101,7 +111,7 @@ gen_pack_header_py = files('gen_pack_header.py')
 
 idep_genxml = declare_dependency(sources : [gen_xml_pack, genX_bits_h, genX_xml_h])
 
-foreach f : gen_xml_files + ['gen_rt.xml']
+foreach f : gen_xml_files + gen_xml_rt_files
   test(
     'genxml sort @0@'.format(f),
     prog_python,

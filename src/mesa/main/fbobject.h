@@ -26,7 +26,7 @@
 #ifndef FBOBJECT_H
 #define FBOBJECT_H
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include <stdbool.h>
 
 struct gl_context;

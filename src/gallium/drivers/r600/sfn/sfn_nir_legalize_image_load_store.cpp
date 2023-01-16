@@ -69,6 +69,7 @@ r600_legalize_image_load_store_impl(nir_builder *b,
          num_components = 1;
          break;
       case GLSL_SAMPLER_DIM_2D:
+      case GLSL_SAMPLER_DIM_MS:
       case GLSL_SAMPLER_DIM_RECT:
       case GLSL_SAMPLER_DIM_CUBE:
          num_components = 2;

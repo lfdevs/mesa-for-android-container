@@ -30,7 +30,7 @@
  */
 
 #include <stdio.h>
-#include "glheader.h"
+#include "util/glheader.h"
 
 #include "blend.h"
 #include "buffers.h"

@@ -35,7 +35,7 @@
 #define SW_WINSYS_H
 
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "frontend/winsys_handle.h"
 
 #ifdef __cplusplus

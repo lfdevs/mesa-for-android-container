@@ -107,7 +107,6 @@ struct nv50_program {
    } gp;
 
    struct {
-      uint32_t lmem_size; /* local memory (TGSI PRIVATE resource) size */
       uint32_t smem_size; /* shared memory (TGSI LOCAL resource) size */
       struct nv50_gmem_state gmem[NV50_MAX_GLOBALS];
    } cp;

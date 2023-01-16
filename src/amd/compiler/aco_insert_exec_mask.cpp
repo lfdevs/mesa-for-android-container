@@ -816,7 +816,7 @@ add_branch_code(exec_ctx& ctx, Block* block)
 
       Builder::Result r = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(exec, bld.lm),
                                      block->linear_succs[1], block->linear_succs[0]);
-      r.instr->branch().selection_control = sel_ctrl;
+      r->branch().selection_control = sel_ctrl;
       return;
    }
 
@@ -832,7 +832,7 @@ add_branch_code(exec_ctx& ctx, Block* block)
 
       Builder::Result r = bld.branch(aco_opcode::p_cbranch_z, bld.def(s2), Operand(exec, bld.lm),
                                      block->linear_succs[1], block->linear_succs[0]);
-      r.instr->branch().selection_control = sel_ctrl;
+      r->branch().selection_control = sel_ctrl;
       return;
    }
 

@@ -161,6 +161,24 @@ is_r8g8(enum pipe_format format)
 }
 
 /**
+ * Can a rsc be accessed tiled with the specified format, or does it need to
+ * be linearized?
+ */
+bool
+fd6_valid_tiling(struct fd_resource *rsc, enum pipe_format format)
+{
+   enum pipe_format orig_format = rsc->b.b.format;
+
+   if (orig_format == format)
+      return true;
+
+   if (rsc->layout.tile_mode && (is_r8g8(orig_format) != is_r8g8(format)))
+      return false;
+
+   return true;
+}
+
+/**
  * Ensure the rsc is in an ok state to be used with the specified format.
  * This handles the case of UBWC buffers used with non-UBWC compatible
  * formats, by triggering an uncompress.
@@ -176,7 +194,7 @@ fd6_validate_format(struct fd_context *ctx, struct fd_resource *rsc,
    if (orig_format == format)
       return;
 
-   if (rsc->layout.tile_mode && (is_r8g8(orig_format) != is_r8g8(format))) {
+   if (!fd6_valid_tiling(rsc, format)) {
       perf_debug_ctx(ctx,
                      "%" PRSC_FMT ": demoted to linear+uncompressed due to use as %s",
                      PRSC_ARGS(&rsc->b.b), util_format_short_name(format));

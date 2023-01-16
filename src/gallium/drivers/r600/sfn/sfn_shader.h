@@ -189,8 +189,8 @@ public:
    void set_info(nir_shader *nir);
    void get_shader_info(r600_shader *sh_info);
 
-   r600_chip_class chip_class() const { return m_chip_class; };
-   void set_chip_class(r600_chip_class cls) { m_chip_class = cls; };
+   r600_chip_class chip_class() const { return m_chip_class; }
+   void set_chip_class(r600_chip_class cls) { m_chip_class = cls; }
 
    void start_new_block(int nesting_depth);
 
@@ -205,7 +205,7 @@ public:
    void chain_scratch_read(Instr *instr);
    void chain_ssbo_read(Instr *instr);
 
-   virtual uint32_t enabled_stream_buffers_mask() const { return 0; };
+   virtual uint32_t enabled_stream_buffers_mask() const { return 0; }
 
    size_t noutputs() const { return m_outputs.size(); }
    size_t ninputs() const { return m_inputs.size(); }
@@ -244,6 +244,8 @@ public:
    PRegister emit_load_to_register(PVirtualValue src);
 
    virtual unsigned image_size_const_offset() { return 0;}
+
+   auto required_registers() const { return m_required_registers;}
 
 protected:
    enum ESlots {
@@ -303,7 +305,6 @@ private:
    bool read_input(std::istream& is);
    virtual bool read_prop(std::istream& is) = 0;
 
-   bool emit_if_start(nir_if *if_stmt);
    bool emit_control_flow(ControlFlowInstr::CFType type);
    bool emit_store_scratch(nir_intrinsic_instr *intr);
    bool emit_load_scratch(nir_intrinsic_instr *intr);
@@ -351,6 +352,7 @@ private:
 
    int32_t m_ssbo_image_offset{0};
    uint32_t m_nloops{0};
+   uint32_t m_required_registers{0};
 
    class InstructionChain : public InstrVisitor {
    public:

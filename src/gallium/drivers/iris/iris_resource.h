@@ -281,8 +281,6 @@ struct iris_transfer {
    struct blorp_context *blorp;
    struct iris_batch *batch;
 
-   bool dest_had_defined_contents;
-
    void (*unmap)(struct iris_transfer *);
 };
 

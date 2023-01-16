@@ -28,7 +28,7 @@
 #define ZINK_KOPPER_H
 
 #include "kopper_interface.h"
-#include "u_queue.h"
+#include "util/u_queue.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -46,7 +46,10 @@ descriptor_layout_create(struct zink_screen *screen, enum zink_descriptor_type t
    VkDescriptorSetLayoutBindingFlagsCreateInfo fci = {0};
    VkDescriptorBindingFlags flags[ZINK_MAX_DESCRIPTORS_PER_TYPE];
    dcslci.pNext = &fci;
-   if (t == ZINK_DESCRIPTOR_TYPE_UNIFORMS)
+   /* TODO bindless */
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB && t != ZINK_DESCRIPTOR_BINDLESS)
+      dcslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+   else if (t == ZINK_DESCRIPTOR_TYPE_UNIFORMS)
       dcslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
    fci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
    fci.bindingCount = num_bindings;
@@ -305,6 +308,62 @@ zink_descriptor_util_alloc_sets(struct zink_screen *screen, VkDescriptorSetLayou
 }
 
 static void
+init_db_template_entry(struct zink_context *ctx, struct zink_shader *shader, enum zink_descriptor_type type,
+                       unsigned idx, struct zink_descriptor_template *entry, unsigned *entry_idx)
+{
+    int index = shader->bindings[type][idx].index;
+    gl_shader_stage stage = shader->nir->info.stage;
+    struct zink_screen *screen = zink_screen(ctx->base.screen);
+    entry->count = shader->bindings[type][idx].size;
+
+    switch (shader->bindings[type][idx].type) {
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+       entry->mem = (void*)&ctx->di.db.ubos[stage][index];
+       entry->stride = sizeof(VkDescriptorAddressInfoEXT);
+       entry->db_size = screen->info.db_props.robustUniformBufferDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+       entry->mem = (void*)&ctx->di.textures[stage][index];
+       entry->stride = sizeof(VkDescriptorImageInfo);
+       entry->db_size = screen->info.db_props.combinedImageSamplerDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+       entry->mem = (void*)&ctx->di.textures[stage][index];
+       entry->stride = sizeof(VkDescriptorImageInfo);
+       entry->db_size = screen->info.db_props.sampledImageDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+       entry->mem = (void*)&ctx->di.textures[stage][index];
+       entry->stride = sizeof(VkDescriptorImageInfo);
+       entry->db_size = screen->info.db_props.samplerDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+       entry->mem = (void*)&ctx->di.db.tbos[stage][index];
+       entry->stride = sizeof(VkDescriptorAddressInfoEXT);
+       entry->db_size = screen->info.db_props.robustUniformTexelBufferDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+       entry->mem = (void*)&ctx->di.db.ssbos[stage][index];
+       entry->stride = sizeof(VkDescriptorAddressInfoEXT);
+       entry->db_size = screen->info.db_props.robustStorageBufferDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+       entry->mem = (void*)&ctx->di.images[stage][index];
+       entry->stride = sizeof(VkDescriptorImageInfo);
+       entry->db_size = screen->info.db_props.storageImageDescriptorSize;
+       break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+       entry->mem = (void*)&ctx->di.db.texel_images[stage][index];
+       entry->stride = sizeof(VkDescriptorAddressInfoEXT);
+       entry->db_size = screen->info.db_props.robustStorageTexelBufferDescriptorSize;
+       break;
+    default:
+       unreachable("unknown type");
+    }
+    (*entry_idx)++;
+}
+
+static void
 init_template_entry(struct zink_shader *shader, enum zink_descriptor_type type,
                     unsigned idx, VkDescriptorUpdateTemplateEntry *entry, unsigned *entry_idx)
 {
@@ -321,7 +380,7 @@ init_template_entry(struct zink_shader *shader, enum zink_descriptor_type type,
     switch (shader->bindings[type][idx].type) {
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-       entry->offset = offsetof(struct zink_context, di.ubos[stage][index]);
+       entry->offset = offsetof(struct zink_context, di.t.ubos[stage][index]);
        entry->stride = sizeof(VkDescriptorBufferInfo);
        break;
     case VK_DESCRIPTOR_TYPE_SAMPLER:
@@ -331,11 +390,11 @@ init_template_entry(struct zink_shader *shader, enum zink_descriptor_type type,
        entry->stride = sizeof(VkDescriptorImageInfo);
        break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-       entry->offset = offsetof(struct zink_context, di.tbos[stage][index]);
+       entry->offset = offsetof(struct zink_context, di.t.tbos[stage][index]);
        entry->stride = sizeof(VkBufferView);
        break;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-       entry->offset = offsetof(struct zink_context, di.ssbos[stage][index]);
+       entry->offset = offsetof(struct zink_context, di.t.ssbos[stage][index]);
        entry->stride = sizeof(VkDescriptorBufferInfo);
        break;
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
@@ -343,13 +402,26 @@ init_template_entry(struct zink_shader *shader, enum zink_descriptor_type type,
        entry->stride = sizeof(VkDescriptorImageInfo);
        break;
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-       entry->offset = offsetof(struct zink_context, di.texel_images[stage][index]);
+       entry->offset = offsetof(struct zink_context, di.t.texel_images[stage][index]);
        entry->stride = sizeof(VkBufferView);
        break;
     default:
        unreachable("unknown type");
     }
     (*entry_idx)++;
+}
+
+static void
+init_program_db(struct zink_screen *screen, struct zink_program *pg, enum zink_descriptor_type type, VkDescriptorSetLayoutBinding *bindings, unsigned num_bindings, VkDescriptorSetLayout dsl)
+{
+   VkDeviceSize val;
+   VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, dsl, &val);
+   pg->dd.db_size[type] = val;
+   pg->dd.db_offset[type] = rzalloc_array(pg, uint32_t, num_bindings);
+   for (unsigned i = 0; i < num_bindings; i++) {
+      VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, dsl, bindings[i].binding, &val);
+      pg->dd.db_offset[type][i] = val;
+   }
 }
 
 static uint16_t
@@ -419,6 +491,21 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
    }
 
    unsigned entry_idx[ZINK_DESCRIPTOR_BASE_TYPES] = {0};
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
+      unsigned desc_set_size[ZINK_DESCRIPTOR_BASE_TYPES];
+      for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++)
+         desc_set_size[i] = zink_program_num_bindings_typed(pg, i);
+      if (screen->compact_descriptors) {
+         desc_set_size[ZINK_DESCRIPTOR_TYPE_UBO] += desc_set_size[ZINK_DESCRIPTOR_TYPE_SSBO];
+         desc_set_size[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] += desc_set_size[ZINK_DESCRIPTOR_TYPE_IMAGE];
+         desc_set_size[ZINK_DESCRIPTOR_TYPE_SSBO] = 0;
+         desc_set_size[ZINK_DESCRIPTOR_TYPE_IMAGE] = 0;
+      }
+      for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++) {
+         if (desc_set_size[i])
+            pg->dd.db_template[i] = rzalloc_array(pg, struct zink_descriptor_template, desc_set_size[i]);
+      }
+   }
 
    unsigned num_shaders = pg->is_compute ? 1 : ZINK_GFX_SHADER_COUNT;
    bool have_push = screen->info.have_KHR_push_descriptor;
@@ -450,7 +537,10 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
                                                          zink_vktype_to_size_idx(shader->bindings[j][k].type);
             sizes[idx].descriptorCount += shader->bindings[j][k].size;
             sizes[idx].type = shader->bindings[j][k].type;
-            init_template_entry(shader, j, k, &entries[desc_type][entry_idx[desc_type]], &entry_idx[desc_type]);
+            if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
+               init_db_template_entry(ctx, shader, j, k, &pg->dd.db_template[desc_type][entry_idx[desc_type]], &entry_idx[desc_type]);
+            else
+               init_template_entry(shader, j, k, &entries[desc_type][entry_idx[desc_type]], &entry_idx[desc_type]);
             num_bindings[desc_type]++;
             has_bindings |= BITFIELD_BIT(desc_type);
          }
@@ -507,6 +597,8 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
          pg->dd.pool_key[desc_type] = descriptor_util_pool_key_get(ctx, desc_type, key, sz, num_type_sizes[desc_type]);
          pg->dd.pool_key[desc_type]->use_count++;
          pg->dsl[pg->num_dsl] = pg->dd.layouts[pg->num_dsl]->layout;
+         if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
+            init_program_db(screen, pg, desc_type, bindings[desc_type], num_bindings[desc_type], pg->dsl[pg->num_dsl]);
          pg->num_dsl++;
       }
    }
@@ -532,6 +624,9 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
    if (!pg->layout)
       return false;
    pg->compat_id = _mesa_hash_data(pg->dsl, pg->num_dsl * sizeof(pg->dsl[0]));
+
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
+      return true;
 
    VkDescriptorUpdateTemplateCreateInfo template[ZINK_DESCRIPTOR_NON_BINDLESS_TYPES] = {0};
    /* type of template */
@@ -586,7 +681,7 @@ zink_descriptor_program_deinit(struct zink_screen *screen, struct zink_program *
          pg->dd.pool_key[i]->use_count--;
          pg->dd.pool_key[i] = NULL;
       }
-      if (pg->dd.templates[i]) {
+      if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_LAZY && pg->dd.templates[i]) {
          VKSCR(DestroyDescriptorUpdateTemplate)(screen->dev, pg->dd.templates[i], NULL);
          pg->dd.templates[i] = VK_NULL_HANDLE;
       }
@@ -852,6 +947,78 @@ populate_sets(struct zink_context *ctx, struct zink_batch_state *bs,
 }
 
 /* updates the mask of changed_sets and binds the mask of bind_sets */
+static void
+zink_descriptors_update_masked_buffer(struct zink_context *ctx, bool is_compute, uint8_t changed_sets, uint8_t bind_sets)
+{
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
+   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_program *pg = is_compute ? &ctx->curr_compute->base : &ctx->curr_program->base;
+
+   /* skip if no descriptors are updated */
+   if (!pg->dd.binding_usage || (!changed_sets && !bind_sets))
+      return;
+
+   u_foreach_bit(type, changed_sets | bind_sets) {
+      assert(type + 1 < pg->num_dsl);
+      assert(type < ZINK_DESCRIPTOR_BASE_TYPES);
+      bool changed = (changed_sets & BITFIELD_BIT(type)) > 0;
+      uint64_t offset = changed ? bs->dd.db_offset[type] : bs->dd.cur_db_offset[type];
+      if (pg->dd.db_template[type] && changed) {
+         const struct zink_descriptor_layout_key *key = pg->dd.pool_key[type]->layout;
+         VkDescriptorGetInfoEXT info;
+         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+         info.pNext = NULL;
+         assert(bs->dd.db[type]->obj->size > bs->dd.db_offset[type] + pg->dd.db_size[type]);
+         for (unsigned i = 0; i < key->num_bindings; i++) {
+            info.type = key->bindings[i].descriptorType;
+            uint64_t desc_offset = offset + pg->dd.db_offset[type][i];
+            if (screen->info.db_props.combinedImageSamplerDescriptorSingleArray ||
+                key->bindings[i].descriptorType != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+                key->bindings[i].descriptorCount == 1) {
+               for (unsigned j = 0; j < key->bindings[i].descriptorCount; j++) {
+                  /* VkDescriptorDataEXT is a union of pointers; the member doesn't matter */
+                  info.data.pSampler = (void*)(pg->dd.db_template[type][i].mem + j * pg->dd.db_template[type][i].stride);
+                  VKSCR(GetDescriptorEXT)(screen->dev, &info, pg->dd.db_template[type][i].db_size, bs->dd.db_map[type] + desc_offset + j * pg->dd.db_template[type][i].db_size);
+               }
+            } else {
+               assert(key->bindings[i].descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+               char buf[1024];
+               uint8_t *db = bs->dd.db_map[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] + desc_offset;
+               uint8_t *samplers = db + key->bindings[i].descriptorCount * screen->info.db_props.sampledImageDescriptorSize;
+               for (unsigned j = 0; j < key->bindings[i].descriptorCount; j++) {
+                  /* VkDescriptorDataEXT is a union of pointers; the member doesn't matter */
+                  info.data.pSampler = (void*)(pg->dd.db_template[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW][i].mem +
+                                               j * pg->dd.db_template[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW][i].stride);
+                  VKSCR(GetDescriptorEXT)(screen->dev, &info, pg->dd.db_template[type][ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW].db_size, buf);
+                  /* drivers that don't support combinedImageSamplerDescriptorSingleArray must have sampler arrays written in memory as
+                   *
+                   *   | array_of_samplers[] | array_of_sampled_images[] |
+                   * 
+                   * which means each descriptor's data must be split
+                   */
+                  memcpy(db, buf, screen->info.db_props.samplerDescriptorSize);
+                  memcpy(samplers, &buf[screen->info.db_props.samplerDescriptorSize], screen->info.db_props.sampledImageDescriptorSize);
+                  db += screen->info.db_props.sampledImageDescriptorSize;
+                  samplers += screen->info.db_props.samplerDescriptorSize;
+               }
+            }
+         }
+         bs->dd.cur_db_offset[type] = bs->dd.db_offset[type];
+         bs->dd.db_offset[type] += pg->dd.db_size[type];
+      }
+      /* templates are indexed by the set id, so increment type by 1
+         * (this is effectively an optimization of indirecting through screen->desc_set_id)
+         */
+      VKCTX(CmdSetDescriptorBufferOffsetsEXT)(bs->cmdbuf,
+                                                is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                pg->layout,
+                                                type + 1, 1,
+                                                &type,
+                                                &offset);
+   }
+}
+
+/* updates the mask of changed_sets and binds the mask of bind_sets */
 void
 zink_descriptors_update_masked(struct zink_context *ctx, bool is_compute, uint8_t changed_sets, uint8_t bind_sets)
 {
@@ -946,29 +1113,71 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
     * VK 14.2.2
     */
    uint8_t bind_sets = bs->dd.pg[is_compute] && bs->dd.compat_id[is_compute] == pg->compat_id ? 0 : pg->dd.binding_usage;
+
    if (pg->dd.push_usage && (ctx->dd.push_state_changed[is_compute] || bind_sets)) {
-      if (have_KHR_push_descriptor) {
-         if (ctx->dd.push_state_changed[is_compute])
-            VKCTX(CmdPushDescriptorSetWithTemplateKHR)(bs->cmdbuf, pg->dd.templates[0],
-                                                        pg->layout, 0, ctx);
-      } else {
+      if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
+         uint32_t index = ZINK_DESCRIPTOR_TYPE_UNIFORMS;
+         uint64_t offset = ctx->dd.push_state_changed[is_compute] ?
+                           bs->dd.db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS] :
+                           bs->dd.cur_db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS];
          if (ctx->dd.push_state_changed[is_compute]) {
-            struct zink_descriptor_pool *pool = check_push_pool_alloc(ctx, &bs->dd.push_pool[pg->is_compute], bs, pg->is_compute);
-            VkDescriptorSet push_set = get_descriptor_set(pool);
-            if (!push_set)
-               mesa_loge("ZINK: failed to get push descriptor set! prepare to crash!");
-            VKCTX(UpdateDescriptorSetWithTemplate)(screen->dev, push_set, pg->dd.templates[0], ctx);
-            bs->dd.sets[is_compute][0] = push_set;
+            assert(bs->dd.db[ZINK_DESCRIPTOR_TYPE_UNIFORMS]->obj->size > bs->dd.db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS] + ctx->dd.db_size[is_compute]);
+            for (unsigned i = 0; i < (is_compute ? 1 : ZINK_GFX_SHADER_COUNT); i++) {
+               VkDescriptorGetInfoEXT info;
+               info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+               info.pNext = NULL;
+               info.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+               info.data.pUniformBuffer = &ctx->di.db.ubos[is_compute ? MESA_SHADER_COMPUTE : i][0];
+               uint64_t stage_offset = offset + (is_compute ? 0 : ctx->dd.db_offset[i]);
+               VKSCR(GetDescriptorEXT)(screen->dev, &info, screen->info.db_props.robustUniformBufferDescriptorSize,
+                                                           bs->dd.db_map[ZINK_DESCRIPTOR_TYPE_UNIFORMS] + stage_offset);
+            }
+            if (!is_compute && ctx->dd.has_fbfetch) {
+               VkDescriptorGetInfoEXT info;
+               info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+               info.pNext = NULL;
+               info.type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+               info.data.pInputAttachmentImage = &ctx->di.fbfetch;
+               uint64_t stage_offset = offset + ctx->dd.db_offset[MESA_SHADER_FRAGMENT + 1];
+               VKSCR(GetDescriptorEXT)(screen->dev, &info, screen->info.db_props.robustUniformBufferDescriptorSize,
+                                                           bs->dd.db_map[ZINK_DESCRIPTOR_TYPE_UNIFORMS] + stage_offset);
+            }
+            bs->dd.cur_db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS] = bs->dd.db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS];
+            bs->dd.db_offset[ZINK_DESCRIPTOR_TYPE_UNIFORMS] += ctx->dd.db_size[is_compute];
          }
-         assert(bs->dd.sets[is_compute][0]);
-         VKCTX(CmdBindDescriptorSets)(bs->cmdbuf,
-                                 is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 pg->layout, 0, 1, &bs->dd.sets[is_compute][0],
-                                 0, NULL);
+         VKCTX(CmdSetDescriptorBufferOffsetsEXT)(bs->cmdbuf,
+                                                 is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                 pg->layout,
+                                                 0, 1,
+                                                 &index,
+                                                 &offset);
+      } else {
+         if (have_KHR_push_descriptor) {
+            if (ctx->dd.push_state_changed[is_compute])
+               VKCTX(CmdPushDescriptorSetWithTemplateKHR)(bs->cmdbuf, pg->dd.templates[0],
+                                                         pg->layout, 0, ctx);
+         } else {
+            if (ctx->dd.push_state_changed[is_compute]) {
+               struct zink_descriptor_pool *pool = check_push_pool_alloc(ctx, &bs->dd.push_pool[pg->is_compute], bs, pg->is_compute);
+               VkDescriptorSet push_set = get_descriptor_set(pool);
+               if (!push_set)
+                  mesa_loge("ZINK: failed to get push descriptor set! prepare to crash!");
+               VKCTX(UpdateDescriptorSetWithTemplate)(screen->dev, push_set, pg->dd.templates[0], ctx);
+               bs->dd.sets[is_compute][0] = push_set;
+            }
+            assert(bs->dd.sets[is_compute][0]);
+            VKCTX(CmdBindDescriptorSets)(bs->cmdbuf,
+                                    is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    pg->layout, 0, 1, &bs->dd.sets[is_compute][0],
+                                    0, NULL);
+         }
       }
    }
    ctx->dd.push_state_changed[is_compute] = false;
-   zink_descriptors_update_masked(ctx, is_compute, changed_sets, bind_sets);
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
+      zink_descriptors_update_masked_buffer(ctx, is_compute, changed_sets, bind_sets);
+   else
+      zink_descriptors_update_masked(ctx, is_compute, changed_sets, bind_sets);
    /* bindless descriptors are context-based and get updated elsewhere */
    if (pg->dd.bindless && unlikely(!ctx->dd.bindless_bound)) {
       VKCTX(CmdBindDescriptorSets)(ctx->batch.state->cmdbuf, is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1023,6 +1232,11 @@ zink_batch_descriptor_deinit(struct zink_screen *screen, struct zink_batch_state
          pool_destroy(screen, bs->dd.push_pool[i].pool);
       deinit_multi_pool_overflow(screen, &bs->dd.push_pool[i]);
    }
+
+   for (unsigned i = 0; i < ARRAY_SIZE(bs->dd.db); i++) {
+      if (bs->dd.db[i])
+         screen->base.resource_destroy(&screen->base, &bs->dd.db[i]->base.b);
+   }
 }
 
 /* ensure the idle/usable overflow set array always has as many members as possible by merging both arrays on batch state reset */
@@ -1055,35 +1269,39 @@ consolidate_pool_alloc(struct zink_screen *screen, struct zink_descriptor_pool_m
 void
 zink_batch_descriptor_reset(struct zink_screen *screen, struct zink_batch_state *bs)
 {
-   for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++) {
-      struct zink_descriptor_pool_multi **mpools = bs->dd.pools[i].data;
-      for (unsigned j = 0; j < bs->dd.pool_size[i]; j++) {
-         struct zink_descriptor_pool_multi *mpool = mpools[j];
-         if (!mpool)
-            continue;
-         consolidate_pool_alloc(screen, mpool);
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
+      memset(bs->dd.db_offset, 0, sizeof(bs->dd.db_offset));
+   } else {
+      for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++) {
+         struct zink_descriptor_pool_multi **mpools = bs->dd.pools[i].data;
+         for (unsigned j = 0; j < bs->dd.pool_size[i]; j++) {
+            struct zink_descriptor_pool_multi *mpool = mpools[j];
+            if (!mpool)
+               continue;
+            consolidate_pool_alloc(screen, mpool);
 
-         /* if the pool is still in use, reset the current set index */
-         if (mpool->pool_key->use_count)
-            mpool->pool->set_idx = 0;
-         else {
-            /* otherwise destroy it to reclaim memory */
-            multi_pool_destroy(screen, mpool);
-            mpools[j] = NULL;
+            /* if the pool is still in use, reset the current set index */
+            if (mpool->pool_key->use_count)
+               mpool->pool->set_idx = 0;
+            else {
+               /* otherwise destroy it to reclaim memory */
+               multi_pool_destroy(screen, mpool);
+               mpools[j] = NULL;
+            }
          }
       }
-   }
-   for (unsigned i = 0; i < 2; i++) {
-      bs->dd.pg[i] = NULL;
-      if (bs->dd.push_pool[i].reinit_overflow) {
-         /* these don't match current fbfetch usage and can never be used again */
-         clear_multi_pool_overflow(screen, &bs->dd.push_pool[i].overflowed_pools[bs->dd.push_pool[i].overflow_idx]);
-      } else if (bs->dd.push_pool[i].pool) {
-         consolidate_pool_alloc(screen, &bs->dd.push_pool[i]);
+      for (unsigned i = 0; i < 2; i++) {
+         if (bs->dd.push_pool[i].reinit_overflow) {
+            /* these don't match current fbfetch usage and can never be used again */
+            clear_multi_pool_overflow(screen, &bs->dd.push_pool[i].overflowed_pools[bs->dd.push_pool[i].overflow_idx]);
+         } else if (bs->dd.push_pool[i].pool) {
+            consolidate_pool_alloc(screen, &bs->dd.push_pool[i]);
+         }
+         if (bs->dd.push_pool[i].pool)
+            bs->dd.push_pool[i].pool->set_idx = 0;
       }
-      if (bs->dd.push_pool[i].pool)
-         bs->dd.push_pool[i].pool->set_idx = 0;
    }
+   memset(bs->dd.pg, 0, sizeof(bs->dd.pg));
 }
 
 /* called on batch state creation */
@@ -1099,6 +1317,22 @@ zink_batch_descriptor_init(struct zink_screen *screen, struct zink_batch_state *
          util_dynarray_init(&bs->dd.push_pool[i].overflowed_pools[1], bs);
       }
    }
+
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB && !(bs->ctx->flags & ZINK_CONTEXT_COPY_ONLY)) {
+      /* TODO: bindless */
+      for (unsigned i = 0; i < ZINK_DESCRIPTOR_NON_BINDLESS_TYPES; i++) {
+         if (!screen->db_size[i])
+            continue;
+         unsigned bind = i == ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW ? ZINK_BIND_SAMPLER_DESCRIPTOR : ZINK_BIND_RESOURCE_DESCRIPTOR;
+         if (screen->compact_descriptors && i == ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW)
+            bind |= ZINK_BIND_RESOURCE_DESCRIPTOR;
+         struct pipe_resource *pres = pipe_buffer_create(&screen->base, bind, 0, screen->db_size[i]);
+         if (!pres)
+            return false;
+         bs->dd.db[i] = zink_resource(pres);
+         bs->dd.db_map[i] = pipe_buffer_map(&bs->ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE, &bs->dd.db_xfer[i]);
+      }
+   }
    return true;
 }
 
@@ -1108,7 +1342,7 @@ init_push_template_entry(VkDescriptorUpdateTemplateEntry *entry, unsigned i)
    entry->dstBinding = i;
    entry->descriptorCount = 1;
    entry->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-   entry->offset = offsetof(struct zink_context, di.ubos[i][0]);
+   entry->offset = offsetof(struct zink_context, di.t.ubos[i][0]);
    entry->stride = sizeof(VkDescriptorBufferInfo);
 }
 
@@ -1116,6 +1350,7 @@ init_push_template_entry(VkDescriptorUpdateTemplateEntry *entry, unsigned i)
 bool
 zink_descriptors_init(struct zink_context *ctx)
 {
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
    for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++) {
       VkDescriptorUpdateTemplateEntry *entry = &ctx->dd.push_entries[i];
       init_push_template_entry(entry, i);
@@ -1131,9 +1366,21 @@ zink_descriptors_init(struct zink_context *ctx)
    if (!zink_descriptor_util_push_layouts_get(ctx, ctx->dd.push_dsl, ctx->dd.push_layout_keys))
       return false;
 
-   ctx->dd.dummy_dsl = descriptor_util_layout_get(zink_screen(ctx->base.screen), 0, NULL, 0, &layout_key);
+   ctx->dd.dummy_dsl = descriptor_util_layout_get(screen, 0, NULL, 0, &layout_key);
    if (!ctx->dd.dummy_dsl)
       return false;
+
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
+      VkDeviceSize val;
+      for (unsigned i = 0; i < 2; i++) {
+         VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, ctx->dd.push_dsl[i]->layout, &val);
+         ctx->dd.db_size[i] = val;
+      }
+      for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++) {
+         VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, ctx->dd.push_dsl[0]->layout, i, &val);
+         ctx->dd.db_offset[i] = val;
+      }
+   }
 
    return true;
 }
@@ -1196,6 +1443,16 @@ zink_descriptor_util_init_fbfetch(struct zink_context *ctx)
    //ralloc_free(ctx->dd.push_layout_keys[0]);
    ctx->dd.push_dsl[0] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[0], true);
    ctx->dd.has_fbfetch = true;
+
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
+      VkDeviceSize val;
+      VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, ctx->dd.push_dsl[0]->layout, &val);
+      ctx->dd.db_size[0] = val;
+      for (unsigned i = 0; i < ARRAY_SIZE(ctx->dd.db_offset); i++) {
+         VKSCR(GetDescriptorSetLayoutBindingOffsetEXT)(screen->dev, ctx->dd.push_dsl[0]->layout, i, &val);
+         ctx->dd.db_offset[i] = val;
+      }
+   }
 }
 
 /* bindless descriptor bindings have their own struct indexing */

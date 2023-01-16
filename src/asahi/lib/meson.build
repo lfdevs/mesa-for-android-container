@@ -24,6 +24,10 @@ dep_iokit = dependency('IOKit', required : false)
 libasahi_lib_files = files(
   'agx_device.c',
   'agx_formats.c',
+  'agx_meta.c',
+  'agx_tilebuffer.c',
+  'agx_nir_lower_tilebuffer.c',
+  'agx_nir_lower_vbo.c',
   'agx_ppp.h',
   'pool.c',
 )
@@ -46,16 +50,6 @@ idep_agx_pack = declare_dependency(
   include_directories : include_directories('.'),
 )
 
-libasahi_lib = static_library(
-  'asahi_lib',
-  [libasahi_lib_files, agx_pack],
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_asahi],
-  c_args : [no_override_init_args],
-  gnu_symbol_visibility : 'hidden',
-  dependencies: [dep_libdrm, dep_valgrind, idep_nir, dep_iokit],
-  build_by_default : false,
-)
-
 libasahi_decode = static_library(
   'asahi_decode',
   [libasahi_decode_files, agx_pack],
@@ -66,6 +60,17 @@ libasahi_decode = static_library(
   build_by_default : false,
 )
 
+libasahi_lib = static_library(
+  'asahi_lib',
+  [libasahi_lib_files, agx_pack],
+  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_asahi],
+  c_args : [no_override_init_args],
+  gnu_symbol_visibility : 'hidden',
+  link_with: [libasahi_decode],
+  dependencies: [dep_libdrm, dep_valgrind, idep_nir, dep_iokit],
+  build_by_default : false,
+)
+
 if with_tests
   test(
     'libasahi_tests',
@@ -73,12 +78,13 @@ if with_tests
       'libasahi_tests',
       files(
         'tests/test-packing.cpp',
+        'tests/test-tilebuffer.cpp',
       ),
       c_args : [c_msvc_compat_args, no_override_init_args],
       gnu_symbol_visibility : 'hidden',
       include_directories : [inc_include, inc_src, inc_mesa],
-      dependencies: [idep_gtest, idep_agx_pack],
-      link_with : [],
+      dependencies: [idep_gtest, idep_agx_pack, idep_mesautil],
+      link_with : [libasahi_lib],
     ),
     suite : ['asahi'],
     protocol : gtest_test_protocol,

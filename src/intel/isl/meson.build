@@ -101,7 +101,7 @@ isl_tiled_memcpy = static_library(
     inc_include, inc_src, inc_mesa, inc_gallium, inc_intel,
   ],
   dependencies : idep_mesautil,
-  c_args : [no_override_init_args, '-msse2'],
+  c_args : [no_override_init_args, c_sse2_arg],
   gnu_symbol_visibility : 'hidden',
   extra_files : ['isl_tiled_memcpy.c']
 )

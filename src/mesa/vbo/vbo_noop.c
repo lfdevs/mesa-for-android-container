@@ -32,7 +32,7 @@
 #define NOGDI
 #endif
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 #include "main/dispatch.h"
 #include "main/dlist.h"

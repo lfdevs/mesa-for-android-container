@@ -386,7 +386,7 @@ void vlVaHandlePictureParameterBufferAV1(vlVaDriver *drv, vlVaContext *context, 
    }
 }
 
-void vlVaHandleSliceParameterBufferAV1(vlVaContext *context, vlVaBuffer *buf, unsigned num_slice_buffers, unsigned num_slices)
+void vlVaHandleSliceParameterBufferAV1(vlVaContext *context, vlVaBuffer *buf, unsigned num_slices)
 {
    for (uint32_t buffer_idx = 0; buffer_idx < buf->num_elements; buffer_idx++) {
       uint32_t slice_index =

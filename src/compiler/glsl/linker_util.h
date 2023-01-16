@@ -25,6 +25,7 @@
 #define GLSL_LINKER_UTIL_H
 
 #include "util/bitset.h"
+#include "util/glheader.h"
 #include "compiler/glsl/list.h"
 
 struct gl_constants;

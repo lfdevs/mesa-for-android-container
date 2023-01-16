@@ -175,8 +175,11 @@ tu_insert_dynamic_cmdbufs(struct tu_device *dev,
          if (result != VK_SUCCESS)
             return result;
 
-         tu_cmd_buffer_begin(cmd_buffer,
-                             VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+         const VkCommandBufferBeginInfo begin = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+         };
+         tu_cmd_buffer_begin(cmd_buffer, &begin);
 
          /* Setup the render pass using the first command buffer involved in
           * the chain, so that it will look like we're inside a render pass

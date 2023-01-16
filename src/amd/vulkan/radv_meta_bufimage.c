@@ -154,9 +154,9 @@ radv_device_init_meta_itob_state(struct radv_device *device)
       .layout = device->meta_state.itob.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        device->meta_state.cache, 1,
-                                        &vk_pipeline_info, NULL, &device->meta_state.itob.pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL, &device->meta_state.itob.pipeline,
+                                         true);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -175,9 +175,9 @@ radv_device_init_meta_itob_state(struct radv_device *device)
       .layout = device->meta_state.itob.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info_3d, NULL, &device->meta_state.itob.pipeline_3d);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info_3d, NULL,
+                                         &device->meta_state.itob.pipeline_3d, true);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -332,9 +332,9 @@ radv_device_init_meta_btoi_state(struct radv_device *device)
       .layout = device->meta_state.btoi.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        device->meta_state.cache, 1,
-                                        &vk_pipeline_info, NULL, &device->meta_state.btoi.pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL, &device->meta_state.btoi.pipeline,
+                                         true);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -353,9 +353,9 @@ radv_device_init_meta_btoi_state(struct radv_device *device)
       .layout = device->meta_state.btoi.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info_3d, NULL, &device->meta_state.btoi.pipeline_3d);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info_3d, NULL,
+                                         &device->meta_state.btoi.pipeline_3d, true);
 
    ralloc_free(cs_3d);
    ralloc_free(cs);
@@ -507,9 +507,9 @@ radv_device_init_meta_btoi_r32g32b32_state(struct radv_device *device)
       .layout = device->meta_state.btoi_r32g32b32.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info, NULL, &device->meta_state.btoi_r32g32b32.pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL,
+                                         &device->meta_state.btoi_r32g32b32.pipeline, true);
 
 fail:
    ralloc_free(cs);
@@ -623,9 +623,8 @@ create_itoi_pipeline(struct radv_device *device, int samples, VkPipeline *pipeli
       .layout = state->itoi.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        state->cache, 1,
-                                        &vk_pipeline_info, NULL, pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), state->cache,
+                                         &vk_pipeline_info, NULL, pipeline, true);
    ralloc_free(cs);
    return result;
 }
@@ -701,9 +700,9 @@ radv_device_init_meta_itoi_state(struct radv_device *device)
       .layout = device->meta_state.itoi.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info_3d, NULL, &device->meta_state.itoi.pipeline_3d);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info_3d, NULL,
+                                         &device->meta_state.itoi.pipeline_3d, true);
    ralloc_free(cs_3d);
 
    return VK_SUCCESS;
@@ -862,9 +861,9 @@ radv_device_init_meta_itoi_r32g32b32_state(struct radv_device *device)
       .layout = device->meta_state.itoi_r32g32b32.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info, NULL, &device->meta_state.itoi_r32g32b32.pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL,
+                                         &device->meta_state.itoi_r32g32b32.pipeline, true);
 
 fail:
    ralloc_free(cs);
@@ -942,9 +941,8 @@ create_cleari_pipeline(struct radv_device *device, int samples, VkPipeline *pipe
       .layout = device->meta_state.cleari.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        device->meta_state.cache, 1,
-                                        &vk_pipeline_info, NULL, pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL, pipeline, true);
    ralloc_free(cs);
    return result;
 }
@@ -1015,9 +1013,9 @@ radv_device_init_meta_cleari_state(struct radv_device *device)
       .layout = device->meta_state.cleari.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info_3d, NULL, &device->meta_state.cleari.pipeline_3d);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info_3d, NULL,
+                                         &device->meta_state.cleari.pipeline_3d, true);
    ralloc_free(cs_3d);
 
    return VK_SUCCESS;
@@ -1133,9 +1131,9 @@ radv_device_init_meta_cleari_r32g32b32_state(struct radv_device *device)
       .layout = device->meta_state.cleari_r32g32b32.img_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info, NULL, &device->meta_state.cleari_r32g32b32.pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL,
+                                         &device->meta_state.cleari_r32g32b32.pipeline, true);
 
 fail:
    ralloc_free(cs);
@@ -1251,15 +1249,15 @@ create_buffer_from_image(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_bl
 
    radv_device_memory_init(&mem, device, surf->image->bindings[0].bo);
 
-   radv_CreateBuffer(radv_device_to_handle(device),
-                     &(VkBufferCreateInfo){
-                        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                        .flags = 0,
-                        .size = surf->image->size,
-                        .usage = usage,
-                        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                     },
-                     NULL, buffer);
+   radv_create_buffer(device,
+                      &(VkBufferCreateInfo){
+                         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                         .flags = 0,
+                         .size = surf->image->size,
+                         .usage = usage,
+                         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                      },
+                      NULL, buffer, true);
 
    radv_BindBufferMemory2(radv_device_to_handle(device), 1,
                           (VkBindBufferMemoryInfo[]){{

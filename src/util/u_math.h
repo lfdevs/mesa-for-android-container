@@ -47,6 +47,8 @@
 
 #include "bitscan.h"
 #include "u_endian.h" /* for UTIL_ARCH_BIG_ENDIAN */
+#include "util/detect_cc.h"
+#include "util/detect_arch.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -157,11 +159,11 @@ util_ifloor(float f)
 static inline int
 util_iround(float f)
 {
-#if defined(PIPE_CC_GCC) && defined(PIPE_ARCH_X86)
+#if DETECT_CC_GCC && DETECT_ARCH_X86
    int r;
    __asm__ ("fistpl %0" : "=m" (r) : "t" (f) : "st");
    return r;
-#elif defined(PIPE_CC_MSVC) && defined(PIPE_ARCH_X86)
+#elif DETECT_CC_MSVC && DETECT_ARCH_X86
    int r;
    _asm {
       fld f
@@ -807,6 +809,20 @@ util_quantize_lod_bias(float lod)
 {
    lod = CLAMP(lod, -16, 16);
    return roundf(lod * 256) / 256;
+}
+
+/**
+ * Adds two unsigned integers and if the addition
+ * overflows then clamp it to ~0U.
+ */
+static inline unsigned
+util_clamped_uadd(unsigned a, unsigned b)
+{
+   unsigned res = a + b;
+   if (res < a) {
+      res = ~0U;
+   }
+   return res;
 }
 
 #ifdef __cplusplus

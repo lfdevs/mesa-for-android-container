@@ -637,8 +637,12 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 #endif
 
    if (pipeline->base.device->vk.enabled_extensions.EXT_sample_locations &&
-       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS))
-      genX(emit_sample_pattern)(&cmd_buffer->batch, dyn->ms.sample_locations);
+       (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_SAMPLE_LOCATIONS_ENABLE))) {
+      genX(emit_sample_pattern)(&cmd_buffer->batch,
+                                dyn->ms.sample_locations_enable ?
+                                dyn->ms.sample_locations : NULL);
+   }
 
    if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_CB_COLOR_WRITE_ENABLES) ||

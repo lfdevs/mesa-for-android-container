@@ -4080,10 +4080,10 @@ void ac_check_shadowed_regs(enum amd_gfx_level gfx_level, enum radeon_family fam
    if (!found || !shadowed) {
       printf("register %s: ", !found ? "not found" : "not shadowed");
       if (count > 1) {
-         printf("%s .. %s\n", ac_get_register_name(gfx_level, reg_offset),
-                ac_get_register_name(gfx_level, reg_offset + (count - 1) * 4));
+         printf("%s .. %s\n", ac_get_register_name(gfx_level, family, reg_offset),
+                ac_get_register_name(gfx_level, family, reg_offset + (count - 1) * 4));
       } else {
-         printf("%s\n", ac_get_register_name(gfx_level, reg_offset));
+         printf("%s\n", ac_get_register_name(gfx_level, family, reg_offset));
       }
    }
 }
@@ -4108,7 +4108,7 @@ void ac_print_shadowed_regs(const struct radeon_info *info)
          for (unsigned j = 0; j < ranges[i].size / 4; j++) {
             unsigned offset = ranges[i].offset + j * 4;
 
-            const char *name = ac_get_register_name(info->gfx_level, offset);
+            const char *name = ac_get_register_name(info->gfx_level, info->family, offset);
             unsigned value = -1;
 
 #ifndef _WIN32

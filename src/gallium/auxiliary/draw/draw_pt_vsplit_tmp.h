@@ -23,9 +23,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#define CONCAT2(name, elt_type) name ## elt_type
-#define CONCAT(name, elt_type) CONCAT2(name, elt_type)
-
 #ifdef ELT_TYPE
 
 /**
@@ -33,8 +30,8 @@
  * (rebased) index buffer as the draw elements.
  */
 static boolean
-CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
-                                    unsigned istart, unsigned icount)
+CONCAT2(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
+                                     unsigned istart, unsigned icount)
 {
    struct draw_context *draw = vsplit->draw;
    const ELT_TYPE *ib = (const ELT_TYPE *) draw->pt.user.elts;
@@ -127,11 +124,11 @@ CONCAT(vsplit_primitive_, ELT_TYPE)(struct vsplit_frontend *vsplit,
  * appended.
  */
 static inline void
-CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
-                                        unsigned flags,
-                                        unsigned istart, unsigned icount,
-                                        boolean spoken, unsigned ispoken,
-                                        boolean close, unsigned iclose)
+CONCAT2(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
+                                         unsigned flags,
+                                         unsigned istart, unsigned icount,
+                                         boolean spoken, unsigned ispoken,
+                                         boolean close, unsigned iclose)
 {
    struct draw_context *draw = vsplit->draw;
    const ELT_TYPE *ib = (const ELT_TYPE *) draw->pt.user.elts;
@@ -168,41 +165,41 @@ CONCAT(vsplit_segment_cache_, ELT_TYPE)(struct vsplit_frontend *vsplit,
 
 
 static void
-CONCAT(vsplit_segment_simple_, ELT_TYPE)(struct vsplit_frontend *vsplit,
-                                         unsigned flags,
-                                         unsigned istart,
-                                         unsigned icount)
+CONCAT2(vsplit_segment_simple_, ELT_TYPE)(struct vsplit_frontend *vsplit,
+                                          unsigned flags,
+                                          unsigned istart,
+                                          unsigned icount)
 {
-   CONCAT(vsplit_segment_cache_, ELT_TYPE)(vsplit,
-         flags, istart, icount, FALSE, 0, FALSE, 0);
+   CONCAT2(vsplit_segment_cache_, ELT_TYPE)(vsplit,
+          flags, istart, icount, FALSE, 0, FALSE, 0);
 }
 
 
 static void
-CONCAT(vsplit_segment_loop_, ELT_TYPE)(struct vsplit_frontend *vsplit,
+CONCAT2(vsplit_segment_loop_, ELT_TYPE)(struct vsplit_frontend *vsplit,
+                                        unsigned flags,
+                                        unsigned istart,
+                                        unsigned icount,
+                                        unsigned i0)
+{
+   const boolean close_loop = ((flags) == DRAW_SPLIT_BEFORE);
+
+   CONCAT2(vsplit_segment_cache_, ELT_TYPE)(vsplit,
+          flags, istart, icount, FALSE, 0, close_loop, i0);
+}
+
+
+static void
+CONCAT2(vsplit_segment_fan_, ELT_TYPE)(struct vsplit_frontend *vsplit,
                                        unsigned flags,
                                        unsigned istart,
                                        unsigned icount,
                                        unsigned i0)
 {
-   const boolean close_loop = ((flags) == DRAW_SPLIT_BEFORE);
-
-   CONCAT(vsplit_segment_cache_, ELT_TYPE)(vsplit,
-         flags, istart, icount, FALSE, 0, close_loop, i0);
-}
-
-
-static void
-CONCAT(vsplit_segment_fan_, ELT_TYPE)(struct vsplit_frontend *vsplit,
-                                      unsigned flags,
-                                      unsigned istart,
-                                      unsigned icount,
-                                      unsigned i0)
-{
    const boolean use_spoken = (((flags) & DRAW_SPLIT_BEFORE) != 0);
 
-   CONCAT(vsplit_segment_cache_, ELT_TYPE)(vsplit,
-         flags, istart, icount, use_spoken, i0, FALSE, 0);
+   CONCAT2(vsplit_segment_cache_, ELT_TYPE)(vsplit,
+          flags, istart, icount, use_spoken, i0, FALSE, 0);
 }
 
 
@@ -214,7 +211,7 @@ CONCAT(vsplit_segment_fan_, ELT_TYPE)(struct vsplit_frontend *vsplit,
    const unsigned max_count_fan = vsplit->segment_size;
 
 #define PRIMITIVE(istart, icount)   \
-   CONCAT(vsplit_primitive_, ELT_TYPE)(vsplit, istart, icount)
+   CONCAT2(vsplit_primitive_, ELT_TYPE)(vsplit, istart, icount)
 
 #else /* ELT_TYPE */
 
@@ -294,18 +291,15 @@ vsplit_segment_fan_linear(struct vsplit_frontend *vsplit, unsigned flags,
    unsigned count
 
 #define SEGMENT_SIMPLE(flags, istart, icount)   \
-   CONCAT(vsplit_segment_simple_, ELT_TYPE)(vsplit, flags, istart, icount)
+   CONCAT2(vsplit_segment_simple_, ELT_TYPE)(vsplit, flags, istart, icount)
 
 #define SEGMENT_LOOP(flags, istart, icount, i0) \
-   CONCAT(vsplit_segment_loop_, ELT_TYPE)(vsplit, flags, istart, icount, i0)
+   CONCAT2(vsplit_segment_loop_, ELT_TYPE)(vsplit, flags, istart, icount, i0)
 
 #define SEGMENT_FAN(flags, istart, icount, i0)  \
-   CONCAT(vsplit_segment_fan_, ELT_TYPE)(vsplit, flags, istart, icount, i0)
+   CONCAT2(vsplit_segment_fan_, ELT_TYPE)(vsplit, flags, istart, icount, i0)
 
 #include "draw_split_tmp.h"
-
-#undef CONCAT2
-#undef CONCAT
 
 #undef ELT_TYPE
 #undef ADD_CACHE

@@ -257,7 +257,7 @@ draw_pipeline_run(struct draw_context *draw,
          }
          if (max_index >= vert_info->count) {
             debug_printf("%s: max_index (%u) outside vertex buffer (%u)\n",
-                         __FUNCTION__,
+                         __func__,
                          max_index,
                          vert_info->count);
          }

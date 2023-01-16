@@ -20,6 +20,7 @@
 #define VK_STRUCTURE_TYPE_IMPORT_MEMORY_RESOURCE_INFO_MESA ((VkStructureType)1000384002)
 #define VK_STRUCTURE_TYPE_MEMORY_RESOURCE_ALLOCATION_SIZE_PROPERTIES_100000_MESA ((VkStructureType)1000384003)
 #define VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_RESOURCE_INFO_100000_MESA ((VkStructureType)1000384004)
+#define VK_STRUCTURE_TYPE_DEVICE_QUEUE_TIMELINE_INFO_MESA ((VkStructureType)1000384005)
 
 typedef enum VkCommandTypeEXT {
     VK_COMMAND_TYPE_vkCreateInstance_EXT = 0,
@@ -425,5 +426,11 @@ typedef struct VkImportSemaphoreResourceInfo100000MESA {
     VkSemaphore semaphore;
     uint32_t resourceId;
 } VkImportSemaphoreResourceInfo100000MESA;
+
+typedef struct VkDeviceQueueTimelineInfoMESA {
+    VkStructureType sType;
+    const void* pNext;
+    uint32_t ringIdx;
+} VkDeviceQueueTimelineInfoMESA;
 
 #endif /* VN_PROTOCOL_DRIVER_DEFINES_H */

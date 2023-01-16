@@ -988,8 +988,9 @@ nv50_screen_get_compiler_options(struct pipe_screen *pscreen,
                                  enum pipe_shader_ir ir,
                                  enum pipe_shader_type shader)
 {
+   struct nouveau_screen *screen = nouveau_screen(pscreen);
    if (ir == PIPE_SHADER_IR_NIR)
-      return nv50_ir_nir_shader_compiler_options(NVISA_G80_CHIPSET, shader);
+      return nv50_ir_nir_shader_compiler_options(NVISA_G80_CHIPSET, shader, screen->prefer_nir);
    return NULL;
 }
 

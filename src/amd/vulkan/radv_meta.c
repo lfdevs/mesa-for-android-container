@@ -136,7 +136,7 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
 
    if (state->flags & RADV_META_SAVE_DESCRIPTORS) {
       state->old_descriptor_set0 = descriptors_state->sets[0];
-      if (!(descriptors_state->valid & 1) || !state->old_descriptor_set0)
+      if (!(descriptors_state->valid & 1))
          state->flags &= ~RADV_META_SAVE_DESCRIPTORS;
    }
 
@@ -469,19 +469,13 @@ radv_device_init_meta(struct radv_device *device)
       goto fail_resolve_fragment;
 
    if (device->physical_device->use_fmask) {
-      result = radv_device_init_meta_fmask_expand_state(device);
+      result = radv_device_init_meta_fmask_expand_state(device, on_demand);
       if (result != VK_SUCCESS)
          goto fail_fmask_expand;
 
-      result = radv_device_init_meta_fmask_copy_state(device);
+      result = radv_device_init_meta_fmask_copy_state(device, on_demand);
       if (result != VK_SUCCESS)
          goto fail_fmask_copy;
-   }
-
-   if (radv_enable_rt(device->physical_device, false)) {
-      result = radv_device_init_accel_struct_build_state(device);
-      if (result != VK_SUCCESS)
-         goto fail_accel_struct_build;
    }
 
    result = radv_device_init_meta_etc_decode_state(device, on_demand);
@@ -502,8 +496,6 @@ fail_dgc:
    radv_device_finish_dgc_prepare_state(device);
 fail_etc_decode:
    radv_device_finish_meta_etc_decode_state(device);
-fail_accel_struct_build:
-   radv_device_finish_accel_struct_build_state(device);
 fail_fmask_copy:
    radv_device_finish_meta_fmask_copy_state(device);
 fail_fmask_expand:

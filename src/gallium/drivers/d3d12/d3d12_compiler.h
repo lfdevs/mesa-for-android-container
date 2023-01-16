@@ -98,55 +98,56 @@ struct d3d12_shader_key {
    unsigned tex_saturate_s : PIPE_MAX_SAMPLERS;
    unsigned tex_saturate_r : PIPE_MAX_SAMPLERS;
    unsigned tex_saturate_t : PIPE_MAX_SAMPLERS;
+   union {
+      struct {
+         unsigned needs_format_emulation:1;
+         enum pipe_format format_conversion[PIPE_MAX_ATTRIBS];
+      } vs;
 
-   struct {
-      unsigned needs_format_emulation:1;
-      enum pipe_format format_conversion[PIPE_MAX_ATTRIBS];
-   } vs;
+      struct {
+         unsigned sprite_coord_enable:24;
+         unsigned sprite_origin_upper_left:1;
+         unsigned point_pos_stream_out:1;
+         unsigned writes_psize:1;
+         unsigned point_size_per_vertex:1;
+         unsigned aa_point:1;
+         unsigned stream_output_factor:3;
+         unsigned primitive_id:1;
+         unsigned triangle_strip:1;
+      } gs;
 
-   struct {
-      unsigned sprite_coord_enable:24;
-      unsigned sprite_origin_upper_left:1;
-      unsigned point_pos_stream_out:1;
-      unsigned writes_psize:1;
-      unsigned point_size_per_vertex:1;
-      unsigned aa_point:1;
-      unsigned stream_output_factor:3;
-      unsigned primitive_id:1;
-      unsigned triangle_strip:1;
-   } gs;
+      struct {
+         unsigned primitive_mode:2;
+         unsigned ccw:1;
+         unsigned point_mode:1;
+         unsigned spacing:2;
+         unsigned patch_vertices_in:5;
+         struct d3d12_varying_info required_patch_outputs;
+         uint32_t next_patch_inputs;
+      } hs;
 
-   struct {
-      unsigned primitive_mode:2;
-      unsigned ccw:1;
-      unsigned point_mode:1;
-      unsigned spacing:2;
-      unsigned patch_vertices_in:5;
-      struct d3d12_varying_info required_patch_outputs;
-      uint32_t next_patch_inputs;
-   } hs;
+      struct {
+         unsigned tcs_vertices_out;
+         struct d3d12_varying_info required_patch_inputs;
+         uint32_t prev_patch_outputs;
+      } ds;
 
-   struct {
-      unsigned tcs_vertices_out;
-      struct d3d12_varying_info required_patch_inputs;
-      uint32_t prev_patch_outputs;
-   } ds;
+      struct {
+         unsigned missing_dual_src_outputs : 2;
+         unsigned frag_result_color_lowering : 4;
+         unsigned cast_to_uint : 1;
+         unsigned cast_to_int : 1;
+         unsigned provoking_vertex : 2;
+         unsigned manual_depth_range : 1;
+         unsigned polygon_stipple : 1;
+         unsigned remap_front_facing : 1;
+         unsigned multisample_disabled : 1;
+      } fs;
 
-   struct {
-      unsigned missing_dual_src_outputs : 2;
-      unsigned frag_result_color_lowering : 4;
-      unsigned cast_to_uint : 1;
-      unsigned cast_to_int : 1;
-      unsigned provoking_vertex : 2;
-      unsigned manual_depth_range : 1;
-      unsigned polygon_stipple : 1;
-      unsigned remap_front_facing : 1;
-      unsigned multisample_disabled : 1;
-   } fs;
-
-   struct {
-      unsigned workgroup_size[3];
-   } cs;
+      struct {
+         unsigned workgroup_size[3];
+      } cs;
+   };
 
    int n_texture_states;
    dxil_wrap_sampler_state tex_wrap_states[PIPE_MAX_SHADER_SAMPLER_VIEWS];

@@ -192,11 +192,11 @@ pp_run(struct pp_queue_t *ppq, struct pipe_resource *in,
 
    /* restore states not restored by cso */
    if (ppq->p->st) {
-      ppq->p->st->invalidate_state(ppq->p->st,
-                                   ST_INVALIDATE_FS_SAMPLER_VIEWS |
-                                   ST_INVALIDATE_FS_CONSTBUF0 |
-                                   ST_INVALIDATE_VS_CONSTBUF0 |
-                                   ST_INVALIDATE_VERTEX_BUFFERS);
+      ppq->p->st_invalidate_state(ppq->p->st,
+                                  ST_INVALIDATE_FS_SAMPLER_VIEWS |
+                                  ST_INVALIDATE_FS_CONSTBUF0 |
+                                  ST_INVALIDATE_VS_CONSTBUF0 |
+                                  ST_INVALIDATE_VERTEX_BUFFERS);
    }
 
    pipe_resource_reference(&ppq->depth, NULL);

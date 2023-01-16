@@ -27,7 +27,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_prim.h"
-#include "indices/u_indices.h"
+#include "util/indices/u_indices.h"
 
 #include "svga_hw_reg.h"
 #include "svga_draw.h"
@@ -110,7 +110,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
                                     hwtnl->index_cache[prim][i].buffer);
 
             if (DBG)
-               debug_printf("%s retrieve %d/%d\n", __FUNCTION__, i, gen_nr);
+               debug_printf("%s retrieve %d/%d\n", __func__, i, gen_nr);
 
             goto done;
          }
@@ -119,7 +119,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
                                     NULL);
 
             if (DBG)
-               debug_printf("%s discard %d/%d\n", __FUNCTION__,
+               debug_printf("%s discard %d/%d\n", __func__,
                             i, hwtnl->index_cache[prim][i].gen_nr);
 
             break;
@@ -148,7 +148,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
                               NULL);
 
       if (DBG)
-         debug_printf("%s discard smallest %d/%d\n", __FUNCTION__,
+         debug_printf("%s discard smallest %d/%d\n", __func__,
                       smallest, smallest_size);
 
       i = smallest;
@@ -163,7 +163,7 @@ retrieve_or_generate_indices(struct svga_hwtnl *hwtnl,
    pipe_resource_reference(&hwtnl->index_cache[prim][i].buffer, *out_buf);
 
    if (DBG)
-      debug_printf("%s cache %d/%d\n", __FUNCTION__,
+      debug_printf("%s cache %d/%d\n", __func__,
                    i, hwtnl->index_cache[prim][i].gen_nr);
 
 done:

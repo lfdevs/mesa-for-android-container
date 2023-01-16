@@ -249,7 +249,7 @@ haiku_create_context(_EGLDisplay *disp, _EGLConfig *conf,
 		return NULL;
 	}
 
-	if (!_eglInitContext(&context->ctx, disp, conf, attrib_list))
+	if (!_eglInitContext(&context->ctx, disp, conf, share_list, attrib_list))
 		goto cleanup;
 
 	TRACE("Context created\n");

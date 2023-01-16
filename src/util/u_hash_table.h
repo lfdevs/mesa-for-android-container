@@ -60,9 +60,9 @@ util_hash_table_get(struct hash_table *ht,
                     void *key);
 
 
-enum pipe_error
+int
 util_hash_table_foreach(struct hash_table *ht,
-                        enum pipe_error (*callback)
+                        int (*callback)
                         (void *key, void *value, void *data),
                         void *data);
 

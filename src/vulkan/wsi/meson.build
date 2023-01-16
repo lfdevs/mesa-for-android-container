@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 files_vulkan_wsi = files('wsi_common.c')
+platform_deps = []
 
 if dep_libdrm.found()
   files_vulkan_wsi += files('wsi_common_drm.c')
@@ -37,7 +38,8 @@ if with_platform_wayland
 endif
 
 if with_platform_windows
-  files_vulkan_wsi += files('wsi_common_win32.c')
+  files_vulkan_wsi += files('wsi_common_win32.cpp')
+  platform_deps += dep_dxheaders
 endif
 
 if system_has_kms_drm and not with_platform_android
@@ -61,7 +63,7 @@ libvulkan_wsi = static_library(
   include_directories : [inc_include, inc_src, inc_gallium],
   dependencies : [
     vulkan_wsi_deps, dep_libdrm, dep_libudev, idep_vulkan_util_headers,
-    idep_vulkan_runtime_headers, idep_xmlconfig,
+    idep_vulkan_runtime_headers, idep_xmlconfig, idep_mesautil, platform_deps
   ],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,

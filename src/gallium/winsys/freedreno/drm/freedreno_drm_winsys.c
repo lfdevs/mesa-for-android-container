@@ -33,7 +33,7 @@
 #include "util/u_inlines.h"
 #include "util/u_hash_table.h"
 #include "util/u_pointer.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "freedreno_drm_public.h"
 

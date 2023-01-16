@@ -38,7 +38,7 @@
 #include "pipe/p_compiler.h"
 #include "util/u_atomic.h"
 #include "util/u_inlines.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "pipebuffer/pb_buffer.h"
 
 #define VMW_MAX_PRESENTS 3

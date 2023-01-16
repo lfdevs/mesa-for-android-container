@@ -14,10 +14,10 @@
  * Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTAagxLITY,
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIAagxLITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
@@ -27,7 +27,10 @@
 /* Validatation doesn't make sense in release builds */
 #ifndef NDEBUG
 
-#define agx_validate_assert(stmt) if (!(stmt)) { return false; }
+#define agx_validate_assert(stmt)                                              \
+   if (!(stmt)) {                                                              \
+      return false;                                                            \
+   }
 
 /*
  * If a block contains phi nodes, they must come at the start of the block. If a
@@ -80,6 +83,7 @@ agx_validate_block_form(agx_block *block)
       case AGX_OPCODE_IF_FCMP:
       case AGX_OPCODE_ELSE_FCMP:
       case AGX_OPCODE_WHILE_FCMP:
+      case AGX_OPCODE_STOP:
          agx_validate_assert(state == AGX_BLOCK_STATE_CF);
          break;
       }
@@ -99,9 +103,8 @@ agx_validate_sources(agx_instr *I)
          agx_validate_assert(!src.cache);
          agx_validate_assert(!src.discard);
 
-         bool ldst =
-            (I->op == AGX_OPCODE_DEVICE_LOAD) ||
-            (I->op == AGX_OPCODE_UNIFORM_STORE);
+         bool ldst = (I->op == AGX_OPCODE_DEVICE_LOAD) ||
+                     (I->op == AGX_OPCODE_UNIFORM_STORE);
 
          /* Immediates are encoded as 8-bit (16-bit for memory load/store). For
           * integers, they extend to 16-bit. For floating point, they are 8-bit
@@ -115,6 +118,72 @@ agx_validate_sources(agx_instr *I)
    }
 
    return true;
+}
+
+static bool
+agx_validate_defs(agx_instr *I, BITSET_WORD *defs)
+{
+   agx_foreach_ssa_src(I, s) {
+      /* Skip phis, they're special in loop headers */
+      if (I->op == AGX_OPCODE_PHI)
+         break;
+
+      /* Sources must be defined before their use */
+      if (!BITSET_TEST(defs, I->src[s].value))
+         return false;
+   }
+
+   agx_foreach_ssa_dest(I, d) {
+      /* Static single assignment */
+      if (BITSET_TEST(defs, I->dest[d].value))
+         return false;
+
+      BITSET_SET(defs, I->dest[d].value);
+   }
+
+   return true;
+}
+
+/*
+ * Type check the dimensionality of sources and destinations. This occurs in two
+ * passes, first to gather all destination sizes, second to validate all source
+ * sizes. Depends on SSA form.
+ */
+static bool
+agx_validate_width(agx_context *ctx)
+{
+   bool succ = true;
+   uint8_t *width = calloc(ctx->alloc, sizeof(uint8_t));
+
+   agx_foreach_instr_global(ctx, I) {
+      agx_foreach_dest(I, d) {
+         if (I->dest[d].type != AGX_INDEX_NORMAL)
+            continue;
+
+         unsigned v = I->dest[d].value;
+         assert(width[v] == 0 && "broken SSA");
+
+         width[v] = agx_write_registers(I, d);
+      }
+   }
+
+   agx_foreach_instr_global(ctx, I) {
+      agx_foreach_ssa_src(I, s) {
+         unsigned v = I->src[s].value;
+         unsigned n = agx_read_registers(I, s);
+
+         if (width[v] != n) {
+            succ = false;
+            fprintf(stderr, "source %u, expected width %u, got width %u\n", s,
+                    n, width[v]);
+            agx_print_instr(I, stderr);
+            fprintf(stderr, "\n");
+         }
+      }
+   }
+
+   free(width);
+   return succ;
 }
 
 void
@@ -133,12 +202,31 @@ agx_validate(agx_context *ctx, const char *after)
       }
    }
 
-   agx_foreach_instr_global(ctx, I) {
-      if (!agx_validate_sources(I)) {
-            fprintf(stderr, "Invalid sources form after %s\n", after);
+   {
+      BITSET_WORD *defs = calloc(sizeof(BITSET_WORD), BITSET_WORDS(ctx->alloc));
+
+      agx_foreach_instr_global(ctx, I) {
+         if (!agx_validate_defs(I, defs)) {
+            fprintf(stderr, "Invalid defs after %s\n", after);
             agx_print_instr(I, stdout);
             fail = true;
+         }
       }
+
+      free(defs);
+   }
+
+   agx_foreach_instr_global(ctx, I) {
+      if (!agx_validate_sources(I)) {
+         fprintf(stderr, "Invalid sources form after %s\n", after);
+         agx_print_instr(I, stdout);
+         fail = true;
+      }
+   }
+
+   if (!agx_validate_width(ctx)) {
+      fprintf(stderr, "Invalid vectors after %s\n", after);
+      fail = true;
    }
 
    /* TODO: Validate more invariants */

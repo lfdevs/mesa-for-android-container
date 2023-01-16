@@ -1526,6 +1526,9 @@ nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
       case nir_op_extract_i8:
       case nir_op_extract_u16:
       case nir_op_extract_i16:
+      case nir_op_b2i8:
+      case nir_op_b2i16:
+      case nir_op_b2i32:
          break;
       case nir_op_u2u1:
       case nir_op_u2u8:
@@ -1656,6 +1659,11 @@ nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
       case nir_op_u2u16:
       case nir_op_u2u32:
          res = MIN2(src0, max);
+         break;
+      case nir_op_b2i8:
+      case nir_op_b2i16:
+      case nir_op_b2i32:
+         res = 1;
          break;
       case nir_op_sad_u8x4:
          res = src2 + 4 * 255;

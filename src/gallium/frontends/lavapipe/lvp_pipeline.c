@@ -39,13 +39,6 @@
 
 #define MAX_DYNAMIC_STATES 72
 
-#define LVP_PIPELINE_DUP(dst, src, type, count) do {             \
-      type *temp = ralloc_array(mem_ctx, type, count);           \
-      if (!temp) return VK_ERROR_OUT_OF_HOST_MEMORY;             \
-      memcpy(temp, (src), sizeof(type) * count);                 \
-      dst = temp;                                                \
-   } while(0)
-
 void
 lvp_pipeline_destroy(struct lvp_device *device, struct lvp_pipeline *pipeline)
 {
@@ -441,9 +434,9 @@ lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline,
 
    if (stage == MESA_SHADER_FRAGMENT)
       lvp_lower_input_attachments(nir, false);
+   NIR_PASS_V(nir, nir_lower_system_values);
    NIR_PASS_V(nir, nir_lower_is_helper_invocation);
    NIR_PASS_V(nir, lower_demote);
-   NIR_PASS_V(nir, nir_lower_system_values);
    NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
 
    NIR_PASS_V(nir, nir_remove_dead_variables,
@@ -489,7 +482,7 @@ lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline,
    /* Skip if there are potentially conflicting rounding modes */
    struct nir_fold_16bit_tex_image_options fold_16bit_options = {
       .rounding_mode = nir_rounding_mode_undef,
-      .fold_tex_dest = true,
+      .fold_tex_dest_types = nir_type_float | nir_type_uint | nir_type_int,
    };
    NIR_PASS_V(nir, nir_fold_16bit_tex_image, &fold_16bit_options);
 
@@ -601,7 +594,7 @@ lvp_pipeline_compile_stage(struct lvp_pipeline *pipeline, nir_shader *nir)
       struct pipe_compute_state shstate = {0};
       shstate.prog = nir;
       shstate.ir_type = PIPE_SHADER_IR_NIR;
-      shstate.req_local_mem = nir->info.shared_size;
+      shstate.static_shared_mem = nir->info.shared_size;
       return device->queue.ctx->create_compute_state(device->queue.ctx, &shstate);
    } else {
       struct pipe_shader_state shstate = {0};
@@ -680,14 +673,18 @@ layouts_equal(const struct lvp_descriptor_set_layout *a, const struct lvp_descri
 #endif
 
 static void
-merge_layouts(struct lvp_pipeline *dst, struct lvp_pipeline_layout *src)
+merge_layouts(struct vk_device *device, struct lvp_pipeline *dst, struct lvp_pipeline_layout *src)
 {
    if (!src)
       return;
    if (!dst->layout) {
-      /* no layout created yet: copy onto ralloc ctx allocation for auto-free */
-      dst->layout = ralloc(dst->mem_ctx, struct lvp_pipeline_layout);
+      dst->layout = vk_zalloc(&device->alloc, sizeof(struct lvp_pipeline_layout), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       memcpy(dst->layout, src, sizeof(struct lvp_pipeline_layout));
+      dst->layout->vk.ref_cnt = 1;
+      for (unsigned i = 0; i < dst->layout->vk.set_count; i++) {
+         if (dst->layout->vk.set_layouts[i])
+            vk_descriptor_set_layout_ref(dst->layout->vk.set_layouts[i]);
+      }
       return;
    }
 #ifndef NDEBUG
@@ -710,8 +707,11 @@ merge_layouts(struct lvp_pipeline *dst, struct lvp_pipeline_layout *src)
    }
 #endif
    for (unsigned i = 0; i < src->vk.set_count; i++) {
-      if (!dst->layout->vk.set_layouts[i])
+      if (!dst->layout->vk.set_layouts[i]) {
          dst->layout->vk.set_layouts[i] = src->vk.set_layouts[i];
+         if (dst->layout->vk.set_layouts[i])
+            vk_descriptor_set_layout_ref(src->vk.set_layouts[i]);
+      }
    }
    dst->layout->vk.set_count = MAX2(dst->layout->vk.set_count,
                                     src->vk.set_count);
@@ -746,8 +746,6 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
       pipeline->library = true;
 
    struct lvp_pipeline_layout *layout = lvp_pipeline_layout_from_handle(pCreateInfo->layout);
-   if (layout)
-      vk_pipeline_layout_ref(&layout->vk);
 
    if (!layout || !(layout->vk.create_flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT))
       /* this is a regular pipeline with no partials: directly reuse */
@@ -758,7 +756,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
          pipeline->layout = layout;
       else {
          /* this is a partial: copy for later merging to avoid modifying another layout */
-         merge_layouts(pipeline, layout);
+         merge_layouts(&device->vk, pipeline, layout);
       }
    }
 
@@ -779,11 +777,14 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
             pipeline->force_min_sample = p->force_min_sample;
          if (p->stages & layout_stages) {
             if (!layout || (layout->vk.create_flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT))
-               merge_layouts(pipeline, p->layout);
+               merge_layouts(&device->vk, pipeline, p->layout);
          }
          pipeline->stages |= p->stages;
       }
    }
+
+   if (pipeline->layout == layout && layout)
+      vk_pipeline_layout_ref(&layout->vk);
 
    result = vk_graphics_pipeline_state_fill(&device->vk,
                                             &pipeline->graphics_state,

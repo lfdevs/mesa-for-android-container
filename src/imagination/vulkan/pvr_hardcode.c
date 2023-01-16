@@ -35,6 +35,7 @@
 #include "rogue/rogue.h"
 #include "usc/hardcoded_apps/pvr_simple_compute.h"
 #include "util/macros.h"
+#include "util/u_dynarray.h"
 #include "util/u_process.h"
 
 /**
@@ -46,6 +47,9 @@
 
 #define PVR_AXE_1_16M_BVNC PVR_BVNC_PACK(33, 15, 11, 3)
 #define PVR_GX6250_BVNC PVR_BVNC_PACK(4, 40, 2, 51)
+
+#define util_dynarray_append_mem(buf, size, mem) \
+   memcpy(util_dynarray_grow_bytes((buf), 1, size), mem, size)
 
 enum pvr_hard_code_shader_type {
    PVR_HARD_CODE_SHADER_TYPE_COMPUTE,
@@ -76,7 +80,7 @@ static const struct pvr_hard_coding_data {
          size_t shader_size;
 
          /* Note that the bo field will be unused. */
-         const struct pvr_compute_pipeline_shader_state shader_info;
+         const struct pvr_compute_shader_state shader_info;
 
          const struct pvr_hard_code_compute_build_info build_info;
       } compute;
@@ -185,7 +189,7 @@ pvr_get_hard_coding_data(const struct pvr_device_info *const dev_info)
 
 VkResult pvr_hard_code_compute_pipeline(
    struct pvr_device *const device,
-   struct pvr_compute_pipeline_shader_state *const shader_state_out,
+   struct pvr_compute_shader_state *const shader_state_out,
    struct pvr_hard_code_compute_build_info *const build_info_out)
 {
    const uint32_t cache_line_size =
@@ -363,3 +367,16 @@ void pvr_hard_code_get_passthrough_vertex_shader(
       "No hard coded passthrough vertex shader. Returning empty shader.");
    *program_out = &shader;
 };
+
+/* Render target array (RTA). */
+void pvr_hard_code_get_passthrough_rta_vertex_shader(
+   const struct pvr_device_info *const dev_info,
+   struct util_dynarray *program_out)
+{
+   uint32_t shader[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+   util_dynarray_append_mem(program_out, ARRAY_SIZE(shader), &shader);
+
+   mesa_loge("No hard coded passthrough rta vertex shader. Returning "
+             "empty shader.");
+}

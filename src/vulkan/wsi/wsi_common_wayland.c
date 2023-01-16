@@ -46,6 +46,7 @@
 #include <util/compiler.h>
 #include <util/hash_table.h>
 #include <util/timespec.h>
+#include <util/u_endian.h>
 #include <util/u_vector.h>
 #include <util/u_dynarray.h>
 #include <util/anon_file.h>
@@ -291,7 +292,7 @@ wsi_wl_display_add_drm_format_modifier(struct wsi_wl_display *display,
 
    /* Vulkan _PACKN formats have the same component order as DRM formats
     * on little endian systems, on big endian there exists no analog. */
-#if MESA_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    case DRM_FORMAT_RGBA4444:
       wsi_wl_display_add_vk_format_modifier(display, formats,
                                             VK_FORMAT_R4G4B4A4_UNORM_PACK16,
@@ -472,7 +473,7 @@ wl_drm_format_for_vk_format(VkFormat vk_format, bool alpha)
    case VK_FORMAT_A4B4G4R4_UNORM_PACK16:
       return alpha ? DRM_FORMAT_ABGR4444 : DRM_FORMAT_XBGR4444;
 #endif
-#if MESA_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
       return alpha ? DRM_FORMAT_RGBA4444 : DRM_FORMAT_RGBX4444;
    case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
@@ -646,8 +647,7 @@ default_dmabuf_feedback_main_device(void *data,
    struct wsi_wl_display *display = data;
 
    assert(device->size == sizeof(dev_t));
-   dev_t *dev = device->data;
-   display->main_device = *dev;
+   memcpy(&display->main_device, device->data, device->size);
 }
 
 static void
@@ -1545,6 +1545,7 @@ static const struct wl_callback_listener frame_listener = {
 static VkResult
 wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                uint32_t image_index,
+                               uint64_t present_id,
                                const VkPresentRegionKHR *damage)
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
@@ -1775,14 +1776,13 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    /* We are taking ownership of the wsi_wl_surface, so remove ownership from
-    * oldSwapchain.
-    *
-    * If the surface is currently owned by a swapchain that is not
-    * oldSwapchain we should return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR. There's
-    * an open issue tracking that:
-    *
-    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/7467
+    * oldSwapchain. If the surface is currently owned by a swapchain that is
+    * not oldSwapchain we return an error.
     */
+   if (wsi_wl_surface->chain &&
+       wsi_swapchain_to_handle(&wsi_wl_surface->chain->base) != pCreateInfo->oldSwapchain) {
+      return VK_ERROR_NATIVE_WINDOW_IN_USE_KHR;
+   }
    if (pCreateInfo->oldSwapchain) {
       VK_FROM_HANDLE(wsi_wl_swapchain, old_chain, pCreateInfo->oldSwapchain);
       old_chain->wsi_wl_surface = NULL;

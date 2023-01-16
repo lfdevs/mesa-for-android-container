@@ -25,6 +25,7 @@ STABLE_EPHEMERAL=" \
       libudev-dev \
       libvulkan-dev \
       libwaffle-dev \
+      libwayland-dev \
       libx11-xcb-dev \
       libxcb-dri2-0-dev \
       libxkbcommon-dev \
@@ -59,7 +60,8 @@ apt-get install -y --no-remove \
       python3-lxml \
       python3-renderdoc \
       python3-simplejson \
-      spirv-tools
+      spirv-tools \
+      weston
 
 
 . .gitlab-ci/container/container_pre_build.sh

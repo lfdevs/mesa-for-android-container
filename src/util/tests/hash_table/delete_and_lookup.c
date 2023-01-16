@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "hash_table.h"
+#include "util/hash_table.h"
 
 /* Return collisions, so we can test the deletion behavior for chained
  * objects.

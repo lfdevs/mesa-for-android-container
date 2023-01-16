@@ -260,10 +260,10 @@ fail:
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
 
    st->ctx->Array.NewVertexElements = true;
-   st->dirty |= ST_NEW_FS_CONSTANTS |
-                ST_NEW_FS_IMAGES |
-                ST_NEW_FS_SAMPLER_VIEWS |
-                ST_NEW_VERTEX_ARRAYS;
+   st->ctx->NewDriverState |= ST_NEW_FS_CONSTANTS |
+                              ST_NEW_FS_IMAGES |
+                              ST_NEW_FS_SAMPLER_VIEWS |
+                              ST_NEW_VERTEX_ARRAYS;
 
    return success;
 }
@@ -429,7 +429,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
 
    /* Validate state (to be sure we have up-to-date framebuffer surfaces)
     * and flush the bitmap cache prior to reading. */
-   st_validate_state(st, ST_PIPELINE_UPDATE_FRAMEBUFFER);
+   st_validate_state(st, ST_PIPELINE_UPDATE_FB_STATE_MASK);
    st_flush_bitmap_cache(st);
 
    if (!st->prefer_blit_based_texture_transfer) {

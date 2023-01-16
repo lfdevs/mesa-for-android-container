@@ -1146,7 +1146,6 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
         case nir_op_b2i32:
                 result = qir_AND(c, src[0], qir_uniform_ui(c, 1));
                 break;
-        case nir_op_i2b32:
         case nir_op_f2b32:
                 qir_SF(c, src[0]);
                 result = qir_MOV(c, qir_SEL(c, QPU_COND_ZC,

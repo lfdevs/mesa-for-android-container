@@ -585,9 +585,10 @@ VkResult pvr_CreateDescriptorSetLayout(
 
          internal_binding->shader_stage_mask |= (1U << stage);
 
-         /* TODO: Do we have to allocate them at the end? We could speed it
-          * by allocating them here if not. */
-         /* We allocate dynamics primary and secondaries at the end. */
+         /* We allocate dynamics primary and secondaries separately so that we
+          * can do a partial update of USC shared registers by just DMAing the
+          * dynamic section and not having to re-DMA everything again.
+          */
          if (descriptor_type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
              descriptor_type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
             struct pvr_descriptor_size_info size_info;
@@ -683,43 +684,53 @@ static void
 pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
                                   const struct pvr_pipeline_layout *layout)
 {
+#   define SEPARATOR_LENGTH 68
+#   define LOGD_CHAR_NTIMES(c, times)         \
+      do {                                    \
+         char _c_buffer[times + 1];           \
+         for (uint32_t i = 0; i < times; i++) \
+            _c_buffer[i] = c;                 \
+         _c_buffer[times] = '\0';             \
+         mesa_logd("%s", _c_buffer);          \
+      } while (0)
+
    mesa_logd("=== SET LAYOUT ===");
-   mesa_logd("----------------------------------------------------");
+   LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
    mesa_logd(" in registers:");
-   mesa_logd("----------------------------------------------------");
+   LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
 
    for (uint32_t stage = 0;
         stage < ARRAY_SIZE(layout->register_layout_in_dwords_per_stage);
         stage++) {
       uint32_t dynamic_offset = 0;
 
-      mesa_logd("| %-48s |", stage_names[stage].primary_dynamic);
-      mesa_logd("----------------------------------------------------");
+      mesa_logd("| %-64s |", stage_names[stage].primary_dynamic);
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
 
-      /* Print dynamic primaries. */
-      for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
-         const struct pvr_descriptor_set_layout *const set_layout =
-            layout->set_layout[set_num];
+      if (layout->per_stage_reg_info[stage].primary_dynamic_size_in_dwords) {
+         /* Print dynamic primaries. */
+         for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
+            const struct pvr_descriptor_set_layout *const set_layout =
+               layout->set_layout[set_num];
 
-         for (uint32_t i = 0; i < set_layout->binding_count; i++) {
-            const struct pvr_descriptor_set_layout_binding *const binding =
-               &set_layout->bindings[i];
-            bool valid = !!(binding->shader_stage_mask & (1U << stage));
-
-            if (binding->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
-                binding->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
-               continue;
-
-            mesa_logd("| %s %04u | %u:%03u | %-26s[%3u] |",
-                      (valid) ? " " : "X",
-                      dynamic_offset,
-                      set_num,
-                      i,
-                      descriptor_names[binding->type],
-                      binding->descriptor_count);
-
-            if (valid) {
+            for (uint32_t i = 0; i < set_layout->binding_count; i++) {
+               const struct pvr_descriptor_set_layout_binding *const binding =
+                  &set_layout->bindings[i];
                struct pvr_descriptor_size_info size_info;
+
+               if (!(binding->shader_stage_mask & BITFIELD_BIT(stage)))
+                  continue;
+
+               if (binding->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
+                   binding->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+                  continue;
+
+               mesa_logd("| +%04u | set = %u, binding = %03u | %-26s[%3u] |",
+                         dynamic_offset,
+                         set_num,
+                         i,
+                         descriptor_names[binding->type],
+                         binding->descriptor_count);
 
                pvr_descriptor_size_info_init(device, binding->type, &size_info);
 
@@ -728,34 +739,39 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      mesa_logd("----------------------------------------------------");
-      mesa_logd("| %-48s |", stage_names[stage].secondary_dynamic);
-      mesa_logd("----------------------------------------------------");
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("| %-64s |", stage_names[stage].secondary_dynamic);
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
 
-      /* Print dynamic secondaries. */
-      for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
-         const struct pvr_descriptor_set_layout *const set_layout =
-            layout->set_layout[set_num];
+      if (layout->per_stage_reg_info[stage].secondary_dynamic_size_in_dwords) {
+         /* Print dynamic secondaries. */
+         for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
+            const struct pvr_descriptor_set_layout *const set_layout =
+               layout->set_layout[set_num];
+            const struct pvr_descriptor_set_layout_mem_layout *const mem_layout =
+               &set_layout->memory_layout_in_dwords_per_stage[stage];
 
-         for (uint32_t i = 0; i < set_layout->binding_count; i++) {
-            const struct pvr_descriptor_set_layout_binding *const binding =
-               &set_layout->bindings[i];
-            bool valid = !!(binding->shader_stage_mask & (1U << stage));
-
-            if (binding->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
-                binding->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+            if (mem_layout->secondary_dynamic_size == 0)
                continue;
 
-            mesa_logd("| %s %04u | %u:%03u | %-26s[%3u] |",
-                      (valid) ? " " : "X",
-                      dynamic_offset,
-                      set_num,
-                      i,
-                      descriptor_names[binding->type],
-                      binding->descriptor_count);
-
-            if (valid) {
+            for (uint32_t i = 0; i < set_layout->binding_count; i++) {
+               const struct pvr_descriptor_set_layout_binding *const binding =
+                  &set_layout->bindings[i];
                struct pvr_descriptor_size_info size_info;
+
+               if (!(binding->shader_stage_mask & BITFIELD_BIT(stage)))
+                  continue;
+
+               if (binding->type != VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC &&
+                   binding->type != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+                  continue;
+
+               mesa_logd("| +%04u | set = %u, binding = %03u | %-26s[%3u] |",
+                         dynamic_offset,
+                         set_num,
+                         i,
+                         descriptor_names[binding->type],
+                         binding->descriptor_count);
 
                pvr_descriptor_size_info_init(device, binding->type, &size_info);
 
@@ -764,9 +780,9 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      mesa_logd("----------------------------------------------------");
-      mesa_logd("| %-48s |", stage_names[stage].primary);
-      mesa_logd("----------------------------------------------------");
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("| %-64s |", stage_names[stage].primary);
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
 
       /* Print primaries. */
       for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
@@ -780,12 +796,14 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
             const struct pvr_descriptor_set_layout_binding *const binding =
                &set_layout->bindings[i];
 
+            if (!(binding->shader_stage_mask & BITFIELD_BIT(stage)))
+               continue;
+
             if (binding->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
                 binding->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
                continue;
 
-            mesa_logd("| %s %04u | %u:%03u | %-26s[%3u] |",
-                      (binding->shader_stage_mask & (1U << stage)) ? " " : "X",
+            mesa_logd("| +%04u | set = %u, binding = %03u | %-26s[%3u] |",
                       base + binding->per_stage_offset_in_dwords[stage].primary,
                       set_num,
                       i,
@@ -794,28 +812,33 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      mesa_logd("----------------------------------------------------");
-      mesa_logd("| %-48s |", stage_names[stage].secondary);
-      mesa_logd("----------------------------------------------------");
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("| %-64s |", stage_names[stage].secondary);
+      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
 
       /* Print secondaries. */
       for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
          const struct pvr_descriptor_set_layout *const set_layout =
             layout->set_layout[set_num];
-         const uint32_t base =
-            layout->register_layout_in_dwords_per_stage[stage][set_num]
-               .secondary_offset;
+         const struct pvr_descriptor_set_layout_mem_layout *const mem_layout =
+            &layout->register_layout_in_dwords_per_stage[stage][set_num];
+         const uint32_t base = mem_layout->secondary_offset;
+
+         if (mem_layout->secondary_size == 0)
+            continue;
 
          for (uint32_t i = 0; i < set_layout->binding_count; i++) {
             const struct pvr_descriptor_set_layout_binding *const binding =
                &set_layout->bindings[i];
 
+            if (!(binding->shader_stage_mask & BITFIELD_BIT(stage)))
+               continue;
+
             if (binding->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
                 binding->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
                continue;
 
-            mesa_logd("| %s %04u | %u:%03u | %-26s[%3u] |",
-                      (binding->shader_stage_mask & (1U << stage)) ? " " : "X",
+            mesa_logd("| +%04u | set = %u, binding = %03u | %-26s[%3u] |",
                       base +
                          binding->per_stage_offset_in_dwords[stage].secondary,
                       set_num,
@@ -825,8 +848,11 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      mesa_logd("====================================================");
+      LOGD_CHAR_NTIMES('=', SEPARATOR_LENGTH);
    }
+
+#   undef LOGD_CHAR_NTIMES
+#   undef SEPARATOR_LENGTH
 }
 #endif
 
@@ -892,6 +918,9 @@ VkResult pvr_CreatePipelineLayout(VkDevice _device,
 
             layout->descriptor_offsets[set_num][stage][type] =
                descriptor_counts[type];
+
+            if (!layout->set_layout[set_num]->descriptor_count)
+               continue;
 
             descriptor_count = layout->set_layout[set_num]
                                   ->per_stage_descriptor_count[stage][type];

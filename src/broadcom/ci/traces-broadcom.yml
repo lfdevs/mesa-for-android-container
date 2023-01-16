@@ -10,12 +10,6 @@ traces:
   behdad-glyphy/glyphy-v2.trace:
     broadcom-rpi4:
       checksum: ea49462ff1545f21506dbd7b5028df45
-  glmark2/desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true-v2.trace:
-    broadcom-rpi4:
-      checksum: edd73dce91341dadad11e074048329e1
-  glmark2/jellyfish-v2.trace:
-    broadcom-rpi4:
-      checksum: ab1e9d3bcbdfceb7087b2a84c8454d35
   glxgears/glxgears-2-v2.trace:
     broadcom-rpi4:
       checksum: 2a9c5e35fa5693fd7d3a76f7b9746edb

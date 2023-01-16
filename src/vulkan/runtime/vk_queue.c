@@ -695,6 +695,16 @@ vk_queue_submit(struct vk_queue *queue,
       assert(info->command_buffers[i].deviceMask == 0 ||
              info->command_buffers[i].deviceMask == 1);
       assert(cmd_buffer->pool->queue_family_index == queue->queue_family_index);
+
+      /* Some drivers don't call vk_command_buffer_begin/end() yet and, for
+       * those, we'll see initial layout.  However, this is enough to catch
+       * command buffers which get submitted without calling EndCommandBuffer.
+       */
+      assert(cmd_buffer->state == MESA_VK_COMMAND_BUFFER_STATE_INITIAL ||
+             cmd_buffer->state == MESA_VK_COMMAND_BUFFER_STATE_EXECUTABLE ||
+             cmd_buffer->state == MESA_VK_COMMAND_BUFFER_STATE_PENDING);
+      cmd_buffer->state = MESA_VK_COMMAND_BUFFER_STATE_PENDING;
+
       submit->command_buffers[i] = cmd_buffer;
    }
 

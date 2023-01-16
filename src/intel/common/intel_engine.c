@@ -24,73 +24,12 @@
 #include <stdlib.h>
 
 #include "intel_engine.h"
-#include "intel_gem.h"
-
-enum intel_engine_class i915_engine_class_to_intel(enum drm_i915_gem_engine_class i915)
-{
-   switch (i915) {
-   case I915_ENGINE_CLASS_RENDER:
-      return INTEL_ENGINE_CLASS_RENDER;
-   case I915_ENGINE_CLASS_COPY:
-      return INTEL_ENGINE_CLASS_COPY;
-   case I915_ENGINE_CLASS_VIDEO:
-      return INTEL_ENGINE_CLASS_VIDEO;
-   case I915_ENGINE_CLASS_VIDEO_ENHANCE:
-      return INTEL_ENGINE_CLASS_VIDEO_ENHANCE;
-   case I915_ENGINE_CLASS_COMPUTE:
-      return INTEL_ENGINE_CLASS_COMPUTE;
-   default:
-      return INTEL_ENGINE_CLASS_INVALID;
-   }
-}
-
-enum drm_i915_gem_engine_class intel_engine_class_to_i915(enum intel_engine_class intel)
-{
-   switch (intel) {
-   case INTEL_ENGINE_CLASS_RENDER:
-      return I915_ENGINE_CLASS_RENDER;
-   case INTEL_ENGINE_CLASS_COPY:
-      return I915_ENGINE_CLASS_COPY;
-   case INTEL_ENGINE_CLASS_VIDEO:
-      return I915_ENGINE_CLASS_VIDEO;
-   case INTEL_ENGINE_CLASS_VIDEO_ENHANCE:
-      return I915_ENGINE_CLASS_VIDEO_ENHANCE;
-   case INTEL_ENGINE_CLASS_COMPUTE:
-      return I915_ENGINE_CLASS_COMPUTE;
-   default:
-      return I915_ENGINE_CLASS_INVALID;
-   }
-}
+#include "intel_engine_i915.h"
 
 struct intel_query_engine_info *
 intel_engine_get_info(int fd)
 {
-   struct drm_i915_query_engine_info *i915_engines_info;
-   i915_engines_info = intel_i915_query_alloc(fd, DRM_I915_QUERY_ENGINE_INFO, NULL);
-   if (!i915_engines_info)
-      return NULL;
-
-   struct intel_query_engine_info *intel_engines_info;
-   intel_engines_info = calloc(1, sizeof(*intel_engines_info) +
-                               sizeof(*intel_engines_info->engines) *
-                               i915_engines_info->num_engines);
-   if (!intel_engines_info) {
-      free(i915_engines_info);
-      return NULL;
-   }
-
-   for (int i = 0; i < i915_engines_info->num_engines; i++) {
-      struct drm_i915_engine_info *i915_engine = &i915_engines_info->engines[i];
-      struct intel_engine_class_instance *intel_engine = &intel_engines_info->engines[i];
-
-      intel_engine->engine_class = i915_engine_class_to_intel(i915_engine->engine.engine_class);
-      intel_engine->engine_instance = i915_engine->engine.engine_instance;
-   }
-
-   intel_engines_info->num_engines = i915_engines_info->num_engines;
-
-   free(i915_engines_info);
-   return intel_engines_info;
+   return i915_engine_get_info(fd);
 }
 
 int

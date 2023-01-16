@@ -2,7 +2,7 @@
 
 set -ex
 
-VKD3D_PROTON_COMMIT="5b73139f182d86cd58a757e4b5f0d4cfad96d319"
+VKD3D_PROTON_COMMIT="804751ee1cb108a2ec59e182ce0c052bafef268e"
 
 VKD3D_PROTON_DST_DIR="/vkd3d-proton-tests"
 VKD3D_PROTON_SRC_DIR="/vkd3d-proton-src"

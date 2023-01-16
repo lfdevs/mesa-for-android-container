@@ -2598,8 +2598,15 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
       brw_inst_set_src0_width(&devinfo, last_inst, inst[i].src_width);
       brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src_hstride);
 
+      /* Note: The Broadwell PRM also lists the restriction that destination
+       * of DWord multiplication cannot be the accumulator.
+       */
       if (devinfo.platform == INTEL_PLATFORM_CHV ||
-          intel_device_info_is_9lp(&devinfo)) {
+          intel_device_info_is_9lp(&devinfo) ||
+          (devinfo.ver == 8 &&
+           inst[i].opcode == BRW_OPCODE_MUL &&
+           brw_inst_dst_reg_file(&devinfo, last_inst) == BRW_ARCHITECTURE_REGISTER_FILE &&
+           brw_inst_dst_da_reg_nr(&devinfo, last_inst) != BRW_ARF_NULL)) {
          EXPECT_EQ(inst[i].expected_result, validate(p));
       } else {
          EXPECT_TRUE(validate(p));

@@ -27,7 +27,7 @@
 #include "util/u_debug.h"
 #include "u_debug_stack.h"
 #include "util/hash_table.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 static hash_table *symbol_table;
 static simple_mtx_t table_mutex = SIMPLE_MTX_INITIALIZER;

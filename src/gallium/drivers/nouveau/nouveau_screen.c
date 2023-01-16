@@ -8,7 +8,7 @@
 #include "util/format/u_format_s3tc.h"
 #include "util/u_string.h"
 
-#include "os/os_mman.h"
+#include "util/os_mman.h"
 #include "util/os_time.h"
 
 #include <stdio.h>
@@ -49,7 +49,7 @@ nouveau_screen_get_name(struct pipe_screen *pscreen)
 static const char *
 nouveau_screen_get_vendor(struct pipe_screen *pscreen)
 {
-   return "nouveau";
+   return "Mesa";
 }
 
 static const char *
@@ -106,14 +106,14 @@ nouveau_screen_bo_from_handle(struct pipe_screen *pscreen,
 
    if (whandle->offset != 0) {
       debug_printf("%s: attempt to import unsupported winsys offset %d\n",
-                   __FUNCTION__, whandle->offset);
+                   __func__, whandle->offset);
       return NULL;
    }
 
    if (whandle->type != WINSYS_HANDLE_TYPE_SHARED &&
        whandle->type != WINSYS_HANDLE_TYPE_FD) {
       debug_printf("%s: attempt to import unsupported handle type %d\n",
-                   __FUNCTION__, whandle->type);
+                   __func__, whandle->type);
       return NULL;
    }
 
@@ -124,7 +124,7 @@ nouveau_screen_bo_from_handle(struct pipe_screen *pscreen,
 
    if (ret) {
       debug_printf("%s: ref name 0x%08x failed with %d\n",
-                   __FUNCTION__, whandle->handle, ret);
+                   __func__, whandle->handle, ret);
       return NULL;
    }
 

@@ -43,19 +43,6 @@ etna_cfloat_to_uint8(float f)
    return f * 256.0f;
 }
 
-/* clamped float [0.0 .. 1.0] -> [0 .. (1<<bits)-1] */
-static inline uint32_t
-etna_cfloat_to_uintN(float f, int bits)
-{
-   if (f <= 0.0f)
-      return 0;
-
-   if (f >= (1.0f - 1.0f / (1 << bits)))
-      return (1 << bits) - 1;
-
-   return f * (1 << bits);
-}
-
 /* 1/log10(2) */
 #define RCPLOG2 (1.4426950408889634f)
 

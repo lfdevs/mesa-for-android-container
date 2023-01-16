@@ -16,3 +16,7 @@ dEQP-GLES3.functional.texture.specification.teximage2d_pbo.rgba32ui_2d
 
 dEQP-VK.api.external.fence.opaque_fd.reset_permanent
 dEQP-VK.api.external.fence.opaque_fd.reset_temporary
+
+# Seem reliable on arm64, but they flake on armhf
+dEQP-VK.glsl.builtin.function.integer.findMSB.ivec2_mediump_geometry
+dEQP-VK.glsl.builtin.function.integer.findMSB.ivec2_highp_geometry

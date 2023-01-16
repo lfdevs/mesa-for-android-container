@@ -118,7 +118,7 @@ libintel_dump_gpu = shared_library(
   ),
   dependencies : [dep_dl, idep_mesautil],
   include_directories : [inc_include, inc_src, inc_intel],
-  link_with : libintel_dev,
+  link_with : [libintel_dev, libintel_common],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
   install_dir : get_option('libexecdir'),

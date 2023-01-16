@@ -156,6 +156,9 @@ struct ac_llvm_context {
 
    unsigned float_mode;
 
+   bool exports_color_null;
+   bool exports_mrtz;
+
    struct ac_llvm_pointer lds;
 };
 
@@ -163,7 +166,7 @@ void ac_llvm_context_init(struct ac_llvm_context *ctx, struct ac_llvm_compiler *
                           enum amd_gfx_level gfx_level, enum radeon_family family,
                           bool has_3d_cube_border_color_mipmap,
                           enum ac_float_mode float_mode, unsigned wave_size,
-                          unsigned ballot_mask_bits);
+                          unsigned ballot_mask_bits, bool exports_color_null, bool exports_mrtz);
 
 void ac_llvm_context_dispose(struct ac_llvm_context *ctx);
 
@@ -247,7 +250,7 @@ LLVMValueRef ac_build_fs_interp_f16(struct ac_llvm_context *ctx, LLVMValueRef ll
                                     LLVMValueRef attr_number, LLVMValueRef params, LLVMValueRef i,
                                     LLVMValueRef j, bool high_16bits);
 
-LLVMValueRef ac_build_fs_interp_mov(struct ac_llvm_context *ctx, LLVMValueRef parameter,
+LLVMValueRef ac_build_fs_interp_mov(struct ac_llvm_context *ctx, unsigned parameter,
                                     LLVMValueRef llvm_chan, LLVMValueRef attr_number,
                                     LLVMValueRef params);
 

@@ -114,7 +114,7 @@ iris_monitor_init_metrics(struct iris_screen *screen)
 
    iris_perf_init_vtbl(perf_cfg);
 
-   intel_perf_init_metrics(perf_cfg, &screen->devinfo, screen->fd,
+   intel_perf_init_metrics(perf_cfg, screen->devinfo, screen->fd,
                            true /* pipeline stats*/,
                            true /* register snapshots */);
 
@@ -169,7 +169,7 @@ iris_init_monitor_ctx(struct iris_context *ice)
                          ice,
                          ice,
                          screen->bufmgr,
-                         &screen->devinfo,
+                         screen->devinfo,
                          ice->batches[IRIS_BATCH_RENDER].ctx_id,
                          screen->fd);
 }

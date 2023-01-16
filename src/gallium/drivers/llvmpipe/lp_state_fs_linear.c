@@ -26,7 +26,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #include "util/u_math.h"
 #include "util/u_cpu_detect.h"
@@ -41,7 +41,7 @@
 #include "lp_linear_priv.h"
 
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
 
 #include <emmintrin.h>
 
@@ -366,7 +366,7 @@ blit_rgba_blit(const struct lp_rast_state *state,
    unsigned src_stride;
    int src_x, src_y;
 
-   LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
    /* Require w==1.0:
     */
@@ -418,7 +418,7 @@ blit_rgb1_blit(const struct lp_rast_state *state,
    unsigned src_stride;
    int src_x, src_y;
 
-   LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
    /* Require w==1.0:
     */
@@ -476,7 +476,7 @@ blit_rgba(const struct lp_rast_state *state,
    struct nearest_sampler samp;
    struct color_blend blend;
 
-   LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
    if (!init_nearest_sampler(&samp,
                              &context->textures[0],
@@ -516,7 +516,7 @@ blit_rgb1(const struct lp_rast_state *state,
    struct color_blend blend;
    struct shader shader;
 
-   LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
    if (!init_nearest_sampler(&samp,
                              &context->textures[0],
@@ -559,7 +559,7 @@ blit_rgba_blend_premul(const struct lp_rast_state *state,
    struct nearest_sampler samp;
    struct color_blend blend;
 
-   LP_DBG(DEBUG_RAST, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
    if (!init_nearest_sampler(&samp,
                              &context->textures[0],

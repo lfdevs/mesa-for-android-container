@@ -143,14 +143,12 @@ lower_alu_instr(nir_builder *b, nir_instr *instr_, UNUSED void *cb_data)
          if (src0->bit_size < 32) {
             /* Just do the math in 32-bit space and shift the result */
             nir_alu_type base_type = nir_op_infos[instr->op].output_type;
-            nir_op upcast_op = nir_type_conversion_op(base_type | src0->bit_size, base_type | 32, nir_rounding_mode_undef);
-            nir_op downscast_op = nir_type_conversion_op(base_type | 32, base_type | src0->bit_size, nir_rounding_mode_undef);
 
-            nir_ssa_def *src0_32 = nir_build_alu(b, upcast_op, src0, NULL, NULL, NULL);
-            nir_ssa_def *src1_32 = nir_build_alu(b, upcast_op, src1, NULL, NULL, NULL);
+            nir_ssa_def *src0_32 = nir_type_convert(b, src0, base_type, base_type | 32, nir_rounding_mode_undef);
+            nir_ssa_def *src1_32 = nir_type_convert(b, src1, base_type, base_type | 32, nir_rounding_mode_undef);
             nir_ssa_def *dest_32 = nir_imul(b, src0_32, src1_32);
             nir_ssa_def *dest_shifted = nir_ishr(b, dest_32, nir_imm_int(b, src0->bit_size));
-            lowered = nir_build_alu(b, downscast_op, dest_shifted, NULL, NULL, NULL);
+            lowered = nir_type_convert(b, dest_shifted, base_type, base_type | src0->bit_size, nir_rounding_mode_undef);
          } else {
             nir_ssa_def *cshift = nir_imm_int(b, src0->bit_size / 2);
             nir_ssa_def *cmask = nir_imm_intN_t(b, (1ull << (src0->bit_size / 2)) - 1, src0->bit_size);

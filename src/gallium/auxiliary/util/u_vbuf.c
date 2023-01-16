@@ -92,7 +92,7 @@
 #include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
-#include "indices/u_primconvert.h"
+#include "util/indices/u_primconvert.h"
 #include "util/u_prim_restart.h"
 #include "util/u_screen.h"
 #include "util/u_upload_mgr.h"
@@ -1450,17 +1450,17 @@ u_vbuf_split_indexed_multidraw(struct u_vbuf *mgr, struct pipe_draw_info *info,
       draw.index_bias = indirect_data[offset + 3];
       info->start_instance = indirect_data[offset + 4];
 
-      u_vbuf_draw_vbo(mgr, info, drawid_offset, NULL, &draw, 1);
+      u_vbuf_draw_vbo(mgr->pipe, info, drawid_offset, NULL, &draw, 1);
    }
 }
 
-void u_vbuf_draw_vbo(struct u_vbuf *mgr, const struct pipe_draw_info *info,
+void u_vbuf_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
                      unsigned drawid_offset,
                      const struct pipe_draw_indirect_info *indirect,
                      const struct pipe_draw_start_count_bias *draws,
                      unsigned num_draws)
 {
-   struct pipe_context *pipe = mgr->pipe;
+   struct u_vbuf *mgr = pipe->vbuf;
    int start_vertex;
    unsigned min_index;
    unsigned num_vertices;

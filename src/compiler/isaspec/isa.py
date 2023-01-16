@@ -472,6 +472,9 @@ class ISA(object):
             self.leafs.setdefault(b.name, []).append(b)
 
     def validate_isa(self):
+        # We only support multiples of 32 bits for now
+        assert self.bitsize % 32 == 0
+
         # Do one-time fixups
         # Remove non-leaf nodes from the leafs table:
         for name, bitsets in list(self.leafs.items()):

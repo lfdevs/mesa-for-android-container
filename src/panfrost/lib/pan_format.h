@@ -37,48 +37,62 @@
 typedef uint32_t mali_pixel_format;
 
 struct panfrost_format {
-        mali_pixel_format hw;
-        unsigned bind;
+   mali_pixel_format hw;
+   unsigned bind;
 };
 
 struct pan_blendable_format {
-        /* enum mali_color_buffer_internal_format */ uint16_t internal;
-        /* enum mali_mfbd_color_format */ uint16_t writeback;
+   /* enum mali_color_buffer_internal_format */ uint16_t internal;
+   /* enum mali_mfbd_color_format */ uint16_t writeback;
 
-        /* Indexed by the dithered? flag. So _PU first, then _AU */
-        mali_pixel_format bifrost[2];
+   /* Indexed by the dithered? flag. So _PU first, then _AU */
+   mali_pixel_format bifrost[2];
 };
 
-extern const struct pan_blendable_format panfrost_blendable_formats_v6[PIPE_FORMAT_COUNT];
-extern const struct pan_blendable_format panfrost_blendable_formats_v7[PIPE_FORMAT_COUNT];
-extern const struct pan_blendable_format panfrost_blendable_formats_v9[PIPE_FORMAT_COUNT];
+extern const struct pan_blendable_format
+   panfrost_blendable_formats_v6[PIPE_FORMAT_COUNT];
+extern const struct pan_blendable_format
+   panfrost_blendable_formats_v7[PIPE_FORMAT_COUNT];
+extern const struct pan_blendable_format
+   panfrost_blendable_formats_v9[PIPE_FORMAT_COUNT];
 extern const struct panfrost_format panfrost_pipe_format_v6[PIPE_FORMAT_COUNT];
 extern const struct panfrost_format panfrost_pipe_format_v7[PIPE_FORMAT_COUNT];
 extern const struct panfrost_format panfrost_pipe_format_v9[PIPE_FORMAT_COUNT];
 
 /* Helpers to construct swizzles */
 
-#define PAN_V6_SWIZZLE(R, G, B, A) ( \
-        ((MALI_CHANNEL_ ## R) << 0) | \
-        ((MALI_CHANNEL_ ## G) << 3) | \
-        ((MALI_CHANNEL_ ## B) << 6) | \
-        ((MALI_CHANNEL_ ## A) << 9))
+#define PAN_V6_SWIZZLE(R, G, B, A)                                             \
+   (((MALI_CHANNEL_##R) << 0) | ((MALI_CHANNEL_##G) << 3) |                    \
+    ((MALI_CHANNEL_##B) << 6) | ((MALI_CHANNEL_##A) << 9))
 
 static inline unsigned
 panfrost_get_default_swizzle(unsigned components)
 {
-        switch (components) {
-        case 1:
-                return PAN_V6_SWIZZLE(R, 0, 0, 1);
-        case 2:
-                return PAN_V6_SWIZZLE(R, G, 0, 1);
-        case 3:
-                return PAN_V6_SWIZZLE(R, G, B, 1);
-        case 4:
-                return PAN_V6_SWIZZLE(R, G, B, A);
-        default:
-                unreachable("Invalid number of components");
-        }
+   switch (components) {
+   case 1:
+      return PAN_V6_SWIZZLE(R, 0, 0, 1);
+   case 2:
+      return PAN_V6_SWIZZLE(R, G, 0, 1);
+   case 3:
+      return PAN_V6_SWIZZLE(R, G, B, 1);
+   case 4:
+      return PAN_V6_SWIZZLE(R, G, B, A);
+   default:
+      unreachable("Invalid number of components");
+   }
 }
+
+#if PAN_ARCH == 7
+struct pan_decomposed_swizzle {
+   /* Component ordering to apply first */
+   enum mali_rgb_component_order pre;
+
+   /* Bijective swizzle applied after */
+   unsigned char post[4];
+};
+
+struct pan_decomposed_swizzle
+   GENX(pan_decompose_swizzle)(enum mali_rgb_component_order order);
+#endif
 
 #endif

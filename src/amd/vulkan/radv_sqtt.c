@@ -43,6 +43,14 @@ radv_se_is_disabled(struct radv_device *device, unsigned se)
 }
 
 static uint32_t
+gfx11_get_thread_trace_ctrl(struct radv_device *device, bool enable)
+{
+   return S_0367B0_MODE(enable) | S_0367B0_HIWATER(5) | S_0367B0_UTIL_TIMER(1) |
+          S_0367B0_RT_FREQ(2) | /* 4096 clk */
+          S_0367B0_DRAW_EVENT_EN(1) | S_0367B0_SPI_STALL_EN(1) | S_0367B0_SQ_STALL_EN(1);
+}
+
+static uint32_t
 gfx10_get_thread_trace_ctrl(struct radv_device *device, bool enable)
 {
    uint32_t thread_trace_ctrl = S_008D1C_MODE(enable) | S_008D1C_HIWATER(5) |
@@ -97,7 +105,39 @@ radv_emit_thread_trace_start(struct radv_device *device, struct radeon_cmdbuf *c
          cs, R_030800_GRBM_GFX_INDEX,
          S_030800_SE_INDEX(se) | S_030800_SH_INDEX(0) | S_030800_INSTANCE_BROADCAST_WRITES(1));
 
-      if (device->physical_device->rad_info.gfx_level >= GFX10) {
+      if (device->physical_device->rad_info.gfx_level >= GFX11) {
+         /* Order seems important for the following 2 registers. */
+         radeon_set_uconfig_reg(cs, R_0367A4_SQ_THREAD_TRACE_BUF0_SIZE,
+                                S_0367A4_SIZE(shifted_size) | S_0367A4_BASE_HI(shifted_va >> 32));
+
+         radeon_set_uconfig_reg(cs, R_0367A0_SQ_THREAD_TRACE_BUF0_BASE, shifted_va);
+
+         radeon_set_uconfig_reg(cs, R_0367B4_SQ_THREAD_TRACE_MASK,
+                                S_0367B4_WTYPE_INCLUDE(0x7f) | /* all shader stages */
+                                   S_0367B4_SA_SEL(0) | S_0367B4_WGP_SEL(first_active_cu / 2) |
+                                   S_0367B4_SIMD_SEL(0));
+
+         uint32_t thread_trace_token_mask = S_0367B8_REG_INCLUDE(
+            V_0367B8_REG_INCLUDE_SQDEC | V_0367B8_REG_INCLUDE_SHDEC | V_0367B8_REG_INCLUDE_GFXUDEC |
+            V_0367B8_REG_INCLUDE_COMP | V_0367B8_REG_INCLUDE_CONTEXT | V_0367B8_REG_INCLUDE_CONFIG);
+
+         /* Performance counters with SQTT are considered deprecated. */
+         uint32_t token_exclude = V_0367B8_TOKEN_EXCLUDE_PERF;
+
+         if (!radv_is_instruction_timing_enabled()) {
+            /* Reduce SQTT traffic when instruction timing isn't enabled. */
+            token_exclude |= V_0367B8_TOKEN_EXCLUDE_VMEMEXEC | V_0367B8_TOKEN_EXCLUDE_ALUEXEC |
+                             V_0367B8_TOKEN_EXCLUDE_VALUINST | V_0367B8_TOKEN_EXCLUDE_IMMEDIATE |
+                             V_0367B8_TOKEN_EXCLUDE_INST;
+         }
+         thread_trace_token_mask |= S_0367B8_TOKEN_EXCLUDE(token_exclude);
+
+         radeon_set_uconfig_reg(cs, R_0367B8_SQ_THREAD_TRACE_TOKEN_MASK, thread_trace_token_mask);
+
+         /* Should be emitted last (it enables thread traces). */
+         radeon_set_uconfig_reg(cs, R_0367B0_SQ_THREAD_TRACE_CTRL,
+                                gfx11_get_thread_trace_ctrl(device, true));
+      } else if (device->physical_device->rad_info.gfx_level >= GFX10) {
          /* Order seems important for the following 2 registers. */
          radeon_set_privileged_config_reg(
             cs, R_008D04_SQ_THREAD_TRACE_BUF0_SIZE,
@@ -221,13 +261,20 @@ static const uint32_t gfx10_thread_trace_info_regs[] = {
    R_008D24_SQ_THREAD_TRACE_DROPPED_CNTR,
 };
 
+static const uint32_t gfx11_thread_trace_info_regs[] = {
+   R_0367BC_SQ_THREAD_TRACE_WPTR,
+   R_0367D0_SQ_THREAD_TRACE_STATUS,
+   R_0367E8_SQ_THREAD_TRACE_DROPPED_CNTR,
+};
 static void
 radv_copy_thread_trace_info_regs(struct radv_device *device, struct radeon_cmdbuf *cs,
                                  unsigned se_index)
 {
    const uint32_t *thread_trace_info_regs = NULL;
 
-   if (device->physical_device->rad_info.gfx_level >= GFX10) {
+   if (device->physical_device->rad_info.gfx_level >= GFX11) {
+      thread_trace_info_regs = gfx11_thread_trace_info_regs;
+   } else if (device->physical_device->rad_info.gfx_level >= GFX10) {
       thread_trace_info_regs = gfx10_thread_trace_info_regs;
    } else if (device->physical_device->rad_info.gfx_level == GFX9) {
       thread_trace_info_regs = gfx9_thread_trace_info_regs;
@@ -283,7 +330,21 @@ radv_emit_thread_trace_stop(struct radv_device *device, struct radeon_cmdbuf *cs
          cs, R_030800_GRBM_GFX_INDEX,
          S_030800_SE_INDEX(se) | S_030800_SH_INDEX(0) | S_030800_INSTANCE_BROADCAST_WRITES(1));
 
-      if (device->physical_device->rad_info.gfx_level >= GFX10) {
+      if (device->physical_device->rad_info.gfx_level >= GFX11) {
+         /* Disable the thread trace mode. */
+         radeon_set_uconfig_reg(cs, R_0367B0_SQ_THREAD_TRACE_CTRL,
+                                gfx11_get_thread_trace_ctrl(device, false));
+
+         /* Wait for thread trace completion. */
+         radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));
+         radeon_emit(
+            cs, WAIT_REG_MEM_EQUAL); /* wait until the register is equal to the reference value */
+         radeon_emit(cs, R_0367D0_SQ_THREAD_TRACE_STATUS >> 2); /* register */
+         radeon_emit(cs, 0);
+         radeon_emit(cs, 0);              /* reference value */
+         radeon_emit(cs, ~C_0367D0_BUSY); /* mask */
+         radeon_emit(cs, 4);              /* poll interval */
+      } else if (device->physical_device->rad_info.gfx_level >= GFX10) {
          if (!device->physical_device->rad_info.has_sqtt_rb_harvest_bug) {
             /* Make sure to wait for the trace buffer. */
             radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));

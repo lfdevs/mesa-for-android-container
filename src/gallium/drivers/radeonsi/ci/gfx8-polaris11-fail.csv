@@ -5,7 +5,6 @@ glx@glx-make-current,Crash
 glx@glx-make-glxdrawable-current,Fail
 glx@glx-multithread-makecurrent-1,Fail
 glx@glx-multithread-texture,Fail
-glx@glx-multithread-texture,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-event_async,Fail
 glx@glx-tfp,Fail

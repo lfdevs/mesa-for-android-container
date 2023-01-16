@@ -288,7 +288,7 @@ tex_cache_flush_hack(struct iris_batch *batch,
                      enum isl_format view_format,
                      enum isl_format surf_format)
 {
-   const struct intel_device_info *devinfo = &batch->screen->devinfo;
+   const struct intel_device_info *devinfo = batch->screen->devinfo;
 
    /* The WaSamplerCacheFlushBetweenRedescribedSurfaceReads workaround says:
     *
@@ -365,7 +365,7 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
 {
    struct iris_context *ice = (void *) ctx;
    struct iris_screen *screen = (struct iris_screen *)ctx->screen;
-   const struct intel_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = screen->devinfo;
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
    enum blorp_batch_flags blorp_flags = iris_blorp_flags_for_batch(batch);
 
@@ -573,7 +573,7 @@ get_copy_region_aux_settings(struct iris_context *ice,
                              bool is_dest)
 {
    struct iris_screen *screen = (void *) ice->ctx.screen;
-   struct intel_device_info *devinfo = &screen->devinfo;
+   const struct intel_device_info *devinfo = screen->devinfo;
 
    switch (res->aux.usage) {
    case ISL_AUX_USAGE_HIZ:

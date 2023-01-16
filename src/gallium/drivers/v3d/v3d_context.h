@@ -552,6 +552,8 @@ struct v3d_context {
         struct pipe_shader_state *sand8_blit_vs;
         struct pipe_shader_state *sand8_blit_fs_luma;
         struct pipe_shader_state *sand8_blit_fs_chroma;
+        struct pipe_shader_state *sand30_blit_vs;
+        struct pipe_shader_state *sand30_blit_fs;
 
         /** @{ Current pipeline state objects */
         struct pipe_scissor_state scissor;

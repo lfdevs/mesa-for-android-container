@@ -11,18 +11,16 @@
     VISIBILITY_GROUP: "mesa-ci"
     RUNNER_TAG: mesa-ci-x86-64-lava-lima
 
-lima-mali450-test:arm64:
+lima-mali450-deqp:arm64:
   extends:
     - .lava-meson-gxl-s805x-libretech-ac
   variables:
-    DEQP_EXPECTED_RENDERER: Mali450
+    HWCI_START_WESTON: 1
+    DEQP_SUITE: lima-mali450-deqp
 
-lima-mali450-piglit-gpu:arm64:
+lima-mali450-piglit:arm64:
   extends:
-    - .piglit-test
     - .lava-meson-gxl-s805x-libretech-ac
-    - .lava-piglit
   variables:
-    PIGLIT_PLATFORM: gbm
-    PIGLIT_PROFILES: gpu
+    DEQP_SUITE: lima-mali450-piglit
   parallel: 2

@@ -58,6 +58,7 @@ static struct  predefined_func_descr predefined_funcs[] = {
 {"dx.op.sampleLevel", "R", "i@@ffffiiif", DXIL_ATTR_KIND_READ_ONLY},
 {"dx.op.sampleGrad", "R", "i@@ffffiiifffffff", DXIL_ATTR_KIND_READ_ONLY},
 {"dx.op.sampleCmp", "R", "i@@ffffiiiff", DXIL_ATTR_KIND_READ_ONLY},
+{"dx.op.sampleCmpLevel", "R", "i@@ffffiiiff", DXIL_ATTR_KIND_READ_ONLY},
 {"dx.op.sampleCmpLevelZero", "R", "i@@ffffiiif", DXIL_ATTR_KIND_READ_ONLY},
 {"dx.op.textureLoad", "R", "i@iiiiiii", DXIL_ATTR_KIND_READ_ONLY},
 {"dx.op.textureGather", "R", "i@@ffffiii", DXIL_ATTR_KIND_READ_ONLY},

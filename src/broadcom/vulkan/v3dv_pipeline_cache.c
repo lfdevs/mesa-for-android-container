@@ -243,7 +243,7 @@ v3dv_pipeline_shared_data_write_to_blob(const struct v3dv_pipeline_shared_data *
                                         struct blob *blob);
 
 /**
- * It searchs for pipeline cached data, and returns a v3dv_pipeline_shared_data with
+ * It searches for pipeline cached data, and returns a v3dv_pipeline_shared_data with
  * it, or NULL if doesn't have it cached. On the former, it will increases the
  * ref_count, so caller is responsible to unref it.
  */

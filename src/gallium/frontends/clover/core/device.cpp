@@ -30,6 +30,7 @@
 #include "util/u_debug.h"
 #include "spirv/invocation.hpp"
 #include "nir/invocation.hpp"
+#include "nir.h"
 #include <fstream>
 
 using namespace clover;
@@ -359,7 +360,12 @@ device::image_support() const {
 
 bool
 device::has_doubles() const {
-   return pipe->get_param(pipe, PIPE_CAP_DOUBLES);
+   nir_shader_compiler_options *options =
+         (nir_shader_compiler_options *)pipe->get_compiler_options(pipe,
+                                                                   PIPE_SHADER_IR_NIR,
+                                                                   PIPE_SHADER_COMPUTE);
+   return pipe->get_param(pipe, PIPE_CAP_DOUBLES) &&
+         !(options->lower_doubles_options & nir_lower_fp64_full_software);
 }
 
 bool

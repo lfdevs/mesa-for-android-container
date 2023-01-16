@@ -126,22 +126,6 @@ anv_shader_bin_create(struct anv_device *device,
       .id = BRW_SHADER_RELOC_SHADER_START_OFFSET,
       .value = shader->kernel.offset,
    };
-   if (brw_shader_stage_is_bindless(stage)) {
-      const struct brw_bs_prog_data *bs_prog_data =
-         brw_bs_prog_data_const(prog_data_in);
-      uint64_t resume_sbt_addr = INSTRUCTION_STATE_POOL_MIN_ADDRESS +
-                                 shader->kernel.offset +
-                                 bs_prog_data->resume_sbt_offset;
-      reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
-         .id = BRW_SHADER_RELOC_RESUME_SBT_ADDR_LOW,
-         .value = resume_sbt_addr,
-      };
-      reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
-         .id = BRW_SHADER_RELOC_RESUME_SBT_ADDR_HIGH,
-         .value = resume_sbt_addr >> 32,
-      };
-   }
-
    brw_write_shader_relocs(&device->physical->compiler->isa,
                            shader->kernel.map, prog_data_in,
                            reloc_values, rv_count);

@@ -26,7 +26,8 @@
 #include "agx_compiler.h"
 
 static bool
-nir_scalarize_preamble(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
+nir_scalarize_preamble(struct nir_builder *b, nir_instr *instr,
+                       UNUSED void *data)
 {
    if (instr->type != nir_instr_type_intrinsic)
       return false;
@@ -38,8 +39,10 @@ nir_scalarize_preamble(struct nir_builder *b, nir_instr *instr, UNUSED void *dat
 
    bool is_load = (intr->intrinsic == nir_intrinsic_load_preamble);
 
-   nir_ssa_def *v = is_load ? &intr->dest.ssa :
-                    nir_ssa_for_src(b, intr->src[0], nir_src_num_components(intr->src[0]));
+   nir_ssa_def *v = is_load
+                       ? &intr->dest.ssa
+                       : nir_ssa_for_src(b, intr->src[0],
+                                         nir_src_num_components(intr->src[0]));
 
    if (v->num_components == 1)
       return false;
@@ -52,12 +55,14 @@ nir_scalarize_preamble(struct nir_builder *b, nir_instr *instr, UNUSED void *dat
    if (is_load) {
       nir_ssa_def *comps[NIR_MAX_VEC_COMPONENTS];
       for (unsigned i = 0; i < v->num_components; ++i)
-         comps[i] = nir_load_preamble(b, 1, v->bit_size, .base = base + (i * stride));
+         comps[i] =
+            nir_load_preamble(b, 1, v->bit_size, .base = base + (i * stride));
 
       nir_ssa_def_rewrite_uses(v, nir_vec(b, comps, v->num_components));
    } else {
       for (unsigned i = 0; i < v->num_components; ++i)
-         nir_store_preamble(b, nir_channel(b, v, i), .base = base + (i * stride));
+         nir_store_preamble(b, nir_channel(b, v, i),
+                            .base = base + (i * stride));
 
       nir_instr_remove(instr);
    }
@@ -81,7 +86,9 @@ instr_cost(nir_instr *instr, const void *data)
    case nir_instr_type_intrinsic:
       switch (nir_instr_as_intrinsic(instr)->intrinsic) {
       case nir_intrinsic_load_global:
+      case nir_intrinsic_load_agx:
       case nir_intrinsic_load_global_constant:
+      case nir_intrinsic_load_constant_agx:
       case nir_intrinsic_load_ubo:
          return 10.0;
       default:
@@ -109,17 +116,15 @@ static float
 rewrite_cost(nir_ssa_def *def, const void *data)
 {
    bool mov_needed = false;
-   nir_foreach_use (use, def) {
+   nir_foreach_use(use, def) {
       nir_instr *parent_instr = use->parent_instr;
       if (parent_instr->type != nir_instr_type_alu) {
          mov_needed = true;
          break;
       } else {
          nir_alu_instr *alu = nir_instr_as_alu(parent_instr);
-         if (alu->op == nir_op_vec2 ||
-             alu->op == nir_op_vec3 ||
-             alu->op == nir_op_vec4 ||
-             alu->op == nir_op_mov) {
+         if (alu->op == nir_op_vec2 || alu->op == nir_op_vec3 ||
+             alu->op == nir_op_vec4 || alu->op == nir_op_mov) {
             mov_needed = true;
             break;
          } else {
@@ -162,9 +167,9 @@ agx_nir_opt_preamble(nir_shader *nir, unsigned *preamble_size)
     * scalarized for the backend to process them appropriately.
     */
    if (progress) {
-      nir_shader_instructions_pass(nir, nir_scalarize_preamble,
-                                   nir_metadata_block_index |
-                                   nir_metadata_dominance, NULL);
+      nir_shader_instructions_pass(
+         nir, nir_scalarize_preamble,
+         nir_metadata_block_index | nir_metadata_dominance, NULL);
    }
 
    return progress;

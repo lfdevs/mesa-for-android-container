@@ -279,7 +279,7 @@ handle_alu(struct vtn_builder *b, uint32_t opcode,
    nir_ssa_def *ret = nir_build_alu(&b->nb, nir_alu_op_for_opencl_opcode(b, (enum OpenCLstd_Entrypoints)opcode),
                                     srcs[0], srcs[1], srcs[2], NULL);
    if (opcode == OpenCLstd_Popcount)
-      ret = nir_u2u(&b->nb, ret, glsl_get_bit_size(dest_type->type));
+      ret = nir_u2uN(&b->nb, ret, glsl_get_bit_size(dest_type->type));
    return ret;
 }
 

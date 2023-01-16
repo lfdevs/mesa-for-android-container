@@ -51,6 +51,7 @@ struct fd6_blend_stateobj {
 
    struct fd_context *ctx;
    bool reads_dest;
+   uint32_t all_mrt_write_mask;
    struct util_dynarray variants;
 };
 

@@ -128,12 +128,11 @@ lp_build_packed_ddx_ddy_twocoord(struct lp_build_context *bld,
    LLVMValueRef shuffles1[LP_MAX_VECTOR_LENGTH/4];
    LLVMValueRef shuffles2[LP_MAX_VECTOR_LENGTH/4];
    LLVMValueRef vec1, vec2;
-   unsigned length, num_quads, i;
 
    /* XXX: do hsub version */
-   length = bld->type.length;
-   num_quads = length / 4;
-   for (i = 0; i < num_quads; i++) {
+   const unsigned length = bld->type.length;
+   const unsigned num_quads = length / 4;
+   for (unsigned i = 0; i < num_quads; i++) {
       unsigned s1 = 4 * i;
       unsigned s2 = 4 * i + length;
       shuffles1[4*i + 0] = lp_build_const_int32(gallivm, LP_BLD_QUAD_TOP_LEFT + s1);
@@ -174,24 +173,19 @@ lp_bld_quad_twiddle(struct gallivm_state *gallivm,
                     unsigned src_count,
                     LLVMValueRef* dst)
 {
-   LLVMBuilderRef builder = gallivm->builder;
-   LLVMTypeRef dst_type_ref;
-   LLVMTypeRef type2_ref;
-   struct lp_type type2;
-   unsigned i;
-
    assert((src_count % 2) == 0);
 
    /* Create a type with only 2 elements */
-   type2 = lp_dst_type;
+   struct lp_type type2 = lp_dst_type;
    type2.width = (lp_dst_type.width * lp_dst_type.length) / 2;
    type2.length = 2;
    type2.floating = 0;
 
-   type2_ref = lp_build_vec_type(gallivm, type2);
-   dst_type_ref = lp_build_vec_type(gallivm, lp_dst_type);
+   LLVMTypeRef type2_ref = lp_build_vec_type(gallivm, type2);
+   LLVMTypeRef dst_type_ref = lp_build_vec_type(gallivm, lp_dst_type);
+   LLVMBuilderRef builder = gallivm->builder;
 
-   for (i = 0; i < src_count; i += 2) {
+   for (unsigned i = 0; i < src_count; i += 2) {
       LLVMValueRef src0, src1;
 
       src0 = LLVMBuildBitCast(builder, src[i + 0], type2_ref, "");

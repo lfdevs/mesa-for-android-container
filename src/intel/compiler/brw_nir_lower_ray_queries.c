@@ -360,7 +360,7 @@ lower_ray_query_intrinsic(nir_builder *b,
       brw_nir_rt_load_mem_hit_from_addr(b, &hit_in, stack_addr, committed);
 
       nir_ssa_def *sysval = NULL;
-      switch (nir_intrinsic_base(intrin)) {
+      switch (nir_intrinsic_ray_query_value(intrin)) {
       case nir_ray_query_value_intersection_type:
          if (committed) {
             /* Values we want to generate :

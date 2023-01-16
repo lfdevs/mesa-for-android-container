@@ -28,8 +28,8 @@
 #include <xcb/glx.h>
 #include <X11/Xlib-xcb.h>
 
-_X_HIDDEN void
-__glX_send_client_info(struct glx_display *glx_dpy)
+void
+glxSendClientInfo(struct glx_display *glx_dpy, int screen)
 {
    const unsigned ext_length = strlen("GLX_ARB_create_context");
    const unsigned prof_length = strlen("_profile");
@@ -96,7 +96,7 @@ __glX_send_client_info(struct glx_display *glx_dpy)
    /* There are three possible flavors of the client info structure that the
     * client could send to the server.  The version sent depends on the
     * combination of GLX versions and extensions supported by the client and
-    * the server. This client only supports GLX major version 1.
+    * the server. This client only supports GLX version >= 1.3.
     *
     * Server supports                  Client sends
     * ----------------------------------------------------------------------
@@ -116,9 +116,6 @@ __glX_send_client_info(struct glx_display *glx_dpy)
     * GLX_ARB_create_context but not GLX 1.4.  Making GLX 1.4 a hard
     * requirement in this case does not seem like a limitation.
     */
-
-   if (glx_dpy->minorVersion == 0)
-      return;
 
    /* Determine whether any screen on the server supports either of the
     * create-context extensions.
@@ -155,11 +152,7 @@ __glX_send_client_info(struct glx_display *glx_dpy)
       }
    }
 
-   gl_extension_string = __glXGetClientGLExtensionString();
-   if (gl_extension_string == NULL) {
-      return;
-   }
-
+   gl_extension_string = __glXGetClientGLExtensionString(screen);
    gl_extension_length = strlen(gl_extension_string) + 1;
 
    c = XGetXCBConnection(glx_dpy->dpy);

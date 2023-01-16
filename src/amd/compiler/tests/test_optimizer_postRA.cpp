@@ -375,7 +375,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    //! v1: %res3:v[2] = v_add_f32 -%a:v[0], %b:v[1] row_mirror bound_ctrl:1
    //! p_unit_test 3, %res3:v[2]
    auto tmp3 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
-   tmp3.instr->dpp16().neg[0] = true;
+   tmp3->dpp16().neg[0] = true;
    Temp res3 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp3, reg_v2), b);
    writeout(3, Operand(res3, reg_v2));
 
@@ -383,7 +383,7 @@ BEGIN_TEST(optimizer_postRA.dpp)
    //! p_unit_test 4, %res4:v[2]
    Temp tmp4 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    auto res4 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp4, reg_v2), b);
-   res4.instr->vop3().neg[0] = true;
+   res4->vop3().neg[0] = true;
    writeout(4, Operand(res4, reg_v2));
 
    //! v1: %tmp5:v[2] = v_mov_b32 %a:v[0] row_mirror bound_ctrl:1
@@ -391,22 +391,22 @@ BEGIN_TEST(optimizer_postRA.dpp)
    //! p_unit_test 5, %res5:v[2]
    Temp tmp5 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    auto res5 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp5, reg_v2), b);
-   res5.instr->vop3().clamp = true;
+   res5->vop3().clamp = true;
    writeout(5, Operand(res5, reg_v2));
 
    //! v1: %res6:v[2] = v_add_f32 |%a:v[0]|, %b:v[1] row_mirror bound_ctrl:1
    //! p_unit_test 6, %res6:v[2]
    auto tmp6 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
-   tmp6.instr->dpp16().neg[0] = true;
+   tmp6->dpp16().neg[0] = true;
    auto res6 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1, reg_v2), Operand(tmp6, reg_v2), b);
-   res6.instr->vop3().abs[0] = true;
+   res6->vop3().abs[0] = true;
    writeout(6, Operand(res6, reg_v2));
 
    //! v1: %res7:v[2] = v_subrev_f32 %a:v[0], |%b:v[1]| row_mirror bound_ctrl:1
    //! p_unit_test 7, %res7:v[2]
    Temp tmp7 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1, reg_v2), a, dpp_row_mirror);
    auto res7 = bld.vop2_e64(aco_opcode::v_sub_f32, bld.def(v1, reg_v2), b, Operand(tmp7, reg_v2));
-   res7.instr->vop3().abs[0] = true;
+   res7->vop3().abs[0] = true;
    writeout(7, Operand(res7, reg_v2));
 
    /* vcc */

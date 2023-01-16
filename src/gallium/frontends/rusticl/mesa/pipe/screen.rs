@@ -5,9 +5,11 @@ use crate::pipe::resource::*;
 use crate::util::disk_cache::*;
 
 use mesa_rust_gen::*;
+use mesa_rust_util::has_required_feature;
 use mesa_rust_util::string::*;
 
 use std::convert::TryInto;
+use std::ffi::CStr;
 use std::mem::size_of;
 use std::os::raw::c_void;
 use std::ptr;
@@ -238,6 +240,24 @@ impl PipeScreen {
         unsafe { *self.ldev.ldev }.type_
     }
 
+    pub fn cl_cts_version(&self) -> &CStr {
+        unsafe {
+            let s = *self.screen;
+
+            let ptr = s
+                .get_cl_cts_version
+                .map_or(ptr::null(), |get_cl_cts_version| {
+                    get_cl_cts_version(self.screen)
+                });
+            if ptr.is_null() {
+                // this string is good enough to pass the CTS
+                CStr::from_bytes_with_nul(b"v0000-01-01-00\0").unwrap()
+            } else {
+                CStr::from_ptr(ptr)
+            }
+        }
+    }
+
     pub fn is_format_supported(
         &self,
         format: pipe_format,
@@ -307,16 +327,18 @@ impl Drop for PipeScreen {
 }
 
 fn has_required_cbs(screen: *mut pipe_screen) -> bool {
-    let s = unsafe { *screen };
-    s.context_create.is_some()
-        && s.destroy.is_some()
-        && s.fence_finish.is_some()
-        && s.fence_reference.is_some()
-        && s.get_compiler_options.is_some()
-        && s.get_compute_param.is_some()
-        && s.get_name.is_some()
-        && s.get_param.is_some()
-        && s.get_shader_param.is_some()
-        && s.is_format_supported.is_some()
-        && s.resource_create.is_some()
+    let screen = unsafe { *screen };
+    // Use '&' to evaluate all features and to not stop
+    // on first missing one to list all missing features.
+    has_required_feature!(screen, context_create)
+        & has_required_feature!(screen, destroy)
+        & has_required_feature!(screen, fence_finish)
+        & has_required_feature!(screen, fence_reference)
+        & has_required_feature!(screen, get_compiler_options)
+        & has_required_feature!(screen, get_compute_param)
+        & has_required_feature!(screen, get_name)
+        & has_required_feature!(screen, get_param)
+        & has_required_feature!(screen, get_shader_param)
+        & has_required_feature!(screen, is_format_supported)
+        & has_required_feature!(screen, resource_create)
 }

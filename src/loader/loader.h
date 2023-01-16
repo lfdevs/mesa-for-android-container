@@ -29,6 +29,8 @@
 
 #include <stdbool.h>
 #include <sys/stat.h>
+#include <stddef.h>
+#include "GL/internal/dri_interface.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,6 +93,23 @@ loader_set_logger(loader_logger *logger);
 
 char *
 loader_get_extensions_name(const char *driver_name);
+
+struct dri_extension_match {
+   /* __DRI_* extension name */
+   const char *name;
+
+   /* Required minimum version in the extension struct */
+   int version;
+
+   /* offset in the data arg at which to store a pointer to the extension */
+   int offset;
+
+   bool optional;
+};
+
+bool loader_bind_extensions(void *data,
+                            const struct dri_extension_match *matches, size_t num_matches,
+                            const __DRIextension **extensions);
 
 #ifdef __cplusplus
 }

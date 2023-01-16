@@ -36,7 +36,7 @@
 
 #include "pipe/p_screen.h"
 #include "pipe/p_defines.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/list.h"
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_misc.h"
@@ -74,8 +74,6 @@ struct llvmpipe_screen
    char renderer_string[100];
 
    struct disk_cache *disk_shader_cache;
-   unsigned num_disk_shader_cache_hits;
-   unsigned num_disk_shader_cache_misses;
 };
 
 

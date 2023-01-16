@@ -83,7 +83,7 @@ uyvy_to_yuv_soa(struct gallivm_state *gallivm,
     * v = (uyvy >>  8) & 0xff
     */
 
-#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
+#if DETECT_ARCH_X86 || DETECT_ARCH_X86_64
    /*
     * Avoid shift with per-element count.
     * No support on x86, gets translated to roughly 5 instructions
@@ -167,7 +167,7 @@ yuyv_to_yuv_soa(struct gallivm_state *gallivm,
     * v = (yuyv)                & 0xff
     */
 
-#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
+#if DETECT_ARCH_X86 || DETECT_ARCH_X86_64
    /*
     * Avoid shift with per-element count.
     * No support on x86, gets translated to roughly 5 instructions

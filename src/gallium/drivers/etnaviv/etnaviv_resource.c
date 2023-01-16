@@ -37,11 +37,9 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#include "drm-uapi/drm_fourcc.h"
-
 static enum etna_surface_layout modifier_to_layout(uint64_t modifier)
 {
-   switch (modifier) {
+   switch (modifier & ~VIVANTE_MOD_EXT_MASK) {
    case DRM_FORMAT_MOD_VIVANTE_TILED:
       return ETNA_LAYOUT_TILED;
    case DRM_FORMAT_MOD_VIVANTE_SUPER_TILED:
@@ -51,8 +49,9 @@ static enum etna_surface_layout modifier_to_layout(uint64_t modifier)
    case DRM_FORMAT_MOD_VIVANTE_SPLIT_SUPER_TILED:
       return ETNA_LAYOUT_MULTI_SUPERTILED;
    case DRM_FORMAT_MOD_LINEAR:
-   default:
       return ETNA_LAYOUT_LINEAR;
+   default:
+      unreachable("unhandled modifier");
    }
 }
 
@@ -74,20 +73,27 @@ static uint64_t layout_to_modifier(enum etna_surface_layout layout)
    }
 }
 
-/* A tile is 4x4 pixels, having 'screen->specs.bits_per_tile' of tile status.
- * So, in a buffer of N pixels, there are N / (4 * 4) tiles.
- * We need N * screen->specs.bits_per_tile / (4 * 4) bits of tile status, or
- * N * screen->specs.bits_per_tile / (4 * 4 * 8) bytes.
+static uint64_t etna_resource_modifier(struct etna_resource *rsc)
+{
+   if (etna_resource_ext_ts(rsc))
+      return rsc->modifier;
+
+   return layout_to_modifier(rsc->layout);
+}
+
+/* A tile is either 64 bytes or, when the GPU has the CACHE128B256BPERLINE
+ * feature, 128/256 bytes of color/depth data, tracked by
+ * 'screen->specs.bits_per_tile' bits of tile status.
  */
 bool
 etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
-                              struct etna_resource *rsc)
+                              struct etna_resource *rsc, uint64_t modifier)
 {
    struct etna_screen *screen = etna_screen(pscreen);
    struct pipe_resource *prsc = &rsc->base;
-   size_t tile_size, rt_ts_size, ts_layer_stride;
+   size_t tile_size, ts_size, ts_bo_size, ts_layer_stride, ts_data_offset = 0;
    uint8_t ts_mode = TS_MODE_128B;
-   int8_t ts_compress_fmt;
+   int8_t ts_compress_fmt = -1;
    unsigned layers;
 
    assert(!rsc->ts_bo);
@@ -96,45 +102,100 @@ etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
     * v4 compression can be enabled everywhere without any known drawback,
     * except that in-place resolve must go through a slower path
     */
-   ts_compress_fmt = (screen->specs.v4_compression || prsc->nr_samples > 1) ?
-                      translate_ts_format(prsc->format) : -1;
+   if ((screen->specs.v4_compression &&
+        (!modifier || (modifier & VIVANTE_MOD_COMP_DEC400))) ||
+       (!modifier && prsc->nr_samples > 1))
+      ts_compress_fmt = translate_ts_format(prsc->format);
 
    /* enable 256B ts mode with compression, as it improves performance
     * the size of the resource might also determine if we want to use it or not
     */
-   if (VIV_FEATURE(screen, chipMinorFeatures6, CACHE128B256BPERLINE) &&
-       ts_compress_fmt >= 0 &&
-       (rsc->layout != ETNA_LAYOUT_LINEAR ||
-        rsc->levels[0].stride % 256 == 0) )
+   if (VIV_FEATURE(screen, chipMinorFeatures6, CACHE128B256BPERLINE)) {
+      if ((modifier & VIVANTE_MOD_TS_MASK) == VIVANTE_MOD_TS_128_4)
+         ts_mode = TS_MODE_128B;
+      else if ((modifier & VIVANTE_MOD_TS_MASK) == VIVANTE_MOD_TS_256_4)
          ts_mode = TS_MODE_256B;
+      else {
+         /* Without a TS modifier TS is only internal, so we can choose the
+          * mode to use freely. Enable 256B ts mode with compression, as it
+          * improves performance. The size of the resource might also determine
+          * if we want to use it or not.
+          */
+         if (ts_compress_fmt >= 0 &&
+            (rsc->layout != ETNA_LAYOUT_LINEAR ||
+             rsc->levels[0].stride % 256 == 0))
+            ts_mode = TS_MODE_256B;
+         else
+            ts_mode = TS_MODE_128B;
+      }
+   }
 
    tile_size = etna_screen_get_tile_size(screen, ts_mode, prsc->nr_samples > 1);
    layers = prsc->target == PIPE_TEXTURE_3D ? prsc->depth0 : prsc->array_size;
    ts_layer_stride = align(DIV_ROUND_UP(rsc->levels[0].layer_stride,
                                         tile_size * 8 / screen->specs.bits_per_tile),
                            0x100 * screen->specs.pixel_pipes);
-   rt_ts_size = ts_layer_stride * layers;
-   if (rt_ts_size == 0)
+   ts_size = ts_bo_size = ts_layer_stride * layers;
+   if (ts_size == 0)
       return true;
 
+   /* add space for the software meta */
+   if (modifier & VIVANTE_MOD_TS_MASK) {
+      /* The offset is a educated guess for a safe value based on the experience
+       * that various object pointers on the GPU need to be 64B aligned. Maybe
+       * some GPU needs even more alignment, or we could drop this to 32B. 64B
+       * has worked well across various GPU generations so far.
+       */
+      ts_data_offset = 64;
+      assert(ts_data_offset >= sizeof(struct etna_ts_sw_meta));
+      ts_bo_size += ts_data_offset;
+   }
+
    DBG_F(ETNA_DBG_RESOURCE_MSGS, "%p: Allocating tile status of size %zu",
-         rsc, rt_ts_size);
+         rsc, ts_bo_size);
 
-   struct etna_bo *rt_ts;
-   rt_ts = etna_bo_new(screen->dev, rt_ts_size, DRM_ETNA_GEM_CACHE_WC);
+   if ((rsc->base.bind & PIPE_BIND_SCANOUT) && screen->ro) {
+      struct pipe_resource scanout_templat;
+      struct winsys_handle handle;
 
-   if (unlikely(!rt_ts)) {
+      scanout_templat.format = PIPE_FORMAT_R8_UNORM;
+      scanout_templat.width0 = align(ts_bo_size, 4096);
+      scanout_templat.height0 = 1;
+
+      rsc->ts_scanout = renderonly_scanout_for_resource(&scanout_templat,
+                                                     screen->ro, &handle);
+      if (!rsc->ts_scanout) {
+         BUG("Problem allocating kms memory for TS resource");
+         return false;
+      }
+
+      assert(handle.type == WINSYS_HANDLE_TYPE_FD);
+      rsc->ts_bo = etna_screen_bo_from_handle(pscreen, &handle);
+      close(handle.handle);
+   } else {
+      rsc->ts_bo = etna_bo_new(screen->dev, ts_bo_size, DRM_ETNA_GEM_CACHE_WC);
+   }
+
+   if (unlikely(!rsc->ts_bo)) {
       BUG("Problem allocating tile status for resource");
       return false;
    }
 
-   rsc->ts_bo = rt_ts;
-   rsc->levels[0].ts_offset = 0;
+   rsc->levels[0].ts_offset = ts_data_offset;
    rsc->levels[0].ts_layer_stride = ts_layer_stride;
-   rsc->levels[0].ts_size = rt_ts_size;
+   rsc->levels[0].ts_size = ts_size;
    rsc->levels[0].ts_mode = ts_mode;
    rsc->levels[0].ts_compress_fmt = ts_compress_fmt;
 
+   /* fill software meta */
+   if (modifier & VIVANTE_MOD_TS_MASK) {
+      rsc->ts_meta = etna_bo_map(rsc->ts_bo);
+      rsc->ts_meta->version = 0;
+      rsc->ts_meta->v0.data_size = ts_size;
+      rsc->ts_meta->v0.data_offset = ts_data_offset;
+      rsc->ts_meta->v0.layer_stride = ts_layer_stride;
+      rsc->ts_meta->v0.comp_format = ts_format_to_drmfourcc(rsc->levels[0].ts_compress_fmt);
+   }
    return true;
 }
 
@@ -287,6 +348,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
    rsc->base.screen = pscreen;
    rsc->base.nr_samples = templat->nr_samples;
    rsc->layout = layout;
+   rsc->modifier = modifier;
    rsc->halign = halign;
    rsc->explicit_flush = true;
 
@@ -327,6 +389,12 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
          goto free_rsc;
       }
    }
+
+   /* If TS is externally visible set it up now, so it can be exported before
+    * the first rendering to a surface.
+    */
+   if (etna_resource_ext_ts(rsc))
+      etna_screen_resource_alloc_ts(pscreen, rsc, modifier);
 
    if (DBG_ENABLED(ETNA_DBG_ZERO)) {
       void *map = etna_bo_map(rsc->bo);
@@ -415,9 +483,10 @@ select_best_modifier(const struct etna_screen * screen,
                      const uint64_t *modifiers, const unsigned count)
 {
    enum modifier_priority prio = MODIFIER_PRIORITY_INVALID;
+   uint64_t best_modifier, base_modifier;
 
    for (int i = 0; i < count; i++) {
-      switch (modifiers[i]) {
+      switch (modifiers[i] & ~VIVANTE_MOD_EXT_MASK) {
       case DRM_FORMAT_MOD_VIVANTE_SUPER_TILED:
          if ((screen->specs.pixel_pipes > 1 && !screen->specs.single_buffer) ||
              !screen->specs.can_supertile)
@@ -448,7 +517,36 @@ select_best_modifier(const struct etna_screen * screen,
       }
    }
 
-   return priority_to_modifier[prio];
+   best_modifier = base_modifier = priority_to_modifier[prio];
+
+   if (!DBG_ENABLED(ETNA_DBG_SHARED_TS) ||
+       !VIV_FEATURE(screen, chipFeatures, FAST_CLEAR))
+      return best_modifier;
+
+   /* Make a second pass to try and find the best TS modifier if any. */
+   for (int i = 0; i < count; i++) {
+      if ((modifiers[i] & ~VIVANTE_MOD_EXT_MASK) == base_modifier)
+         if ((modifiers[i] & VIVANTE_MOD_TS_MASK) >
+             (best_modifier & VIVANTE_MOD_TS_MASK))
+            best_modifier = modifiers[i];
+   }
+
+   /* If no modifier with TS was found, there is no point in looking further,
+    * as compression depends on TS.
+    */
+   if (best_modifier == base_modifier)
+      return best_modifier;
+
+   /* Make a third pass to find a modifier allowing compression. */
+   base_modifier = best_modifier;
+   for (int i = 0; i < count; i++) {
+      if ((modifiers[i] & ~VIVANTE_MOD_COMP_MASK) == base_modifier)
+         if ((modifiers[i] & VIVANTE_MOD_COMP_MASK) >
+             (best_modifier & VIVANTE_MOD_COMP_MASK))
+            best_modifier = modifiers[i];
+   }
+
+   return best_modifier;
 }
 
 static struct pipe_resource *
@@ -486,6 +584,9 @@ etna_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
    if (rsc->scanout)
       renderonly_scanout_destroy(rsc->scanout, etna_screen(pscreen)->ro);
 
+   if (rsc->ts_scanout)
+      renderonly_scanout_destroy(rsc->ts_scanout, etna_screen(pscreen)->ro);
+
    util_range_destroy(&rsc->valid_buffer_range);
 
    pipe_resource_reference(&rsc->texture, NULL);
@@ -497,6 +598,42 @@ etna_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
    FREE(rsc);
 }
 
+static void etna_resource_finish_ts_import(struct etna_screen *screen,
+                                           struct etna_resource *rsc)
+{
+   struct etna_resource *ts_rsc = etna_resource(rsc->base.next);
+   uint64_t ts_modifier = rsc->modifier & VIVANTE_MOD_TS_MASK;
+   uint8_t ts_mode = 0;
+
+   if (ts_rsc->bo == rsc->bo)
+      fprintf(stderr, "etnaviv: application bug: importing shared TS resource "
+              "with TS BO matching color BO, expect rendering corruption!\n");
+
+   if (ts_modifier == VIVANTE_MOD_TS_256_4)
+      ts_mode = TS_MODE_256B;
+
+   rsc->ts_bo = etna_bo_ref(ts_rsc->bo);
+   rsc->ts_meta = etna_bo_map(rsc->ts_bo) + ts_rsc->levels[0].offset;
+
+   rsc->ts_scanout = ts_rsc->scanout;
+   ts_rsc->scanout = NULL;
+
+   /* Get TS layout/usage information from the SW meta. FIXME: clear color may
+    * change over the lifetime of the resource, so might need to look this up
+    * at a few other places. For now it's not an issue, as buffers with shared
+    * TS get re-imported all the time. */
+   rsc->levels[0].ts_compress_fmt = drmfourcc_to_ts_format(rsc->ts_meta->v0.comp_format);
+   rsc->levels[0].ts_offset = ts_rsc->levels[0].offset + rsc->ts_meta->v0.data_offset;
+   rsc->levels[0].ts_layer_stride = rsc->ts_meta->v0.layer_stride;
+   rsc->levels[0].clear_value = rsc->ts_meta->v0.clear_value;
+   rsc->levels[0].ts_size = rsc->ts_meta->v0.data_size;
+   rsc->levels[0].ts_mode = ts_mode;
+   rsc->levels[0].ts_valid = true;
+
+   etna_resource_destroy(&screen->base, rsc->base.next);
+   rsc->base.next = NULL;
+}
+
 static struct pipe_resource *
 etna_resource_from_handle(struct pipe_screen *pscreen,
                           const struct pipe_resource *tmpl,
@@ -506,6 +643,7 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    struct etna_resource *rsc;
    struct etna_resource_level *level;
    struct pipe_resource *prsc;
+   uint64_t modifier = handle->modifier;
 
    DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
        "nr_samples=%u, usage=%u, bind=%x, flags=%x",
@@ -530,8 +668,12 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    if (!rsc->bo)
       goto fail;
 
+   if (modifier == DRM_FORMAT_MOD_INVALID)
+      modifier = DRM_FORMAT_MOD_LINEAR;
+
    rsc->seqno = 1;
-   rsc->layout = modifier_to_layout(handle->modifier);
+   rsc->layout = modifier_to_layout(modifier);
+   rsc->modifier = modifier;
 
    if (usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH)
       rsc->explicit_flush = true;
@@ -554,6 +696,20 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
                                                                   level->padded_height);
    level->size = level->layer_stride;
 
+   if (screen->ro) {
+      struct pipe_resource *imp_prsc = prsc;
+      do {
+         etna_resource(imp_prsc)->scanout =
+               renderonly_create_gpu_import_for_resource(imp_prsc, screen->ro,
+                                                         NULL);
+         /* failure is expected for scanout incompatible buffers */
+      } while ((imp_prsc = imp_prsc->next));
+   }
+
+   /* If the buffer is for a TS plane, skip the RS compatible checks */
+   if (handle->plane >= util_format_get_num_planes(prsc->format))
+      return prsc;
+
    /* The DDX must give us a BO which conforms to our padding size.
     * The stride of the BO must be greater or equal to our padded
     * stride. The size of the BO must accomodate the padded height. */
@@ -570,15 +726,8 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
       goto fail;
    }
 
-   if (screen->ro) {
-      struct pipe_resource *imp_prsc = prsc;
-      do {
-         etna_resource(imp_prsc)->scanout =
-               renderonly_create_gpu_import_for_resource(imp_prsc, screen->ro,
-                                                         NULL);
-         /* failure is expected for scanout incompatible buffers */
-      } while ((imp_prsc = imp_prsc->next));
-   }
+   if (handle->plane == 0 && etna_resource_ext_ts(rsc))
+      etna_resource_finish_ts_import(screen, rsc);
 
    return prsc;
 
@@ -596,9 +745,12 @@ etna_resource_get_handle(struct pipe_screen *pscreen,
 {
    struct etna_screen *screen = etna_screen(pscreen);
    struct etna_resource *rsc = etna_resource(prsc);
+   bool wants_ts = etna_resource_ext_ts(rsc) &&
+                      handle->plane >= util_format_get_num_planes(prsc->format);
    struct renderonly_scanout *scanout;
+   struct etna_bo *bo;
 
-   if (handle->plane) {
+   if (handle->plane && !wants_ts) {
       struct pipe_resource *cur = prsc;
 
       for (int i = 0; i < handle->plane; i++) {
@@ -612,24 +764,37 @@ etna_resource_get_handle(struct pipe_screen *pscreen,
    /* Scanout is always attached to the base resource */
    scanout = rsc->scanout;
 
-   handle->stride = rsc->levels[0].stride;
-   handle->offset = rsc->levels[0].offset;
-   handle->modifier = layout_to_modifier(rsc->layout);
+   if (wants_ts) {
+      handle->stride = DIV_ROUND_UP(rsc->levels[0].stride,
+                          etna_screen_get_tile_size(screen,
+                                                     rsc->levels[0].ts_mode,
+                                                     false)
+                          * 8 /screen->specs.bits_per_tile);
+      handle->offset = rsc->levels[0].ts_offset - rsc->ts_meta->v0.data_offset;
+      scanout = rsc->ts_scanout;
+      bo = rsc->ts_bo;
+   } else {
+      handle->stride = rsc->levels[0].stride;
+      handle->offset = rsc->levels[0].offset;
+      scanout = rsc->scanout;
+      bo = rsc->bo;
+   }
+   handle->modifier = etna_resource_modifier(rsc);
 
    if (!(usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH))
       rsc->explicit_flush = false;
 
    if (handle->type == WINSYS_HANDLE_TYPE_SHARED) {
-      return etna_bo_get_name(rsc->bo, &handle->handle) == 0;
+      return etna_bo_get_name(bo, &handle->handle) == 0;
    } else if (handle->type == WINSYS_HANDLE_TYPE_KMS) {
       if (screen->ro) {
          return renderonly_get_handle(scanout, handle);
       } else {
-         handle->handle = etna_bo_handle(rsc->bo);
+         handle->handle = etna_bo_handle(bo);
          return true;
       }
    } else if (handle->type == WINSYS_HANDLE_TYPE_FD) {
-      handle->handle = etna_bo_dmabuf(rsc->bo);
+      handle->handle = etna_bo_dmabuf(bo);
       return true;
    } else {
       return false;
@@ -643,32 +808,54 @@ etna_resource_get_param(struct pipe_screen *pscreen,
                         enum pipe_resource_param param,
                         unsigned usage, uint64_t *value)
 {
-   if (param == PIPE_RESOURCE_PARAM_NPLANES) {
-      unsigned count = 0;
+   struct etna_screen *screen = etna_screen(pscreen);
+   struct etna_resource *rsc = etna_resource(prsc);
+   bool wants_ts = etna_resource_ext_ts(rsc) &&
+                      plane >= util_format_get_num_planes(prsc->format);
 
-      for (struct pipe_resource *cur = prsc; cur; cur = cur->next)
-         count++;
-      *value = count;
+   if (param == PIPE_RESOURCE_PARAM_NPLANES) {
+      if (etna_resource_ext_ts(rsc)) {
+               *value = 2;
+      } else {
+         unsigned count = 0;
+
+         for (struct pipe_resource *cur = prsc; cur; cur = cur->next)
+            count++;
+         *value = count;
+      }
       return true;
    }
 
-   struct pipe_resource *cur = prsc;
-   for (int i = 0; i < plane; i++) {
-      cur = cur->next;
-      if (!cur)
-         return false;
+   if (!wants_ts) {
+      struct pipe_resource *cur = prsc;
+      for (int i = 0; i < plane; i++) {
+         cur = cur->next;
+         if (!cur)
+            return false;
+      }
+      rsc = etna_resource(cur);
    }
-   struct etna_resource *rsc = etna_resource(cur);
 
    switch (param) {
    case PIPE_RESOURCE_PARAM_STRIDE:
-      *value = rsc->levels[level].stride;
+      if (wants_ts) {
+         *value = DIV_ROUND_UP(rsc->levels[0].stride,
+                               etna_screen_get_tile_size(screen,
+                                                         rsc->levels[0].ts_mode,
+                                                         prsc->nr_samples > 1)
+                               * 8 / screen->specs.bits_per_tile);
+      } else {
+         *value = rsc->levels[0].stride;
+      }
       return true;
    case PIPE_RESOURCE_PARAM_OFFSET:
-      *value = rsc->levels[level].offset;
+      if (wants_ts)
+         *value = rsc->levels[0].ts_offset - rsc->ts_meta->v0.data_offset;
+      else
+         *value = rsc->levels[0].offset;
       return true;
    case PIPE_RESOURCE_PARAM_MODIFIER:
-      *value = layout_to_modifier(rsc->layout);
+      *value = etna_resource_modifier(rsc);
       return true;
    default:
       return false;

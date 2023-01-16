@@ -293,8 +293,9 @@ public:
 
 	const shader_target target;
 
-	value_table vt;
 	expr_handler ex;
+
+	value_table vt;
 
 	container_node *root;
 

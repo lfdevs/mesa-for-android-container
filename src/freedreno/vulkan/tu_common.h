@@ -94,6 +94,9 @@
    (MAX_DYNAMIC_UNIFORM_BUFFERS + 2 * MAX_DYNAMIC_STORAGE_BUFFERS) *         \
    A6XX_TEX_CONST_DWORDS
 
+#define SAMPLE_LOCATION_MIN 0.f
+#define SAMPLE_LOCATION_MAX 0.9375f
+
 #define TU_MAX_DRM_DEVICES 8
 #define MAX_VIEWS 16
 #define MAX_BIND_POINTS 2 /* compute + graphics */
@@ -105,6 +108,12 @@
  * range might be higher.
  */
 #define MAX_UNIFORM_BUFFER_RANGE 0x10000
+
+/* Use the minimum maximum to guarantee that it can always fit in the safe
+ * const file size, even with maximum push constant usage and driver params.
+ */
+#define MAX_INLINE_UBO_RANGE 256
+#define MAX_INLINE_UBOS 4
 
 #define A6XX_TEX_CONST_DWORDS 16
 #define A6XX_TEX_SAMP_DWORDS 4

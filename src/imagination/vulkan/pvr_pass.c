@@ -348,9 +348,9 @@ static void pvr_load_op_destroy(struct pvr_device *device,
 
 #define PVR_SPM_LOAD_IN_BUFFERS_COUNT(dev_info)              \
    ({                                                        \
-      int __ret = 7U;                                        \
+      int __ret = PVR_MAX_TILE_BUFFER_COUNT;                 \
       if (PVR_HAS_FEATURE(dev_info, eight_output_registers)) \
-         __ret = 3U;                                         \
+         __ret -= 4U;                                        \
       __ret;                                                 \
    })
 
@@ -451,8 +451,8 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
       attachment->load_op = desc->loadOp;
       attachment->store_op = desc->storeOp;
 
-      attachment->has_stencil = vk_format_has_stencil(attachment->vk_format);
-      if (attachment->has_stencil) {
+      attachment->aspects = vk_format_aspects(desc->format);
+      if (attachment->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
          attachment->stencil_load_op = desc->stencilLoadOp;
          attachment->stencil_store_op = desc->stencilStoreOp;
       }
@@ -590,8 +590,14 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
          &pass->hw_setup->renders[i];
       struct pvr_load_op *load_op = NULL;
 
-      if (hw_render->tile_buffers_count)
-         pvr_finishme("Set up tile buffer table");
+      if (hw_render->tile_buffers_count) {
+         result = pvr_device_tile_buffer_ensure_cap(
+            device,
+            hw_render->tile_buffers_count,
+            hw_render->eot_setup.tile_buffer_size);
+         if (result != VK_SUCCESS)
+            goto err_free_pass;
+      }
 
       assert(!hw_render->load_op);
 

@@ -416,6 +416,29 @@ _mesa_hw_select_enabled(const struct gl_context *ctx)
       ctx->Const.HardwareAcceleratedSelect;
 }
 
+static inline bool
+_mesa_has_occlusion_query(const struct gl_context *ctx)
+{
+   return _mesa_has_ARB_occlusion_query(ctx) ||
+          _mesa_has_ARB_occlusion_query2(ctx) ||
+          (_mesa_is_desktop_gl(ctx) && ctx->Version >= 15);
+}
+
+static inline bool
+_mesa_has_occlusion_query_boolean(const struct gl_context *ctx)
+{
+   return _mesa_has_ARB_occlusion_query2(ctx) ||
+          _mesa_has_EXT_occlusion_query_boolean(ctx) ||
+          (_mesa_is_desktop_gl(ctx) && ctx->Version >= 33);
+}
+
+static inline bool
+_mesa_has_pipeline_statistics(const struct gl_context *ctx)
+{
+   return _mesa_has_ARB_pipeline_statistics_query(ctx) ||
+          (_mesa_is_desktop_gl(ctx) && ctx->Version >= 46);
+}
+
 #ifdef __cplusplus
 }
 #endif

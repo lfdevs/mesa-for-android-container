@@ -64,10 +64,9 @@ if (!$?) {
 }
 
 Push-Location -Path ".\deps\libva"
-Write-Host "Checking out libva commit 2579eb0f77897dc01a02c1e43defc63c40fd2988"
-# Checking out commit hash with libva-win32 support
-# This feature will be released with libva version 2.17
-git checkout 2579eb0f77897dc01a02c1e43defc63c40fd2988
+Write-Host "Checking out libva df3c584bb79d1a1e521372d62fa62e8b1c52ce6c"
+# libva-win32 is released with libva version 2.17 (see https://github.com/intel/libva/releases/tag/2.17.0)
+git checkout 2.17.0
 Pop-Location
 
 Write-Host "Building libva"

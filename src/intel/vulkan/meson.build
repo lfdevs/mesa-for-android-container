@@ -18,6 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+subdir('shaders')
+
 inc_anv = include_directories('.')
 
 anv_flags = [
@@ -38,22 +40,10 @@ anv_entrypoints = custom_target(
     '--device-prefix', 'gfx11',
     '--device-prefix', 'gfx12',
     '--device-prefix', 'gfx125',
+    '--device-prefix', 'doom64',
     '--device-prefix', 'hitman3'
   ],
   depend_files : vk_entrypoints_gen_depend_files,
-)
-
-float64_spv_h = custom_target(
-  'float64_spv.h',
-  input : [glsl2spirv, float64_glsl_file],
-  output : 'float64_spv.h',
-  command : [
-    prog_python, '@INPUT@', '@OUTPUT@',
-    '--create-entry', 'main',
-    '--vn', 'float64_spv_source',
-    '--glsl-version', '450',
-    '-Olib',
-  ]
 )
 
 idep_anv_headers = declare_dependency(
@@ -125,7 +115,8 @@ foreach g : [['90', ['gfx8_cmd_buffer.c']],
   _gfx_ver = g[0]
   libanv_per_hw_ver_libs += static_library(
     'anv_per_hw_ver@0@'.format(_gfx_ver),
-    [anv_per_hw_ver_files, g[1], anv_entrypoints[0]],
+    [anv_per_hw_ver_files, g[1], anv_entrypoints[0],
+     generated_draws_spv_h, generated_draws_count_spv_h],
     include_directories : [
       inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler, inc_intel,
     ],
@@ -141,6 +132,7 @@ foreach g : [['90', ['gfx8_cmd_buffer.c']],
 endforeach
 
 libanv_files = files(
+  'layers/anv_doom64.c',
   'layers/anv_hitman3.c',
   'anv_allocator.c',
   'anv_android.h',
@@ -151,12 +143,12 @@ libanv_files = files(
   'anv_descriptor_set.c',
   'anv_device.c',
   'anv_formats.c',
+  'anv_generated_indirect_draws.c',
   'anv_genX.h',
   'anv_image.c',
   'anv_measure.c',
   'anv_measure.h',
   'anv_nir.h',
-  'anv_nir_add_base_work_group_id.c',
   'anv_nir_apply_pipeline_layout.c',
   'anv_nir_compute_push_layout.c',
   'anv_nir_lower_multiview.c',
@@ -216,7 +208,7 @@ libanv_common = static_library(
   c_args : anv_flags,
   cpp_args : anv_cpp_flags,
   gnu_symbol_visibility : 'hidden',
-  dependencies : anv_deps,
+  dependencies : anv_deps
 )
 
 libvulkan_intel = shared_library(

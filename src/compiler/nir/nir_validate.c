@@ -28,6 +28,7 @@
 #include "nir.h"
 #include "nir_xfb_info.h"
 #include "c11/threads.h"
+#include "util/simple_mtx.h"
 #include <assert.h>
 
 /*
@@ -786,6 +787,17 @@ validate_intrinsic_instr(nir_intrinsic_instr *instr, validate_state *state)
       break;
    }
 
+   case nir_intrinsic_store_buffer_amd:
+      if (nir_intrinsic_access(instr) & ACCESS_USES_FORMAT_AMD) {
+         unsigned writemask = nir_intrinsic_write_mask(instr);
+
+         /* Make sure the writemask is derived from the component count. */
+         validate_assert(state,
+                         writemask ==
+                         BITFIELD_MASK(nir_src_num_components(instr->src[0])));
+      }
+      break;
+
    default:
       break;
    }
@@ -899,6 +911,7 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
                                 glsl_type_is_sampler(deref->type));
          switch (instr->op) {
          case nir_texop_descriptor_amd:
+         case nir_texop_sampler_descriptor_amd:
             break;
          case nir_texop_lod:
             validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_float);
@@ -1733,7 +1746,7 @@ destroy_validate_state(validate_state *state)
    ralloc_free(state->mem_ctx);
 }
 
-mtx_t fail_dump_mutex = _MTX_INITIALIZER_NP;
+simple_mtx_t fail_dump_mutex = SIMPLE_MTX_INITIALIZER;
 
 static void
 dump_errors(validate_state *state, const char *when)
@@ -1743,7 +1756,7 @@ dump_errors(validate_state *state, const char *when)
    /* Lock around dumping so that we get clean dumps in a multi-threaded
     * scenario
     */
-   mtx_lock(&fail_dump_mutex);
+   simple_mtx_lock(&fail_dump_mutex);
 
    if (when) {
       fprintf(stderr, "NIR validation failed %s\n", when);
@@ -1763,7 +1776,7 @@ dump_errors(validate_state *state, const char *when)
       }
    }
 
-   mtx_unlock(&fail_dump_mutex);
+   simple_mtx_unlock(&fail_dump_mutex);
 
    abort();
 }

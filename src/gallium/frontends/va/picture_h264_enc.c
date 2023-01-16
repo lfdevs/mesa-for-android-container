@@ -215,6 +215,7 @@ vlVaHandleVAEncSequenceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *con
    context->desc.h264enc.seq.time_scale = time_scale;
    context->desc.h264enc.rate_ctrl[0].frame_rate_num = time_scale / 2;
    context->desc.h264enc.rate_ctrl[0].frame_rate_den = num_units_in_tick;
+   context->desc.h264enc.intra_idr_period = h264->intra_idr_period;
 
    if (h264->frame_cropping_flag) {
       context->desc.h264enc.seq.enc_frame_cropping_flag = h264->frame_cropping_flag;
@@ -252,12 +253,17 @@ vlVaHandleVAEncMiscParameterTypeRateControlH264(vlVaContext *context, VAEncMiscP
    context->desc.h264enc.rate_ctrl[temporal_id].fill_data_enable = !(rc->rc_flags.bits.disable_bit_stuffing);
    context->desc.h264enc.rate_ctrl[temporal_id].skip_frame_enable = !(rc->rc_flags.bits.disable_frame_skip);
    context->desc.h264enc.rate_ctrl[temporal_id].peak_bitrate = rc->bits_per_second;
-   if (context->desc.h264enc.rate_ctrl[temporal_id].target_bitrate < 2000000)
-       context->desc.h264enc.rate_ctrl[temporal_id].vbv_buffer_size =
+
+   if ((context->desc.h264enc.rate_ctrl[0].rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT) ||
+       (context->desc.h264enc.rate_ctrl[0].rate_ctrl_method == PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT_SKIP))
+      context->desc.h264enc.rate_ctrl[temporal_id].vbv_buffer_size =
+         context->desc.h264enc.rate_ctrl[temporal_id].target_bitrate;
+   else if (context->desc.h264enc.rate_ctrl[temporal_id].target_bitrate < 2000000)
+      context->desc.h264enc.rate_ctrl[temporal_id].vbv_buffer_size =
          MIN2((context->desc.h264enc.rate_ctrl[0].target_bitrate * 2.75), 2000000);
    else
       context->desc.h264enc.rate_ctrl[temporal_id].vbv_buffer_size =
-         context->desc.h264enc.rate_ctrl[0].target_bitrate;
+         context->desc.h264enc.rate_ctrl[temporal_id].target_bitrate;
 
    context->desc.h264enc.rate_ctrl[temporal_id].max_qp = rc->max_qp;
    context->desc.h264enc.rate_ctrl[temporal_id].min_qp = rc->min_qp;

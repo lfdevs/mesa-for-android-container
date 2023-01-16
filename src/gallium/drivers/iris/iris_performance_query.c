@@ -68,7 +68,7 @@ iris_init_perf_query_info(struct pipe_context *pipe)
 
    iris_perf_init_vtbl(perf_cfg);
 
-   intel_perf_init_metrics(perf_cfg, &screen->devinfo, screen->fd,
+   intel_perf_init_metrics(perf_cfg, screen->devinfo, screen->fd,
                            true /* pipeline_statistics */,
                            true /* register snapshots */);
 
@@ -77,7 +77,7 @@ iris_init_perf_query_info(struct pipe_context *pipe)
                          ice,
                          ice,
                          screen->bufmgr,
-                         &screen->devinfo,
+                         screen->devinfo,
                          ice->batches[IRIS_BATCH_RENDER].ctx_id,
                          screen->fd);
 

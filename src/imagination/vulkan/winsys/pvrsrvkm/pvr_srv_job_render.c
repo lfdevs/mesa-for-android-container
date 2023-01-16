@@ -402,28 +402,82 @@ void pvr_srv_winsys_render_ctx_destroy(struct pvr_winsys_render_ctx *ctx)
    vk_free(srv_ws->alloc, srv_ctx);
 }
 
+static void
+pvr_srv_geometry_cmd_stream_load(struct rogue_fwif_cmd_ta *const cmd,
+                                 const uint8_t *const stream,
+                                 const uint32_t stream_len,
+                                 const struct pvr_device_info *const dev_info)
+{
+   const uint32_t *stream_ptr = (const uint32_t *)stream;
+   struct rogue_fwif_ta_regs *const regs = &cmd->regs;
+
+   regs->vdm_ctrl_stream_base = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_VDM_CTRL_STREAM_BASE);
+
+   regs->tpu_border_colour_table = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_TPU_BORDER_COLOUR_TABLE_VDM);
+
+   regs->ppp_ctrl = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_PPP_CTRL);
+
+   regs->te_psg = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_TE_PSG);
+
+   regs->vdm_context_resume_task0_size = *stream_ptr;
+   stream_ptr += pvr_cmd_length(VDMCTRL_PDS_STATE0);
+
+   regs->view_idx = *stream_ptr;
+   stream_ptr++;
+
+   assert((const uint8_t *)stream_ptr - stream == stream_len);
+}
+
+static void pvr_srv_geometry_cmd_ext_stream_load(
+   struct rogue_fwif_cmd_ta *const cmd,
+   const uint8_t *const ext_stream,
+   const uint32_t ext_stream_len,
+   const struct pvr_device_info *const dev_info)
+{
+   const uint32_t *ext_stream_ptr = (const uint32_t *)ext_stream;
+   struct rogue_fwif_ta_regs *const regs = &cmd->regs;
+
+   struct PVRX(FW_STREAM_EXTHDR_GEOM0) header0;
+
+   header0 = pvr_csb_unpack(ext_stream_ptr, FW_STREAM_EXTHDR_GEOM0);
+   ext_stream_ptr += pvr_cmd_length(FW_STREAM_EXTHDR_GEOM0);
+
+   assert(PVR_HAS_QUIRK(dev_info, 49927) == header0.has_brn49927);
+   if (header0.has_brn49927) {
+      regs->tpu = *ext_stream_ptr;
+      ext_stream_ptr += pvr_cmd_length(CR_TPU);
+   }
+
+   assert((const uint8_t *)ext_stream_ptr - ext_stream == ext_stream_len);
+}
+
 static void pvr_srv_geometry_cmd_init(
    const struct pvr_winsys_render_submit_info *submit_info,
    const struct pvr_srv_sync_prim *sync_prim,
-   struct rogue_fwif_cmd_ta *cmd)
+   struct rogue_fwif_cmd_ta *cmd,
+   const struct pvr_device_info *const dev_info)
 {
    const struct pvr_winsys_geometry_state *state = &submit_info->geometry;
-   struct rogue_fwif_ta_regs *fw_regs = &cmd->geom_regs;
 
    memset(cmd, 0, sizeof(*cmd));
 
    cmd->cmd_shared.cmn.frame_num = submit_info->frame_num;
 
-   fw_regs->vdm_ctrl_stream_base = state->regs.vdm_ctrl_stream_base;
-   fw_regs->tpu_border_colour_table = state->regs.tpu_border_colour_table;
-   fw_regs->ppp_ctrl = state->regs.ppp_ctrl;
-   fw_regs->te_psg = state->regs.te_psg;
-   fw_regs->tpu = state->regs.tpu;
-   fw_regs->vdm_context_resume_task0_size =
-      state->regs.vdm_ctx_resume_task0_size;
+   pvr_srv_geometry_cmd_stream_load(cmd,
+                                    state->fw_stream,
+                                    state->fw_stream_len,
+                                    dev_info);
 
-   assert(state->regs.pds_ctrl >> 32U == 0U);
-   fw_regs->pds_ctrl = (uint32_t)state->regs.pds_ctrl;
+   if (state->fw_ext_stream_len) {
+      pvr_srv_geometry_cmd_ext_stream_load(cmd,
+                                           state->fw_ext_stream,
+                                           state->fw_ext_stream_len,
+                                           dev_info);
+   }
 
    if (state->flags & PVR_WINSYS_GEOM_FLAG_FIRST_GEOMETRY)
       cmd->flags |= ROGUE_FWIF_TAFLAGS_FIRSTKICK;
@@ -439,73 +493,160 @@ static void pvr_srv_geometry_cmd_init(
    cmd->partial_render_ta_3d_fence.value = sync_prim->value;
 }
 
+static void
+pvr_srv_fragment_cmd_stream_load(struct rogue_fwif_cmd_3d *const cmd,
+                                 const uint8_t *const stream,
+                                 const uint32_t stream_len,
+                                 const struct pvr_device_info *const dev_info)
+{
+   const uint32_t *stream_ptr = (const uint32_t *)stream;
+   struct rogue_fwif_3d_regs *const regs = &cmd->regs;
+
+   regs->isp_scissor_base = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_SCISSOR_BASE);
+
+   regs->isp_dbias_base = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_DBIAS_BASE);
+
+   regs->isp_oclqry_base = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_OCLQRY_BASE);
+
+   regs->isp_zlsctl = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_ZLSCTL);
+
+   regs->isp_zload_store_base = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_ZLOAD_BASE);
+
+   regs->isp_stencil_load_store_base = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_STENCIL_LOAD_BASE);
+
+   regs->fb_cdc_zls = *(const uint64_t *)stream_ptr;
+   stream_ptr += 2U;
+
+   STATIC_ASSERT(ARRAY_SIZE(regs->pbe_word) == 8U);
+   STATIC_ASSERT(ARRAY_SIZE(regs->pbe_word[0]) == 3U);
+   STATIC_ASSERT(sizeof(regs->pbe_word[0][0]) == sizeof(uint64_t));
+   memcpy(regs->pbe_word, stream_ptr, sizeof(regs->pbe_word));
+   stream_ptr += 8U * 3U * 2U;
+
+   regs->tpu_border_colour_table = *(const uint64_t *)stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_TPU_BORDER_COLOUR_TABLE_PDM);
+
+   STATIC_ASSERT(ARRAY_SIZE(regs->pds_bgnd) == 3U);
+   STATIC_ASSERT(sizeof(regs->pds_bgnd[0]) == sizeof(uint64_t));
+   memcpy(regs->pds_bgnd, stream_ptr, sizeof(regs->pds_bgnd));
+   stream_ptr += 3U * 2U;
+
+   STATIC_ASSERT(ARRAY_SIZE(regs->pds_pr_bgnd) == 3U);
+   STATIC_ASSERT(sizeof(regs->pds_pr_bgnd[0]) == sizeof(uint64_t));
+   memcpy(regs->pds_pr_bgnd, stream_ptr, sizeof(regs->pds_pr_bgnd));
+   stream_ptr += 3U * 2U;
+
+   STATIC_ASSERT(ARRAY_SIZE(regs->usc_clear_register) == 8U);
+   STATIC_ASSERT(sizeof(regs->usc_clear_register[0]) == sizeof(uint32_t));
+   memcpy(regs->usc_clear_register,
+          stream_ptr,
+          sizeof(regs->usc_clear_register));
+   stream_ptr += 8U;
+
+   regs->usc_pixel_output_ctrl = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_USC_PIXEL_OUTPUT_CTRL);
+
+   regs->isp_bgobjdepth = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_BGOBJDEPTH);
+
+   regs->isp_bgobjvals = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_BGOBJVALS);
+
+   regs->isp_aa = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_AA);
+
+   regs->isp_ctl = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_ISP_CTL);
+
+   regs->event_pixel_pds_info = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_EVENT_PIXEL_PDS_INFO);
+
+   if (PVR_HAS_FEATURE(dev_info, cluster_grouping)) {
+      regs->pixel_phantom = *stream_ptr;
+      stream_ptr++;
+   }
+
+   regs->view_idx = *stream_ptr;
+   stream_ptr++;
+
+   regs->event_pixel_pds_data = *stream_ptr;
+   stream_ptr += pvr_cmd_length(CR_EVENT_PIXEL_PDS_DATA);
+
+   if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
+      regs->isp_oclqry_stride = *stream_ptr;
+      stream_ptr++;
+   }
+
+   if (PVR_HAS_FEATURE(dev_info, zls_subtile)) {
+      regs->isp_zls_pixels = *stream_ptr;
+      stream_ptr += pvr_cmd_length(CR_ISP_ZLS_PIXELS);
+   }
+
+   cmd->zls_stride = *stream_ptr;
+   stream_ptr++;
+
+   cmd->sls_stride = *stream_ptr;
+   stream_ptr++;
+
+   if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
+      cmd->execute_count = *stream_ptr;
+      stream_ptr++;
+   }
+
+   assert((const uint8_t *)stream_ptr - stream == stream_len);
+}
+
+static void pvr_srv_fragment_cmd_ext_stream_load(
+   struct rogue_fwif_cmd_3d *const cmd,
+   const uint8_t *const ext_stream,
+   const uint32_t ext_stream_len,
+   const struct pvr_device_info *const dev_info)
+{
+   const uint32_t *ext_stream_ptr = (const uint32_t *)ext_stream;
+   struct rogue_fwif_3d_regs *const regs = &cmd->regs;
+
+   struct PVRX(FW_STREAM_EXTHDR_FRAG0) header0;
+
+   header0 = pvr_csb_unpack(ext_stream_ptr, FW_STREAM_EXTHDR_FRAG0);
+   ext_stream_ptr += pvr_cmd_length(FW_STREAM_EXTHDR_FRAG0);
+
+   assert(PVR_HAS_QUIRK(dev_info, 49927) == header0.has_brn49927);
+   if (header0.has_brn49927) {
+      regs->tpu = *ext_stream_ptr;
+      ext_stream_ptr += pvr_cmd_length(CR_TPU);
+   }
+
+   assert((const uint8_t *)ext_stream_ptr - ext_stream == ext_stream_len);
+}
+
 static void pvr_srv_fragment_cmd_init(
    const struct pvr_winsys_render_submit_info *submit_info,
-   struct rogue_fwif_cmd_3d *cmd)
+   struct rogue_fwif_cmd_3d *cmd,
+   const struct pvr_device_info *dev_info)
 {
    const struct pvr_winsys_fragment_state *state = &submit_info->fragment;
-   struct rogue_fwif_3d_regs *fw_regs = &cmd->regs;
 
    memset(cmd, 0, sizeof(*cmd));
 
    cmd->cmd_shared.cmn.frame_num = submit_info->frame_num;
 
-   fw_regs->usc_pixel_output_ctrl = state->regs.usc_pixel_output_ctrl;
-   fw_regs->isp_bgobjdepth = state->regs.isp_bgobjdepth;
-   fw_regs->isp_bgobjvals = state->regs.isp_bgobjvals;
-   fw_regs->isp_aa = state->regs.isp_aa;
-   fw_regs->isp_ctl = state->regs.isp_ctl;
-   fw_regs->tpu = state->regs.tpu;
-   fw_regs->event_pixel_pds_info = state->regs.event_pixel_pds_info;
-   fw_regs->pixel_phantom = state->regs.pixel_phantom;
-   fw_regs->event_pixel_pds_data = state->regs.event_pixel_pds_data;
-   fw_regs->isp_scissor_base = state->regs.isp_scissor_base;
-   fw_regs->isp_dbias_base = state->regs.isp_dbias_base;
-   fw_regs->isp_oclqry_base = state->regs.isp_oclqry_base;
-   fw_regs->isp_zlsctl = state->regs.isp_zlsctl;
-   fw_regs->isp_zload_store_base = state->regs.isp_zload_store_base;
-   fw_regs->isp_stencil_load_store_base =
-      state->regs.isp_stencil_load_store_base;
-   fw_regs->isp_zls_pixels = state->regs.isp_zls_pixels;
+   pvr_srv_fragment_cmd_stream_load(cmd,
+                                    state->fw_stream,
+                                    state->fw_stream_len,
+                                    dev_info);
 
-   STATIC_ASSERT(ARRAY_SIZE(fw_regs->pbe_word) ==
-                 ARRAY_SIZE(state->regs.pbe_word));
-
-   STATIC_ASSERT(ARRAY_SIZE(fw_regs->pbe_word[0]) <=
-                 ARRAY_SIZE(state->regs.pbe_word[0]));
-
-#if !defined(NDEBUG)
-   /* Depending on the hardware we might have more PBE words than the firmware
-    * accepts so check that the extra words are 0.
-    */
-   if (ARRAY_SIZE(fw_regs->pbe_word[0]) < ARRAY_SIZE(state->regs.pbe_word[0])) {
-      /* For each color attachment. */
-      for (uint32_t i = 0; i < ARRAY_SIZE(state->regs.pbe_word); i++) {
-         /* For each extra PBE word not used by the firmware. */
-         for (uint32_t j = ARRAY_SIZE(fw_regs->pbe_word[0]);
-              j < ARRAY_SIZE(state->regs.pbe_word[0]);
-              j++) {
-            assert(state->regs.pbe_word[i][j] == 0);
-         }
-      }
+   if (state->fw_ext_stream_len) {
+      pvr_srv_fragment_cmd_ext_stream_load(cmd,
+                                           state->fw_ext_stream,
+                                           state->fw_ext_stream_len,
+                                           dev_info);
    }
-#endif
-
-   memcpy(fw_regs->pbe_word, state->regs.pbe_word, sizeof(fw_regs->pbe_word));
-
-   fw_regs->tpu_border_colour_table = state->regs.tpu_border_colour_table;
-
-   STATIC_ASSERT(ARRAY_SIZE(fw_regs->pds_bgnd) ==
-                 ARRAY_SIZE(state->regs.pds_bgnd));
-   typed_memcpy(fw_regs->pds_bgnd,
-                state->regs.pds_bgnd,
-                ARRAY_SIZE(fw_regs->pds_bgnd));
-
-   STATIC_ASSERT(ARRAY_SIZE(fw_regs->pds_pr_bgnd) ==
-                 ARRAY_SIZE(state->regs.pds_pr_bgnd));
-   typed_memcpy(fw_regs->pds_pr_bgnd,
-                state->regs.pds_pr_bgnd,
-                ARRAY_SIZE(fw_regs->pds_pr_bgnd));
 
    if (state->flags & PVR_WINSYS_FRAG_FLAG_DEPTH_BUFFER_PRESENT)
       cmd->flags |= ROGUE_FWIF_RENDERFLAGS_DEPTHBUFFER;
@@ -519,13 +660,14 @@ static void pvr_srv_fragment_cmd_init(
    if (state->flags & PVR_WINSYS_FRAG_FLAG_SINGLE_CORE)
       cmd->flags |= ROGUE_FWIF_RENDERFLAGS_SINGLE_CORE;
 
-   cmd->zls_stride = state->zls_stride;
-   cmd->sls_stride = state->sls_stride;
+   if (state->flags & PVR_WINSYS_FRAG_FLAG_GET_VIS_RESULTS)
+      cmd->flags |= ROGUE_FWIF_RENDERFLAGS_GETVISRESULTS;
 }
 
 VkResult pvr_srv_winsys_render_submit(
    const struct pvr_winsys_render_ctx *ctx,
    const struct pvr_winsys_render_submit_info *submit_info,
+   const struct pvr_device_info *dev_info,
    struct vk_sync *signal_sync_geom,
    struct vk_sync *signal_sync_frag)
 {
@@ -552,8 +694,8 @@ VkResult pvr_srv_winsys_render_submit(
 
    VkResult result;
 
-   pvr_srv_geometry_cmd_init(submit_info, sync_prim, &geom_cmd);
-   pvr_srv_fragment_cmd_init(submit_info, &frag_cmd);
+   pvr_srv_geometry_cmd_init(submit_info, sync_prim, &geom_cmd, dev_info);
+   pvr_srv_fragment_cmd_init(submit_info, &frag_cmd, dev_info);
 
    for (uint32_t i = 0U; i < submit_info->wait_count; i++) {
       struct pvr_srv_sync *srv_wait_sync = to_srv_sync(submit_info->waits[i]);

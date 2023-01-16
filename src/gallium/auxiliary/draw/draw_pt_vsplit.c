@@ -23,6 +23,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include "util/macros.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -32,9 +33,6 @@
 
 #define SEGMENT_SIZE 1024
 #define MAP_SIZE     256
-
-/* The largest possible index within an index buffer */
-#define MAX_ELT_IDX 0xffffffff
 
 struct vsplit_frontend {
    struct draw_pt_front_end base;
@@ -116,7 +114,7 @@ vsplit_add_cache(struct vsplit_frontend *vsplit, unsigned fetch)
 static inline unsigned
 vsplit_get_base_idx(unsigned start, unsigned fetch)
 {
-   return draw_overflow_uadd(start, fetch, MAX_ELT_IDX);
+   return util_clamped_uadd(start, fetch);
 }
 
 

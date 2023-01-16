@@ -42,6 +42,7 @@ typedef struct {
    uint8_t buffer;
    uint16_t offset;
    uint8_t location;
+   bool high_16bits;
    uint8_t component_mask;
    uint8_t component_offset;
 } nir_xfb_output_info;

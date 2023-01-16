@@ -2,6 +2,12 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
+# deqp-egl skips
+# slow
+dEQP-EGL.functional.buffer_age.no_preserve
+dEQP-EGL.functional.multicontext
+dEQP-EGL.functional.swap_buffers_with_damage
+
 # piglit skips
 gles3
 glsl-1.3

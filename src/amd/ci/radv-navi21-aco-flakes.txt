@@ -5,6 +5,7 @@ dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.combined.view_type
 # Came with the split of the test lists in CI
 dEQP-VK.memory.mapping.dedicated_alloc.image.full.1048577.*
 dEQP-VK.memory.pipeline_barrier.host_read_host_write.65536
+dEQP-VK.memory.pipeline_barrier.host_read_host_write.1048576
 dEQP-VK.rasterization.primitives_multisample_2_bit.static_stipple.bresenham_line_strip_wide
 
 # This fail is 100% reproducible when running vkcts in parallel mode,
@@ -14,3 +15,9 @@ dEQP-VK.rasterization.primitives_multisample_2_bit.static_stipple.bresenham_line
 #
 # See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/7220
 dEQP-VK.draw.renderpass.linear_interpolation.no_offset_8_samples
+
+# Timeout but pass.
+dEQP-VK.memory.pipeline_barrier.all.65536_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.all.1048576_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.all.65536_vertex_buffer_stride_4
+dEQP-VK.memory.pipeline_barrier.all.1048576_vertex_buffer_stride_4

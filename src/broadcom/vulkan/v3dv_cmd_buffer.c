@@ -493,7 +493,7 @@ v3dv_job_start_frame(struct v3dv_job *job,
 static bool
 job_should_enable_double_buffer(struct v3dv_job *job)
 {
-   /* Inocmpatibility with double-buffer */
+   /* Incompatibility with double-buffer */
    if (!job->can_use_double_buffer)
       return false;
 
@@ -565,23 +565,43 @@ v3dv_cmd_buffer_create_cpu_job(struct v3dv_device *device,
 }
 
 static void
-cmd_buffer_add_cpu_jobs_for_pending_state(struct v3dv_cmd_buffer *cmd_buffer)
+cmd_buffer_emit_end_query_cpu(struct v3dv_cmd_buffer *cmd_buffer,
+                              struct v3dv_query_pool *pool,
+                              uint32_t query, uint32_t count)
+{
+   assert(pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR);
+
+   struct v3dv_job *job =
+      v3dv_cmd_buffer_create_cpu_job(cmd_buffer->device,
+                                     V3DV_JOB_TYPE_CPU_END_QUERY,
+                                     cmd_buffer, -1);
+   v3dv_return_if_oom(cmd_buffer, NULL);
+
+   job->cpu.query_end.pool = pool;
+   job->cpu.query_end.query = query;
+   job->cpu.query_end.count = count;
+   list_addtail(&job->list_link, &cmd_buffer->jobs);
+}
+
+static void
+cmd_buffer_add_jobs_for_pending_state(struct v3dv_cmd_buffer *cmd_buffer)
 {
    struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
 
    if (state->query.end.used_count > 0) {
-      const uint32_t query_count = state->query.end.used_count;
-      for (uint32_t i = 0; i < query_count; i++) {
+      const uint32_t count = state->query.end.used_count;
+      for (uint32_t i = 0; i < count; i++) {
          assert(i < state->query.end.used_count);
-         struct v3dv_job *job =
-            v3dv_cmd_buffer_create_cpu_job(cmd_buffer->device,
-                                           V3DV_JOB_TYPE_CPU_END_QUERY,
-                                           cmd_buffer, -1);
-         v3dv_return_if_oom(cmd_buffer, NULL);
-
-         job->cpu.query_end = state->query.end.states[i];
-         list_addtail(&job->list_link, &cmd_buffer->jobs);
+         struct v3dv_end_query_info *info = &state->query.end.states[i];
+          if (info->pool->query_type == VK_QUERY_TYPE_OCCLUSION) {
+            v3dv_cmd_buffer_emit_set_query_availability(cmd_buffer, info->pool,
+                                                        info->query, info->count, 1);
+         } else {
+            cmd_buffer_emit_end_query_cpu(cmd_buffer, info->pool,
+                                          info->query, info->count);
+         }
       }
+      state->query.end.used_count = 0;
    }
 }
 
@@ -649,14 +669,14 @@ v3dv_cmd_buffer_finish_job(struct v3dv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.job = NULL;
 
    /* If we have recorded any state with this last GPU job that requires to
-    * emit CPU jobs after the job is completed, add them now. The only
-    * exception is secondary command buffers inside a render pass, because in
+    * emit jobs after the job is completed, add them now. The only exception
+    * is secondary command buffers inside a render pass, because in
     * that case we want to defer this until we finish recording the primary
     * job into which we execute the secondary.
     */
    if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY ||
        !cmd_buffer->state.pass) {
-      cmd_buffer_add_cpu_jobs_for_pending_state(cmd_buffer);
+      cmd_buffer_add_jobs_for_pending_state(cmd_buffer);
    }
 }
 
@@ -764,7 +784,7 @@ v3dv_job_init(struct v3dv_job *job,
       cmd_buffer->state.dirty = ~0;
       cmd_buffer->state.dirty_descriptor_stages = ~0;
 
-      /* Honor inheritance of occlussion queries in secondaries if requested */
+      /* Honor inheritance of occlusion queries in secondaries if requested */
       if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY &&
           cmd_buffer->state.inheritance.occlusion_query_enable) {
          cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_OCCLUSION_QUERY;
@@ -1716,7 +1736,7 @@ v3dv_cmd_buffer_subpass_start(struct v3dv_cmd_buffer *cmd_buffer,
     *
     * Secondary command buffers don't start subpasses (and may not even have
     * framebuffer state), so we only care about this in primaries. The only
-    * exception could be a secondary runnning inside a subpass that needs to
+    * exception could be a secondary running inside a subpass that needs to
     * record a meta operation (with its own render pass) that relies on
     * attachment load clears, but we don't have any instances of that right
     * now.
@@ -2620,7 +2640,7 @@ cmd_buffer_pre_draw_split_job(struct v3dv_cmd_buffer *cmd_buffer)
  *    in rasterization."
  *
  * We need to enable MSAA in the TILE_BINNING_MODE_CFG packet, which we
- * emit when we start a new frame at the begining of a subpass. At that point,
+ * emit when we start a new frame at the beginning of a subpass. At that point,
  * if the framebuffer doesn't have any attachments we won't enable MSAA and
  * the job won't be valid in the scenario described by the spec.
  *
@@ -3391,7 +3411,7 @@ v3dv_CmdSetDepthBounds(VkCommandBuffer commandBuffer,
                        float minDepthBounds,
                        float maxDepthBounds)
 {
-   /* We do not support depth bounds testing so we just ingore this. We are
+   /* We do not support depth bounds testing so we just ignore this. We are
     * already asserting that pipelines don't enable the feature anyway.
     */
 }
@@ -3535,34 +3555,6 @@ v3dv_CmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer,
 }
 
 void
-v3dv_cmd_buffer_reset_queries(struct v3dv_cmd_buffer *cmd_buffer,
-                              struct v3dv_query_pool *pool,
-                              uint32_t first,
-                              uint32_t count)
-{
-   /* Resets can only happen outside a render pass instance so we should not
-    * be in the middle of job recording.
-    */
-   assert(cmd_buffer->state.pass == NULL);
-   assert(cmd_buffer->state.job == NULL);
-
-   assert(first < pool->query_count);
-   assert(first + count <= pool->query_count);
-
-   struct v3dv_job *job =
-      v3dv_cmd_buffer_create_cpu_job(cmd_buffer->device,
-                                     V3DV_JOB_TYPE_CPU_RESET_QUERIES,
-                                     cmd_buffer, -1);
-   v3dv_return_if_oom(cmd_buffer, NULL);
-
-   job->cpu.query_reset.pool = pool;
-   job->cpu.query_reset.first = first;
-   job->cpu.query_reset.count = count;
-
-   list_addtail(&job->list_link, &cmd_buffer->jobs);
-}
-
-void
 v3dv_cmd_buffer_ensure_array_state(struct v3dv_cmd_buffer *cmd_buffer,
                                    uint32_t slot_size,
                                    uint32_t used_count,
@@ -3601,8 +3593,9 @@ v3dv_cmd_buffer_begin_query(struct v3dv_cmd_buffer *cmd_buffer,
       /* FIXME: we only support one active occlusion query for now */
       assert(cmd_buffer->state.query.active_query.bo == NULL);
 
-      cmd_buffer->state.query.active_query.bo = pool->queries[query].bo;
-      cmd_buffer->state.query.active_query.offset = pool->queries[query].offset;
+      cmd_buffer->state.query.active_query.bo = pool->occlusion.bo;
+      cmd_buffer->state.query.active_query.offset =
+         pool->queries[query].occlusion.offset;
       cmd_buffer->state.dirty |= V3DV_CMD_DIRTY_OCCLUSION_QUERY;
       break;
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR: {
@@ -3630,22 +3623,25 @@ v3dv_cmd_buffer_schedule_end_query(struct v3dv_cmd_buffer *cmd_buffer,
                                    uint32_t query)
 {
    assert(query < pool->query_count);
+   assert(pool->query_type == VK_QUERY_TYPE_OCCLUSION ||
+          pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR);
 
+   /* For occlusion queries in the middle of a render pass we don't want to
+    * split the current job at the EndQuery just to emit query availability,
+    * instead we queue this state in the command buffer and we emit it when
+    * we finish the current job.
+    */
    if  (cmd_buffer->state.pass &&
-        pool->query_type != VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR) {
-      /* Queue the EndQuery in the command buffer state, we will create a CPU
-       * job to flag all of these queries as possibly available right after the
-       * render pass job in which they have been recorded.
-       */
+        pool->query_type == VK_QUERY_TYPE_OCCLUSION) {
       struct v3dv_cmd_buffer_state *state = &cmd_buffer->state;
       v3dv_cmd_buffer_ensure_array_state(cmd_buffer,
-                                         sizeof(struct v3dv_end_query_cpu_job_info),
+                                         sizeof(struct v3dv_end_query_info),
                                          state->query.end.used_count,
                                          &state->query.end.alloc_count,
                                          (void **) &state->query.end.states);
       v3dv_return_if_oom(cmd_buffer, NULL);
 
-      struct v3dv_end_query_cpu_job_info *info =
+      struct v3dv_end_query_info *info =
          &state->query.end.states[state->query.end.used_count++];
 
       info->pool = pool;
@@ -3662,7 +3658,7 @@ v3dv_cmd_buffer_schedule_end_query(struct v3dv_cmd_buffer *cmd_buffer,
        *
        * In our case, only the first query is used but this means we still need
        * to flag the other queries as available so we don't emit errors when
-       * the applications attempt to retrive values from them.
+       * the applications attempt to retrieve values from them.
        */
       struct v3dv_render_pass *pass = cmd_buffer->state.pass;
       if (!pass->multiview_enabled) {
@@ -3672,20 +3668,15 @@ v3dv_cmd_buffer_schedule_end_query(struct v3dv_cmd_buffer *cmd_buffer,
          info->count = util_bitcount(subpass->view_mask);
       }
    } else {
-      /* Otherwise, schedule the CPU job immediately */
-      struct v3dv_job *job =
-         v3dv_cmd_buffer_create_cpu_job(cmd_buffer->device,
-                                        V3DV_JOB_TYPE_CPU_END_QUERY,
-                                        cmd_buffer, -1);
-      v3dv_return_if_oom(cmd_buffer, NULL);
-
-      job->cpu.query_end.pool = pool;
-      job->cpu.query_end.query = query;
-
-      /* Multiview queries cannot cross subpass boundaries */
-      job->cpu.query_end.count = 1;
-
-      list_addtail(&job->list_link, &cmd_buffer->jobs);
+      /* Otherwise, schedule the end query job immediately.
+       *
+       * Multiview queries cannot cross subpass boundaries, so query count is
+       * always 1.
+       */
+       if (pool->query_type == VK_QUERY_TYPE_OCCLUSION)
+         v3dv_cmd_buffer_emit_set_query_availability(cmd_buffer, pool, query, 1, 1);
+       else
+         cmd_buffer_emit_end_query_cpu(cmd_buffer, pool, query, 1);
    }
 }
 
@@ -3736,42 +3727,6 @@ void v3dv_cmd_buffer_end_query(struct v3dv_cmd_buffer *cmd_buffer,
    default:
       unreachable("Unsupported query type");
    }
-}
-
-void
-v3dv_cmd_buffer_copy_query_results(struct v3dv_cmd_buffer *cmd_buffer,
-                                   struct v3dv_query_pool *pool,
-                                   uint32_t first,
-                                   uint32_t count,
-                                   struct v3dv_buffer *dst,
-                                   uint32_t offset,
-                                   uint32_t stride,
-                                   VkQueryResultFlags flags)
-{
-   /* Copies can only happen outside a render pass instance so we should not
-    * be in the middle of job recording.
-    */
-   assert(cmd_buffer->state.pass == NULL);
-   assert(cmd_buffer->state.job == NULL);
-
-   assert(first < pool->query_count);
-   assert(first + count <= pool->query_count);
-
-   struct v3dv_job *job =
-      v3dv_cmd_buffer_create_cpu_job(cmd_buffer->device,
-                                     V3DV_JOB_TYPE_CPU_COPY_QUERY_RESULTS,
-                                     cmd_buffer, -1);
-   v3dv_return_if_oom(cmd_buffer, NULL);
-
-   job->cpu.query_copy_results.pool = pool;
-   job->cpu.query_copy_results.first = first;
-   job->cpu.query_copy_results.count = count;
-   job->cpu.query_copy_results.dst = dst;
-   job->cpu.query_copy_results.offset = offset;
-   job->cpu.query_copy_results.stride = stride;
-   job->cpu.query_copy_results.flags = flags;
-
-   list_addtail(&job->list_link, &cmd_buffer->jobs);
 }
 
 void
@@ -4042,19 +3997,6 @@ cmd_buffer_dispatch(struct v3dv_cmd_buffer *cmd_buffer,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdDispatch(VkCommandBuffer commandBuffer,
-                 uint32_t groupCountX,
-                 uint32_t groupCountY,
-                 uint32_t groupCountZ)
-{
-   V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
-
-   cmd_buffer_emit_pre_dispatch(cmd_buffer);
-   cmd_buffer_dispatch(cmd_buffer, 0, 0, 0,
-                       groupCountX, groupCountY, groupCountZ);
-}
-
-VKAPI_ATTR void VKAPI_CALL
 v3dv_CmdDispatchBase(VkCommandBuffer commandBuffer,
                      uint32_t baseGroupX,
                      uint32_t baseGroupY,
@@ -4132,11 +4074,4 @@ v3dv_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
 
    cmd_buffer_emit_pre_dispatch(cmd_buffer);
    cmd_buffer_dispatch_indirect(cmd_buffer, buffer, offset);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-v3dv_CmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
-{
-   /* Nothing to do here since we only support a single device */
-   assert(deviceMask == 0x1);
 }

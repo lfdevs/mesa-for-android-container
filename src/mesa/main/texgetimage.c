@@ -29,7 +29,7 @@
  */
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "bufferobj.h"
 #include "enums.h"
 #include "context.h"

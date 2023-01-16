@@ -36,9 +36,22 @@
 #include "util/u_helpers.h"
 #include "util/u_range.h"
 
+#include "drm-uapi/drm_fourcc.h"
+
 struct etna_context;
 struct pipe_screen;
 struct util_dynarray;
+
+struct etna_ts_sw_meta {
+   uint16_t version;
+   struct {
+      uint16_t data_offset;
+      uint32_t data_size;
+      uint32_t layer_stride;
+      uint32_t comp_format;
+      uint64_t clear_value;
+   } v0;
+};
 
 struct etna_resource_level {
    unsigned width, padded_width; /* in pixels */
@@ -79,10 +92,13 @@ struct etna_resource {
    /* only lod 0 used for non-texture buffers */
    /* Layout for surface (tiled, multitiled, split tiled, ...) */
    enum etna_surface_layout layout;
+   uint64_t modifier;
    /* Horizontal alignment for texture unit (TEXTURE_HALIGN_*) */
    unsigned halign;
    struct etna_bo *bo; /* Surface video memory */
    struct etna_bo *ts_bo; /* Tile status video memory */
+   struct renderonly_scanout *ts_scanout; /* display compatible TS */
+   struct etna_ts_sw_meta *ts_meta; /* metadata for shared TS */
 
    struct etna_resource_level levels[ETNA_NUM_LOD];
 
@@ -142,6 +158,13 @@ etna_resource_hw_tileable(bool use_blt, const struct pipe_resource *pres)
           util_format_get_blocksize(pres->format) == 4;
 }
 
+/* returns TRUE if resource TS buffer is exposed externally */
+static inline bool
+etna_resource_ext_ts(const struct etna_resource *res)
+{
+   return res->modifier & VIVANTE_MOD_TS_MASK;
+}
+
 static inline struct etna_resource *
 etna_resource(struct pipe_resource *p)
 {
@@ -173,7 +196,8 @@ etna_resource_status(struct etna_context *ctx, struct etna_resource *res);
  * This is also called "fast clear". */
 bool
 etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
-                              struct etna_resource *prsc);
+                              struct etna_resource *prsc,
+                              uint64_t modifier);
 
 struct pipe_resource *
 etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,

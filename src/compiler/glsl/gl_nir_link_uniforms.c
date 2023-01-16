@@ -830,12 +830,6 @@ update_uniforms_shader_info(struct gl_shader_program *prog,
       /* Set image access qualifiers */
       enum gl_access_qualifier image_access =
          state->current_var->data.access;
-      const GLenum access =
-         (image_access & ACCESS_NON_WRITEABLE) ?
-         ((image_access & ACCESS_NON_READABLE) ? GL_NONE :
-                                                 GL_READ_ONLY) :
-         ((image_access & ACCESS_NON_READABLE) ? GL_WRITE_ONLY :
-                                                 GL_READ_WRITE);
 
       int image_index;
       if (state->current_var->data.bindless) {
@@ -850,7 +844,7 @@ update_uniforms_shader_info(struct gl_shader_program *prog,
 
          for (unsigned j = sh->Program->sh.NumBindlessImages;
               j < state->next_bindless_image_index; j++) {
-            sh->Program->sh.BindlessImages[j].access = access;
+            sh->Program->sh.BindlessImages[j].image_access = image_access;
          }
 
          sh->Program->sh.NumBindlessImages = state->next_bindless_image_index;
@@ -866,7 +860,7 @@ update_uniforms_shader_info(struct gl_shader_program *prog,
 
          for (unsigned i = image_index;
               i < MIN2(state->next_image_index, MAX_IMAGE_UNIFORMS); i++) {
-            sh->Program->sh.ImageAccess[i] = access;
+            sh->Program->sh.image_access[i] = image_access;
          }
       }
 

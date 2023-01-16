@@ -31,6 +31,7 @@
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
+#include "genxml/genX_rt_pack.h"
 
 #if GFX_VERx10 >= 125
 
@@ -167,7 +168,7 @@ get_gpu_size_estimate(const VkAccelerationStructureBuildGeometryInfoKHR *pInfo,
    struct MKSizeEstimate est = {};
 
    uint64_t size = sizeof(BVHBase);
-   size = align_u64(size, 64);
+   size = align64(size, 64);
 
    /* Must immediately follow BVHBase because we use fixed offset to nodes. */
    est.node_data_start = size;
@@ -258,25 +259,25 @@ get_gpu_size_estimate(const VkAccelerationStructureBuildGeometryInfoKHR *pInfo,
       unreachable("Unsupported acceleration structure type");
    }
 
-   size = align_u64(size, 64);
+   size = align64(size, 64);
    est.instance_descs_start = size;
    size += sizeof(struct InstanceDesc) * num_instances;
 
    est.geo_meta_data_start = size;
    size += sizeof(struct GeoMetaData) * pInfo->geometryCount;
-   size = align_u64(size, 64);
+   size = align64(size, 64);
 
-   assert(size == align_u64(size, 64));
+   assert(size == align64(size, 64));
    est.back_pointer_start = size;
 
    const bool alloc_backpointers = false; /* RT TODO */
    if (alloc_backpointers) {
       size += est.max_inner_nodes * sizeof(uint32_t);
-      size = align_u64(size, 64);
+      size = align64(size, 64);
    }
 
    assert(size < UINT32_MAX);
-   est.sizeTotal = align_u64(size, 64);
+   est.sizeTotal = align64(size, 64);
 
    return est;
 }

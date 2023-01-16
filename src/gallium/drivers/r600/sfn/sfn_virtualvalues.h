@@ -159,23 +159,21 @@ class Register : public VirtualValue {
 public:
    using Pointer = R600_POINTER_TYPE(Register);
 
+   enum Flags {
+      ssa,
+      pin_start,
+      pin_end,
+      flag_count
+   };
+
    Register(int sel, int chan, Pin pin);
    void accept(RegisterVisitor& vistor) override;
    void accept(ConstRegisterVisitor& vistor) const override;
    void print(std::ostream& os) const override;
 
-   int live_start_pinned() const { return m_pin_start; }
-   int live_end_pinned() const { return m_pin_end; }
-
-   void pin_live_range(bool start, bool end = false);
-
    static Pointer from_string(const std::string& s);
 
    Register *as_register() override { return this; }
-
-   void set_is_ssa(bool value);
-
-   bool is_ssa() const { return m_is_ssa; }
 
    void add_parent(Instr *instr);
    void del_parent(Instr *instr);
@@ -197,8 +195,13 @@ public:
    void set_sel(int new_sel)
    {
       set_sel_internal(new_sel);
-      m_is_ssa = false;
+      m_flags.reset(ssa);
    }
+
+   void set_flag(Flags f) { m_flags.set(f); }
+   void reset_flag(Flags f) { m_flags.reset(f); }
+   auto has_flag(Flags f) const { return m_flags.test(f); }
+   auto flags() const { return m_flags; }
 
 private:
    Register(const Register& orig) = delete;
@@ -216,9 +219,7 @@ private:
 
    int m_index{-1};
 
-   bool m_is_ssa{false};
-   bool m_pin_start{false};
-   bool m_pin_end{false};
+   std::bitset<flag_count> m_flags{0};
 };
 using PRegister = Register::Pointer;
 
@@ -493,6 +494,11 @@ sfn_value_equal(const T *lhs, const T *rhs)
    }
    return true;
 }
+
+bool
+value_is_const_uint(const VirtualValue& val, uint32_t value);
+bool
+value_is_const_float(const VirtualValue& val, float value);
 
 class RegisterVisitor {
 public:

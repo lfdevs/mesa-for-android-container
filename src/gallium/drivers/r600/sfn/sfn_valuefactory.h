@@ -220,6 +220,8 @@ public:
 
    void set_virtual_register_base(int base);
 
+   int new_register_index();
+
    bool allocate_registers(const exec_list *registers);
    PRegister allocate_pinned_register(int sel, int chan);
    RegisterVec4 allocate_pinned_vec4(int sel, bool is_ssa);

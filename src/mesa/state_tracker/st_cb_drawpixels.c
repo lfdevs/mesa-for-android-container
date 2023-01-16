@@ -945,8 +945,8 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
 
    ctx->Array.NewVertexElements = true;
-   st->dirty |= ST_NEW_VERTEX_ARRAYS |
-                ST_NEW_FS_SAMPLER_VIEWS;
+   ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS |
+                          ST_NEW_FS_SAMPLER_VIEWS;
 }
 
 
@@ -1149,7 +1149,7 @@ get_color_fp_variant(struct st_context *st)
                      ctx->Color._ClampFragmentColor;
    key.lower_alpha_func = COMPARE_FUNC_ALWAYS;
 
-   fpv = st_get_fp_variant(st, st->fp, &key);
+   fpv = st_get_fp_variant(st, ctx->FragmentProgram._Current, &key);
 
    return fpv;
 }
@@ -1179,7 +1179,7 @@ get_color_index_fp_variant(struct st_context *st)
                      ctx->Color._ClampFragmentColor;
    key.lower_alpha_func = COMPARE_FUNC_ALWAYS;
 
-   fpv = st_get_fp_variant(st, st->fp, &key);
+   fpv = st_get_fp_variant(st, ctx->FragmentProgram._Current, &key);
 
    return fpv;
 }
@@ -1291,7 +1291,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
 
-   st_validate_state(st, ST_PIPELINE_META);
+   st_validate_state(st, ST_PIPELINE_META_STATE_MASK);
 
    clippedUnpack = *unpack;
    unpack = &clippedUnpack;
@@ -1353,7 +1353,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
       /* compiling a new fragment shader variant added new state constants
        * into the constant buffer, we need to update them
        */
-      st_upload_constants(st, st->fp, MESA_SHADER_FRAGMENT);
+      st_upload_constants(st, ctx->FragmentProgram._Current, MESA_SHADER_FRAGMENT);
    }
 
    {
@@ -1690,7 +1690,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
 
-   st_validate_state(st, ST_PIPELINE_META);
+   st_validate_state(st, ST_PIPELINE_META_STATE_MASK);
 
    if (blit_copy_pixels(ctx, srcx, srcy, width, height, dstx, dsty, type))
       return;
@@ -1738,7 +1738,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       /* compiling a new fragment shader variant added new state constants
        * into the constant buffer, we need to update them
        */
-      st_upload_constants(st, st->fp, MESA_SHADER_FRAGMENT);
+      st_upload_constants(st, ctx->FragmentProgram._Current, MESA_SHADER_FRAGMENT);
    } else if (type == GL_DEPTH) {
       rbRead = ctx->ReadBuffer->Attachment[BUFFER_DEPTH].Renderbuffer;
       driver_fp = get_drawpix_z_stencil_program(st, GL_TRUE, GL_FALSE);

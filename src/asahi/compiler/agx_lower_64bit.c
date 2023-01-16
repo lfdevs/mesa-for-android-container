@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#include "agx_compiler.h"
 #include "agx_builder.h"
+#include "agx_compiler.h"
 
 /*
  * Lower 64-bit moves to 32-bit moves. Although there are not 64-bit moves in

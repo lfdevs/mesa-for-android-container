@@ -34,7 +34,7 @@
 #define LP_QUERY_H
 
 #include <limits.h>
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "lp_limits.h"
 
 

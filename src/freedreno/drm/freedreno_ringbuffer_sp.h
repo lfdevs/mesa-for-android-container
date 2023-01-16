@@ -50,8 +50,18 @@ struct fd_submit_sp {
 
    DECLARE_ARRAY(struct fd_bo *, bos);
 
+   /* Keep a separate table of sub-alloc BOs.. the backing objects are
+    * tracked in the main bos table (because this is what the kernel
+    * sees), but we need to attach userspace fences to the sub-alloc'd
+    * BOs so the driver knows when they are idle
+    */
+   DECLARE_ARRAY(struct fd_bo *, suballoc_bos);
+
    /* maps fd_bo to idx in bos table: */
    struct hash_table *bo_table;
+
+   /* maps fd_bo to idx in suballoc_bos table: */
+   struct hash_table *suballoc_bo_table;
 
    struct slab_child_pool ring_pool;
 
@@ -67,17 +77,13 @@ struct fd_submit_sp {
     * of submits to merge:
     */
    int in_fence_fd;
-   struct fd_submit_fence *out_fence;
+   struct fd_fence *out_fence;
 
    /* State for enqueued submits:
     */
    struct list_head submit_list;   /* includes this submit as last element */
 
-   /* Used in case out_fence==NULL: */
-   struct util_queue_fence fence;
-
    /* Used by retire_queue, if used by backend: */
-   int out_fence_fd;
    struct util_queue_fence retire_fence;
 
    flush_submit_list_fn flush_submit_list;

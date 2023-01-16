@@ -552,7 +552,7 @@ static bool ppir_emit_tex(ppir_block *block, nir_instr *ni)
       load->num_components = instr->coord_components;
 
       ppir_debug("%s create load_coords node %d for %d\n",
-                 __FUNCTION__, load->index, node->node.index);
+                 __func__, load->index, node->node.index);
 
       ppir_node_foreach_pred_safe((&node->node), dep) {
          ppir_node *pred = dep->pred;

@@ -13,10 +13,6 @@
 
 /* A simple implementations of breadcrumbs tracking of GPU progress
  * intended to be a last resort when debugging unrecoverable hangs.
- * For best results use Vulkan traces to have a predictable place of hang.
- *
- * For ordinary hangs as a more user-friendly solution use GFR
- * "Graphics Flight Recorder".
  *
  * This implementation aims to handle cases where we cannot do anything
  * after the hang, which is achieved by:
@@ -25,43 +21,7 @@
  * - At specified breadcrumb require explicit user input to continue
  *   execution up to the next breadcrumb.
  *
- * In-driver breadcrumbs also allow more precise tracking since we could
- * target a single GPU packet.
- *
- *
- * Breadcrumbs settings:
- *
- *  TU_BREADCRUMBS=$IP:$PORT,break=$BREAKPOINT:$BREAKPOINT_HITS
- * Where:
- *  $BREAKPOINT - the breadcrumb from which we require explicit ack
- *  $BREAKPOINT_HITS - how many times breakpoint should be reached for
- *   break to occur. Necessary for a gmem mode and re-usable cmdbuffers
- *   in both of which the same cmdstream could be executed several times.
- *
- *
- * A typical work flow would be:
- * - Start listening for breadcrumbs on remote host:
- *    nc -lvup $PORT | stdbuf -o0 xxd -pc -c 4 | awk -Wposix '{printf("%u:%u\n", "0x" $0, a[$0]++)}'
- *
- * - Start capturing command stream:
- *    sudo cat /sys/kernel/debug/dri/0/rd > ~/cmdstream.rd
- *
- * - On device replay the hanging trace with:
- *    TU_BREADCRUMBS=$IP:$PORT,break=-1:0
- *   ! Try to reproduce the hang in a sysmem mode because it would
- *   require much less breadcrumb writes and syncs.
- *
- * - Increase hangcheck period:
- *    echo -n 60000 > /sys/kernel/debug/dri/0/hangcheck_period_ms
- *
- * - After GPU hang note the last breadcrumb and relaunch trace with:
- *    TU_BREADCRUMBS=$IP:$PORT,break=$LAST_BREADCRUMB:$HITS
- *
- * - After the breakpoint is reached each breadcrumb would require
- *   explicit ack from the user. This way it's possible to find
- *   the last packet which did't hang.
- *
- * - Find the packet in the decoded cmdstream.
+ * For usage see freedreno.rst
  */
 
 struct breadcrumbs_context

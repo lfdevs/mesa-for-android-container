@@ -38,14 +38,6 @@
 _CRTIMP int _vscprintf(const char *format, va_list argptr);
 #endif
 
-#ifndef va_copy
-#ifdef __va_copy
-#define va_copy(dest, src) __va_copy((dest), (src))
-#else
-#define va_copy(dest, src) (dest) = (src)
-#endif
-#endif
-
 static const char*
 util_printf_prev_tok(const char *str)
 {

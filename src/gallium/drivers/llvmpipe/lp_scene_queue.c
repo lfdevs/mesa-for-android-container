@@ -32,7 +32,7 @@
  * which are produced by the "rast" code when it finishes rendering a scene.
  */
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_memory.h"
 #include "lp_scene_queue.h"
 #include "util/u_math.h"

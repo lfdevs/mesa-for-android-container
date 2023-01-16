@@ -40,6 +40,7 @@ if [[ "$DEBIAN_ARCH" = "arm64" ]]; then
     DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-juniper-sku16.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/nvidia/tegra210-p3450-0000.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-lazor-limozeen-nots-r5.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-kingoftown-r1.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/freescale/imx8mq-nitrogen.dtb"
     KERNEL_IMAGE_NAME="Image"
 
@@ -109,6 +110,7 @@ apt-get install -y --no-remove \
                    libx11-xcb-dev \
                    libxcb-dri2-0-dev \
                    libxkbcommon-dev \
+                   libwayland-dev \
                    ninja-build \
                    patch \
                    protobuf-compiler \
@@ -198,6 +200,8 @@ if [[ ${DEBIAN_ARCH} = "amd64" ]]; then
     . .gitlab-ci/container/build-crosvm.sh
     mv /usr/local/bin/crosvm /lava-files/rootfs-${DEBIAN_ARCH}/usr/bin/
     mv /usr/local/lib/$GCC_ARCH/libvirglrenderer.* /lava-files/rootfs-${DEBIAN_ARCH}/usr/lib/$GCC_ARCH/
+    mkdir -p /lava-files/rootfs-${DEBIAN_ARCH}/usr/local/libexec/
+    mv /usr/local/libexec/virgl* /lava-files/rootfs-${DEBIAN_ARCH}/usr/local/libexec/
 fi
 
 ############### Build libdrm
@@ -240,6 +244,7 @@ cp .gitlab-ci/container/debian/winehq.gpg.key /lava-files/rootfs-${DEBIAN_ARCH}/
 chroot /lava-files/rootfs-${DEBIAN_ARCH} sh /create-rootfs.sh
 rm /lava-files/rootfs-${DEBIAN_ARCH}/{llvm-snapshot,winehq}.gpg.key
 rm /lava-files/rootfs-${DEBIAN_ARCH}/create-rootfs.sh
+cp /etc/wgetrc /lava-files/rootfs-${DEBIAN_ARCH}/etc/.
 
 
 ############### Install the built libdrm

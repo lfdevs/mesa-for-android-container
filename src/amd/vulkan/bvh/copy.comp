@@ -96,10 +96,10 @@ main(void)
          uint32_t bvh_offset = DEREF(REF(radv_bvh_instance_node)(copy_src_addr + offset)).bvh_offset;
          if (args.mode == RADV_COPY_MODE_SERIALIZE) {
             DEREF(INDEX(uint64_t, instance_base, idx)) =
-               DEREF(REF(radv_bvh_instance_node)(copy_src_addr + offset)).bvh_ptr - bvh_offset;
+               node_to_addr(DEREF(REF(radv_bvh_instance_node)(copy_src_addr + offset)).bvh_ptr) - bvh_offset;
          } else { /* RADV_COPY_MODE_DESERIALIZE */
             uint64_t blas_addr = DEREF(INDEX(uint64_t, instance_base, idx));
-            DEREF(REF(radv_bvh_instance_node)(copy_dst_addr + offset)).bvh_ptr = blas_addr + bvh_offset;
+            DEREF(REF(radv_bvh_instance_node)(copy_dst_addr + offset)).bvh_ptr = addr_to_node(blas_addr + bvh_offset);
          }
       }
    }

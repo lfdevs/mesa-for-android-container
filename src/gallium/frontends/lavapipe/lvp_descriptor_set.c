@@ -24,7 +24,7 @@
 #include "lvp_private.h"
 #include "vk_descriptors.h"
 #include "vk_util.h"
-#include "u_math.h"
+#include "util/u_math.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorSetLayout(
     VkDevice                                    _device,

@@ -361,6 +361,10 @@ spec@arb_es2_compatibility@texwrap formats bordercolor@GL_RGB565- border color o
 # GL_RGB10_A2 dest failures
 spec@arb_framebuffer_object@fbo-mipmap-copypix,Fail
 
+# Unexpected GL error: GL_INVALID_OPERATION 0x502
+# (Error at tests/spec/arb_framebuffer_object/same-attachment-tex2d-depth_stencil.c:135)
+spec@arb_framebuffer_object@same-attachment-tex2d-depth_stencil,Fail
+
 # fails at 4 samples (for our 4 supported indirections) because the 1D coordinate workaround
 # causes an extra texture indirection phase.
 spec@arb_fragment_program@fp-indirections2,Fail
@@ -392,7 +396,6 @@ spec@arb_internalformat_query2@all internalformat_<x>_type pname checks,Timeout
 spec@arb_occlusion_query2@render,Fail
 spec@arb_occlusion_query@occlusion_query,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
-spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi1,Fail
 spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi2,Fail
 spec@arb_occlusion_query@occlusion_query_meta_fragments,Fail
 spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
@@ -410,6 +413,10 @@ spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 spec@arb_sampler_objects@gl_ext_texture_srgb_decode,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-texturelod-01,Fail
 
+# No useful debug info.
+spec@arb_sync@clientwaitsync-timeout,Fail
+spec@arb_sync@clientwaitsync-timeout@read coherent client-storage,Fail
+
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@arb_texture_compression@texwrap formats bordercolor,Fail
 spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_ALPHA- border color only,Fail
@@ -418,6 +425,8 @@ spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_LUMINANCE
 spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_LUMINANCE_ALPHA- border color only,Fail
 spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_RGB- border color only,Fail
 spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_RGBA- border color only,Fail
+spec@ati_texture_compression_3dc@texwrap formats bordercolor,Fail
+spec@ati_texture_compression_3dc@texwrap formats bordercolor@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI- border color only,Fail
 
 spec@arb_texture_cube_map@copyteximage cube,Fail
 spec@arb_texture_cube_map@cubemap npot,Fail
@@ -828,7 +837,6 @@ spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0-alt,Fail
 spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0,Fail
 
-spec@glsl-1.10@execution@fs-loop-bounds-unrolled,Fail
 spec@glsl-1.10@execution@fs-notequal-of-expression,Fail
 spec@glsl-1.10@execution@fs-sign-times-abs,Fail
 spec@glsl-1.10@execution@fs-sign-times-neg,Fail
@@ -841,7 +849,6 @@ spec@glsl-1.10@execution@glsl-clamp-vertex-color,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-1,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-2,Fail
 spec@glsl-1.10@execution@glsl-fs-if-nested-loop,Fail
-spec@glsl-1.10@execution@glsl-fs-loop-while-false-03,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-fixed,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-none,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-vertex,Fail
@@ -864,6 +871,10 @@ spec@glsl-1.10@execution@loops@glsl-fs-continue-inside-do-while,Fail
 spec@glsl-1.10@execution@loops@glsl-fs-loop-300,Fail
 
 spec@glsl-1.10@execution@loops@glsl-fs-loop-shadow-variables,Fail
+
+# Failed to link: error: looping not supported i915 fragment shaders, all loops must be statically unrollable.
+spec@glsl-1.10@execution@loops@glsl-fs-loop-vec4-counter,Fail
+
 spec@glsl-1.10@execution@loops@glsl-fs-unroll-out-param,Fail
 spec@glsl-1.10@execution@loops@glsl-fs-unroll-side-effect,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d,Fail

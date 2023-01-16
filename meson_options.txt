@@ -555,3 +555,9 @@ option(
   value : 8,
   description : 'Minimum Windows version to support. Defaults to Windows 8.'
 )
+option(
+  'xmlconfig',
+  type : 'feature',
+  value : 'auto',
+  description : 'Build custom xmlconfig (driconf) support. If disabled, the default driconf file is hardcoded into Mesa. Requires expat.'
+)

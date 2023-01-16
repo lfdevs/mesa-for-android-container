@@ -59,6 +59,7 @@
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/perf/u_trace.h"
+#include "util/set.h"
 #include "util/sparse_array.h"
 #include "util/u_atomic.h"
 #include "util/u_vector.h"
@@ -100,7 +101,6 @@ struct anv_buffer_view;
 struct anv_image_view;
 struct anv_instance;
 
-struct intel_aux_map_context;
 struct intel_perf_config;
 struct intel_perf_counter_pass;
 struct intel_perf_query_result;
@@ -284,68 +284,12 @@ align_down_npot_u32(uint32_t v, uint32_t a)
    return v - (v % a);
 }
 
-static inline uint32_t
-align_down_u32(uint32_t v, uint32_t a)
-{
-   assert(a != 0 && a == (a & -a));
-   return v & ~(a - 1);
-}
-
-static inline uint32_t
-align_u32(uint32_t v, uint32_t a)
-{
-   assert(a != 0 && a == (a & -a));
-   return align_down_u32(v + a - 1, a);
-}
-
-static inline uint64_t
-align_down_u64(uint64_t v, uint64_t a)
-{
-   assert(a != 0 && a == (a & -a));
-   return v & ~(a - 1);
-}
-
-static inline uint64_t
-align_u64(uint64_t v, uint64_t a)
-{
-   return align_down_u64(v + a - 1, a);
-}
-
-static inline int32_t
-align_i32(int32_t v, int32_t a)
-{
-   assert(a != 0 && a == (a & -a));
-   return (v + a - 1) & ~(a - 1);
-}
-
 /** Alignment must be a power of 2. */
 static inline bool
 anv_is_aligned(uintmax_t n, uintmax_t a)
 {
    assert(a == (a & -a));
    return (n & (a - 1)) == 0;
-}
-
-static inline uint32_t
-anv_minify(uint32_t n, uint32_t levels)
-{
-   if (unlikely(n == 0))
-      return 0;
-   else
-      return MAX2(n >> levels, 1);
-}
-
-static inline float
-anv_clamp_f(float f, float min, float max)
-{
-   assert(min < max);
-
-   if (f > max)
-      return max;
-   else if (f < min)
-      return min;
-   else
-      return f;
 }
 
 static inline union isl_color_value
@@ -474,30 +418,6 @@ struct anv_bo {
     */
    void *map;
 
-   /** Size of the implicit CCS range at the end of the buffer
-    *
-    * On Gfx12, CCS data is always a direct 1/256 scale-down.  A single 64K
-    * page of main surface data maps to a 256B chunk of CCS data and that
-    * mapping is provided on TGL-LP by the AUX table which maps virtual memory
-    * addresses in the main surface to virtual memory addresses for CCS data.
-    *
-    * Because we can't change these maps around easily and because Vulkan
-    * allows two VkImages to be bound to overlapping memory regions (as long
-    * as the app is careful), it's not feasible to make this mapping part of
-    * the image.  (On Gfx11 and earlier, the mapping was provided via
-    * RENDER_SURFACE_STATE so each image had its own main -> CCS mapping.)
-    * Instead, we attach the CCS data directly to the buffer object and setup
-    * the AUX table mapping at BO creation time.
-    *
-    * This field is for internal tracking use by the BO allocator only and
-    * should not be touched by other parts of the code.  If something wants to
-    * know if a BO has implicit CCS data, it should instead look at the
-    * has_implicit_ccs boolean below.
-    *
-    * This data is not included in maps of this buffer.
-    */
-   uint32_t _ccs_size;
-
    /** Flags to pass to the kernel through drm_i915_exec_object2::flags */
    uint32_t flags;
 
@@ -521,9 +441,6 @@ struct anv_bo {
 
    /** See also ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS */
    bool has_client_visible_address:1;
-
-   /** True if this BO has implicit CCS data attached to it */
-   bool has_implicit_ccs:1;
 };
 
 static inline struct anv_bo *
@@ -870,8 +787,6 @@ void anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo);
 struct anv_scratch_pool {
    /* Indexed by Per-Thread Scratch Space number (the hardware value) and stage */
    struct anv_bo *bos[16][MESA_SHADER_STAGES];
-   uint32_t surfs[16];
-   struct anv_state surf_states[16];
 };
 
 void anv_scratch_pool_init(struct anv_device *device,
@@ -882,9 +797,6 @@ struct anv_bo *anv_scratch_pool_alloc(struct anv_device *device,
                                       struct anv_scratch_pool *pool,
                                       gl_shader_stage stage,
                                       unsigned per_thread_scratch);
-uint32_t anv_scratch_pool_get_surf(struct anv_device *device,
-                                   struct anv_scratch_pool *pool,
-                                   unsigned per_thread_scratch);
 
 /** Implements a BO cache that ensures a 1-1 mapping of GEM BOs to anv_bos */
 struct anv_bo_cache {
@@ -968,9 +880,6 @@ struct anv_physical_device {
     bool                                        has_exec_async;
     bool                                        has_exec_capture;
     int                                         max_context_priority;
-    bool                                        has_context_isolation;
-    bool                                        has_mmap_offset;
-    bool                                        has_userptr_probe;
     uint64_t                                    gtt_size;
 
     bool                                        use_relocations;
@@ -980,8 +889,6 @@ struct anv_physical_device {
 
     /** True if we can access buffers using A64 messages */
     bool                                        has_a64_buffer_access;
-    /** True if we can use bindless access for images */
-    bool                                        has_bindless_images;
     /** True if we can use bindless access for samplers */
     bool                                        has_bindless_samplers;
     /** True if we can use timeline semaphores through execbuf */
@@ -993,13 +900,6 @@ struct anv_physical_device {
      * on Gfx12+.
      */
     bool                                        has_reg_timestamp;
-
-    /** True if this device has implicit AUX
-     *
-     * If true, CCS is handled as an implicit attachment to the BO rather than
-     * as an explicitly bound surface.
-     */
-    bool                                        has_implicit_ccs;
 
     bool                                        always_flush_cache;
 
@@ -1122,7 +1022,7 @@ struct anv_device {
     struct anv_physical_device *                physical;
     const struct intel_device_info *            info;
     struct isl_device                           isl_dev;
-    int                                         context_id;
+    uint32_t                                    context_id;
     int                                         fd;
     bool                                        can_chain_batches;
     bool                                        robust_buffer_access;
@@ -1160,6 +1060,13 @@ struct anv_device {
     struct anv_bo *                             workaround_bo;
     struct anv_address                          workaround_address;
 
+    /**
+     * Workarounds for game bugs.
+     */
+    struct {
+       struct set *                             doom64_images;
+    } workarounds;
+
     struct anv_bo *                             trivial_batch_bo;
     struct anv_state                            null_surface_state;
 
@@ -1170,16 +1077,6 @@ struct anv_device {
     struct anv_state                            border_colors;
 
     struct anv_state                            slice_hash;
-
-    /** An array of CPS_STATE structures grouped by MAX_VIEWPORTS elements
-     *
-     * We need to emit CPS_STATE structures for each viewport accessible by a
-     * pipeline. So rather than write many identical CPS_STATE structures
-     * dynamically, we can enumerate all possible combinaisons and then just
-     * emit a 3DSTATE_CPS_POINTERS instruction with the right offset into this
-     * array.
-     */
-    struct anv_state                            cps_states;
 
     uint32_t                                    queue_count;
     struct anv_queue  *                         queues;
@@ -1198,8 +1095,6 @@ struct anv_device {
 
     int                                         perf_fd; /* -1 if no opened */
     uint64_t                                    perf_metric; /* 0 if unset */
-
-    struct intel_aux_map_context                *aux_map_ctx;
 
     const struct intel_l3_config                *l3_config;
 
@@ -1308,9 +1203,6 @@ enum anv_bo_alloc_flags {
 
    /** Has an address which is visible to the client */
    ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS = (1 << 8),
-
-   /** This buffer has implicit CCS data attached to it */
-   ANV_BO_ALLOC_IMPLICIT_CCS = (1 << 9),
 };
 
 VkResult anv_device_alloc_bo(struct anv_device *device,
@@ -1387,12 +1279,9 @@ int anv_gem_execbuffer(struct anv_device *device,
                        struct drm_i915_gem_execbuffer2 *execbuf);
 int anv_gem_set_tiling(struct anv_device *device, uint32_t gem_handle,
                        uint32_t stride, uint32_t tiling);
-int anv_gem_create_context(struct anv_device *device);
 bool anv_gem_has_context_priority(int fd, int priority);
-int anv_gem_destroy_context(struct anv_device *device, int context);
-int anv_gem_set_context_param(int fd, int context, uint32_t param,
+int anv_gem_set_context_param(int fd, uint32_t context, uint32_t param,
                               uint64_t value);
-int anv_gem_get_param(int fd, uint32_t param);
 int anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle);
 int anv_gem_context_get_reset_stats(int fd, int context,
                                     uint32_t *active, uint32_t *pending);
@@ -2399,12 +2288,6 @@ struct anv_push_constants {
    /* Robust access pushed registers. */
    uint64_t push_reg_mask[MESA_SHADER_STAGES];
 
-   /** Ray query globals (RT_DISPATCH_GLOBALS) */
-   uint64_t ray_query_globals;
-
-   /* Base addresses for descriptor sets */
-   uint64_t desc_sets[MAX_SETS];
-
    struct {
       /** Base workgroup ID
        *
@@ -2496,7 +2379,7 @@ anv_gfx8_9_vb_cache_range_needs_workaround(struct anv_vb_cache_range *bound,
 
    /* Align everything to a cache line */
    bound->start &= ~(64ull - 1ull);
-   bound->end = align_u64(bound->end, 64);
+   bound->end = align64(bound->end, 64);
 
    /* Compute the dirty range */
    dirty->start = MIN2(dirty->start, bound->start);
@@ -2600,7 +2483,6 @@ struct anv_cmd_state {
    /* PIPELINE_SELECT.PipelineSelection */
    uint32_t                                     current_pipeline;
    const struct intel_l3_config *               current_l3_config;
-   uint32_t                                     last_aux_map_state;
 
    struct anv_cmd_graphics_state                gfx;
    struct anv_cmd_compute_state                 compute;
@@ -2647,11 +2529,6 @@ struct anv_cmd_state {
     * genX(cmd_buffer_emit_hashing_mode)().
     */
    unsigned                                     current_hash_scale;
-
-   /**
-    * A buffer used for spill/fill of ray queries.
-    */
-   struct anv_bo *                              ray_query_shadow_bo;
 };
 
 #define ANV_MIN_CMD_BUFFER_BATCH_SIZE 8192
@@ -2754,6 +2631,8 @@ struct anv_cmd_buffer {
    struct u_trace                               trace;
 };
 
+extern const struct vk_command_buffer_ops anv_cmd_buffer_ops;
+
 /* Determine whether we can chain a given cmd_buffer to another one. We need
  * softpin and we also need to make sure that we can edit the end of the batch
  * to point to next one, which requires the command buffer to not be used
@@ -2784,7 +2663,8 @@ VkResult anv_cmd_buffer_execbuf(struct anv_queue *queue,
                                 VkFence fence,
                                 int perf_query_pass);
 
-VkResult anv_cmd_buffer_reset(struct anv_cmd_buffer *cmd_buffer);
+void anv_cmd_buffer_reset(struct vk_command_buffer *vk_cmd_buffer,
+                          UNUSED VkCommandBufferResetFlags flags);
 
 struct anv_state anv_cmd_buffer_emit_dynamic(struct anv_cmd_buffer *cmd_buffer,
                                              const void *data, uint32_t size, uint32_t alignment);
@@ -2951,8 +2831,6 @@ struct anv_pipeline {
 
    enum anv_pipeline_type                       type;
    VkPipelineCreateFlags                        flags;
-
-   uint32_t                                     ray_queries;
 
    struct util_dynarray                         executables;
 
@@ -3223,12 +3101,6 @@ anv_get_isl_format(const struct intel_device_info *devinfo, VkFormat vk_format,
    return anv_get_format_aspect(devinfo, vk_format, aspect, tiling).isl_format;
 }
 
-bool anv_formats_ccs_e_compatible(const struct intel_device_info *devinfo,
-                                  VkImageCreateFlags create_flags,
-                                  VkFormat vk_format, VkImageTiling vk_tiling,
-                                  VkImageUsageFlags vk_usage,
-                                  const VkImageFormatListCreateInfo *fmt_list);
-
 extern VkFormat
 vk_format_from_android(unsigned android_format, unsigned android_usage);
 
@@ -3324,6 +3196,11 @@ struct anv_image {
     * VK_IMAGE_CREATE_DISJOINT_BIT.
     */
    bool disjoint;
+
+   /**
+    * Image is a WSI image
+    */
+   bool from_wsi;
 
    /**
     * Image was imported from an struct AHardwareBuffer.  We have to delay
@@ -3522,38 +3399,6 @@ anv_image_get_fast_clear_type_addr(const struct anv_device *device,
    return anv_address_add(addr, clear_color_state_size);
 }
 
-static inline struct anv_address
-anv_image_get_compression_state_addr(const struct anv_device *device,
-                                     const struct anv_image *image,
-                                     VkImageAspectFlagBits aspect,
-                                     uint32_t level, uint32_t array_layer)
-{
-   assert(level < anv_image_aux_levels(image, aspect));
-   assert(array_layer < anv_image_aux_layers(image, aspect, level));
-   UNUSED uint32_t plane = anv_image_aspect_to_plane(image, aspect);
-   assert(image->planes[plane].aux_usage == ISL_AUX_USAGE_CCS_E);
-
-   /* Relative to start of the plane's fast clear memory range */
-   uint32_t offset;
-
-   offset = 4; /* Go past the fast clear type */
-
-   if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
-      for (uint32_t l = 0; l < level; l++)
-         offset += anv_minify(image->vk.extent.depth, l) * 4;
-   } else {
-      offset += level * image->vk.array_layers * 4;
-   }
-
-   offset += array_layer * 4;
-
-   assert(offset < image->planes[plane].fast_clear_memory_range.size);
-
-   return anv_address_add(
-      anv_image_get_fast_clear_type_addr(device, image, aspect),
-      offset);
-}
-
 /* Returns true if a HiZ-enabled depth buffer can be sampled from. */
 static inline bool
 anv_can_sample_with_hiz(const struct intel_device_info * const devinfo,
@@ -3607,15 +3452,6 @@ anv_can_sample_mcs_with_clear(const struct intel_device_info * const devinfo,
    }
 
    return true;
-}
-
-static inline bool
-anv_image_plane_uses_aux_map(const struct anv_device *device,
-                             const struct anv_image *image,
-                             uint32_t plane)
-{
-   return device->info->has_aux_map &&
-      isl_aux_usage_has_ccs(image->planes[plane].aux_usage);
 }
 
 void

@@ -138,6 +138,55 @@ void util_barrier_destroy(util_barrier *barrier);
 
 bool util_barrier_wait(util_barrier *barrier);
 
+/*
+ * Semaphores
+ */
+
+typedef struct
+{
+   mtx_t mutex;
+   cnd_t cond;
+   int counter;
+} util_semaphore;
+
+
+static inline void
+util_semaphore_init(util_semaphore *sema, int init_val)
+{
+   (void) mtx_init(&sema->mutex, mtx_plain);
+   cnd_init(&sema->cond);
+   sema->counter = init_val;
+}
+
+static inline void
+util_semaphore_destroy(util_semaphore *sema)
+{
+   mtx_destroy(&sema->mutex);
+   cnd_destroy(&sema->cond);
+}
+
+/** Signal/increment semaphore counter */
+static inline void
+util_semaphore_signal(util_semaphore *sema)
+{
+   mtx_lock(&sema->mutex);
+   sema->counter++;
+   cnd_signal(&sema->cond);
+   mtx_unlock(&sema->mutex);
+}
+
+/** Wait for semaphore counter to be greater than zero */
+static inline void
+util_semaphore_wait(util_semaphore *sema)
+{
+   mtx_lock(&sema->mutex);
+   while (sema->counter <= 0) {
+      cnd_wait(&sema->cond, &sema->mutex);
+   }
+   sema->counter--;
+   mtx_unlock(&sema->mutex);
+}
+
 #ifdef __cplusplus
 }
 #endif

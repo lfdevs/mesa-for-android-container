@@ -8,9 +8,13 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="PS_DEALLOC" value="1"/>
 	<value name="VS_DONE_TS" value="2"/>
 	<value name="PS_DONE_TS" value="3"/>
+	<doc>
+		Flushes dirty data from UCHE, and also writes a GPU timestamp to
+		the address if one is provided.
+	</doc>
 	<value name="CACHE_FLUSH_TS" value="4"/>
 	<value name="CONTEXT_DONE" value="5"/>
-	<value name="CACHE_FLUSH" value="6"/>
+	<value name="CACHE_FLUSH" value="6" variants="A2XX-A4XX"/>
 	<value name="VIZQUERY_START" value="7" variants="A2XX"/>
 	<value name="HLSQ_FLUSH" value="7" variants="A3XX-A4XX"/>
 	<value name="VIZQUERY_END" value="8" variants="A2XX"/>
@@ -24,9 +28,20 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="TILE_FLUSH" value="15" variants="A2XX-A4XX"/>
 	<value name="STAT_EVENT" value="16" variants="A2XX-A4XX"/>
 	<value name="CACHE_FLUSH_AND_INV_TS_EVENT" value="20" variants="A2XX-A4XX"/>
+	<doc>
+		If A6XX_RB_SAMPLE_COUNT_CONTROL.copy is true, writes OQ Z passed
+		sample counts to RB_SAMPLE_COUNT_ADDR.  This writes to main
+		memory, skipping UCHE.
+	</doc>
 	<value name="ZPASS_DONE" value="21"/>
 	<value name="CACHE_FLUSH_AND_INV_EVENT" value="22" variants="A2XX"/>
+
+	<doc>
+		Writes the GPU timestamp to the address that follows, once RB
+		access and flushes are complete.
+	</doc>
 	<value name="RB_DONE_TS" value="22" variants="A3XX-"/>
+
 	<value name="PERFCOUNTER_START" value="23" variants="A2XX-A4XX"/>
 	<value name="PERFCOUNTER_STOP" value="24" variants="A2XX-A4XX"/>
 	<value name="VS_FETCH_DONE" value="27"/>
@@ -42,12 +57,44 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="FLUSH_SO_1" value="18" variants="A5XX-"/>
 	<value name="FLUSH_SO_2" value="19" variants="A5XX-"/>
 	<value name="FLUSH_SO_3" value="20" variants="A5XX-"/>
+
+	<doc>
+		Invalidates depth attachment data from the CCU.  We assume this
+		happens in the last stage.
+	</doc>
 	<value name="PC_CCU_INVALIDATE_DEPTH" value="24" variants="A5XX-"/>
+
+	<doc>
+		Invalidates color attachment data from the CCU.  We assume this
+		happens in the last stage.
+	</doc>
 	<value name="PC_CCU_INVALIDATE_COLOR" value="25" variants="A5XX-"/>
+
+	<doc>
+		Flushes the small cache used by CP_EVENT_WRITE::BLIT (which,
+		along with its registers, would be better named RESOLVE).
+	</doc>
 	<value name="PC_CCU_RESOLVE_TS" value="26" variants="A6XX"/>
+
+	<doc>
+		Flushes depth attachment data from the CCU.  We assume this
+		happens in the last stage.
+	</doc>
 	<value name="PC_CCU_FLUSH_DEPTH_TS" value="28" variants="A5XX-"/>
+
+	<doc>
+		Flushes color attachment data from the CCU.  We assume this
+		happens in the last stage.
+	</doc>
 	<value name="PC_CCU_FLUSH_COLOR_TS" value="29" variants="A5XX-"/>
+
+	<doc>
+		2D blit to resolve GMEM to system memory (skipping CCU) at the
+		end of a render pass.  Compare to CP_BLIT's BLIT_OP_SCALE for
+		more general blitting.
+	</doc>
 	<value name="BLIT" value="30" variants="A5XX-"/>
+
 	<doc>
 		Clears based on GRAS_LRZ_CNTL configuration, could clear
 		fast-clear buffer or LRZ direction.
@@ -60,6 +107,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 		Clear of direction means setting the direction to CUR_DIR_UNSET.
 	</doc>
 	<value name="LRZ_CLEAR" value="37" variants="A5XX-"/>
+
 	<value name="LRZ_FLUSH" value="38" variants="A5XX-"/>
 	<value name="BLIT_OP_FILL_2D" value="39" variants="A5XX-"/>
 	<value name="BLIT_OP_COPY_2D" value="40" variants="A5XX-"/>
@@ -69,7 +117,11 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="UNK_2D" value="45" variants="A5XX-"/>
 
 	<!-- a6xx events -->
+	<doc>
+		Invalidates UCHE.
+	</doc>
 	<value name="CACHE_INVALIDATE" value="49" variants="A6XX"/>
+
 	<value name="LABEL" value="63" variants="A6XX-"/>
 
 	<!-- note, some of these are the same as a6xx, just named differently -->
@@ -194,8 +246,8 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 		indirect buffer dispatch.  prefetch parser uses this packet
 		type to determine whether to pre-fetch the IB
 	</doc>
-	<value name="CP_PREEMPT_ENABLE" value="0x1c"/>
-	<value name="CP_PREEMPT_TOKEN" value="0x1e"/>
+	<value name="CP_PREEMPT_ENABLE" value="0x1c" variants="A5XX"/>
+	<value name="CP_PREEMPT_TOKEN" value="0x1e" variants="A5XX"/>
 	<value name="CP_INDIRECT_BUFFER" value="0x3f"/>
 	<doc>
 		Takes the same arguments as CP_INDIRECT_BUFFER, but jumps to
@@ -205,7 +257,10 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_INDIRECT_BUFFER_CHAIN" value="0x57" variants="A5XX-"/>
 	<doc>indirect buffer dispatch.  same as IB, but init is pipelined</doc>
 	<value name="CP_INDIRECT_BUFFER_PFD" value="0x37"/>
-	<doc>wait for the IDLE state of the engine</doc>
+	<doc>
+		Waits for the IDLE state of the engine before further drawing.
+		This is pipelined, so the CP may continue.
+	</doc>
 	<value name="CP_WAIT_FOR_IDLE" value="0x26"/>
 	<doc>wait until a register or memory location is a specific value</doc>
 	<value name="CP_WAIT_REG_MEM" value="0x3c"/>
@@ -429,12 +484,18 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<!-- Enable/Disable A5x local preemption model -->
 	<value name="CP_PREEMPT_ENABLE_LOCAL" value="0x6a" variants="A5XX"/>
 	<!-- Yield token on a5xx similar to CP_PREEMPT on a4xx -->
-	<value name="CP_CONTEXT_SWITCH_YIELD" value="0x6b" variants="A5XX"/>
+	<value name="CP_CONTEXT_SWITCH_YIELD" value="0x6b" variants="A5XX-"/>
 	<!-- Inform CP about current render mode (needed for a5xx preemption) -->
 	<value name="CP_SET_RENDER_MODE" value="0x6c" variants="A5XX"/>
 	<value name="CP_COMPUTE_CHECKPOINT" value="0x6e" variants="A5XX"/>
 	<!-- check if this works on earlier.. -->
 	<value name="CP_MEM_TO_MEM" value="0x73" variants="A5XX-"/>
+
+	<doc>
+		General purpose 2D blit engine for image transfers and mipmap
+		generation.  Reads through UCHE, writes through the CCU cache in
+		the PS stage.
+	</doc>
 	<value name="CP_BLIT" value="0x2c" variants="A5XX-"/>
 
 	<!-- Test specified bit in specified register and set predicate -->
@@ -483,8 +544,16 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="IN_INCR_UPDT_CONST" value="0x56" variants="A2XX"/>
 	<value name="IN_INCR_UPDT_INSTR" value="0x57" variants="A2XX"/>
 
+	<!-- internal jumptable entries on a6xx+, possibly a5xx: -->
+
 	<!-- jmptable entry used to handle type4 packet on a5xx+: -->
 	<value name="PKT4" value="0x04" variants="A5XX-"/>
+	<!-- called when ROQ is empty, "returns" from an IB or merged sequence of IBs -->
+	<value name="IN_IB_END" value="0x0a" variants="A6XX-"/>
+	<!-- handles IFPC save/restore -->
+	<value name="IN_GMU_INTERRUPT" value="0x0b" variants="A6XX-"/>
+	<!-- preemption/context-swtich routine -->
+	<value name="IN_PREEMPT" value="0x0f" variants="A6XX-"/>
 
 	<!-- TODO do these exist on A5xx? -->
 	<value name="CP_SCRATCH_WRITE" value="0x4c" variants="A6XX"/>
@@ -494,6 +563,11 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_WAIT_TWO_REGS" value="0x70" variants="A6XX"/>
 	<value name="CP_MEMCPY" value="0x75" variants="A6XX"/>
 	<value name="CP_SET_BIN_DATA5_OFFSET" value="0x2e" variants="A6XX"/>
+	<doc>
+                Write CP_CONTEXT_SWITCH_*_INFO from CP to the following dwords,
+                and forcibly switch to the indicated context.
+	</doc>
+	<value name="CP_CONTEXT_SWITCH" value="0x54" variants="A6XX"/>
 	<!-- Note, kgsl calls this CP_SET_AMBLE: -->
 	<value name="CP_SET_CTXSWITCH_IB" value="0x55" variants="A6XX"/>
 
@@ -532,6 +606,9 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	</doc>
 	<value name="CP_START_BIN" value="0x50" variants="A6XX"/>
 	<value name="CP_END_BIN" value="0x51" variants="A6XX"/>
+
+	<doc> Make next dword 1 to disable preemption, 0 to re-enable it. </doc>
+	<value name="CP_PREEMPT_DISABLE" value="0x6c" variants="A6XX"/>
 
 	<value name="CP_WAIT_TIMESTAMP" value="0x14" variants="A7XX-"/>
 	<value name="CP_THREAD_CONTROL" value="0x17" variants="A7XX-"/>

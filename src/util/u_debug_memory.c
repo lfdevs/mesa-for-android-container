@@ -32,11 +32,11 @@
  * @author José Fonseca <jfonseca@vmware.com>
  */
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #define DEBUG_MEMORY_IMPLEMENTATION
 
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "util/simple_mtx.h"
 #include "util/u_debug.h"
@@ -73,7 +73,7 @@ struct debug_memory_header
 #endif
    size_t size;
 #if DEBUG_FREED_MEMORY
-   boolean freed;  /**< Is this a freed block? */
+   bool freed;  /**< Is this a freed block? */
 #endif
 
    unsigned magic;
@@ -144,7 +144,7 @@ debug_malloc(const char *file, unsigned line, const char *function,
    hdr->magic = DEBUG_MEMORY_MAGIC;
    hdr->tag = 0;
 #if DEBUG_FREED_MEMORY
-   hdr->freed = FALSE;
+   hdr->freed = false;
 #endif
 
 #if DEBUG_MEMORY_STACK
@@ -192,7 +192,7 @@ debug_free(const char *file, unsigned line, const char *function,
    /* Check for double-free */
    assert(!hdr->freed);
    /* Mark the block as freed but don't really free it */
-   hdr->freed = TRUE;
+   hdr->freed = true;
    /* Save file/line where freed */
    hdr->file = file;
    hdr->line = line;
@@ -268,7 +268,7 @@ debug_realloc(const char *file, unsigned line, const char *function,
    new_hdr->magic = DEBUG_MEMORY_MAGIC;
    new_hdr->tag = 0;
 #if DEBUG_FREED_MEMORY
-   new_hdr->freed = FALSE;
+   new_hdr->freed = false;
 #endif
 
    new_ftr = footer_from_header(new_hdr);
@@ -365,7 +365,7 @@ debug_memory_tag(void *ptr, unsigned tag)
 
    hdr = header_from_data(ptr);
    if (hdr->magic != DEBUG_MEMORY_MAGIC) {
-      debug_printf("%s corrupted memory at %p\n", __FUNCTION__, ptr);
+      debug_printf("%s corrupted memory at %p\n", __func__, ptr);
       assert(0);
    }
 

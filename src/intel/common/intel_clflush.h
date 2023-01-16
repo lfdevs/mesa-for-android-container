@@ -27,6 +27,7 @@
 #define CACHELINE_SIZE 64
 #define CACHELINE_MASK 63
 
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
 static inline void
 intel_clflush_range(void *start, size_t size)
 {
@@ -67,5 +68,6 @@ intel_invalidate_range(void *start, size_t size)
    __builtin_ia32_clflush(start + size - 1);
    __builtin_ia32_mfence();
 }
+#endif /* SUPPORT_INTEL_INTEGRATED_GPUS */
 
 #endif

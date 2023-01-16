@@ -21,10 +21,11 @@ enum tu_dynamic_state
 {
    /* re-use VK_DYNAMIC_STATE_ enums for non-extended dynamic states */
    TU_DYNAMIC_STATE_SAMPLE_LOCATIONS = VK_DYNAMIC_STATE_STENCIL_REFERENCE + 1,
+   TU_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE,
    TU_DYNAMIC_STATE_RB_DEPTH_CNTL,
    TU_DYNAMIC_STATE_RB_STENCIL_CNTL,
    TU_DYNAMIC_STATE_VB_STRIDE,
-   TU_DYNAMIC_STATE_RASTERIZER_DISCARD,
+   TU_DYNAMIC_STATE_PC_RASTER_CNTL,
    TU_DYNAMIC_STATE_BLEND,
    TU_DYNAMIC_STATE_VERTEX_INPUT,
    TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS,
@@ -33,9 +34,21 @@ enum tu_dynamic_state
    TU_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY = TU_DYNAMIC_STATE_COUNT,
    TU_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
    TU_DYNAMIC_STATE_LOGIC_OP,
+   TU_DYNAMIC_STATE_LOGIC_OP_ENABLE,
    TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE,
+   TU_DYNAMIC_STATE_POLYGON_MODE,
+   TU_DYNAMIC_STATE_TESS_DOMAIN_ORIGIN,
+   TU_DYNAMIC_STATE_MSAA_SAMPLES,
+   TU_DYNAMIC_STATE_ALPHA_TO_COVERAGE,
+   TU_DYNAMIC_STATE_DEPTH_CLIP_RANGE,
+   TU_DYNAMIC_STATE_VIEWPORT_RANGE,
+   TU_DYNAMIC_STATE_LINE_MODE,
+   TU_DYNAMIC_STATE_PROVOKING_VTX,
+   TU_DYNAMIC_STATE_BLEND_ENABLE,
+   TU_DYNAMIC_STATE_BLEND_EQUATION,
+   TU_DYNAMIC_STATE_COLOR_WRITE_MASK,
    /* re-use the line width enum as it uses GRAS_SU_CNTL: */
-   TU_DYNAMIC_STATE_GRAS_SU_CNTL = VK_DYNAMIC_STATE_LINE_WIDTH,
+   TU_DYNAMIC_STATE_RAST = VK_DYNAMIC_STATE_LINE_WIDTH,
 };
 
 struct cache_entry;
@@ -122,7 +135,7 @@ struct tu_pipeline
    /* mask of enabled dynamic states
     * if BIT(i) is set, pipeline->dynamic_state[i] is *NOT* used
     */
-   uint32_t dynamic_state_mask;
+   uint64_t dynamic_state_mask;
    struct tu_draw_state dynamic_state[TU_DYNAMIC_STATE_COUNT];
 
    VkGraphicsPipelineLibraryFlagsEXT state;
@@ -130,15 +143,16 @@ struct tu_pipeline
    /* for dynamic states which use the same register: */
    struct {
       uint32_t gras_su_cntl, gras_su_cntl_mask;
+      uint32_t gras_cl_cntl, gras_cl_cntl_mask;
       uint32_t pc_raster_cntl, pc_raster_cntl_mask;
       uint32_t vpc_unknown_9107, vpc_unknown_9107_mask;
-      uint32_t rb_depth_cntl;
+      uint32_t rb_depth_cntl, rb_depth_cntl_mask;
       enum a5xx_line_mode line_mode;
+      enum a6xx_polygon_mode polygon_mode;
       bool provoking_vertex_last;
+      bool override_depth_clip;
 
       uint32_t multiview_mask;
-
-      struct tu_draw_state state;
    } rast;
 
    /* RB_DEPTH_CNTL state comes from both rast and depth/stencil state.
@@ -158,6 +172,7 @@ struct tu_pipeline
    struct {
       unsigned num_rts;
       uint32_t rb_mrt_control[MAX_RTS], rb_mrt_control_mask;
+      uint32_t rb_mrt_control_rop;
       uint32_t rb_mrt_blend_control[MAX_RTS];
       uint32_t sp_blend_cntl, sp_blend_cntl_mask;
       uint32_t rb_blend_cntl, rb_blend_cntl_mask;
@@ -236,6 +251,9 @@ struct tu_pipeline
    struct tu_lrz_pipeline lrz;
 
    struct {
+      VkViewport viewports[MAX_VIEWPORTS];
+      unsigned num_viewports;
+      bool set_dynamic_vp_to_static;
       bool z_negative_one_to_one;
    } viewport;
 
@@ -282,6 +300,9 @@ void
 tu6_emit_sample_locations(struct tu_cs *cs, const VkSampleLocationsInfoEXT *samp_loc);
 
 void
+tu6_emit_sample_locations_enable(struct tu_cs *cs, bool enable);
+
+void
 tu6_emit_depth_bias(struct tu_cs *cs,
                     float constant_factor,
                     float clamp,
@@ -301,6 +322,13 @@ void tu6_emit_vertex_input(struct tu_cs *cs,
 void tu6_emit_patch_control_points(struct tu_cs *cs,
                                    const struct tu_pipeline *pipeline,
                                    unsigned patch_control_points);
+
+uint32_t tu6_rast_size(struct tu_device *dev);
+
+void tu6_emit_rast(struct tu_cs *cs,
+                   uint32_t gras_su_cntl,
+                   uint32_t gras_cl_cntl,
+                   enum a6xx_polygon_mode polygon_mode);
 
 uint32_t tu6_rb_mrt_control_rop(VkLogicOp op, bool *rop_reads_dst);
 

@@ -41,7 +41,7 @@
 
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_state.h"
 
 /**
@@ -86,28 +86,28 @@ struct translate_key {
 struct translate;
 
 
-typedef void (PIPE_CDECL *run_elts_func)(struct translate *,
+typedef void (UTIL_CDECL *run_elts_func)(struct translate *,
                                          const unsigned *elts,
                                          unsigned count,
                                          unsigned start_instance,
                                          unsigned instance_id,
                                          void *output_buffer);
 
-typedef void (PIPE_CDECL *run_elts16_func)(struct translate *,
+typedef void (UTIL_CDECL *run_elts16_func)(struct translate *,
                                            const uint16_t *elts,
                                            unsigned count,
                                            unsigned start_instance,
                                            unsigned instance_id,
                                            void *output_buffer);
 
-typedef void (PIPE_CDECL *run_elts8_func)(struct translate *,
+typedef void (UTIL_CDECL *run_elts8_func)(struct translate *,
                                           const uint8_t *elts,
                                           unsigned count,
                                           unsigned start_instance,
                                           unsigned instance_id,
                                           void *output_buffer);
 
-typedef void (PIPE_CDECL *run_func)(struct translate *,
+typedef void (UTIL_CDECL *run_func)(struct translate *,
                                     unsigned start,
                                     unsigned count,
                                     unsigned start_instance,

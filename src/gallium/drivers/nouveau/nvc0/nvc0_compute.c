@@ -30,30 +30,7 @@ int
 nvc0_screen_compute_setup(struct nvc0_screen *screen,
                           struct nouveau_pushbuf *push)
 {
-   struct nouveau_object *chan = screen->base.channel;
-   struct nouveau_device *dev = screen->base.device;
-   uint32_t obj_class;
-   int ret;
    int i;
-
-   switch (dev->chipset & ~0xf) {
-   case 0xc0:
-   case 0xd0:
-      /* In theory, GF110+ should also support NVC8_COMPUTE_CLASS but,
-       * in practice, a ILLEGAL_CLASS dmesg fail appears when using it. */
-      obj_class = NVC0_COMPUTE_CLASS;
-      break;
-   default:
-      NOUVEAU_ERR("unsupported chipset: NV%02x\n", dev->chipset);
-      return -1;
-   }
-
-   ret = nouveau_object_new(chan, 0xbeef90c0, obj_class, NULL, 0,
-                            &screen->compute);
-   if (ret) {
-      NOUVEAU_ERR("Failed to allocate compute object: %d\n", ret);
-      return ret;
-   }
 
    BEGIN_NVC0(push, SUBC_CP(NV01_SUBCHAN_OBJECT), 1);
    PUSH_DATA (push, screen->compute->oclass);
@@ -441,12 +418,12 @@ nvc0_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    PUSH_DATA (push, cp->code_base);
 
    BEGIN_NVC0(push, NVC0_CP(LOCAL_POS_ALLOC), 3);
-   PUSH_DATA (push, (cp->hdr[1] & 0xfffff0) + align(cp->cp.lmem_size, 0x10));
+   PUSH_DATA (push, cp->hdr[1] & 0xfffff0);
    PUSH_DATA (push, 0);
    PUSH_DATA (push, 0x800); /* WARP_CSTACK_SIZE */
 
    BEGIN_NVC0(push, NVC0_CP(SHARED_SIZE), 3);
-   PUSH_DATA (push, align(cp->cp.smem_size, 0x100));
+   PUSH_DATA (push, align(cp->cp.smem_size + info->variable_shared_mem, 0x100));
    PUSH_DATA (push, info->block[0] * info->block[1] * info->block[2]);
    PUSH_DATA (push, cp->num_barriers);
    BEGIN_NVC0(push, NVC0_CP(CP_GPR_ALLOC), 1);

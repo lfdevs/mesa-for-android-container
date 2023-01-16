@@ -432,7 +432,10 @@ void
 fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
                       const uint8_t *swiz, uint64_t iova, uint32_t size)
 {
-   unsigned elements = size / util_format_get_blocksize(format);
+   unsigned elem_size = util_format_get_blocksize(format);
+   unsigned elements = size / elem_size;
+   uint64_t base_iova = iova & ~0x3full;
+   unsigned texel_offset = (iova & 0x3f) / elem_size;
 
    struct fdl_view_args args = {
       .format = format,
@@ -449,8 +452,9 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
       COND(util_format_is_srgb(format), A6XX_TEX_CONST_0_SRGB);
    descriptor[1] = A6XX_TEX_CONST_1_WIDTH(elements & ((1 << 15) - 1)) |
                    A6XX_TEX_CONST_1_HEIGHT(elements >> 15);
-   descriptor[2] = A6XX_TEX_CONST_2_BUFFER |
+   descriptor[2] = A6XX_TEX_CONST_2_STRUCTSIZETEXELS(1) |
+                   A6XX_TEX_CONST_2_STARTOFFSETTEXELS(texel_offset) |
                    A6XX_TEX_CONST_2_TYPE(A6XX_TEX_BUFFER);
-   descriptor[4] = iova;
-   descriptor[5] = iova >> 32;
+   descriptor[4] = base_iova;
+   descriptor[5] = base_iova >> 32;
 }

@@ -60,17 +60,6 @@ struct aco_vs_prolog_key {
    gl_shader_stage next_stage;
 };
 
-struct aco_ps_epilog_key {
-   uint32_t spi_shader_col_format;
-
-   /* Bitmasks, each bit represents one of the 8 MRTs. */
-   uint8_t color_is_int8;
-   uint8_t color_is_int10;
-   uint8_t enable_mrt_output_nan_fixup;
-
-   bool mrt0_is_dual_src;
-};
-
 struct aco_vp_output_info {
    uint8_t vs_output_param_offset[VARYING_SLOT_MAX];
    uint8_t clip_dist_mask;
@@ -86,20 +75,6 @@ struct aco_vp_output_info {
    bool writes_primitive_shading_rate_per_primitive;
    bool export_prim_id;
    bool export_clip_dists;
-};
-
-struct aco_stream_output {
-   uint8_t location;
-   uint8_t buffer;
-   uint16_t offset;
-   uint8_t component_mask;
-   uint8_t stream;
-};
-
-struct aco_streamout_info {
-   uint16_t num_outputs;
-   struct aco_stream_output outputs[ACO_MAX_SO_OUTPUTS];
-   uint16_t strides[ACO_MAX_SO_BUFFERS];
 };
 
 struct aco_shader_info {
@@ -143,7 +118,6 @@ struct aco_shader_info {
    struct {
       uint8_t subgroup_size;
    } cs;
-   struct aco_streamout_info so;
 
    uint32_t gfx9_gs_ring_lds_size;
 };
@@ -151,6 +125,17 @@ struct aco_shader_info {
 enum aco_compiler_debug_level {
    ACO_COMPILER_DEBUG_LEVEL_PERFWARN,
    ACO_COMPILER_DEBUG_LEVEL_ERROR,
+};
+
+struct aco_ps_epilog_key {
+   uint32_t spi_shader_col_format;
+
+   /* Bitmasks, each bit represents one of the 8 MRTs. */
+   uint8_t color_is_int8;
+   uint8_t color_is_int10;
+   uint8_t enable_mrt_output_nan_fixup;
+
+   bool mrt0_is_dual_src;
 };
 
 struct aco_stage_input {
@@ -171,11 +156,10 @@ struct aco_stage_input {
    } tcs;
 
    struct {
-      uint32_t col_format;
+      struct aco_ps_epilog_key epilog;
 
       /* Used to export alpha through MRTZ for alpha-to-coverage (GFX11+). */
       bool alpha_to_coverage_via_mrtz;
-      bool mrt0_is_dual_src;
    } ps;
 };
 
@@ -187,6 +171,7 @@ struct aco_compiler_options {
    bool record_ir;
    bool record_stats;
    bool has_ls_vgpr_init_bug;
+   uint8_t enable_mrt_output_nan_fixup;
    bool wgp_mode;
    enum radeon_family family;
    enum amd_gfx_level gfx_level;
@@ -195,6 +180,20 @@ struct aco_compiler_options {
       void (*func)(void *private_data, enum aco_compiler_debug_level level, const char *message);
       void *private_data;
    } debug;
+};
+
+enum aco_statistic {
+   aco_statistic_hash,
+   aco_statistic_instructions,
+   aco_statistic_copies,
+   aco_statistic_branches,
+   aco_statistic_latency,
+   aco_statistic_inv_throughput,
+   aco_statistic_vmem_clauses,
+   aco_statistic_smem_clauses,
+   aco_statistic_sgpr_presched,
+   aco_statistic_vgpr_presched,
+   aco_num_statistics
 };
 
 #ifdef __cplusplus

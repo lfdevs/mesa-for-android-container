@@ -388,9 +388,6 @@ panvk_CreateCommandPool(VkDevice _device,
       return result;
    }
 
-   list_inithead(&pool->active_cmd_buffers);
-   list_inithead(&pool->free_cmd_buffers);
-
    panvk_bo_pool_init(&pool->desc_bo_pool);
    panvk_bo_pool_init(&pool->varying_bo_pool);
    panvk_bo_pool_init(&pool->tls_bo_pool);
@@ -509,14 +506,14 @@ panvk_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
    cmdbuf->state.subpass = pass->subpasses;
    cmdbuf->state.framebuffer = fb;
    cmdbuf->state.render_area = pRenderPassBegin->renderArea;
-   cmdbuf->state.batch = vk_zalloc(&cmdbuf->pool->vk.alloc,
+   cmdbuf->state.batch = vk_zalloc(&cmdbuf->vk.pool->alloc,
                                    sizeof(*cmdbuf->state.batch), 8,
                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    util_dynarray_init(&cmdbuf->state.batch->jobs, NULL);
    util_dynarray_init(&cmdbuf->state.batch->event_ops, NULL);
    assert(pRenderPassBegin->clearValueCount <= pass->attachment_count);
    cmdbuf->state.clear =
-      vk_zalloc(&cmdbuf->pool->vk.alloc,
+      vk_zalloc(&cmdbuf->vk.pool->alloc,
                 sizeof(*cmdbuf->state.clear) * pass->attachment_count,
                 8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    panvk_cmd_prepare_clear_values(cmdbuf, pRenderPassBegin->pClearValues);
@@ -551,7 +548,7 @@ struct panvk_batch *
 panvk_cmd_open_batch(struct panvk_cmd_buffer *cmdbuf)
 {
    assert(!cmdbuf->state.batch);
-   cmdbuf->state.batch = vk_zalloc(&cmdbuf->pool->vk.alloc,
+   cmdbuf->state.batch = vk_zalloc(&cmdbuf->vk.pool->alloc,
                                    sizeof(*cmdbuf->state.batch), 8,
                                    VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    assert(cmdbuf->state.batch);
@@ -594,12 +591,6 @@ void
 panvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
                           VkBuffer _buffer,
                           VkDeviceSize offset)
-{
-   panvk_stub();
-}
-
-void
-panvk_CmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
 {
    panvk_stub();
 }

@@ -289,6 +289,25 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
 
    util_copy_framebuffer_state(cso, framebuffer);
 
+   STATIC_ASSERT((4 * PIPE_MAX_COLOR_BUFS) == (8 * sizeof(ctx->all_mrt_channel_mask)));
+   ctx->all_mrt_channel_mask = 0;
+
+   /* Generate a bitmask of all valid channels for all MRTs.  Blend
+    * state with unwritten channels essentially acts as blend enabled,
+    * which disables LRZ write.  But only if the cbuf *has* the masked
+    * channels, which is not known at the time the blend state is
+    * created.
+    */
+   for (unsigned i = 0; i < framebuffer->nr_cbufs; i++) {
+      if (!framebuffer->cbufs[i])
+         continue;
+
+      enum pipe_format format = framebuffer->cbufs[i]->format;
+      unsigned nr = util_format_get_nr_components(format);
+
+      ctx->all_mrt_channel_mask |= BITFIELD_MASK(nr) << (4 * i);
+   }
+
    cso->samples = util_framebuffer_get_num_samples(cso);
 
    if (ctx->screen->reorder) {

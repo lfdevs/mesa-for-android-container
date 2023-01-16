@@ -113,7 +113,6 @@ anv_shader_stage_to_nir(struct anv_device *device,
          .vk_memory_model = true,
          .vk_memory_model_device_scope = true,
          .workgroup_memory_explicit_layout = true,
-         .fragment_shading_rate = pdevice->info.ver >= 11,
       },
       .ubo_addr_format =
          anv_nir_ubo_addr_format(pdevice, device->robust_buffer_access),
@@ -261,25 +260,6 @@ static void
 populate_sampler_prog_key(const struct intel_device_info *devinfo,
                           struct brw_sampler_prog_key_data *key)
 {
-   /* Almost all multisampled textures are compressed.  The only time when we
-    * don't compress a multisampled texture is for 16x MSAA with a surface
-    * width greater than 8k which is a bit of an edge case.  Since the sampler
-    * just ignores the MCS parameter to ld2ms when MCS is disabled, it's safe
-    * to tell the compiler to always assume compression.
-    */
-   key->compressed_multisample_layout_mask = ~0;
-
-   /* SkyLake added support for 16x MSAA.  With this came a new message for
-    * reading from a 16x MSAA surface with compression.  The new message was
-    * needed because now the MCS data is 64 bits instead of 32 or lower as is
-    * the case for 8x, 4x, and 2x.  The key->msaa_16 bit-field controls which
-    * message we use.  Fortunately, the 16x message works for 8x, 4x, and 2x
-    * so we can just use it unconditionally.  This may not be quite as
-    * efficient but it saves us from recompiling.
-    */
-   if (devinfo->ver >= 9)
-      key->msaa_16 = ~0;
-
    /* XXX: Handle texture swizzle on HSW- */
    for (int i = 0; i < BRW_MAX_SAMPLERS; i++) {
       /* Assume color sampler, no swizzling. (Works for BDW+) */
@@ -346,64 +326,11 @@ populate_gs_prog_key(const struct anv_device *device,
    populate_base_prog_key(device, robust_buffer_acccess, &key->base);
 }
 
-static bool
-pipeline_has_coarse_pixel(const struct anv_graphics_pipeline *pipeline,
-                          const BITSET_WORD *dynamic,
-                          const struct vk_multisample_state *ms,
-                          const struct vk_fragment_shading_rate_state *fsr)
-{
-   /* The Vulkan 1.2.199 spec says:
-    *
-    *    "If any of the following conditions are met, Cxy' must be set to
-    *    {1,1}:
-    *
-    *     * If Sample Shading is enabled.
-    *     * [...]"
-    *
-    * And "sample shading" is defined as follows:
-    *
-    *    "Sample shading is enabled for a graphics pipeline:
-    *
-    *     * If the interface of the fragment shader entry point of the
-    *       graphics pipeline includes an input variable decorated with
-    *       SampleId or SamplePosition. In this case minSampleShadingFactor
-    *       takes the value 1.0.
-    *
-    *     * Else if the sampleShadingEnable member of the
-    *       VkPipelineMultisampleStateCreateInfo structure specified when
-    *       creating the graphics pipeline is set to VK_TRUE. In this case
-    *       minSampleShadingFactor takes the value of
-    *       VkPipelineMultisampleStateCreateInfo::minSampleShading.
-    *
-    *    Otherwise, sample shading is considered disabled."
-    *
-    * The first bullet above is handled by the back-end compiler because those
-    * inputs both force per-sample dispatch.  The second bullet is handled
-    * here.  Note that this sample shading being enabled has nothing to do
-    * with minSampleShading.
-    */
-   if (ms != NULL && ms->sample_shading_enable)
-      return false;
-
-   /* Not dynamic & pipeline has a 1x1 fragment shading rate with no
-    * possibility for element of the pipeline to change the value.
-    */
-   if (!BITSET_TEST(dynamic, MESA_VK_DYNAMIC_FSR) &&
-       fsr->fragment_size.width <= 1 &&
-       fsr->fragment_size.height <= 1 &&
-       fsr->combiner_ops[0] == VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR &&
-       fsr->combiner_ops[1] == VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR)
-      return false;
-
-   return true;
-}
-
 static void
 populate_wm_prog_key(const struct anv_graphics_pipeline *pipeline,
                      bool robust_buffer_acccess,
                      const BITSET_WORD *dynamic,
                      const struct vk_multisample_state *ms,
-                     const struct vk_fragment_shading_rate_state *fsr,
                      const struct vk_render_pass_state *rp,
                      struct brw_wm_prog_key *key)
 {
@@ -451,11 +378,6 @@ populate_wm_prog_key(const struct anv_graphics_pipeline *pipeline,
       if (device->physical->instance->sample_mask_out_opengl_behaviour)
          key->ignore_sample_mask_out = !key->multisample_fbo;
    }
-
-   key->coarse_pixel =
-      !key->persample_interp &&
-      device->vk.enabled_extensions.KHR_fragment_shading_rate &&
-      pipeline_has_coarse_pixel(pipeline, dynamic, ms, fsr);
 }
 
 static void
@@ -613,8 +535,7 @@ static void
 anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
                        void *mem_ctx,
                        struct anv_pipeline_stage *stage,
-                       struct anv_pipeline_layout *layout,
-                       bool use_primitive_replication)
+                       struct anv_pipeline_layout *layout)
 {
    const struct anv_physical_device *pdevice = pipeline->device->physical;
    const struct brw_compiler *compiler = pdevice->compiler;
@@ -636,8 +557,7 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
    if (pipeline->type == ANV_PIPELINE_GRAPHICS) {
       struct anv_graphics_pipeline *gfx_pipeline =
          anv_pipeline_to_graphics(pipeline);
-      NIR_PASS(_, nir, anv_nir_lower_multiview, gfx_pipeline->view_mask,
-               use_primitive_replication);
+      NIR_PASS(_, nir, anv_nir_lower_multiview, gfx_pipeline->view_mask);
    }
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
@@ -648,8 +568,6 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
             nir_address_format_64bit_global);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_push_const,
             nir_address_format_32bit_offset);
-
-   NIR_PASS(_, nir, brw_nir_lower_ray_queries, &pdevice->info);
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
    NIR_PASS_V(nir, anv_nir_apply_pipeline_layout,
@@ -1154,8 +1072,6 @@ anv_pipeline_add_executables(struct anv_pipeline *pipeline,
    } else {
       anv_pipeline_add_executable(pipeline, stage, bin->stats, 0);
    }
-
-   pipeline->ray_queries = MAX2(pipeline->ray_queries, bin->prog_data->ray_queries);
 }
 
 static void
@@ -1197,7 +1113,7 @@ anv_graphics_pipeline_init_keys(struct anv_graphics_pipeline *pipeline,
       case MESA_SHADER_FRAGMENT: {
          populate_wm_prog_key(pipeline,
                               pipeline->base.device->robust_buffer_access,
-                              state->dynamic, state->ms, state->fsr, state->rp,
+                              state->dynamic, state->ms, state->rp,
                               &stages[s].key.wm);
          break;
       }
@@ -1415,24 +1331,6 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
       next_stage = &stages[s];
    }
 
-   bool use_primitive_replication = false;
-   if (pipeline->base.device->info->ver >= 12 &&
-       pipeline->view_mask != 0) {
-      /* For some pipelines HW Primitive Replication can be used instead of
-       * instancing to implement Multiview.  This depend on how viewIndex is
-       * used in all the active shaders, so this check can't be done per
-       * individual shaders.
-       */
-      nir_shader *shaders[ANV_GRAPHICS_SHADER_STAGE_COUNT] = {};
-      for (unsigned s = 0; s < ARRAY_SIZE(shaders); s++)
-         shaders[s] = stages[s].nir;
-
-      use_primitive_replication =
-         anv_check_for_primitive_replication(pipeline->base.device,
-                                             pipeline->active_stages,
-                                             shaders, pipeline->view_mask);
-   }
-
    struct anv_pipeline_stage *prev_stage = NULL;
    for (unsigned i = 0; i < ARRAY_SIZE(graphics_shader_order); i++) {
       gl_shader_stage s = graphics_shader_order[i];
@@ -1443,8 +1341,7 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
 
       void *stage_ctx = ralloc_context(NULL);
 
-      anv_pipeline_lower_nir(&pipeline->base, stage_ctx, &stages[s], layout,
-                             use_primitive_replication);
+      anv_pipeline_lower_nir(&pipeline->base, stage_ctx, &stages[s], layout);
 
       if (prev_stage && compiler->nir_options[s]->unify_interfaces) {
          prev_stage->nir->info.outputs_written |= stages[s].nir->info.inputs_read &
@@ -1460,37 +1357,6 @@ anv_graphics_pipeline_compile(struct anv_graphics_pipeline *pipeline,
       stages[s].feedback.duration += os_time_get_nano() - stage_start;
 
       prev_stage = &stages[s];
-   }
-
-   /* In the case the platform can write the primitive variable shading rate,
-    * figure out the last geometry stage that should write the primitive
-    * shading rate, and ensure it is marked as used there. The backend will
-    * write a default value if the shader doesn't actually write it.
-    *
-    * We iterate backwards in the stage and stop on the first shader that can
-    * set the value.
-    */
-   const struct intel_device_info *devinfo = pipeline->base.device->info;
-   if (devinfo->has_coarse_pixel_primitive_and_cb &&
-       stages[MESA_SHADER_FRAGMENT].info &&
-       stages[MESA_SHADER_FRAGMENT].key.wm.coarse_pixel &&
-       !stages[MESA_SHADER_FRAGMENT].nir->info.fs.uses_sample_shading) {
-      struct anv_pipeline_stage *last_psr = NULL;
-
-      for (unsigned i = 0; i < ARRAY_SIZE(graphics_shader_order); i++) {
-         gl_shader_stage s =
-            graphics_shader_order[ARRAY_SIZE(graphics_shader_order) - i - 1];
-
-         if (!stages[s].info ||
-             !gl_shader_stage_can_set_fragment_shading_rate(s))
-            continue;
-
-         last_psr = &stages[s];
-         break;
-      }
-
-      assert(last_psr);
-      last_psr->nir->info.outputs_written |= VARYING_BIT_PRIMITIVE_SHADING_RATE;
    }
 
    prev_stage = NULL;
@@ -1667,10 +1533,7 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
          return vk_error(pipeline, VK_ERROR_UNKNOWN);
       }
 
-      NIR_PASS(_, stage.nir, anv_nir_add_base_work_group_id);
-
-      anv_pipeline_lower_nir(&pipeline->base, mem_ctx, &stage, layout,
-                             false /* use_primitive_replication */);
+      anv_pipeline_lower_nir(&pipeline->base, mem_ctx, &stage, layout);
 
       unsigned local_size = stage.nir->info.workgroup_size[0] *
                             stage.nir->info.workgroup_size[1] *
@@ -1922,17 +1785,8 @@ anv_graphics_pipeline_init(struct anv_graphics_pipeline *pipeline,
       pipeline->vb[b].instance_divisor = state->vi->bindings[b].divisor;
    }
 
-   /* Our implementation of VK_KHR_multiview uses instancing to draw the
-    * different views when primitive replication cannot be used. If the client
-    * asks for instancing, we need to multiply by the client's instance count
-    * at draw time and instance divisor in the vertex bindings by the number
-    * of views ensure that we repeat the client's per-instance data once for
-    * each view.
-    */
-   const bool uses_primitive_replication =
-      anv_pipeline_get_last_vue_prog_data(pipeline)->vue_map.num_pos_slots > 1;
    pipeline->instance_multiplier = 1;
-   if (pipeline->view_mask && !uses_primitive_replication)
+   if (pipeline->view_mask)
       pipeline->instance_multiplier = util_bitcount(pipeline->view_mask);
 
    pipeline->negative_one_to_one =

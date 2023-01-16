@@ -334,20 +334,25 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       }
       break;
    case nir_intrinsic_load_provoking_vtx_in_prim_amd: {
-      unsigned provoking_vertex = 0;
-      if (s->pl_key->vs.provoking_vtx_last) {
-         if (stage == MESA_SHADER_VERTEX) {
-            provoking_vertex = radv_get_num_vertices_per_prim(s->pl_key) - 1;
-         } else if (stage == MESA_SHADER_GEOMETRY) {
-            provoking_vertex = b->shader->info.gs.vertices_in - 1;
-         } else {
-            /* TES won't use this intrinsic, because it can get primitive id directly
-             * instead of using this intrinsic to pass primitive id by LDS.
-             */
-            unreachable("load_provoking_vtx_in_prim_amd is only supported in VS and GS");
+      if (s->pl_key->dynamic_provoking_vtx_mode) {
+         replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ngg_provoking_vtx);
+      } else {
+         unsigned provoking_vertex = 0;
+         if (s->pl_key->vs.provoking_vtx_last) {
+            if (stage == MESA_SHADER_VERTEX) {
+               provoking_vertex = radv_get_num_vertices_per_prim(s->pl_key) - 1;
+            } else if (stage == MESA_SHADER_GEOMETRY) {
+               provoking_vertex = b->shader->info.gs.vertices_in - 1;
+            } else {
+               /* TES won't use this intrinsic, because it can get primitive id directly
+                * instead of using this intrinsic to pass primitive id by LDS.
+                */
+               unreachable("load_provoking_vtx_in_prim_amd is only supported in VS and GS");
+            }
          }
+
+         replacement = nir_imm_int(b, provoking_vertex);
       }
-      replacement = nir_imm_int(b, provoking_vertex);
       break;
    }
    case nir_intrinsic_atomic_add_gs_emit_prim_count_amd:
@@ -364,6 +369,9 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       nir_gds_atomic_add_amd(b, 32, intrin->src[0].ssa,
                              nir_imm_int(b, RADV_NGG_QUERY_PRIM_XFB_OFFSET(nir_intrinsic_stream_id(intrin))),
                              nir_imm_int(b, 0x100));
+      break;
+   case nir_intrinsic_atomic_add_gs_invocation_count_amd:
+      /* TODO: add gs invocation query emulation. */
       break;
 
    case nir_intrinsic_load_streamout_config_amd:

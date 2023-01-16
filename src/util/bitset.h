@@ -446,7 +446,7 @@ __bitset_next_range(unsigned *start, unsigned *end, const BITSET_WORD *set,
  * it as, and N is the number of bits in the bitset.
  */
 #define DECLARE_BITSET_T(T, N) struct T {                       \
-      EXPLICIT_CONVERSION                                       \
+      explicit                                                  \
       operator bool() const                                     \
       {                                                         \
          for (unsigned i = 0; i < BITSET_WORDS(N); i++)         \

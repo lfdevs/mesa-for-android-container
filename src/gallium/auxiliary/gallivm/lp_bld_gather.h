@@ -66,4 +66,20 @@ lp_build_gather_values(struct gallivm_state * gallivm,
                        LLVMValueRef * values,
                        unsigned value_count);
 
+LLVMValueRef
+lp_build_masked_gather(struct gallivm_state *gallivm,
+                       unsigned length,
+                       unsigned bit_size,
+                       LLVMTypeRef vec_type,
+                       LLVMValueRef offset_ptr,
+                       LLVMValueRef exec_mask);
+
+void
+lp_build_masked_scatter(struct gallivm_state *gallivm,
+                        unsigned length,
+                        unsigned bit_size,
+                        LLVMValueRef offset_ptr,
+                        LLVMValueRef value_vec,
+                        LLVMValueRef exec_mask);
+
 #endif /* LP_BLD_GATHER_H_ */

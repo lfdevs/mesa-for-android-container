@@ -26,17 +26,15 @@
 #define __AGX_FORMATS_H_
 
 #include "util/format/u_format.h"
-#include "asahi/compiler/agx_compile.h"
 
 struct agx_pixel_format_entry {
    uint8_t channels;
    uint8_t type;
    bool renderable : 1;
-   enum agx_format internal : 4;
+   enum pipe_format internal;
 };
 
 extern const struct agx_pixel_format_entry agx_pixel_format[PIPE_FORMAT_COUNT];
-extern const enum agx_format agx_vertex_format[PIPE_FORMAT_COUNT];
 
 /* N.b. hardware=0 corresponds to R8 UNORM, which is renderable. So a zero
  * entry indicates an invalid format. */

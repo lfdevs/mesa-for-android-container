@@ -228,3 +228,20 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/7152
 spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail
+
+# EGL_BAD_DISPLAY is generated if display is not an EGL display connection
+# eglCreatePixmapSurface(0, 0x0000000000000000, 0x0000000000000000, { EGL_NONE });
+# // 0x0000000000000000 returned
+# eglCreatePixmapSurface(0xffffffffffffffff, 0x0000000000000000, 0x0000000000000000, { EGL_NONE });
+# // 0x0000000000000000 returned
+# EGL_BAD_CONFIG or EGL_BAD_PARAMETER is generated if config is not an EGL frame buffer configuration or if the PixmapSurface call is not supported
+# eglCreatePixmapSurface(0x5592c982cf90, 0xffffffffffffffff, 0x0000000000000000, { EGL_NONE });
+# // 0x0000000000000000 returned
+# // ERROR expected: EGL_BAD_CONFIG or EGL_BAD_PARAMETER, Got: EGL_BAD_NATIVE_PIXMAP
+wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail
+# [...]
+# Image comparison failed: reference = -0.000488281, expected = 0:0:0:0, result = 0:0:0:3
+# Image comparison failed: reference = 0, expected = 0:0:0:0, result = 0:0:0:3
+# Image comparison failed: reference = 0.000488281, expected = 0:1:0:0, result = 0:1:0:3
+# [...]
+wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail

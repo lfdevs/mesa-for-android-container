@@ -24,14 +24,14 @@
  */
 
 
-#include "hash_table.h"
 #include "si_pipe.h"
 #include "si_build_pm4.h"
 #include "si_compute.h"
 
 #include "ac_rgp.h"
 #include "ac_sqtt.h"
-#include "u_debug.h"
+#include "util/hash_table.h"
+#include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "tgsi/tgsi_from_mesa.h"
 

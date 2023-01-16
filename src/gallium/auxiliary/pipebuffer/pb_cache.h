@@ -32,7 +32,7 @@
 #include "pb_buffer.h"
 #include "util/simple_mtx.h"
 #include "util/list.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 /**
  * Statically inserted into the driver-specific buffer structure.

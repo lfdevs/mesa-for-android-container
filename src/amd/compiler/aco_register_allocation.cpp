@@ -31,6 +31,7 @@
 #include <set>
 #include <unordered_map>
 #include <vector>
+#include <optional>
 
 namespace aco {
 namespace {
@@ -885,7 +886,7 @@ update_renames(ra_ctx& ctx, RegisterFile& reg_file,
    }
 }
 
-std::pair<PhysReg, bool>
+std::optional<PhysReg>
 get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
 {
    const PhysRegInterval& bounds = info.bounds;
@@ -899,8 +900,8 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
       if (size % new_stride)
          continue;
       new_info.stride = new_stride;
-      std::pair<PhysReg, bool> res = get_reg_simple(ctx, reg_file, new_info);
-      if (res.second)
+      std::optional<PhysReg> res = get_reg_simple(ctx, reg_file, new_info);
+      if (res)
          return res;
    }
 
@@ -934,7 +935,7 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
          /* early return on exact matches */
          if (size == gap.size) {
             adjust_max_used_regs(ctx, rc, gap.lo());
-            return {gap.lo(), true};
+            return gap.lo();
          }
 
          /* check if it fits and the gap size is smaller */
@@ -947,7 +948,7 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
       }
 
       if (best_gap.size == UINT_MAX)
-         return {{}, false};
+         return {};
 
       /* find best position within gap by leaving a good stride for other variables*/
       unsigned buffer = best_gap.size - size;
@@ -959,7 +960,7 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
       }
 
       adjust_max_used_regs(ctx, rc, best_gap.lo());
-      return {best_gap.lo(), true};
+      return best_gap.lo();
    }
 
    for (PhysRegInterval reg_win = {bounds.lo(), size}; reg_win.hi() <= bounds.hi();
@@ -971,7 +972,7 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
       bool is_valid = std::all_of(std::next(reg_win.begin()), reg_win.end(), is_free);
       if (is_valid) {
          adjust_max_used_regs(ctx, rc, reg_win.lo());
-         return {reg_win.lo(), true};
+         return reg_win.lo();
       }
    }
 
@@ -998,13 +999,13 @@ get_reg_simple(ra_ctx& ctx, RegisterFile& reg_file, DefInfo info)
                PhysReg res{entry.first};
                res.reg_b += i;
                adjust_max_used_regs(ctx, rc, entry.first);
-               return {res, true};
+               return res;
             }
          }
       }
    }
 
-   return {{}, false};
+   return {};
 }
 
 /* collect variables from a register area */
@@ -1054,7 +1055,7 @@ collect_vars(ra_ctx& ctx, RegisterFile& reg_file, const PhysRegInterval reg_inte
    return ids;
 }
 
-std::pair<PhysReg, bool>
+std::optional<PhysReg>
 get_reg_for_create_vector_copy(ra_ctx& ctx, RegisterFile& reg_file,
                                std::vector<std::pair<Operand, Definition>>& parallelcopies,
                                aco_ptr<Instruction>& instr, const PhysRegInterval def_reg,
@@ -1066,13 +1067,17 @@ get_reg_for_create_vector_copy(ra_ctx& ctx, RegisterFile& reg_file,
       if (instr->operands[i].isTemp() && instr->operands[i].tempId() == id &&
           instr->operands[i].isKillBeforeDef()) {
          assert(!reg_file.test(reg, instr->operands[i].bytes()));
-         return {reg, info.rc.is_subdword() || reg.byte() == 0};
+         if (info.rc.is_subdword() || reg.byte() == 0)
+            return reg;
+         else
+            return {};
       }
       reg.reg_b += instr->operands[i].bytes();
    }
 
-   if (ctx.program->gfx_level <= GFX8)
-      return {PhysReg(), false};
+   /* GFX9+ has a VGPR swap instruction. */
+   if (ctx.program->gfx_level <= GFX8 || info.rc.type() == RegType::sgpr)
+      return {};
 
    /* check if the previous position was in vector */
    assignment& var = ctx.assignments[id];
@@ -1094,13 +1099,13 @@ get_reg_for_create_vector_copy(ra_ctx& ctx, RegisterFile& reg_file,
                 op.reg != scc && reg_file.get_id(op.reg) == instr->operands[i].tempId()) {
                Definition pc_def = Definition(reg, info.rc);
                parallelcopies.emplace_back(instr->operands[i], pc_def);
-               return {op.reg, true};
+               return op.reg;
             }
          }
-         return {PhysReg(), false};
+         return {};
       }
    }
-   return {PhysReg(), false};
+   return {};
 }
 
 bool
@@ -1119,7 +1124,7 @@ get_regs_for_copies(ra_ctx& ctx, RegisterFile& reg_file,
       /* check if this is a dead operand, then we can re-use the space from the definition
        * also use the correct stride for sub-dword operands */
       bool is_dead_operand = false;
-      std::pair<PhysReg, bool> res{PhysReg(), false};
+      std::optional<PhysReg> res;
       if (instr->opcode == aco_opcode::p_create_vector) {
          res =
             get_reg_for_create_vector_copy(ctx, reg_file, parallelcopies, instr, def_reg, info, id);
@@ -1136,30 +1141,30 @@ get_regs_for_copies(ra_ctx& ctx, RegisterFile& reg_file,
             }
          }
       }
-      if (!res.second && !def_reg.size) {
+      if (!res && !def_reg.size) {
          /* If this is before definitions are handled, def_reg may be an empty interval. */
          info.bounds = bounds;
          res = get_reg_simple(ctx, reg_file, info);
-      } else if (!res.second) {
+      } else if (!res) {
          /* Try to find space within the bounds but outside of the definition */
          info.bounds = PhysRegInterval::from_until(bounds.lo(), MIN2(def_reg.lo(), bounds.hi()));
          res = get_reg_simple(ctx, reg_file, info);
-         if (!res.second && def_reg.hi() <= bounds.hi()) {
+         if (!res && def_reg.hi() <= bounds.hi()) {
             unsigned lo = (def_reg.hi() + info.stride - 1) & ~(info.stride - 1);
             info.bounds = PhysRegInterval::from_until(PhysReg{lo}, bounds.hi());
             res = get_reg_simple(ctx, reg_file, info);
          }
       }
 
-      if (res.second) {
+      if (res) {
          /* mark the area as blocked */
-         reg_file.block(res.first, var.rc);
+         reg_file.block(*res, var.rc);
 
          /* create parallelcopy pair (without definition id) */
          Temp tmp = Temp(id, var.rc);
          Operand pc_op = Operand(tmp);
          pc_op.setFixed(var.reg);
-         Definition pc_def = Definition(res.first, pc_op.regClass());
+         Definition pc_def = Definition(*res, pc_op.regClass());
          parallelcopies.emplace_back(pc_op, pc_def);
          continue;
       }
@@ -1255,7 +1260,7 @@ get_regs_for_copies(ra_ctx& ctx, RegisterFile& reg_file,
    return true;
 }
 
-std::pair<PhysReg, bool>
+std::optional<PhysReg>
 get_reg_impl(ra_ctx& ctx, RegisterFile& reg_file,
              std::vector<std::pair<Operand, Definition>>& parallelcopies, const DefInfo& info,
              aco_ptr<Instruction>& instr)
@@ -1370,7 +1375,7 @@ get_reg_impl(ra_ctx& ctx, RegisterFile& reg_file,
    }
 
    if (num_moves == 0xFF)
-      return {{}, false};
+      return {};
 
    /* now, we figured the placement for our definition */
    RegisterFile tmp_file(reg_file);
@@ -1395,12 +1400,12 @@ get_reg_impl(ra_ctx& ctx, RegisterFile& reg_file,
 
    std::vector<std::pair<Operand, Definition>> pc;
    if (!get_regs_for_copies(ctx, tmp_file, pc, vars, instr, best_win))
-      return {{}, false};
+      return {};
 
    parallelcopies.insert(parallelcopies.end(), pc.begin(), pc.end());
 
    adjust_max_used_regs(ctx, rc, best_win.lo());
-   return {best_win.lo(), true};
+   return best_win.lo();
 }
 
 bool
@@ -1571,7 +1576,7 @@ is_mimg_vaddr_intact(ra_ctx& ctx, RegisterFile& reg_file, Instruction* instr)
    return true;
 }
 
-std::pair<PhysReg, bool>
+std::optional<PhysReg>
 get_reg_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp, aco_ptr<Instruction>& instr)
 {
    Instruction* vec = ctx.vectors[temp.id()];
@@ -1598,11 +1603,11 @@ get_reg_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp, aco_ptr<Instructi
             PhysReg reg = ctx.assignments[op.tempId()].reg;
             reg.reg_b += (our_offset - their_offset);
             if (get_reg_specified(ctx, reg_file, temp.regClass(), instr, reg))
-               return {reg, true};
+               return reg;
 
             /* return if MIMG vaddr components don't remain vector-aligned */
             if (vec->format == Format::MIMG)
-               return {{}, false};
+               return {};
          }
          their_offset += op.bytes();
       }
@@ -1612,16 +1617,15 @@ get_reg_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp, aco_ptr<Instructi
        */
       RegClass vec_rc = RegClass::get(temp.type(), their_offset);
       DefInfo info(ctx, ctx.pseudo_dummy, vec_rc, -1);
-      std::pair<PhysReg, bool> res = get_reg_simple(ctx, reg_file, info);
-      PhysReg reg = res.first;
-      if (res.second) {
-         reg.reg_b += our_offset;
+      std::optional<PhysReg> reg = get_reg_simple(ctx, reg_file, info);
+      if (reg) {
+         reg->reg_b += our_offset;
          /* make sure to only use byte offset if the instruction supports it */
-         if (get_reg_specified(ctx, reg_file, temp.regClass(), instr, reg))
-            return {reg, true};
+         if (get_reg_specified(ctx, reg_file, temp.regClass(), instr, *reg))
+            return reg;
       }
    }
-   return {{}, false};
+   return {};
 }
 
 PhysReg
@@ -1658,12 +1662,12 @@ get_reg(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
          return vcc;
    }
 
-   std::pair<PhysReg, bool> res;
+   std::optional<PhysReg> res;
 
    if (ctx.vectors.find(temp.id()) != ctx.vectors.end()) {
       res = get_reg_vector(ctx, reg_file, temp, instr);
-      if (res.second)
-         return res.first;
+      if (res)
+         return *res;
    }
 
    DefInfo info(ctx, instr, temp.regClass(), operand_index);
@@ -1672,15 +1676,15 @@ get_reg(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
       /* try to find space without live-range splits */
       res = get_reg_simple(ctx, reg_file, info);
 
-      if (res.second)
-         return res.first;
+      if (res)
+         return *res;
    }
 
    /* try to find space with live-range splits */
    res = get_reg_impl(ctx, reg_file, parallelcopies, info, instr);
 
-   if (res.second)
-      return res.first;
+   if (res)
+      return *res;
 
    /* try using more registers */
 
@@ -1839,9 +1843,9 @@ get_reg_create_vector(ra_ctx& ctx, RegisterFile& reg_file, Temp temp,
       return get_reg(ctx, reg_file, temp, parallelcopies, instr);
    } else if (num_moves > bytes) {
       DefInfo info(ctx, instr, rc, -1);
-      std::pair<PhysReg, bool> res = get_reg_simple(ctx, reg_file, info);
-      if (res.second)
-         return res.first;
+      std::optional<PhysReg> res = get_reg_simple(ctx, reg_file, info);
+      if (res)
+         return *res;
    }
 
    /* re-enable killed operands which are in the wrong position */
@@ -2941,10 +2945,9 @@ register_allocation(Program* program, std::vector<IDSet>& live_out_per_block, ra
                } else if (i == 0) {
                   RegClass vec_rc = RegClass::get(rc.type(), instr->operands[0].bytes());
                   DefInfo info(ctx, ctx.pseudo_dummy, vec_rc, -1);
-                  std::pair<PhysReg, bool> res = get_reg_simple(ctx, register_file, info);
-                  reg = res.first;
-                  if (res.second && get_reg_specified(ctx, register_file, rc, instr, reg))
-                     definition->setFixed(reg);
+                  std::optional<PhysReg> res = get_reg_simple(ctx, register_file, info);
+                  if (res && get_reg_specified(ctx, register_file, rc, instr, *res))
+                     definition->setFixed(*res);
                } else if (instr->definitions[i - 1].isFixed()) {
                   reg = instr->definitions[i - 1].physReg();
                   reg.reg_b += instr->definitions[i - 1].bytes();

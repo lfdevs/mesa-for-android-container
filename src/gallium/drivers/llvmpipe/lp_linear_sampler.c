@@ -26,7 +26,7 @@
  **************************************************************************/
 
 
-#include "pipe/p_config.h"
+#include "util/detect.h"
 
 #include "util/u_math.h"
 #include "util/u_cpu_detect.h"
@@ -39,7 +39,7 @@
 #include "lp_state_fs.h"
 #include "lp_linear_priv.h"
 
-#if defined(PIPE_ARCH_SSE)
+#if DETECT_ARCH_SSE
 
 #define FIXED16_SHIFT  16
 #define FIXED16_ONE    (1<<16)
@@ -988,7 +988,7 @@ lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
    return TRUE;
 }
 
-#else  // PIPE_ARCH_SSE
+#else  // DETECT_ARCH_SSE
 
 boolean
 lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
@@ -997,4 +997,4 @@ lp_linear_check_sampler(const struct lp_sampler_static_state *sampler,
    return FALSE;
 }
 
-#endif  // PIPE_ARCH_SSE
+#endif  // DETECT_ARCH_SSE

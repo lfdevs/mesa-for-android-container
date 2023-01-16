@@ -31,7 +31,7 @@
  * GL_ARB_texture_view functions
  */
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "context.h"
 #include "enums.h"
 

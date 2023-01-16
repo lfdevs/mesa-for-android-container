@@ -1081,11 +1081,8 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
              ms_info->rasterizationSamples == VK_SAMPLE_COUNT_4_BIT);
       key->msaa = ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
 
-      if (key->msaa) {
-         key->sample_coverage =
-            p_stage->pipeline->sample_mask != (1 << V3D_MAX_SAMPLES) - 1;
+      if (key->msaa)
          key->sample_alpha_to_coverage = ms_info->alphaToCoverageEnable;
-      }
 
       key->sample_alpha_to_one = ms_info->alphaToOneEnable;
    }
@@ -1901,11 +1898,8 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
              ms_info->rasterizationSamples == VK_SAMPLE_COUNT_4_BIT);
       key->msaa = ms_info->rasterizationSamples > VK_SAMPLE_COUNT_1_BIT;
 
-      if (key->msaa) {
-         key->sample_coverage =
-            pipeline->sample_mask != (1 << V3D_MAX_SAMPLES) - 1;
+      if (key->msaa)
          key->sample_alpha_to_coverage = ms_info->alphaToCoverageEnable;
-      }
 
       key->sample_alpha_to_one = ms_info->alphaToOneEnable;
    }
@@ -3326,7 +3320,7 @@ pipeline_get_qpu(struct v3dv_pipeline *pipeline,
 }
 
 /* FIXME: we use the same macro in various drivers, maybe move it to
- * the comon vk_util.h?
+ * the common vk_util.h?
  */
 #define WRITE_STR(field, ...) ({                                \
    memset(field, 0, sizeof(field));                             \

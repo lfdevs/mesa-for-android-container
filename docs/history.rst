@@ -35,7 +35,7 @@ project.
 during my work hours at the Space Science and Engineering Center at the
 University of Wisconsin in Madison. My supervisor, Bill Hibbard, lets me
 do this because Mesa is now being using for the
-`Vis5D <https://www.ssec.wisc.edu/%7Ebillh/vis.html>`__ project.
+`Vis5D <https://www.ssec.wisc.edu/~billh/vis.html>`__ project.
 
 October 1996: Mesa 2.0 is released. It implements the OpenGL 1.1
 specification.
@@ -66,8 +66,8 @@ November 2002: Mesa 5.0 is released. It implements the OpenGL 1.4
 specification.
 
 January 2003: Mesa 6.0 is released. It implements the OpenGL 1.5
-specification as well as the GL_ARB_vertex_program and
-GL_ARB_fragment_program extensions.
+specification as well as the :ext:`GL_ARB_vertex_program` and
+:ext:`GL_ARB_fragment_program` extensions.
 
 June 2007: Mesa 7.0 is released, implementing the OpenGL 2.1
 specification and OpenGL Shading Language.

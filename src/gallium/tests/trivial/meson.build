@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-foreach t : ['compute', 'tri', 'quad-tex']
+foreach t : ['tri', 'quad-tex']
   executable(
     t,
     '@0@.c'.format(t),

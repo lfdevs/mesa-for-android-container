@@ -248,9 +248,7 @@ _isl_memcpy_tiled_to_linear_sse41(uint32_t xt1, uint32_t xt2,
                                   isl_memcpy_type copy_type);
 
 /* This is useful for adding the isl_prefix to genX functions */
-#define __PASTE2(x, y) x ## y
-#define __PASTE(x, y) __PASTE2(x, y)
-#define isl_genX(x) __PASTE(isl_, genX(x))
+#define isl_genX(x) CONCAT2(isl_, genX(x))
 
 #ifdef genX
 #  include "isl_genX_priv.h"

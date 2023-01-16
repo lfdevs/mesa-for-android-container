@@ -505,8 +505,7 @@ VertexShader::load_input(nir_intrinsic_instr *intr)
    if (location < VERT_ATTRIB_MAX) {
       for (unsigned i = 0; i < nir_dest_num_components(intr->dest); ++i) {
          auto src = vf.allocate_pinned_register(driver_location + 1, i);
-         src->pin_live_range(true);
-         src->set_is_ssa(true);
+         src->set_flag(Register::ssa);
          if (intr->dest.is_ssa)
             vf.inject_value(intr->dest, i, src);
          else {
@@ -532,23 +531,19 @@ VertexShader::do_allocate_reserved_registers()
 {
    if (m_sv_values.test(es_vertexid)) {
       m_vertex_id = value_factory().allocate_pinned_register(0, 0);
-      m_vertex_id->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_instanceid)) {
       m_instance_id = value_factory().allocate_pinned_register(0, 3);
-      m_instance_id->pin_live_range(true);
    }
 
    if (m_sv_values.test(es_primitive_id) || m_vs_as_gs_a) {
       auto primitive_id = value_factory().allocate_pinned_register(0, 2);
-      primitive_id->pin_live_range(true);
       set_primitive_id(primitive_id);
    }
 
    if (m_sv_values.test(es_rel_patch_id)) {
       m_rel_vertex_id = value_factory().allocate_pinned_register(0, 1);
-      m_rel_vertex_id->pin_live_range(true);
    }
 
    return m_last_vertex_atribute_register + 1;

@@ -115,6 +115,7 @@ nir_options = {
    .lower_usub_sat = true,
    .lower_iadd_sat = true,
    .lower_uadd_carry = true,
+   .lower_usub_borrow = true,
    .lower_mul_high = true,
    .lower_rotate = true,
    .lower_pack_half_2x16 = true,
@@ -335,6 +336,7 @@ enum dxil_intr {
    DXIL_INTR_CREATE_HANDLE_FROM_BINDING = 217,
 
    DXIL_INTR_IS_HELPER_LANE = 221,
+   DXIL_INTR_SAMPLE_CMP_LEVEL = 224,
 };
 
 enum dxil_atomic_op {
@@ -1272,13 +1274,13 @@ var_fill_const_array(struct ntd_context *ctx, const struct nir_constant *c,
                                                  offset);
    } else if (glsl_type_is_array(type)) {
       assert(!glsl_type_is_unsized_array(type));
-      const struct glsl_type *without = glsl_without_array(type);
-      unsigned stride = glsl_get_explicit_stride(without);
+      const struct glsl_type *without = glsl_get_array_element(type);
+      unsigned stride = glsl_get_explicit_stride(type);
 
       for (unsigned elt = 0; elt < glsl_get_length(type); elt++) {
          var_fill_const_array(ctx, c->elements[elt], without,
-                              const_vals, offset + (elt * stride));
-         offset += glsl_get_cl_size(without);
+                              const_vals, offset);
+         offset += stride;
       }
    } else if (glsl_type_is_struct(type)) {
       for (unsigned int elt = 0; elt < glsl_get_length(type); elt++) {
@@ -1616,6 +1618,10 @@ get_module_flags(struct ntd_context *ctx)
       flags |= (1 << 9);
    if (ctx->mod.feats.inner_coverage)
       flags |= (1 << 10);
+   if (ctx->mod.feats.stencil_ref)
+      flags |= (1 << 11);
+   if (ctx->mod.feats.tiled_resources)
+      flags |= (1 << 12);
    if (ctx->mod.feats.typed_uav_load_additional_formats)
       flags |= (1 << 13);
    if (ctx->mod.feats.use_64uavs)
@@ -1624,16 +1630,40 @@ get_module_flags(struct ntd_context *ctx)
       flags |= (1 << 16);
    if (ctx->mod.feats.cs_4x_raw_sb)
       flags |= (1 << 17);
+   if (ctx->mod.feats.rovs)
+      flags |= (1 << 18);
    if (ctx->mod.feats.wave_ops)
       flags |= (1 << 19);
    if (ctx->mod.feats.int64_ops)
       flags |= (1 << 20);
+   if (ctx->mod.feats.view_id)
+      flags |= (1 << 21);
    if (ctx->mod.feats.barycentrics)
       flags |= (1 << 22);
-   if (ctx->mod.feats.stencil_ref)
-      flags |= (1 << 11);
    if (ctx->mod.feats.native_low_precision)
       flags |= (1 << 23) | (1 << 5);
+   if (ctx->mod.feats.shading_rate)
+      flags |= (1 << 24);
+   if (ctx->mod.feats.raytracing_tier_1_1)
+      flags |= (1 << 25);
+   if (ctx->mod.feats.sampler_feedback)
+      flags |= (1 << 26);
+   if (ctx->mod.feats.atomic_int64_typed)
+      flags |= (1 << 27);
+   if (ctx->mod.feats.atomic_int64_tgsm)
+      flags |= (1 << 28);
+   if (ctx->mod.feats.derivatives_in_mesh_or_amp)
+      flags |= (1 << 29);
+   if (ctx->mod.feats.resource_descriptor_heap_indexing)
+      flags |= (1 << 30);
+   if (ctx->mod.feats.sampler_descriptor_heap_indexing)
+      flags |= (1 << 31);
+   if (ctx->mod.feats.atomic_int64_heap_resource)
+      flags |= (1ull << 32);
+   if (ctx->mod.feats.advanced_texture_ops)
+      flags |= (1ull << 34);
+   if (ctx->mod.feats.writable_msaa)
+      flags |= (1ull << 35);
 
    if (ctx->opts->disable_math_refactoring)
       flags |= (1 << 1);
@@ -1708,7 +1738,7 @@ emit_resources(struct ntd_context *ctx)
       dxil_get_metadata_node(&ctx->mod, resources_nodes, ARRAY_SIZE(resources_nodes)): NULL;
 }
 
-static boolean
+static bool
 emit_tag(struct ntd_context *ctx, enum dxil_shader_tag tag,
          const struct dxil_mdnode *value_node)
 {
@@ -1921,20 +1951,30 @@ get_src(struct ntd_context *ctx, nir_src *src, unsigned chan,
    switch (nir_alu_type_get_base_type(type)) {
    case nir_type_int:
    case nir_type_uint: {
-      assert(bit_size != 64 || ctx->mod.feats.int64_ops);
       const struct dxil_type *expect_type =  dxil_module_get_int_type(&ctx->mod, bit_size);
       /* nohing to do */
-      if (dxil_value_type_equal_to(value, expect_type))
+      if (dxil_value_type_equal_to(value, expect_type)) {
+         assert(bit_size != 64 || ctx->mod.feats.int64_ops);
          return value;
+      }
+      if (bit_size == 64) {
+         assert(ctx->mod.feats.doubles);
+         ctx->mod.feats.int64_ops = true;
+      }
       assert(dxil_value_type_bitsize_equal_to(value, bit_size));
       return bitcast_to_int(ctx,  bit_size, value);
       }
 
    case nir_type_float:
       assert(nir_src_bit_size(*src) >= 16);
-      assert(nir_src_bit_size(*src) != 64 || ctx->mod.feats.doubles);
-      if (dxil_value_type_equal_to(value, dxil_module_get_float_type(&ctx->mod, bit_size)))
+      if (dxil_value_type_equal_to(value, dxil_module_get_float_type(&ctx->mod, bit_size))) {
+         assert(nir_src_bit_size(*src) != 64 || ctx->mod.feats.doubles);
          return value;
+      }
+      if (bit_size == 64) {
+         assert(ctx->mod.feats.int64_ops);
+         ctx->mod.feats.doubles = true;
+      }
       assert(dxil_value_type_bitsize_equal_to(value, bit_size));
       return bitcast_to_float(ctx, bit_size, value);
 
@@ -4547,7 +4587,7 @@ emit_intrinsic(struct ntd_context *ctx, nir_intrinsic_instr *intr)
    case nir_intrinsic_load_sample_pos_from_id:
       return emit_load_sample_pos_from_id(ctx, intr);
 
-   case nir_intrinsic_load_helper_invocation:
+   case nir_intrinsic_is_helper_invocation:
       return emit_load_unary_external_function(
          ctx, intr, "dx.op.isHelperLane", DXIL_INTR_IS_HELPER_LANE);
 
@@ -4846,17 +4886,9 @@ emit_sample_cmp(struct ntd_context *ctx, struct texop_parameters *params)
 {
    const struct dxil_func *func;
    enum dxil_intr opcode;
-   int numparam;
 
-   if (ctx->mod.shader_kind == DXIL_PIXEL_SHADER)  {
-      func = dxil_get_function(&ctx->mod, "dx.op.sampleCmp", DXIL_F32);
-      opcode = DXIL_INTR_SAMPLE_CMP;
-      numparam = 12;
-   } else {
-      func = dxil_get_function(&ctx->mod, "dx.op.sampleCmpLevelZero", DXIL_F32);
-      opcode = DXIL_INTR_SAMPLE_CMP_LVL_ZERO;
-      numparam = 11;
-   }
+   func = dxil_get_function(&ctx->mod, "dx.op.sampleCmp", DXIL_F32);
+   opcode = DXIL_INTR_SAMPLE_CMP;
 
    if (!func)
       return NULL;
@@ -4869,7 +4901,51 @@ emit_sample_cmp(struct ntd_context *ctx, struct texop_parameters *params)
       params->cmp, params->min_lod
    };
 
-   return dxil_emit_call(&ctx->mod, func, args, numparam);
+   return dxil_emit_call(&ctx->mod, func, args, ARRAY_SIZE(args));
+}
+
+static const struct dxil_value *
+emit_sample_cmp_level_zero(struct ntd_context *ctx, struct texop_parameters *params)
+{
+   const struct dxil_func *func;
+   enum dxil_intr opcode;
+
+   func = dxil_get_function(&ctx->mod, "dx.op.sampleCmpLevelZero", DXIL_F32);
+   opcode = DXIL_INTR_SAMPLE_CMP_LVL_ZERO;
+
+   if (!func)
+      return NULL;
+
+   const struct dxil_value *args[11] = {
+      dxil_module_get_int32_const(&ctx->mod, opcode),
+      params->tex, params->sampler,
+      params->coord[0], params->coord[1], params->coord[2], params->coord[3],
+      params->offset[0], params->offset[1], params->offset[2],
+      params->cmp
+   };
+
+   return dxil_emit_call(&ctx->mod, func, args, ARRAY_SIZE(args));
+}
+
+static const struct dxil_value *
+emit_sample_cmp_level(struct ntd_context *ctx, struct texop_parameters *params)
+{
+   ctx->mod.feats.advanced_texture_ops = true;
+   const struct dxil_func *func = dxil_get_function(&ctx->mod, "dx.op.sampleCmpLevel", params->overload);
+   if (!func)
+      return NULL;
+
+   assert(params->lod_or_sample != NULL);
+
+   const struct dxil_value *args[12] = {
+      dxil_module_get_int32_const(&ctx->mod, DXIL_INTR_SAMPLE_CMP_LEVEL),
+      params->tex, params->sampler,
+      params->coord[0], params->coord[1], params->coord[2], params->coord[3],
+      params->offset[0], params->offset[1], params->offset[2],
+      params->cmp, params->lod_or_sample
+   };
+
+   return dxil_emit_call(&ctx->mod, func, args, ARRAY_SIZE(args));
 }
 
 static const struct dxil_value *
@@ -4976,6 +5052,7 @@ emit_tex(struct ntd_context *ctx, nir_tex_instr *instr)
    unsigned coord_components = 0, offset_components = 0, dx_components = 0, dy_components = 0;
    params.overload = get_overload(instr->dest_type, 32);
 
+   bool lod_is_zero = false;
    for (unsigned i = 0; i < instr->num_srcs; i++) {
       nir_alu_type type = nir_tex_instr_src_type(instr, i);
 
@@ -4992,6 +5069,10 @@ emit_tex(struct ntd_context *ctx, nir_tex_instr *instr)
                                        &instr->src[i],  nir_type_int);
          if (!offset_components)
             return false;
+
+         /* Dynamic offsets were only allowed with gather, until "advanced texture ops" in SM7 */
+         if (!nir_src_is_const(instr->src[i].src) && instr->op != nir_texop_tg4)
+            ctx->mod.feats.advanced_texture_ops = true;
          break;
 
       case nir_tex_src_bias:
@@ -5016,6 +5097,9 @@ emit_tex(struct ntd_context *ctx, nir_tex_instr *instr)
             params.lod_or_sample = int_undef;
          if (!params.lod_or_sample)
             return false;
+
+         if (nir_src_is_const(instr->src[i].src) && nir_src_as_float(instr->src[i].src) == 0.0f)
+            lod_is_zero = true;
          break;
 
       case nir_tex_src_min_lod:
@@ -5116,9 +5200,21 @@ emit_tex(struct ntd_context *ctx, nir_tex_instr *instr)
          break;
       }
       params.lod_or_sample = dxil_module_get_float_const(&ctx->mod, 0);
+      lod_is_zero = true;
       FALLTHROUGH;
    case nir_texop_txl:
-      sample = emit_sample_level(ctx, &params);
+      if (lod_is_zero && params.cmp != NULL && ctx->opts->shader_model_max < SHADER_MODEL_6_7) {
+         /* Prior to SM 6.7, if the level is constant 0.0, ignore the LOD argument,
+          * so level-less DXIL instructions are used. This is needed to avoid emitting
+          * dx.op.sampleCmpLevel, which would not be available.
+          */
+         sample = emit_sample_cmp_level_zero(ctx, &params);
+      } else {
+         if (params.cmp != NULL)
+            sample = emit_sample_cmp_level(ctx, &params);
+         else
+            sample = emit_sample_level(ctx, &params);
+      }
       break;
 
    case nir_texop_txd:
@@ -5279,9 +5375,10 @@ static bool
 emit_loop(struct ntd_context *ctx, nir_loop *loop)
 {
    nir_block *first_block = nir_loop_first_block(loop);
+   nir_block *last_block = nir_loop_last_block(loop);
 
-   assert(nir_loop_last_block(loop)->successors[0]);
-   assert(!nir_loop_last_block(loop)->successors[1]);
+   assert(last_block->successors[0]);
+   assert(!last_block->successors[1]);
 
    if (!emit_branch(ctx, first_block->index))
       return false;
@@ -5289,7 +5386,12 @@ emit_loop(struct ntd_context *ctx, nir_loop *loop)
    if (!emit_cf_list(ctx, &loop->body))
       return false;
 
-   if (!emit_branch(ctx, first_block->index))
+   /* If the loop's last block doesn't explicitly jump somewhere, then there's
+    * an implicit continue that should take it back to the first loop block
+    */
+   nir_instr *last_instr = nir_block_last_instr(last_block);
+   if ((!last_instr || last_instr->type != nir_instr_type_jump) &&
+       !emit_branch(ctx, first_block->index))
       return false;
 
    return true;
@@ -5661,6 +5763,25 @@ emit_module(struct ntd_context *ctx, const struct nir_to_dxil_options *opts)
       }
    }
 
+   /* From the Vulkan spec 1.3.238, section 15.8:
+    * When Sample Shading is enabled, the x and y components of FragCoord reflect the location 
+    * of one of the samples corresponding to the shader invocation.
+    * 
+    * In other words, if the fragment shader is executing per-sample, then the position variable
+    * should always be per-sample, 
+    * 
+    * Also:
+    * The Centroid interpolation decoration is ignored, but allowed, on FragCoord.
+    */
+   if (ctx->opts->environment == DXIL_ENVIRONMENT_VULKAN) {
+      nir_variable *pos_var = nir_find_variable_with_location(ctx->shader, nir_var_shader_in, VARYING_SLOT_POS);
+      if (pos_var) {
+         if (ctx->mod.info.has_per_sample_input)
+            pos_var->data.sample = true;
+         pos_var->data.centroid = false;
+      }
+   }
+
    unsigned input_clip_size = ctx->mod.shader_kind == DXIL_PIXEL_SHADER ?
       ctx->shader->info.clip_distance_array_size : ctx->opts->input_clip_size;
    preprocess_signatures(&ctx->mod, ctx->shader, input_clip_size);
@@ -5895,9 +6016,9 @@ allocate_sysvalues(struct ntd_context *ctx)
 {
    unsigned driver_location = 0;
    nir_foreach_variable_with_modes(var, ctx->shader, nir_var_shader_in)
-      driver_location++;
+      driver_location = MAX2(driver_location, var->data.driver_location + 1);
    nir_foreach_variable_with_modes(var, ctx->shader, nir_var_system_value)
-      driver_location++;
+      driver_location = MAX2(driver_location, var->data.driver_location + 1);
 
    if (ctx->shader->info.stage == MESA_SHADER_FRAGMENT &&
        ctx->shader->info.inputs_read &&
@@ -6034,6 +6155,12 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
    NIR_PASS_V(s, nir_lower_pack);
    NIR_PASS_V(s, dxil_nir_lower_system_values);
    NIR_PASS_V(s, nir_lower_io_to_scalar, nir_var_shader_in | nir_var_system_value | nir_var_shader_out);
+   if (opts->shader_model_max < SHADER_MODEL_6_6) {
+      /* In a later pass, load_helper_invocation will be lowered to sample mask based fallback,
+       * so both load- and is- will be emulated eventually.
+       */
+      NIR_PASS_V(s, nir_lower_is_helper_invocation);
+   }
 
    if (ctx->mod.shader_kind == DXIL_HULL_SHADER)
       NIR_PASS_V(s, dxil_nir_split_tess_ctrl, &ctx->tess_ctrl_patch_constant_func);
@@ -6156,27 +6283,4 @@ out:
    ralloc_free(ctx->ralloc_ctx);
    free(ctx);
    return retval;
-}
-
-enum dxil_sysvalue_type
-nir_var_to_dxil_sysvalue_type(nir_variable *var, uint64_t other_stage_mask)
-{
-   switch (var->data.location) {
-   case VARYING_SLOT_FACE:
-      return DXIL_GENERATED_SYSVALUE;
-   case VARYING_SLOT_POS:
-   case VARYING_SLOT_PRIMITIVE_ID:
-   case VARYING_SLOT_CLIP_DIST0:
-   case VARYING_SLOT_CLIP_DIST1:
-   case VARYING_SLOT_PSIZ:
-   case VARYING_SLOT_TESS_LEVEL_INNER:
-   case VARYING_SLOT_TESS_LEVEL_OUTER:
-   case VARYING_SLOT_VIEWPORT:
-   case VARYING_SLOT_LAYER:
-      if (!((1ull << var->data.location) & other_stage_mask))
-         return DXIL_SYSVALUE;
-      FALLTHROUGH;
-   default:
-      return DXIL_NO_SYSVALUE;
-   }
 }

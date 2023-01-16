@@ -21,9 +21,9 @@
  * SOFTWARE.
  */
 
-#include "agx_compiler.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
+#include "agx_compiler.h"
 
 #define AGX_TEXTURE_DESC_STRIDE 24
 
@@ -53,7 +53,7 @@ static nir_ssa_def *
 agx_txs(nir_builder *b, nir_tex_instr *tex)
 {
    nir_ssa_def *ptr = texture_descriptor_ptr(b, tex);
-   nir_ssa_def *comp[4] = { NULL };
+   nir_ssa_def *comp[4] = {NULL};
 
    nir_ssa_def *desc = nir_load_global_constant(b, ptr, 8, 4, 32);
    nir_ssa_def *w0 = nir_channel(b, desc, 0);
@@ -61,25 +61,26 @@ agx_txs(nir_builder *b, nir_tex_instr *tex)
    nir_ssa_def *w3 = nir_channel(b, desc, 3);
 
    /* Width minus 1: bits [28, 42) */
-   nir_ssa_def *width_m1 = nir_ior(b, nir_ushr_imm(b, w0, 28),
-                                   nir_ishl_imm(b, nir_iand_imm(b, w1,
-                                         BITFIELD_MASK(14 - 4)), 4));
+   nir_ssa_def *width_m1 =
+      nir_ior(b, nir_ushr_imm(b, w0, 28),
+              nir_ishl_imm(b, nir_iand_imm(b, w1, BITFIELD_MASK(14 - 4)), 4));
    /* Height minus 1: bits [42, 56) */
-   nir_ssa_def *height_m1 = nir_iand_imm(b, nir_ushr_imm(b, w1, 42 - 32),
-                                            BITFIELD_MASK(14));
+   nir_ssa_def *height_m1 =
+      nir_iand_imm(b, nir_ushr_imm(b, w1, 42 - 32), BITFIELD_MASK(14));
 
    /* Depth minus 1: bits [110, 124) */
-   nir_ssa_def *depth_m1 = nir_iand_imm(b, nir_ushr_imm(b, w3, 110 - 96),
-                                            BITFIELD_MASK(14));
+   nir_ssa_def *depth_m1 =
+      nir_iand_imm(b, nir_ushr_imm(b, w3, 110 - 96), BITFIELD_MASK(14));
 
    /* First level: bits [56, 60) */
-   nir_ssa_def *lod = nir_iand_imm(b, nir_ushr_imm(b, w1, 56 - 32),
-                                      BITFIELD_MASK(4));
+   nir_ssa_def *lod =
+      nir_iand_imm(b, nir_ushr_imm(b, w1, 56 - 32), BITFIELD_MASK(4));
 
    /* Add LOD offset to first level to get the interesting LOD */
    int lod_idx = nir_tex_instr_src_index(tex, nir_tex_src_lod);
    if (lod_idx >= 0)
-      lod = nir_iadd(b, lod, nir_ssa_for_src(b, tex->src[lod_idx].src, 1));
+      lod = nir_iadd(
+         b, lod, nir_u2u32(b, nir_ssa_for_src(b, tex->src[lod_idx].src, 1)));
 
    /* Add 1 to width-1, height-1 to get base dimensions */
    nir_ssa_def *width = nir_iadd_imm(b, width_m1, 1);
@@ -131,7 +132,6 @@ lower_txs(nir_builder *b, nir_instr *instr, UNUSED void *data)
 bool
 agx_lower_resinfo(nir_shader *s)
 {
-   return nir_shader_instructions_pass(s, lower_txs,
-                                       nir_metadata_block_index |
-                                       nir_metadata_dominance, NULL);
+   return nir_shader_instructions_pass(
+      s, lower_txs, nir_metadata_block_index | nir_metadata_dominance, NULL);
 }

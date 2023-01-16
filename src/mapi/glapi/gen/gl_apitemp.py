@@ -164,8 +164,8 @@ class PrintGlOffsets(gl_XML.gl_print_base):
 #error RETURN_DISPATCH must be defined
 #endif
 
-#ifdef MemoryBarrier
-#undef MemoryBarrier
+#if defined(_WIN32) && defined(_WINDOWS_)
+#error "Should not include <windows.h> here"
 #endif
 
 """)

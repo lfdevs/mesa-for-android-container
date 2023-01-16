@@ -153,7 +153,16 @@ struct dxil_features {
             native_low_precision : 1,
             shading_rate : 1,
             raytracing_tier_1_1 : 1,
-            sampler_feedback : 1;
+            sampler_feedback : 1,
+            atomic_int64_typed : 1,
+            atomic_int64_tgsm : 1,
+            derivatives_in_mesh_or_amp : 1,
+            resource_descriptor_heap_indexing : 1,
+            sampler_descriptor_heap_indexing : 1,
+            unnamed : 1,
+            atomic_int64_heap_resource : 1,
+            advanced_texture_ops : 1,
+            writable_msaa : 1;
 };
 
 struct dxil_shader_info {

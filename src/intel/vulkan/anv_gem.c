@@ -142,11 +142,12 @@ anv_gem_mmap_legacy(struct anv_device *device, uint32_t gem_handle,
  * Wrapper around DRM_IOCTL_I915_GEM_MMAP. Returns MAP_FAILED on error.
  */
 void*
-anv_gem_mmap(struct anv_device *device, uint32_t gem_handle,
+anv_gem_mmap(struct anv_device *device, struct anv_bo *bo,
              uint64_t offset, uint64_t size, uint32_t flags)
 {
+   uint32_t gem_handle = bo->gem_handle;
    void *map;
-   if (device->physical->has_mmap_offset)
+   if (device->physical->info.has_mmap_offset)
       map = anv_gem_mmap_offset(device, gem_handle, offset, size, flags);
    else
       map = anv_gem_mmap_legacy(device, gem_handle, offset, size, flags);
@@ -176,7 +177,7 @@ anv_gem_userptr(struct anv_device *device, void *mem, size_t size)
       .flags = 0,
    };
 
-   if (device->physical->has_userptr_probe)
+   if (device->physical->info.has_userptr_probe)
       userptr.flags |= I915_USERPTR_PROBE;
 
    int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_USERPTR, &userptr);
@@ -278,50 +279,11 @@ anv_gem_set_tiling(struct anv_device *device,
    return ret;
 }
 
-int
-anv_gem_get_param(int fd, uint32_t param)
-{
-   int tmp;
-
-   drm_i915_getparam_t gp = {
-      .param = param,
-      .value = &tmp,
-   };
-
-   int ret = intel_ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gp);
-   if (ret == 0)
-      return tmp;
-
-   return 0;
-}
-
 bool
 anv_gem_has_context_priority(int fd, VkQueueGlobalPriorityKHR priority)
 {
    return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_PRIORITY,
                                      priority);
-}
-
-int
-anv_gem_create_context(struct anv_device *device)
-{
-   struct drm_i915_gem_context_create create = { 0 };
-
-   int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE, &create);
-   if (ret == -1)
-      return -1;
-
-   return create.ctx_id;
-}
-
-int
-anv_gem_destroy_context(struct anv_device *device, int context)
-{
-   struct drm_i915_gem_context_destroy destroy = {
-      .ctx_id = context,
-   };
-
-   return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_DESTROY, &destroy);
 }
 
 static int
@@ -342,19 +304,13 @@ vk_priority_to_i915(VkQueueGlobalPriorityKHR priority)
 }
 
 int
-anv_gem_set_context_param(int fd, int context, uint32_t param, uint64_t value)
+anv_gem_set_context_param(int fd, uint32_t context, uint32_t param, uint64_t value)
 {
    if (param == I915_CONTEXT_PARAM_PRIORITY)
       value = vk_priority_to_i915(value);
 
-   struct drm_i915_gem_context_param p = {
-      .ctx_id = context,
-      .param = param,
-      .value = value,
-   };
    int err = 0;
-
-   if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_SETPARAM, &p))
+   if (!intel_gem_set_context_param(fd, context, param, value))
       err = -errno;
    return err;
 }

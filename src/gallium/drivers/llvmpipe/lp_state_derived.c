@@ -293,21 +293,8 @@ llvmpipe_update_derived(struct llvmpipe_context *llvmpipe)
                           LP_NEW_RASTERIZER |
                           LP_NEW_SAMPLE_MASK |
                           LP_NEW_DEPTH_STENCIL_ALPHA)) {
-
-      /*
-       * Rasterization is disabled if there is no pixel shader and
-       * both depth and stencil testing are disabled:
-       * http://msdn.microsoft.com/en-us/library/windows/desktop/bb205125
-       * FIXME: set rasterizer_discard in state tracker instead.
-       */
-      boolean null_fs = !llvmpipe->fs ||
-                        llvmpipe->fs->info.base.num_instructions <= 1;
       boolean discard =
-         (llvmpipe->sample_mask) == 0 ||
-         (llvmpipe->rasterizer ? llvmpipe->rasterizer->rasterizer_discard : FALSE) ||
-         (null_fs &&
-          !llvmpipe->depth_stencil->depth_enabled &&
-          !llvmpipe->depth_stencil->stencil[0].enabled);
+         llvmpipe->rasterizer ? llvmpipe->rasterizer->rasterizer_discard : FALSE;
       lp_setup_set_rasterizer_discard(llvmpipe->setup, discard);
    }
 

@@ -1551,7 +1551,7 @@ _mesa_uniform(GLint location, GLsizei count, const GLvoid *values,
                 */
                if (sampler->unit != value || !sampler->bound) {
                   if (!flushed) {
-                     FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT | _NEW_PROGRAM, 0);
+                     FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT, 0);
                      flushed = true;
                   }
                   sampler->unit = value;
@@ -1562,7 +1562,7 @@ _mesa_uniform(GLint location, GLsizei count, const GLvoid *values,
             } else {
                if (sh->Program->SamplerUnits[unit] != value) {
                   if (!flushed) {
-                     FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT | _NEW_PROGRAM, 0);
+                     FLUSH_VERTICES(ctx, _NEW_TEXTURE_OBJECT, 0);
                      flushed = true;
                   }
                   sh->Program->SamplerUnits[unit] = value;

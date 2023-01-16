@@ -41,7 +41,8 @@
 /** Initialize the internal details */
 struct pp_program *
 pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
-             struct cso_context *cso, struct st_context_iface *st)
+             struct cso_context *cso, struct st_context *st,
+             pp_st_invalidate_state_func st_invalidate_state)
 {
    struct pp_program *p;
 
@@ -57,6 +58,7 @@ pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
    p->pipe = pipe;
    p->cso = cso;
    p->st = st;
+   p->st_invalidate_state = st_invalidate_state;
 
    {
       static const float verts[4][2][4] = {

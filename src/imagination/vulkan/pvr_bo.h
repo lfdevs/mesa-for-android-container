@@ -28,10 +28,13 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+#include "pvr_types.h"
+#include "pvr_winsys.h"
 #include "util/list.h"
 #include "util/macros.h"
 
 struct pvr_device;
+struct pvr_dump_ctx;
 struct pvr_winsys_bo;
 struct pvr_winsys_vma;
 struct pvr_winsys_heap;
@@ -86,5 +89,28 @@ VkResult pvr_bo_alloc(struct pvr_device *device,
 void *pvr_bo_cpu_map(struct pvr_device *device, struct pvr_bo *bo);
 void pvr_bo_cpu_unmap(struct pvr_device *device, struct pvr_bo *bo);
 void pvr_bo_free(struct pvr_device *device, struct pvr_bo *bo);
+
+#if defined(HAVE_VALGRIND)
+void *pvr_bo_cpu_map_unchanged(struct pvr_device *device,
+                               struct pvr_bo *pvr_bo);
+#else /* defined(HAVE_VALGRIND) */
+static ALWAYS_INLINE void *pvr_bo_cpu_map_unchanged(struct pvr_device *device,
+                                                    struct pvr_bo *pvr_bo)
+{
+   return pvr_bo_cpu_map(device, pvr_bo);
+}
+#endif /* defined(HAVE_VALGRIND) */
+
+struct pvr_bo_store;
+
+VkResult pvr_bo_store_create(struct pvr_device *device);
+void pvr_bo_store_destroy(struct pvr_device *device);
+struct pvr_bo *pvr_bo_store_lookup(struct pvr_device *device,
+                                   pvr_dev_addr_t addr);
+bool pvr_bo_store_dump(struct pvr_device *device);
+
+void pvr_bo_list_dump(struct pvr_dump_ctx *ctx,
+                      const struct list_head *bo_list,
+                      uint32_t bo_size);
 
 #endif /* PVR_BO_H */

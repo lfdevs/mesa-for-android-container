@@ -43,6 +43,8 @@
 #include "program/prog_parameter.h"
 #include "util/u_math.h"
 
+#include <memory>
+
 using namespace brw;
 
 static unsigned get_lowered_simd_width(const struct brw_compiler *compiler,
@@ -1120,7 +1122,7 @@ fs_visitor::vgrf(const glsl_type *const type)
                  brw_type_for_base_type(type));
 }
 
-fs_reg::fs_reg(enum brw_reg_file file, int nr)
+fs_reg::fs_reg(enum brw_reg_file file, unsigned nr)
 {
    init();
    this->file = file;
@@ -1129,7 +1131,7 @@ fs_reg::fs_reg(enum brw_reg_file file, int nr)
    this->stride = (file == UNIFORM ? 0 : 1);
 }
 
-fs_reg::fs_reg(enum brw_reg_file file, int nr, enum brw_reg_type type)
+fs_reg::fs_reg(enum brw_reg_file file, unsigned nr, enum brw_reg_type type)
 {
    init();
    this->file = file;
@@ -2137,12 +2139,12 @@ fs_visitor::split_virtual_grfs()
     */
    compact_virtual_grfs();
 
-   int num_vars = this->alloc.count;
+   unsigned num_vars = this->alloc.count;
 
    /* Count the total number of registers */
-   int reg_count = 0;
-   int vgrf_to_reg[num_vars];
-   for (int i = 0; i < num_vars; i++) {
+   unsigned reg_count = 0;
+   unsigned vgrf_to_reg[num_vars];
+   for (unsigned i = 0; i < num_vars; i++) {
       vgrf_to_reg[i] = reg_count;
       reg_count += alloc.sizes[i];
    }
@@ -2159,14 +2161,14 @@ fs_visitor::split_virtual_grfs()
    /* Mark all used registers as fully splittable */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       if (inst->dst.file == VGRF) {
-         int reg = vgrf_to_reg[inst->dst.nr];
+         unsigned reg = vgrf_to_reg[inst->dst.nr];
          for (unsigned j = 1; j < this->alloc.sizes[inst->dst.nr]; j++)
             split_points[reg + j] = true;
       }
 
-      for (int i = 0; i < inst->sources; i++) {
+      for (unsigned i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
-            int reg = vgrf_to_reg[inst->src[i].nr];
+            unsigned reg = vgrf_to_reg[inst->src[i].nr];
             for (unsigned j = 1; j < this->alloc.sizes[inst->src[i].nr]; j++)
                split_points[reg + j] = true;
          }
@@ -2181,13 +2183,13 @@ fs_visitor::split_virtual_grfs()
       }
 
       if (inst->dst.file == VGRF) {
-         int reg = vgrf_to_reg[inst->dst.nr] + inst->dst.offset / REG_SIZE;
+         unsigned reg = vgrf_to_reg[inst->dst.nr] + inst->dst.offset / REG_SIZE;
          for (unsigned j = 1; j < regs_written(inst); j++)
             split_points[reg + j] = false;
       }
-      for (int i = 0; i < inst->sources; i++) {
+      for (unsigned i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
-            int reg = vgrf_to_reg[inst->src[i].nr] + inst->src[i].offset / REG_SIZE;
+            unsigned reg = vgrf_to_reg[inst->src[i].nr] + inst->src[i].offset / REG_SIZE;
             for (unsigned j = 1; j < regs_read(inst, i); j++)
                split_points[reg + j] = false;
          }
@@ -2198,19 +2200,19 @@ fs_visitor::split_virtual_grfs()
    bool *vgrf_has_split = new bool[num_vars];
    memset(vgrf_has_split, 0, num_vars * sizeof(*vgrf_has_split));
 
-   int *new_virtual_grf = new int[reg_count];
-   int *new_reg_offset = new int[reg_count];
+   unsigned *new_virtual_grf = new unsigned[reg_count];
+   unsigned *new_reg_offset = new unsigned[reg_count];
 
-   int reg = 0;
+   unsigned reg = 0;
    bool has_splits = false;
-   for (int i = 0; i < num_vars; i++) {
+   for (unsigned i = 0; i < num_vars; i++) {
       /* The first one should always be 0 as a quick sanity check. */
       assert(split_points[reg] == false);
 
       /* j = 0 case */
       new_reg_offset[reg] = 0;
       reg++;
-      int offset = 1;
+      unsigned offset = 1;
 
       /* j > 0 case */
       for (unsigned j = 1; j < alloc.sizes[i]; j++) {
@@ -2221,8 +2223,8 @@ fs_visitor::split_virtual_grfs()
             has_splits = true;
             vgrf_has_split[i] = true;
             assert(offset <= MAX_VGRF_SIZE);
-            int grf = alloc.allocate(offset);
-            for (int k = reg - offset; k < reg; k++)
+            unsigned grf = alloc.allocate(offset);
+            for (unsigned k = reg - offset; k < reg; k++)
                new_virtual_grf[k] = grf;
             offset = 0;
          }
@@ -2234,7 +2236,7 @@ fs_visitor::split_virtual_grfs()
       /* The last one gets the original register number */
       assert(offset <= MAX_VGRF_SIZE);
       alloc.sizes[i] = offset;
-      for (int k = reg - offset; k < reg; k++)
+      for (unsigned k = reg - offset; k < reg; k++)
          new_virtual_grf[k] = i;
    }
    assert(reg == reg_count);
@@ -2268,7 +2270,7 @@ fs_visitor::split_virtual_grfs()
          } else {
             reg = vgrf_to_reg[inst->dst.nr];
             assert(new_reg_offset[reg] == 0);
-            assert(new_virtual_grf[reg] == (int)inst->dst.nr);
+            assert(new_virtual_grf[reg] == inst->dst.nr);
          }
          continue;
       }
@@ -2279,14 +2281,13 @@ fs_visitor::split_virtual_grfs()
             inst->dst.nr = new_virtual_grf[reg];
             inst->dst.offset = new_reg_offset[reg] * REG_SIZE +
                                inst->dst.offset % REG_SIZE;
-            assert((unsigned)new_reg_offset[reg] <
-                   alloc.sizes[new_virtual_grf[reg]]);
+            assert(new_reg_offset[reg] < alloc.sizes[new_virtual_grf[reg]]);
          } else {
             assert(new_reg_offset[reg] == inst->dst.offset / REG_SIZE);
-            assert(new_virtual_grf[reg] == (int)inst->dst.nr);
+            assert(new_virtual_grf[reg] == inst->dst.nr);
          }
       }
-      for (int i = 0; i < inst->sources; i++) {
+      for (unsigned i = 0; i < inst->sources; i++) {
 	 if (inst->src[i].file != VGRF)
             continue;
 
@@ -2295,11 +2296,10 @@ fs_visitor::split_virtual_grfs()
             inst->src[i].nr = new_virtual_grf[reg];
             inst->src[i].offset = new_reg_offset[reg] * REG_SIZE +
                                   inst->src[i].offset % REG_SIZE;
-            assert((unsigned)new_reg_offset[reg] <
-                   alloc.sizes[new_virtual_grf[reg]]);
+            assert(new_reg_offset[reg] < alloc.sizes[new_virtual_grf[reg]]);
          } else {
             assert(new_reg_offset[reg] == inst->src[i].offset / REG_SIZE);
-            assert(new_virtual_grf[reg] == (int)inst->src[i].nr);
+            assert(new_virtual_grf[reg] == inst->src[i].nr);
          }
       }
    }
@@ -3933,15 +3933,147 @@ fs_visitor::lower_load_payload()
    return progress;
 }
 
+/**
+ * Factor an unsigned 32-bit integer.
+ *
+ * Attempts to factor \c x into two values that are at most 0xFFFF.  If no
+ * such factorization is possible, either because the value is too large or is
+ * prime, both \c result_a and \c result_b will be zero.
+ */
+static void
+factor_uint32(uint32_t x, unsigned *result_a, unsigned *result_b)
+{
+   /* This is necessary to prevent various opportunities for division by zero
+    * below.
+    */
+   assert(x > 0xffff);
+
+   /* This represents the actual expected constraints on the input.  Namely,
+    * both the upper and lower words should be > 1.
+    */
+   assert(x >= 0x00020002);
+
+   *result_a = 0;
+   *result_b = 0;
+
+   /* The value is too large to factor with the constraints. */
+   if (x > (0xffffu * 0xffffu))
+      return;
+
+   /* A non-prime number will have the form p*q*d where p is some prime
+    * number, q > 1, and 1 <= d <= q.  To meet the constraints of this
+    * function, (p*d) < 0x10000.  This implies d <= floor(0xffff / p).
+    * Furthermore, since q < 0x10000, d >= floor(x / (0xffff * p)).  Finally,
+    * floor(x / (0xffff * p)) <= d <= floor(0xffff / p).
+    *
+    * The observation is finding the largest possible value of p reduces the
+    * possible range of d.  After selecting p, all values of d in this range
+    * are tested until a factorization is found.  The size of the range of
+    * possible values of d sets an upper bound on the run time of the
+    * function.
+    */
+   static const uint16_t primes[256] = {
+         2,    3,    5,    7,   11,   13,   17,   19,
+        23,   29,   31,   37,   41,   43,   47,   53,
+        59,   61,   67,   71,   73,   79,   83,   89,
+        97,  101,  103,  107,  109,  113,  127,  131,  /*  32 */
+       137,  139,  149,  151,  157,  163,  167,  173,
+       179,  181,  191,  193,  197,  199,  211,  223,
+       227,  229,  233,  239,  241,  251,  257,  263,
+       269,  271,  277,  281,  283,  293,  307,  311,  /*  64 */
+       313,  317,  331,  337,  347,  349,  353,  359,
+       367,  373,  379,  383,  389,  397,  401,  409,
+       419,  421,  431,  433,  439,  443,  449,  457,
+       461,  463,  467,  479,  487,  491,  499,  503,  /*  96 */
+       509,  521,  523,  541,  547,  557,  563,  569,
+       571,  577,  587,  593,  599,  601,  607,  613,
+       617,  619,  631,  641,  643,  647,  653,  659,
+       661,  673,  677,  683,  691,  701,  709,  719,   /* 128 */
+       727,  733,  739,  743,  751,  757,  761,  769,
+       773,  787,  797,  809,  811,  821,  823,  827,
+       829,  839,  853,  857,  859,  863,  877,  881,
+       883,  887,  907,  911,  919,  929,  937,  941,  /* 160 */
+       947,  953,  967,  971,  977,  983,  991,  997,
+      1009, 1013, 1019, 1021, 1031, 1033, 1039, 1049,
+      1051, 1061, 1063, 1069, 1087, 1091, 1093, 1097,
+      1103, 1109, 1117, 1123, 1129, 1151, 1153, 1163,  /* 192 */
+      1171, 1181, 1187, 1193, 1201, 1213, 1217, 1223,
+      1229, 1231, 1237, 1249, 1259, 1277, 1279, 1283,
+      1289, 1291, 1297, 1301, 1303, 1307, 1319, 1321,
+      1327, 1361, 1367, 1373, 1381, 1399, 1409, 1423,  /* 224 */
+      1427, 1429, 1433, 1439, 1447, 1451, 1453, 1459,
+      1471, 1481, 1483, 1487, 1489, 1493, 1499, 1511,
+      1523, 1531, 1543, 1549, 1553, 1559, 1567, 1571,
+      1579, 1583, 1597, 1601, 1607, 1609, 1613, 1619,  /* 256 */
+   };
+
+   unsigned p;
+   unsigned x_div_p;
+
+   for (int i = ARRAY_SIZE(primes) - 1; i >= 0; i--) {
+      p = primes[i];
+      x_div_p = x / p;
+
+      if ((x_div_p * p) == x)
+         break;
+   }
+
+   /* A prime factor was not found. */
+   if (x_div_p * p != x)
+      return;
+
+   /* Terminate early if d=1 is a solution. */
+   if (x_div_p < 0x10000) {
+      *result_a = x_div_p;
+      *result_b = p;
+      return;
+   }
+
+   /* Pick the maximum possible value for 'd'.  It's important that the loop
+    * below execute while d <= max_d because max_d is a valid value.  Having
+    * the wrong loop bound would cause 1627*1367*47 (0x063b0c83) to be
+    * incorrectly reported as not being factorable.  The problem would occur
+    * with any value that is a factor of two primes in the table and one prime
+    * not in the table.
+    */
+   const unsigned max_d = 0xffff / p;
+
+   /* Pick an initial value of 'd' that (combined with rejecting too large
+    * values above) guarantees that 'q' will always be small enough.
+    * DIV_ROUND_UP is used to prevent 'd' from being zero.
+    */
+   for (unsigned d = DIV_ROUND_UP(x_div_p, 0xffff); d <= max_d; d++) {
+      unsigned q = x_div_p / d;
+
+      if ((q * d) == x_div_p) {
+         assert(p * d * q == x);
+         assert((p * d) < 0x10000);
+
+         *result_a = q;
+         *result_b = p * d;
+         break;
+      }
+
+      /* Since every value of 'd' is tried, as soon as 'd' is larger
+       * than 'q', we're just re-testing combinations that have
+       * already been tested.
+       */
+      if (d > q)
+         break;
+   }
+}
+
 void
 fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
 {
    const fs_builder ibld(this, block, inst);
 
-   const bool ud = (inst->src[1].type == BRW_REGISTER_TYPE_UD);
+   /* It is correct to use inst->src[1].d in both end of the comparison.
+    * Using .ud in the UINT16_MAX comparison would cause any negative value to
+    * fail the check.
+    */
    if (inst->src[1].file == IMM &&
-       (( ud && inst->src[1].ud <= UINT16_MAX) ||
-        (!ud && inst->src[1].d <= INT16_MAX && inst->src[1].d >= INT16_MIN))) {
+       (inst->src[1].d >= INT16_MIN && inst->src[1].d <= UINT16_MAX)) {
       /* The MUL instruction isn't commutative. On Gen <= 6, only the low
        * 16-bits of src0 are read, and on Gen >= 7 only the low 16-bits of
        * src1 are used.
@@ -3949,6 +4081,7 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
        * If multiplying by an immediate value that fits in 16-bits, do a
        * single MUL instruction with that value in the proper location.
        */
+      const bool ud = (inst->src[1].d >= 0);
       if (devinfo->ver < 7) {
          fs_reg imm(VGRF, alloc.allocate(dispatch_width / 8), inst->dst.type);
          ibld.MOV(imm, inst->src[1]);
@@ -4029,6 +4162,7 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
       high.stride = inst->dst.stride;
       high.offset = inst->dst.offset % REG_SIZE;
 
+      bool do_addition = true;
       if (devinfo->ver >= 7) {
          /* From Wa_1604601757:
           *
@@ -4047,10 +4181,37 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
             lower_src_modifiers(this, block, inst, 1);
 
          if (inst->src[1].file == IMM) {
-            ibld.MUL(low, inst->src[0],
-                     brw_imm_uw(inst->src[1].ud & 0xffff));
-            ibld.MUL(high, inst->src[0],
-                     brw_imm_uw(inst->src[1].ud >> 16));
+            unsigned a;
+            unsigned b;
+
+            /* If the immeditate value can be factored into two values, A and
+             * B, that each fit in 16-bits, the multiplication result can
+             * instead be calculated as (src1 * (A * B)) = ((src1 * A) * B).
+             * This saves an operation (the addition) and a temporary register
+             * (high).
+             *
+             * Skip the optimization if either the high word or the low word
+             * is 0 or 1.  In these conditions, at least one of the
+             * multiplications generated by the straightforward method will be
+             * eliminated anyway.
+             */
+            if (inst->src[1].ud > 0x0001ffff &&
+                (inst->src[1].ud & 0xffff) > 1) {
+               factor_uint32(inst->src[1].ud, &a, &b);
+
+               if (a != 0) {
+                  ibld.MUL(low, inst->src[0], brw_imm_uw(a));
+                  ibld.MUL(low, low, brw_imm_uw(b));
+                  do_addition = false;
+               }
+            }
+
+            if (do_addition) {
+               ibld.MUL(low, inst->src[0],
+                        brw_imm_uw(inst->src[1].ud & 0xffff));
+               ibld.MUL(high, inst->src[0],
+                        brw_imm_uw(inst->src[1].ud >> 16));
+            }
          } else {
             ibld.MUL(low, inst->src[0],
                      subscript(inst->src[1], BRW_REGISTER_TYPE_UW, 0));
@@ -4067,9 +4228,11 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
                   inst->src[1]);
       }
 
-      ibld.ADD(subscript(low, BRW_REGISTER_TYPE_UW, 1),
-               subscript(low, BRW_REGISTER_TYPE_UW, 1),
-               subscript(high, BRW_REGISTER_TYPE_UW, 0));
+      if (do_addition) {
+         ibld.ADD(subscript(low, BRW_REGISTER_TYPE_UW, 1),
+                  subscript(low, BRW_REGISTER_TYPE_UW, 1),
+                  subscript(high, BRW_REGISTER_TYPE_UW, 0));
+      }
 
       if (needs_mov || inst->conditional_mod)
          set_condmod(inst->conditional_mod, ibld.MOV(orig_dst, low));
@@ -7377,17 +7540,16 @@ brw_compile_fs(const struct brw_compiler *compiler,
    brw_nir_populate_wm_prog_data(nir, compiler->devinfo, key, prog_data,
                                  params->mue_map);
 
-   fs_visitor *v8 = NULL, *v16 = NULL, *v32 = NULL;
+   std::unique_ptr<fs_visitor> v8, v16, v32;
    cfg_t *simd8_cfg = NULL, *simd16_cfg = NULL, *simd32_cfg = NULL;
    float throughput = 0;
    bool has_spilled = false;
 
-   v8 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
-                       &prog_data->base, nir, 8,
-                       debug_enabled);
+   v8 = std::make_unique<fs_visitor>(compiler, params->log_data, mem_ctx, &key->base,
+                                     &prog_data->base, nir, 8,
+                                     debug_enabled);
    if (!v8->run_fs(allow_spilling, false /* do_rep_send */)) {
       params->error_str = ralloc_strdup(mem_ctx, v8->fail_msg);
-      delete v8;
       return NULL;
    } else if (!INTEL_DEBUG(DEBUG_NO8)) {
       simd8_cfg = v8->cfg;
@@ -7425,10 +7587,10 @@ brw_compile_fs(const struct brw_compiler *compiler,
        v8->max_dispatch_width >= 16 &&
        (!INTEL_DEBUG(DEBUG_NO16) || params->use_rep_send)) {
       /* Try a SIMD16 compile */
-      v16 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
-                           &prog_data->base, nir, 16,
-                           debug_enabled);
-      v16->import_uniforms(v8);
+      v16 = std::make_unique<fs_visitor>(compiler, params->log_data, mem_ctx, &key->base,
+                                         &prog_data->base, nir, 16,
+                                         debug_enabled);
+      v16->import_uniforms(v8.get());
       if (!v16->run_fs(allow_spilling, params->use_rep_send)) {
          brw_shader_perf_log(compiler, params->log_data,
                              "SIMD16 shader failed to compile: %s\n",
@@ -7452,10 +7614,10 @@ brw_compile_fs(const struct brw_compiler *compiler,
        devinfo->ver >= 6 && !simd16_failed &&
        !INTEL_DEBUG(DEBUG_NO32)) {
       /* Try a SIMD32 compile */
-      v32 = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
-                           &prog_data->base, nir, 32,
-                           debug_enabled);
-      v32->import_uniforms(v8);
+      v32 = std::make_unique<fs_visitor>(compiler, params->log_data, mem_ctx, &key->base,
+                                         &prog_data->base, nir, 32,
+                                         debug_enabled);
+      v32->import_uniforms(v8.get());
       if (!v32->run_fs(allow_spilling, false)) {
          brw_shader_perf_log(compiler, params->log_data,
                              "SIMD32 shader failed to compile: %s\n",
@@ -7463,7 +7625,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
       } else {
          const performance &perf = v32->performance_analysis.require();
 
-         if (!INTEL_DEBUG(DEBUG_DO32) && throughput >= perf.throughput) {
+         if (!INTEL_DEBUG(DEBUG_DO32) && throughput > perf.throughput) {
             brw_shader_perf_log(compiler, params->log_data,
                                 "SIMD32 shader inefficient\n");
          } else {
@@ -7545,11 +7707,6 @@ brw_compile_fs(const struct brw_compiler *compiler,
    }
 
    g.add_const_data(nir->constant_data, nir->constant_data_size);
-
-   delete v8;
-   delete v16;
-   delete v32;
-
    return g.get_assembly();
 }
 
@@ -7707,15 +7864,17 @@ brw_compile_cs(const struct brw_compiler *compiler,
       prog_data->local_size[2] = nir->info.workgroup_size[2];
    }
 
-   const unsigned required_dispatch_width =
-      brw_required_dispatch_width(&nir->info);
+   brw_simd_selection_state simd_state{
+      .mem_ctx = mem_ctx,
+      .devinfo = compiler->devinfo,
+      .prog_data = prog_data,
+      .required_width = brw_required_dispatch_width(&nir->info),
+   };
 
-   fs_visitor *v[3]     = {0};
-   const char *error[3] = {0};
+   std::unique_ptr<fs_visitor> v[3];
 
    for (unsigned simd = 0; simd < 3; simd++) {
-      if (!brw_simd_should_compile(mem_ctx, simd, compiler->devinfo, prog_data,
-                                   required_dispatch_width, &error[simd]))
+      if (!brw_simd_should_compile(simd_state, simd))
          continue;
 
       const unsigned dispatch_width = 8u << simd;
@@ -7733,24 +7892,22 @@ brw_compile_cs(const struct brw_compiler *compiler,
       brw_postprocess_nir(shader, compiler, true, debug_enabled,
                           key->base.robust_buffer_access);
 
-      v[simd] = new fs_visitor(compiler, params->log_data, mem_ctx, &key->base,
-                               &prog_data->base, shader, dispatch_width,
-                               debug_enabled);
+      v[simd] = std::make_unique<fs_visitor>(compiler, params->log_data, mem_ctx, &key->base,
+                                    &prog_data->base, shader, dispatch_width,
+                                             debug_enabled);
 
-      if (prog_data->prog_mask) {
-         unsigned first = ffs(prog_data->prog_mask) - 1;
-         v[simd]->import_uniforms(v[first]);
-      }
+      const int first = brw_simd_first_compiled(simd_state);
+      if (first >= 0)
+         v[simd]->import_uniforms(v[first].get());
 
-      const bool allow_spilling = !prog_data->prog_mask ||
-                                  nir->info.workgroup_size_variable;
+      const bool allow_spilling = first < 0 || nir->info.workgroup_size_variable;
 
       if (v[simd]->run_cs(allow_spilling)) {
          cs_fill_push_const_info(compiler->devinfo, prog_data);
 
-         brw_simd_mark_compiled(simd, prog_data, v[simd]->spilled_any_registers);
+         brw_simd_mark_compiled(simd_state, simd, v[simd]->spilled_any_registers);
       } else {
-         error[simd] = ralloc_strdup(mem_ctx, v[simd]->fail_msg);
+         simd_state.error[simd] = ralloc_strdup(mem_ctx, v[simd]->fail_msg);
          if (simd > 0) {
             brw_shader_perf_log(compiler, params->log_data,
                                 "SIMD%u shader failed to compile: %s\n",
@@ -7759,20 +7916,19 @@ brw_compile_cs(const struct brw_compiler *compiler,
       }
    }
 
-   const int selected_simd = brw_simd_select(prog_data);
+   const int selected_simd = brw_simd_select(simd_state);
    if (selected_simd < 0) {
       params->error_str = ralloc_asprintf(mem_ctx, "Can't compile shader: %s, %s and %s.\n",
-                                          error[0], error[1], error[2]);;
+                                          simd_state.error[0], simd_state.error[1],
+                                          simd_state.error[2]);
       return NULL;
    }
 
    assert(selected_simd < 3);
-   fs_visitor *selected = v[selected_simd];
+   fs_visitor *selected = v[selected_simd].get();
 
    if (!nir->info.workgroup_size_variable)
       prog_data->prog_mask = 1 << selected_simd;
-
-   const unsigned *ret = NULL;
 
    fs_generator g(compiler, params->log_data, mem_ctx, &prog_data->base,
                   selected->runtime_check_aads_emit, MESA_SHADER_COMPUTE);
@@ -7797,13 +7953,7 @@ brw_compile_cs(const struct brw_compiler *compiler,
 
    g.add_const_data(nir->constant_data, nir->constant_data_size);
 
-   ret = g.get_assembly();
-
-   delete v[0];
-   delete v[1];
-   delete v[2];
-
-   return ret;
+   return g.get_assembly();
 }
 
 struct brw_cs_dispatch_info
@@ -7817,9 +7967,7 @@ brw_cs_get_dispatch_info(const struct intel_device_info *devinfo,
       override_local_size ? override_local_size :
                             prog_data->local_size;
 
-   const int simd =
-      override_local_size ? brw_simd_select_for_workgroup_size(devinfo, prog_data, sizes) :
-                            brw_simd_select(prog_data);
+   const int simd = brw_simd_select_for_workgroup_size(devinfo, prog_data, sizes);
    assert(simd >= 0 && simd < 3);
 
    info.group_size = sizes[0] * sizes[1] * sizes[2];
@@ -7857,81 +8005,63 @@ compile_single_bs(const struct brw_compiler *compiler, void *log_data,
    brw_postprocess_nir(shader, compiler, true, debug_enabled,
                        key->base.robust_buffer_access);
 
-   fs_visitor *v = NULL, *v8 = NULL, *v16 = NULL;
-   bool has_spilled = false;
+   brw_simd_selection_state simd_state{
+      .mem_ctx = mem_ctx,
+      .devinfo = compiler->devinfo,
+      .prog_data = prog_data,
 
-   uint8_t simd_size = 0;
-   if ((shader->info.subgroup_size == SUBGROUP_SIZE_VARYING ||
-        shader->info.subgroup_size == SUBGROUP_SIZE_REQUIRE_8) &&
-       !INTEL_DEBUG(DEBUG_NO8)) {
-      v8 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
-                          &prog_data->base, shader,
-                          8, debug_enabled);
-      const bool allow_spilling = true;
-      if (!v8->run_bs(allow_spilling)) {
-         if (error_str)
-            *error_str = ralloc_strdup(mem_ctx, v8->fail_msg);
-         delete v8;
-         return 0;
+      /* Since divergence is a lot more likely in RT than compute, it makes
+       * sense to limit ourselves to SIMD8 for now.
+       */
+      .required_width = 8,
+   };
+
+   std::unique_ptr<fs_visitor> v[2];
+
+   for (unsigned simd = 0; simd < ARRAY_SIZE(v); simd++) {
+      if (!brw_simd_should_compile(simd_state, simd))
+         continue;
+
+      const unsigned dispatch_width = 8u << simd;
+
+      v[simd] = std::make_unique<fs_visitor>(compiler, log_data, mem_ctx, &key->base,
+                                             &prog_data->base, shader,
+                                             dispatch_width, debug_enabled);
+
+      const bool allow_spilling = !brw_simd_any_compiled(simd_state);
+      if (v[simd]->run_bs(allow_spilling)) {
+         brw_simd_mark_compiled(simd_state, simd, v[simd]->spilled_any_registers);
       } else {
-         v = v8;
-         simd_size = 8;
-         if (v8->spilled_any_registers)
-            has_spilled = true;
-      }
-   }
-
-   if ((shader->info.subgroup_size == SUBGROUP_SIZE_VARYING ||
-        shader->info.subgroup_size == SUBGROUP_SIZE_REQUIRE_16) &&
-       !has_spilled && !INTEL_DEBUG(DEBUG_NO16)) {
-      v16 = new fs_visitor(compiler, log_data, mem_ctx, &key->base,
-                           &prog_data->base, shader,
-                           16, debug_enabled);
-      const bool allow_spilling = (v == NULL);
-      if (!v16->run_bs(allow_spilling)) {
-         brw_shader_perf_log(compiler, log_data,
-                             "SIMD16 shader failed to compile: %s\n",
-                             v16->fail_msg);
-         if (v == NULL) {
-            assert(v8 == NULL);
-            if (error_str) {
-               *error_str = ralloc_asprintf(
-                  mem_ctx, "SIMD8 disabled and couldn't generate SIMD16: %s",
-                  v16->fail_msg);
-            }
-            delete v16;
-            return 0;
+         simd_state.error[simd] = ralloc_strdup(mem_ctx, v[simd]->fail_msg);
+         if (simd > 0) {
+            brw_shader_perf_log(compiler, log_data,
+                                "SIMD%u shader failed to compile: %s",
+                                dispatch_width, v[simd]->fail_msg);
          }
-      } else {
-         v = v16;
-         simd_size = 16;
-         if (v16->spilled_any_registers)
-            has_spilled = true;
       }
    }
 
-   if (unlikely(v == NULL)) {
-      assert(INTEL_DEBUG(DEBUG_NO8 | DEBUG_NO16));
-      if (error_str) {
-         *error_str = ralloc_strdup(mem_ctx,
-            "Cannot satisfy INTEL_DEBUG flags SIMD restrictions");
-      }
-      return false;
+   const int selected_simd = brw_simd_select(simd_state);
+   if (selected_simd < 0) {
+      *error_str = ralloc_asprintf(mem_ctx, "Can't compile shader: %s and %s.",
+                                   simd_state.error[0], simd_state.error[1]);
+      return 0;
    }
 
-   assert(v);
+   assert(selected_simd < int(ARRAY_SIZE(v)));
+   fs_visitor *selected = v[selected_simd].get();
+   assert(selected);
 
-   int offset = g->generate_code(v->cfg, simd_size, v->shader_stats,
-                                 v->performance_analysis.require(), stats);
+   const unsigned dispatch_width = selected->dispatch_width;
+
+   int offset = g->generate_code(selected->cfg, dispatch_width, selected->shader_stats,
+                                 selected->performance_analysis.require(), stats);
    if (prog_offset)
       *prog_offset = offset;
    else
       assert(offset == 0);
 
-   delete v8;
-   delete v16;
-
-   return simd_size;
+   return dispatch_width;
 }
 
 uint64_t

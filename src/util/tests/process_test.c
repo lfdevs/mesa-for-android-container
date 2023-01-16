@@ -60,6 +60,17 @@ test_util_get_process_name (void)
 
    const char *name = util_get_process_name();
    expect_equal_str(expected, name, "util_get_process_name");
+
+   /* Test util_get_process_name_may_override */
+   char name_buf[PATH_MAX] = { 0 };
+   util_get_process_name_may_override("TEST_MESA_OVERRIDE_PROCESS_NAME", name_buf, sizeof(name_buf));
+   expect_equal_str(expected, name_buf, "util_get_process_name_may_override");
+   putenv("TEST_MESA_OVERRIDE_PROCESS_NAME=hello");
+   util_get_process_name_may_override("TEST_MESA_OVERRIDE_PROCESS_NAME", name_buf, sizeof(name_buf));
+   expect_equal_str("hello", name_buf, "util_get_process_name_may_override");
+   putenv("TEST_MESA_OVERRIDE_PROCESS_NAME=hello2");
+   util_get_process_name_may_override("TEST_MESA_OVERRIDE_PROCESS_NAME", name_buf, sizeof(name_buf));
+   expect_equal_str("hello2", name_buf, "util_get_process_name_may_override");
 }
 
 static void posixify_path(char *path) {

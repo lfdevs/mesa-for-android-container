@@ -67,7 +67,9 @@
  * MinGW 7.3.0 (in Ubuntu 18.04) does not have this bug.  Assume versions before 7.3.x are buggy
  */
 
-#if defined(__MINGW32__) && ((__GNUC__ * 100) + __GNUC_MINOR < 703)
+#include "util/detect_cc.h"
+
+#if defined(__MINGW32__) && (DETECT_CC_GCC_VERSION < 703)
 #warning "disabling optimizations for this file to work around compiler bug"
 #pragma GCC optimize("O1")
 #endif
@@ -75,6 +77,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include "util/simple_mtx.h"
 #include "main/consts_exts.h"
 #include "main/shader_types.h"
 #include "main/shaderobj.h"
@@ -97,7 +100,7 @@
 
 using namespace ir_builder;
 
-static mtx_t builtins_lock = _MTX_INITIALIZER_NP;
+static simple_mtx_t builtins_lock = SIMPLE_MTX_INITIALIZER;
 
 /**
  * Availability predicates:
@@ -1388,7 +1391,7 @@ builtin_builder::builtin_builder()
 
 builtin_builder::~builtin_builder()
 {
-   mtx_lock(&builtins_lock);
+   simple_mtx_lock(&builtins_lock);
 
    ralloc_free(mem_ctx);
    mem_ctx = NULL;
@@ -1396,7 +1399,7 @@ builtin_builder::~builtin_builder()
    ralloc_free(shader);
    shader = NULL;
 
-   mtx_unlock(&builtins_lock);
+   simple_mtx_unlock(&builtins_lock);
 }
 
 ir_function_signature *
@@ -8510,20 +8513,20 @@ static uint32_t builtin_users = 0;
 extern "C" void
 _mesa_glsl_builtin_functions_init_or_ref()
 {
-   mtx_lock(&builtins_lock);
+   simple_mtx_lock(&builtins_lock);
    if (builtin_users++ == 0)
       builtins.initialize();
-   mtx_unlock(&builtins_lock);
+   simple_mtx_unlock(&builtins_lock);
 }
 
 extern "C" void
 _mesa_glsl_builtin_functions_decref()
 {
-   mtx_lock(&builtins_lock);
+   simple_mtx_lock(&builtins_lock);
    assert(builtin_users != 0);
    if (--builtin_users == 0)
       builtins.release();
-   mtx_unlock(&builtins_lock);
+   simple_mtx_unlock(&builtins_lock);
 }
 
 ir_function_signature *
@@ -8531,9 +8534,9 @@ _mesa_glsl_find_builtin_function(_mesa_glsl_parse_state *state,
                                  const char *name, exec_list *actual_parameters)
 {
    ir_function_signature *s;
-   mtx_lock(&builtins_lock);
+   simple_mtx_lock(&builtins_lock);
    s = builtins.find(state, name, actual_parameters);
-   mtx_unlock(&builtins_lock);
+   simple_mtx_unlock(&builtins_lock);
 
    return s;
 }
@@ -8543,7 +8546,7 @@ _mesa_glsl_has_builtin_function(_mesa_glsl_parse_state *state, const char *name)
 {
    ir_function *f;
    bool ret = false;
-   mtx_lock(&builtins_lock);
+   simple_mtx_lock(&builtins_lock);
    f = builtins.shader->symbols->get_function(name);
    if (f != NULL) {
       foreach_in_list(ir_function_signature, sig, &f->signatures) {
@@ -8553,7 +8556,7 @@ _mesa_glsl_has_builtin_function(_mesa_glsl_parse_state *state, const char *name)
          }
       }
    }
-   mtx_unlock(&builtins_lock);
+   simple_mtx_unlock(&builtins_lock);
 
    return ret;
 }

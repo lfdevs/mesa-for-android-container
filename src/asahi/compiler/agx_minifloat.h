@@ -39,15 +39,17 @@ agx_minifloat_decode(uint8_t imm)
    unsigned mantissa = (imm & 0xF);
 
    if (exp)
-      return ldexpf(sign * (float) (mantissa | 0x10), exp - 7);
+      return ldexpf(sign * (float)(mantissa | 0x10), exp - 7);
    else
-      return ldexpf(sign * ((float) mantissa), -6);
+      return ldexpf(sign * ((float)mantissa), -6);
 }
 
 /* Encodes a float. Results are only valid if the float can be represented
- * exactly, if not the result of this function is UNDEFINED. signbit() is used
- * to ensure -0.0 is handled correctly. */
-
+ * exactly, if not the result of this function is UNDEFINED. However, it is
+ * guaranteed that this function will not crash on out-of-spec inputs, so it is
+ * safe to call on any input. signbit() is used to ensure -0.0 is handled
+ * correctly.
+ */
 static inline uint8_t
 agx_minifloat_encode(float f)
 {
@@ -63,13 +65,9 @@ agx_minifloat_encode(float f)
       exp -= 5; /* 2^5 = 32 */
       exp = CLAMP(exp + 7, 0, 7);
 
-      assert(mantissa >= 0x10 && mantissa < 0x20);
-      assert(exp >= 1);
-
       return sign | (exp << 4) | (mantissa & 0xF);
    } else {
       unsigned mantissa = (f * 64.0f);
-      assert(mantissa < 0x10);
 
       return sign | mantissa;
    }

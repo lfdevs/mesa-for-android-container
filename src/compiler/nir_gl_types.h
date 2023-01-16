@@ -28,7 +28,7 @@
 #ifndef NIR_GL_TYPES_H
 #define NIR_GL_TYPES_H
 
-#include "GL/gl.h"
+#include "util/glheader.h"
 
 #ifdef __cplusplus
 extern "C" {

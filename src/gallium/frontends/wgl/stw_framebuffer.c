@@ -25,6 +25,8 @@
  *
  **************************************************************************/
 
+#include "state_tracker/st_context.h"
+
 #include <windows.h>
 
 #include "pipe/p_screen.h"
@@ -83,7 +85,7 @@ stw_framebuffer_from_hwnd_locked(HWND hwnd)
  */
 void
 stw_framebuffer_release_locked(struct stw_framebuffer *fb,
-                               struct st_context_iface *stctx)
+                               struct st_context *st)
 {
    struct stw_framebuffer **link;
 
@@ -113,9 +115,9 @@ stw_framebuffer_release_locked(struct stw_framebuffer *fb,
                                                 fb->shared_surface);
 
    if (fb->winsys_framebuffer)
-      fb->winsys_framebuffer->destroy(fb->winsys_framebuffer, stctx ? stctx->pipe : NULL);
+      fb->winsys_framebuffer->destroy(fb->winsys_framebuffer, st ? st->pipe : NULL);
 
-   stw_st_destroy_framebuffer_locked(fb->stfb);
+   stw_st_destroy_framebuffer_locked(fb->drawable);
 
    stw_framebuffer_unlock(fb);
 
@@ -187,15 +189,15 @@ stw_framebuffer_get_size(struct stw_framebuffer *fb)
 
 #if 0
    debug_printf("\n");
-   debug_printf("%s: hwnd = %p\n", __FUNCTION__, fb->hWnd);
+   debug_printf("%s: hwnd = %p\n", __func__, fb->hWnd);
    debug_printf("%s: client_position = (%li, %li)\n",
-                __FUNCTION__, client_pos.x, client_pos.y);
+                __func__, client_pos.x, client_pos.y);
    debug_printf("%s: window_rect = (%li, %li) - (%li, %li)\n",
-                __FUNCTION__,
+                __func__,
                 window_rect.left, window_rect.top,
                 window_rect.right, window_rect.bottom);
    debug_printf("%s: client_rect = (%li, %li) - (%li, %li)\n",
-                __FUNCTION__,
+                __func__,
                 fb->client_rect.left, fb->client_rect.top,
                 fb->client_rect.right, fb->client_rect.bottom);
 #endif
@@ -251,9 +253,9 @@ stw_call_window_proc(int nCode, WPARAM wParam, LPARAM lParam)
          fb = stw_framebuffer_from_hwnd_locked( pParams->hwnd );
          if (fb) {
             struct stw_context *current_context = stw_current_context();
-            struct st_context_iface *ctx_iface = current_context &&
+            struct st_context *st = current_context &&
                current_context->current_framebuffer == fb ? current_context->st : NULL;
-            stw_framebuffer_release_locked(fb, ctx_iface);
+            stw_framebuffer_release_locked(fb, st);
          }
          stw_unlock_framebuffers(stw_dev);
       }
@@ -270,7 +272,7 @@ stw_call_window_proc(int nCode, WPARAM wParam, LPARAM lParam)
  */
 struct stw_framebuffer *
 stw_framebuffer_create(HWND hWnd, const struct stw_pixelformat_info *pfi, enum stw_framebuffer_owner owner,
-                       struct st_manager *smapi)
+                       struct pipe_frontend_screen *fscreen)
 {
    struct stw_framebuffer *fb;
 
@@ -293,8 +295,8 @@ stw_framebuffer_create(HWND hWnd, const struct stw_pixelformat_info *pfi, enum s
    fb->owner = owner;
 
    fb->pfi = pfi;
-   fb->stfb = stw_st_create_framebuffer( fb, smapi );
-   if (!fb->stfb) {
+   fb->drawable = stw_st_create_framebuffer( fb, fscreen );
+   if (!fb->drawable) {
       FREE( fb );
       return NULL;
    }
@@ -371,7 +373,7 @@ stw_framebuffer_unlock(struct stw_framebuffer *fb)
 void
 stw_framebuffer_update(struct stw_framebuffer *fb)
 {
-   assert(fb->stfb);
+   assert(fb->drawable);
    assert(fb->height);
    assert(fb->width);
 
@@ -499,7 +501,7 @@ DrvSetPixelFormat(HDC hdc, LONG iPixelFormat)
 
    const struct stw_pixelformat_info *pfi = stw_pixelformat_get_info(iPixelFormat);
 
-   fb = stw_framebuffer_create(WindowFromDC(hdc), pfi, STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->smapi);
+   fb = stw_framebuffer_create(WindowFromDC(hdc), pfi, STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->fscreen);
    if (!fb) {
       return FALSE;
    }
@@ -697,7 +699,7 @@ stw_framebuffer_swap_locked(HDC hdc, struct stw_framebuffer *fb)
       if (ctx->hud) {
          /* Display the HUD */
          struct pipe_resource *back =
-            stw_get_framebuffer_resource(fb->stfb, ST_ATTACHMENT_BACK_LEFT);
+            stw_get_framebuffer_resource(fb->drawable, ST_ATTACHMENT_BACK_LEFT);
          if (back) {
             hud_run(ctx->hud, NULL, back);
          }
@@ -705,7 +707,7 @@ stw_framebuffer_swap_locked(HDC hdc, struct stw_framebuffer *fb)
 
       if (ctx->current_framebuffer == fb) {
          /* flush current context */
-         stw_st_flush(ctx->st, fb->stfb, ST_FLUSH_END_OF_FRAME);
+         stw_st_flush(ctx->st, fb->drawable, ST_FLUSH_END_OF_FRAME);
       }
    }
 
@@ -714,7 +716,7 @@ stw_framebuffer_swap_locked(HDC hdc, struct stw_framebuffer *fb)
       wait_swap_interval(fb, interval);
    }
 
-   return stw_st_swap_framebuffer_locked(hdc, ctx->st, fb->stfb);
+   return stw_st_swap_framebuffer_locked(hdc, ctx->st, fb->drawable);
 }
 
 BOOL APIENTRY

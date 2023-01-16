@@ -24,22 +24,34 @@
 #ifndef __AGX_DEVICE_H
 #define __AGX_DEVICE_H
 
+#include "util/simple_mtx.h"
 #include "util/sparse_array.h"
-#include "io.h"
 #include "agx_formats.h"
+#include "io.h"
 
 #if __APPLE__
-#include <mach/mach.h>
 #include <IOKit/IOKitLib.h>
+#include <mach/mach.h>
 #endif
 
 enum agx_dbg {
    AGX_DBG_TRACE = BITFIELD_BIT(0),
-   AGX_DBG_DEQP  = BITFIELD_BIT(1),
-   AGX_DBG_NO16  = BITFIELD_BIT(2),
-   AGX_DBG_DIRTY  = BITFIELD_BIT(3),
-   AGX_DBG_PRECOMPILE  = BITFIELD_BIT(4),
+   AGX_DBG_DEQP = BITFIELD_BIT(1),
+   AGX_DBG_NO16 = BITFIELD_BIT(2),
+   AGX_DBG_DIRTY = BITFIELD_BIT(3),
+   AGX_DBG_PRECOMPILE = BITFIELD_BIT(4),
+   AGX_DBG_PERF = BITFIELD_BIT(5),
+   AGX_DBG_NOCOMPRESS = BITFIELD_BIT(6),
 };
+
+/* How many power-of-two levels in the BO cache do we want? 2^14 minimum chosen
+ * as it is the page size that all allocations are rounded to
+ */
+#define MIN_BO_CACHE_BUCKET (14) /* 2^14 = 16KB */
+#define MAX_BO_CACHE_BUCKET (22) /* 2^22 = 4MB */
+
+/* Fencepost problem, hence the off-by-one */
+#define NR_BO_CACHE_BUCKETS (MAX_BO_CACHE_BUCKET - MIN_BO_CACHE_BUCKET + 1)
 
 struct agx_device {
    void *memctx;
@@ -56,28 +68,35 @@ struct agx_device {
 #else
    int fd;
 #endif
+   struct renderonly *ro;
 
    pthread_mutex_t bo_map_lock;
    struct util_sparse_array bo_map;
 
-   /* Fixed shaders */
    struct {
-      struct agx_bo *bo;
-      uint32_t clear;
-      uint32_t store;
-   } internal;
+      simple_mtx_t lock;
 
-   struct {
-      struct agx_bo *bo;
-      uint32_t format[AGX_NUM_FORMATS];
-   } reload;
+      /* List containing all cached BOs sorted in LRU (Least Recently Used)
+       * order so we can quickly evict BOs that are more than 1 second old.
+       */
+      struct list_head lru;
+
+      /* The BO cache is a set of buckets with power-of-two sizes.  Each bucket
+       * is a linked list of free panfrost_bo objects.
+       */
+      struct list_head buckets[NR_BO_CACHE_BUCKETS];
+
+      /* Current size of the BO cache in bytes (sum of sizes of cached BOs) */
+      size_t size;
+
+      /* Number of hits/misses for the BO cache */
+      uint64_t hits, misses;
+   } bo_cache;
 };
 
-bool
-agx_open_device(void *memctx, struct agx_device *dev);
+bool agx_open_device(void *memctx, struct agx_device *dev);
 
-void
-agx_close_device(struct agx_device *dev);
+void agx_close_device(struct agx_device *dev);
 
 static inline struct agx_bo *
 agx_lookup_bo(struct agx_device *dev, uint32_t handle)
@@ -85,22 +104,17 @@ agx_lookup_bo(struct agx_device *dev, uint32_t handle)
    return util_sparse_array_get(&dev->bo_map, handle);
 }
 
-struct agx_bo
-agx_shmem_alloc(struct agx_device *dev, size_t size, bool cmdbuf);
+struct agx_bo agx_shmem_alloc(struct agx_device *dev, size_t size, bool cmdbuf);
 
-void
-agx_shmem_free(struct agx_device *dev, unsigned handle);
+void agx_shmem_free(struct agx_device *dev, unsigned handle);
 
-uint64_t
-agx_get_global_id(struct agx_device *dev);
+uint64_t agx_get_global_id(struct agx_device *dev);
 
-struct agx_command_queue
-agx_create_command_queue(struct agx_device *dev);
+struct agx_command_queue agx_create_command_queue(struct agx_device *dev);
 
-void
-agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf, unsigned mappings, uint64_t scalar);
+void agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf,
+                       unsigned mappings, uint64_t scalar);
 
-void
-agx_wait_queue(struct agx_command_queue queue);
+void agx_wait_queue(struct agx_command_queue queue);
 
 #endif

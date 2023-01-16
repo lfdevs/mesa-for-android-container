@@ -39,20 +39,20 @@ get_texture_type_for_image(const struct glsl_type *type)
                             glsl_get_sampler_result_type(type));
 }
 
-static void
-replace_image_type_with_sampler(nir_deref_instr *deref)
+static bool
+replace_image_type_with_texture(nir_deref_instr *deref)
 {
    const struct glsl_type *type = deref->type;
 
    /* If we've already chased up the deref chain this far from a different intrinsic, we're done */
-   if (glsl_type_is_texture(glsl_without_array(type)))
-      return;
+   if (!glsl_type_is_image(glsl_without_array(type)))
+      return false;
 
    deref->type = get_texture_type_for_image(type);
    deref->modes = nir_var_uniform;
    if (deref->deref_type == nir_deref_type_var) {
       type = deref->var->type;
-      if (!glsl_type_is_texture(glsl_without_array(type))) {
+      if (glsl_type_is_image(glsl_without_array(type))) {
          deref->var->type = get_texture_type_for_image(type);
          deref->var->data.mode = nir_var_uniform;
          memset(&deref->var->data.sampler, 0, sizeof(deref->var->data.sampler));
@@ -60,8 +60,10 @@ replace_image_type_with_sampler(nir_deref_instr *deref)
    } else {
       nir_deref_instr *parent = nir_deref_instr_parent(deref);
       if (parent)
-         replace_image_type_with_sampler(parent);
+         replace_image_type_with_texture(parent);
    }
+
+   return true;
 }
 
 struct readonly_image_lower_options {
@@ -69,14 +71,9 @@ struct readonly_image_lower_options {
 };
 
 static bool
-lower_readonly_image_instr(nir_builder *b, nir_instr *instr, void *context)
+lower_readonly_image_instr_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
+                                     const struct readonly_image_lower_options *options)
 {
-   struct readonly_image_lower_options *options = (struct readonly_image_lower_options *)context;
-
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    if (intrin->intrinsic != nir_intrinsic_image_deref_load &&
        intrin->intrinsic != nir_intrinsic_image_deref_size)
       return false;
@@ -135,7 +132,7 @@ lower_readonly_image_instr(nir_builder *b, nir_instr *instr, void *context)
 
    if (options->per_variable) {
       assert(nir_deref_instr_get_variable(deref));
-      replace_image_type_with_sampler(deref);
+      replace_image_type_with_texture(deref);
    }
 
    switch (intrin->intrinsic) {
@@ -188,6 +185,38 @@ lower_readonly_image_instr(nir_builder *b, nir_instr *instr, void *context)
    return true;
 }
 
+static bool
+lower_readonly_image_instr_tex(nir_builder *b, nir_tex_instr *tex,
+                               const struct readonly_image_lower_options *options)
+{
+   int deref_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+   if (deref_idx == -1)
+      return false;
+
+   nir_deref_instr *deref = nir_src_as_deref(tex->src[deref_idx].src);
+   if (options->per_variable) {
+      assert(nir_deref_instr_get_variable(deref));
+      return replace_image_type_with_texture(deref);
+   }
+
+   return false;
+}
+
+static bool
+lower_readonly_image_instr(nir_builder *b, nir_instr *instr, void *context)
+{
+   struct readonly_image_lower_options *options = (struct readonly_image_lower_options *)context;
+
+   switch (instr->type) {
+   case nir_instr_type_intrinsic:
+      return lower_readonly_image_instr_intrinsic(b, nir_instr_as_intrinsic(instr), options);
+   case nir_instr_type_tex:
+      return lower_readonly_image_instr_tex(b, nir_instr_as_tex(instr), options);
+   default:
+      return false;
+   }
+}
+
 /** Lowers image ops to texture ops for read-only images
  *
  * If per_variable is set:
@@ -201,8 +230,6 @@ lower_readonly_image_instr(nir_builder *b, nir_instr *instr, void *context)
 bool
 nir_lower_readonly_images_to_tex(nir_shader *shader, bool per_variable)
 {
-   assert(shader->info.stage != MESA_SHADER_KERNEL || !per_variable);
-
    struct readonly_image_lower_options options = { per_variable };
    return nir_shader_instructions_pass(shader, lower_readonly_image_instr,
                                        nir_metadata_block_index |

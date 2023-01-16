@@ -18,6 +18,7 @@ INSTALL=`pwd`/install
 export LD_LIBRARY_PATH=`pwd`/install/lib/
 export EGL_PLATFORM=surfaceless
 export VK_ICD_FILENAMES=`pwd`/install/share/vulkan/icd.d/"$VK_DRIVER"_icd.${VK_CPU:-`uname -m`}.json
+export OCL_ICD_VENDORS=`pwd`/install/etc/OpenCL/vendors/
 
 RESULTS=`pwd`/${DEQP_RESULTS_DIR:-results}
 mkdir -p $RESULTS
@@ -83,14 +84,6 @@ if [ -z "$DEQP_SUITE" ]; then
     # of the caselist.
     if [ -n "$CI_NODE_INDEX" ]; then
        sed -ni $CI_NODE_INDEX~$CI_NODE_TOTAL"p" /tmp/case-list.txt
-    fi
-
-    if [ -n "$DEQP_CASELIST_FILTER" ]; then
-        sed -ni "/$DEQP_CASELIST_FILTER/p" /tmp/case-list.txt
-    fi
-
-    if [ -n "$DEQP_CASELIST_INV_FILTER" ]; then
-        sed -ni "/$DEQP_CASELIST_INV_FILTER/!p" /tmp/case-list.txt
     fi
 
     if [ ! -s /tmp/case-list.txt ]; then

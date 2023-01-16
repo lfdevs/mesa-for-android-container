@@ -176,8 +176,7 @@ replace_load_view_index_with_layer_id(struct nir_builder *b,
 }
 
 bool
-anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask,
-                        bool use_primitive_replication)
+anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
 {
    assert(shader->info.stage != MESA_SHADER_COMPUTE);
 
@@ -194,32 +193,6 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask,
 
    /* This pass assumes a single entrypoint */
    nir_function_impl *entrypoint = nir_shader_get_entrypoint(shader);
-
-   /* Primitive Replication allows a shader to write different positions for
-    * each view in the same execution. If only the position depends on the
-    * view, then it is possible to use the feature instead of instancing to
-    * implement multiview.
-    */
-   if (use_primitive_replication) {
-      bool progress = nir_lower_multiview(shader, view_mask);
-
-      if (progress) {
-         nir_builder b;
-         nir_builder_init(&b, entrypoint);
-         b.cursor = nir_before_cf_list(&entrypoint->body);
-
-         /* Fill Layer ID with zero. Replication will use that as base to
-          * apply the RTAI offsets.
-          */
-         nir_variable *layer_id_out =
-            nir_variable_create(shader, nir_var_shader_out,
-                                glsl_int_type(), "layer ID");
-         layer_id_out->data.location = VARYING_SLOT_LAYER;
-         nir_store_var(&b, layer_id_out, nir_imm_zero(&b, 1, 32), 0x1);
-      }
-
-      return progress;
-   }
 
    struct lower_multiview_state state = {
       .view_mask = view_mask,
@@ -285,40 +258,4 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask,
                                      nir_metadata_dominance);
 
    return true;
-}
-
-bool
-anv_check_for_primitive_replication(struct anv_device *device,
-                                    VkShaderStageFlags stages,
-                                    nir_shader **shaders,
-                                    uint32_t view_mask)
-{
-   assert(device->info->ver >= 12);
-
-   static int primitive_replication_max_views = -1;
-   if (primitive_replication_max_views < 0) {
-      /* TODO: Figure out why we are not getting same benefits for larger than
-       * 2 views.  For now use Primitive Replication just for the 2-view case
-       * by default.
-       */
-      const unsigned default_max_views = 2;
-
-      primitive_replication_max_views =
-         MIN2(MAX_VIEWS_FOR_PRIMITIVE_REPLICATION,
-              debug_get_num_option("ANV_PRIMITIVE_REPLICATION_MAX_VIEWS",
-                                  default_max_views));
-   }
-
-   /* TODO: We should be able to support replication at 'geometry' stages
-    * later than Vertex.  In that case only the last stage can refer to
-    * gl_ViewIndex.
-    */
-   if (stages & ~(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT))
-      return false;
-
-   int view_count = util_bitcount(view_mask);
-   if (view_count == 1 || view_count > primitive_replication_max_views)
-      return false;
-
-   return nir_can_lower_multiview(shaders[MESA_SHADER_VERTEX]);
 }

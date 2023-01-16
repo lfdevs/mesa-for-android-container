@@ -23,7 +23,7 @@
  */
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "context.h"
 #include "lines.h"
 #include "macros.h"

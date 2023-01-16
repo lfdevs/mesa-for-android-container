@@ -33,7 +33,6 @@ struct si_compute {
    struct si_shader shader;
 
    unsigned ir_type;
-   unsigned private_size;
    unsigned input_size;
 
    int max_global_buffers;

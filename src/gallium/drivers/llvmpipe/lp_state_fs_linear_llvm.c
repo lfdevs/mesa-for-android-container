@@ -405,8 +405,6 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       LLVMValueRef inputs_ptr = LLVMBuildCall2(builder, call_type, fetch_ptr, &elem, 1, "");
       assert(LLVMGetTypeKind(LLVMTypeOf(inputs_ptr)) == LLVMPointerTypeKind);
 
-      /* Mark the function read-only so that LLVM can optimize it away */
-      lp_add_function_attr(inputs_ptr, -1, LP_FUNC_ATTR_READONLY);
       lp_add_function_attr(inputs_ptr, -1, LP_FUNC_ATTR_NOUNWIND);
 
       lp_build_name(inputs_ptr, "input%u_ptr", attrib);
@@ -445,8 +443,6 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       LLVMValueRef texels_ptr = LLVMBuildCall2(builder, call_type, fetch_ptr, &elem, 1, "");
       assert(LLVMGetTypeKind(LLVMTypeOf(texels_ptr)) == LLVMPointerTypeKind);
 
-      /* Mark the function read-only so that LLVM can optimize it away */
-      lp_add_function_attr(texels_ptr, -1, LP_FUNC_ATTR_READONLY);
       lp_add_function_attr(texels_ptr, -1, LP_FUNC_ATTR_NOUNWIND);
 
       lp_build_name(texels_ptr, "tex%u_ptr", attrib);

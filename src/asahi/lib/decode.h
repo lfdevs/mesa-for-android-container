@@ -32,7 +32,8 @@ void agxdecode_next_frame(void);
 
 void agxdecode_close(void);
 
-void agxdecode_cmdstream(unsigned cmdbuf_index, unsigned map_index, bool verbose);
+void agxdecode_cmdstream(unsigned cmdbuf_index, unsigned map_index,
+                         bool verbose);
 
 void agxdecode_dump_file_open(void);
 
@@ -42,4 +43,4 @@ void agxdecode_dump_mappings(unsigned map_index);
 
 void agxdecode_track_free(struct agx_bo *bo);
 
-#endif /* __MMAP_TRACE_H__ */
+#endif /* __AGX_DECODE_H__ */

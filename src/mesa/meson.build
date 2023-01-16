@@ -58,8 +58,6 @@ files_libmesa = files(
   'main/context.c',
   'main/context.h',
   'main/copyimage.c',
-  'main/cpuinfo.c',
-  'main/cpuinfo.h',
   'main/dd.h',
   'main/debug.c',
   'main/debug.h',
@@ -115,7 +113,6 @@ files_libmesa = files(
   'main/getstring.c',
   'main/glformats.c',
   'main/glformats.h',
-  'main/glheader.h',
   'main/glspirv.c',
   'main/glspirv.h',
   'main/glthread.c',
@@ -214,7 +211,6 @@ files_libmesa = files(
   'main/texcompress_cpal.h',
   'main/texcompress_etc.c',
   'main/texcompress_etc.h',
-  'main/texcompress_etc_tmp.h',
   'main/texcompress_fxt1.c',
   'main/texcompress_fxt1.h',
   'main/texcompress_rgtc.c',
@@ -255,17 +251,10 @@ files_libmesa = files(
   'main/viewport.c',
   'main/viewport.h',
   'main/es1_conversion.c',
-  'math/m_debug.h',
-  'math/m_debug_clip.c',
-  'math/m_debug_norm.c',
-  'math/m_debug_util.h',
-  'math/m_debug_xform.c',
   'math/m_eval.c',
   'math/m_eval.h',
   'math/m_matrix.c',
   'math/m_matrix.h',
-  'math/m_vector.c',
-  'math/m_vector.h',
   'program/arbprogparse.c',
   'program/arbprogparse.h',
   'program/link_program.cpp',
@@ -294,7 +283,6 @@ files_libmesa = files(
   'program/symbol_table.h',
   'state_tracker/st_atifs_to_nir.c',
   'state_tracker/st_atifs_to_nir.h',
-  'state_tracker/st_atom.c',
   'state_tracker/st_atom_array.cpp',
   'state_tracker/st_atom_atomicbuf.c',
   'state_tracker/st_atom_blend.c',
@@ -398,19 +386,13 @@ files_libmesa = files(
   'vbo/vbo_save_draw.c',
   'vbo/vbo_save_loopback.c',
   'vbo/vbo_util.h',
-  'x86/common_x86.c',
 )
 
 inc_libmesa_asm = []
 if with_asm_arch == 'x86'
   files_libmesa += files(
     'x86/assyntax.h',
-    'x86/common_x86_asm.S',
-    'x86/common_x86_asm.h',
-    'x86/common_x86_features.h',
-    'x86/read_rgba_span_x86.S',
   )
-  inc_libmesa_asm = include_directories('x86')
 endif
 
 format_fallback_c = custom_target(

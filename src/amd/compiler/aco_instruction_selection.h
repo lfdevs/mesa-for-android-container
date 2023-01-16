@@ -128,8 +128,7 @@ isel_context setup_isel_context(Program* program, unsigned shader_count,
                                 struct nir_shader* const* shaders, ac_shader_config* config,
                                 const struct aco_compiler_options* options,
                                 const struct aco_shader_info* info,
-                                const struct radv_shader_args* args,
-                                bool is_gs_copy_shader, bool is_ps_epilog);
+                                const struct radv_shader_args* args, bool is_ps_epilog);
 
 } // namespace aco
 

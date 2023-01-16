@@ -39,7 +39,7 @@ foreach t : ['pipe_barrier_test', 'u_cache_test', 'u_half_test',
     endif
   elif t != 'u_cache_test' # u_cache_test is slow
     test(t, exe, suite: 'gallium',
-         should_fail : meson.get_cross_property('xfail', '').contains(t),
+         should_fail : meson.get_external_property('xfail', '').contains(t),
     )
   endif
 endforeach

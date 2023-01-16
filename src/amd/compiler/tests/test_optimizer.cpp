@@ -698,7 +698,7 @@ BEGIN_TEST(optimize.add3)
    //! v1: %res1 = v_add_u32 %a, %tmp1
    //! p_unit_test 1, %res1
    tmp = bld.vop2_e64(aco_opcode::v_add_u32, bld.def(v1), inputs[1], inputs[2]);
-   tmp.instr->vop3().clamp = true;
+   tmp->vop3().clamp = true;
    writeout(1, bld.vop2(aco_opcode::v_add_u32, bld.def(v1), inputs[0], tmp));
 
    //! v1: %tmp2 = v_add_u32 %b, %c
@@ -706,30 +706,71 @@ BEGIN_TEST(optimize.add3)
    //! p_unit_test 2, %res2
    tmp = bld.vop2(aco_opcode::v_add_u32, bld.def(v1), inputs[1], inputs[2]);
    tmp = bld.vop2_e64(aco_opcode::v_add_u32, bld.def(v1), inputs[0], tmp);
-   tmp.instr->vop3().clamp = true;
+   tmp->vop3().clamp = true;
    writeout(2, tmp);
 
    finish_opt_test();
 END_TEST
 
 BEGIN_TEST(optimize.minmax)
-   for (unsigned i = GFX9; i <= GFX10; i++) {
-      //>> v1: %a = p_startpgm
-      if (!setup_cs("v1", (amd_gfx_level)i))
+   for (unsigned i = GFX10_3; i <= GFX11; i++) {
+      //>> v1: %a, v1: %b, v1: %c = p_startpgm
+      if (!setup_cs("v1 v1 v1", (amd_gfx_level)i))
          continue;
 
-      //! v1: %res0 = v_max3_f32 0, -0, %a
-      //! p_unit_test 0, %res0
-      Temp xor0 = fneg(inputs[0]);
-      Temp min = bld.vop2(aco_opcode::v_min_f32, bld.def(v1), Operand::zero(), xor0);
-      Temp xor1 = fneg(min);
-      writeout(0, bld.vop2(aco_opcode::v_max_f32, bld.def(v1), Operand::zero(), xor1));
+      Temp a = inputs[0];
+      Temp b = inputs[1];
+      Temp c = inputs[2];
 
-      //! v1: %res1 = v_max3_f32 0, -0, -%a
+      //! v1: %res0 = v_min3_f32 %a, %b, %c
+      //! p_unit_test 0, %res0
+      writeout(0, fmin(c, fmin(a, b)));
+
+      //! v1: %res1 = v_max3_f32 %a, %b, %c
       //! p_unit_test 1, %res1
-      min = bld.vop2(aco_opcode::v_min_f32, bld.def(v1), Operand::zero(), Operand(inputs[0]));
-      xor1 = fneg(min);
-      writeout(1, bld.vop2(aco_opcode::v_max_f32, bld.def(v1), Operand::zero(), xor1));
+      writeout(1, fmax(c, fmax(a, b)));
+
+      //! v1: %res2 = v_min3_f32 -%a, -%b, %c
+      //! p_unit_test 2, %res2
+      writeout(2, fmin(c, fneg(fmax(a, b))));
+
+      //! v1: %res3 = v_max3_f32 -%a, -%b, %c
+      //! p_unit_test 3, %res3
+      writeout(3, fmax(c, fneg(fmin(a, b))));
+
+      //! v1: %res4 = v_max3_f32 -%a, %b, %c
+      //! p_unit_test 4, %res4
+      writeout(4, fmax(c, fneg(fmin(a, fneg(b)))));
+
+      //~gfx10_3! v1: %res5_tmp = v_max_f32 %a, %b
+      //~gfx10_3! v1: %res5 = v_min_f32 %c, %res5_tmp
+      //~gfx11! v1: %res5 = v_maxmin_f32 %a, %b, %c
+      //! p_unit_test 5, %res5
+      writeout(5, fmin(c, fmax(a, b)));
+
+      //~gfx10_3! v1: %res6_tmp = v_min_f32 %a, %b
+      //~gfx10_3! v1: %res6 = v_max_f32 %c, %res6_tmp
+      //~gfx11! v1: %res6 = v_minmax_f32 %a, %b, %c
+      //! p_unit_test 6, %res6
+      writeout(6, fmax(c, fmin(a, b)));
+
+      //~gfx10_3! v1: %res7_tmp = v_min_f32 %a, %b
+      //~gfx10_3! v1: %res7 = v_min_f32 %c, -%res7_tmp
+      //~gfx11! v1: %res7 = v_maxmin_f32 -%a, -%b, %c
+      //! p_unit_test 7, %res7
+      writeout(7, fmin(c, fneg(fmin(a, b))));
+
+      //~gfx10_3! v1: %res8_tmp = v_max_f32 %a, %b
+      //~gfx10_3! v1: %res8 = v_max_f32 %c, -%res8_tmp
+      //~gfx11! v1: %res8 = v_minmax_f32 -%a, -%b, %c
+      //! p_unit_test 8, %res8
+      writeout(8, fmax(c, fneg(fmax(a, b))));
+
+      //~gfx10_3! v1: %res9_tmp = v_max_f32 %a, -%b
+      //~gfx10_3! v1: %res9 = v_max_f32 %c, -%res9_tmp
+      //~gfx11! v1: %res9 = v_minmax_f32 -%a, %b, %c
+      //! p_unit_test 9, %res9
+      writeout(9, fmax(c, fneg(fmax(a, fneg(b)))));
 
       finish_opt_test();
    }
@@ -989,7 +1030,7 @@ BEGIN_TEST(optimizer.dpp)
    //! v1: %res3 = v_add_f32 -%a, %b row_mirror bound_ctrl:1
    //! p_unit_test 3, %res3
    auto tmp3 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
-   tmp3.instr->dpp16().neg[0] = true;
+   tmp3->dpp16().neg[0] = true;
    Temp res3 = bld.vop2(aco_opcode::v_add_f32, bld.def(v1), tmp3, b);
    writeout(3, res3);
 
@@ -997,7 +1038,7 @@ BEGIN_TEST(optimizer.dpp)
    //! p_unit_test 4, %res4
    Temp tmp4 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
    auto res4 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1), tmp4, b);
-   res4.instr->vop3().neg[0] = true;
+   res4->vop3().neg[0] = true;
    writeout(4, res4);
 
    //! v1: %tmp5 = v_mov_b32 %a row_mirror bound_ctrl:1
@@ -1005,22 +1046,22 @@ BEGIN_TEST(optimizer.dpp)
    //! p_unit_test 5, %res5
    Temp tmp5 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
    auto res5 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1), tmp5, b);
-   res5.instr->vop3().clamp = true;
+   res5->vop3().clamp = true;
    writeout(5, res5);
 
    //! v1: %res6 = v_add_f32 |%a|, %b row_mirror bound_ctrl:1
    //! p_unit_test 6, %res6
    auto tmp6 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
-   tmp6.instr->dpp16().neg[0] = true;
+   tmp6->dpp16().neg[0] = true;
    auto res6 = bld.vop2_e64(aco_opcode::v_add_f32, bld.def(v1), tmp6, b);
-   res6.instr->vop3().abs[0] = true;
+   res6->vop3().abs[0] = true;
    writeout(6, res6);
 
    //! v1: %res7 = v_subrev_f32 %a, |%b| row_mirror bound_ctrl:1
    //! p_unit_test 7, %res7
    Temp tmp7 = bld.vop1_dpp(aco_opcode::v_mov_b32, bld.def(v1), a, dpp_row_mirror);
    auto res7 = bld.vop2_e64(aco_opcode::v_sub_f32, bld.def(v1), b, tmp7);
-   res7.instr->vop3().abs[0] = true;
+   res7->vop3().abs[0] = true;
    writeout(7, res7);
 
    /* vcc */

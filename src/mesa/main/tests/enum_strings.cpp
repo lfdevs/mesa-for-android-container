@@ -22,7 +22,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <GL/gl.h>
 
 #include "main/enums.h"
 

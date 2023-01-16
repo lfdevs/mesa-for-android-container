@@ -93,9 +93,14 @@ if with_dri2
     'drivers/dri2/egl_dri2.c',
     'drivers/dri2/egl_dri2.h',
   )
+  files_egl += sha1_h
   deps_for_egl += idep_xmlconfig
   link_for_egl += libloader
   incs_for_egl += inc_loader
+  incs_for_egl += inc_gallium
+  incs_for_egl += inc_gallium_aux
+  incs_for_egl += inc_mesa
+  incs_for_egl += inc_st_dri
 
   files_egl += files(
     'drivers/dri2/platform_device.c',
@@ -149,7 +154,7 @@ elif with_platform_windows
     '-DEGLAPI=', '-DPUBLIC='
   ]
   files_egl += files('drivers/wgl/egl_wgl.c')
-  incs_for_egl += [inc_wgl, inc_gallium, inc_gallium_aux]
+  incs_for_egl += [inc_wgl, inc_gallium, inc_gallium_aux, inc_mesa, inc_mapi]
   link_for_egl += libgallium_wgl
 endif
 

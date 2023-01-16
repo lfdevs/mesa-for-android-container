@@ -178,7 +178,7 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
             rs_info->polygonMode == VK_POLYGON_MODE_POINT;
       }
 
-      /* diamond-exit rasterization does not suport oversample */
+      /* diamond-exit rasterization does not support oversample */
       config.rasterizer_oversample_mode =
          (config.line_rasterization == V3D_LINE_RASTERIZATION_PERP_END_CAPS &&
           pipeline->msaa) ? 1 : 0;
@@ -435,7 +435,7 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
       shader.vertex_shader_propagate_nans = true;
       shader.fragment_shader_propagate_nans = true;
 
-      /* Note: see previous note about adresses */
+      /* Note: see previous note about addresses */
       /* shader.coordinate_shader_code_address */
       /* shader.vertex_shader_code_address */
       /* shader.fragment_shader_code_address */
@@ -460,7 +460,7 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
       shader.vertex_shader_output_vpm_segment_size =
          prog_data_vs->vpm_output_size;
 
-      /* Note: see previous note about adresses */
+      /* Note: see previous note about addresses */
       /* shader.coordinate_shader_uniforms_address */
       /* shader.vertex_shader_uniforms_address */
       /* shader.fragment_shader_uniforms_address */
@@ -502,7 +502,7 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
       shader.instance_id_read_by_vertex_shader =
          prog_data_vs->uses_iid;
 
-      /* Note: see previous note about adresses */
+      /* Note: see previous note about addresses */
       /* shader.address_of_default_attribute_values */
    }
 }

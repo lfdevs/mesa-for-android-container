@@ -423,7 +423,7 @@ TexInstr::replace_source(PRegister old_src, PVirtualValue new_src)
 }
 
 uint8_t
-TexInstr::allowed_dest_chan_mask() const
+TexInstr::allowed_src_chan_mask() const
 {
    return m_src.free_chan_mask();
 }
@@ -488,10 +488,6 @@ TexInstr::emit_set_offsets(
 
    for (int i = 0; i < src_components; ++i)
       swizzle[i] = i;
-
-   int noffsets = tex->coord_components;
-   if (tex->is_array)
-      --noffsets;
 
    auto ofs = shader.value_factory().src_vec4(*src.offset, pin_group, swizzle);
    RegisterVec4 empty_dst(0, false, {0, 0, 0, 0}, pin_group);
@@ -960,7 +956,10 @@ private:
    nir_ssa_def *
    finalize(nir_tex_instr *tex, nir_ssa_def *backend1, nir_ssa_def *backend2);
 
+   nir_ssa_def *get_undef();
+
    amd_gfx_level m_chip_class;
+   nir_ssa_def *m_undef {nullptr};
 };
 
 bool
@@ -997,6 +996,13 @@ LowerTexToBackend::filter(const nir_instr *instr) const
    }
 
    return nir_tex_instr_src_index(tex, nir_tex_src_backend1) == -1;
+}
+
+nir_ssa_def *LowerTexToBackend::get_undef()
+{
+   if (!m_undef)
+      m_undef = nir_ssa_undef(b, 1, 32);
+   return m_undef;
 }
 
 nir_ssa_def *
@@ -1156,14 +1162,16 @@ LowerTexToBackend::finalize(nir_tex_instr *tex,
 nir_ssa_def *
 LowerTexToBackend::prep_src(std::array<nir_ssa_def *, 4>& coord, int& used_coord_mask)
 {
+   int max_coord = 0;
    for (int i = 0; i < 4; ++i) {
-      if (coord[i])
+      if (coord[i]) {
          used_coord_mask |= 1 << i;
-      else
-         coord[i] = nir_ssa_undef(b, 1, 32);
+         max_coord = i;
+      } else
+         coord[i] = get_undef();
    }
 
-   return nir_vec(b, coord.data(), 4);
+   return nir_vec(b, coord.data(), max_coord + 1);
 }
 
 nir_ssa_def *

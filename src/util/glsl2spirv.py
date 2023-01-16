@@ -1,4 +1,3 @@
-# encoding=utf-8
 # Copyright © 2022 Intel Corporation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
@@ -22,19 +21,32 @@
 
 # Converts GLSL shader to SPIR-V library 
 
+from __future__ import annotations
 import argparse
 import subprocess
-import io
+import sys
 import os
+import typing as T
 
-class ShaderCompileError(RuntimeError):
-    def __init__(self, *args):
-        super(ShaderCompileError, self).__init__(*args)
+if T.TYPE_CHECKING:
 
-def get_args():
+    class Arguments(T.Protocol):
+        input: str
+        output: str
+        glslang: str
+        create_entry: T.Optional[str]
+        glsl_ver: T.Optional[str]
+        Olib: bool
+        extra: T.Optional[str]
+        vn: str
+        stage: str
+
+
+def get_args() -> Arguments:
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="Name of input file.")
     parser.add_argument('output', help="Name of output file.")
+    parser.add_argument('glslang', help="path to glslangValidator")
 
     parser.add_argument("--create-entry",
                         dest="create_entry",
@@ -42,7 +54,8 @@ def get_args():
 
     parser.add_argument('--glsl-version',
                         dest="glsl_ver",
-                        help="{100 | 110 | 120 | 130 | 140 | 150 | 300es | 310es | 320es | 330 | 400 | 410 | 420 | 430 | 440 | 450 | 460} set GLSL version, overrides #version in shader sources. Default is 460.")
+                        choices=['100', '110', '120', '130', '140', '150', '300es', '310es', '330', '400', '410', '420', '430', '440', '450', '460'],
+                        help="Override GLSL #version declaration in source.")
 
     parser.add_argument("-Olib",
                         action='store_true',
@@ -54,119 +67,119 @@ def get_args():
 
     parser.add_argument("--vn",
                         dest="vn",
+                        required=True,
                         help="Variable name. Creates a C header file that contains a uint32_t array.")
 
     parser.add_argument("--stage",
                         default="vert",
-                        help="Uses specified stage rather than parsing the file extension choices for <stage> are vert, tesc, tese, geom, frag, or comp.")
+                        choices=['vert', 'tesc', 'tese', 'geom', 'frag', 'comp'],
+                        help="Uses specified stage rather than parsing the file extension")
     args = parser.parse_args()
     return args
 
 
-def create_include_guard(lines, filename):
+def create_include_guard(lines: T.List[str], filename: str) -> T.List[str]:
     filename = filename.replace('.', '_')
     upper_name = filename.upper()
 
-    guard_head = ["#ifndef {}\n".format(upper_name),
-                  "#define {}\n".format(upper_name)]
-    guard_tail = ["\n#endif // {}\n".format(upper_name)]
+    guard_head = [f"#ifndef {upper_name}\n",
+                  f"#define {upper_name}\n"]
+    guard_tail = [f"\n#endif // {upper_name}\n"]
 
     # remove '#pragma once'
     for idx, l in enumerate(lines):
-        if l.find('#pragma once') != -1:
+        if '#pragma once' in l:
             lines.pop(idx)
             break
 
     return guard_head + lines + guard_tail
 
 
-def convert_to_static_variable(lines, varname):
+def convert_to_static_variable(lines: T.List[str], varname: str) -> T.List[str]:
     for idx, l in enumerate(lines):
-        if l.find(varname) != -1:
-            lines[idx] = "static " + lines[idx]
+        if varname in l:
+            lines[idx] = f"static {l}"
             return lines
+    raise RuntimeError(f'Did not find {varname}, this is unexpected')
 
 
-def override_version(lines, glsl_version):
+def override_version(lines: T.List[str], glsl_version: str) -> T.List[str]:
     for idx, l in enumerate(lines):
-        if l.find('#version ') != -1:
-            lines[idx] = "#version {}\n".format(glsl_version)
+        if '#version ' in l:
+            lines[idx] = f"#version {glsl_version}\n"
             return lines
+    raise RuntimeError('Did not find #version directive, this is unexpected')
 
 
-def postprocess_file(args):
+def postprocess_file(args: Arguments) -> None:
     with open(args.output, "r") as r:
         lines = r.readlines()
 
-        # glslangValidator creates a variable without the static modifier.
-        lines = convert_to_static_variable(lines, args.vn)
+    # glslangValidator creates a variable without the static modifier.
+    lines = convert_to_static_variable(lines, args.vn)
 
-        # '#pragma once' is unstandardised.
-        lines = create_include_guard(lines, os.path.basename(r.name))
+    # '#pragma once' is unstandardised.
+    lines = create_include_guard(lines, os.path.basename(r.name))
 
-        with open(args.output, "w") as w:
-            w.writelines(lines)
+    with open(args.output, "w") as w:
+        w.writelines(lines)
 
 
-def preprocess_file(args, origin_file):
-    with io.open(origin_file.name + ".copy", "w") as copy_file:
+def preprocess_file(args: Arguments, origin_file: T.TextIO, directory: os.PathLike) -> str:
+    with open(os.path.join(directory, os.path.basename(origin_file.name)), "w") as copy_file:
         lines = origin_file.readlines()
 
         if args.create_entry is not None:
-            lines.append("\nvoid {}()".format(args.create_entry) + "{}\n")
+            lines.append(f"\nvoid {args.create_entry}() {{}}\n")
 
         if args.glsl_ver is not None:
             override_version(lines, args.glsl_ver)
 
         copy_file.writelines(lines)
 
-        return copy_file.name
+    return copy_file.name
 
 
-def process_file(args):
-    with io.open(args.input, "r") as infile:
-        copy_file = preprocess_file(args, infile)
+def process_file(args: Arguments) -> None:
+    with open(args.input, "r") as infile:
+        copy_file = preprocess_file(args, infile,
+                                    os.path.dirname(args.output))
 
-        cmd_list = ["glslangValidator"]
+    cmd_list = [args.glslang]
 
-        if args.Olib:
-            cmd_list += ["--keep-uncalled"]
+    if args.Olib:
+        cmd_list.append("--keep-uncalled")
 
-        if args.vn is not None:
-            cmd_list += ["--variable-name", args.vn]
+    if args.vn is not None:
+        cmd_list.extend(["--variable-name", args.vn])
 
-        if args.extra is not None:
-            cmd_list.append(args.extra)
+    if args.extra is not None:
+        cmd_list.append(args.extra)
 
-        if args.create_entry is not None:
-            cmd_list += ["--entry-point", args.create_entry]
+    if args.create_entry is not None:
+        cmd_list.extend(["--entry-point", args.create_entry])
 
-        cmd_list.append("-V")
-        cmd_list += ["-o", args.output]
-        cmd_list += ["-S", args.stage]
+    cmd_list.extend([
+        '-V',
+        '-o', args.output,
+        '-S', args.stage,
+        copy_file,
+    ])
 
-        cmd_list.append(copy_file)
+    ret = subprocess.run(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    if ret.returncode != 0:
+        print(ret.stdout)
+        print(ret.stderr, file=sys.stderr)
+        sys.exit(1)
 
-        with subprocess.Popen(" ".join(cmd_list),
-                              shell = True,
-                              stdout = subprocess.PIPE,
-                              stderr = subprocess.PIPE,
-                              stdin = subprocess.PIPE) as proc:
+    if args.vn is not None:
+        postprocess_file(args)
 
-            out, err = proc.communicate(timeout=30)
-
-            if proc.returncode != 0:
-                message = out.decode('utf-8') + '\n' + err.decode('utf-8')
-                raise ShaderCompileError(message.strip())
-
-            if args.vn is not None:
-                postprocess_file(args)
-
-        if args.create_entry is not None:
-            os.remove(copy_file)
+    if args.create_entry is not None:
+        os.remove(copy_file)
 
 
-def main():
+def main() -> None:
     args = get_args()
     process_file(args)
 

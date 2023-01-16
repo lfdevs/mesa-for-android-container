@@ -37,8 +37,8 @@ public:
 
    fs_reg();
    fs_reg(struct ::brw_reg reg);
-   fs_reg(enum brw_reg_file file, int nr);
-   fs_reg(enum brw_reg_file file, int nr, enum brw_reg_type type);
+   fs_reg(enum brw_reg_file file, unsigned nr);
+   fs_reg(enum brw_reg_file file, unsigned nr, enum brw_reg_type type);
 
    bool equals(const fs_reg &r) const;
    bool negative_equals(const fs_reg &r) const;
@@ -546,9 +546,12 @@ is_send(const fs_inst *inst)
  * assumed to complete in-order.
  */
 static inline bool
-is_unordered(const fs_inst *inst)
+is_unordered(const intel_device_info *devinfo, const fs_inst *inst)
 {
-   return is_send(inst) || inst->is_math();
+   return is_send(inst) || inst->is_math() ||
+          (devinfo->has_64bit_float_via_math_pipe &&
+           (get_exec_type(inst) == BRW_REGISTER_TYPE_DF ||
+            inst->dst.type == BRW_REGISTER_TYPE_DF));
 }
 
 /**

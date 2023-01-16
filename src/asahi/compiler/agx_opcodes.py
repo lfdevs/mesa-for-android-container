@@ -29,7 +29,7 @@ VARIABLE = ~0
 
 class Opcode(object):
    def __init__(self, name, dests, srcs, imms, is_float, can_eliminate,
-           encoding_16, encoding_32):
+                can_reorder, encoding_16, encoding_32):
       self.name = name
       self.dests = dests if dests != VARIABLE else 0
       self.srcs = srcs if srcs != VARIABLE else 0
@@ -38,6 +38,7 @@ class Opcode(object):
       self.imms = imms
       self.is_float = is_float
       self.can_eliminate = can_eliminate
+      self.can_reorder = can_reorder
       self.encoding_16 = encoding_16
       self.encoding_32 = encoding_32
 
@@ -63,11 +64,11 @@ class Encoding(object):
          assert(length_long == length_short + (4 if length_short > 8 else 2))
 
 def op(name, encoding_32, dests = 1, srcs = 0, imms = [], is_float = False,
-        can_eliminate = True, encoding_16 = None):
+        can_eliminate = True, can_reorder = True, encoding_16 = None):
    encoding_16 = Encoding(encoding_16) if encoding_16 is not None else None
    encoding_32 = Encoding(encoding_32) if encoding_32 is not None else None
 
-   opcodes[name] = Opcode(name, dests, srcs, imms, is_float, can_eliminate, encoding_16, encoding_32)
+   opcodes[name] = Opcode(name, dests, srcs, imms, is_float, can_eliminate, can_reorder, encoding_16, encoding_32)
 
 def immediate(name, ctype = "uint32_t"):
    imm = Immediate(name, ctype)
@@ -93,6 +94,7 @@ SHIFT = immediate("shift")
 MASK = immediate("mask")
 BFI_MASK = immediate("bfi_mask")
 LOD_MODE = immediate("lod_mode", "enum agx_lod_mode")
+PIXEL_OFFSET = immediate("pixel_offset")
 
 DIM = enum("dim", {
     0: '1d',
@@ -102,7 +104,8 @@ DIM = enum("dim", {
     4: '2d_ms',
     5: '3d',
     6: 'cube',
-    7: 'cube_array'
+    7: 'cube_array',
+    8: '2d_ms_array',
 })
 
 OFFSET = immediate("offset", "bool")
@@ -114,6 +117,7 @@ NEST = immediate("nest")
 INVERT_COND = immediate("invert_cond")
 NEST = immediate("nest")
 TARGET = immediate("target", "agx_block *")
+ZS = immediate("zs")
 PERSPECTIVE = immediate("perspective", "bool")
 SR = enum("sr", {
    0:  'threadgroup_position_in_grid.x',
@@ -147,6 +151,13 @@ def funop(name, opcode):
       0x3F | L | (((1 << 14) - 1) << 28), 6, _),
       srcs = 1, is_float = True)
 
+def iunop(name, opcode):
+    assert(opcode < 4)
+    op(name, (0x3E | (opcode << 26),
+              0x7F | L | (((1 << 14) - 1) << 26),
+              6, _),
+       srcs = 1)
+
 # Listing of opcodes
 funop("floor",     0b000000)
 funop("srsqrt",    0b000001)
@@ -161,6 +172,10 @@ funop("sin_pt_2",  0b001110)
 funop("ceil",      0b010000)
 funop("trunc",     0b100000)
 funop("roundeven", 0b110000)
+
+iunop("bitrev",    0b01)
+iunop("popcount",  0b10)
+iunop("ffs",       0b11)
 
 op("fadd",
       encoding_16 = (0x26 | L, 0x3F | L, 6, _),
@@ -222,7 +237,13 @@ op("texture_load",
 # sources are base, index
 op("device_load",
       encoding_32 = (0x05, 0x7F, 6, 8),
-      srcs = 2, imms = [FORMAT, MASK, SCOREBOARD])
+      srcs = 2, imms = [FORMAT, MASK, SHIFT, SCOREBOARD], can_reorder = False)
+
+# sources are value, base, index
+# TODO: Consider permitting the short form
+op("device_store",
+      encoding_32 = (0x45 | (1 << 47), 0, 8, _),
+      dests = 0, srcs = 3, imms = [FORMAT, MASK, SHIFT, SCOREBOARD], can_eliminate = False)
 
 # sources are value, index
 # TODO: Consider permitting the short form
@@ -237,11 +258,16 @@ op("get_sr", (0x72, 0x7F | L, 4, _), dests = 1, imms = [SR])
 
 op("sample_mask", (0x7fc1, 0xffff, 6, _), dests = 0, srcs = 1, can_eliminate = False)
 
-# Essentially same encoding
-op("ld_tile", (0x49, 0x7F, 8, _), dests = 1, srcs = 0, imms = [FORMAT, MASK])
+# Sources: sample mask, combined depth/stencil
+op("zs_emit", (0x41, 0xFF | L, 4, _), dests = 0, srcs = 2,
+              can_eliminate = False, imms = [ZS])
 
-op("st_tile", (0x09, 0x7F, 8, _), dests = 0, srcs = 1,
-      can_eliminate = False, imms = [FORMAT, MASK])
+# Essentially same encoding. Last source is the sample mask
+op("ld_tile", (0x49, 0x7F, 8, _), dests = 1, srcs = 1,
+        imms = [FORMAT, MASK, PIXEL_OFFSET], can_reorder = False)
+
+op("st_tile", (0x09, 0x7F, 8, _), dests = 0, srcs = 2,
+      can_eliminate = False, imms = [FORMAT, MASK, PIXEL_OFFSET])
 
 for (name, exact) in [("any", 0xC000), ("none", 0xC200)]:
    op("jmp_exec_" + name, (exact, (1 << 16) - 1, 6, _), dests = 0, srcs = 0,
@@ -268,9 +294,15 @@ op("convert", (0x3E | L, 0x7F | L | (0x3 << 38), 6, _), srcs = 2, imms = [ROUND]
 op("iter", (0x21, 0xBF, 8, _), srcs = 2, imms = [CHANNELS, PERSPECTIVE])
 op("ldcf", (0xA1, 0xBF, 8, _), srcs = 1, imms = [CHANNELS])
 op("st_vary", None, dests = 0, srcs = 2, can_eliminate = False)
+op("no_varyings", (0x80000051, 0xFFFFFFFF, 4, _), dests = 0, can_eliminate = False)
 op("stop", (0x88, 0xFFFF, 2, _), dests = 0, can_eliminate = False)
 op("trap", (0x08, 0xFFFF, 2, _), dests = 0, can_eliminate = False)
 op("writeout", (0x48, 0xFF, 4, _), dests = 0, imms = [WRITEOUT], can_eliminate = False)
+
+# Sources are the image and the offset within shared memory
+# TODO: Do we need the short encoding?
+op("block_image_store", (0xB1, 0xFF, 10, _), dests = 0, srcs = 2,
+   imms = [FORMAT, DIM], can_eliminate = False)
 
 # Convenient aliases.
 op("mov", _, srcs = 1)

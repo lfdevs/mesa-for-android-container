@@ -179,7 +179,8 @@ public:
 
    AluInstr *as_alu() override { return this; }
 
-   uint8_t allowed_dest_chan_mask() const override;
+   uint8_t allowed_src_chan_mask() const override;
+   uint8_t allowed_dest_chan_mask() const {return m_allowed_desk_mask;}
 
 private:
    friend class AluGroup;
@@ -215,6 +216,7 @@ private:
    int m_priority{0};
    std::set<PRegister, std::less<PRegister>, Allocator<PRegister>> m_extra_dependencies;
    AluGroup *m_parent_group{nullptr};
+   unsigned m_allowed_desk_mask{0xf};
 };
 
 class AluInstrVisitor : public InstrVisitor {

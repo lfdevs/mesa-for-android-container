@@ -46,7 +46,7 @@
 #include "svga3d_caps.h"
 #include "svga3d_reg.h"
 
-#include "os/os_mman.h"
+#include "util/os_mman.h"
 
 #include <errno.h>
 #include <unistd.h>
@@ -153,7 +153,7 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
    uint32_t iMipLevel;
    int ret;
 
-   vmw_printf("%s flags %d format %d\n", __FUNCTION__, flags, format);
+   vmw_printf("%s flags %d format %d\n", __func__, flags, format);
 
    memset(&s_arg, 0, sizeof(s_arg));
    req->flags = (uint32_t) flags;
@@ -218,7 +218,7 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
    struct vmw_region *region = NULL;
    int ret;
 
-   vmw_printf("%s flags %d format %d\n", __FUNCTION__, flags, format);
+   vmw_printf("%s flags %d format %d\n", __func__, flags, format);
 
    if (p_region) {
       region = CALLOC_STRUCT(vmw_region);
@@ -478,7 +478,7 @@ vmw_ioctl_gb_surface_ref(struct vmw_winsys_screen *vws,
       *numMipLevels = rep->creq.mip_levels;
    }
 
-   vmw_printf("%s flags %d format %d\n", __FUNCTION__, *flags, *format);
+   vmw_printf("%s flags %d format %d\n", __func__, *flags, *format);
 
    if (needs_unref)
       vmw_ioctl_surface_destroy(vws, *handle);
@@ -573,7 +573,7 @@ vmw_ioctl_command(struct vmw_winsys_screen *vws, int32_t cid,
           usleep(1000);
    } while(ret == -ERESTART || ret == -EBUSY);
    if (ret) {
-      vmw_error("%s error %s.\n", __FUNCTION__, strerror(-ret));
+      vmw_error("%s error %s.\n", __func__, strerror(-ret));
       abort();
    }
 
@@ -617,7 +617,7 @@ vmw_ioctl_region_create(struct vmw_winsys_screen *vws, uint32_t size)
    struct drm_vmw_dmabuf_rep *rep = &arg.rep;
    int ret;
 
-   vmw_printf("%s: size = %u\n", __FUNCTION__, size);
+   vmw_printf("%s: size = %u\n", __func__, size);
 
    region = CALLOC_STRUCT(vmw_region);
    if (!region)
@@ -657,7 +657,7 @@ vmw_ioctl_region_destroy(struct vmw_region *region)
 {
    struct drm_vmw_unref_dmabuf_arg arg;
 
-   vmw_printf("%s: gmrId = %u, offset = %u\n", __FUNCTION__,
+   vmw_printf("%s: gmrId = %u, offset = %u\n", __func__,
               region->ptr.gmrId, region->ptr.offset);
 
    if (region->data) {
@@ -684,14 +684,14 @@ vmw_ioctl_region_map(struct vmw_region *region)
 {
    void *map;
 
-   vmw_printf("%s: gmrId = %u, offset = %u\n", __FUNCTION__,
+   vmw_printf("%s: gmrId = %u, offset = %u\n", __func__,
               region->ptr.gmrId, region->ptr.offset);
 
    if (region->data == NULL) {
       map = os_mmap(NULL, region->size, PROT_READ | PROT_WRITE, MAP_SHARED,
 		 region->drm_fd, region->map_handle);
       if (map == MAP_FAILED) {
-	 vmw_error("%s: Map failed.\n", __FUNCTION__);
+	 vmw_error("%s: Map failed.\n", __func__);
 	 return NULL;
       }
 
@@ -710,7 +710,7 @@ vmw_ioctl_region_map(struct vmw_region *region)
 void
 vmw_ioctl_region_unmap(struct vmw_region *region)
 {
-   vmw_printf("%s: gmrId = %u, offset = %u\n", __FUNCTION__,
+   vmw_printf("%s: gmrId = %u, offset = %u\n", __func__,
               region->ptr.gmrId, region->ptr.offset);
 
    --region->map_count;
@@ -794,7 +794,7 @@ vmw_ioctl_fence_unref(struct vmw_winsys_screen *vws,
    ret = drmCommandWrite(vws->ioctl.drm_fd, DRM_VMW_FENCE_UNREF,
 			 &arg, sizeof(arg));
    if (ret != 0)
-      vmw_error("%s Failed\n", __FUNCTION__);
+      vmw_error("%s Failed\n", __func__);
 }
 
 static inline uint32_t
@@ -857,7 +857,7 @@ vmw_ioctl_fence_finish(struct vmw_winsys_screen *vws,
 			     &arg, sizeof(arg));
 
    if (ret != 0)
-      vmw_error("%s Failed\n", __FUNCTION__);
+      vmw_error("%s Failed\n", __func__);
    
    return 0;
 }
@@ -1244,7 +1244,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
 
    free(cap_buffer);
    drmFreeVersion(version);
-   vmw_printf("%s OK\n", __FUNCTION__);
+   vmw_printf("%s OK\n", __func__);
    return TRUE;
   out_no_caps:
    free(vws->ioctl.cap_3d);
@@ -1254,7 +1254,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
    drmFreeVersion(version);
   out_no_version:
    vws->ioctl.num_cap_3d = 0;
-   debug_printf("%s Failed\n", __FUNCTION__);
+   debug_printf("%s Failed\n", __func__);
    return FALSE;
 }
 

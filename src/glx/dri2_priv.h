@@ -37,6 +37,8 @@
 extern "C" {
 #endif
 
+#include "GL/internal/mesa_interface.h"
+
 struct dri2_screen {
    struct glx_screen base;
 
@@ -44,6 +46,7 @@ struct dri2_screen {
    __GLXDRIscreen vtable;
    const __DRIdri2Extension *dri2;
    const __DRIcoreExtension *core;
+   const __DRImesaCoreExtension *mesa;
 
    const __DRI2flushExtension *f;
    const __DRI2configQueryExtension *config;

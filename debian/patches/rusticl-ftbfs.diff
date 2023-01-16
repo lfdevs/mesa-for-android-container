@@ -1,0 +1,20 @@
+--- a/src/gallium/frontends/rusticl/meson.build
++++ b/src/gallium/frontends/rusticl/meson.build
+@@ -195,6 +195,7 @@ rusticl_mesa_bindings_inline_wrapper = s
+   ],
+   dependencies: [
+     idep_nir_headers,
++    dep_valgrind,
+   ],
+ )
+ 
+@@ -209,6 +210,9 @@ rusticl_mesa_bindings_rs = rust.bindgen(
+     inc_nir,
+     inc_src,
+   ],
++  dependencies: [
++    dep_valgrind,
++  ],
+   c_args : [
+     rusticl_bindgen_c_args,
+     pre_args,

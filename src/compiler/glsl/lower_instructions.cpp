@@ -60,10 +60,6 @@
 #define LDEXP_TO_ARITH     0x80
 #define DOPS_TO_DFRAC      0x800
 #define DFREXP_DLDEXP_TO_ARITH    0x1000
-#define BIT_COUNT_TO_MATH         0x02000
-#define EXTRACT_TO_SHIFTS         0x04000
-#define INSERT_TO_SHIFTS          0x08000
-#define REVERSE_TO_SHIFTS         0x10000
 #define FIND_LSB_TO_FLOAT_CAST    0x20000
 #define FIND_MSB_TO_FLOAT_CAST    0x40000
 #define IMUL_HIGH_TO_MUL          0x80000
@@ -89,8 +85,6 @@ private:
    void dldexp_to_arith(ir_expression *);
    void dfrexp_sig_to_arith(ir_expression *);
    void dfrexp_exp_to_arith(ir_expression *);
-   void carry_to_arith(ir_expression *);
-   void borrow_to_arith(ir_expression *);
    void double_dot_to_fma(ir_expression *);
    void double_lrp(ir_expression *);
    void dceil_to_dfrac(ir_expression *);
@@ -98,10 +92,6 @@ private:
    void dround_even_to_dfrac(ir_expression *);
    void dtrunc_to_dfrac(ir_expression *);
    void dsign_to_csel(ir_expression *);
-   void bit_count_to_math(ir_expression *);
-   void extract_to_shifts(ir_expression *);
-   void insert_to_shifts(ir_expression *);
-   void reverse_to_shifts(ir_expression *ir);
    void find_lsb_to_float_cast(ir_expression *ir);
    void find_msb_to_float_cast(ir_expression *ir);
    void imul_high_to_mul(ir_expression *ir);
@@ -136,11 +126,7 @@ lower_instructions(exec_list *instructions, bool have_ldexp, bool have_dfrexp,
        * extended integer functions need lowering.  It may be necessary to add
        * some caps for individual instructions.
        */
-      (!have_gpu_shader5 ? BIT_COUNT_TO_MATH |
-                           EXTRACT_TO_SHIFTS |
-                           INSERT_TO_SHIFTS |
-                           REVERSE_TO_SHIFTS |
-                           FIND_LSB_TO_FLOAT_CAST |
+      (!have_gpu_shader5 ? FIND_LSB_TO_FLOAT_CAST |
                            FIND_MSB_TO_FLOAT_CAST |
                            IMUL_HIGH_TO_MUL : 0);
 
@@ -297,22 +283,12 @@ lower_instructions_visitor::ldexp_to_arith(ir_expression *ir)
                                        new(ir) ir_constant(0x80000000u, vec_elem)),
                                sign_mantissa)));
 
-   /* Don't generate new IR that would need to be lowered in an additional
-    * pass.
-    */
    i.insert_before(result);
-   if (!lowering(INSERT_TO_SHIFTS)) {
-      i.insert_before(assign(result,
-                             bitfield_insert(sign_mantissa,
-                                             i2u(resulting_biased_exp),
-                                             new(ir) ir_constant(23u, vec_elem),
-                                             new(ir) ir_constant(8u, vec_elem))));
-   } else {
-      i.insert_before(assign(result,
-                             bit_or(sign_mantissa,
-                                    lshift(i2u(resulting_biased_exp),
-                                           new(ir) ir_constant(23, vec_elem)))));
-   }
+   i.insert_before(assign(result,
+                          bitfield_insert(sign_mantissa,
+                                          i2u(resulting_biased_exp),
+                                          new(ir) ir_constant(23u, vec_elem),
+                                          new(ir) ir_constant(8u, vec_elem))));
 
    ir->operation = ir_triop_csel;
    ir->init_num_operands();
@@ -581,44 +557,6 @@ lower_instructions_visitor::dfrexp_exp_to_arith(ir_expression *ir)
 }
 
 void
-lower_instructions_visitor::carry_to_arith(ir_expression *ir)
-{
-   /* Translates
-    *   ir_binop_carry x y
-    * into
-    *   sum = ir_binop_add x y
-    *   bcarry = ir_binop_less sum x
-    *   carry = ir_unop_b2i bcarry
-    */
-
-   ir_rvalue *x_clone = ir->operands[0]->clone(ir, NULL);
-   ir->operation = ir_unop_i2u;
-   ir->init_num_operands();
-   ir->operands[0] = b2i(less(add(ir->operands[0], ir->operands[1]), x_clone));
-   ir->operands[1] = NULL;
-
-   this->progress = true;
-}
-
-void
-lower_instructions_visitor::borrow_to_arith(ir_expression *ir)
-{
-   /* Translates
-    *   ir_binop_borrow x y
-    * into
-    *   bcarry = ir_binop_less x y
-    *   carry = ir_unop_b2i bcarry
-    */
-
-   ir->operation = ir_unop_i2u;
-   ir->init_num_operands();
-   ir->operands[0] = b2i(less(ir->operands[0], ir->operands[1]));
-   ir->operands[1] = NULL;
-
-   this->progress = true;
-}
-
-void
 lower_instructions_visitor::double_dot_to_fma(ir_expression *ir)
 {
    ir_variable *temp = new(ir) ir_variable(ir->operands[0]->type->get_base_type(), "dot_res",
@@ -814,284 +752,6 @@ lower_instructions_visitor::dsign_to_csel(ir_expression *ir)
    ir->operands[2] = csel(greater(arg, zero),
                           one,
                           zero->clone(ir, NULL));
-
-   this->progress = true;
-}
-
-void
-lower_instructions_visitor::bit_count_to_math(ir_expression *ir)
-{
-   /* For more details, see:
-    *
-    * http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetPaallel
-    */
-   const unsigned elements = ir->operands[0]->type->vector_elements;
-   ir_variable *temp = new(ir) ir_variable(glsl_type::uvec(elements), "temp",
-                                           ir_var_temporary);
-   ir_constant *c55555555 = new(ir) ir_constant(0x55555555u);
-   ir_constant *c33333333 = new(ir) ir_constant(0x33333333u);
-   ir_constant *c0F0F0F0F = new(ir) ir_constant(0x0F0F0F0Fu);
-   ir_constant *c01010101 = new(ir) ir_constant(0x01010101u);
-   ir_constant *c1 = new(ir) ir_constant(1u);
-   ir_constant *c2 = new(ir) ir_constant(2u);
-   ir_constant *c4 = new(ir) ir_constant(4u);
-   ir_constant *c24 = new(ir) ir_constant(24u);
-
-   base_ir->insert_before(temp);
-
-   if (ir->operands[0]->type->base_type == GLSL_TYPE_UINT) {
-      base_ir->insert_before(assign(temp, ir->operands[0]));
-   } else {
-      assert(ir->operands[0]->type->base_type == GLSL_TYPE_INT);
-      base_ir->insert_before(assign(temp, i2u(ir->operands[0])));
-   }
-
-   /* temp = temp - ((temp >> 1) & 0x55555555u); */
-   base_ir->insert_before(assign(temp, sub(temp, bit_and(rshift(temp, c1),
-                                                         c55555555))));
-
-   /* temp = (temp & 0x33333333u) + ((temp >> 2) & 0x33333333u); */
-   base_ir->insert_before(assign(temp, add(bit_and(temp, c33333333),
-                                           bit_and(rshift(temp, c2),
-                                                   c33333333->clone(ir, NULL)))));
-
-   /* int(((temp + (temp >> 4) & 0xF0F0F0Fu) * 0x1010101u) >> 24); */
-   ir->operation = ir_unop_u2i;
-   ir->init_num_operands();
-   ir->operands[0] = rshift(mul(bit_and(add(temp, rshift(temp, c4)), c0F0F0F0F),
-                                c01010101),
-                            c24);
-
-   this->progress = true;
-}
-
-void
-lower_instructions_visitor::extract_to_shifts(ir_expression *ir)
-{
-   ir_variable *bits =
-      new(ir) ir_variable(ir->operands[0]->type, "bits", ir_var_temporary);
-
-   base_ir->insert_before(bits);
-   base_ir->insert_before(assign(bits, ir->operands[2]));
-
-   if (ir->operands[0]->type->base_type == GLSL_TYPE_UINT) {
-      ir_constant *c1 =
-         new(ir) ir_constant(1u, ir->operands[0]->type->vector_elements);
-      ir_constant *c32 =
-         new(ir) ir_constant(32u, ir->operands[0]->type->vector_elements);
-      ir_constant *cFFFFFFFF =
-         new(ir) ir_constant(0xFFFFFFFFu, ir->operands[0]->type->vector_elements);
-
-      /* At least some hardware treats (x << y) as (x << (y%32)).  This means
-       * we'd get a mask of 0 when bits is 32.  Special case it.
-       *
-       * mask = bits == 32 ? 0xffffffff : (1u << bits) - 1u;
-       */
-      ir_expression *mask = csel(equal(bits, c32),
-                                 cFFFFFFFF,
-                                 sub(lshift(c1, bits), c1->clone(ir, NULL)));
-
-      /* Section 8.8 (Integer Functions) of the GLSL 4.50 spec says:
-       *
-       *    If bits is zero, the result will be zero.
-       *
-       * Since (1 << 0) - 1 == 0, we don't need to bother with the conditional
-       * select as in the signed integer case.
-       *
-       * (value >> offset) & mask;
-       */
-      ir->operation = ir_binop_bit_and;
-      ir->init_num_operands();
-      ir->operands[0] = rshift(ir->operands[0], ir->operands[1]);
-      ir->operands[1] = mask;
-      ir->operands[2] = NULL;
-   } else {
-      ir_constant *c0 =
-         new(ir) ir_constant(int(0), ir->operands[0]->type->vector_elements);
-      ir_constant *c32 =
-         new(ir) ir_constant(int(32), ir->operands[0]->type->vector_elements);
-      ir_variable *temp =
-         new(ir) ir_variable(ir->operands[0]->type, "temp", ir_var_temporary);
-
-      /* temp = 32 - bits; */
-      base_ir->insert_before(temp);
-      base_ir->insert_before(assign(temp, sub(c32, bits)));
-
-      /* expr = value << (temp - offset)) >> temp; */
-      ir_expression *expr =
-         rshift(lshift(ir->operands[0], sub(temp, ir->operands[1])), temp);
-
-      /* Section 8.8 (Integer Functions) of the GLSL 4.50 spec says:
-       *
-       *    If bits is zero, the result will be zero.
-       *
-       * Due to the (x << (y%32)) behavior mentioned before, the (value <<
-       * (32-0)) doesn't "erase" all of the data as we would like, so finish
-       * up with:
-       *
-       * (bits == 0) ? 0 : e;
-       */
-      ir->operation = ir_triop_csel;
-      ir->init_num_operands();
-      ir->operands[0] = equal(c0, bits);
-      ir->operands[1] = c0->clone(ir, NULL);
-      ir->operands[2] = expr;
-   }
-
-   this->progress = true;
-}
-
-void
-lower_instructions_visitor::insert_to_shifts(ir_expression *ir)
-{
-   ir_constant *c1;
-   ir_constant *c32;
-   ir_constant *cFFFFFFFF;
-   ir_variable *offset =
-      new(ir) ir_variable(ir->operands[0]->type, "offset", ir_var_temporary);
-   ir_variable *bits =
-      new(ir) ir_variable(ir->operands[0]->type, "bits", ir_var_temporary);
-   ir_variable *mask =
-      new(ir) ir_variable(ir->operands[0]->type, "mask", ir_var_temporary);
-
-   if (ir->operands[0]->type->base_type == GLSL_TYPE_INT) {
-      c1 = new(ir) ir_constant(int(1), ir->operands[0]->type->vector_elements);
-      c32 = new(ir) ir_constant(int(32), ir->operands[0]->type->vector_elements);
-      cFFFFFFFF = new(ir) ir_constant(int(0xFFFFFFFF), ir->operands[0]->type->vector_elements);
-   } else {
-      assert(ir->operands[0]->type->base_type == GLSL_TYPE_UINT);
-
-      c1 = new(ir) ir_constant(1u, ir->operands[0]->type->vector_elements);
-      c32 = new(ir) ir_constant(32u, ir->operands[0]->type->vector_elements);
-      cFFFFFFFF = new(ir) ir_constant(0xFFFFFFFFu, ir->operands[0]->type->vector_elements);
-   }
-
-   base_ir->insert_before(offset);
-   base_ir->insert_before(assign(offset, ir->operands[2]));
-
-   base_ir->insert_before(bits);
-   base_ir->insert_before(assign(bits, ir->operands[3]));
-
-   /* At least some hardware treats (x << y) as (x << (y%32)).  This means
-    * we'd get a mask of 0 when bits is 32.  Special case it.
-    *
-    * mask = (bits == 32 ? 0xffffffff : (1u << bits) - 1u) << offset;
-    *
-    * Section 8.8 (Integer Functions) of the GLSL 4.50 spec says:
-    *
-    *    The result will be undefined if offset or bits is negative, or if the
-    *    sum of offset and bits is greater than the number of bits used to
-    *    store the operand.
-    *
-    * Since it's undefined, there are a couple other ways this could be
-    * implemented.  The other way that was considered was to put the csel
-    * around the whole thing:
-    *
-    *    final_result = bits == 32 ? insert : ... ;
-    */
-   base_ir->insert_before(mask);
-
-   base_ir->insert_before(assign(mask, csel(equal(bits, c32),
-                                            cFFFFFFFF,
-                                            lshift(sub(lshift(c1, bits),
-                                                       c1->clone(ir, NULL)),
-                                                   offset))));
-
-   /* (base & ~mask) | ((insert << offset) & mask) */
-   ir->operation = ir_binop_bit_or;
-   ir->init_num_operands();
-   ir->operands[0] = bit_and(ir->operands[0], bit_not(mask));
-   ir->operands[1] = bit_and(lshift(ir->operands[1], offset), mask);
-   ir->operands[2] = NULL;
-   ir->operands[3] = NULL;
-
-   this->progress = true;
-}
-
-void
-lower_instructions_visitor::reverse_to_shifts(ir_expression *ir)
-{
-   /* For more details, see:
-    *
-    * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
-    */
-   ir_constant *c1 =
-      new(ir) ir_constant(1u, ir->operands[0]->type->vector_elements);
-   ir_constant *c2 =
-      new(ir) ir_constant(2u, ir->operands[0]->type->vector_elements);
-   ir_constant *c4 =
-      new(ir) ir_constant(4u, ir->operands[0]->type->vector_elements);
-   ir_constant *c8 =
-      new(ir) ir_constant(8u, ir->operands[0]->type->vector_elements);
-   ir_constant *c16 =
-      new(ir) ir_constant(16u, ir->operands[0]->type->vector_elements);
-   ir_constant *c33333333 =
-      new(ir) ir_constant(0x33333333u, ir->operands[0]->type->vector_elements);
-   ir_constant *c55555555 =
-      new(ir) ir_constant(0x55555555u, ir->operands[0]->type->vector_elements);
-   ir_constant *c0F0F0F0F =
-      new(ir) ir_constant(0x0F0F0F0Fu, ir->operands[0]->type->vector_elements);
-   ir_constant *c00FF00FF =
-      new(ir) ir_constant(0x00FF00FFu, ir->operands[0]->type->vector_elements);
-   ir_variable *temp =
-      new(ir) ir_variable(glsl_type::uvec(ir->operands[0]->type->vector_elements),
-                          "temp", ir_var_temporary);
-   ir_instruction &i = *base_ir;
-
-   i.insert_before(temp);
-
-   if (ir->operands[0]->type->base_type == GLSL_TYPE_UINT) {
-      i.insert_before(assign(temp, ir->operands[0]));
-   } else {
-      assert(ir->operands[0]->type->base_type == GLSL_TYPE_INT);
-      i.insert_before(assign(temp, i2u(ir->operands[0])));
-   }
-
-   /* Swap odd and even bits.
-    *
-    * temp = ((temp >> 1) & 0x55555555u) | ((temp & 0x55555555u) << 1);
-    */
-   i.insert_before(assign(temp, bit_or(bit_and(rshift(temp, c1), c55555555),
-                                       lshift(bit_and(temp, c55555555->clone(ir, NULL)),
-                                              c1->clone(ir, NULL)))));
-   /* Swap consecutive pairs.
-    *
-    * temp = ((temp >> 2) & 0x33333333u) | ((temp & 0x33333333u) << 2);
-    */
-   i.insert_before(assign(temp, bit_or(bit_and(rshift(temp, c2), c33333333),
-                                       lshift(bit_and(temp, c33333333->clone(ir, NULL)),
-                                              c2->clone(ir, NULL)))));
-
-   /* Swap nibbles.
-    *
-    * temp = ((temp >> 4) & 0x0F0F0F0Fu) | ((temp & 0x0F0F0F0Fu) << 4);
-    */
-   i.insert_before(assign(temp, bit_or(bit_and(rshift(temp, c4), c0F0F0F0F),
-                                       lshift(bit_and(temp, c0F0F0F0F->clone(ir, NULL)),
-                                              c4->clone(ir, NULL)))));
-
-   /* The last step is, basically, bswap.  Swap the bytes, then swap the
-    * words.  When this code is run through GCC on x86, it does generate a
-    * bswap instruction.
-    *
-    * temp = ((temp >> 8) & 0x00FF00FFu) | ((temp & 0x00FF00FFu) << 8);
-    * temp = ( temp >> 16              ) | ( temp                << 16);
-    */
-   i.insert_before(assign(temp, bit_or(bit_and(rshift(temp, c8), c00FF00FF),
-                                       lshift(bit_and(temp, c00FF00FF->clone(ir, NULL)),
-                                              c8->clone(ir, NULL)))));
-
-   if (ir->operands[0]->type->base_type == GLSL_TYPE_UINT) {
-      ir->operation = ir_binop_bit_or;
-      ir->init_num_operands();
-      ir->operands[0] = rshift(temp, c16);
-      ir->operands[1] = lshift(temp, c16->clone(ir, NULL));
-   } else {
-      ir->operation = ir_unop_u2i;
-      ir->init_num_operands();
-      ir->operands[0] = bit_or(rshift(temp, c16),
-                               lshift(temp, c16->clone(ir, NULL)));
-   }
 
    this->progress = true;
 }
@@ -1467,14 +1127,6 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
          dfrexp_sig_to_arith(ir);
       break;
 
-   case ir_binop_carry:
-      carry_to_arith(ir);
-      break;
-
-   case ir_binop_borrow:
-      borrow_to_arith(ir);
-      break;
-
    case ir_unop_trunc:
       if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
          dtrunc_to_dfrac(ir);
@@ -1498,26 +1150,6 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
    case ir_unop_sign:
       if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
          dsign_to_csel(ir);
-      break;
-
-   case ir_unop_bit_count:
-      if (lowering(BIT_COUNT_TO_MATH))
-         bit_count_to_math(ir);
-      break;
-
-   case ir_triop_bitfield_extract:
-      if (lowering(EXTRACT_TO_SHIFTS))
-         extract_to_shifts(ir);
-      break;
-
-   case ir_quadop_bitfield_insert:
-      if (lowering(INSERT_TO_SHIFTS))
-         insert_to_shifts(ir);
-      break;
-
-   case ir_unop_bitfield_reverse:
-      if (lowering(REVERSE_TO_SHIFTS))
-         reverse_to_shifts(ir);
       break;
 
    case ir_unop_find_lsb:

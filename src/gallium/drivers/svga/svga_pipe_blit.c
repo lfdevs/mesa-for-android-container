@@ -857,7 +857,7 @@ svga_blit(struct pipe_context *pipe,
 
    if (!is_texture_valid_to_copy(svga, blit->src.resource)) {
       debug_printf("%s: texture is not defined to copy\n",
-                   __FUNCTION__);
+                   __func__);
       goto done;
    }
 
@@ -903,7 +903,7 @@ svga_resource_copy_region(struct pipe_context *pipe,
 
    if (!is_texture_valid_to_copy(svga, src_tex)) {
       debug_printf("%s: texture is not defined to copy\n",
-                   __FUNCTION__);
+                   __func__);
       goto done;
    }
 

@@ -36,7 +36,7 @@
 
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_memory.h"
 #include "util/list.h"
 

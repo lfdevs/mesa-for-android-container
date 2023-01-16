@@ -39,7 +39,7 @@
 
 
 #include "pipe/p_compiler.h"
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_video_enums.h"
 
@@ -111,6 +111,13 @@ struct pipe_screen {
     * rather than a potentially generic driver string.
     */
    const char *(*get_device_vendor)(struct pipe_screen *);
+
+   /**
+    * Returns the latest OpenCL CTS version passed
+    *
+    * The returned value should be the git tag used when passing conformance.
+    */
+   const char *(*get_cl_cts_version)(struct pipe_screen *);
 
    /**
     * Query an integer-valued capability/parameter/limit
@@ -747,10 +754,10 @@ struct pipe_screen {
 
    /**
     * Get additional data for interop_query_device_info
-    * 
+    *
     * \p in_data_size is how much data was allocated by the caller
     * \p data is the buffer to fill
-    * 
+    *
     * \return how much data was written
     */
    uint32_t (*interop_query_device_info)(struct pipe_screen *screen,
@@ -759,13 +766,13 @@ struct pipe_screen {
 
    /**
     * Get additional data for interop_export_object
-    * 
+    *
     * \p in_data_size is how much data was allocated by the caller
     * \p data is the buffer to fill
     * \p need_export_dmabuf can be set to false to prevent
     *    a following call to resource_get_handle, if the private
     *    data contains the exported data
-    * 
+    *
     * \return how much data was written
     */
    uint32_t (*interop_export_object)(struct pipe_screen *screen,

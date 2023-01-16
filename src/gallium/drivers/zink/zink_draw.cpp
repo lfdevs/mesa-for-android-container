@@ -525,6 +525,7 @@ zink_draw(struct pipe_context *pctx,
       zink_set_last_vertex_key(ctx)->push_drawid = drawid_broken;
 
    bool rast_prim_changed = false;
+   bool lines_changed = false;
    bool rast_state_changed = ctx->rast_state_changed;
    if (mode_changed || ctx->gfx_pipeline_state.modules_changed ||
        rast_state_changed) {
@@ -534,6 +535,10 @@ zink_draw(struct pipe_context *pctx,
             (ctx->gfx_pipeline_state.rast_prim == PIPE_PRIM_POINTS) !=
             (rast_prim == PIPE_PRIM_POINTS);
 
+         lines_changed =
+            (ctx->gfx_pipeline_state.rast_prim == PIPE_PRIM_LINES) !=
+            (rast_prim == PIPE_PRIM_LINES);
+
          ctx->gfx_pipeline_state.rast_prim = rast_prim;
          rast_prim_changed = true;
 
@@ -542,6 +547,10 @@ zink_draw(struct pipe_context *pctx,
       }
    }
    ctx->gfx_pipeline_state.gfx_prim_mode = mode;
+
+   if (!screen->optimal_keys &&
+       (lines_changed || rast_state_changed || ctx->gfx_pipeline_state.modules_changed))
+      zink_set_primitive_emulation_keys(ctx);
 
    if (index_size) {
       const VkIndexType index_type[3] = {
@@ -670,7 +679,7 @@ zink_draw(struct pipe_context *pctx,
       VKCTX(CmdSetCullModeEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.dyn_state1.cull_mode);
    }
    if ((BATCH_CHANGED || rast_state_changed) &&
-       (DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3 || (screen->info.have_EXT_line_rasterization && rast_state->base.line_stipple_enable)))
+       (DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3 || (!screen->driver_workarounds.no_linestipple && rast_state->base.line_stipple_enable)))
       VKCTX(CmdSetLineStippleEXT)(batch->state->cmdbuf, rast_state->base.line_stipple_factor, rast_state->base.line_stipple_pattern);
 
    if ((BATCH_CHANGED || rast_state_changed) && DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3) {
@@ -695,9 +704,11 @@ zink_draw(struct pipe_context *pctx,
          VKCTX(CmdSetAlphaToCoverageEnableEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->alpha_to_coverage);
          if (screen->info.feats.features.alphaToOne)
             VKCTX(CmdSetAlphaToOneEnableEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->alpha_to_one);
-         VKCTX(CmdSetColorBlendEnableEXT)(batch->state->cmdbuf, 0, ctx->fb_state.nr_cbufs, ctx->gfx_pipeline_state.blend_state->ds3.enables);
-         VKCTX(CmdSetColorWriteMaskEXT)(batch->state->cmdbuf, 0, ctx->fb_state.nr_cbufs, ctx->gfx_pipeline_state.blend_state->ds3.wrmask);
-         VKCTX(CmdSetColorBlendEquationEXT)(batch->state->cmdbuf, 0, ctx->fb_state.nr_cbufs, ctx->gfx_pipeline_state.blend_state->ds3.eq);
+         if (ctx->fb_state.nr_cbufs) {
+            VKCTX(CmdSetColorBlendEnableEXT)(batch->state->cmdbuf, 0, ctx->fb_state.nr_cbufs, ctx->gfx_pipeline_state.blend_state->ds3.enables);
+            VKCTX(CmdSetColorWriteMaskEXT)(batch->state->cmdbuf, 0, ctx->fb_state.nr_cbufs, ctx->gfx_pipeline_state.blend_state->ds3.wrmask);
+            VKCTX(CmdSetColorBlendEquationEXT)(batch->state->cmdbuf, 0, ctx->fb_state.nr_cbufs, ctx->gfx_pipeline_state.blend_state->ds3.eq);
+         }
          VKCTX(CmdSetLogicOpEnableEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->logicop_enable);
          VKCTX(CmdSetLogicOpEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.blend_state->logicop_func);
       }
@@ -786,10 +797,50 @@ zink_draw(struct pipe_context *pctx,
                          &draw_mode_is_indexed);
    }
    if (ctx->curr_program->shaders[MESA_SHADER_TESS_CTRL] &&
-       ctx->curr_program->shaders[MESA_SHADER_TESS_CTRL]->tcs.is_generated) {
+       ctx->curr_program->shaders[MESA_SHADER_TESS_CTRL]->non_fs.is_generated) {
       VKCTX(CmdPushConstants)(batch->state->cmdbuf, ctx->curr_program->base.layout, VK_SHADER_STAGE_ALL_GRAPHICS,
                          offsetof(struct zink_gfx_push_constant, default_inner_level), sizeof(float) * 6,
                          &ctx->tess_levels[0]);
+   }
+
+   if (!screen->optimal_keys) {
+      if (zink_get_fs_key(ctx)->lower_line_stipple ||
+          zink_get_gs_key(ctx)->lower_gl_point ||
+          zink_get_fs_key(ctx)->lower_line_smooth) {
+
+         assert(zink_get_gs_key(ctx)->lower_line_stipple ==
+                zink_get_fs_key(ctx)->lower_line_stipple);
+
+         assert(zink_get_gs_key(ctx)->lower_line_smooth ==
+                zink_get_fs_key(ctx)->lower_line_smooth);
+
+         float viewport_scale[2] = {
+            ctx->vp_state.viewport_states[0].scale[0],
+            ctx->vp_state.viewport_states[0].scale[1]
+         };
+         VKCTX(CmdPushConstants)(batch->state->cmdbuf,
+                                 ctx->curr_program->base.layout,
+                                 VK_SHADER_STAGE_ALL_GRAPHICS,
+                                 offsetof(struct zink_gfx_push_constant, viewport_scale),
+                                 sizeof(float) * 2, &viewport_scale);
+
+         uint32_t stipple = ctx->rast_state->base.line_stipple_pattern;
+         stipple |= ctx->rast_state->base.line_stipple_factor << 16;
+         VKCTX(CmdPushConstants)(batch->state->cmdbuf,
+                                 ctx->curr_program->base.layout,
+                                 VK_SHADER_STAGE_ALL_GRAPHICS,
+                                 offsetof(struct zink_gfx_push_constant, line_stipple_pattern),
+                                 sizeof(uint32_t), &stipple);
+
+         if (ctx->gfx_pipeline_state.shader_keys.key[MESA_SHADER_FRAGMENT].key.fs.lower_line_smooth) {
+            float line_width = ctx->rast_state->base.line_width;
+            VKCTX(CmdPushConstants)(batch->state->cmdbuf,
+                                    ctx->curr_program->base.layout,
+                                    VK_SHADER_STAGE_ALL_GRAPHICS,
+                                    offsetof(struct zink_gfx_push_constant, line_width),
+                                    sizeof(uint32_t), &line_width);
+         }
+      }
    }
 
    if (have_streamout) {

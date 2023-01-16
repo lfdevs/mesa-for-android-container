@@ -135,10 +135,9 @@ create_dcc_compress_compute(struct radv_device *device)
       .layout = device->meta_state.fast_clear_flush.dcc_decompress_compute_p_layout,
    };
 
-   result = radv_CreateComputePipelines(
-      radv_device_to_handle(device), device->meta_state.cache, 1,
-      &vk_pipeline_info, NULL,
-      &device->meta_state.fast_clear_flush.dcc_decompress_compute_pipeline);
+   result = radv_compute_pipeline_create(
+      radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info, NULL,
+      &device->meta_state.fast_clear_flush.dcc_decompress_compute_pipeline, true);
    if (result != VK_SUCCESS)
       goto cleanup;
 
@@ -275,7 +274,8 @@ create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkPipeli
          .use_rectlist = true,
          .custom_blend_mode = V_028808_CB_ELIMINATE_FAST_CLEAR,
       },
-      &device->meta_state.alloc, &device->meta_state.fast_clear_flush.cmask_eliminate_pipeline);
+      &device->meta_state.alloc, &device->meta_state.fast_clear_flush.cmask_eliminate_pipeline,
+      true);
    if (result != VK_SUCCESS)
       goto cleanup;
 
@@ -325,7 +325,8 @@ create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkPipeli
          .use_rectlist = true,
          .custom_blend_mode = V_028808_CB_FMASK_DECOMPRESS,
       },
-      &device->meta_state.alloc, &device->meta_state.fast_clear_flush.fmask_decompress_pipeline);
+      &device->meta_state.alloc, &device->meta_state.fast_clear_flush.fmask_decompress_pipeline,
+      true);
    if (result != VK_SUCCESS)
       goto cleanup;
 
@@ -377,7 +378,8 @@ create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkPipeli
                                  ? V_028808_CB_DCC_DECOMPRESS_GFX11
                                  : V_028808_CB_DCC_DECOMPRESS_GFX8,
       },
-      &device->meta_state.alloc, &device->meta_state.fast_clear_flush.dcc_decompress_pipeline);
+      &device->meta_state.alloc, &device->meta_state.fast_clear_flush.dcc_decompress_pipeline,
+      true);
    if (result != VK_SUCCESS)
       goto cleanup;
 

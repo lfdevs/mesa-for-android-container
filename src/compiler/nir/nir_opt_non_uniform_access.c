@@ -79,6 +79,7 @@ is_image_intrinsic(nir_intrinsic_instr *intrin)
    case nir_intrinsic_image_atomic_fmax:
    case nir_intrinsic_image_size:
    case nir_intrinsic_image_samples:
+   case nir_intrinsic_image_fragment_mask_load_amd:
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_bindless_image_sparse_load:
    case nir_intrinsic_bindless_image_store:
@@ -97,6 +98,7 @@ is_image_intrinsic(nir_intrinsic_instr *intrin)
    case nir_intrinsic_bindless_image_atomic_fmax:
    case nir_intrinsic_bindless_image_size:
    case nir_intrinsic_bindless_image_samples:
+   case nir_intrinsic_bindless_image_fragment_mask_load_amd:
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_sparse_load:
    case nir_intrinsic_image_deref_store:
@@ -115,6 +117,7 @@ is_image_intrinsic(nir_intrinsic_instr *intrin)
    case nir_intrinsic_image_deref_atomic_fmax:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
+   case nir_intrinsic_image_deref_fragment_mask_load_amd:
       return true;
 
    default:

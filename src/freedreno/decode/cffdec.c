@@ -815,14 +815,60 @@ endswith(uint32_t regbase, const char *suffix)
    return (s - strlen(name) + strlen(suffix)) == name;
 }
 
-void
-dump_register_val(uint32_t regbase, uint32_t dword, int level)
+struct regacc
+regacc(struct rnn *r)
 {
-   struct rnndecaddrinfo *info = rnn_reginfo(rnn, regbase);
+   if (!r)
+      r = rnn;
+
+   return (struct regacc){ .rnn = r };
+}
+
+/* returns true if the complete reg value has been accumulated: */
+bool
+regacc_push(struct regacc *r, uint32_t regbase, uint32_t dword)
+{
+   if (r->has_dword_lo) {
+      /* Work around kernel devcore dumps which accidentially miss half of a 64b reg
+       * see: https://patchwork.freedesktop.org/series/112302/
+       */
+      if (regbase != r->regbase + 1) {
+         printf("WARNING: 64b discontinuity (%x, expected %x)\n", regbase, r->regbase + 1);
+         r->has_dword_lo = false;
+         return true;
+      }
+
+      r->value |= ((uint64_t)dword) << 32;
+      r->has_dword_lo = false;
+
+      return true;
+   }
+
+   r->regbase = regbase;
+   r->value = dword;
+
+   struct rnndecaddrinfo *info = rnn_reginfo(r->rnn, regbase);
+   r->has_dword_lo = (info->width == 64);
+
+   /* Workaround for kernel devcore dump bugs: */
+   if ((info->width == 64) && endswith(regbase, "_HI")) {
+      printf("WARNING: 64b discontinuity (no _LO dword for %x)\n", regbase);
+      r->has_dword_lo = false;
+   }
+
+   rnn_reginfo_free(info);
+
+   return !r->has_dword_lo;
+}
+
+void
+dump_register_val(struct regacc *r, int level)
+{
+   struct rnndecaddrinfo *info = rnn_reginfo(rnn, r->regbase);
 
    if (info && info->typeinfo) {
       uint64_t gpuaddr = 0;
-      char *decoded = rnndec_decodeval(rnn->vc, info->typeinfo, dword);
+      char *decoded = rnndec_decodeval(rnn->vc, info->typeinfo, r->value);
       printf("%s%s: %s", levels[level], info->name, decoded);
 
       /* Try and figure out if we are looking at a gpuaddr.. this
@@ -834,13 +880,18 @@ dump_register_val(uint32_t regbase, uint32_t dword, int level)
       if (options->gpu_id >= 600) {
          if (!strcmp(info->typeinfo->name, "address") ||
              !strcmp(info->typeinfo->name, "waddress")) {
-            gpuaddr = (((uint64_t)reg_val(regbase + 1)) << 32) | dword;
+            gpuaddr = r->value;
          }
       } else if (options->gpu_id >= 500) {
-         if (endswith(regbase, "_HI") && endswith(regbase - 1, "_LO")) {
-            gpuaddr = (((uint64_t)dword) << 32) | reg_val(regbase - 1);
-         } else if (endswith(regbase, "_LO") && endswith(regbase + 1, "_HI")) {
-            gpuaddr = (((uint64_t)reg_val(regbase + 1)) << 32) | dword;
+         /* TODO we shouldn't rely on reg_val() since reg_set() might
+          * not have been called yet for the other half of the 64b reg.
+          * We can remove this hack once a5xx.xml is converted to reg64
+          * and address/waddess.
+          */
+         if (endswith(r->regbase, "_HI") && endswith(r->regbase - 1, "_LO")) {
+            gpuaddr = (r->value << 32) | reg_val(r->regbase - 1);
+         } else if (endswith(r->regbase, "_LO") && endswith(r->regbase + 1, "_HI")) {
+            gpuaddr = (((uint64_t)reg_val(r->regbase + 1)) << 32) | r->value;
          }
       }
 
@@ -854,31 +905,27 @@ dump_register_val(uint32_t regbase, uint32_t dword, int level)
 
       free(decoded);
    } else if (info) {
-      printf("%s%s: %08x\n", levels[level], info->name, dword);
+      printf("%s%s: %08"PRIx64"\n", levels[level], info->name, r->value);
    } else {
-      printf("%s<%04x>: %08x\n", levels[level], regbase, dword);
+      printf("%s<%04x>: %08"PRIx64"\n", levels[level], r->regbase, r->value);
    }
 
-   if (info) {
-      free(info->name);
-      free(info);
-   }
+   rnn_reginfo_free(info);
 }
 
 static void
-dump_register(uint32_t regbase, uint32_t dword, int level)
+dump_register(struct regacc *r, int level)
 {
    if (!quiet(3)) {
-      dump_register_val(regbase, dword, level);
+      dump_register_val(r, level);
    }
 
    for (unsigned idx = 0; type0_reg[idx].regname; idx++) {
-      if (type0_reg[idx].regbase == regbase) {
+      if (type0_reg[idx].regbase == r->regbase) {
          if (type0_reg[idx].is_reg64) {
-            uint64_t qword = (((uint64_t)reg_val(regbase + 1)) << 32) | dword;
-            type0_reg[idx].fxn64(type0_reg[idx].regname, qword, level);
+            type0_reg[idx].fxn64(type0_reg[idx].regname, r->value, level);
          } else {
-            type0_reg[idx].fxn(type0_reg[idx].regname, dword, level);
+            type0_reg[idx].fxn(type0_reg[idx].regname, (uint32_t)r->value, level);
          }
          break;
       }
@@ -895,6 +942,8 @@ static void
 dump_registers(uint32_t regbase, uint32_t *dwords, uint32_t sizedwords,
                int level)
 {
+   struct regacc r = regacc(NULL);
+
    while (sizedwords--) {
       int last_summary = summary;
 
@@ -905,7 +954,8 @@ dump_registers(uint32_t regbase, uint32_t *dwords, uint32_t sizedwords,
          printl(2, "NEEDS WFI: %s (%x)\n", regname(regbase, 1), regbase);
 
       reg_set(regbase, *dwords);
-      dump_register(regbase, *dwords, level);
+      if (regacc_push(&r, regbase, *dwords))
+         dump_register(&r, level);
       regbase++;
       dwords++;
       summary = last_summary;
@@ -1033,26 +1083,33 @@ __do_query(const char *primtype, uint32_t num_indices)
 
    for (int i = 0; i < options->nquery; i++) {
       uint32_t regbase = queryvals[i];
-      if (reg_written(regbase)) {
-         uint32_t lastval = reg_val(regbase);
-         printf("%4d: %s(%u,%u-%u,%u):%u:", draw_count, primtype, bin_x1,
-                bin_y1, bin_x2, bin_y2, num_indices);
-         if (options->gpu_id >= 500)
-            printf("%s:", render_mode);
-         printf("\t%08x", lastval);
-         if (lastval != lastvals[regbase]) {
-            printf("!");
-         } else {
-            printf(" ");
-         }
-         if (reg_rewritten(regbase)) {
-            printf("+");
-         } else {
-            printf(" ");
-         }
-         dump_register_val(regbase, lastval, 0);
-         n++;
+      if (!reg_written(regbase))
+         continue;
+
+      struct regacc r = regacc(NULL);
+
+      /* 64b regs require two successive 32b dwords: */
+      for (int d = 0; d < 2; d++)
+         if (regacc_push(&r, regbase + d, reg_val(regbase + d)))
+            break;
+
+      printf("%4d: %s(%u,%u-%u,%u):%u:", draw_count, primtype, bin_x1,
+             bin_y1, bin_x2, bin_y2, num_indices);
+      if (options->gpu_id >= 500)
+         printf("%s:", render_mode);
+      printf("\t%08"PRIx64, r.value);
+      if (r.value != lastvals[regbase]) {
+         printf("!");
+      } else {
+         printf(" ");
       }
+      if (reg_rewritten(regbase)) {
+         printf("+");
+      } else {
+         printf(" ");
+      }
+      dump_register_val(&r, 0);
+      n++;
    }
 
    if (n > 1)
@@ -1160,9 +1217,10 @@ static void
 cp_wide_reg_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t reg = dwords[0] & 0xffff;
-   int i;
-   for (i = 1; i < sizedwords; i++) {
-      dump_register(reg, dwords[i], level + 1);
+   struct regacc r = regacc(NULL);
+   for (int i = 1; i < sizedwords; i++) {
+      if (regacc_push(&r, reg, dwords[i]))
+         dump_register(&r, level + 1);
       reg_set(reg, dwords[i]);
       reg++;
    }
@@ -1455,8 +1513,8 @@ cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
       break;
    case STATE_SRC_BINDLESS: {
       const unsigned base_reg = stage == MESA_SHADER_COMPUTE
-                                   ? regbase("HLSQ_CS_BINDLESS_BASE[0].ADDR")
-                                   : regbase("HLSQ_BINDLESS_BASE[0].ADDR");
+                                   ? regbase("HLSQ_CS_BINDLESS_BASE[0].DESCRIPTOR")
+                                   : regbase("HLSQ_BINDLESS_BASE[0].DESCRIPTOR");
 
       if (is_64b()) {
          const unsigned reg = base_reg + (dwords[1] >> 28) * 2;
@@ -1834,8 +1892,14 @@ dump_register_summary(int level)
 
    in_summary = true;
 
+   struct regacc r = regacc(NULL);
+
    /* dump current state of registers: */
    printl(2, "%sdraw[%i] register values\n", levels[level], draw_count);
+
+   bool changed = false;
+   bool written = false;
+
    for (i = 0; i < regcnt(); i++) {
       uint32_t regbase = i;
       uint32_t lastval = reg_val(regbase);
@@ -1845,19 +1909,29 @@ dump_register_summary(int level)
       if (!reg_written(regbase))
          continue;
       if (lastval != lastvals[regbase]) {
-         printl(2, "!");
+         changed |= true;
          lastvals[regbase] = lastval;
-      } else {
-         printl(2, " ");
       }
       if (reg_rewritten(regbase)) {
-         printl(2, "+");
-      } else {
-         printl(2, " ");
+         written |= true;
       }
-      printl(2, "\t%08x", lastval);
       if (!quiet(2)) {
-         dump_register(regbase, lastval, level);
+         if (regacc_push(&r, regbase, lastval)) {
+            if (changed) {
+               printl(2, "!");
+            } else {
+               printl(2, " ");
+            }
+            if (written) {
+               printl(2, "+");
+            } else {
+               printl(2, " ");
+            }
+            printl(2, "\t%08"PRIx64, r.value);
+            dump_register(&r, level);
+
+            changed = written = false;
+         }
       }
    }
 
@@ -2106,13 +2180,47 @@ cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
+print_nop_tail_string(uint32_t *dwords, uint32_t sizedwords)
 {
    const char *buf = (void *)dwords;
-   int i;
+   for (int i = 0; i < 4 * sizedwords; i++) {
+      if (buf[i] == '\0')
+         break;
+      if (isascii(buf[i]))
+         printf("%c", buf[i]);
+   }
+}
 
+static void
+cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
+{
    if (quiet(3))
       return;
+
+   /* NOP is used to encode special debug strings by Turnip.
+    * See tu_cs_emit_debug_magic_strv(...)
+    */
+   static int scope_level = 0;
+   uint32_t identifier = dwords[0];
+   bool is_special = false;
+   if (identifier == CP_NOP_MESG) {
+      printf("### ");
+      is_special = true;
+   } else if (identifier == CP_NOP_BEGN) {
+      printf(">>> #%d: ", ++scope_level);
+      is_special = true;
+   } else if (identifier == CP_NOP_END) {
+      printf("<<< #%d: ", scope_level--);
+      is_special = true;
+   }
+
+   if (is_special) {
+      if (sizedwords > 1) {
+         print_nop_tail_string(dwords + 1, sizedwords - 1);
+         printf("\n");
+      }
+      return;
+   }
 
    // blob doesn't use CP_NOP for string_marker but it does
    // use it for things that end up looking like, but aren't
@@ -2120,12 +2228,7 @@ cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
    if (!options->decode_markers)
       return;
 
-   for (i = 0; i < 4 * sizedwords; i++) {
-      if (buf[i] == '\0')
-         break;
-      if (isascii(buf[i]))
-         printf("%c", buf[i]);
-   }
+   print_nop_tail_string(dwords, sizedwords);
    printf("\n");
 }
 
@@ -2590,8 +2693,11 @@ cp_context_reg_bunch(uint32_t *dwords, uint32_t sizedwords, int level)
    bool saved_summary = summary;
    summary = false;
 
+   struct regacc r = regacc(NULL);
+
    for (i = 0; i < sizedwords; i += 2) {
-      dump_register(dwords[i + 0], dwords[i + 1], level + 1);
+      if (regacc_push(&r, dwords[i + 0], dwords[i + 1]))
+         dump_register(&r, level + 1);
       reg_set(dwords[i + 0], dwords[i + 1]);
    }
 
@@ -2603,7 +2709,9 @@ cp_reg_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t reg = dwords[1] & 0xffff;
 
-   dump_register(reg, dwords[2], level + 1);
+   struct regacc r = regacc(NULL);
+   if (regacc_push(&r, reg, dwords[2]))
+      dump_register(&r, level + 1);
    reg_set(reg, dwords[2]);
 }
 
@@ -2746,21 +2854,7 @@ dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
       //		if ((dwords[0] >> 16) == 0xffff)
       //			goto skip;
 
-      if (pkt_is_type0(dwords[0])) {
-         printl(3, "t0");
-         count = type0_pkt_size(dwords[0]) + 1;
-         val = type0_pkt_offset(dwords[0]);
-         assert(val < regcnt());
-         printl(3, "%swrite %s%s (%04x)\n", levels[level + 1], regname(val, 1),
-                (dwords[0] & 0x8000) ? " (same register)" : "", val);
-         dump_registers(val, dwords + 1, count - 1, level + 2);
-         if (!quiet(3))
-            dump_hex(dwords, count, level + 1);
-      } else if (pkt_is_type4(dwords[0])) {
-         /* basically the same(ish) as type0 prior to a5xx */
-         printl(3, "t4");
-         count = type4_pkt_size(dwords[0]) + 1;
-         val = type4_pkt_offset(dwords[0]);
+      if (pkt_is_regwrite(dwords[0], &val, &count)) {
          assert(val < regcnt());
          printl(3, "%swrite %s (%04x)\n", levels[level + 1], regname(val, 1),
                 val);
@@ -2769,7 +2863,6 @@ dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
             dump_hex(dwords, count, level + 1);
 #if 0
       } else if (pkt_is_type1(dwords[0])) {
-         printl(3, "t1");
          count = 3;
          val = dwords[0] & 0xfff;
          printl(3, "%swrite %s\n", levels[level+1], regname(val, 1));
@@ -2779,38 +2872,11 @@ dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
          dump_registers(val, dwords+2, 1, level+2);
          if (!quiet(3))
             dump_hex(dwords, count, level+1);
-      } else if (pkt_is_type2(dwords[0])) {
-         printl(3, "t2");
-         printf("%sNOP\n", levels[level+1]);
-         count = 1;
-         if (!quiet(3))
-            dump_hex(dwords, count, level+1);
 #endif
-      } else if (pkt_is_type3(dwords[0])) {
-         count = type3_pkt_size(dwords[0]) + 1;
-         val = cp_type3_opcode(dwords[0]);
+      } else if (pkt_is_opcode(dwords[0], &val, &count)) {
          const struct type3_op *op = get_type3_op(val);
          if (op->options.load_all_groups)
             load_all_groups(level + 1);
-         printl(3, "t3");
-         const char *name = pktname(val);
-         if (!quiet(2)) {
-            printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
-                   rnn->vc->colors->bctarg, name, rnn->vc->colors->reset, val,
-                   count, (dwords[0] & 0x1) ? " (predicated)" : "");
-         }
-         if (name)
-            dump_domain(dwords + 1, count - 1, level + 2, name);
-         op->fxn(dwords + 1, count - 1, level + 1);
-         if (!quiet(2))
-            dump_hex(dwords, count, level + 1);
-      } else if (pkt_is_type7(dwords[0])) {
-         count = type7_pkt_size(dwords[0]) + 1;
-         val = cp_type7_opcode(dwords[0]);
-         const struct type3_op *op = get_type3_op(val);
-         if (op->options.load_all_groups)
-            load_all_groups(level + 1);
-         printl(3, "t7");
          const char *name = pktname(val);
          if (!quiet(2)) {
             printf("\t%sopcode: %s%s%s (%02x) (%d dwords)\n", levels[level],
@@ -2830,7 +2896,6 @@ dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
          if (!quiet(2))
             dump_hex(dwords, count, level + 1);
       } else if (pkt_is_type2(dwords[0])) {
-         printl(3, "t2");
          printl(3, "%snop\n", levels[level + 1]);
       } else {
          /* for 5xx+ we can do a passable job of looking for start of next valid

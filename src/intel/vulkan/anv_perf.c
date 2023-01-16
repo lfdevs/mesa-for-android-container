@@ -109,7 +109,10 @@ anv_device_perf_open(struct anv_device *device, uint64_t metric_id)
    properties[p++] = metric_id;
 
    properties[p++] = DRM_I915_PERF_PROP_OA_FORMAT;
-   properties[p++] = I915_OA_FORMAT_A32u40_A4u32_B8_C8;
+   properties[p++] =
+      device->info->verx10 >= 125 ?
+      I915_OA_FORMAT_A24u40_A14u32_B8_C8 :
+      I915_OA_FORMAT_A32u40_A4u32_B8_C8;
 
    properties[p++] = DRM_I915_PERF_PROP_OA_EXPONENT;
    properties[p++] = 31; /* slowest sampling period */
@@ -430,10 +433,12 @@ anv_perf_write_pass_results(struct intel_perf_config *perf,
                             const struct intel_perf_query_result *accumulated_results,
                             union VkPerformanceCounterResultKHR *results)
 {
+   const struct intel_perf_query_info *query = pool->pass_query[pass];
+
    for (uint32_t c = 0; c < pool->n_counters; c++) {
       const struct intel_perf_counter_pass *counter_pass = &pool->counter_pass[c];
 
-      if (counter_pass->pass != pass)
+      if (counter_pass->query != query)
          continue;
 
       switch (pool->pass_query[pass]->kind) {

@@ -49,7 +49,6 @@ struct dispatch_packet {
    uint32_t grid_size_x;
    uint32_t grid_size_y;
    uint32_t grid_size_z;
-   uint32_t private_segment_size;
    uint32_t group_segment_size;
    uint64_t kernel_object;
    uint64_t kernarg_address;
@@ -131,6 +130,7 @@ static void si_create_compute_state_async(void *job, void *gdata, int thread_ind
                             &sel->active_samplers_and_images);
 
    program->shader.is_monolithic = true;
+   program->shader.wave_size = si_determine_wave_size(sscreen, &program->shader);
 
    /* Variable block sizes need 10 bits (1 + log2(SI_MAX_VARIABLE_THREADS_PER_BLOCK)) per dim.
     * We pack them into a single user SGPR.
@@ -241,11 +241,9 @@ static void *si_create_compute_state(struct pipe_context *ctx, const struct pipe
       si_const_and_shader_buffer_descriptors_idx(PIPE_SHADER_COMPUTE);
    sel->sampler_and_images_descriptors_index =
       si_sampler_and_image_descriptors_idx(PIPE_SHADER_COMPUTE);
-   sel->info.base.shared_size = cso->req_local_mem;
+   sel->info.base.shared_size = cso->static_shared_mem;
    program->shader.selector = &program->sel;
-   program->shader.wave_size = si_determine_wave_size(sscreen, &program->shader);
    program->ir_type = cso->ir_type;
-   program->private_size = cso->req_private_mem;
    program->input_size = cso->req_input_mem;
 
    if (cso->ir_type != PIPE_SHADER_IR_NATIVE) {
@@ -274,6 +272,9 @@ static void *si_create_compute_state(struct pipe_context *ctx, const struct pipe
          return NULL;
       }
       memcpy((void *)program->shader.binary.elf_buffer, header->blob, header->num_bytes);
+
+      /* This is only for clover without NIR. */
+      program->shader.wave_size = sscreen->info.gfx_level >= GFX10 ? 32 : 64;
 
       const amd_kernel_code_t *code_object = si_compute_get_code_object(program, 0);
       code_object_to_config(code_object, &program->shader.config);
@@ -417,7 +418,7 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
       }
 
       /* Set the pointer to border colors. */
-      /* Aldebaran doesn't support border colors. */
+      /* MI200 doesn't support border colors. */
       if (sctx->border_color_buffer) {
          uint64_t bc_va = sctx->border_color_buffer->gpu_address;
 
@@ -436,7 +437,7 @@ void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf 
                              sctx->gfx_level >= GFX10 ? 0x20 : 0);
    }
 
-   if (!info->has_graphics && info->family >= CHIP_ARCTURUS) {
+   if (!info->has_graphics && info->family >= CHIP_MI100) {
       radeon_set_sh_reg_seq(R_00B894_COMPUTE_STATIC_THREAD_MGMT_SE4, 4);
       radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
       radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
@@ -507,43 +508,61 @@ static bool si_setup_compute_scratch_buffer(struct si_context *sctx, struct si_s
 
 static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute *program,
                                      struct si_shader *shader, const amd_kernel_code_t *code_object,
-                                     unsigned offset, bool *prefetch)
+                                     unsigned offset, bool *prefetch, unsigned variable_shared_size)
 {
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    struct ac_shader_config inline_config = {0};
-   struct ac_shader_config *config;
+   const struct ac_shader_config *config;
+   unsigned rsrc2;
    uint64_t shader_va;
+   unsigned stage = shader->selector->info.base.stage;
 
    *prefetch = false;
 
-   if (sctx->cs_shader_state.emitted_program == program && sctx->cs_shader_state.offset == offset)
+   assert(variable_shared_size == 0 || stage == MESA_SHADER_KERNEL || program->ir_type == PIPE_SHADER_IR_NATIVE);
+   if (sctx->cs_shader_state.emitted_program == program && sctx->cs_shader_state.offset == offset &&
+       sctx->cs_shader_state.variable_shared_size == variable_shared_size)
       return true;
 
    if (program->ir_type != PIPE_SHADER_IR_NATIVE) {
       config = &shader->config;
    } else {
+      code_object_to_config(code_object, &inline_config);
+      config = &inline_config;
+   }
+   /* copy rsrc2 so we don't have to change it inside the si_shader object */
+   rsrc2 = config->rsrc2;
+
+   /* only do this for OpenCL */
+   if (program->ir_type == PIPE_SHADER_IR_NATIVE || stage == MESA_SHADER_KERNEL) {
+      unsigned shared_size = program->sel.info.base.shared_size + variable_shared_size;
       unsigned lds_blocks;
 
-      config = &inline_config;
-      code_object_to_config(code_object, config);
+      /* Clover uses the compute API differently than other frontends and expects drivers to parse
+       * the shared_size out of the shader headers.
+       */
+      if (program->ir_type == PIPE_SHADER_IR_NATIVE) {
+         lds_blocks = config->lds_size;
+      } else {
+         lds_blocks = 0;
+      }
 
-      lds_blocks = config->lds_size;
       /* XXX: We are over allocating LDS.  For GFX6, the shader reports
        * LDS in blocks of 256 bytes, so if there are 4 bytes lds
        * allocated in the shader and 4 bytes allocated by the state
        * tracker, then we will set LDS_SIZE to 512 bytes rather than 256.
        */
       if (sctx->gfx_level <= GFX6) {
-         lds_blocks += align(program->sel.info.base.shared_size, 256) >> 8;
+         lds_blocks += align(shared_size, 256) >> 8;
       } else {
-         lds_blocks += align(program->sel.info.base.shared_size, 512) >> 9;
+         lds_blocks += align(shared_size, 512) >> 9;
       }
 
       /* TODO: use si_multiwave_lds_size_workaround */
       assert(lds_blocks <= 0xFF);
 
-      config->rsrc2 &= C_00B84C_LDS_SIZE;
-      config->rsrc2 |= S_00B84C_LDS_SIZE(lds_blocks);
+      rsrc2 &= C_00B84C_LDS_SIZE;
+      rsrc2 |= S_00B84C_LDS_SIZE(lds_blocks);
    }
 
    unsigned tmpring_size;
@@ -586,7 +605,7 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
    }
 
    radeon_emit(config->rsrc1);
-   radeon_emit(config->rsrc2);
+   radeon_emit(rsrc2);
 
    COMPUTE_DBG(sctx->screen,
                "COMPUTE_PGM_RSRC1: 0x%08x "
@@ -598,6 +617,7 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
 
    sctx->cs_shader_state.emitted_program = program;
    sctx->cs_shader_state.offset = offset;
+   sctx->cs_shader_state.variable_shared_size = variable_shared_size;
 
    *prefetch = true;
    return true;
@@ -684,8 +704,8 @@ static void si_setup_user_sgprs_co_v2(struct si_context *sctx, const amd_kernel_
       dispatch.grid_size_y = util_cpu_to_le32(info->grid[1] * info->block[1]);
       dispatch.grid_size_z = util_cpu_to_le32(info->grid[2] * info->block[2]);
 
-      dispatch.private_segment_size = util_cpu_to_le32(program->private_size);
-      dispatch.group_segment_size = util_cpu_to_le32(program->sel.info.base.shared_size);
+      dispatch.group_segment_size =
+         util_cpu_to_le32(program->sel.info.base.shared_size + info->variable_shared_mem);
 
       dispatch.kernarg_address = util_cpu_to_le64(kernel_args_va);
 
@@ -1004,7 +1024,8 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
 
    /* First emit registers. */
    bool prefetch;
-   if (!si_switch_compute_shader(sctx, program, &program->shader, code_object, info->pc, &prefetch))
+   if (!si_switch_compute_shader(sctx, program, &program->shader, code_object, info->pc, &prefetch,
+                                 info->variable_shared_mem))
       return;
 
    si_upload_compute_shader_descriptors(sctx);

@@ -43,6 +43,32 @@ layout(push_constant) uniform CONSTS {
    convert_leaf_args args;
 };
 
+uint32_t
+convert_geometry_id_and_flags(uint32_t src)
+{
+   uint32_t flags = src >> 28;
+   uint32_t ret = src & 0xfffffffu;
+   if ((flags & VK_GEOMETRY_OPAQUE_BIT_KHR) != 0)
+      ret |= RADV_GEOMETRY_OPAQUE;
+   return ret;
+}
+
+uint32_t
+convert_sbt_offset_and_flags(uint32_t src)
+{
+   uint32_t flags = src >> 24;
+   uint32_t ret = src & 0xffffffu;
+   if ((flags & VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR) != 0)
+      ret |= RADV_INSTANCE_FORCE_OPAQUE;
+   if ((flags & VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR) == 0)
+      ret |= RADV_INSTANCE_NO_FORCE_NOT_OPAQUE;
+   if ((flags & VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR) != 0)
+      ret |= RADV_INSTANCE_TRIANGLE_FACING_CULL_DISABLE;
+   if ((flags & VK_GEOMETRY_INSTANCE_TRIANGLE_FLIP_FACING_BIT_KHR) != 0)
+      ret |= RADV_INSTANCE_TRIANGLE_FLIP_FACING;
+   return ret;
+}
+
 void
 main()
 {
@@ -60,7 +86,7 @@ main()
 
       DEREF(dst).coords = src.coords;
       DEREF(dst).triangle_id = src.triangle_id;
-      DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
+      DEREF(dst).geometry_id_and_flags = convert_geometry_id_and_flags(src.geometry_id_and_flags);
       DEREF(dst).id = src.id;
       break;
    }
@@ -71,7 +97,7 @@ main()
          INDEX(radv_bvh_aabb_node, dst_leaves, global_id);
       DEREF(dst).aabb = src.base.aabb;
       DEREF(dst).primitive_id = src.primitive_id;
-      DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
+      DEREF(dst).geometry_id_and_flags = convert_geometry_id_and_flags(src.geometry_id_and_flags);
       break;
    }
    default: { /* instances */
@@ -83,9 +109,9 @@ main()
       if (src.base_ptr != 0)
          bvh_offset = DEREF(REF(radv_accel_struct_header)(src.base_ptr)).bvh_offset;
 
-      DEREF(dst).bvh_ptr = src.base_ptr + bvh_offset;
+      DEREF(dst).bvh_ptr = addr_to_node(src.base_ptr + bvh_offset);
       DEREF(dst).custom_instance_and_mask = src.custom_instance_and_mask;
-      DEREF(dst).sbt_offset_and_flags = src.sbt_offset_and_flags;
+      DEREF(dst).sbt_offset_and_flags = convert_sbt_offset_and_flags(src.sbt_offset_and_flags);
       DEREF(dst).instance_id = src.instance_id;
       DEREF(dst).bvh_offset = bvh_offset;
 

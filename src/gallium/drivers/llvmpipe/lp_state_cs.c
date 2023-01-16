@@ -498,7 +498,6 @@ llvmpipe_create_compute_state(struct pipe_context *pipe,
    shader->no = cs_no++;
 
    shader->base.type = templ->ir_type;
-   shader->req_local_mem = templ->req_local_mem;
    if (templ->ir_type == PIPE_SHADER_IR_NIR_SERIALIZED) {
       struct blob_reader reader;
       const struct pipe_binary_program_header *hdr = templ->prog;
@@ -954,7 +953,7 @@ lp_csctx_set_sampler_views(struct lp_cs_context *csctx,
                            unsigned num,
                            struct pipe_sampler_view **views)
 {
-   LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_SETUP, "%s\n", __func__);
 
    assert(num <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
 
@@ -1099,7 +1098,7 @@ lp_csctx_set_sampler_state(struct lp_cs_context *csctx,
                            unsigned num,
                            struct pipe_sampler_state **samplers)
 {
-   LP_DBG(DEBUG_SETUP, "%s\n", __FUNCTION__);
+   LP_DBG(DEBUG_SETUP, "%s\n", __func__);
 
    assert(num <= PIPE_MAX_SAMPLERS);
 
@@ -1127,7 +1126,7 @@ lp_csctx_set_cs_constants(struct lp_cs_context *csctx,
 {
    unsigned i;
 
-   LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__, (void *) buffers);
+   LP_DBG(DEBUG_SETUP, "%s %p\n", __func__, (void *) buffers);
 
    assert(num <= ARRAY_SIZE(csctx->constants));
 
@@ -1146,7 +1145,7 @@ lp_csctx_set_cs_ssbos(struct lp_cs_context *csctx,
                        struct pipe_shader_buffer *buffers)
 {
    int i;
-   LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__, (void *)buffers);
+   LP_DBG(DEBUG_SETUP, "%s %p\n", __func__, (void *)buffers);
 
    assert (num <= ARRAY_SIZE(csctx->ssbos));
 
@@ -1166,7 +1165,7 @@ lp_csctx_set_cs_images(struct lp_cs_context *csctx,
 {
    unsigned i;
 
-   LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__, (void *) images);
+   LP_DBG(DEBUG_SETUP, "%s %p\n", __func__, (void *) images);
 
    assert(num <= ARRAY_SIZE(csctx->images));
 
@@ -1425,7 +1424,7 @@ llvmpipe_launch_grid(struct pipe_context *pipe,
    job_info.block_size[1] = info->block[1];
    job_info.block_size[2] = info->block[2];
    job_info.work_dim = info->work_dim;
-   job_info.req_local_mem = llvmpipe->cs->req_local_mem;
+   job_info.req_local_mem = llvmpipe->cs->req_local_mem + info->variable_shared_mem;
    job_info.zero_initialize_shared_memory = llvmpipe->cs->zero_initialize_shared_memory;
    job_info.current = &llvmpipe->csctx->cs.current;
 

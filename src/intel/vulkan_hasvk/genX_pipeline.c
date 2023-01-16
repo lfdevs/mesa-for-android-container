@@ -25,8 +25,9 @@
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
-#include "genxml/gen_rt_pack.h"
+#include "genxml/genX_rt_pack.h"
 
+#include "common/intel_genX_state.h"
 #include "common/intel_l3_config.h"
 #include "common/intel_sample_positions.h"
 #include "nir/nir_xfb_info.h"
@@ -354,11 +355,6 @@ emit_3dstate_sbe(struct anv_graphics_pipeline *pipeline)
       .ConstantInterpolationEnable = wm_prog_data->flat_inputs,
    };
 
-#if GFX_VER >= 9
-   for (unsigned i = 0; i < 32; i++)
-      sbe.AttributeActiveComponentFormat[i] = ACF_XYZW;
-#endif
-
 #if GFX_VER >= 8
    /* On Broadwell, they broke 3DSTATE_SBE into two packets */
    struct GENX(3DSTATE_SBE_SWIZ) swiz = {
@@ -584,16 +580,12 @@ genX(rasterization_mode)(VkPolygonMode raster_mode,
       switch (line_mode) {
       case VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT:
          *api_mode = DX100;
-#if GFX_VER <= 9
-         /* Prior to ICL, the algorithm the HW uses to draw wide lines
-          * doesn't quite match what the CTS expects, at least for rectangular
-          * lines, so we set this to false here, making it draw parallelograms
-          * instead, which work well enough.
+         /* The algorithm the HW uses to draw wide lines doesn't quite match
+          * what the CTS expects, at least for rectangular lines, so we set
+          * this to false here, making it draw parallelograms instead, which
+          * work well enough.
           */
          *msaa_rasterization_enable = line_width < 1.0078125;
-#else
-         *msaa_rasterization_enable = true;
-#endif
          break;
 
       case VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT:
@@ -652,10 +644,6 @@ emit_rs_state(struct anv_graphics_pipeline *pipeline,
    sf.LineStippleEnable = rs->line.stipple.enable;
 #endif
 
-#if GFX_VER >= 12
-   sf.DerefBlockSize = urb_deref_block_size;
-#endif
-
    bool point_from_shader;
    const struct brw_vue_prog_data *last_vue_prog_data =
       anv_pipeline_get_last_vue_prog_data(pipeline);
@@ -692,17 +680,8 @@ emit_rs_state(struct anv_graphics_pipeline *pipeline,
    raster.BackFaceFillMode = genX(vk_to_intel_fillmode)[rs->polygon_mode];
    raster.ScissorRectangleEnable = true;
 
-#if GFX_VER >= 9
-   /* GFX9+ splits ViewportZClipTestEnable into near and far enable bits */
-   raster.ViewportZFarClipTestEnable = pipeline->depth_clip_enable;
-   raster.ViewportZNearClipTestEnable = pipeline->depth_clip_enable;
-#elif GFX_VER >= 8
+#if GFX_VER >= 8
    raster.ViewportZClipTestEnable = pipeline->depth_clip_enable;
-#endif
-
-#if GFX_VER >= 9
-   raster.ConservativeRasterizationEnable =
-      rs->conservative_mode != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
 #endif
 
 #if GFX_VER == 7
@@ -1341,25 +1320,6 @@ get_scratch_space(const struct anv_shader_bin *bin)
    return ffs(bin->prog_data->total_scratch / 2048);
 }
 
-static UNUSED uint32_t
-get_scratch_surf(struct anv_pipeline *pipeline,
-                 gl_shader_stage stage,
-                 const struct anv_shader_bin *bin)
-{
-   if (bin->prog_data->total_scratch == 0)
-      return 0;
-
-   struct anv_bo *bo =
-      anv_scratch_pool_alloc(pipeline->device,
-                             &pipeline->device->scratch_pool,
-                             stage, bin->prog_data->total_scratch);
-   anv_reloc_list_add_bo(pipeline->batch.relocs,
-                         pipeline->batch.alloc, bo);
-   return anv_scratch_pool_get_surf(pipeline->device,
-                                    &pipeline->device->scratch_pool,
-                                    bin->prog_data->total_scratch) >> 4;
-}
-
 static void
 emit_3dstate_vs(struct anv_graphics_pipeline *pipeline)
 {
@@ -1380,43 +1340,19 @@ emit_3dstate_vs(struct anv_graphics_pipeline *pipeline)
 #endif
 
       assert(!vs_prog_data->base.base.use_alt_mode);
-#if GFX_VER < 11
       vs.SingleVertexDispatch       = false;
-#endif
       vs.VectorMaskEnable           = false;
       /* Wa_1606682166:
        * Incorrect TDL's SSP address shift in SARB for 16:6 & 18:8 modes.
        * Disable the Sampler state prefetch functionality in the SARB by
        * programming 0xB000[30] to '1'.
        */
-      vs.SamplerCount               = GFX_VER == 11 ? 0 : get_sampler_count(vs_bin);
+      vs.SamplerCount               = get_sampler_count(vs_bin);
       vs.BindingTableEntryCount     = vs_bin->bind_map.surface_count;
       vs.FloatingPointMode          = IEEE754;
       vs.IllegalOpcodeExceptionEnable = false;
       vs.SoftwareExceptionEnable    = false;
       vs.MaximumNumberofThreads     = devinfo->max_vs_threads - 1;
-
-      if (GFX_VER == 9 && devinfo->gt == 4 &&
-          anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL)) {
-         /* On Sky Lake GT4, we have experienced some hangs related to the VS
-          * cache and tessellation.  It is unknown exactly what is happening
-          * but the Haswell docs for the "VS Reference Count Full Force Miss
-          * Enable" field of the "Thread Mode" register refer to a HSW bug in
-          * which the VUE handle reference count would overflow resulting in
-          * internal reference counting bugs.  My (Jason's) best guess is that
-          * this bug cropped back up on SKL GT4 when we suddenly had more
-          * threads in play than any previous gfx9 hardware.
-          *
-          * What we do know for sure is that setting this bit when
-          * tessellation shaders are in use fixes a GPU hang in Batman: Arkham
-          * City when playing with DXVK (https://bugs.freedesktop.org/107280).
-          * Disabling the vertex cache with tessellation shaders should only
-          * have a minor performance impact as the tessellation shaders are
-          * likely generating and processing far more geometry than the vertex
-          * stage.
-          */
-         vs.VertexCacheDisable = true;
-      }
 
       vs.VertexURBEntryReadLength      = vs_prog_data->base.urb_read_length;
       vs.VertexURBEntryReadOffset      = 0;
@@ -1430,14 +1366,9 @@ emit_3dstate_vs(struct anv_graphics_pipeline *pipeline)
          vs_prog_data->base.cull_distance_mask;
 #endif
 
-#if GFX_VERx10 >= 125
-      vs.ScratchSpaceBuffer =
-         get_scratch_surf(&pipeline->base, MESA_SHADER_VERTEX, vs_bin);
-#else
       vs.PerThreadScratchSpace   = get_scratch_space(vs_bin);
       vs.ScratchSpaceBasePointer =
          get_scratch_address(&pipeline->base, MESA_SHADER_VERTEX, vs_bin);
-#endif
    }
 }
 
@@ -1466,18 +1397,8 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       hs.StatisticsEnable = true;
       hs.KernelStartPointer = tcs_bin->kernel.offset;
       /* Wa_1606682166 */
-      hs.SamplerCount = GFX_VER == 11 ? 0 : get_sampler_count(tcs_bin);
+      hs.SamplerCount = get_sampler_count(tcs_bin);
       hs.BindingTableEntryCount = tcs_bin->bind_map.surface_count;
-
-#if GFX_VER >= 12
-      /* Wa_1604578095:
-       *
-       *    Hang occurs when the number of max threads is less than 2 times
-       *    the number of instance count. The number of max threads must be
-       *    more than 2 times the number of instance count.
-       */
-      assert((devinfo->max_tcs_threads / 2) > tcs_prog_data->instances);
-#endif
 
       hs.MaximumNumberofThreads = devinfo->max_tcs_threads - 1;
       hs.IncludeVertexHandles = true;
@@ -1487,31 +1408,10 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       hs.VertexURBEntryReadOffset = 0;
       hs.DispatchGRFStartRegisterForURBData =
          tcs_prog_data->base.base.dispatch_grf_start_reg & 0x1f;
-#if GFX_VER >= 12
-      hs.DispatchGRFStartRegisterForURBData5 =
-         tcs_prog_data->base.base.dispatch_grf_start_reg >> 5;
-#endif
 
-#if GFX_VERx10 >= 125
-      hs.ScratchSpaceBuffer =
-         get_scratch_surf(&pipeline->base, MESA_SHADER_TESS_CTRL, tcs_bin);
-#else
       hs.PerThreadScratchSpace = get_scratch_space(tcs_bin);
       hs.ScratchSpaceBasePointer =
          get_scratch_address(&pipeline->base, MESA_SHADER_TESS_CTRL, tcs_bin);
-#endif
-
-#if GFX_VER == 12
-      /*  Patch Count threshold specifies the maximum number of patches that
-       *  will be accumulated before a thread dispatch is forced.
-       */
-      hs.PatchCountThreshold = tcs_prog_data->patch_count_threshold;
-#endif
-
-#if GFX_VER >= 9
-      hs.DispatchMode = tcs_prog_data->base.dispatch_mode;
-      hs.IncludePrimitiveID = tcs_prog_data->include_primitive_id;
-#endif
    }
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_TE), te) {
@@ -1534,16 +1434,6 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       te.TEEnable = true;
       te.MaximumTessellationFactorOdd = 63.0;
       te.MaximumTessellationFactorNotOdd = 64.0;
-#if GFX_VERx10 >= 125
-      te.TessellationDistributionMode = TEDMODE_RR_FREE;
-      te.TessellationDistributionLevel = TEDLEVEL_PATCH;
-      /* 64_TRIANGLES */
-      te.SmallPatchThreshold = 3;
-      /* 1K_TRIANGLES */
-      te.TargetBlockSize = 8;
-      /* 1K_TRIANGLES */
-      te.LocalBOPAccumulatorThreshold = 1;
-#endif
    }
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_DS), ds) {
@@ -1551,7 +1441,7 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       ds.StatisticsEnable = true;
       ds.KernelStartPointer = tes_bin->kernel.offset;
       /* Wa_1606682166 */
-      ds.SamplerCount = GFX_VER == 11 ? 0 : get_sampler_count(tes_bin);
+      ds.SamplerCount = get_sampler_count(tes_bin);
       ds.BindingTableEntryCount = tes_bin->bind_map.surface_count;
       ds.MaximumNumberofThreads = devinfo->max_tes_threads - 1;
 
@@ -1564,15 +1454,10 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
          tes_prog_data->base.base.dispatch_grf_start_reg;
 
 #if GFX_VER >= 8
-#if GFX_VER < 11
       ds.DispatchMode =
          tes_prog_data->base.dispatch_mode == DISPATCH_MODE_SIMD8 ?
-            DISPATCH_MODE_SIMD8_SINGLE_PATCH :
-            DISPATCH_MODE_SIMD4X2;
-#else
-      assert(tes_prog_data->base.dispatch_mode == DISPATCH_MODE_SIMD8);
-      ds.DispatchMode = DISPATCH_MODE_SIMD8_SINGLE_PATCH;
-#endif
+         DISPATCH_MODE_SIMD8_SINGLE_PATCH :
+         DISPATCH_MODE_SIMD4X2;
 
       ds.UserClipDistanceClipTestEnableBitmask =
          tes_prog_data->base.clip_distance_mask;
@@ -1580,17 +1465,9 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
          tes_prog_data->base.cull_distance_mask;
 #endif
 
-#if GFX_VER >= 12
-      ds.PrimitiveIDNotRequired = !tes_prog_data->include_primitive_id;
-#endif
-#if GFX_VERx10 >= 125
-      ds.ScratchSpaceBuffer =
-         get_scratch_surf(&pipeline->base, MESA_SHADER_TESS_EVAL, tes_bin);
-#else
       ds.PerThreadScratchSpace = get_scratch_space(tes_bin);
       ds.ScratchSpaceBasePointer =
          get_scratch_address(&pipeline->base, MESA_SHADER_TESS_EVAL, tes_bin);
-#endif
    }
 }
 
@@ -1617,7 +1494,7 @@ emit_3dstate_gs(struct anv_graphics_pipeline *pipeline)
       gs.SingleProgramFlow       = false;
       gs.VectorMaskEnable        = false;
       /* Wa_1606682166 */
-      gs.SamplerCount            = GFX_VER == 11 ? 0 : get_sampler_count(gs_bin);
+      gs.SamplerCount            = get_sampler_count(gs_bin);
       gs.BindingTableEntryCount  = gs_bin->bind_map.surface_count;
       gs.IncludeVertexHandles    = gs_prog_data->base.include_vue_handles;
       gs.IncludePrimitiveID      = gs_prog_data->include_primitive_id;
@@ -1655,14 +1532,9 @@ emit_3dstate_gs(struct anv_graphics_pipeline *pipeline)
          gs_prog_data->base.cull_distance_mask;
 #endif
 
-#if GFX_VERx10 >= 125
-      gs.ScratchSpaceBuffer =
-         get_scratch_surf(&pipeline->base, MESA_SHADER_GEOMETRY, gs_bin);
-#else
       gs.PerThreadScratchSpace   = get_scratch_space(gs_bin);
       gs.ScratchSpaceBasePointer =
          get_scratch_address(&pipeline->base, MESA_SHADER_GEOMETRY, gs_bin);
-#endif
    }
 }
 
@@ -1806,25 +1678,8 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
 #endif
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PS), ps) {
-      brw_fs_get_dispatch_enables(devinfo, wm_prog_data,
-                                  ms != NULL ? ms->rasterization_samples : 1,
-                                  &ps._8PixelDispatchEnable,
-                                  &ps._16PixelDispatchEnable,
-                                  &ps._32PixelDispatchEnable);
-
-      /* From the Sky Lake PRM 3DSTATE_PS::32 Pixel Dispatch Enable:
-       *
-       *    "When NUM_MULTISAMPLES = 16 or FORCE_SAMPLE_COUNT = 16, SIMD32
-       *    Dispatch must not be enabled for PER_PIXEL dispatch mode."
-       *
-       * Since 16x MSAA is first introduced on SKL, we don't need to apply
-       * the workaround on any older hardware.
-       */
-      if (GFX_VER >= 9 && !wm_prog_data->persample_dispatch &&
-          ms != NULL && ms->rasterization_samples == 16) {
-         assert(ps._8PixelDispatchEnable || ps._16PixelDispatchEnable);
-         ps._32PixelDispatchEnable = false;
-      }
+      intel_set_ps_dispatch_state(&ps, devinfo, wm_prog_data,
+                                  ms != NULL ? ms->rasterization_samples : 1);
 
       ps.KernelStartPointer0 = fs_bin->kernel.offset +
                                brw_wm_prog_data_prog_offset(wm_prog_data, ps, 0);
@@ -1837,7 +1692,7 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
       ps.VectorMaskEnable           = GFX_VER >= 8 &&
                                       wm_prog_data->uses_vmask;
       /* Wa_1606682166 */
-      ps.SamplerCount               = GFX_VER == 11 ? 0 : get_sampler_count(fs_bin);
+      ps.SamplerCount               = get_sampler_count(fs_bin);
       ps.BindingTableEntryCount     = fs_bin->bind_map.surface_count;
       ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0 ||
                                       wm_prog_data->base.ubo_ranges[0].length;
@@ -1870,14 +1725,9 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
       ps.DispatchGRFStartRegisterForConstantSetupData2 =
          brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 2);
 
-#if GFX_VERx10 >= 125
-      ps.ScratchSpaceBuffer =
-         get_scratch_surf(&pipeline->base, MESA_SHADER_FRAGMENT, fs_bin);
-#else
       ps.PerThreadScratchSpace   = get_scratch_space(fs_bin);
       ps.ScratchSpaceBasePointer =
          get_scratch_address(&pipeline->base, MESA_SHADER_FRAGMENT, fs_bin);
-#endif
    }
 }
 
@@ -1913,35 +1763,7 @@ emit_3dstate_ps_extra(struct anv_graphics_pipeline *pipeline,
                                          rp->stencil_self_dependency ||
                                          wm_prog_data->uses_kill;
 
-#if GFX_VER >= 9
-      ps.PixelShaderComputesStencil = wm_prog_data->computed_stencil;
-      ps.PixelShaderPullsBary    = wm_prog_data->pulls_bary;
-
-      ps.InputCoverageMaskState = ICMS_NONE;
-      assert(!wm_prog_data->inner_coverage); /* Not available in SPIR-V */
-      if (!wm_prog_data->uses_sample_mask)
-         ps.InputCoverageMaskState = ICMS_NONE;
-      else if (wm_prog_data->per_coarse_pixel_dispatch)
-         ps.InputCoverageMaskState  = ICMS_NORMAL;
-      else if (wm_prog_data->post_depth_coverage)
-         ps.InputCoverageMaskState = ICMS_DEPTH_COVERAGE;
-      else
-         ps.InputCoverageMaskState = ICMS_NORMAL;
-#else
       ps.PixelShaderUsesInputCoverageMask = wm_prog_data->uses_sample_mask;
-#endif
-
-#if GFX_VER >= 11
-      ps.PixelShaderRequiresSourceDepthandorWPlaneCoefficients =
-         wm_prog_data->uses_depth_w_coefficients;
-      ps.PixelShaderIsPerCoarsePixel = wm_prog_data->per_coarse_pixel_dispatch;
-#endif
-#if GFX_VERx10 >= 125
-      /* TODO: We should only require this when the last geometry shader uses
-       *       a fragment shading rate that is not constant.
-       */
-      ps.EnablePSDependencyOnCPsizeChange = wm_prog_data->per_coarse_pixel_dispatch;
-#endif
    }
 }
 #endif
@@ -1988,37 +1810,6 @@ compute_kill_pixel(struct anv_graphics_pipeline *pipeline,
       (ms && ms->alpha_to_coverage_enable);
 }
 
-#if GFX_VER == 12
-static void
-emit_3dstate_primitive_replication(struct anv_graphics_pipeline *pipeline,
-                                   const struct vk_render_pass_state *rp)
-{
-   const int replication_count =
-      anv_pipeline_get_last_vue_prog_data(pipeline)->vue_map.num_pos_slots;
-
-   assert(replication_count >= 1);
-   if (replication_count == 1) {
-      anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
-      return;
-   }
-
-   uint32_t view_mask = rp->view_mask;
-   assert(replication_count == util_bitcount(view_mask));
-   assert(replication_count <= MAX_VIEWS_FOR_PRIMITIVE_REPLICATION);
-
-   anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr) {
-      pr.ReplicaMask = (1 << replication_count) - 1;
-      pr.ReplicationCount = replication_count - 1;
-
-      int i = 0;
-      u_foreach_bit(view_index, rp->view_mask) {
-         pr.RTAIOffset[i] = view_index;
-         i++;
-      }
-   }
-}
-#endif
-
 void
 genX(graphics_pipeline_emit)(struct anv_graphics_pipeline *pipeline,
                              const struct vk_graphics_pipeline_state *state)
@@ -2034,10 +1825,6 @@ genX(graphics_pipeline_emit)(struct anv_graphics_pipeline *pipeline,
    compute_kill_pixel(pipeline, state->ms, state->rp);
 
    emit_3dstate_clip(pipeline, state->ia, state->vp, state->rs);
-
-#if GFX_VER == 12
-   emit_3dstate_primitive_replication(pipeline, state->rp);
-#endif
 
 #if 0
    /* From gfx7_vs_state.c */
@@ -2077,28 +1864,6 @@ genX(graphics_pipeline_emit)(struct anv_graphics_pipeline *pipeline,
 #endif
 }
 
-#if GFX_VERx10 >= 125
-
-void
-genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
-{
-   struct anv_device *device = pipeline->base.device;
-   const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
-   anv_pipeline_setup_l3_config(&pipeline->base, cs_prog_data->base.total_shared > 0);
-
-   const UNUSED struct anv_shader_bin *cs_bin = pipeline->cs;
-   const struct intel_device_info *devinfo = device->info;
-
-   anv_batch_emit(&pipeline->base.batch, GENX(CFE_STATE), cfe) {
-      cfe.MaximumNumberofThreads =
-         devinfo->max_cs_threads * devinfo->subslice_total;
-      cfe.ScratchSpaceBuffer =
-         get_scratch_surf(&pipeline->base, MESA_SHADER_COMPUTE, cs_bin);
-   }
-}
-
-#else /* #if GFX_VERx10 >= 125 */
-
 void
 genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
 {
@@ -2125,12 +1890,8 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
       vfe.MaximumNumberofThreads =
          devinfo->max_cs_threads * devinfo->subslice_total - 1;
       vfe.NumberofURBEntries     = GFX_VER <= 7 ? 0 : 2;
-#if GFX_VER < 11
       vfe.ResetGatewayTimer      = true;
-#endif
-#if GFX_VER <= 8
       vfe.BypassGatewayControl   = true;
-#endif
       vfe.URBEntryAllocationSize = GFX_VER <= 7 ? 0 : 2;
       vfe.CURBEAllocationSize    = vfe_curbe_allocation;
 
@@ -2165,7 +1926,7 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
          brw_cs_prog_data_prog_offset(cs_prog_data, dispatch.simd_size),
 
       /* Wa_1606682166 */
-      .SamplerCount           = GFX_VER == 11 ? 0 : get_sampler_count(cs_bin),
+      .SamplerCount           = get_sampler_count(cs_bin),
       /* We add 1 because the CS indirect parameters buffer isn't accounted
        * for in bind_map.surface_count.
        */
@@ -2182,18 +1943,6 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
       .CrossThreadConstantDataReadLength =
          cs_prog_data->push.cross_thread.regs,
 #endif
-#if GFX_VER >= 12
-      /* TODO: Check if we are missing workarounds and enable mid-thread
-       * preemption.
-       *
-       * We still have issues with mid-thread preemption (it was already
-       * disabled by the kernel on gfx11, due to missing workarounds). It's
-       * possible that we are just missing some workarounds, and could enable
-       * it later, but for now let's disable it to fix a GPU in compute in Car
-       * Chase (and possibly more).
-       */
-      .ThreadPreemptionDisable = true,
-#endif
 
       .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
    };
@@ -2201,5 +1950,3 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
                                         pipeline->interface_descriptor_data,
                                         &desc);
 }
-
-#endif /* #if GFX_VERx10 >= 125 */

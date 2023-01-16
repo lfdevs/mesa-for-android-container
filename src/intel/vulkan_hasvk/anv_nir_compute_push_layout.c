@@ -37,7 +37,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
                             void *mem_ctx)
 {
    const struct brw_compiler *compiler = pdevice->compiler;
-   const struct intel_device_info *devinfo = compiler->devinfo;
    memset(map->push_ranges, 0, sizeof(map->push_ranges));
 
    bool has_const_ubo = false;
@@ -67,13 +66,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
                break;
             }
 
-            case nir_intrinsic_load_desc_set_address_intel:
-               push_start = MIN2(push_start,
-                  offsetof(struct anv_push_constants, desc_sets));
-               push_end = MAX2(push_end, push_start +
-                  sizeof_field(struct anv_push_constants, desc_sets));
-               break;
-
             default:
                break;
             }
@@ -102,7 +94,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       push_end = MAX2(push_end, push_reg_mask_end);
    }
 
-   if (nir->info.stage == MESA_SHADER_COMPUTE && devinfo->verx10 < 125) {
+   if (nir->info.stage == MESA_SHADER_COMPUTE) {
       /* For compute shaders, we always have to have the subgroup ID.  The
        * back-end compiler will "helpfully" add it for us in the last push
        * constant slot.  Yes, there is an off-by-one error here but that's
@@ -118,7 +110,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
     * push_end (no push constants is indicated by push_start = UINT_MAX).
     */
    push_start = MIN2(push_start, push_end);
-   push_start = align_down_u32(push_start, 32);
+   push_start = ROUND_DOWN_TO(push_start, 32);
 
    /* For vec4 our push data size needs to be aligned to a vec4 and for
     * scalar, it needs to be aligned to a DWORD.
@@ -162,17 +154,6 @@ anv_nir_compute_push_layout(nir_shader *nir,
                   nir_intrinsic_set_base(intrin,
                                          nir_intrinsic_base(intrin) -
                                          base_offset);
-                  break;
-               }
-
-               case nir_intrinsic_load_desc_set_address_intel: {
-                  b->cursor = nir_before_instr(&intrin->instr);
-                  nir_ssa_def *pc_load = nir_load_uniform(b, 1, 64,
-                     nir_imul_imm(b, intrin->src[0].ssa, sizeof(uint64_t)),
-                     .base = offsetof(struct anv_push_constants, desc_sets),
-                     .range = sizeof_field(struct anv_push_constants, desc_sets),
-                     .dest_type = nir_type_uint64);
-                  nir_ssa_def_rewrite_uses(&intrin->dest.ssa, pc_load);
                   break;
                }
 

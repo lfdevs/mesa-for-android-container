@@ -167,27 +167,16 @@ fd6_blend_state_create(struct pipe_context *pctx,
    so->use_dual_src_blend =
       cso->rt[0].blend_enable && util_blend_state_is_dual(cso, 0);
 
-   unsigned nr = cso->independent_blend_enable ? cso->max_rt : 0;
-   for (unsigned i = 0; i <= nr; i++) {
-      const struct pipe_rt_blend_state *rt = &cso->rt[i];
+   STATIC_ASSERT((4 * PIPE_MAX_COLOR_BUFS) == (8 * sizeof(so->all_mrt_write_mask)));
+   so->all_mrt_write_mask = 0;
+
+   for (unsigned i = 0; i <= cso->max_rt; i++) {
+      const struct pipe_rt_blend_state *rt =
+         &cso->rt[cso->independent_blend_enable ? i : 0];
 
       so->reads_dest |= rt->blend_enable;
 
-      /* From the PoV of LRZ, having masked color channels is
-       * the same as having blend enabled, in that the draw will
-       * care about the fragments from an earlier draw.
-       *
-       * NOTE we actually don't care about masked color channels
-       * that don't actually exist in the render target, but we
-       * don't know the render target format here to determine
-       * that.  It is probably not worth worrying about, but if
-       * we find a game/benchmark that goes out of it's way to
-       * mask off non-existent channels, we should fixup the
-       * pipe_blend_state to give us more info.
-       */
-      if (rt->blend_enable || (rt->colormask != 0xf)) {
-         so->reads_dest = true;
-      }
+      so->all_mrt_write_mask |= rt->colormask << (4 * i);
    }
 
    util_dynarray_init(&so->variants, so);

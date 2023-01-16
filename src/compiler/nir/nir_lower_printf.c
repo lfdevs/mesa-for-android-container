@@ -82,7 +82,7 @@ lower_printf_instr(nir_builder *b, nir_instr *instr, void *_options)
 
    /* Write the format string ID */
    nir_ssa_def *fmt_str_id_offset =
-      nir_i2i(b, offset, ptr_bit_size);
+      nir_i2iN(b, offset, ptr_bit_size);
    nir_deref_instr *fmt_str_id_deref =
       nir_build_deref_array(b, buffer, fmt_str_id_offset);
    fmt_str_id_deref = nir_build_deref_cast(b, &fmt_str_id_deref->dest.ssa,
@@ -111,7 +111,7 @@ lower_printf_instr(nir_builder *b, nir_instr *instr, void *_options)
 
       unsigned field_offset = glsl_get_struct_field_offset(args->type, i);
       nir_ssa_def *arg_offset =
-         nir_i2i(b, nir_iadd_imm(b, offset,
+         nir_i2iN(b, nir_iadd_imm(b, offset,
                                  fmt_str_id_size + field_offset),
                  ptr_bit_size);
       nir_deref_instr *dst_arg_deref =

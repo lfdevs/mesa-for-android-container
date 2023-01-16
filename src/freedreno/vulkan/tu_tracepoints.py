@@ -45,19 +45,22 @@ tu_default_tps = []
 #
 
 def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
-                 tp_default_enabled=True):
+                 tp_default_enabled=True, marker_tp=True,
+                 queue_tp=True):
     global tu_default_tps
     if tp_default_enabled:
         tu_default_tps.append(name)
     Tracepoint('start_{0}'.format(name),
                toggle_name=name,
-               tp_perfetto='tu_start_{0}'.format(name))
-    Tracepoint('end_{0}'.format(name),
-               toggle_name=name,
                args=args,
                tp_struct=tp_struct,
-               tp_perfetto='tu_end_{0}'.format(name),
-               tp_print=tp_print)
+               tp_perfetto='tu_perfetto_start_{0}'.format(name) if queue_tp else None,
+               tp_print=tp_print if queue_tp else None,
+               tp_markers='tu_cs_trace_start' if marker_tp else None)
+    Tracepoint('end_{0}'.format(name),
+               toggle_name=name,
+               tp_perfetto='tu_perfetto_end_{0}'.format(name),
+               tp_markers='tu_cs_trace_end' if marker_tp else None)
 
 begin_end_tp('cmd_buffer',
     args=[ArgStruct(type='const struct tu_cmd_buffer *', var='cmd')],

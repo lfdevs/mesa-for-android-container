@@ -6,7 +6,7 @@
 /* define etc1_parse_block and etc. */
 #define UINT8_TYPE uint8_t
 #define TAG(x) x
-#include "../../mesa/main/texcompress_etc_tmp.h"
+#include "util/format/texcompress_etc_tmp.h"
 #undef TAG
 #undef UINT8_TYPE
 

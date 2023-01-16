@@ -22,8 +22,8 @@
  * SOFTWARE.
  */
 
-#include "agx_compiler.h"
 #include "agx_builder.h"
+#include "agx_compiler.h"
 
 /*
  * Emits code for
@@ -40,31 +40,22 @@
  * We only handles register-register copies, not general agx_index sources. This
  * suffices for its internal use for register allocation.
  */
-static agx_index
-copy_src(const struct agx_copy *copy)
-{
-   if (copy->is_uniform)
-      return agx_uniform(copy->src, copy->size);
-   else
-      return agx_register(copy->src, copy->size);
-}
-
 static void
 do_copy(agx_builder *b, const struct agx_copy *copy)
 {
-   agx_mov_to(b, agx_register(copy->dest, copy->size), copy_src(copy));
+   agx_mov_to(b, agx_register(copy->dest, copy->src.size), copy->src);
 }
 
 static void
 do_swap(agx_builder *b, const struct agx_copy *copy)
 {
-   assert(!copy->is_uniform && "cannot swap uniform with GPR");
+   assert(copy->src.type == AGX_INDEX_REGISTER && "only GPRs are swapped");
 
-   if (copy->dest == copy->src)
+   if (copy->dest == copy->src.value)
       return;
 
-   agx_index x = agx_register(copy->dest, copy->size);
-   agx_index y = copy_src(copy);
+   agx_index x = agx_register(copy->dest, copy->src.size);
+   agx_index y = copy->src;
 
    agx_xor_to(b, x, x, y);
    agx_xor_to(b, y, x, y);
@@ -90,7 +81,7 @@ struct copy_ctx {
 static bool
 entry_blocked(struct agx_copy *entry, struct copy_ctx *ctx)
 {
-   for (unsigned i = 0; i < agx_size_align_16(entry->size); i++) {
+   for (unsigned i = 0; i < agx_size_align_16(entry->src.size); i++) {
       if (ctx->physreg_use_count[entry->dest + i] != 0)
          return true;
    }
@@ -101,7 +92,7 @@ entry_blocked(struct agx_copy *entry, struct copy_ctx *ctx)
 static bool
 is_real(struct agx_copy *entry)
 {
-   return !entry->is_uniform;
+   return entry->src.type == AGX_INDEX_REGISTER;
 }
 
 /* TODO: Generalize to other bit sizes */
@@ -110,25 +101,23 @@ split_32bit_copy(struct copy_ctx *ctx, struct agx_copy *entry)
 {
    assert(!entry->done);
    assert(is_real(entry));
-   assert(agx_size_align_16(entry->size) == 2);
+   assert(agx_size_align_16(entry->src.size) == 2);
    struct agx_copy *new_entry = &ctx->entries[ctx->entry_count++];
 
    new_entry->dest = entry->dest + 1;
-   new_entry->src = entry->src + 1;
+   new_entry->src = entry->src;
+   new_entry->src.value += 1;
    new_entry->done = false;
-   entry->size = AGX_SIZE_16;
-   new_entry->size = AGX_SIZE_16;
+   entry->src.size = AGX_SIZE_16;
+   new_entry->src.size = AGX_SIZE_16;
    ctx->physreg_dest[entry->dest + 1] = new_entry;
 }
 
 void
-agx_emit_parallel_copies(agx_builder *b,
-                         struct agx_copy *copies,
+agx_emit_parallel_copies(agx_builder *b, struct agx_copy *copies,
                          unsigned num_copies)
 {
-   struct copy_ctx _ctx = {
-      .entry_count = num_copies
-   };
+   struct copy_ctx _ctx = {.entry_count = num_copies};
 
    struct copy_ctx *ctx = &_ctx;
 
@@ -141,9 +130,9 @@ agx_emit_parallel_copies(agx_builder *b,
 
       ctx->entries[i] = *entry;
 
-      for (unsigned j = 0; j < agx_size_align_16(entry->size); j++) {
+      for (unsigned j = 0; j < agx_size_align_16(entry->src.size); j++) {
          if (is_real(entry))
-            ctx->physreg_use_count[entry->src + j]++;
+            ctx->physreg_use_count[entry->src.value + j]++;
 
          /* Copies should not have overlapping destinations. */
          assert(!ctx->physreg_dest[entry->dest + j]);
@@ -170,9 +159,9 @@ agx_emit_parallel_copies(agx_builder *b,
             entry->done = true;
             progress = true;
             do_copy(b, entry);
-            for (unsigned j = 0; j < agx_size_align_16(entry->size); j++) {
+            for (unsigned j = 0; j < agx_size_align_16(entry->src.size); j++) {
                if (is_real(entry))
-                  ctx->physreg_use_count[entry->src + j]--;
+                  ctx->physreg_use_count[entry->src.value + j]--;
                ctx->physreg_dest[entry->dest + j] = NULL;
             }
          }
@@ -193,7 +182,7 @@ agx_emit_parallel_copies(agx_builder *b,
        */
       for (unsigned i = 0; i < ctx->entry_count; i++) {
          struct agx_copy *entry = &ctx->entries[i];
-         if (entry->done || (agx_size_align_16(entry->size) != 2))
+         if (entry->done || (agx_size_align_16(entry->src.size) != 2))
             continue;
 
          if (((ctx->physreg_use_count[entry->dest] == 0 ||
@@ -249,7 +238,7 @@ agx_emit_parallel_copies(agx_builder *b,
       assert(is_real(entry));
 
       /* catch trivial copies */
-      if (entry->dest == entry->src) {
+      if (entry->dest == entry->src.value) {
          entry->done = true;
          continue;
       }
@@ -259,16 +248,16 @@ agx_emit_parallel_copies(agx_builder *b,
       /* Split any blocking copies whose sources are only partially
        * contained within our destination.
        */
-      if (agx_size_align_16(entry->size) == 1) {
+      if (agx_size_align_16(entry->src.size) == 1) {
          for (unsigned j = 0; j < ctx->entry_count; j++) {
             struct agx_copy *blocking = &ctx->entries[j];
 
             if (blocking->done)
                continue;
 
-            if (blocking->src <= entry->dest &&
-                blocking->src + 1 >= entry->dest &&
-                agx_size_align_16(blocking->size) == 2) {
+            if (blocking->src.value <= entry->dest &&
+                blocking->src.value + 1 >= entry->dest &&
+                agx_size_align_16(blocking->src.size) == 2) {
                split_32bit_copy(ctx, blocking);
             }
          }
@@ -281,9 +270,11 @@ agx_emit_parallel_copies(agx_builder *b,
        */
       for (unsigned j = 0; j < ctx->entry_count; j++) {
          struct agx_copy *blocking = &ctx->entries[j];
-         if (blocking->src >= entry->dest &&
-             blocking->src < entry->dest + agx_size_align_16(entry->size)) {
-            blocking->src = entry->src + (blocking->src - entry->dest);
+         if (blocking->src.value >= entry->dest &&
+             blocking->src.value <
+                entry->dest + agx_size_align_16(entry->src.size)) {
+            blocking->src.value =
+               entry->src.value + (blocking->src.value - entry->dest);
          }
       }
 

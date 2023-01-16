@@ -832,7 +832,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
 
       if (gallivm_debug & GALLIVM_DEBUG_PERF) {
          debug_printf("%s: AoS fetch fallback for %s\n",
-                      __FUNCTION__, format_desc->short_name);
+                      __func__, format_desc->short_name);
       }
 
       tmp_type = type;

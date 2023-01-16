@@ -187,5 +187,5 @@ Developer Git Tips
       git config --global branch.autosetuprebase=always
 
    See `Understanding Git
-   Conceptually <https://www.eecs.harvard.edu/~cduan/technical/git/>`__
+   Conceptually <https://www.cduan.com/technical/git/>`__
    for a fairly clear explanation about all of this.

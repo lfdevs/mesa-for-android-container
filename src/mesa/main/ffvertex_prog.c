@@ -34,7 +34,7 @@
 
 
 #include "main/errors.h"
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/mtypes.h"
 #include "main/macros.h"
 #include "main/enums.h"

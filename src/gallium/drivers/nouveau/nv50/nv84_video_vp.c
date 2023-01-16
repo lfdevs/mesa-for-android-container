@@ -287,7 +287,7 @@ nv84_decoder_vp_mpeg12_mb(struct nv84_decoder *dec,
        * a lot faster if one skips over them.
        */
 
-#if defined(PIPE_ARCH_SSE) && defined(PIPE_ARCH_X86_64)
+#if DETECT_ARCH_SSE && DETECT_ARCH_X86_64
 /* Note that the SSE implementation is much more tuned to X86_64. As it's not
  * benchmarked on X86_32, disable it there. I suspect that the code needs to
  * be reorganized in terms of 32-bit wide data in order to be more

@@ -38,7 +38,7 @@
 #include <stdbool.h>
 #include "c11/threads.h"
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/glthread.h"
 #include "main/consts_exts.h"
 #include "main/shader_types.h"
@@ -319,20 +319,26 @@ struct gl_colorbuffer_attrib
    GLboolean sRGBEnabled;  /**< Framebuffer sRGB blending/updating requested */
 };
 
+union gl_vertex_format_user {
+   struct {
+      GLenum16 Type;        /**< datatype: GL_FLOAT, GL_INT, etc */
+      bool Bgra;            /**< true if GL_BGRA, else GL_RGBA */
+      GLubyte Size:5;       /**< components per element (1,2,3,4) */
+      GLubyte Normalized:1; /**< GL_ARB_vertex_program */
+      GLubyte Integer:1;    /**< Integer-valued? */
+      GLubyte Doubles:1;    /**< double values are not converted to floats */
+   };
+   uint32_t All;
+};
 
 /**
  * Vertex format to describe a vertex element.
  */
 struct gl_vertex_format
 {
-   GLenum16 Type;        /**< datatype: GL_FLOAT, GL_INT, etc */
-   GLenum16 Format;      /**< default: GL_RGBA, but may be GL_BGRA */
+   union gl_vertex_format_user User;
    enum pipe_format _PipeFormat:16; /**< pipe_format for Gallium */
-   GLubyte Size:5;       /**< components per element (1,2,3,4) */
-   GLubyte Normalized:1; /**< GL_ARB_vertex_program */
-   GLubyte Integer:1;    /**< Integer-valued? */
-   GLubyte Doubles:1;    /**< double values are not converted to floats */
-   GLubyte _ElementSize; /**< Size of each element in bytes */
+   GLushort _ElementSize; /**< Size of each element in bytes */
 };
 
 
@@ -1680,27 +1686,11 @@ struct gl_vertex_array_object
     */
    GLbitfield NonDefaultStateMask;
 
-   /**
-    * Mask of VERT_BIT_* enabled arrays past position/generic0 mapping
-    *
-    * The value is valid past calling _mesa_update_vao_derived_arrays.
-    * Note that _mesa_update_vao_derived_arrays is called when binding
-    * the VAO to Array._DrawVAO.
-    */
-   GLbitfield _EffEnabledVBO;
-
-   /** Same as _EffEnabledVBO, but for instance divisors. */
-   GLbitfield _EffEnabledNonZeroDivisor;
-
    /** Denotes the way the position/generic0 attribute is mapped */
    gl_attribute_map_mode _AttributeMapMode;
 
    /** "Enabled" with the position/generic0 attribute aliasing resolved */
    GLbitfield _EnabledWithMapMode;
-
-   /** Which states have been changed according to the gallium definitions. */
-   bool NewVertexBuffers;
-   bool NewVertexElements;
 
    /** The index buffer (also known as the element array buffer in OpenGL). */
    struct gl_buffer_object *IndexBufferObj;
@@ -1755,15 +1745,18 @@ struct gl_array_attrib
     * mode or display list draws.
     */
    struct gl_vertex_array_object *_DrawVAO;
+
    /**
-    * The VERT_BIT_* bits effectively enabled from the current _DrawVAO.
-    * This is always a subset of _mesa_get_vao_vp_inputs(_DrawVAO)
-    * but may omit those arrays that shall not be referenced by the current
-    * gl_vertex_program_state::_VPMode. For example the generic attributes are
-    * maked out form the _DrawVAO's enabled arrays when a fixed function
-    * array draw is executed.
+    * Whether per-vertex edge flags are enabled and should be processed by
+    * the vertex shader.
     */
-   GLbitfield _DrawVAOEnabledAttribs;
+   bool _PerVertexEdgeFlagsEnabled;
+
+   /**
+    * Whether all edge flags are false, causing all points and lines generated
+    * by polygon mode to be not drawn. (i.e. culled)
+    */
+   bool _PolygonModeAlwaysCulls;
 
    /**
     * If gallium vertex buffers are dirty, this flag indicates whether gallium
@@ -1774,12 +1767,6 @@ struct gl_array_attrib
     * The driver should clear this when it's done.
     */
    bool NewVertexElements;
-
-   /**
-    * Initially or if the VAO referenced by _DrawVAO is deleted the _DrawVAO
-    * pointer is set to the _EmptyVAO which is just an empty VAO all the time.
-    */
-   struct gl_vertex_array_object *_EmptyVAO;
 
    /** Legal array datatypes and the API for which they have been computed */
    GLbitfield LegalTypesMask;
@@ -2727,6 +2714,7 @@ struct gl_framebuffer
 
    GLbitfield _IntegerBuffers;  /**< Which color buffers are integer valued */
    GLbitfield _BlendForceAlphaToOne;  /**< Which color buffers need blend factor adjustment */
+   GLbitfield _IsRGB;  /**< Which color buffers have an RGB base format? */
    GLbitfield _FP32Buffers; /**< Which color buffers are FP32 */
 
    /* ARB_color_buffer_float */
@@ -2769,12 +2757,12 @@ struct gl_framebuffer
    /** Delete this framebuffer */
    void (*Delete)(struct gl_framebuffer *fb);
 
-   struct st_framebuffer_iface *iface;
+   struct pipe_frontend_drawable *drawable;
    enum st_attachment_type statts[ST_ATTACHMENT_COUNT];
    unsigned num_statts;
    int32_t stamp;
-   int32_t iface_stamp;
-   uint32_t iface_ID;
+   int32_t drawable_stamp;
+   uint32_t drawable_ID;
 
    /* list of framebuffer objects */
    struct list_head head;
@@ -2850,37 +2838,6 @@ struct gl_matrix_stack
 #define _NEW_FF_FRAG_PROGRAM   (1u << 31)
 #define _NEW_ALL ~0
 /*@}*/
-
-
-/**
- * Composite state flags, deprecated and inefficient, do not use.
- */
-/*@{*/
-#define _NEW_LIGHT     (_NEW_LIGHT_CONSTANTS |  /* state parameters */ \
-                        _NEW_LIGHT_STATE |      /* rasterizer state */ \
-                        _NEW_MATERIAL |         /* light materials */ \
-                        _NEW_FF_VERT_PROGRAM | \
-                        _NEW_FF_FRAG_PROGRAM)
-
-#define _NEW_TEXTURE   (_NEW_TEXTURE_OBJECT | _NEW_TEXTURE_STATE | \
-                        _NEW_FF_VERT_PROGRAM | _NEW_FF_FRAG_PROGRAM)
-
-#define _MESA_NEW_NEED_EYE_COORDS         (_NEW_FF_VERT_PROGRAM | \
-                                           _NEW_FF_FRAG_PROGRAM | \
-                                           _NEW_LIGHT_CONSTANTS | \
-                                           _NEW_TEXTURE_STATE |	\
-                                           _NEW_POINT |		\
-                                           _NEW_PROGRAM |	\
-                                           _NEW_MODELVIEW)
-
-#define _MESA_NEW_SEPARATE_SPECULAR        (_NEW_LIGHT | \
-                                            _NEW_FOG | \
-                                            _NEW_PROGRAM)
-
-
-/*@}*/
-
-
 
 
 /* This has to be included here. */
@@ -3581,7 +3538,6 @@ struct gl_context
 
    GLuint TextureStateTimestamp; /**< detect changes to shared state */
 
-   GLboolean LastVertexStageDirty; /**< the last vertex stage has changed */
    GLboolean PointSizeIsSet; /**< the glPointSize value in the shader is set */
 
    /** \name For debugging/development only */

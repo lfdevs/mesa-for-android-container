@@ -36,6 +36,7 @@
 #include "st_context.h"
 #include "st_atom.h"
 #include "st_cb_bitmap.h"
+#include "st_manager.h"
 #include "st_texture.h"
 #include "st_util.h"
 #include "pipe/p_context.h"
@@ -114,6 +115,9 @@ st_update_framebuffer_state( struct st_context *st )
    struct gl_framebuffer *fb = st->ctx->DrawBuffer;
    struct gl_renderbuffer *rb;
    GLuint i;
+
+   /* Window framebuffer changes are received here. */
+   st_manager_validate_framebuffers(st);
 
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);

@@ -37,6 +37,14 @@
 #include "spirv.h"
 #include "vtn_generator_ids.h"
 
+extern uint32_t mesa_spirv_debug;
+
+#ifndef NDEBUG
+#define MESA_SPIRV_DEBUG(flag) unlikely(mesa_spirv_debug & (MESA_SPIRV_DEBUG_ ## flag))
+#else
+#define MESA_SPIRV_DEBUG(flag) false
+#endif
+
 struct vtn_builder;
 struct vtn_decoration;
 

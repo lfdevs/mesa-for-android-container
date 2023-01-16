@@ -29,6 +29,7 @@
 
 #include "ac_gpu_info.h"
 #include "amdgfxregs.h"
+#include "addrlib/src/amdgpu_asic_addr.h"
 
 typedef void (*gpu_init_func)(struct radeon_info *info);
 
@@ -139,9 +140,9 @@ static void init_gfx103(struct radeon_info *info)
 
 static void init_gfx11(struct radeon_info *info)
 {
-   info->family = CHIP_UNKNOWN;
+   info->family = CHIP_GFX1100;
    info->gfx_level = GFX11;
-   info->family_id = 0x00;
+   info->family_id = FAMILY_GFX1100;
    info->chip_external_rev = 0x01;
    info->use_display_dcc_unaligned = false;
    info->use_display_dcc_with_retile_blit = true;
@@ -181,6 +182,15 @@ static struct testcase testcases[] = {
    {"gfx103_8pipe", init_gfx103, 3, 3},
    {"gfx103_4pipe", init_gfx103, 2, 2},
    {"gfx103_4pipe_2pkr", init_gfx103, 1, 2},
+   {"gfx103_4pipe_1pkr", init_gfx103, 0, 2},
+   {"gfx103_2pipe_1pkr", init_gfx103, 0, 1},
+   {"gfx11_32pipe", init_gfx11, 5, 5},
+   {"gfx11_16pipe", init_gfx11, 4, 4},
+   {"gfx11_8pipe", init_gfx11, 3, 3},
+   {"gfx11_4pipe", init_gfx11, 2, 2},
+   {"gfx11_4pipe_2pkr", init_gfx11, 1, 2},
+   {"gfx11_4pipe_1pkr", init_gfx11, 0, 2},
+   {"gfx11_2pipe_1pkr", init_gfx11, 0, 1},
 };
 
 static struct radeon_info get_radeon_info(struct testcase *testcase)

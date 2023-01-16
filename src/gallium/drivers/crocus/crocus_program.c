@@ -49,8 +49,7 @@
 #include "nir/tgsi_to_nir.h"
 
 #define KEY_INIT_NO_ID()                              \
-   .base.tex.swizzles[0 ... BRW_MAX_SAMPLERS - 1] = 0x688,   \
-   .base.tex.compressed_multisample_layout_mask = ~0
+   .base.tex.swizzles[0 ... BRW_MAX_SAMPLERS - 1] = 0x688
 #define KEY_INIT()                                                        \
    .base.program_string_id = ish->program_id,                             \
    .base.limit_trig_input_range = screen->driconf.limit_trig_input_range, \
@@ -161,7 +160,6 @@ crocus_populate_sampler_prog_key_data(struct crocus_context *ice,
 
       struct crocus_sampler_view *texture = ice->state.shaders[stage].textures[s];
       key->swizzles[s] = SWIZZLE_NOOP;
-      key->scale_factors[s] = 0.0f;
 
       if (!texture)
          continue;
@@ -436,7 +434,7 @@ setup_vec4_image_sysval(uint32_t *sysvals, uint32_t idx,
  * ideal situation (though the backend can reduce this).
  */
 static void
-crocus_setup_uniforms(const struct brw_compiler *compiler,
+crocus_setup_uniforms(ASSERTED const struct intel_device_info *devinfo,
                       void *mem_ctx,
                       nir_shader *nir,
                       struct brw_stage_prog_data *prog_data,
@@ -444,8 +442,6 @@ crocus_setup_uniforms(const struct brw_compiler *compiler,
                       unsigned *out_num_system_values,
                       unsigned *out_num_cbufs)
 {
-   UNUSED const struct intel_device_info *devinfo = compiler->devinfo;
-
    const unsigned CROCUS_MAX_SYSTEM_VALUES =
       PIPE_MAX_SHADER_IMAGES * BRW_IMAGE_PARAM_SIZE;
    enum brw_param_builtin *system_values =
@@ -478,6 +474,13 @@ crocus_setup_uniforms(const struct brw_compiler *compiler,
          nir_ssa_def *offset;
 
          switch (intrin->intrinsic) {
+         case nir_intrinsic_load_base_workgroup_id: {
+            /* GL doesn't have a concept of base workgroup */
+            b.cursor = nir_instr_remove(&intrin->instr);
+            nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+                                     nir_imm_zero(&b, 3, 32));
+            continue;
+         }
          case nir_intrinsic_load_constant: {
             /* This one is special because it reads from the shader constant
              * data and not cbuf0 which gallium uploads for us.
@@ -1208,7 +1211,7 @@ crocus_compile_vs(struct crocus_context *ice,
 
    prog_data->use_alt_mode = nir->info.use_legacy_math_rules;
 
-   crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
+   crocus_setup_uniforms(devinfo, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
 
    crocus_lower_swizzles(nir, &key->base.tex);
@@ -1401,8 +1404,6 @@ crocus_compile_tcs(struct crocus_context *ice,
 {
    struct crocus_screen *screen = (struct crocus_screen *)ice->ctx.screen;
    const struct brw_compiler *compiler = screen->compiler;
-   const struct nir_shader_compiler_options *options =
-      compiler->nir_options[MESA_SHADER_TESS_CTRL];
    void *mem_ctx = ralloc_context(NULL);
    struct brw_tcs_prog_data *tcs_prog_data =
       rzalloc(mem_ctx, struct brw_tcs_prog_data);
@@ -1420,7 +1421,7 @@ crocus_compile_tcs(struct crocus_context *ice,
    if (ish) {
       nir = nir_shader_clone(mem_ctx, ish->nir);
 
-      crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
+      crocus_setup_uniforms(devinfo, mem_ctx, nir, prog_data, &system_values,
                             &num_system_values, &num_cbufs);
 
       crocus_lower_swizzles(nir, &key->base.tex);
@@ -1429,7 +1430,7 @@ crocus_compile_tcs(struct crocus_context *ice,
       if (can_push_ubo(devinfo))
          brw_nir_analyze_ubo_ranges(compiler, nir, NULL, prog_data->ubo_ranges);
    } else {
-      nir = brw_nir_create_passthrough_tcs(mem_ctx, compiler, options, key);
+      nir = brw_nir_create_passthrough_tcs(mem_ctx, compiler, key);
 
       /* Reserve space for passing the default tess levels as constants. */
       num_cbufs = 1;
@@ -1592,7 +1593,7 @@ crocus_compile_tes(struct crocus_context *ice,
    if (key->clamp_pointsize)
       nir_lower_point_size(nir, 1.0, 255.0);
 
-   crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
+   crocus_setup_uniforms(devinfo, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
    crocus_lower_swizzles(nir, &key->base.tex);
    struct crocus_binding_table bt;
@@ -1732,7 +1733,7 @@ crocus_compile_gs(struct crocus_context *ice,
    if (key->clamp_pointsize)
       nir_lower_point_size(nir, 1.0, 255.0);
 
-   crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
+   crocus_setup_uniforms(devinfo, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
    crocus_lower_swizzles(nir, &key->base.tex);
    struct crocus_binding_table bt;
@@ -1858,7 +1859,7 @@ crocus_compile_fs(struct crocus_context *ice,
 
    prog_data->use_alt_mode = nir->info.use_legacy_math_rules;
 
-   crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
+   crocus_setup_uniforms(devinfo, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
 
    /* Lower output variables to load_output intrinsics before setting up
@@ -2555,7 +2556,7 @@ crocus_compile_cs(struct crocus_context *ice,
 
    NIR_PASS_V(nir, brw_nir_lower_cs_intrinsics);
 
-   crocus_setup_uniforms(compiler, mem_ctx, nir, prog_data, &system_values,
+   crocus_setup_uniforms(devinfo, mem_ctx, nir, prog_data, &system_values,
                          &num_system_values, &num_cbufs);
    crocus_lower_swizzles(nir, &key->base.tex);
    struct crocus_binding_table bt;

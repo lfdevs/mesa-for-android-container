@@ -232,6 +232,62 @@ stage_end(struct pipe_context *pctx, uint64_t ts_ns, enum fd_stage_id stage)
             data->set_name("binHeight");
             data->set_value(std::to_string(p->binh));
          }
+      } else if (stage == COMPUTE_STAGE_ID) {
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("indirect");
+            data->set_value(std::to_string(p->indirect));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("work_dim");
+            data->set_value(std::to_string(p->work_dim));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("local_size_x");
+            data->set_value(std::to_string(p->local_size_x));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("local_size_y");
+            data->set_value(std::to_string(p->local_size_y));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("local_size_z");
+            data->set_value(std::to_string(p->local_size_z));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("num_groups_x");
+            data->set_value(std::to_string(p->num_groups_x));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("num_groups_y");
+            data->set_value(std::to_string(p->num_groups_y));
+         }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("num_groups_z");
+            data->set_value(std::to_string(p->num_groups_z));
+         }
       }
    });
 }
@@ -410,6 +466,17 @@ fd_start_compute(struct pipe_context *pctx, uint64_t ts_ns,
                  const struct trace_start_compute *payload)
 {
    stage_start(pctx, ts_ns, COMPUTE_STAGE_ID);
+
+   struct fd_perfetto_state *p = &fd_context(pctx)->perfetto;
+
+   p->indirect = payload->indirect;
+   p->work_dim = payload->work_dim;
+   p->local_size_x = payload->local_size_x;
+   p->local_size_y = payload->local_size_y;
+   p->local_size_z = payload->local_size_z;
+   p->num_groups_x = payload->num_groups_x;
+   p->num_groups_y = payload->num_groups_y;
+   p->num_groups_z = payload->num_groups_z;
 }
 
 void

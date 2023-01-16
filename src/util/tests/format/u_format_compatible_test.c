@@ -32,7 +32,7 @@
 #include "util/format/u_format.h"
 
 
-static boolean
+static bool
 test_all(void)
 {
    enum pipe_format src_format;
@@ -56,13 +56,13 @@ test_all(void)
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 
 int main(int argc, char **argv)
 {
-   boolean success;
+   bool success;
 
    success = test_all();
 

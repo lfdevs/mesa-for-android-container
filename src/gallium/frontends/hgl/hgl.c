@@ -11,7 +11,7 @@
 
 #include <stdio.h>
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "util/u_atomic.h"
 #include "util/format/u_format.h"
 #include "util/u_memory.h"
@@ -32,11 +32,11 @@
 
 // Perform a safe void to hgl_context cast
 static inline struct hgl_context*
-hgl_st_context(struct st_context_iface *stctxi)
+hgl_st_context(struct st_context *st)
 {
 	struct hgl_context* context;
-	assert(stctxi);
-	context = (struct hgl_context*)stctxi->st_manager_private;
+	assert(st);
+	context = (struct hgl_context*)st->frontend_context;
 	assert(context);
 	return context;
 }
@@ -45,23 +45,23 @@ hgl_st_context(struct st_context_iface *stctxi)
 // Perform a safe void to hgl_buffer cast
 //static inline struct hgl_buffer*
 struct hgl_buffer*
-hgl_st_framebuffer(struct st_framebuffer_iface *stfbi)
+hgl_st_framebuffer(struct pipe_frontend_drawable *drawable)
 {
 	struct hgl_buffer* buffer;
-	assert(stfbi);
-	buffer = (struct hgl_buffer*)stfbi->st_manager_private;
+	assert(drawable);
+	buffer = (struct hgl_buffer*)drawable;
 	assert(buffer);
 	return buffer;
 }
 
 
 static bool
-hgl_st_framebuffer_flush_front(struct st_context_iface* stctxi,
-	struct st_framebuffer_iface* stfbi, enum st_attachment_type statt)
+hgl_st_framebuffer_flush_front(struct st_context *st,
+	struct pipe_frontend_drawable* drawable, enum st_attachment_type statt)
 {
 	CALLED();
 
-	struct hgl_buffer* buffer = hgl_st_framebuffer(stfbi);
+	struct hgl_buffer* buffer = hgl_st_framebuffer(drawable);
 	struct pipe_resource* ptex = buffer->textures[statt];
 
 	if (statt != ST_ATTACHMENT_FRONT_LEFT)
@@ -79,7 +79,7 @@ hgl_st_framebuffer_flush_front(struct st_context_iface* stctxi,
 
 
 static bool
-hgl_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
+hgl_st_framebuffer_validate_textures(struct pipe_frontend_drawable *drawable,
 	unsigned width, unsigned height, unsigned mask)
 {
 	struct hgl_buffer* buffer;
@@ -88,7 +88,7 @@ hgl_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
 
 	CALLED();
 
-	buffer = hgl_st_framebuffer(stfbi);
+	buffer = hgl_st_framebuffer(drawable);
 
 	if (buffer->width != width || buffer->height != height) {
 		TRACE("validate_textures: size changed: %d, %d -> %d, %d\n",
@@ -153,8 +153,8 @@ hgl_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
  * its resources).
  */
 static bool
-hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
-	struct st_framebuffer_iface *stfbi, const enum st_attachment_type *statts,
+hgl_st_framebuffer_validate(struct st_context *st,
+	struct pipe_frontend_drawable *drawable, const enum st_attachment_type *statts,
 	unsigned count, struct pipe_resource **out)
 {
 	struct hgl_context* context;
@@ -165,8 +165,8 @@ hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 
 	CALLED();
 
-	context = hgl_st_context(stctxi);
-	buffer = hgl_st_framebuffer(stfbi);
+	context = hgl_st_context(st);
+	buffer = hgl_st_framebuffer(drawable);
 
 	// Build mask of current attachments
 	stAttachmentMask = 0;
@@ -183,7 +183,7 @@ hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 		TRACE("%s: resize event. old:  %d x %d; new: %d x %d\n", __func__,
 			buffer->width, buffer->height, context->width, context->height);
 
-		ret = hgl_st_framebuffer_validate_textures(stfbi, 
+		ret = hgl_st_framebuffer_validate_textures(drawable,
 			context->width, context->height, stAttachmentMask);
 
 		if (!ret)
@@ -198,7 +198,7 @@ hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 
 
 static int
-hgl_st_manager_get_param(struct st_manager *smapi, enum st_manager_param param)
+hgl_st_manager_get_param(struct pipe_frontend_screen *fscreen, enum st_manager_param param)
 {
 	CALLED();
 
@@ -230,13 +230,9 @@ hgl_create_st_framebuffer(struct hgl_context* context, void *winsysContext)
 	buffer = CALLOC_STRUCT(hgl_buffer);
 	assert(buffer);
 
-	// calloc and configure our st_framebuffer interface
-	buffer->stfbi = CALLOC_STRUCT(st_framebuffer_iface);
-	assert(buffer->stfbi);
-
 	// Prepare our buffer
 	buffer->visual = context->stVisual;
-	buffer->screen = context->display->manager->screen;
+	buffer->screen = context->display->fscreen->screen;
 	buffer->winsysContext = winsysContext;
 
 	if (buffer->screen->get_param(buffer->screen, PIPE_CAP_NPOT_TEXTURES))
@@ -245,14 +241,13 @@ hgl_create_st_framebuffer(struct hgl_context* context, void *winsysContext)
 		buffer->target = PIPE_TEXTURE_RECT;
 
 	// Prepare our frontend interface
-	buffer->stfbi->flush_front = hgl_st_framebuffer_flush_front;
-	buffer->stfbi->validate = hgl_st_framebuffer_validate;
-	buffer->stfbi->visual = context->stVisual;
+	buffer->base.flush_front = hgl_st_framebuffer_flush_front;
+	buffer->base.validate = hgl_st_framebuffer_validate;
+	buffer->base.visual = context->stVisual;
 
-	p_atomic_set(&buffer->stfbi->stamp, 1);
-	buffer->stfbi->st_manager_private = (void*)buffer;
-	buffer->stfbi->ID = p_atomic_inc_return(&hgl_fb_ID);
-	buffer->stfbi->state_manager = context->display->manager;
+	p_atomic_set(&buffer->base.stamp, 1);
+	buffer->base.ID = p_atomic_inc_return(&hgl_fb_ID);
+	buffer->base.fscreen = context->display->fscreen;
 
 	return buffer;
 }
@@ -267,7 +262,6 @@ hgl_destroy_st_framebuffer(struct hgl_buffer *buffer)
 	for (i = 0; i < ST_ATTACHMENT_COUNT; i++)
 		pipe_resource_reference(&buffer->textures[i], NULL);
 
-	FREE(buffer->stfbi);
 	FREE(buffer);
 }
 
@@ -341,11 +335,11 @@ hgl_create_display(struct pipe_screen* screen)
 
 	display = CALLOC_STRUCT(hgl_display);
 	assert(display);
-	display->manager = CALLOC_STRUCT(st_manager);
-	assert(display->manager);
-	display->manager->screen = screen;
-	display->manager->get_param = hgl_st_manager_get_param;
-	// display->manager->st_manager_private is used by llvmpipe
+	display->fscreen = CALLOC_STRUCT(pipe_frontend_screen);
+	assert(display->fscreen);
+	display->fscreen->screen = screen;
+	display->fscreen->get_param = hgl_st_manager_get_param;
+	// display->fscreen->st_screen is used by llvmpipe
 
 	return display;
 }
@@ -354,8 +348,7 @@ hgl_create_display(struct pipe_screen* screen)
 void
 hgl_destroy_display(struct hgl_display *display)
 {
-	if (display->manager->destroy)
-		display->manager->destroy(display->manager);
-	FREE(display->manager);
+	st_screen_destroy(display->fscreen);
+	FREE(display->fscreen);
 	FREE(display);
 }

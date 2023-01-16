@@ -119,7 +119,7 @@ fse_prepare(struct draw_pt_middle_end *middle,
    }
 
    if (0) debug_printf("%s: lookup const_vbuffers: %x\n",
-                       __FUNCTION__, fse->key.const_vbuffers);
+                       __func__, fse->key.const_vbuffers);
 
    {
       unsigned dst_offset = 0;
@@ -150,7 +150,7 @@ fse_prepare(struct draw_pt_middle_end *middle,
       return ;
    }
 
-   if (0) debug_printf("%s: found const_vbuffers: %x\n", __FUNCTION__,
+   if (0) debug_printf("%s: found const_vbuffers: %x\n", __func__,
                        fse->active->key.const_vbuffers);
 
    /* Now set buffer pointers:
@@ -216,7 +216,7 @@ fse_run_linear(struct draw_pt_middle_end *middle,
    if (0) {
       for (unsigned i = 0; i < count; i++) {
          debug_printf("\n\n%s vertex %d: (stride %d, offset %d)\n",
-                      __FUNCTION__, i,
+                      __func__, i,
                       fse->key.output_stride,
                       fse->key.output_stride * i);
 
@@ -274,7 +274,7 @@ fse_run(struct draw_pt_middle_end *middle,
 
    if (0) {
       for (unsigned i = 0; i < fetch_count; i++) {
-         debug_printf("\n\n%s vertex %d:\n", __FUNCTION__, i);
+         debug_printf("\n\n%s vertex %d:\n", __func__, i);
          draw_dump_emitted_vertex(fse->vinfo,
                                   (const uint8_t *)hw_verts +
                                   fse->key.output_stride * i);

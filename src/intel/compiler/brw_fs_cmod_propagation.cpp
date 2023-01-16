@@ -225,7 +225,7 @@ static bool
 opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
 {
    bool progress = false;
-   int ip = block->end_ip + 1;
+   UNUSED int ip = block->end_ip + 1;
 
    foreach_inst_in_block_reverse_safe(fs_inst, inst, block) {
       ip--;

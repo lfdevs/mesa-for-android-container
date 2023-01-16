@@ -23,6 +23,7 @@
 
 from mako.template import Template
 from isa import ISA
+import argparse
 import os
 import sys
 
@@ -49,7 +50,7 @@ template = """\
  * IN THE SOFTWARE.
  */
 
-#include "decode.h"
+#include "${header}"
 
 /*
  * enum tables, these don't have any link back to other tables so just
@@ -191,6 +192,8 @@ const struct isa_bitset *${root.get_c_name()}[] = {
 };
 %endfor
 
+#include "isaspec_decode_impl.c"
+
 """
 
 header = """\
@@ -243,7 +246,11 @@ next_instruction(bitmask_t *instr, BITSET_WORD *start)
 static inline uint64_t
 bitmask_to_uint64_t(bitmask_t mask)
 {
+%   if isa.bitsize <= 32:
+    return mask.bitset[0];
+%   else:
     return ((uint64_t)mask.bitset[1] << 32) | mask.bitset[0];
+%   endif
 }
 
 static inline bitmask_t
@@ -251,62 +258,49 @@ uint64_t_to_bitmask(uint64_t val)
 {
     bitmask_t mask = {
         .bitset[0] = val & 0xffffffff,
+%   if isa.bitsize > 32:
         .bitset[1] = (val >> 32) & 0xffffffff,
+%   endif
     };
 
     return mask;
 }
 
-#endif /* _${guard}_ */
-
-"""
-
-glue = """\
-/* Copyright (C) 2020 Google, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- */
-
-#ifndef _${guard}_
-#define _${guard}_
-
-#include "${isa}"
+#include "isaspec_decode_decl.h"
 
 #endif /* _${guard}_ */
 
 """
 
-xml = sys.argv[1]
-glue_h = sys.argv[2]
-dst_c = sys.argv[3]
-dst_h = sys.argv[4]
+def guard(p):
+    return os.path.basename(p).upper().replace("-", "_").replace(".", "_")
 
-isa = ISA(xml)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--xml', required=True, help='isaspec XML file.')
+    parser.add_argument('--out-c', required=True, help='Output C file.')
+    parser.add_argument('--out-h', required=True, help='Output H file.')
+    args = parser.parse_args()
 
-with open(glue_h, 'w') as f:
-    guard = os.path.basename(glue_h).upper().replace("-", "_").replace(".", "_")
-    f.write(Template(glue).render(guard=guard, isa=os.path.basename(dst_h)))
+    isa = ISA(args.xml)
 
-with open(dst_c, 'w') as f:
-    f.write(Template(template).render(isa=isa))
+    try:
+        with open(args.out_c, 'w') as f:
+            out_h_basename = os.path.basename(args.out_h)
+            f.write(Template(template).render(isa=isa, header=out_h_basename))
 
-with open(dst_h, 'w') as f:
-    guard = os.path.basename(dst_h).upper().replace("-", "_").replace(".", "_")
-    f.write(Template(header).render(isa=isa, guard=guard))
+        with open(args.out_h, 'w') as f:
+            f.write(Template(header).render(isa=isa, guard=guard(args.out_h)))
+
+    except Exception:
+        # In the event there's an error, this imports some helpers from mako
+        # to print a useful stack trace and prints it, then exits with
+        # status 1, if python is run with debug; otherwise it just raises
+        # the exception
+        import sys
+        from mako import exceptions
+        print(exceptions.text_error_template().render(), file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

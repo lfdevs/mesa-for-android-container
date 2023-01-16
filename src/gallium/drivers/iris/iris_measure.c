@@ -340,7 +340,7 @@ iris_destroy_ctx_measure(struct iris_context *ice)
     * destroyed.
     */
    struct iris_screen *screen = (struct iris_screen *) ice->ctx.screen;
-   intel_measure_gather(&screen->measure, &screen->devinfo);
+   intel_measure_gather(&screen->measure, screen->devinfo);
 }
 
 void
@@ -383,7 +383,7 @@ iris_measure_batch_end(struct iris_context *ice, struct iris_batch *batch)
 
    static int interval = 0;
    if (++interval > 10) {
-      intel_measure_gather(measure_device, &screen->devinfo);
+      intel_measure_gather(measure_device, screen->devinfo);
       interval = 0;
    }
 }
@@ -401,5 +401,5 @@ iris_measure_frame_end(struct iris_context *ice)
    /* increment frame counter */
    intel_measure_frame_transition(p_atomic_inc_return(&measure_device->frame));
 
-   intel_measure_gather(measure_device, &screen->devinfo);
+   intel_measure_gather(measure_device, screen->devinfo);
 }

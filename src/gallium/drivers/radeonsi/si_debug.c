@@ -297,7 +297,7 @@ static void si_dump_mmapped_reg(struct si_context *sctx, FILE *f, unsigned offse
    uint32_t value;
 
    if (ws->read_registers(ws, offset, 1, &value))
-      ac_dump_reg(f, sctx->gfx_level, offset, value, ~0);
+      ac_dump_reg(f, sctx->gfx_level, sctx->family, offset, value, ~0);
 }
 
 static void si_dump_debug_registers(struct si_context *sctx, FILE *f)
@@ -352,7 +352,7 @@ static void si_log_chunk_type_cs_destroy(void *data)
 
 static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begin, unsigned end,
                                 int *last_trace_id, unsigned trace_id_count, const char *name,
-                                enum amd_gfx_level gfx_level)
+                                enum amd_gfx_level gfx_level, enum radeon_family family)
 {
    unsigned orig_end = end;
 
@@ -365,7 +365,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
 
       if (begin < chunk->cdw) {
          ac_parse_ib_chunk(f, chunk->buf + begin, MIN2(end, chunk->cdw) - begin, last_trace_id,
-                           trace_id_count, gfx_level, NULL, NULL);
+                           trace_id_count, gfx_level, family, NULL, NULL);
       }
 
       if (end <= chunk->cdw)
@@ -381,7 +381,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
    assert(end <= cs->current.cdw);
 
    ac_parse_ib_chunk(f, cs->current.buf + begin, end - begin, last_trace_id, trace_id_count,
-                     gfx_level, NULL, NULL);
+                     gfx_level, family, NULL, NULL);
 
    fprintf(f, "------------------- %s end (dw = %u) -------------------\n\n", name, orig_end);
 }
@@ -389,7 +389,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
 void si_print_current_ib(struct si_context *sctx, FILE *f)
 {
    si_parse_current_ib(f, &sctx->gfx_cs, 0, sctx->gfx_cs.prev_dw + sctx->gfx_cs.current.cdw,
-                       NULL, 0, "GFX", sctx->gfx_level);
+                       NULL, 0, "GFX", sctx->gfx_level, sctx->family);
 }
 
 static void si_log_chunk_type_cs_print(void *data, FILE *f)
@@ -412,15 +412,15 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
       if (chunk->gfx_begin == 0) {
          if (ctx->cs_preamble_state)
             ac_parse_ib(f, ctx->cs_preamble_state->pm4, ctx->cs_preamble_state->ndw, NULL, 0,
-                        "IB2: Init config", ctx->gfx_level, NULL, NULL);
+                        "IB2: Init config", ctx->gfx_level, ctx->family, NULL, NULL);
       }
 
       if (scs->flushed) {
          ac_parse_ib(f, scs->gfx.ib + chunk->gfx_begin, chunk->gfx_end - chunk->gfx_begin,
-                     &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, NULL, NULL);
+                     &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, ctx->family, NULL, NULL);
       } else {
          si_parse_current_ib(f, &ctx->gfx_cs, chunk->gfx_begin, chunk->gfx_end, &last_trace_id,
-                             map ? 1 : 0, "IB", ctx->gfx_level);
+                             map ? 1 : 0, "IB", ctx->gfx_level, ctx->family);
       }
    }
 
@@ -615,6 +615,7 @@ struct si_log_chunk_desc_list {
    const char *elem_name;
    slot_remap_func slot_remap;
    enum amd_gfx_level gfx_level;
+   enum radeon_family family;
    unsigned element_dw_size;
    unsigned num_elements;
 
@@ -647,36 +648,38 @@ static void si_log_chunk_desc_list_print(void *data, FILE *f)
       switch (chunk->element_dw_size) {
       case 4:
          for (unsigned j = 0; j < 4; j++)
-            ac_dump_reg(f, chunk->gfx_level, R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, gpu_list[j],
-                        0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level, chunk->family,
+                        R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, gpu_list[j], 0xffffffff);
          break;
       case 8:
          for (unsigned j = 0; j < 8; j++)
-            ac_dump_reg(f, chunk->gfx_level, sq_img_rsrc_word0 + j * 4, gpu_list[j], 0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level, chunk->family,
+                        sq_img_rsrc_word0 + j * 4, gpu_list[j], 0xffffffff);
 
          fprintf(f, COLOR_CYAN "    Buffer:" COLOR_RESET "\n");
          for (unsigned j = 0; j < 4; j++)
-            ac_dump_reg(f, chunk->gfx_level, R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, gpu_list[4 + j],
-                        0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level, chunk->family,
+                        R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, gpu_list[4 + j], 0xffffffff);
          break;
       case 16:
          for (unsigned j = 0; j < 8; j++)
-            ac_dump_reg(f, chunk->gfx_level, sq_img_rsrc_word0 + j * 4, gpu_list[j], 0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level,  chunk->family,
+                        sq_img_rsrc_word0 + j * 4, gpu_list[j], 0xffffffff);
 
          fprintf(f, COLOR_CYAN "    Buffer:" COLOR_RESET "\n");
          for (unsigned j = 0; j < 4; j++)
-            ac_dump_reg(f, chunk->gfx_level, R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, gpu_list[4 + j],
-                        0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level, chunk->family,
+                        R_008F00_SQ_BUF_RSRC_WORD0 + j * 4, gpu_list[4 + j], 0xffffffff);
 
          fprintf(f, COLOR_CYAN "    FMASK:" COLOR_RESET "\n");
          for (unsigned j = 0; j < 8; j++)
-            ac_dump_reg(f, chunk->gfx_level, sq_img_rsrc_word0 + j * 4, gpu_list[8 + j],
-                        0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level, chunk->family,
+                        sq_img_rsrc_word0 + j * 4, gpu_list[8 + j], 0xffffffff);
 
          fprintf(f, COLOR_CYAN "    Sampler state:" COLOR_RESET "\n");
          for (unsigned j = 0; j < 4; j++)
-            ac_dump_reg(f, chunk->gfx_level, R_008F30_SQ_IMG_SAMP_WORD0 + j * 4, gpu_list[12 + j],
-                        0xffffffff);
+            ac_dump_reg(f, chunk->gfx_level, chunk->family,
+                        R_008F30_SQ_IMG_SAMP_WORD0 + j * 4, gpu_list[12 + j], 0xffffffff);
          break;
       }
 
@@ -726,6 +729,7 @@ static void si_dump_descriptor_list(struct si_screen *screen, struct si_descript
    chunk->num_elements = num_elements;
    chunk->slot_remap = slot_remap;
    chunk->gfx_level = screen->info.gfx_level;
+   chunk->family = screen->info.family;
 
    si_resource_reference(&chunk->buf, desc->buffer);
    chunk->gpu_list = desc->gpu_list;
@@ -1063,7 +1067,7 @@ void si_check_vm_faults(struct si_context *sctx, struct radeon_saved_cs *saved, 
       return;
 
    fprintf(f, "VM fault report.\n\n");
-   if (os_get_command_line(cmd_line, sizeof(cmd_line)))
+   if (util_get_command_line(cmd_line, sizeof(cmd_line)))
       fprintf(f, "Command: %s\n", cmd_line);
    fprintf(f, "Driver vendor: %s\n", screen->get_vendor(screen));
    fprintf(f, "Device vendor: %s\n", screen->get_device_vendor(screen));

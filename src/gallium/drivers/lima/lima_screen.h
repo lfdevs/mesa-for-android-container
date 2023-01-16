@@ -30,7 +30,7 @@
 #include "util/slab.h"
 #include "util/list.h"
 #include "util/disk_cache.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 
 #include "pipe/p_screen.h"
 

@@ -526,10 +526,18 @@ static ioctl_fn_t driver_ioctls[] = {
 void
 drm_shim_driver_init(void)
 {
-   const char *user_platform = getenv("INTEL_STUB_GPU_PLATFORM");
+   i915.device_id = 0;
+   const char *device_id_str = getenv("INTEL_STUB_GPU_DEVICE_ID");
+   if (device_id_str != NULL) {
+      /* Set as 0 if strtoul fails */
+      i915.device_id = strtoul(device_id_str, NULL, 16);
+   }
+   if (i915.device_id == 0) {
+      const char *user_platform = getenv("INTEL_STUB_GPU_PLATFORM");
+      /* Use SKL if nothing is specified. */
+      i915.device_id = intel_device_name_to_pci_device_id(user_platform ?: "skl");
+   }
 
-   /* Use SKL if nothing is specified. */
-   i915.device_id = intel_device_name_to_pci_device_id(user_platform ?: "skl");
    if (!intel_get_device_info_from_pci_id(i915.device_id, &i915.devinfo))
       return;
 

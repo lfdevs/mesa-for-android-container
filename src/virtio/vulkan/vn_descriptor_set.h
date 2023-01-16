@@ -135,6 +135,19 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vn_descriptor_update_template,
                                VkDescriptorUpdateTemplate,
                                VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE)
 
+bool
+vn_should_sanitize_descriptor_set_writes(
+   uint32_t write_count,
+   const VkWriteDescriptorSet *writes,
+   VkPipelineLayout pipeline_layout_handle);
+
+struct vn_update_descriptor_sets *
+vn_update_descriptor_sets_parse_writes(
+   uint32_t write_count,
+   const VkWriteDescriptorSet *writes,
+   const VkAllocationCallbacks *alloc,
+   VkPipelineLayout pipeline_layout_handle);
+
 struct vn_update_descriptor_sets *
 vn_update_descriptor_set_with_template_locked(
    struct vn_descriptor_update_template *templ,

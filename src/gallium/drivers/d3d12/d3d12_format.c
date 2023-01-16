@@ -23,7 +23,7 @@
 
 #include "d3d12_format.h"
 
-#include "pipe/p_format.h"
+#include "util/format/u_formats.h"
 #include "pipe/p_video_enums.h"
 #include "util/format/u_format.h"
 #include "util/u_math.h"

@@ -133,6 +133,7 @@ class Field(object):
         self.end = int(attrs["end"])
         self.type = attrs["type"]
         self.nonzero = bool_from_str(attrs.get("nonzero", "false"))
+        self.prefix = attrs["prefix"] if "prefix" in attrs else None
 
         assert self.start <= self.end, \
                'field {} has end ({}) < start ({})'.format(self.name, self.end,
@@ -140,11 +141,6 @@ class Field(object):
         if self.type == 'bool':
             assert self.end == self.start, \
                    'bool field ({}) is too wide'.format(self.name)
-
-        if "prefix" in attrs:
-            self.prefix = attrs["prefix"]
-        else:
-            self.prefix = None
 
         if "default" in attrs:
             # Base 0 recognizes 0x, 0o, 0b prefixes in addition to decimal ints.
@@ -340,6 +336,13 @@ class Group(object):
             else:
                 address_count = 1
 
+            # Assert in dont_use values
+            for field in dw.fields:
+                for value in field.values:
+                    if value.dont_use:
+                        print("   assert(values->%s != %s);" %
+                              (field.name, field.prefix + "_" + value.name))
+
             if dw.size == 32 and dw.address == None:
                 v = None
                 print("   dw[%d] =" % index)
@@ -423,6 +426,7 @@ class Value(object):
     def __init__(self, attrs):
         self.name = safe_name(attrs["name"])
         self.value = ast.literal_eval(attrs["value"])
+        self.dont_use = int(attrs["dont_use"]) != 0 if "dont_use" in attrs else False
 
 class Parser(object):
     def __init__(self):
@@ -442,7 +446,7 @@ class Parser(object):
         return 'GFX%s_%s' % (self.gen, name)
 
     def gen_guard(self):
-        return self.gen_prefix("PACK_H")
+        return self.gen_prefix("{0}_PACK_H".format(self.platform))
 
     def start_element(self, name, attrs):
         if name == "genxml":
@@ -490,7 +494,7 @@ class Parser(object):
             if "prefix" in attrs:
                 self.prefix = safe_name(attrs["prefix"])
             else:
-                self.prefix= None
+                self.prefix = None
         elif name == "value":
             self.values.append(Value(attrs))
 

@@ -41,7 +41,7 @@ int if_conversion::run() {
 
 	regions_vec &rv = sh.get_regions();
 
-	unsigned converted = 0;
+	UNUSED unsigned converted = 0;
 	for (regions_vec::reverse_iterator I = rv.rbegin(); I != rv.rend(); ) {
 		region_node *r = *I;
 		if (run_on(r)) {

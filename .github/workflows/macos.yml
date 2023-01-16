@@ -26,6 +26,7 @@ jobs:
         brew "libxcb"
         brew "libxdamage"
         brew "libxext"
+        brew "molten-vk"
         brew "ninja"
         brew "pkg-config"
         brew "python@3.10"
@@ -41,7 +42,7 @@ jobs:
         [binaries]
         llvm-config = '/usr/local/opt/llvm/bin/llvm-config'
         EOL
-        $MESON_EXEC . build --native-file=native_config -Dbuild-tests=true -Dosmesa=true -Dgallium-drivers=swrast -Dglx=${{ matrix.glx_option }}
+        $MESON_EXEC . build --native-file=native_config -Dmoltenvk-dir=$(brew --prefix molten-vk) -Dbuild-tests=true -Dosmesa=true -Dgallium-drivers=swrast,zink -Dglx=${{ matrix.glx_option }}
     - name: Build
       run: $MESON_EXEC compile -C build
     - name: Test

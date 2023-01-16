@@ -1,3 +1,11 @@
+mesa (23.0.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * patches: Refreshed.
+  * rusticl-ftbfs.diff: Fix rusticl dependencies to include valgrind.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 16 Jan 2023 11:20:46 +0200
+
 mesa (22.3.3-1) unstable; urgency=medium
 
   * New upstream release. (LP: #1988859)

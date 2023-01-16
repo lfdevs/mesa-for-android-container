@@ -76,7 +76,7 @@
  */
 
 
-#include "glheader.h"
+#include "util/glheader.h"
 
 #include "accum.h"
 #include "arrayobj.h"
@@ -87,7 +87,6 @@
 #include "bufferobj.h"
 #include "conservativeraster.h"
 #include "context.h"
-#include "cpuinfo.h"
 #include "debug.h"
 #include "debug_output.h"
 #include "depth.h"
@@ -217,7 +216,6 @@ one_time_init(const char *extensions_override)
 
    _mesa_one_time_init_extension_overrides(extensions_override);
 
-   _mesa_get_cpu_features();
 
    for (i = 0; i < 256; i++) {
       _mesa_ubyte_to_float_color_tab[i] = (float) i / 255.0F;
@@ -690,6 +688,7 @@ init_attrib_groups(struct gl_context *ctx)
    _mesa_init_pixelstore( ctx );
    _mesa_init_point( ctx );
    _mesa_init_polygon( ctx );
+   _mesa_init_varray( ctx ); /* should be before _mesa_init_program */
    _mesa_init_program( ctx );
    _mesa_init_queryobj( ctx );
    _mesa_init_sync( ctx );
@@ -699,7 +698,6 @@ init_attrib_groups(struct gl_context *ctx)
    _mesa_init_stencil( ctx );
    _mesa_init_transform( ctx );
    _mesa_init_transform_feedback( ctx );
-   _mesa_init_varray( ctx );
    _mesa_init_viewport( ctx );
    _mesa_init_resident_handles( ctx );
 
@@ -710,7 +708,7 @@ init_attrib_groups(struct gl_context *ctx)
    ctx->TileRasterOrderIncreasingX = GL_TRUE;
    ctx->TileRasterOrderIncreasingY = GL_TRUE;
    ctx->NewState = _NEW_ALL;
-   ctx->NewDriverState = ~0;
+   ctx->NewDriverState = ST_ALL_STATES_MASK;
    ctx->ErrorValue = GL_NO_ERROR;
    ctx->ShareGroupReset = false;
    ctx->VertexProgram._VaryingInputs = VERT_BIT_ALL;
@@ -1107,7 +1105,6 @@ _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
 
    _mesa_reference_vao(ctx, &ctx->Array.VAO, NULL);
    _mesa_reference_vao(ctx, &ctx->Array.DefaultVAO, NULL);
-   _mesa_reference_vao(ctx, &ctx->Array._EmptyVAO, NULL);
    _mesa_reference_vao(ctx, &ctx->Array._DrawVAO, NULL);
 
    _mesa_free_attrib_data(ctx);
@@ -1281,7 +1278,7 @@ _mesa_copy_context( const struct gl_context *src, struct gl_context *dst,
    /* XXX FIXME:  Call callbacks?
     */
    dst->NewState = _NEW_ALL;
-   dst->NewDriverState = ~0;
+   dst->NewDriverState = ST_ALL_STATES_MASK;
 }
 
 

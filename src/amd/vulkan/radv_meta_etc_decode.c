@@ -594,9 +594,8 @@ create_decode_pipeline(struct radv_device *device, VkPipeline *pipeline)
       .layout = device->meta_state.resolve_compute.p_layout,
    };
 
-   result = radv_CreateComputePipelines(radv_device_to_handle(device),
-                                        device->meta_state.cache, 1,
-                                        &vk_pipeline_info, NULL, pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
+                                         &vk_pipeline_info, NULL, pipeline, true);
    if (result != VK_SUCCESS)
       goto fail;
 

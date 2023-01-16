@@ -24,6 +24,7 @@
 #include "anv_private.h"
 
 #include "util/os_time.h"
+#include "util/perf/cpu_trace.h"
 
 static struct anv_bo_sync *
 to_anv_bo_sync(struct vk_sync *sync)
@@ -105,6 +106,7 @@ anv_bo_sync_wait(struct vk_device *vk_device,
 {
    struct anv_device *device = container_of(vk_device, struct anv_device, vk);
    VkResult result;
+   MESA_TRACE_FUNC();
 
    uint32_t pending = wait_count;
    while (pending) {

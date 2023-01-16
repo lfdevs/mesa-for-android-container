@@ -110,6 +110,9 @@ struct spirv_to_nir_options {
                    const char *message);
       void *private_data;
    } debug;
+
+   /* Force texture sampling to be non-uniform. */
+   bool force_tex_non_uniform;
 };
 
 bool gl_spirv_validation(const uint32_t *words, size_t word_count,

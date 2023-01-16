@@ -30,7 +30,7 @@
  */
 
 #include <stdbool.h>
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/blend.h"
 #include "main/context.h"
 #include "main/enums.h"

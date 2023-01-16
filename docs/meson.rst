@@ -359,8 +359,8 @@ Options
 ^^^^^^^
 
 One of the oddities of Meson is that some options are different when
-passed to the ``meson`` than to ``meson configure``. These options are
-passed as --option=foo to ``meson``, but -Doption=foo to
+passed to :program:`meson` than to ``meson configure``. These options are
+passed as --option=foo to :program:`meson`, but -Doption=foo to
 ``meson configure``. Mesa defined options are always passed as
 -Doption=foo.
 
@@ -408,7 +408,7 @@ Those running on Arch Linux can use the AUR-maintained packages for some
 of those, as they'll have the right values for your system:
 
 -  `meson-cross-x86-linux-gnu <https://aur.archlinux.org/packages/meson-cross-x86-linux-gnu>`__
--  `meson-cross-aarch64-linux-gnu <https://aur.archlinux.org/packages/meson-cross-aarch64-linux-gnu>`__
+-  `meson-cross-aarch64-linux-gnu <https://github.com/dcbaker/archlinux-meson-cross-aarch64-linux-gnu>`__
 
 32-bit build on x86 linux:
 

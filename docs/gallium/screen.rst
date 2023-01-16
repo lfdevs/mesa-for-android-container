@@ -119,8 +119,9 @@ The integer capabilities:
   is allowed to return ``0`` in which case ``PIPE_CAP_GLSL_FEATURE_LEVEL`` is
   used.
   Note that simply returning the same value as the GLSL feature level cap is
-  incorrect.  For example, GLSL version 3.30 does not require ``ARB_gpu_shader5``,
-  but ESSL version 3.20 es does require ``EXT_gpu_shader5``
+  incorrect.  For example, GLSL version 3.30 does not require
+  :ext:`GL_EXT_gpu_shader5`, but ESSL version 3.20 es does require
+  :ext:`GL_EXT_gpu_shader5`
 * ``PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION``: Whether quads adhere to
   the flatshade_first setting in ``pipe_rasterizer_state``.
 * ``PIPE_CAP_USER_VERTEX_BUFFERS``: Whether the driver supports user vertex
@@ -207,7 +208,7 @@ The integer capabilities:
   PIPE_ENDIAN_BIG or PIPE_ENDIAN_LITTLE.
 * ``PIPE_CAP_MIXED_FRAMEBUFFER_SIZES``: Whether it is allowed to have
   different sizes for fb color/zs attachments. This controls whether
-  ARB_framebuffer_object is provided.
+  :ext:`GL_ARB_framebuffer_object` is provided.
 * ``PIPE_CAP_VS_LAYER_VIEWPORT``: Whether ``VARYING_SLOT_LAYER`` and
   ``VARYING_SLOT_VIEWPORT`` are supported as vertex shader outputs. Note that
   the viewport will only be used if multiple viewports are exposed.
@@ -270,11 +271,11 @@ The integer capabilities:
 * ``PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE``: The maximum supported vertex stride.
 * ``PIPE_CAP_SAMPLER_VIEW_TARGET``: Whether the sampler view's target can be
   different than the underlying resource's, as permitted by
-  ARB_texture_view. For example a 2d array texture may be reinterpreted as a
+  :ext:`GL_ARB_texture_view`. For example a 2d array texture may be reinterpreted as a
   cube (array) texture and vice-versa.
 * ``PIPE_CAP_CLIP_HALFZ``: Whether the driver supports the
   pipe_rasterizer_state::clip_halfz being set to true. This is required
-  for enabling ARB_clip_control.
+  for enabling :ext:`GL_ARB_clip_control`.
 * ``PIPE_CAP_POLYGON_OFFSET_CLAMP``: If true, the driver implements support
   for ``pipe_rasterizer_state::offset_clamp``.
 * ``PIPE_CAP_MULTISAMPLE_Z_RESOLVE``: Whether the driver supports blitting
@@ -303,25 +304,25 @@ The integer capabilities:
   textures.
 * ``PIPE_CAP_DEPTH_BOUNDS_TEST``: Whether bounds_test, bounds_min, and
   bounds_max states of pipe_depth_stencil_alpha_state behave according
-  to the GL_EXT_depth_bounds_test specification.
-* ``PIPE_CAP_TEXTURE_QUERY_SAMPLES``: Whether the `TXQS` opcode is supported
+  to the :ext:`GL_EXT_depth_bounds_test` specification.
+* ``PIPE_CAP_TEXTURE_QUERY_SAMPLES``: Whether the ``TXQS`` opcode is supported
 * ``PIPE_CAP_FORCE_PERSAMPLE_INTERP``: If the driver can force per-sample
   interpolation for all fragment shader inputs if
   pipe_rasterizer_state::force_persample_interp is set. This is only used
-  by GL3-level sample shading (ARB_sample_shading). GL4-level sample shading
-  (ARB_gpu_shader5) doesn't use this. While GL3 hardware has a state for it,
-  GL4 hardware will likely need to emulate it with a shader variant, or by
-  selecting the interpolation weights with a conditional assignment
-  in the shader.
+  by GL3-level sample shading (:ext:`GL_ARB_sample_shading`). GL4-level sample
+  shading (:ext:`GL_ARB_gpu_shader5`) doesn't use this. While GL3 hardware has a
+  state for it, GL4 hardware will likely need to emulate it with a shader
+  variant, or by selecting the interpolation weights with a conditional
+  assignment in the shader.
 * ``PIPE_CAP_SHAREABLE_SHADERS``: Whether shader CSOs can be used by any
   pipe_context.  Important for reducing jank at draw time by letting GL shaders
   linked in one thread be used in another thread without recompiling.
 * ``PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS``:
   Whether copying between compressed and plain formats is supported where
   a compressed block is copied to/from a plain pixel of the same size.
-* ``PIPE_CAP_CLEAR_TEXTURE``: Whether `clear_texture` will be
+* ``PIPE_CAP_CLEAR_TEXTURE``: Whether ``clear_texture`` will be
   available in contexts.
-* ``PIPE_CAP_CLEAR_SCISSORED``: Whether `clear` can accept a scissored
+* ``PIPE_CAP_CLEAR_SCISSORED``: Whether ``clear`` can accept a scissored
   bounding box.
 * ``PIPE_CAP_DRAW_PARAMETERS``: Whether ``TGSI_SEMANTIC_BASEVERTEX``,
   ``TGSI_SEMANTIC_BASEINSTANCE``, and ``TGSI_SEMANTIC_DRAWID`` are
@@ -367,13 +368,15 @@ The integer capabilities:
   rendering or textures.
 * ``PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR``: Implementation uses bounds
   checking on resource accesses by shader if the context is created with
-  PIPE_CONTEXT_ROBUST_BUFFER_ACCESS. See the ARB_robust_buffer_access_behavior
-  extension for information on the required behavior for out of bounds accesses
-  and accesses to unbound resources.
-* ``PIPE_CAP_CULL_DISTANCE``: Whether the driver supports the arb_cull_distance
-  extension and thus implements proper support for culling planes.
+  PIPE_CONTEXT_ROBUST_BUFFER_ACCESS. See the
+  :ext:`GL_ARB_robust_buffer_access_behavior` extension for information on the
+  required behavior for out of bounds accesses and accesses to unbound
+  resources.
+* ``PIPE_CAP_CULL_DISTANCE``: Whether the driver supports the
+  :ext:`GL_ARB_cull_distance` extension and thus implements proper support for
+  culling planes.
 * ``PIPE_CAP_CULL_DISTANCE_NOCOMBINE``: Whether the driver wants to skip
-  running the `nir_lower_clip_cull_distance_arrays` pass in order to get
+  running the ``nir_lower_clip_cull_distance_arrays`` pass in order to get
   VARYING_SLOT_CULL_DIST0 slot variables.
 * ``PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES``: Whether primitive restart is
   supported for patch primitives.
@@ -401,13 +404,13 @@ The integer capabilities:
   equal interpolation qualifiers.
   Components may overlap, notably when the gaps in an array of dvec3 are
   filled in.
-* ``PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME``: Whether GL_ARB_transform_feeddback2
-  is supported, including pausing/resuming queries and having
-  `count_from_stream_output` set on indirect draws to implement
-  glDrawTransformFeedback.  Required for OpenGL 4.0.
+* ``PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME``: Whether
+  :ext:`GL_ARB_transform_feedback2` is supported, including pausing/resuming
+  queries and having ``count_from_stream_output`` set on indirect draws to
+  implement glDrawTransformFeedback.  Required for OpenGL 4.0.
 * ``PIPE_CAP_STREAM_OUTPUT_INTERLEAVE_BUFFERS``: Whether interleaved stream
   output mode is able to interleave across buffers. This is required for
-  ARB_transform_feedback3.
+  :ext:`GL_ARB_transform_feedback3`.
 * ``PIPE_CAP_SHADER_CAN_READ_OUTPUTS``: Whether every TGSI shader stage can read
   from the output file.
 * ``PIPE_CAP_FBFETCH``: The number of render targets whose value in the
@@ -459,7 +462,7 @@ The integer capabilities:
 * ``PIPE_CAP_LOAD_CONSTBUF``: True if the driver supports ``TGSI_OPCODE_LOAD`` use
   with constant buffers.
 * ``PIPE_CAP_TILE_RASTER_ORDER``: Whether the driver supports
-  GL_MESA_tile_raster_order, using the tile_raster_order_* fields in
+  :ext:`GL_MESA_tile_raster_order`, using the tile_raster_order_* fields in
   pipe_rasterizer_state.
 * ``PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES``: Limit on combined shader
   output resources (images + buffers + fragment outputs). If 0 the state
@@ -509,7 +512,7 @@ The integer capabilities:
 * ``PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE``: Whether
   ``PIPE_CAP_POST_DEPTH_COVERAGE`` works with conservative rasterization.
 * ``PIPE_CAP_CONSERVATIVE_RASTER_INNER_COVERAGE``: Whether
-  inner_coverage from GL_INTEL_conservative_rasterization is supported.
+  inner_coverage from :ext:`GL_INTEL_conservative_rasterization` is supported.
 * ``PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS``: The maximum
   subpixel precision bias in bits during conservative rasterization.
 * ``PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS``: True is the driver supports
@@ -534,7 +537,7 @@ The integer capabilities:
   of pipe_vertex_element::src_offset.
 * ``PIPE_CAP_SURFACE_SAMPLE_COUNT``: Whether the driver
   supports pipe_surface overrides of resource nr_samples. If set, will
-  enable EXT_multisampled_render_to_texture.
+  enable :ext:`GL_EXT_multisampled_render_to_texture`.
 * ``PIPE_CAP_IMAGE_ATOMIC_FLOAT_ADD``: Atomic floating point adds are
   supported on images, buffers, and shared memory.
 * ``PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND``: True if the driver needs blend state to use zero/one instead of destination alpha for RGB/XRGB formats.
@@ -577,7 +580,7 @@ The integer capabilities:
   turn arrays whose contents can be deduced at compile time into constant
   buffer loads, or false if the driver can handle such arrays itself in a more
   efficient manner (such as through nir_opt_large_constants() and nir->constant_data).
-* ``PIPE_CAP_GL_SPIRV``: True if the driver supports ARB_gl_spirv extension.
+* ``PIPE_CAP_GL_SPIRV``: True if the driver supports :ext:`GL_ARB_gl_spirv` extension.
 * ``PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS``: True if the driver supports Variable Pointers in SPIR-V shaders.
 * ``PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION``: True if driver supports demote keyword in GLSL programs.
 * ``PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE``: True if driver wants the TG4 component encoded in sampler swizzle rather than as a separate source.
@@ -604,37 +607,39 @@ The integer capabilities:
 * ``PIPE_CAP_VIEWPORT_TRANSFORM_LOWERED``: Driver needs the nir_lower_viewport_transform pass to be enabled. This also means that the gl_Position value is modified and should be lowered for transform feedback, if needed. Defaults to false.
 * ``PIPE_CAP_PSIZ_CLAMPED``: Driver needs for the point size to be clamped. Additionally, the gl_PointSize has been modified and its value should be lowered for transform feedback, if needed. Defaults to false.
 * ``PIPE_CAP_GL_BEGIN_END_BUFFER_SIZE``: Buffer size used to upload vertices for glBegin/glEnd.
-* ``PIPE_CAP_VIEWPORT_SWIZZLE``: Whether pipe_viewport_state::swizzle can be used to specify pre-clipping swizzling of coordinates (see GL_NV_viewport_swizzle).
+* ``PIPE_CAP_VIEWPORT_SWIZZLE``: Whether pipe_viewport_state::swizzle can be used to specify pre-clipping swizzling of coordinates (see :ext:`GL_NV_viewport_swizzle`).
 * ``PIPE_CAP_SYSTEM_SVM``: True if all application memory can be shared with the GPU without explicit mapping.
-* ``PIPE_CAP_VIEWPORT_MASK``: Whether ``TGSI_SEMANTIC_VIEWPORT_MASK`` and ``TGSI_PROPERTY_LAYER_VIEWPORT_RELATIVE`` are supported (see GL_NV_viewport_array2).
+* ``PIPE_CAP_VIEWPORT_MASK``: Whether ``TGSI_SEMANTIC_VIEWPORT_MASK`` and ``TGSI_PROPERTY_LAYER_VIEWPORT_RELATIVE`` are supported (see :ext:`GL_NV_viewport_array2`).
 * ``PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE``: Whether mapping a buffer as unsynchronized from any thread is safe.
-* ``PIPE_CAP_GLSL_ZERO_INIT``: Choose a default zero initialization some glsl variables. If `1`, then all glsl shader variables and gl_FragColor are initialized to zero. If `2`, then shader out variables are not initialized but function out variables are.
+* ``PIPE_CAP_GLSL_ZERO_INIT``: Choose a default zero initialization some GLSL variables. If ``1``, then all GLSL shader variables and gl_FragColor are initialized to zero. If ``2``, then shader out variables are not initialized but function out variables are.
 * ``PIPE_CAP_BLEND_EQUATION_ADVANCED``: Driver supports blend equation advanced without necessarily supporting FBFETCH.
 * ``PIPE_CAP_NIR_ATOMICS_AS_DEREF``: Whether NIR atomics instructions should reference atomics as NIR derefs instead of by indices.
-* ``PIPE_CAP_NO_CLIP_ON_COPY_TEX``: Driver doesn't want x/y/width/height clipped based on src size when doing a copy texture operation (eg: may want out-of-bounds reads that produce 0 instead of leaving the texture content undefined)
+* ``PIPE_CAP_NO_CLIP_ON_COPY_TEX``: Driver doesn't want x/y/width/height clipped based on src size when doing a copy texture operation (e.g.: may want out-of-bounds reads that produce 0 instead of leaving the texture content undefined)
 * ``PIPE_CAP_MAX_TEXTURE_MB``: Maximum texture size in MB (default is 1024)
 * ``PIPE_CAP_DEVICE_PROTECTED_SURFACE``: Whether the device support protected / encrypted content.
 * ``PIPE_CAP_PREFER_REAL_BUFFER_IN_CONSTBUF0``: The state tracker is encouraged to upload constants into a real buffer and bind it into constant buffer 0 instead of binding a user pointer. This may enable a faster codepath in a gallium frontend for drivers that really prefer a real buffer.
 * ``PIPE_CAP_GL_CLAMP``: Driver natively supports GL_CLAMP.  Required for non-NIR drivers with the GL frontend.  NIR drivers with the cap unavailable will have GL_CLAMP lowered to txd/txl with a saturate on the coordinates.
-* ``PIPE_CAP_TEXRECT``: Driver supports rectangle textures.  Required for OpenGL on `!prefers_nir` drivers.  If this cap is not present, st/mesa will lower the NIR to use normal 2D texture sampling by using either `txs` or `nir_intrinsic_load_texture_scaling` to normalize the texture coordinates.
+* ``PIPE_CAP_TEXRECT``: Driver supports rectangle textures.  Required for OpenGL on ``!prefers_nir`` drivers.  If this cap is not present, st/mesa will lower the NIR to use normal 2D texture sampling by using either ``txs`` or ``nir_intrinsic_load_texture_scaling`` to normalize the texture coordinates.
 * ``PIPE_CAP_SAMPLER_REDUCTION_MINMAX``: Driver supports EXT min/max sampler reduction.
 * ``PIPE_CAP_SAMPLER_REDUCTION_MINMAX_ARB``: Driver supports ARB min/max sampler reduction with format queries.
 * ``PIPE_CAP_EMULATE_NONFIXED_PRIMITIVE_RESTART``: Driver requests all draws using a non-fixed restart index to be rewritten to use a fixed restart index.
 * ``PIPE_CAP_SUPPORTED_PRIM_MODES``: A bitmask of the ``pipe_prim_type`` enum values that the driver can natively support.
 * ``PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART``: A bitmask of the ``pipe_prim_type`` enum values that the driver can natively support for primitive restart. Only useful if ``PIPE_CAP_PRIMITIVE_RESTART`` is also exported.
 * ``PIPE_CAP_PREFER_BACK_BUFFER_REUSE``: Only applies to DRI_PRIME. If 1, the driver prefers that DRI3 tries to use the same back buffer each frame. If 0, this means DRI3 will at least use 2 back buffers and ping-pong between them to allow the tiled->linear copy to run in parallel.
-* ``PIPE_CAP_DRAW_VERTEX_STATE``: Driver supports `pipe_screen::create_vertex_state/vertex_state_destroy` and `pipe_context::draw_vertex_state`. Only used by display lists and designed to serve vbo_save.
+* ``PIPE_CAP_DRAW_VERTEX_STATE``: Driver supports ``pipe_screen::create_vertex_state/vertex_state_destroy`` and ``pipe_context::draw_vertex_state``. Only used by display lists and designed to serve vbo_save.
 * ``PIPE_CAP_PREFER_POT_ALIGNED_VARYINGS``: Driver prefers varyings to be aligned to power of two in a slot. If this cap is enabled, vec4 varying will be placed in .xyzw components of the varying slot, vec3 in .xyz and vec2 in .xy or .zw
 * ``PIPE_CAP_MAX_SPARSE_TEXTURE_SIZE``: Maximum 1D/2D/rectangle texture image dimension for a sparse texture.
 * ``PIPE_CAP_MAX_SPARSE_3D_TEXTURE_SIZE``: Maximum 3D texture image dimension for a sparse texture.
 * ``PIPE_CAP_MAX_SPARSE_ARRAY_TEXTURE_LAYERS``: Maximum number of layers in a sparse array texture.
-* ``PIPE_CAP_SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS``: TRUE if there are no restrictions on the allocation of mipmaps in sparse textures and FALSE otherwise. See SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS_ARB description in ARB_sparse_texture extension spec.
+* ``PIPE_CAP_SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS``: TRUE if there are no restrictions on the allocation of mipmaps in sparse textures and FALSE otherwise. See SPARSE_TEXTURE_FULL_ARRAY_CUBE_MIPMAPS_ARB description in :ext:`GL_ARB_sparse_texture` extension spec.
 * ``PIPE_CAP_QUERY_SPARSE_TEXTURE_RESIDENCY``: TRUE if shader sparse texture sample instruction could also return the residency information.
-* ``PIPE_CAP_CLAMP_SPARSE_TEXTURE_LOD``: TRUE if shader sparse texture sample instruction support clamp the minimal lod to prevent read from un-committed pages.
+* ``PIPE_CAP_CLAMP_SPARSE_TEXTURE_LOD``: TRUE if shader sparse texture sample instruction support clamp the minimal lod to prevent read from uncommitted pages.
 * ``PIPE_CAP_ALLOW_DRAW_OUT_OF_ORDER``: TRUE if the driver allows the "draw out of order" optimization to be enabled. See _mesa_update_allow_draw_out_of_order for more details.
-* ``PIPE_CAP_MAX_CONSTANT_BUFFER_SIZE_UINT``: Maximum bound constant buffer size in bytes. This is unsigned integer with the maximum of 4GB - 1. This applies to all constant buffers used by UBOs, unlike `PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE`, which is specifically for GLSL uniforms.
+* ``PIPE_CAP_MAX_CONSTANT_BUFFER_SIZE_UINT``: Maximum bound constant buffer size in bytes. This is unsigned integer with the maximum of 4GB - 1. This applies to all constant buffers used by UBOs, unlike ``PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE``, which is specifically for GLSL uniforms.
 * ``PIPE_CAP_HARDWARE_GL_SELECT``: Enable hardware accelerated GL_SELECT for this driver.
 * ``PIPE_CAP_DEVICE_PROTECTED_CONTEXT``: Whether the device supports protected / encrypted context which can manipulate protected / encrypted content (some devices might need protected contexts to access protected content, whereas ``PIPE_CAP_DEVICE_PROTECTED_SURFACE`` does not require any particular context to do so).
+* ``PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT``: Whether to allow glthread to convert glBufferSubData to glCopyBufferSubData. This may improve or worsen performance depending on your driver.
+* ``PIPE_CAP_VALIDATE_ALL_DIRTY_STATES`` : Whether state validation must also validate the state changes for resources types used in the previous shader but not in the current shader.
 
 .. _pipe_capf:
 
@@ -686,13 +691,15 @@ support different features.
   to any shader stage using ``set_constant_buffer``. If 0 or 1, the pipe will
   only permit binding one constant buffer per shader.
 
-If a value greater than 0 is returned, the driver can have multiple
-constant buffers bound to shader stages. The CONST register file is
-accessed with two-dimensional indices, like in the example below.
+  If a value greater than 0 is returned, the driver can have multiple
+  constant buffers bound to shader stages. The CONST register file is
+  accessed with two-dimensional indices, like in the example below.
 
-DCL CONST[0][0..7]       # declare first 8 vectors of constbuf 0
-DCL CONST[3][0]          # declare first vector of constbuf 3
-MOV OUT[0], CONST[0][3]  # copy vector 3 of constbuf 0
+  ::
+
+    DCL CONST[0][0..7]       # declare first 8 vectors of constbuf 0
+    DCL CONST[3][0]          # declare first vector of constbuf 3
+    MOV OUT[0], CONST[0][3]  # copy vector 3 of constbuf 0
 
 * ``PIPE_SHADER_CAP_MAX_TEMPS``: The maximum number of temporary registers.
 * ``PIPE_SHADER_CAP_CONT_SUPPORTED``: Whether continue is supported.
@@ -803,7 +810,7 @@ PIPE_BIND_*
 
 These flags indicate how a resource will be used and are specified at resource
 creation time. Resources may be used in different roles
-during their lifecycle. Bind flags are cumulative and may be combined to create
+during their life cycle. Bind flags are cumulative and may be combined to create
 a resource which can be used for multiple things.
 Depending on the pipe driver's memory management and these bind flags,
 resources might be created and handled quite differently.

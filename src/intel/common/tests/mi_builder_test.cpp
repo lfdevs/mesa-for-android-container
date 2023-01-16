@@ -28,7 +28,9 @@
 #include <gtest/gtest.h>
 
 #include "c99_compat.h"
+#include "common/intel_gem.h"
 #include "dev/intel_device_info.h"
+#include "intel_gem.h"
 #include "drm-uapi/i915_drm.h"
 #include "genxml/gen_macros.h"
 #include "util/macros.h"
@@ -128,7 +130,7 @@ public:
    }
 
    int fd;
-   int ctx_id;
+   uint32_t ctx_id;
    intel_device_info devinfo;
 
    uint32_t batch_bo_handle;
@@ -188,11 +190,8 @@ mi_builder_test::SetUp()
           * --device option with it.
           */
          int device_id;
-         drm_i915_getparam getparam = drm_i915_getparam();
-         getparam.param = I915_PARAM_CHIPSET_ID;
-         getparam.value = &device_id;
-         ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GETPARAM,
-                            (void *)&getparam), 0) << strerror(errno);
+         ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_CHIPSET_ID, &device_id))
+               << strerror(errno);
 
          ASSERT_TRUE(intel_get_device_info_from_pci_id(device_id, &devinfo));
          if (devinfo.ver != GFX_VER ||
@@ -209,19 +208,13 @@ mi_builder_test::SetUp()
    }
    ASSERT_TRUE(i < max_devices) << "Failed to find a DRM device";
 
-   drm_i915_gem_context_create ctx_create = drm_i915_gem_context_create();
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE,
-                      (void *)&ctx_create), 0) << strerror(errno);
-   ctx_id = ctx_create.ctx_id;
+   ASSERT_TRUE(intel_gem_create_context(fd, &ctx_id)) << strerror(errno);
 
    if (GFX_VER >= 8) {
       /* On gfx8+, we require softpin */
       int has_softpin;
-      drm_i915_getparam getparam = drm_i915_getparam();
-      getparam.param = I915_PARAM_HAS_EXEC_SOFTPIN;
-      getparam.value = &has_softpin;
-      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GETPARAM,
-                         (void *)&getparam), 0) << strerror(errno);
+      ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_HAS_EXEC_SOFTPIN, &has_softpin))
+            << strerror(errno);
       ASSERT_TRUE(has_softpin);
    }
 

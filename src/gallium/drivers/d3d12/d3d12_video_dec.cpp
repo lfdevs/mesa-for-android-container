@@ -65,6 +65,7 @@ d3d12_video_create_decoder(struct pipe_context *context, const struct pipe_video
    pD3D12Dec->base.decode_bitstream = d3d12_video_decoder_decode_bitstream;
    pD3D12Dec->base.end_frame = d3d12_video_decoder_end_frame;
    pD3D12Dec->base.flush = d3d12_video_decoder_flush;
+   pD3D12Dec->base.get_decoder_fence = d3d12_video_decoder_get_decoder_fence;
 
    pD3D12Dec->m_decodeFormat = d3d12_convert_pipe_video_profile_to_dxgi_format(codec->profile);
    pD3D12Dec->m_d3d12DecProfileType = d3d12_video_decoder_convert_pipe_video_profile_to_profile_type(codec->profile);
@@ -195,7 +196,7 @@ d3d12_video_decoder_decode_bitstream(struct pipe_video_codec *codec,
    assert(pD3D12Dec->m_spD3D12VideoDevice);
    assert(pD3D12Dec->m_spDecodeCommandQueue);
    assert(pD3D12Dec->m_pD3D12Screen);
-   struct d3d12_video_buffer *pD3D12VideoBuffer = (struct d3d12_video_buffer *) target;
+   ASSERTED struct d3d12_video_buffer *pD3D12VideoBuffer = (struct d3d12_video_buffer *) target;
    assert(pD3D12VideoBuffer);
 
    ///
@@ -444,7 +445,7 @@ d3d12_video_decoder_end_frame(struct pipe_video_codec *codec,
 
    d3d12InputArguments.CompressedBitstream.pBuffer = pD3D12Dec->m_curFrameCompressedBitstreamBuffer.Get();
    d3d12InputArguments.CompressedBitstream.Offset = 0u;
-   constexpr uint64_t d3d12BitstreamOffsetAlignment =
+   ASSERTED constexpr uint64_t d3d12BitstreamOffsetAlignment =
       128u;   // specified in
               // https://docs.microsoft.com/en-us/windows/win32/api/d3d12video/ne-d3d12video-d3d12_video_decode_tier
    assert((d3d12InputArguments.CompressedBitstream.Offset == 0) ||
@@ -665,6 +666,29 @@ d3d12_video_decoder_end_frame(struct pipe_video_codec *codec,
       pD3D12Screen->base.fence_reference(&pD3D12Screen->base, &completion_fence, NULL);
       pipe_resource_reference(&pPipeSrc, NULL);
    }
+
+   // We do not use the async fence for now but set it to
+   // NULL to avoid uninitialized memory in VA frontend
+   *picture->fence = NULL;
+}
+
+/**
+ * Get decoder fence.
+ */
+int d3d12_video_decoder_get_decoder_fence(struct pipe_video_codec *codec,
+                                          struct pipe_fence_handle *fence,
+                                          uint64_t timeout)
+{
+   /* No need to wait for anything, we're already flushing
+   and waiting in d3d12_video_decoder_end_frame */
+
+   // We set NULL in d3d12_video_decoder_end_frame
+   assert(fence == NULL);
+
+   // Return semantics based on p_video_codec interface
+   // ret == 0 -> Decode in progress
+   // ret != 0 -> Decode completed
+   return 1;
 }
 
 /**

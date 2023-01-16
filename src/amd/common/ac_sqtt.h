@@ -75,10 +75,12 @@ struct ac_thread_trace_se {
    uint32_t compute_unit;
 };
 
+#define SQTT_MAX_TRACES 6
+
 struct ac_thread_trace {
    struct ac_thread_trace_data *data;
    uint32_t num_traces;
-   struct ac_thread_trace_se traces[4];
+   struct ac_thread_trace_se traces[SQTT_MAX_TRACES];
 };
 
 uint64_t

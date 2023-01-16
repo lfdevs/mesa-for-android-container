@@ -36,7 +36,7 @@
  * 2. Insert FLUSH_VERTICES calls in various places
  */
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "main/context.h"
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"

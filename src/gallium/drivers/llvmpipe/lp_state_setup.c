@@ -847,7 +847,7 @@ cull_setup_variants(struct llvmpipe_context *lp)
     * counting in fragment shaders as they may still be binned
     * Flushing alone might not be sufficient we need to wait on it too.
     */
-   llvmpipe_finish(pipe, __FUNCTION__);
+   llvmpipe_finish(pipe, __func__);
 
    for (int i = 0; i < LP_MAX_SETUP_VARIANTS / 4; i++) {
       struct lp_setup_variant_list_item *item;

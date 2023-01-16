@@ -153,7 +153,7 @@ public:
 
    bool replace_source(PRegister old_src, PVirtualValue new_src) override;
 
-   uint8_t allowed_dest_chan_mask() const override;
+   uint8_t allowed_src_chan_mask() const override;
 
 private:
    bool do_ready() const override;

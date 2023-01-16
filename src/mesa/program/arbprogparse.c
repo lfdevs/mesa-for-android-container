@@ -23,6 +23,8 @@
  */
 
 #define DEBUG_PARSING 0
+#define DEBUG_VP 0
+#define DEBUG_FP 0
 
 /**
  * \file arbprogparse.c
@@ -50,7 +52,7 @@ having three separate program parameter arrays.
 */
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 
 #include "main/context.h"
 #include "arbprogparse.h"

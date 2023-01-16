@@ -28,7 +28,7 @@
 
 #include "pipe/p_state.h"
 #include "pipe/p_defines.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
@@ -104,7 +104,7 @@ svga_transfer_dma(struct svga_context *svga,
    assert(!st->use_direct_map);
 
    if (transfer == SVGA3D_READ_HOST_VRAM) {
-      SVGA_DBG(DEBUG_PERF, "%s: readback transfer\n", __FUNCTION__);
+      SVGA_DBG(DEBUG_PERF, "%s: readback transfer\n", __func__);
    }
 
    /* Ensure any pending operations on host surfaces are queued on the command
@@ -293,7 +293,7 @@ svga_texture_transfer_map_dma(struct svga_context *svga,
       if (0) {
          debug_printf("%s: failed to allocate %u KB of DMA, "
                       "splitting into %u x %u KB DMA transfers\n",
-                      __FUNCTION__,
+                      __func__,
                       (nblocksy * st->base.stride + 1023) / 1024,
                       (nblocksy + st->hw_nblocksy - 1) / st->hw_nblocksy,
                       (st->hw_nblocksy * st->base.stride + 1023) / 1024);
@@ -745,7 +745,7 @@ svga_texture_transfer_unmap_direct(struct svga_context *svga,
 
       if (0)
          debug_printf("%s %d, %d, %d  %d x %d x %d\n",
-                      __FUNCTION__,
+                      __func__,
                       box.x, box.y, box.z,
                       box.w, box.h, box.d);
 

@@ -88,6 +88,14 @@ struct vk_command_buffer_ops {
    void (*destroy)(struct vk_command_buffer *);
 };
 
+enum mesa_vk_command_buffer_state {
+   MESA_VK_COMMAND_BUFFER_STATE_INVALID,
+   MESA_VK_COMMAND_BUFFER_STATE_INITIAL,
+   MESA_VK_COMMAND_BUFFER_STATE_RECORDING,
+   MESA_VK_COMMAND_BUFFER_STATE_EXECUTABLE,
+   MESA_VK_COMMAND_BUFFER_STATE_PENDING,
+};
+
 struct vk_command_buffer {
    struct vk_object_base base;
 
@@ -99,6 +107,9 @@ struct vk_command_buffer {
    const struct vk_command_buffer_ops *ops;
 
    struct vk_dynamic_graphics_state dynamic_graphics_state;
+
+   /** State of the command buffer */
+   enum mesa_vk_command_buffer_state state;
 
    /** Command buffer recording error state. */
    VkResult record_result;
@@ -178,6 +189,13 @@ vk_command_buffer_reset(struct vk_command_buffer *command_buffer);
 
 void
 vk_command_buffer_recycle(struct vk_command_buffer *command_buffer);
+
+void
+vk_command_buffer_begin(struct vk_command_buffer *command_buffer,
+                        const VkCommandBufferBeginInfo *pBeginInfo);
+
+VkResult
+vk_command_buffer_end(struct vk_command_buffer *command_buffer);
 
 void
 vk_command_buffer_finish(struct vk_command_buffer *command_buffer);

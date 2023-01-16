@@ -344,7 +344,11 @@ struct r600_pipe_shader_selector {
 	struct r600_pipe_shader *current;
 
 	struct tgsi_token       *tokens;
-        struct nir_shader       *nir;
+	struct nir_shader       *nir;
+
+	size_t  nir_blob_size;
+	void   *nir_blob;
+
 	struct pipe_stream_output_info  so;
 	struct tgsi_shader_info		info;
 

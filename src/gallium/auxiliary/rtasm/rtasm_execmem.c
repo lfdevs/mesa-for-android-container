@@ -33,7 +33,7 @@
 
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
-#include "os/os_thread.h"
+#include "util/u_thread.h"
 #include "util/u_memory.h"
 
 #include "rtasm_execmem.h"
@@ -42,11 +42,11 @@
 #define MAP_ANONYMOUS MAP_ANON
 #endif
 
-#if defined(PIPE_OS_WINDOWS)
+#if DETECT_OS_WINDOWS
 #include <windows.h>
 #endif
 
-#if defined(PIPE_OS_UNIX)
+#if DETECT_OS_UNIX
 
 
 /*
@@ -125,7 +125,7 @@ rtasm_exec_free(void *addr)
 }
 
 
-#elif defined(PIPE_OS_WINDOWS)
+#elif DETECT_OS_WINDOWS
 
 
 /*

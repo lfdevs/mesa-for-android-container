@@ -376,5 +376,25 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value value="0x1"  name="RECTANGULAR"/>
 </enum>
 
+<doc>
+	Blob (v615) seem to only use SAM and I wasn't able to coerce
+	it to produce any other command.
+	Probably valid for a4xx+ but not enabled or tested on anything
+	but a6xx.
+</doc>
+<enum name="a6xx_tex_prefetch_cmd">
+	<doc> Produces garbage </doc>
+	<value value="0x0" name="TEX_PREFETCH_UNK0"/>
+	<value value="0x1" name="TEX_PREFETCH_SAM"/>
+	<value value="0x2" name="TEX_PREFETCH_GATHER4R"/>
+	<value value="0x3" name="TEX_PREFETCH_GATHER4G"/>
+	<value value="0x4" name="TEX_PREFETCH_GATHER4B"/>
+	<value value="0x5" name="TEX_PREFETCH_GATHER4A"/>
+	<doc> Causes reads from an invalid address </doc>
+	<value value="0x6" name="TEX_PREFETCH_UNK6"/>
+	<doc> Results in color being zero </doc>
+	<value value="0x7" name="TEX_PREFETCH_UNK7"/>
+</enum>
+
 </database>
 

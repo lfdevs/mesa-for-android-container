@@ -84,7 +84,7 @@ is_gmu_legacy(void)
    }
 }
 
-void dump_register(struct rnn *rnn, uint32_t offset, uint32_t value);
+void dump_register(struct regacc *r);
 void dump_cp_mem_pool(uint32_t *mempool);
 
 struct a6xx_hfi_state {

@@ -136,6 +136,7 @@ opencl_headers = files(
   'CL/cl_va_api_media_sharing_intel.h',
   'CL/cl_version.h',
   'CL/opencl.h',
+  'CL/opencl.hpp',
 )
 # Only install the headers if we are building a stand alone implementation and
 # not an ICD enabled implementation

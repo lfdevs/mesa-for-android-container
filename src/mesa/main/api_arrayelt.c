@@ -34,7 +34,7 @@
  *    Keith Whitwell <keithw@vmware.com>
  */
 
-#include "glheader.h"
+#include "util/glheader.h"
 #include "arrayobj.h"
 #include "api_arrayelt.h"
 #include "bufferobj.h"
@@ -66,11 +66,11 @@ TYPE_IDX(GLenum t)
 static inline int
 vertex_format_to_index(const struct gl_vertex_format *vformat)
 {
-   if (vformat->Doubles)
+   if (vformat->User.Doubles)
       return 3;
-   else if (vformat->Integer)
+   else if (vformat->User.Integer)
       return 2;
-   else if (vformat->Normalized)
+   else if (vformat->User.Normalized)
       return 1;
    else
       return 0;
@@ -1395,8 +1395,8 @@ static const attrib_func AttribFuncsARB[4][4][NUM_TYPES] = {
 static inline attrib_func
 func_nv(const struct gl_vertex_format *vformat)
 {
-   return AttribFuncsNV[vformat->Normalized][vformat->Size-1]
-      [TYPE_IDX(vformat->Type)];
+   return AttribFuncsNV[vformat->User.Normalized][vformat->User.Size-1]
+      [TYPE_IDX(vformat->User.Type)];
 }
 
 
@@ -1406,8 +1406,8 @@ func_nv(const struct gl_vertex_format *vformat)
 static inline attrib_func
 func_arb(const struct gl_vertex_format *vformat)
 {
-   return AttribFuncsARB[vertex_format_to_index(vformat)][vformat->Size-1]
-      [TYPE_IDX(vformat->Type)];
+   return AttribFuncsARB[vertex_format_to_index(vformat)][vformat->User.Size-1]
+      [TYPE_IDX(vformat->User.Type)];
 }
 
 

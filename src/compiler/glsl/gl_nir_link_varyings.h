@@ -31,7 +31,7 @@
  */
 
 
-#include "main/glheader.h"
+#include "util/glheader.h"
 #include "program/prog_parameter.h"
 #include "util/bitset.h"
 

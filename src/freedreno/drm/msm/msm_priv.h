@@ -54,12 +54,6 @@ struct msm_pipe {
    uint64_t gmem_base;
    uint32_t gmem;
    uint32_t queue_id;
-
-   /**
-    * If we *ever* see an in-fence-fd, assume that userspace is
-    * not relying on implicit fences.
-    */
-   bool no_implicit_sync;
 };
 FD_DEFINE_CAST(fd_pipe, msm_pipe);
 

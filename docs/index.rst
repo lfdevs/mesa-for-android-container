@@ -22,7 +22,7 @@ Linux, FreeBSD, and other operating systems.
 .. _OpenMAX: https://www.khronos.org/openmax/
 .. _VDPAU: https://en.wikipedia.org/wiki/VDPAU
 .. _VA-API: https://en.wikipedia.org/wiki/Video_Acceleration_API
-.. _Vulkan: https://www.khronos.org/vulkan/
+.. _Vulkan: https://www.vulkan.org/
 .. _EGL: https://www.khronos.org/egl/
 .. _Direct Rendering Infrastructure: https://dri.freedesktop.org/
 .. _X.org: https://x.org

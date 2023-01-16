@@ -59,6 +59,7 @@ struct zwp_linux_dmabuf_feedback_v1;
 
 #include <GL/gl.h>
 #include <GL/internal/dri_interface.h>
+#include <GL/internal/mesa_interface.h>
 #include "kopper_interface.h"
 
 #ifdef HAVE_DRM_PLATFORM
@@ -226,6 +227,7 @@ struct dri2_egl_display
    const __DRIconfig **driver_configs;
    void *driver;
    const __DRIcoreExtension *core;
+   const __DRImesaCoreExtension *mesa;
    const __DRIimageDriverExtension *image_driver;
    const __DRIdri2Extension *dri2;
    const __DRIswrastExtension *swrast;
@@ -234,12 +236,10 @@ struct dri2_egl_display
    const __DRI2flushControlExtension *flush_control;
    const __DRItexBufferExtension *tex_buffer;
    const __DRIimageExtension *image;
-   const __DRIrobustnessExtension *robustness;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
    const __DRI2bufferDamageExtension *buffer_damage;
    const __DRI2blobExtension *blob;
-   const __DRI2rendererQueryExtension *rendererQuery;
    const __DRI2interopExtension *interop;
    const __DRIconfigOptionsExtension *configOptions;
    const __DRImutableRenderBufferDriverExtension *mutable_render_buffer;

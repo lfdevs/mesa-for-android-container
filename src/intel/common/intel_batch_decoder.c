@@ -1127,6 +1127,31 @@ decode_load_register_imm(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 }
 
 static void
+disasm_program_from_group(struct intel_batch_decode_ctx *ctx,
+                          struct intel_group *strct, const void *map,
+                          const char *type)
+{
+   uint64_t ksp = 0;
+   bool is_enabled = true;
+   struct intel_field_iterator iter;
+
+   intel_field_iterator_init(&iter, strct, map, 0, false);
+
+   while (intel_field_iterator_next(&iter)) {
+      if (strcmp(iter.name, "Kernel Start Pointer") == 0) {
+         ksp = iter.raw_value;
+      } else if (strcmp(iter.name, "Enable") == 0) {
+         is_enabled = iter.raw_value;
+      }
+   }
+
+   if (is_enabled) {
+      ctx_disassemble_program(ctx, ksp, type);
+      fprintf(ctx->fp, "\n");
+   }
+}
+
+static void
 decode_vs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
 {
    struct intel_group *strct =
@@ -1145,22 +1170,7 @@ decode_vs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
-
-   uint64_t ksp = 0;
-   bool is_enabled = true;
-   struct intel_field_iterator iter;
-   intel_field_iterator_init(&iter, strct, bind_bo.map, 0, false);
-   while (intel_field_iterator_next(&iter)) {
-      if (strcmp(iter.name, "Kernel Start Pointer") == 0) {
-         ksp = iter.raw_value;
-      } else if (strcmp(iter.name, "Enable") == 0) {
-	is_enabled = iter.raw_value;
-      }
-   }
-   if (is_enabled) {
-      ctx_disassemble_program(ctx, ksp, "vertex shader");
-      fprintf(ctx->fp, "\n");
-   }
+   disasm_program_from_group(ctx, strct, bind_bo.map, "vertex shader");
 }
 
 static void
@@ -1182,6 +1192,7 @@ decode_gs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
+   disasm_program_from_group(ctx, strct, bind_bo.map, "geometry shader");
 }
 
 static void
@@ -1203,6 +1214,7 @@ decode_clip_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
+   disasm_program_from_group(ctx, strct, bind_bo.map, "clip shader");
 
    struct intel_group *vp_strct =
       intel_spec_find_struct(ctx->spec, "CLIP_VIEWPORT");
@@ -1239,6 +1251,7 @@ decode_sf_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
+   disasm_program_from_group(ctx, strct, bind_bo.map, "strips and fans shader");
 
    struct intel_group *vp_strct =
       intel_spec_find_struct(ctx->spec, "SF_VIEWPORT");

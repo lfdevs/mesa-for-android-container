@@ -21,10 +21,6 @@
     # 4 CPUs, but spawn a couple extra threads to make sure they stay busy while
     # some are waiting for the GPU.
     FDO_CI_CONCURRENT: 6
-  needs:
-    - debian/arm_test
-    - job: debian-armhf
-      artifacts: false
   tags:
     - anholt-nouveau-jetson-tk1
 
@@ -45,7 +41,7 @@
     - google-nouveau-jetson-nano
 
 # 6 Jetson TK1 boards at anholt's house.
-gk20a-gles:
+.gk20a-gles:
   extends:
     - .gk20a-test
   parallel: 4

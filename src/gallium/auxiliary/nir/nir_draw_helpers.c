@@ -147,71 +147,94 @@ nir_lower_pstipple_fs(struct nir_shader *shader,
 }
 
 typedef struct {
-   nir_builder b;
-   nir_shader *shader;
    nir_variable *line_width_input;
+   nir_variable *stipple_counter;
+   nir_variable *stipple_pattern;
 } lower_aaline;
 
-static void
-nir_lower_aaline_block(nir_block *block,
-                       lower_aaline *state)
+static bool
+lower_aaline_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-  nir_builder *b = &state->b;
-  nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_intrinsic)
-         continue;
+   lower_aaline *state = data;
 
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      if (intrin->intrinsic != nir_intrinsic_store_deref)
-         continue;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-      nir_variable *var = nir_intrinsic_get_var(intrin, 0);
-      if (var->data.mode != nir_var_shader_out)
-         continue;
-      if (var->data.location < FRAG_RESULT_DATA0 && var->data.location != FRAG_RESULT_COLOR)
-         continue;
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   if (intrin->intrinsic != nir_intrinsic_store_deref)
+      return false;
 
-      nir_ssa_def *out_input = intrin->src[1].ssa;
-      b->cursor = nir_before_instr(instr);
-      nir_ssa_def *lw = nir_load_var(b, state->line_width_input);
-      nir_ssa_def *tmp = nir_fsat(b, nir_fadd(b, nir_channel(b, lw, 1),
-                                              nir_fneg(b, nir_fabs(b, nir_channel(b, lw, 0)))));
-      nir_ssa_def *tmp1 = nir_fsat(b, nir_fadd(b, nir_channel(b, lw, 3),
-                                               nir_fneg(b, nir_fabs(b, nir_channel(b, lw, 2)))));
+   nir_variable *var = nir_intrinsic_get_var(intrin, 0);
+   if (var->data.mode != nir_var_shader_out)
+      return false;
+   if (var->data.location < FRAG_RESULT_DATA0 && var->data.location != FRAG_RESULT_COLOR)
+      return false;
 
-      tmp = nir_fmul(b, tmp, tmp1);
-      tmp = nir_fmul(b, nir_channel(b, out_input, 3), tmp);
+   nir_ssa_def *out_input = intrin->src[1].ssa;
+   b->cursor = nir_before_instr(instr);
+   nir_ssa_def *lw = nir_load_var(b, state->line_width_input);
+   nir_ssa_def *len = nir_channel(b, lw, 3);
+   len = nir_fadd_imm(b, nir_fmul_imm(b, len, 2.0), -1.0);
+   nir_ssa_def *tmp = nir_fsat(b, nir_fadd(b, nir_channels(b, lw, 0xa),
+                                             nir_fneg(b, nir_fabs(b, nir_channels(b, lw, 0x5)))));
 
-      nir_ssa_def *out = nir_vec4(b, nir_channel(b, out_input, 0),
-                                  nir_channel(b, out_input, 1),
-                                  nir_channel(b, out_input, 2),
-                                  tmp);
-      nir_instr_rewrite_src(instr, &intrin->src[1], nir_src_for_ssa(out));
+   nir_ssa_def *max = len;
+   if (state->stipple_counter) {
+      assert(state->stipple_pattern);
+
+      nir_ssa_def *counter = nir_load_var(b, state->stipple_counter);
+      nir_ssa_def *pattern = nir_load_var(b, state->stipple_pattern);
+      nir_ssa_def *factor = nir_i2f32(b, nir_ishr_imm(b, pattern, 16));
+      pattern = nir_iand_imm(b, pattern, 0xffff);
+
+      nir_ssa_def *stipple_pos = nir_vec2(b, nir_fadd_imm(b, counter, -0.5),
+                                             nir_fadd_imm(b, counter, 0.5));
+
+      stipple_pos = nir_frem(b, nir_fdiv(b, stipple_pos, factor),
+                                 nir_imm_float(b, 16.0));
+
+      nir_ssa_def *p = nir_f2i32(b, stipple_pos);
+      nir_ssa_def *one = nir_imm_float(b, 1.0);
+
+      // float t = 1.0 - min((1.0 - fract(stipple_pos.x)) * factor, 1.0);
+      nir_ssa_def *t = nir_ffract(b, nir_channel(b, stipple_pos, 0));
+      t = nir_fsub(b, one,
+                     nir_fmin(b, nir_fmul(b, factor,
+                                          nir_fsub(b, one, t)), one));
+
+      // vec2 a = vec2((uvec2(pattern) >> p) & uvec2(1u));
+      nir_ssa_def *a = nir_i2f32(b,
+         nir_iand(b, nir_ishr(b, nir_vec2(b, pattern, pattern), p),
+                  nir_imm_ivec2(b, 1, 1)));
+
+      // float cov = mix(a.x, a.y, t);
+      nir_ssa_def *cov = nir_flrp(b, nir_channel(b, a, 0), nir_channel(b, a, 1), t);
+
+      max = nir_fmin(b, len, cov);
    }
 
-}
+   tmp = nir_fmul(b, nir_channel(b, tmp, 0),
+                  nir_fmin(b, nir_channel(b, tmp, 1), max));
+   tmp = nir_fmul(b, nir_channel(b, out_input, 3), tmp);
 
-static void
-nir_lower_aaline_impl(nir_function_impl *impl,
-                      lower_aaline *state)
-{
-   nir_builder *b = &state->b;
-
-   nir_builder_init(b, impl);
-
-   nir_foreach_block(block, impl) {
-      nir_lower_aaline_block(block, state);
-   }
+   nir_ssa_def *out = nir_vec4(b, nir_channel(b, out_input, 0),
+                                 nir_channel(b, out_input, 1),
+                                 nir_channel(b, out_input, 2),
+                                 tmp);
+   nir_instr_rewrite_src(instr, &intrin->src[1], nir_src_for_ssa(out));
+   return true;
 }
 
 void
-nir_lower_aaline_fs(struct nir_shader *shader, int *varying)
+nir_lower_aaline_fs(struct nir_shader *shader, int *varying,
+                    nir_variable *stipple_counter,
+                    nir_variable *stipple_pattern)
 {
    lower_aaline state = {
-      .shader = shader,
+      .stipple_counter = stipple_counter,
+      .stipple_pattern = stipple_pattern,
    };
-   if (shader->info.stage != MESA_SHADER_FRAGMENT)
-      return;
+   assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
    int highest_location = -1, highest_drv_location = -1;
    nir_foreach_shader_in_variable(var, shader) {
@@ -234,11 +257,8 @@ nir_lower_aaline_fs(struct nir_shader *shader, int *varying)
    *varying = tgsi_get_generic_gl_varying_index(line_width->data.location, true);
    state.line_width_input = line_width;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_lower_aaline_impl(function->impl, &state);
-      }
-   }
+   nir_shader_instructions_pass(shader, lower_aaline_instr,
+                                nir_metadata_dominance, &state);
 }
 
 typedef struct {

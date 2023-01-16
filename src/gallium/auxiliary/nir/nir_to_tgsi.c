@@ -1568,13 +1568,6 @@ ntt_emit_alu(struct ntt_compile *c, nir_alu_instr *instr)
             ntt_FSNE(c, dst, src[0], ureg_imm1f(c->ureg, 0));
          break;
 
-      case nir_op_i2b32:
-         if (src_64) {
-            ntt_U64SNE(c, dst, src[0], ureg_imm1u(c->ureg, 0));
-         } else
-            ntt_USNE(c, dst, src[0], ureg_imm1u(c->ureg, 0));
-         break;
-
       case nir_op_b2i32:
          ntt_AND(c, dst, src[0], ureg_imm1u(c->ureg, 1));
          break;
@@ -3656,6 +3649,8 @@ ntt_fix_nir_options(struct pipe_screen *screen, struct nir_shader *s,
        !options->lower_flrp64 ||
        !options->lower_fmod ||
        !options->lower_rotate ||
+       !options->lower_uadd_carry ||
+       !options->lower_usub_borrow ||
        !options->lower_uadd_sat ||
        !options->lower_usub_sat ||
        !options->lower_uniforms_to_ubo ||
@@ -3674,6 +3669,8 @@ ntt_fix_nir_options(struct pipe_screen *screen, struct nir_shader *s,
       new_options->lower_flrp64 = true;
       new_options->lower_fmod = true;
       new_options->lower_rotate = true;
+      new_options->lower_uadd_carry = true;
+      new_options->lower_usub_borrow = true;
       new_options->lower_uadd_sat = true;
       new_options->lower_usub_sat = true;
       new_options->lower_uniforms_to_ubo = true;
@@ -4030,6 +4027,8 @@ static const nir_shader_compiler_options nir_to_tgsi_compiler_options = {
    .lower_fmod = true,
    .lower_rotate = true,
    .lower_uniforms_to_ubo = true,
+   .lower_uadd_carry = true,
+   .lower_usub_borrow = true,
    .lower_uadd_sat = true,
    .lower_usub_sat = true,
    .lower_vector_cmp = true,
