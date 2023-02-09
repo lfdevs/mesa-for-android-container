@@ -31,7 +31,7 @@
 #include "pipe/p_state.h"
 #include "nir/nir_to_tgsi.h"
 #include "util/format/u_format.h"
-#include "util/indices/u_primconvert.h"
+#include "indices/u_primconvert.h"
 #include "util/u_draw.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"

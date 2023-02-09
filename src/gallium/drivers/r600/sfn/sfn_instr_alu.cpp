@@ -587,22 +587,24 @@ AluInstr::check_readport_validation(PRegister old_src, PVirtualValue new_src) co
    assert(nsrc * m_alu_slots == m_src.size());
 
    for (int s = 0; s < m_alu_slots && success; ++s) {
-      for (AluBankSwizzle i = alu_vec_012; i != alu_vec_unknown; ++i) {
-         auto ireg = m_src.begin() + s * nsrc;
+      PVirtualValue src[3];
+      auto ireg = m_src.begin() + s * nsrc;
 
+      for (unsigned i = 0; i < nsrc; ++i, ++ireg)
+         src[i] = old_src->equal_to(**ireg) ? new_src : *ireg;
+
+      AluBankSwizzle bs = alu_vec_012;
+      while (bs != alu_vec_unknown) {
          AluReadportReservation rpr = rpr_sum;
-         PVirtualValue s[3];
-
-         for (unsigned i = 0; i < nsrc; ++i, ++ireg)
-            s[i] = old_src->equal_to(**ireg) ? new_src : *ireg;
-
-         if (rpr.schedule_vec_src(s, nsrc, i)) {
+         if (rpr.schedule_vec_src(src, nsrc, bs)) {
             rpr_sum = rpr;
             break;
-         } else {
-            success = false;
          }
+         ++bs;
       }
+
+      if (bs == alu_vec_unknown)
+         success = false;
    }
    return success;
 }

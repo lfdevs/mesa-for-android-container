@@ -2246,11 +2246,11 @@ dri2_init_screen_extensions(struct dri_screen *screen,
          screen->buffer_damage_extension.set_damage_region =
             dri2_set_damage_region;
       *nExt++ = &screen->buffer_damage_extension.base;
+   }
 
-      if (pscreen->get_param(pscreen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY)) {
-         *nExt++ = &dri2Robustness.base;
-         screen->has_reset_status_query = true;
-      }
+   if (pscreen->get_param(pscreen, PIPE_CAP_DEVICE_RESET_STATUS_QUERY)) {
+      *nExt++ = &dri2Robustness.base;
+      screen->has_reset_status_query = true;
    }
 
    /* Ensure the extension list didn't overrun its buffer and is still

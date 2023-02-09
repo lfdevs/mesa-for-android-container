@@ -162,10 +162,6 @@ files_mesa_util = files(
   'vma.c',
   'vma.h',
   'xxhash.h',
-  'indices/u_indices.h',
-  'indices/u_indices_priv.h',
-  'indices/u_primconvert.c',
-  'indices/u_primconvert.h',
   'mesa_cache_db.c',
   'mesa_cache_db.h',
 )
@@ -249,20 +245,6 @@ endif
 
 u_trace_py = files('perf/u_trace.py')
 
-u_indices_gen_c = custom_target(
-  'u_indices_gen.c',
-  input : 'indices/u_indices_gen.py',
-  output : 'u_indices_gen.c',
-  command : [prog_python, '@INPUT@', '@OUTPUT@'],
-)
-
-u_unfilled_gen_c = custom_target(
-  'u_unfilled_gen.c',
-  input : 'indices/u_unfilled_gen.py',
-  output : 'u_unfilled_gen.c',
-  command : [prog_python, '@INPUT@', '@OUTPUT@'],
-)
-
 libmesa_util_sse41 = static_library(
   'mesa_util_sse41',
   files('streaming-load-memcpy.c'),
@@ -273,7 +255,7 @@ libmesa_util_sse41 = static_library(
 
 _libmesa_util = static_library(
   'mesa_util',
-  [files_mesa_util, files_debug_stack, format_srgb, u_indices_gen_c, u_unfilled_gen_c],
+  [files_mesa_util, files_debug_stack, format_srgb],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
   dependencies : deps_for_libmesa_util,
   link_with: [libmesa_format, libmesa_util_sse41],

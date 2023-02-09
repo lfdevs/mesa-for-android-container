@@ -961,4 +961,8 @@ void vl_compositor_cs_cleanup_shaders(struct vl_compositor *c)
                 c->pipe->delete_compute_state(c->pipe, c->cs_yuv.bob.y);
         if (c->cs_yuv.bob.uv)
                 c->pipe->delete_compute_state(c->pipe, c->cs_yuv.bob.uv);
+        if (c->cs_yuv.progressive.y)
+                c->pipe->delete_compute_state(c->pipe, c->cs_yuv.progressive.y);
+        if (c->cs_yuv.progressive.uv)
+                c->pipe->delete_compute_state(c->pipe, c->cs_yuv.progressive.uv);
 }

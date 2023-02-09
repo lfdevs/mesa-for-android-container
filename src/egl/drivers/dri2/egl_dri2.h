@@ -274,6 +274,7 @@ struct dri2_egl_display
    int present_major_version;
    int present_minor_version;
    struct loader_dri3_extensions loader_dri3_ext;
+   struct loader_dri3_screen_resources screen_resources;
 #endif
 #endif
 

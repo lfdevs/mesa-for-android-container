@@ -3804,7 +3804,8 @@ static void si_emit_msaa_config(struct si_context *sctx)
    unsigned sc_line_cntl = 0;
    unsigned sc_aa_config = 0;
 
-   if (coverage_samples > 1 && rs->multisample_enable) {
+   if (coverage_samples > 1 && (rs->multisample_enable ||
+                                sctx->smoothing_enabled)) {
       /* distance from the pixel center, indexed by log2(nr_samples) */
       static unsigned max_dist[] = {
          0, /* unused */
@@ -3826,7 +3827,8 @@ static void si_emit_msaa_config(struct si_context *sctx)
                      S_028BE0_COVERED_CENTROID_IS_CENTER(sctx->gfx_level >= GFX10_3);
    }
 
-   if (sctx->framebuffer.nr_samples > 1) {
+   if (sctx->framebuffer.nr_samples > 1 ||
+       sctx->smoothing_enabled) {
       if (sctx->framebuffer.state.zsbuf) {
          z_samples = sctx->framebuffer.state.zsbuf->texture->nr_samples;
          z_samples = MAX2(1, z_samples);

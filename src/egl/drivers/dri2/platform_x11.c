@@ -1192,23 +1192,82 @@ dri2_x11_get_sync_values(_EGLDisplay *display, _EGLSurface *surface,
    return EGL_TRUE;
 }
 
+static int
+box_intersection_area(int16_t a_x, int16_t a_y,
+                      int16_t a_width, int16_t a_height,
+                      int16_t b_x, int16_t b_y,
+                      int16_t b_width, int16_t b_height)
+{
+   int w = MIN2(a_x + a_width,  b_x + b_width)  - MAX2(a_x, b_x);
+   int h = MIN2(a_y + a_height, b_y + b_height) - MAX2(a_y, b_y);
+
+   return (w < 0 || h < 0) ? 0 : w * h;
+}
+
 EGLBoolean
 dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
                       EGLint *numerator, EGLint *denominator)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(display);
-   xcb_randr_get_screen_info_cookie_t cookie;
-   xcb_randr_get_screen_info_reply_t *reply;
 
-   cookie = xcb_randr_get_screen_info_unchecked(dri2_dpy->conn, dri2_dpy->screen->root);
-   reply = xcb_randr_get_screen_info_reply(dri2_dpy->conn, cookie, NULL);
+   loader_dri3_update_screen_resources(&dri2_dpy->screen_resources);
 
-   if (!reply)
-      return _eglError(EGL_BAD_ACCESS, "eglGetMscRateANGLE");
+   if (dri2_dpy->screen_resources.num_crtcs == 0) {
+      /* If there's no CRTC active, use the present fake vblank of 1Hz */
+      *numerator = 1;
+      *denominator = 1;
+      return EGL_TRUE;
+   }
 
-   *numerator = reply->rate;
-   *denominator = 1;
-   free(reply);
+   /* Default to the first CRTC in the list */
+   *numerator = dri2_dpy->screen_resources.crtcs[0].refresh_numerator;
+   *denominator = dri2_dpy->screen_resources.crtcs[0].refresh_denominator;
+
+   /* If there's only one active CRTC, we're done */
+   if (dri2_dpy->screen_resources.num_crtcs == 1)
+      return EGL_TRUE;
+
+   /* In a multi-monitor setup, look at each CRTC and perform a box
+    * intersection between the CRTC and surface.  Use the CRTC whose
+    * box intersection has the largest area.
+    */
+   if (surface->Type != EGL_WINDOW_BIT)
+      return EGL_TRUE;
+
+   xcb_window_t window = (uintptr_t) surface->NativeSurface;
+
+   xcb_translate_coordinates_cookie_t cookie =
+      xcb_translate_coordinates_unchecked(dri2_dpy->conn, window,
+                                          dri2_dpy->screen->root, 0, 0);
+   xcb_translate_coordinates_reply_t *reply =
+      xcb_translate_coordinates_reply(dri2_dpy->conn, cookie, NULL);
+
+   if (!reply) {
+      _eglError(EGL_BAD_SURFACE,
+                "eglGetMscRateANGLE failed to translate coordinates");
+      return EGL_FALSE;
+   }
+
+   int area = 0;
+
+   for (unsigned c = 0; c < dri2_dpy->screen_resources.num_crtcs; c++) {
+      struct loader_dri3_crtc_info *crtc =
+         &dri2_dpy->screen_resources.crtcs[c];
+
+      int c_area = box_intersection_area(reply->dst_x, reply->dst_y,
+                                        surface->Width, surface->Height,
+                                        crtc->x, crtc->y,
+                                        crtc->width, crtc->height);
+      if (c_area > area) {
+         *numerator = crtc->refresh_numerator;
+         *denominator = crtc->refresh_denominator;
+         area = c_area;
+      }
+   }
+
+   /* If the window is entirely off-screen, then area will still be 0.
+    * We defaulted to the first CRTC in the list's refresh rate, earlier.
+    */
 
    return EGL_TRUE;
 }
@@ -1586,6 +1645,9 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
    if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, false))
       goto cleanup;
 
+   loader_dri3_init_screen_resources(&dri2_dpy->screen_resources,
+                                     dri2_dpy->conn, dri2_dpy->screen);
+
    dri2_dpy->loader_dri3_ext.core = dri2_dpy->core;
    dri2_dpy->loader_dri3_ext.image_driver = dri2_dpy->image_driver;
    dri2_dpy->loader_dri3_ext.flush = dri2_dpy->flush;
@@ -1733,6 +1795,9 @@ dri2_initialize_x11(_EGLDisplay *disp)
 void
 dri2_teardown_x11(struct dri2_egl_display *dri2_dpy)
 {
+   if (dri2_dpy->dri2_major >= 3)
+      loader_dri3_destroy_screen_resources(&dri2_dpy->screen_resources);
+
    if (dri2_dpy->own_device)
       xcb_disconnect(dri2_dpy->conn);
 }

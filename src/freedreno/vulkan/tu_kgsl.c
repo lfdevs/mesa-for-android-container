@@ -452,8 +452,8 @@ tu_QueueSubmit2(VkQueue _queue,
                &cmdbuf->device->perfcntrs_pass_cs_entries[perf_info->counterPassIndex];
 
             cmds[entry_idx++] = (struct kgsl_command_object) {
-               .offset = perf_cs_entry->offset,
-               .gpuaddr = perf_cs_entry->bo->iova,
+               .offset = 0, // KGSL doesn't use offset
+               .gpuaddr = perf_cs_entry->bo->iova + perf_cs_entry->offset,
                .size = perf_cs_entry->size,
                .flags = KGSL_CMDLIST_IB,
                .id = perf_cs_entry->bo->gem_handle,
@@ -462,8 +462,8 @@ tu_QueueSubmit2(VkQueue _queue,
 
          for (unsigned k = 0; k < cs->entry_count; k++) {
             cmds[entry_idx++] = (struct kgsl_command_object) {
-               .offset = cs->entries[k].offset,
-               .gpuaddr = cs->entries[k].bo->iova,
+               .offset = 0, // KGSL doesn't use offset
+               .gpuaddr = cs->entries[k].bo->iova + cs->entries[k].offset,
                .size = cs->entries[k].size,
                .flags = KGSL_CMDLIST_IB,
                .id = cs->entries[k].bo->gem_handle,
@@ -478,8 +478,9 @@ tu_QueueSubmit2(VkQueue _queue,
                                   cmd_buffers,
                                   cmdbuf_count);
          cmds[entry_idx++] = (struct kgsl_command_object) {
-            .offset = autotune_cs->entries[0].offset,
-            .gpuaddr = autotune_cs->entries[0].bo->iova,
+            .offset = 0, // KGSL doesn't use offset
+            .gpuaddr = autotune_cs->entries[0].bo->iova +
+                       autotune_cs->entries[0].offset,
             .size = autotune_cs->entries[0].size,
             .flags = KGSL_CMDLIST_IB,
             .id = autotune_cs->entries[0].bo->gem_handle,

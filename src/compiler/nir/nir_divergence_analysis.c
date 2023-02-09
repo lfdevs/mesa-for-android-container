@@ -686,6 +686,9 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_ray_hit_kind:
    case nir_intrinsic_load_ray_flags:
    case nir_intrinsic_load_cull_mask:
+   case nir_intrinsic_report_ray_intersection:
+   case nir_intrinsic_rq_proceed:
+   case nir_intrinsic_rq_load:
       is_divergent = true;
       break;
 

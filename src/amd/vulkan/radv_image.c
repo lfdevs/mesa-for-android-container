@@ -795,6 +795,8 @@ si_set_mutable_tex_desc_fields(struct radv_device *device, struct radv_image *im
    } else
       va += (uint64_t)base_level_info->offset_256B * 256;
 
+   swizzle = radv_adjust_tile_swizzle(device->physical_device, swizzle);
+
    state[0] = va >> 8;
    if (gfx_level >= GFX9 || base_level_info->mode == RADEON_SURF_MODE_2D)
       state[0] |= swizzle;
@@ -809,7 +811,7 @@ si_set_mutable_tex_desc_fields(struct radv_device *device, struct radv_image *im
          if (gfx_level <= GFX8)
             meta_va += plane->surface.u.legacy.color.dcc_level[base_level].dcc_offset;
 
-         unsigned dcc_tile_swizzle = plane->surface.tile_swizzle << 8;
+         unsigned dcc_tile_swizzle = swizzle << 8;
          dcc_tile_swizzle &= (1 << plane->surface.meta_alignment_log2) - 1;
          meta_va |= dcc_tile_swizzle;
       } else if (!disable_compression && radv_image_is_tc_compat_htile(image)) {
@@ -1048,7 +1050,7 @@ gfx10_make_texture_descriptor(struct radv_device *device, struct radv_image *ima
    unsigned max_mip =
       image->info.samples > 1 ? util_logbase2(image->info.samples) : image->info.levels - 1;
    if (nbc_view && nbc_view->valid)
-      max_mip = nbc_view->max_mip;
+      max_mip = nbc_view->max_mip - 1;
 
    unsigned min_lod_clamped = radv_float_to_ufixed(CLAMP(min_lod, 0, 15), 8);
    if (device->physical_device->rad_info.gfx_level >= GFX11) {
@@ -1980,6 +1982,7 @@ radv_image_view_make_descriptor(struct radv_image_view *iview, struct radv_devic
    struct radv_image *image = iview->image;
    struct radv_image_plane *plane = &image->planes[plane_id];
    bool is_stencil = iview->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT;
+   unsigned first_layer = iview->vk.base_array_layer;
    uint32_t blk_w;
    union radv_descriptor *descriptor;
    uint32_t hw_level = 0;
@@ -2001,12 +2004,15 @@ radv_image_view_make_descriptor(struct radv_image_view *iview, struct radv_devic
          hw_level = nbc_view->level;
          iview->extent.width = nbc_view->width;
          iview->extent.height = nbc_view->height;
+
+         /* Clear the base array layer because addrlib adds it as part of the base addr offset. */
+         first_layer = 0;
       }
    }
 
    radv_make_texture_descriptor(
       device, image, is_storage_image, iview->vk.view_type, vk_format, components, hw_level,
-      hw_level + iview->vk.level_count - 1, iview->vk.base_array_layer,
+      hw_level + iview->vk.level_count - 1, first_layer,
       iview->vk.base_array_layer + iview->vk.layer_count - 1,
       vk_format_get_plane_width(image->vk.format, plane_id, iview->extent.width),
       vk_format_get_plane_height(image->vk.format, plane_id, iview->extent.height),
@@ -2107,7 +2113,6 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
    const VkImageSubresourceRange *range = &pCreateInfo->subresourceRange;
    uint32_t plane_count = 1;
    float min_lod = 0.0f;
-   struct ac_surf_nbc_view nbc_view = {0};
 
    const struct VkImageViewMinLodCreateInfoEXT *min_lod_info =
       vk_find_struct_const(pCreateInfo->pNext, IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT);
@@ -2133,6 +2138,7 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
    }
    iview->image = image;
    iview->plane_id = radv_plane_from_aspect(pCreateInfo->subresourceRange.aspectMask);
+   iview->nbc_view.valid = false;
 
    /* If the image has an Android external format, pCreateInfo->format will be
     * VK_FORMAT_UNDEFINED. */
@@ -2244,7 +2250,7 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
                 (radv_minify(iview->extent.width, range->baseMipLevel) < lvl_width ||
                  radv_minify(iview->extent.height, range->baseMipLevel) < lvl_height) &&
                 iview->vk.layer_count == 1) {
-               compute_non_block_compressed_view(device, iview, &nbc_view);
+               compute_non_block_compressed_view(device, iview, &iview->nbc_view);
             }
          }
       }
@@ -2259,10 +2265,10 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
       VkFormat format = vk_format_get_plane_format(iview->vk.view_format, i);
       radv_image_view_make_descriptor(iview, device, format, &pCreateInfo->components, min_lod, false,
                                       disable_compression, enable_compression, iview->plane_id + i,
-                                      i, img_create_flags, &nbc_view);
+                                      i, img_create_flags, &iview->nbc_view);
       radv_image_view_make_descriptor(iview, device, format, &pCreateInfo->components, min_lod, true,
                                       disable_compression, enable_compression, iview->plane_id + i,
-                                      i, img_create_flags, &nbc_view);
+                                      i, img_create_flags, &iview->nbc_view);
    }
 }
 

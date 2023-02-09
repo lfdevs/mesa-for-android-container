@@ -3608,9 +3608,7 @@ VkResult anv_CreateDevice(
     * to zero and they have a valid descriptor.
     */
    device->null_surface_state =
-      anv_state_pool_alloc(device->info->verx10 >= 125 ?
-                           &device->scratch_surface_state_pool :
-                           &device->internal_surface_state_pool,
+      anv_state_pool_alloc(&device->bindless_surface_state_pool,
                            device->isl_dev.ss.size,
                            device->isl_dev.ss.align);
    isl_null_fill_state(&device->isl_dev, device->null_surface_state.map,

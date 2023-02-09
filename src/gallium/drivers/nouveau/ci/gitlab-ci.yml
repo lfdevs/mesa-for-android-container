@@ -41,7 +41,7 @@
     - google-nouveau-jetson-nano
 
 # 6 Jetson TK1 boards at anholt's house.
-.gk20a-gles:
+gk20a-gles:
   extends:
     - .gk20a-test
   parallel: 4

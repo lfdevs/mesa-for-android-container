@@ -296,6 +296,12 @@ try_setup_line(struct lp_setup_context *setup,
    if (0)
       print_line(setup, v1, v2);
 
+   if (lp_setup_zero_sample_mask(setup)) {
+      if (0) debug_printf("zero sample mask\n");
+      LP_COUNT(nr_culled_tris);
+      return TRUE;
+   }
+
    const float (*pv)[4];
    if (setup->flatshade_first) {
       pv = v1;

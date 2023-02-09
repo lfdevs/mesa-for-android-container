@@ -66,10 +66,6 @@ apt-key add .gitlab-ci/container/debian/winehq.gpg.key
 apt-add-repository https://dl.winehq.org/wine-builds/debian/
 apt-get update -q
 
-# Needed for Valve's tracing jobs to collect information about the graphics
-# hardware on the test devices.
-pip3 install gfxinfo-mupuf==0.0.9
-
 # workaround wine needing 32-bit
 # https://bugs.winehq.org/show_bug.cgi?id=53393
 apt-get install -y --no-remove wine-stable-amd64  # a requirement for wine-stable

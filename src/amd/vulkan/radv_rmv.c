@@ -183,7 +183,7 @@ static void
 evaluate_trace_event(struct radv_device *device, uint64_t timestamp, struct util_dynarray *tokens,
                      struct trace_event_amdgpu_vm_update_ptes *event)
 {
-   if (event->common.pid != getpid()) {
+   if (event->common.pid != getpid() && event->pid != getpid()) {
       return;
    }
 
@@ -243,11 +243,11 @@ append_trace_events(struct radv_device *device, int pipe_fd)
             }
          case TRACE_EVENT_TYPE_EXTENDED_DELTA:
             timestamp += event_header->time_delta;
-            timestamp += event_header->excess_length << 28;
+            timestamp += (uint64_t)event_header->excess_length << 27ULL;
             continue;
          case TRACE_EVENT_TYPE_TIMESTAMP:
             timestamp = event_header->time_delta;
-            timestamp |= event_header->excess_length << 28;
+            timestamp |= (uint64_t)event_header->excess_length << 27ULL;
             continue;
          default:
             break;
@@ -276,6 +276,8 @@ append_trace_events(struct radv_device *device, int pipe_fd)
          read_ptr += length - sizeof(struct trace_event_header);
       }
    } while (true);
+
+   free(page);
 }
 
 static void
@@ -719,8 +721,8 @@ radv_rmv_log_border_color_palette_create(struct radv_device *device, struct rade
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE,
                      &create_token);
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_BIND, &bind_token);
-   vk_rmv_log_cpu_map(&device->vk, bo->va, false);
    simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
+   vk_rmv_log_cpu_map(&device->vk, bo->va, false);
 }
 
 void

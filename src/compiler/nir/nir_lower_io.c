@@ -1184,8 +1184,9 @@ addr_is_in_bounds(nir_builder *b, nir_ssa_def *addr,
 {
    assert(addr_format == nir_address_format_64bit_bounded_global);
    assert(addr->num_components == 4);
-   return nir_ige(b, nir_channel(b, addr, 2),
-                     nir_iadd_imm(b, nir_channel(b, addr, 3), size));
+   assert(size > 0);
+   return nir_ult(b, nir_iadd_imm(b, nir_channel(b, addr, 3), size - 1),
+                     nir_channel(b, addr, 2));
 }
 
 static void

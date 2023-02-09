@@ -80,8 +80,15 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
       uint32_t ms_rast_mode =
          genX(ms_rasterization_mode)(pipeline, dynamic_raster_mode);
 
+     /* From the Haswell PRM, Volume 2b, documentation for
+      * 3DSTATE_SF, "Antialiasing Enable":
+      *
+      * "This field must be disabled if any of the render targets
+      * have integer (UINT or SINT) surface format."
+      */
       bool aa_enable = anv_rasterization_aa_mode(dynamic_raster_mode,
-                                                 pipeline->line_mode);
+                                                 pipeline->line_mode) &&
+                       !cmd_buffer->state.gfx.has_uint_rt;
 
       uint32_t sf_dw[GENX(3DSTATE_SF_length)];
       struct GENX(3DSTATE_SF) sf = {

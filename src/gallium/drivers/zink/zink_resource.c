@@ -199,6 +199,8 @@ create_bci(struct zink_screen *screen, const struct pipe_resource *templ, unsign
                   VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
                   VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT;
    }
+   if (screen->info.have_KHR_buffer_device_address)
+      bci.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
    if (bind & PIPE_BIND_SHADER_IMAGE)
       bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
@@ -640,9 +642,12 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
 #else
          external = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #endif
-      } else {
+      } else if (screen->info.have_EXT_external_memory_dma_buf) {
          external = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
          export_types |= VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+      } else {
+         /* can't export anything, fail early */
+         return NULL;
       }
    }
 
@@ -682,6 +687,8 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
          flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
       obj->is_buffer = true;
       obj->transfer_dst = true;
+      obj->vkflags = bci.flags;
+      obj->vkusage = bci.usage;
    } else {
       bool winsys_modifier = (export_types & VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT) && whandle && whandle->modifier != DRM_FORMAT_MOD_INVALID;
       uint64_t mods[10];
@@ -963,7 +970,7 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
    mai.pNext = NULL;
    mai.allocationSize = reqs.size;
    enum zink_heap heap = zink_heap_from_domain_flags(flags, aflags);
-   mai.memoryTypeIndex = zink_heap_idx_from_bits(screen, heap, reqs.memoryTypeBits);
+   mai.memoryTypeIndex = zink_mem_type_idx_from_bits(screen, heap, reqs.memoryTypeBits);
    if (mai.memoryTypeIndex == UINT32_MAX) {
       /* not valid based on reqs; demote to more compatible type */
       switch (heap) {
@@ -976,7 +983,7 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
       default:
          break;
       }
-      mai.memoryTypeIndex = zink_heap_idx_from_bits(screen, heap, reqs.memoryTypeBits);
+      mai.memoryTypeIndex = zink_mem_type_idx_from_bits(screen, heap, reqs.memoryTypeBits);
       assert(mai.memoryTypeIndex != UINT32_MAX);
    }
    assert(reqs.memoryTypeBits & BITFIELD_BIT(mai.memoryTypeIndex));
@@ -1305,11 +1312,6 @@ add_resource_bind(struct zink_context *ctx, struct zink_resource *res, unsigned 
    res->layout = VK_IMAGE_LAYOUT_UNDEFINED;
    res->obj->access = 0;
    res->obj->access_stage = 0;
-   bool needs_unref = true;
-   if (zink_resource_has_usage(res)) {
-      zink_batch_reference_resource_move(&ctx->batch, res);
-      needs_unref = false;
-   }
    res->obj = new_obj;
    for (unsigned i = 0; i <= res->base.b.last_level; i++) {
       struct pipe_box box = {0, 0, 0,
@@ -1318,8 +1320,7 @@ add_resource_bind(struct zink_context *ctx, struct zink_resource *res, unsigned 
       box.depth = util_num_layers(&res->base.b, i);
       ctx->base.resource_copy_region(&ctx->base, &res->base.b, i, 0, 0, 0, &staging.base.b, i, &box);
    }
-   if (needs_unref)
-      zink_resource_object_reference(screen, &old_obj, NULL);
+   zink_resource_object_reference(screen, &old_obj, NULL);
    return true;
 }
 
@@ -1553,6 +1554,7 @@ zink_resource_from_handle(struct pipe_screen *pscreen,
          res->valid = true;
       else
          tc_buffer_disable_cpu_storage(pres);
+      res->internal_format = whandle->format;
    }
    return pres;
 #else
@@ -1875,9 +1877,7 @@ zink_buffer_map(struct pipe_context *pctx,
          goto success;
       usage |= PIPE_MAP_UNSYNCHRONIZED;
    } else if (!(usage & PIPE_MAP_UNSYNCHRONIZED) &&
-              (((usage & PIPE_MAP_READ) && !(usage & PIPE_MAP_PERSISTENT) &&
-               ((screen->info.mem_props.memoryTypes[res->obj->bo->base.placement].propertyFlags & VK_STAGING_RAM) != VK_STAGING_RAM)) ||
-              !res->obj->host_visible)) {
+              (((usage & PIPE_MAP_READ) && !(usage & PIPE_MAP_PERSISTENT) && res->base.b.usage != PIPE_USAGE_STAGING) || !res->obj->host_visible)) {
       assert(!(usage & (TC_TRANSFER_MAP_THREADED_UNSYNC | PIPE_MAP_THREAD_SAFE)));
       if (!res->obj->host_visible || !(usage & PIPE_MAP_ONCE)) {
 overwrite:

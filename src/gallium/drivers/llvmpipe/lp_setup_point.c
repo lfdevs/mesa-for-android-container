@@ -450,6 +450,12 @@ try_setup_point(struct lp_setup_context *setup,
       lp_context->pipeline_statistics.c_primitives++;
    }
 
+   if (lp_setup_zero_sample_mask(setup)) {
+      if (0) debug_printf("zero sample mask\n");
+      LP_COUNT(nr_culled_tris);
+      return TRUE;
+   }
+
    if (!u_rect_test_intersection(&setup->draw_regions[viewport_index], &bbox)) {
       if (0) debug_printf("no intersection\n");
       LP_COUNT(nr_culled_tris);

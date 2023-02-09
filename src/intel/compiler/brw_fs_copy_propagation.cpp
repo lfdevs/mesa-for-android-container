@@ -1109,9 +1109,11 @@ fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
             if (inst->src[i].file == VGRF ||
                 (inst->src[i].file == FIXED_GRF &&
                  inst->src[i].is_contiguous())) {
+               const brw_reg_type t = i < inst->header_size ?
+                  BRW_REGISTER_TYPE_UD : inst->src[i].type;
                acp_entry *entry = rzalloc(copy_prop_ctx, acp_entry);
-               entry->dst = byte_offset(inst->dst, offset);
-               entry->src = inst->src[i];
+               entry->dst = byte_offset(retype(inst->dst, t), offset);
+               entry->src = retype(inst->src[i], t);
                entry->size_written = size_written;
                entry->size_read = inst->size_read(i);
                entry->opcode = inst->opcode;

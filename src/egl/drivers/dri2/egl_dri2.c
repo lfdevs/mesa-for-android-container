@@ -2234,8 +2234,6 @@ dri2_get_sync_values_chromium(_EGLDisplay *disp, _EGLSurface *surf,
    if (dri2_dpy->vtbl->get_sync_values)
       ret = dri2_dpy->vtbl->get_sync_values(disp, surf, ust, msc, sbc);
 
-   mtx_unlock(&dri2_dpy->lock);
-
    return ret;
 }
 
@@ -2359,8 +2357,6 @@ dri2_query_surface(_EGLDisplay *disp, _EGLSurface *surf,
    } else {
       ret = dri2_dpy->vtbl->query_surface(disp, surf, attribute, value);
    }
-
-   mtx_unlock(&dri2_dpy->lock);
 
    return ret;
 }

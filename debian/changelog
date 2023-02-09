@@ -1,3 +1,15 @@
+mesa (23.0.0~rc4-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release candidate.
+  * copyright: Updated.
+  * rusticl-ftbfs.diff: Dropped, upstream.
+
+  [ Joshua Watt ]
+  * Add mesa-drm-shim package.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 09 Feb 2023 20:56:43 +0200
+
 mesa (23.0.0~rc1-1) experimental; urgency=medium
 
   * New upstream release candidate.

@@ -1803,7 +1803,9 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
              spi_format == V_028714_SPI_SHADER_UINT16_ABGR ||
              spi_format == V_028714_SPI_SHADER_SINT16_ABGR) {
             sx_ps_downconvert |= V_028754_SX_RT_EXPORT_8_8_8_8 << (i * 4);
-            sx_blend_opt_epsilon |= V_028758_8BIT_FORMAT << (i * 4);
+
+            if (G_028C70_NUMBER_TYPE(cb->cb_color_info) != V_028C70_NUMBER_SRGB)
+               sx_blend_opt_epsilon |= V_028758_8BIT_FORMAT << (i * 4);
          }
          break;
 
@@ -1899,8 +1901,10 @@ radv_emit_ps_epilog_state(struct radv_cmd_buffer *cmd_buffer, struct radv_shader
    if (cmd_buffer->state.emitted_ps_epilog == ps_epilog && !pipeline_is_dirty)
       return;
 
-   radeon_set_context_reg(cmd_buffer->cs, R_028714_SPI_SHADER_COL_FORMAT,
-                          ps_epilog->spi_shader_col_format);
+   uint32_t col_format = ps_epilog->spi_shader_col_format;
+   if (pipeline->need_null_export_workaround && !col_format)
+      col_format = V_028714_SPI_SHADER_32_R;
+   radeon_set_context_reg(cmd_buffer->cs, R_028714_SPI_SHADER_COL_FORMAT, col_format);
    radeon_set_context_reg(cmd_buffer->cs, R_02823C_CB_SHADER_MASK,
                           ac_get_cb_shader_mask(ps_epilog->spi_shader_col_format));
 
@@ -3504,7 +3508,7 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
 
       if (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11) {
          radeon_set_context_reg(cmd_buffer->cs, R_028424_CB_FDCC_CONTROL,
-                                S_028424_SAMPLE_MASK_TRACKER_WATERMARK(15));
+                                S_028424_SAMPLE_MASK_TRACKER_WATERMARK(0));
       } else {
         uint8_t watermark = gfx_level >= GFX10 ? 6 : 4;
 
@@ -4180,7 +4184,7 @@ radv_emit_msaa_state(struct radv_cmd_buffer *cmd_buffer)
    unsigned db_eqaa;
 
    db_eqaa = S_028804_HIGH_QUALITY_INTERSECTIONS(1) | S_028804_INCOHERENT_EQAA_READS(1) |
-             S_028804_INTERPOLATE_COMP_Z(1) | S_028804_STATIC_ANCHOR_ASSOCIATIONS(1);
+             S_028804_STATIC_ANCHOR_ASSOCIATIONS(1);
 
    if (pdevice->rad_info.gfx_level >= GFX9 &&
        d->vk.rs.conservative_mode != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT) {
@@ -6233,7 +6237,7 @@ radv_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipeline
 
       if (cmd_buffer->device->physical_device->rad_info.rbplus_allowed &&
           (!cmd_buffer->state.emitted_graphics_pipeline ||
-           cmd_buffer->state.emitted_graphics_pipeline->col_format_non_compacted != graphics_pipeline->col_format_non_compacted)) {
+           cmd_buffer->state.col_format_non_compacted != graphics_pipeline->col_format_non_compacted)) {
          cmd_buffer->state.col_format_non_compacted = graphics_pipeline->col_format_non_compacted;
          cmd_buffer->state.dirty |= RADV_CMD_DIRTY_RBPLUS;
       }
@@ -8541,6 +8545,9 @@ radv_emit_all_graphics_states(struct radv_cmd_buffer *cmd_buffer, const struct r
          }
 
          cmd_buffer->state.col_format_non_compacted = ps_epilog->spi_shader_col_format;
+         if (cmd_buffer->state.graphics_pipeline->need_null_export_workaround &&
+             !cmd_buffer->state.col_format_non_compacted)
+            cmd_buffer->state.col_format_non_compacted = V_028714_SPI_SHADER_32_R;
          cmd_buffer->state.dirty |= RADV_CMD_DIRTY_RBPLUS;
       }
 

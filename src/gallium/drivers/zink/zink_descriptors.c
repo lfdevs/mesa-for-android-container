@@ -681,6 +681,8 @@ zink_descriptor_program_deinit(struct zink_screen *screen, struct zink_program *
          pg->dd.pool_key[i]->use_count--;
          pg->dd.pool_key[i] = NULL;
       }
+   }
+   for (unsigned i = 0; pg->num_dsl && i < ZINK_DESCRIPTOR_NON_BINDLESS_TYPES; i++) {
       if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_LAZY && pg->dd.templates[i]) {
          VKSCR(DestroyDescriptorUpdateTemplate)(screen->dev, pg->dd.templates[i], NULL);
          pg->dd.templates[i] = VK_NULL_HANDLE;
@@ -1323,7 +1325,9 @@ zink_batch_descriptor_init(struct zink_screen *screen, struct zink_batch_state *
       for (unsigned i = 0; i < ZINK_DESCRIPTOR_NON_BINDLESS_TYPES; i++) {
          if (!screen->db_size[i])
             continue;
-         unsigned bind = i == ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW ? ZINK_BIND_SAMPLER_DESCRIPTOR : ZINK_BIND_RESOURCE_DESCRIPTOR;
+         unsigned bind = ZINK_BIND_RESOURCE_DESCRIPTOR;
+         if (i == ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW)
+            bind |= ZINK_BIND_SAMPLER_DESCRIPTOR;
          if (screen->compact_descriptors && i == ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW)
             bind |= ZINK_BIND_RESOURCE_DESCRIPTOR;
          struct pipe_resource *pres = pipe_buffer_create(&screen->base, bind, 0, screen->db_size[i]);

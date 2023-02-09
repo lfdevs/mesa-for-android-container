@@ -135,6 +135,8 @@ void etna_cmd_stream_del(struct etna_cmd_stream *stream)
 	_mesa_hash_table_destroy(priv->bo_table, NULL);
 
 	free(stream->buffer);
+	free(priv->bos);
+	free(priv->submit.bos);
 	free(priv->submit.relocs);
 	free(priv->submit.pmrs);
 	free(priv);

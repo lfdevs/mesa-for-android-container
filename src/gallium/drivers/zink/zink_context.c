@@ -369,7 +369,7 @@ zink_create_sampler_state(struct pipe_context *pctx,
    } else if (state->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
       sci.mipmapMode = sampler_mipmap_mode(state->min_mip_filter);
       sci.minLod = state->min_lod;
-      sci.maxLod = state->max_lod;
+      sci.maxLod = MAX2(state->max_lod, state->min_lod);
    } else {
       sci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
       sci.minLod = 0;

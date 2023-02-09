@@ -32,7 +32,7 @@
 #include "d3d12_screen.h"
 #include "d3d12_surface.h"
 
-#include "util/indices/u_primconvert.h"
+#include "indices/u_primconvert.h"
 #include "util/u_debug.h"
 #include "util/u_draw.h"
 #include "util/u_helpers.h"

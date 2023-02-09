@@ -76,6 +76,7 @@
 #include "vk_device.h"
 #include "vk_drm_syncobj.h"
 #include "vk_enum_defines.h"
+#include "vk_format.h"
 #include "vk_framebuffer.h"
 #include "vk_graphics_state.h"
 #include "vk_image.h"
@@ -2530,6 +2531,7 @@ struct anv_cmd_graphics_state {
    struct vk_sample_locations_state sample_locations;
 
    bool object_preemption;
+   bool has_uint_rt;
 };
 
 enum anv_depth_reg_mode {
@@ -3177,6 +3179,18 @@ anv_cmd_buffer_all_color_write_masked(const struct anv_cmd_buffer *cmd_buffer)
    }
 
    return true;
+}
+
+static inline void
+anv_cmd_graphic_state_update_has_uint_rt(struct anv_cmd_graphics_state *state)
+{
+   state->has_uint_rt = false;
+   for (unsigned a = 0; a < state->color_att_count; a++) {
+      if (vk_format_is_int(state->color_att[a].vk_format)) {
+         state->has_uint_rt = true;
+         break;
+      }
+   }
 }
 
 #define ANV_DECL_GET_GRAPHICS_PROG_DATA_FUNC(prefix, stage)             \

@@ -3583,6 +3583,7 @@ radv_create_shaders(struct radv_pipeline *pipeline, struct radv_pipeline_layout 
                     const VkPipelineCreationFeedbackCreateInfo *creation_feedback,
                     struct radv_pipeline_shader_stack_size **stack_sizes,
                     uint32_t *num_stack_sizes,
+                    VkGraphicsPipelineLibraryFlagBitsEXT lib_flags,
                     gl_shader_stage *last_vgt_api_stage)
 {
    const char *noop_fs_entrypoint = "noop_fs";
@@ -3609,6 +3610,12 @@ radv_create_shaders(struct radv_pipeline *pipeline, struct radv_pipeline_layout 
    for (uint32_t i = 0; i < stageCount; i++) {
       const VkPipelineShaderStageCreateInfo *sinfo = &pStages[i];
       gl_shader_stage stage = vk_to_mesa_shader_stage(sinfo->stage);
+
+      /* Ignore graphics shader stages that don't need to be imported. */
+      if ((pipeline->type == RADV_PIPELINE_GRAPHICS ||
+           pipeline->type == RADV_PIPELINE_GRAPHICS_LIB) &&
+          !(shader_stage_to_pipeline_library_flags(sinfo->stage) & lib_flags))
+         continue;
 
       radv_pipeline_stage_init(sinfo, &stages[stage], stage);
    }
@@ -5164,7 +5171,9 @@ radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv
 
    result = radv_create_shaders(&pipeline->base, &pipeline_layout, device, cache, &key, pCreateInfo->pStages,
                                 pCreateInfo->stageCount, pCreateInfo->flags, NULL,
-                                creation_feedback, NULL, NULL, &pipeline->last_vgt_api_stage);
+                                creation_feedback, NULL, NULL,
+                                (~imported_flags) & ALL_GRAPHICS_LIB_FLAGS,
+                                &pipeline->last_vgt_api_stage);
    if (result != VK_SUCCESS) {
       radv_pipeline_layout_finish(device, &pipeline_layout);
       return result;
@@ -5220,12 +5229,12 @@ radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv
     * color and Z formats to SPI_SHADER_ZERO. The hw will skip export
     * instructions if any are present.
     */
-   if ((device->physical_device->rad_info.gfx_level <= GFX9 || ps->info.ps.can_discard) &&
-       !blend.spi_shader_col_format) {
-      if (!ps->info.ps.writes_z && !ps->info.ps.writes_stencil && !ps->info.ps.writes_sample_mask) {
-         blend.spi_shader_col_format = V_028714_SPI_SHADER_32_R;
-         pipeline->col_format_non_compacted = V_028714_SPI_SHADER_32_R;
-      }
+   pipeline->need_null_export_workaround =
+      (device->physical_device->rad_info.gfx_level <= GFX9 || ps->info.ps.can_discard) &&
+      !ps->info.ps.writes_z && !ps->info.ps.writes_stencil && !ps->info.ps.writes_sample_mask;
+   if (pipeline->need_null_export_workaround && !blend.spi_shader_col_format) {
+      blend.spi_shader_col_format = V_028714_SPI_SHADER_32_R;
+      pipeline->col_format_non_compacted = V_028714_SPI_SHADER_32_R;
    }
 
    if (radv_pipeline_has_stage(pipeline, MESA_SHADER_GEOMETRY) && !radv_pipeline_has_ngg(pipeline)) {
@@ -5379,7 +5388,7 @@ radv_graphics_lib_pipeline_init(struct radv_graphics_lib_pipeline *pipeline,
 
       result = radv_create_shaders(&pipeline->base.base, pipeline_layout, device, cache, &key,
                                    pCreateInfo->pStages, pCreateInfo->stageCount, pCreateInfo->flags,
-                                   NULL, creation_feedback, NULL, NULL,
+                                   NULL, creation_feedback, NULL, NULL, imported_flags,
                                    &pipeline->base.last_vgt_api_stage);
 
       if (result != VK_SUCCESS)
@@ -5583,7 +5592,7 @@ radv_compute_pipeline_create(VkDevice _device, VkPipelineCache _cache,
    UNUSED gl_shader_stage last_vgt_api_stage = MESA_SHADER_NONE;
    result = radv_create_shaders(&pipeline->base, pipeline_layout, device, cache, &key,
                                 &pCreateInfo->stage, 1, pCreateInfo->flags, NULL, creation_feedback,
-                                NULL, NULL, &last_vgt_api_stage);
+                                NULL, NULL, 0, &last_vgt_api_stage);
    if (result != VK_SUCCESS) {
       radv_pipeline_destroy(device, &pipeline->base, pAllocator);
       return result;

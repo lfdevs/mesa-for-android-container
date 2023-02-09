@@ -2733,6 +2733,17 @@ create_builtin_var(struct ntv_context *ctx, SpvId var_type,
    spirv_builder_emit_name(&ctx->builder, var, name);
    spirv_builder_emit_builtin(&ctx->builder, var, builtin);
 
+   if (ctx->stage == MESA_SHADER_FRAGMENT) {
+      switch (builtin) {
+      case SpvBuiltInSampleId:
+      case SpvBuiltInSubgroupLocalInvocationId:
+         spirv_builder_emit_decoration(&ctx->builder, var, SpvDecorationFlat);
+         break;
+      default:
+         break;
+      }
+   }
+
    assert(ctx->num_entry_ifaces < ARRAY_SIZE(ctx->entry_ifaces));
    ctx->entry_ifaces[ctx->num_entry_ifaces++] = var;
    return var;
@@ -2768,17 +2779,19 @@ emit_load_uint_input(struct ntv_context *ctx, nir_intrinsic_instr *intr, SpvId *
                                    SpvStorageClassInput,
                                    var_name,
                                    builtin);
-      if (builtin == SpvBuiltInSampleMask) {
-         SpvId zero = emit_uint_const(ctx, 32, 0);
-         var_type = spirv_builder_type_uint(&ctx->builder, 32);
-         SpvId pointer_type = spirv_builder_type_pointer(&ctx->builder,
-                                                         SpvStorageClassInput,
-                                                         var_type);
-         *var_id = spirv_builder_emit_access_chain(&ctx->builder, pointer_type, *var_id, &zero, 1);
-      }
    }
 
-   SpvId result = spirv_builder_emit_load(&ctx->builder, var_type, *var_id);
+   SpvId load_var = *var_id;
+   if (builtin == SpvBuiltInSampleMask) {
+      SpvId zero = emit_uint_const(ctx, 32, 0);
+      var_type = spirv_builder_type_uint(&ctx->builder, 32);
+      SpvId pointer_type = spirv_builder_type_pointer(&ctx->builder,
+                                                      SpvStorageClassInput,
+                                                      var_type);
+      load_var = spirv_builder_emit_access_chain(&ctx->builder, pointer_type, load_var, &zero, 1);
+   }
+
+   SpvId result = spirv_builder_emit_load(&ctx->builder, var_type, load_var);
    assert(1 == nir_dest_num_components(intr->dest));
    store_dest(ctx, &intr->dest, result, nir_type_uint);
 }
@@ -4444,26 +4457,24 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
    ctx.explicit_lod = true;
    spirv_builder_emit_source(&ctx.builder, SpvSourceLanguageUnknown, 0);
 
+   SpvAddressingModel model = SpvAddressingModelLogical;
    if (gl_shader_stage_is_compute(s->info.stage)) {
-      SpvAddressingModel model;
       if (s->info.cs.ptr_size == 32)
          model = SpvAddressingModelPhysical32;
       else if (s->info.cs.ptr_size == 64)
          model = SpvAddressingModelPhysicalStorageBuffer64;
       else
          model = SpvAddressingModelLogical;
+   }
+
+   if (ctx.sinfo->have_vulkan_memory_model) {
+      spirv_builder_emit_cap(&ctx.builder, SpvCapabilityVulkanMemoryModel);
+      spirv_builder_emit_cap(&ctx.builder, SpvCapabilityVulkanMemoryModelDeviceScope);
+      spirv_builder_emit_mem_model(&ctx.builder, model,
+                                   SpvMemoryModelVulkan);
+   } else {
       spirv_builder_emit_mem_model(&ctx.builder, model,
                                    SpvMemoryModelGLSL450);
-   } else {
-      if (ctx.sinfo->have_vulkan_memory_model) {
-         spirv_builder_emit_cap(&ctx.builder, SpvCapabilityVulkanMemoryModel);
-         spirv_builder_emit_cap(&ctx.builder, SpvCapabilityVulkanMemoryModelDeviceScope);
-         spirv_builder_emit_mem_model(&ctx.builder, SpvAddressingModelLogical,
-                                      SpvMemoryModelVulkan);
-      } else {
-         spirv_builder_emit_mem_model(&ctx.builder, SpvAddressingModelLogical,
-                                      SpvMemoryModelGLSL450);
-      }
    }
 
    if (s->info.stage == MESA_SHADER_FRAGMENT &&

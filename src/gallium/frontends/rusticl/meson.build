@@ -195,6 +195,7 @@ rusticl_mesa_bindings_inline_wrapper = static_library(
   ],
   dependencies: [
     idep_nir_headers,
+    dep_valgrind,
   ],
 )
 
@@ -208,6 +209,9 @@ rusticl_mesa_bindings_rs = rust.bindgen(
     inc_include,
     inc_nir,
     inc_src,
+  ],
+  dependencies: [
+    dep_valgrind,
   ],
   c_args : [
     rusticl_bindgen_c_args,

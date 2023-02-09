@@ -51,13 +51,13 @@
  * lower register pressure.
  */
 
-static ALWAYS_INLINE bool
+static inline bool
 src_is_ssa(nir_src *src, void *state)
 {
    return src->is_ssa;
 }
 
-static ALWAYS_INLINE bool
+static inline bool
 instr_reads_register(nir_instr *instr)
 {
    return !nir_foreach_src(instr, src_is_ssa, NULL);

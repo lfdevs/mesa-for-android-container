@@ -28,7 +28,7 @@
 
 #include "pipe/p_compiler.h"
 #include "pipe/p_defines.h"
-#include "util/indices/u_indices.h"
+#include "indices/u_indices.h"
 #include "util/u_prim.h"
 #include "svga_context.h"
 #include "svga_hw_reg.h"

@@ -254,13 +254,13 @@ genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state)
    genX(emit_apply_pipe_flushes)(state->batch, state->device, _3D,
                                  ANV_PIPE_END_OF_PIPE_SYNC_BIT);
 
+   if (intel_device_info_is_dg2(state->device->info))
+      genX(batch_set_preemption)(state->batch, true);
+
    anv_batch_emit(state->batch, GENX(MI_BATCH_BUFFER_END), end);
 
    if ((state->batch->next - state->batch->start) & 4)
       anv_batch_emit(state->batch, GENX(MI_NOOP), noop);
-
-   if (intel_device_info_is_dg2(state->device->info))
-      genX(batch_set_preemption)(state->batch, true);
 }
 
 void

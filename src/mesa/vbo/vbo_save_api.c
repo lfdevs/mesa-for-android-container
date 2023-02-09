@@ -116,7 +116,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "util/bitscan.h"
 #include "util/u_memory.h"
 #include "util/hash_table.h"
-#include "util/indices/u_indices.h"
+#include "gallium/auxiliary/indices/u_indices.h"
 #include "util/u_prim.h"
 
 #include "gallium/include/pipe/p_state.h"
@@ -1364,11 +1364,8 @@ do {                                                            \
       save->vertex_store->used += save->vertex_size;            \
       unsigned used_next = (save->vertex_store->used +          \
                             save->vertex_size) * sizeof(float); \
-      if (used_next > save->vertex_store->buffer_in_ram_size) { \
+      if (used_next > save->vertex_store->buffer_in_ram_size)   \
          grow_vertex_storage(ctx, get_vertex_count(save));      \
-         assert(used_next <=                                    \
-                save->vertex_store->buffer_in_ram_size);        \
-      }                                                         \
    }                                                            \
 } while (0)
 

@@ -303,6 +303,10 @@ opt_cmod_propagation_local(const intel_device_info *devinfo, bblock_t *block)
                 scan_inst->exec_size != inst->exec_size)
                break;
 
+            /* If the write mask is different we can't propagate. */
+            if (scan_inst->force_writemask_all != inst->force_writemask_all)
+               break;
+
             /* CMP's result is the same regardless of dest type. */
             if (inst->conditional_mod == BRW_CONDITIONAL_NZ &&
                 scan_inst->opcode == BRW_OPCODE_CMP &&

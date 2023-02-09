@@ -9626,7 +9626,7 @@ visit_tex(isel_context* ctx, nir_tex_instr* instr)
    unsigned wqm_coord_count = 0;
    std::vector<Temp> unpacked_coord;
    if (ctx->options->gfx_level == GFX9 && instr->sampler_dim == GLSL_SAMPLER_DIM_1D &&
-       instr->op != nir_texop_lod && instr->coord_components) {
+       instr->coord_components) {
       RegClass rc = a16 ? v2b : v1;
       for (unsigned i = 0; i < coord.bytes() / rc.bytes(); i++)
          unpacked_coord.emplace_back(emit_extract_vector(ctx, coord, i, rc));
@@ -11482,6 +11482,9 @@ create_fs_exports(isel_context* ctx)
 
    if (ctx->program->info.ps.has_epilog) {
       create_fs_jump_to_epilog(ctx);
+
+      /* FS epilogs always have at least one color/null export. */
+      ctx->program->has_color_exports = true;
    } else {
       struct aco_export_mrt mrts[8];
       unsigned compacted_mrt_index = 0;

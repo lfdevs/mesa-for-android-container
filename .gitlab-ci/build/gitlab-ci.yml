@@ -78,7 +78,7 @@ debian-testing:
       -D dri3=enabled
       -D gallium-va=enabled
     GALLIUM_DRIVERS: "swrast,virgl,radeonsi,zink,crocus,iris,i915"
-    VULKAN_DRIVERS: "swrast,amd,intel,intel_hasvk,virtio-experimental"
+    VULKAN_DRIVERS: "swrast,amd,intel,virtio-experimental"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
@@ -121,7 +121,7 @@ debian-testing-msan:
     MESON_TEST_ARGS: "--suite glcpp --suite gallium  --suite format"
     # Freedreno dropped because freedreno tools fail at msan.
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus"
-    VULKAN_DRIVERS: intel,intel_hasvk,amd,broadcom,virtio-experimental
+    VULKAN_DRIVERS: intel,amd,broadcom,virtio-experimental
 
 .debian-cl-testing:
   extends:
@@ -305,7 +305,7 @@ fedora-release:
       -D shared-llvm=enabled
     LLVM_VERSION: ""
     UNWIND: "disabled"
-    VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,intel_hasvk,imagination-experimental"
+    VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,imagination-experimental"
   script:
     - .gitlab-ci/meson/build.sh
 
@@ -350,7 +350,7 @@ debian-android:
     # is not a dependency that AOSP wants to accept.  Can't do Radeon Gallium
     # drivers because they requires LLVM, which we don't have an Android build
     # of.
-    - PKG_CONFIG_PATH=/usr/local/lib/x86_64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/pkgconfig/ CROSS=x86_64-linux-android GALLIUM_DRIVERS=iris VULKAN_DRIVERS=amd,intel,intel_hasvk .gitlab-ci/meson/build.sh
+    - PKG_CONFIG_PATH=/usr/local/lib/x86_64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/pkgconfig/ CROSS=x86_64-linux-android GALLIUM_DRIVERS=iris VULKAN_DRIVERS=amd,intel .gitlab-ci/meson/build.sh
 
 .meson-cross:
   extends:
@@ -481,7 +481,7 @@ debian-clang:
       -D shared-llvm=enabled
       -D opencl-spirv=true
     GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,radeonsi,tegra,d3d12,crocus,i915,asahi"
-    VULKAN_DRIVERS: intel,intel_hasvk,amd,freedreno,broadcom,virtio-experimental,swrast,panfrost,imagination-experimental,microsoft-experimental
+    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,swrast,panfrost,imagination-experimental,microsoft-experimental
     EXTRA_OPTION:
       -D spirv-to-dxil=true
       -D osmesa=true
@@ -579,7 +579,7 @@ debian-vulkan:
       -D c_args=-fno-sanitize-recover=all
       -D cpp_args=-fno-sanitize-recover=all
     UBSAN_OPTIONS: "print_stacktrace=1"
-    VULKAN_DRIVERS: intel,intel_hasvk,amd,freedreno,broadcom,virtio-experimental,imagination-experimental,microsoft-experimental
+    VULKAN_DRIVERS: intel,amd,freedreno,broadcom,virtio-experimental,imagination-experimental,microsoft-experimental
     EXTRA_OPTION: >
       -D vulkan-layers=device-select,overlay
       -D build-aco-tests=true
@@ -592,7 +592,7 @@ debian-i386:
     - .use-debian/i386_build
   variables:
     CROSS: i386
-    VULKAN_DRIVERS: intel,intel_hasvk,amd,swrast,virtio-experimental
+    VULKAN_DRIVERS: intel,amd,swrast,virtio-experimental
     GALLIUM_DRIVERS: "iris,nouveau,r300,r600,radeonsi,swrast,virgl,zink,crocus"
     LLVM_VERSION: 13
     EXTRA_OPTION: >

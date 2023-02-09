@@ -208,6 +208,7 @@ if with_tests
       link_with : [
         libintel_compiler, libintel_common, libintel_dev, libisl,
       ],
+      override_options: ['cpp_std=c++17'],
       dependencies : [idep_gtest, idep_nir, idep_mesautil],
     ),
     suite : ['intel'],

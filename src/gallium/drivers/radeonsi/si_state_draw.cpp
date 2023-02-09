@@ -1298,13 +1298,8 @@ static void gfx10_emit_ge_cntl(struct si_context *sctx, unsigned num_patches)
    if (NGG) {
       if (HAS_TESS) {
          if (GFX_VERSION >= GFX11) {
-            unsigned prim_grp_size =
-               G_03096C_PRIM_GRP_SIZE_GFX11(si_get_vs_inline(sctx, HAS_TESS, HAS_GS)->current->ge_cntl);
-
-            ge_cntl = S_03096C_PRIMS_PER_SUBGRP(num_patches) |
-                      S_03096C_VERTS_PER_SUBGRP(si_get_vs_inline(sctx, HAS_TESS, HAS_GS)->current->ngg.hw_max_esverts) |
-                      S_03096C_BREAK_PRIMGRP_AT_EOI(key.u.tess_uses_prim_id) |
-                      S_03096C_PRIM_GRP_SIZE_GFX11(prim_grp_size);
+            ge_cntl = si_get_vs_inline(sctx, HAS_TESS, HAS_GS)->current->ge_cntl |
+                      S_03096C_BREAK_PRIMGRP_AT_EOI(key.u.tess_uses_prim_id);
          } else {
             ge_cntl = S_03096C_PRIM_GRP_SIZE_GFX10(num_patches) |
                       S_03096C_VERT_GRP_SIZE(0) |

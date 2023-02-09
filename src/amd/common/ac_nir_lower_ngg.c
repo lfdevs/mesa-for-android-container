@@ -1684,6 +1684,13 @@ ngg_nogs_store_xfb_outputs_to_lds(nir_builder *b, lower_ngg_nogs_state *s)
          util_bitcount64(b->shader->info.outputs_written & BITFIELD64_MASK(slot));
 
       unsigned mask = xfb_mask[slot];
+
+      /* Clear unused components. */
+      for (unsigned i = 0; i < 4; i++) {
+         if (!s->outputs[slot][i])
+            mask &= ~BITFIELD_BIT(i);
+      }
+
       while (mask) {
          int start, count;
          u_bit_scan_consecutive_range(&mask, &start, &count);
@@ -1705,6 +1712,14 @@ ngg_nogs_store_xfb_outputs_to_lds(nir_builder *b, lower_ngg_nogs_state *s)
 
       unsigned mask_lo = xfb_mask_16bit_lo[slot];
       unsigned mask_hi = xfb_mask_16bit_hi[slot];
+
+      /* Clear unused components. */
+      for (unsigned i = 0; i < 4; i++) {
+         if (!s->outputs_16bit_lo[slot][i])
+            mask_lo &= ~BITFIELD_BIT(i);
+         if (!s->outputs_16bit_hi[slot][i])
+            mask_hi &= ~BITFIELD_BIT(i);
+      }
 
       nir_ssa_def **outputs_lo = s->outputs_16bit_lo[slot];
       nir_ssa_def **outputs_hi = s->outputs_16bit_hi[slot];

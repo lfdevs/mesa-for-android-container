@@ -449,8 +449,21 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
                                line_mode, dyn->rs.line.width,
                                &api_mode, &msaa_raster_enable);
 
-      bool aa_enable = anv_rasterization_aa_mode(dynamic_raster_mode,
-                                                 line_mode);
+     /* From the Browadwell PRM, Volume 2, documentation for
+      * 3DSTATE_RASTER, "Antialiasing Enable":
+      *
+      * "This field must be disabled if any of the render targets
+      * have integer (UINT or SINT) surface format."
+      *
+      * Additionally internal documentation for Gfx12+ states:
+      *
+      * "This bit MUST not be set when NUM_MULTISAMPLES > 1 OR
+      *  FORCED_SAMPLE_COUNT > 1."
+      */
+      bool aa_enable =
+         anv_rasterization_aa_mode(dynamic_raster_mode, line_mode) &&
+         !cmd_buffer->state.gfx.has_uint_rt &&
+         !(GFX_VER >= 12 && cmd_buffer->state.gfx.samples > 1);
 
       bool depth_clip_enable =
          vk_rasterization_state_depth_clip_enable(&dyn->rs);

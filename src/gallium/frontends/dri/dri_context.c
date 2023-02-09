@@ -63,6 +63,11 @@ dri_create_context(struct dri_screen *screen,
       screen->dri2.backgroundCallable;
    const struct driOptionCache *optionCache = &screen->dev->option_cache;
 
+   /* This is effectively doing error checking for GLX context creation (by both
+    * Mesa and the X server) when the driver doesn't support the robustness ext.
+    * EGL already checks, so it won't send us the flags if the ext isn't
+    * available.
+    */
    if (screen->has_reset_status_query) {
       allowed_flags |= __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS;
       allowed_attribs |= __DRIVER_CONTEXT_ATTRIB_RESET_STRATEGY;

@@ -60,11 +60,14 @@ panfrost_clear(struct pipe_context *pipe, unsigned buffers,
                const union pipe_color_union *color, double depth,
                unsigned stencil)
 {
+   if (!panfrost_render_condition_check(pan_context(pipe)))
+      return;
+
+   /* Only get batch after checking the render condition, since the check can
+    * cause the batch to be flushed.
+    */
    struct panfrost_context *ctx = pan_context(pipe);
    struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
-
-   if (!panfrost_render_condition_check(ctx))
-      return;
 
    /* At the start of the batch, we can clear for free */
    if (!batch->scoreboard.first_job) {

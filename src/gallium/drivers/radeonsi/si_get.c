@@ -644,8 +644,9 @@ static int si_get_video_param(struct pipe_screen *screen, enum pipe_video_profil
             return 0;
 
       case PIPE_VIDEO_CAP_ENC_HEVC_BLOCK_SIZES:
-         if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN ||
-             profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10) {
+         if (sscreen->info.family >= CHIP_RAVEN &&
+             (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN ||
+              profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)) {
             union pipe_h265_enc_cap_block_sizes pipe_block_sizes;
             pipe_block_sizes.value = 0;
 

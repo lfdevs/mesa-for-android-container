@@ -133,8 +133,10 @@ lower_swizzle(bi_context *ctx, bi_instr *ins, unsigned src)
       bi_index dest = ins->dest[0];
       bi_index tmp = bi_temp(ctx);
 
+      bi_index swizzled_src = bi_replace_index(ins->src[0], tmp);
+      ins->src[0].swizzle = BI_SWIZZLE_H01;
       ins->dest[0] = tmp;
-      bi_swz_v2i16_to(&b, dest, bi_replace_index(ins->src[0], tmp));
+      bi_swz_v2i16_to(&b, dest, swizzled_src);
       return;
    }
 

@@ -307,7 +307,7 @@ radv_rt_pipeline_create(VkDevice _device, VkPipelineCache _cache,
     * generating the nir. */
    result = radv_create_shaders(
       &rt_pipeline->base.base, pipeline_layout, device, cache, &key, &stage, 1, flags, hash,
-      creation_feedback, &rt_pipeline->stack_sizes, &rt_pipeline->group_count, &last_vgt_api_stage);
+      creation_feedback, &rt_pipeline->stack_sizes, &rt_pipeline->group_count, 0, &last_vgt_api_stage);
 
    if (result != VK_SUCCESS && result != VK_PIPELINE_COMPILE_REQUIRED)
       goto pipeline_fail;
@@ -327,7 +327,7 @@ radv_rt_pipeline_create(VkDevice _device, VkPipelineCache _cache,
       module.nir = shader;
       result = radv_create_shaders(&rt_pipeline->base.base, pipeline_layout, device, cache, &key,
                                    &stage, 1, pCreateInfo->flags, hash, creation_feedback,
-                                   &rt_pipeline->stack_sizes, &rt_pipeline->group_count,
+                                   &rt_pipeline->stack_sizes, &rt_pipeline->group_count, 0,
                                    &last_vgt_api_stage);
       if (result != VK_SUCCESS)
          goto shader_fail;

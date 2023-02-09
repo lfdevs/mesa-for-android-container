@@ -460,6 +460,12 @@ lp_rect_cw(struct lp_setup_context *setup,
            const float (*v2)[4],
            boolean frontfacing)
 {
+   if (lp_setup_zero_sample_mask(setup)) {
+      if (0) debug_printf("zero sample mask\n");
+      LP_COUNT(nr_culled_rects);
+      return;
+   }
+
    if (!try_rect_cw(setup, v0, v1, v2, frontfacing)) {
       if (!lp_setup_flush_and_restart(setup))
          return;

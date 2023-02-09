@@ -22,6 +22,9 @@
  */
 
 /* find | grep .*h$ >../headers.txt */
+#include <indices/u_indices.h>
+#include <indices/u_indices_priv.h>
+#include <indices/u_primconvert.h>
 #include <mesa/main/accum.h>
 #include <mesa/main/api_arrayelt.h>
 #include <mesa/main/arrayobj.h>
@@ -224,9 +227,6 @@
 #include <util/glheader.h>
 #include <util/half_float.h>
 #include <util/hash_table.h>
-#include <util/indices/u_indices.h>
-#include <util/indices/u_indices_priv.h>
-#include <util/indices/u_primconvert.h>
 #include <util/list.h>
 #include <util/log.h>
 #include <util/macros.h>

@@ -135,6 +135,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_OCCLUSION_QUERY:
+   case PIPE_CAP_PRIMITIVE_RESTART:
    case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
       return true;
 
@@ -312,8 +313,8 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
    /* Removed in v9 (Valhall). PRIMTIIVE_RESTART_FIXED_INDEX is of course
     * still supported as it is core GLES3.0 functionality
     */
-   case PIPE_CAP_PRIMITIVE_RESTART:
-      return dev->arch <= 7;
+   case PIPE_CAP_EMULATE_NONFIXED_PRIMITIVE_RESTART:
+      return dev->arch >= 9;
 
    case PIPE_CAP_FLATSHADE:
    case PIPE_CAP_TWO_SIDED_COLOR:
@@ -632,14 +633,13 @@ panfrost_walk_dmabuf_modifiers(struct pipe_screen *screen,
           test_modifier != pan_best_modifiers[i])
          continue;
 
-      count++;
-
       if (max > (int)count) {
          modifiers[count] = pan_best_modifiers[i];
 
          if (external_only)
             external_only[count] = false;
       }
+      count++;
    }
 
    *out_count = count;

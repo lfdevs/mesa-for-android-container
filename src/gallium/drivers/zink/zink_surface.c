@@ -451,7 +451,7 @@ zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *sur
    struct kopper_displaytarget *cdt = res->obj->dt;
    if (!cdt)
       return; //dead swapchain
-   if (res->obj->dt != surface->dt) {
+   if (cdt->swapchain != surface->dt_swapchain) {
       /* new swapchain: clear out previous swapchain imageviews/array and setup a new one;
        * old views will be pruned normally in zink_batch or on object destruction
        */
@@ -465,7 +465,7 @@ zink_surface_swapchain_update(struct zink_context *ctx, struct zink_surface *sur
       surface->base.width = res->base.b.width0;
       surface->base.height = res->base.b.height0;
       init_surface_info(surface, res, &surface->ivci);
-      surface->dt = res->obj->dt;
+      surface->dt_swapchain = cdt->swapchain;
    }
    if (!surface->swapchain[res->obj->dt_idx]) {
       /* no current swapchain imageview exists: create it */

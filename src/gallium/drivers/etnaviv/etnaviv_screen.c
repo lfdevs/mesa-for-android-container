@@ -95,6 +95,8 @@ etna_screen_destroy(struct pipe_screen *pscreen)
    if (screen->perfmon)
       etna_perfmon_del(screen->perfmon);
 
+   util_dynarray_fini(&screen->supported_pm_queries);
+
    etna_shader_screen_fini(pscreen);
 
    if (screen->pipe)

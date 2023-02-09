@@ -787,9 +787,9 @@ static inline bool
 util_is_vbo_upload_ratio_too_large(unsigned draw_vertex_count,
                                    unsigned upload_vertex_count)
 {
-   if (draw_vertex_count > 1024)
+   if (upload_vertex_count > 256)
       return upload_vertex_count > draw_vertex_count * 4;
-   else if (draw_vertex_count > 32)
+   else if (upload_vertex_count > 64)
       return upload_vertex_count > draw_vertex_count * 8;
    else
       return upload_vertex_count > draw_vertex_count * 16;

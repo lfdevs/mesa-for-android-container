@@ -566,6 +566,7 @@ VkResult radv_create_shaders(struct radv_pipeline *pipeline,
                              const VkPipelineCreationFeedbackCreateInfo *creation_feedback,
                              struct radv_pipeline_shader_stack_size **stack_sizes,
                              uint32_t *num_stack_sizes,
+                             VkGraphicsPipelineLibraryFlagBitsEXT lib_flags,
                              gl_shader_stage *last_vgt_api_stage);
 
 struct radv_shader_args;

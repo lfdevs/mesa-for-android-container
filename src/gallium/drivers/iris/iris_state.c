@@ -657,6 +657,8 @@ emit_pipeline_select(struct iris_batch *batch, uint32_t pipeline)
    if (pipeline == GPGPU) {
       flags |= PIPE_CONTROL_RENDER_TARGET_FLUSH |
                PIPE_CONTROL_DEPTH_CACHE_FLUSH;
+   } else {
+      flags |= PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH;
    }
    iris_emit_pipe_control_flush(batch, "PIPELINE_SELECT flush", flags);
 #else
@@ -1878,6 +1880,7 @@ struct iris_rasterizer_state {
    bool light_twoside; /* for shader state */
    bool rasterizer_discard; /* for 3DSTATE_STREAMOUT and 3DSTATE_CLIP */
    bool half_pixel_center; /* for 3DSTATE_MULTISAMPLE */
+   bool line_smooth;
    bool line_stipple_enable;
    bool poly_stipple_enable;
    bool multisample;
@@ -1943,6 +1946,7 @@ iris_create_rasterizer_state(struct pipe_context *ctx,
    cso->half_pixel_center = state->half_pixel_center;
    cso->sprite_coord_mode = state->sprite_coord_mode;
    cso->sprite_coord_enable = state->sprite_coord_enable;
+   cso->line_smooth = state->line_smooth;
    cso->line_stipple_enable = state->line_stipple_enable;
    cso->poly_stipple_enable = state->poly_stipple_enable;
    cso->conservative_rasterization =
@@ -1999,7 +2003,6 @@ iris_create_rasterizer_state(struct pipe_context *ctx,
       rr.GlobalDepthOffsetScale = state->offset_scale;
       rr.GlobalDepthOffsetClamp = state->offset_clamp;
       rr.SmoothPointEnable = state->point_smooth;
-      rr.AntialiasingEnable = state->line_smooth;
       rr.ScissorRectangleEnable = state->scissor;
 #if GFX_VER >= 9
       rr.ViewportZNearClipTestEnable = state->depth_clip_near;
@@ -3347,9 +3350,26 @@ iris_set_framebuffer_state(struct pipe_context *ctx,
       ice->state.dirty |= IRIS_DIRTY_DEPTH_BUFFER;
    }
 
+   bool has_integer_rt = false;
+   for (unsigned i = 0; i < state->nr_cbufs; i++) {
+      if (state->cbufs[i]) {
+         enum isl_format ifmt =
+            isl_format_for_pipe_format(state->cbufs[i]->format);
+         has_integer_rt |= isl_format_has_int_channel(ifmt);
+      }
+   }
+
+   /* 3DSTATE_RASTER::AntialiasingEnable */
+   if (has_integer_rt != ice->state.has_integer_rt ||
+       cso->samples != samples) {
+      ice->state.dirty |= IRIS_DIRTY_RASTER;
+   }
+
    util_copy_framebuffer_state(cso, state);
    cso->samples = samples;
    cso->layers = layers;
+
+   ice->state.has_integer_rt = has_integer_rt;
 
    struct iris_depth_buffer_state *cso_z = &ice->state.genx->depth_buffer;
 
@@ -6455,8 +6475,31 @@ iris_upload_dirty_render_state(struct iris_context *ice,
    }
 
    if (dirty & (IRIS_DIRTY_RASTER | IRIS_DIRTY_URB)) {
+      /* From the Browadwell PRM, Volume 2, documentation for
+       * 3DSTATE_RASTER, "Antialiasing Enable":
+       *
+       * "This field must be disabled if any of the render targets
+       * have integer (UINT or SINT) surface format."
+       *
+       * Additionally internal documentation for Gfx12+ states:
+       *
+       * "This bit MUST not be set when NUM_MULTISAMPLES > 1 OR
+       *  FORCED_SAMPLE_COUNT > 1."
+       */
+      struct pipe_framebuffer_state *cso_fb = &ice->state.framebuffer;
+      unsigned samples = util_framebuffer_get_num_samples(cso_fb);
       struct iris_rasterizer_state *cso = ice->state.cso_rast;
-      iris_batch_emit(batch, cso->raster, sizeof(cso->raster));
+
+      bool aa_enable = cso->line_smooth &&
+                       !ice->state.has_integer_rt &&
+                       !(batch->screen->devinfo->ver >= 12 && samples > 1);
+
+      uint32_t dynamic_raster[GENX(3DSTATE_RASTER_length)];
+      iris_pack_command(GENX(3DSTATE_RASTER), &dynamic_raster, raster) {
+         raster.AntialiasingEnable = aa_enable;
+      }
+      iris_emit_merge(batch, cso->raster, dynamic_raster,
+                      ARRAY_SIZE(cso->raster));
 
       uint32_t dynamic_sf[GENX(3DSTATE_SF_length)];
       iris_pack_command(GENX(3DSTATE_SF), &dynamic_sf, sf) {

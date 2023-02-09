@@ -274,6 +274,7 @@ void _mesa_glthread_init_dispatch7(struct gl_context *ctx,
 void _mesa_glthread_flush_batch(struct gl_context *ctx);
 void _mesa_glthread_finish(struct gl_context *ctx);
 void _mesa_glthread_finish_before(struct gl_context *ctx, const char *func);
+void _mesa_glthread_release_upload_buffer(struct gl_context *ctx);
 void _mesa_glthread_upload(struct gl_context *ctx, const void *data,
                            GLsizeiptr size, unsigned *out_offset,
                            struct gl_buffer_object **out_buffer,

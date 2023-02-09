@@ -733,8 +733,11 @@ kopper_present(void *data, void *gdata, int thread_idx)
    }
    util_dynarray_append(arr, VkSemaphore, cpi->sem);
 out:
-   if (thread_idx != -1)
+   if (thread_idx != -1) {
       p_atomic_dec(&swapchain->async_presents);
+      struct pipe_resource *pres = &cpi->res->base.b;
+      pipe_resource_reference(&pres, NULL);
+   }
    free(cpi);
 }
 
@@ -778,6 +781,8 @@ zink_kopper_present_queue(struct zink_screen *screen, struct zink_resource *res)
    }
    if (util_queue_is_initialized(&screen->flush_queue)) {
       p_atomic_inc(&cpi->swapchain->async_presents);
+      struct pipe_resource *pres = NULL;
+      pipe_resource_reference(&pres, &res->base.b);
       util_queue_add_job(&screen->flush_queue, cpi, &cdt->present_fence,
                          kopper_present, NULL, 0);
    } else {

@@ -189,6 +189,7 @@ enum zink_resource_access {
 };
 
 
+/* zink heaps are based off of vulkan memory types, but are not a 1-to-1 mapping to vulkan memory type indices and have no direct relation to vulkan memory heaps*/
 enum zink_heap {
    ZINK_HEAP_DEVICE_LOCAL,
    ZINK_HEAP_DEVICE_LOCAL_SPARSE,
@@ -325,7 +326,6 @@ struct zink_blend_state {
    VkBool32 alpha_to_coverage;
    VkBool32 alpha_to_one;
 
-   bool need_blend_constants;
    bool dual_src_blend;
 };
 
@@ -1253,8 +1253,8 @@ struct zink_screen {
       unsigned min_alloc_size;
       uint32_t next_bo_unique_id;
    } pb;
-   uint8_t heap_map[ZINK_HEAP_MAX][VK_MAX_MEMORY_TYPES];
-   uint8_t heap_count[ZINK_HEAP_MAX];
+   uint8_t heap_map[ZINK_HEAP_MAX][VK_MAX_MEMORY_TYPES];  // mapping from zink heaps to memory type indices
+   uint8_t heap_count[ZINK_HEAP_MAX];  // number of memory types per zink heap
    bool resizable_bar;
 
    uint64_t total_video_mem;
@@ -1368,7 +1368,7 @@ struct zink_surface {
    VkImageView *swapchain;
    unsigned swapchain_size;
    void *obj; //backing resource object; used to determine rebinds
-   void *dt; //current swapchain object; used to determine swapchain rebinds
+   void *dt_swapchain; //current swapchain object; used to determine swapchain rebinds
    uint32_t hash; //for surface caching
 };
 
@@ -1734,6 +1734,7 @@ struct zink_context {
    bool blend_state_changed : 1;
    bool sample_mask_changed : 1;
    bool rast_state_changed : 1;
+   bool line_width_changed : 1;
    bool dsa_state_changed : 1;
    bool stencil_ref_changed : 1;
    bool rasterizer_discard_changed : 1;

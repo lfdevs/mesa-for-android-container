@@ -112,6 +112,10 @@ files_libgallium = files(
   'hud/hud_driver_query.c',
   'hud/hud_fps.c',
   'hud/hud_private.h',
+  'indices/u_indices.h',
+  'indices/u_indices_priv.h',
+  'indices/u_primconvert.c',
+  'indices/u_primconvert.h',
   'os/os_process.h',
   'pipebuffer/pb_buffer_fenced.c',
   'pipebuffer/pb_buffer_fenced.h',
@@ -491,10 +495,24 @@ idep_u_tracepoints = declare_dependency(
   sources: files_u_tracepoints,
 )
 
+u_indices_gen_c = custom_target(
+  'u_indices_gen.c',
+  input : 'indices/u_indices_gen.py',
+  output : 'u_indices_gen.c',
+  command : [prog_python, '@INPUT@', '@OUTPUT@'],
+)
+
+u_unfilled_gen_c = custom_target(
+  'u_unfilled_gen.c',
+  input : 'indices/u_unfilled_gen.py',
+  output : 'u_unfilled_gen.c',
+  command : [prog_python, '@INPUT@', '@OUTPUT@'],
+)
+
 libgallium_extra_c_args = []
 libgallium = static_library(
   'gallium',
-  [files_libgallium],
+  [files_libgallium, u_indices_gen_c, u_unfilled_gen_c],
   include_directories : [
     inc_loader, inc_gallium, inc_src, inc_include, include_directories('util')
   ],

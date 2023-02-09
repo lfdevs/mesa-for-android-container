@@ -63,6 +63,19 @@ new_upload_buffer(struct gl_context *ctx, GLsizeiptr size, uint8_t **ptr)
 }
 
 void
+_mesa_glthread_release_upload_buffer(struct gl_context *ctx)
+{
+   struct glthread_state *glthread = &ctx->GLThread;
+
+   if (glthread->upload_buffer_private_refcount > 0) {
+      p_atomic_add(&glthread->upload_buffer->RefCount,
+                   -glthread->upload_buffer_private_refcount);
+      glthread->upload_buffer_private_refcount = 0;
+   }
+   _mesa_reference_buffer_object(ctx, &glthread->upload_buffer, NULL);
+}
+
+void
 _mesa_glthread_upload(struct gl_context *ctx, const void *data,
                       GLsizeiptr size, unsigned *out_offset,
                       struct gl_buffer_object **out_buffer,
@@ -100,12 +113,8 @@ _mesa_glthread_upload(struct gl_context *ctx, const void *data,
          return;
       }
 
-      if (glthread->upload_buffer_private_refcount > 0) {
-         p_atomic_add(&glthread->upload_buffer->RefCount,
-                      -glthread->upload_buffer_private_refcount);
-         glthread->upload_buffer_private_refcount = 0;
-      }
-      _mesa_reference_buffer_object(ctx, &glthread->upload_buffer, NULL);
+      _mesa_glthread_release_upload_buffer(ctx);
+
       glthread->upload_buffer =
          new_upload_buffer(ctx, default_size, &glthread->upload_ptr);
       glthread->upload_offset = 0;

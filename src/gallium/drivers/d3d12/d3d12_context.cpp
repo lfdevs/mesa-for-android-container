@@ -40,7 +40,7 @@
 #include "d3d12_video_proc.h"
 #include "d3d12_video_buffer.h"
 #endif
-#include "util/indices/u_primconvert.h"
+#include "indices/u_primconvert.h"
 #include "util/u_atomic.h"
 #include "util/u_blitter.h"
 #include "util/u_dual_blend.h"

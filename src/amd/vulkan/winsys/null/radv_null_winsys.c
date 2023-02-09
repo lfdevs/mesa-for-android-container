@@ -68,7 +68,7 @@ static const struct {
    [CHIP_VANGOGH] = {0x163F, 8, false},
    [CHIP_NAVI22] = {0x73C0, 8, true},
    [CHIP_NAVI23] = {0x73E0, 8, true},
-   [CHIP_GFX1100] = {0x73BF, 24, true},
+   [CHIP_GFX1100] = {0x744C, 24, true},
 };
 
 static void

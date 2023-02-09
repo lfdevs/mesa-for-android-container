@@ -435,4 +435,16 @@ Description: free implementation of the OpenCL API -- ICD runtime
  provides a standardized interface for computational analysis on graphical
  processing units.
 
+Package: mesa-drm-shim
+Section: libs
+Architecture: amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64
+Pre-Depends: ${misc:Pre-Depends}
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Multi-Arch: same
+Description: DRM shim libraries
+ This package provides drm-shim libraries which can be used for testing DRM drivers when
+ none exists on the host
+
 # vim: tw=0

@@ -488,6 +488,18 @@ _mesa_glthread_Enable(struct gl_context *ctx, GLenum cap)
    case GL_POLYGON_STIPPLE:
       ctx->GLThread.PolygonStipple = true;
       break;
+   case GL_VERTEX_ARRAY:
+   case GL_NORMAL_ARRAY:
+   case GL_COLOR_ARRAY:
+   case GL_TEXTURE_COORD_ARRAY:
+   case GL_INDEX_ARRAY:
+   case GL_EDGE_FLAG_ARRAY:
+   case GL_FOG_COORDINATE_ARRAY:
+   case GL_SECONDARY_COLOR_ARRAY:
+   case GL_POINT_SIZE_ARRAY_OES:
+      _mesa_glthread_ClientState(ctx, NULL, _mesa_array_to_attrib(ctx, cap),
+                                 true);
+      break;
    }
 }
 
@@ -516,6 +528,18 @@ _mesa_glthread_Disable(struct gl_context *ctx, GLenum cap)
       break;
    case GL_POLYGON_STIPPLE:
       ctx->GLThread.PolygonStipple = false;
+      break;
+   case GL_VERTEX_ARRAY:
+   case GL_NORMAL_ARRAY:
+   case GL_COLOR_ARRAY:
+   case GL_TEXTURE_COORD_ARRAY:
+   case GL_INDEX_ARRAY:
+   case GL_EDGE_FLAG_ARRAY:
+   case GL_FOG_COORDINATE_ARRAY:
+   case GL_SECONDARY_COLOR_ARRAY:
+   case GL_POINT_SIZE_ARRAY_OES:
+      _mesa_glthread_ClientState(ctx, NULL, _mesa_array_to_attrib(ctx, cap),
+                                 false);
       break;
    }
 }

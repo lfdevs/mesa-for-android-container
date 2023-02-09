@@ -171,7 +171,6 @@ fail:
    dri_destroy_screen_helper(screen);
    if (screen->dev)
       pipe_loader_release(&screen->dev, 1);
-   FREE(screen);
    return NULL;
 }
 

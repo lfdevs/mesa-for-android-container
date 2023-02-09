@@ -21,7 +21,6 @@
 
 # Converts GLSL shader to SPIR-V library 
 
-from __future__ import annotations
 import argparse
 import subprocess
 import sys
@@ -29,7 +28,6 @@ import os
 import typing as T
 
 if T.TYPE_CHECKING:
-
     class Arguments(T.Protocol):
         input: str
         output: str
@@ -42,7 +40,7 @@ if T.TYPE_CHECKING:
         stage: str
 
 
-def get_args() -> Arguments:
+def get_args() -> 'Arguments':
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="Name of input file.")
     parser.add_argument('output', help="Name of output file.")
@@ -111,7 +109,7 @@ def override_version(lines: T.List[str], glsl_version: str) -> T.List[str]:
     raise RuntimeError('Did not find #version directive, this is unexpected')
 
 
-def postprocess_file(args: Arguments) -> None:
+def postprocess_file(args: 'Arguments') -> None:
     with open(args.output, "r") as r:
         lines = r.readlines()
 
@@ -125,7 +123,7 @@ def postprocess_file(args: Arguments) -> None:
         w.writelines(lines)
 
 
-def preprocess_file(args: Arguments, origin_file: T.TextIO, directory: os.PathLike) -> str:
+def preprocess_file(args: 'Arguments', origin_file: T.TextIO, directory: os.PathLike) -> str:
     with open(os.path.join(directory, os.path.basename(origin_file.name)), "w") as copy_file:
         lines = origin_file.readlines()
 
@@ -140,7 +138,7 @@ def preprocess_file(args: Arguments, origin_file: T.TextIO, directory: os.PathLi
     return copy_file.name
 
 
-def process_file(args: Arguments) -> None:
+def process_file(args: 'Arguments') -> None:
     with open(args.input, "r") as infile:
         copy_file = preprocess_file(args, infile,
                                     os.path.dirname(args.output))

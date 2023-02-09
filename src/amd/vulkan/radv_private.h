@@ -2077,6 +2077,7 @@ struct radv_graphics_pipeline {
 
    bool mrt0_is_dual_src;
    uint8_t need_src_alpha;
+   bool need_null_export_workaround;
 
    bool uses_drawid;
    bool uses_baseinstance;
@@ -2617,6 +2618,9 @@ struct radv_image_view {
     * This has a few differences for cube maps (e.g. type).
     */
    union radv_descriptor storage_descriptor;
+
+   /* Block-compressed image views on GFX10+. */
+   struct ac_surf_nbc_view nbc_view;
 };
 
 struct radv_image_create_info {
@@ -3236,6 +3240,12 @@ radv_has_shader_buffer_float_minmax(const struct radv_physical_device *pdevice, 
    return (pdevice->rad_info.gfx_level <= GFX7 && !pdevice->use_llvm) ||
           pdevice->rad_info.gfx_level == GFX10 || pdevice->rad_info.gfx_level == GFX10_3 ||
           (pdevice->rad_info.gfx_level == GFX11 && bitsize == 32);
+}
+
+static inline unsigned
+radv_adjust_tile_swizzle(const struct radv_physical_device *dev, unsigned pipe_bank_xor)
+{
+   return pipe_bank_xor << (dev->rad_info.gfx_level >= GFX11 ? 2 : 0);
 }
 
 /* radv_perfcounter.c */

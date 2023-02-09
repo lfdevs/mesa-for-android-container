@@ -1,4 +1,3 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
 path_max.diff
 src_glx_dri_common.h.diff
-rusticl-ftbfs.diff

@@ -784,6 +784,9 @@ struct iris_context {
       /** Are stencil writes enabled?  (Stencil buffer may or may not exist.) */
       bool stencil_writes_enabled;
 
+      /** Do we have integer RT in current framebuffer state? */
+      bool has_integer_rt;
+
       /** GenX-specific current state */
       struct iris_genx_state *genx;
 

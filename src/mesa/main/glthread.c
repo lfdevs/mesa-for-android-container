@@ -189,6 +189,7 @@ _mesa_glthread_destroy(struct gl_context *ctx, const char *reason)
 
    _mesa_HashDeleteAll(glthread->VAOs, free_vao, NULL);
    _mesa_DeleteHashTable(glthread->VAOs);
+   _mesa_glthread_release_upload_buffer(ctx);
 
    ctx->GLThread.enabled = false;
    ctx->CurrentClientDispatch = ctx->CurrentServerDispatch;

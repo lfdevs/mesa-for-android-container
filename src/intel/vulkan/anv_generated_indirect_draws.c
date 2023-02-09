@@ -230,20 +230,24 @@ compile_upload_spirv(struct anv_device *device,
    };
    const unsigned *program = brw_compile_fs(compiler, nir, &params);
 
+   unsigned stat_idx = 0;
    if (wm_prog_data.dispatch_8) {
-      assert(stats[0].spills == 0);
-      assert(stats[0].fills == 0);
-      assert(stats[0].sends == sends_count_expectation);
+      assert(stats[stat_idx].spills == 0);
+      assert(stats[stat_idx].fills == 0);
+      assert(stats[stat_idx].sends == sends_count_expectation);
+      stat_idx++;
    }
    if (wm_prog_data.dispatch_16) {
-      assert(stats[1].spills == 0);
-      assert(stats[1].fills == 0);
-      assert(stats[1].sends == sends_count_expectation);
+      assert(stats[stat_idx].spills == 0);
+      assert(stats[stat_idx].fills == 0);
+      assert(stats[stat_idx].sends == sends_count_expectation);
+      stat_idx++;
    }
    if (wm_prog_data.dispatch_32) {
-      assert(stats[2].spills == 0);
-      assert(stats[2].fills == 0);
-      assert(stats[2].sends == sends_count_expectation);
+      assert(stats[stat_idx].spills == 0);
+      assert(stats[stat_idx].fills == 0);
+      assert(stats[stat_idx].sends == sends_count_expectation);
+      stat_idx++;
    }
 
    struct anv_pipeline_bind_map bind_map;

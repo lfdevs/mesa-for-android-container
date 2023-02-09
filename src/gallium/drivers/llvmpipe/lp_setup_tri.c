@@ -272,9 +272,6 @@ do_triangle_ccw(struct lp_setup_context *setup,
 {
    struct lp_scene *scene = setup->scene;
 
-   if (0)
-      lp_setup_print_triangle(setup, v0, v1, v2);
-
    const float (*pv)[4];
    if (setup->flatshade_first) {
       pv = v0;
@@ -1001,6 +998,15 @@ retry_triangle_ccw(struct lp_setup_context *setup,
                    const float (*v2)[4],
                    boolean front)
 {
+   if (0)
+      lp_setup_print_triangle(setup, v0, v1, v2);
+
+   if (lp_setup_zero_sample_mask(setup)) {
+      if (0) debug_printf("zero sample mask\n");
+      LP_COUNT(nr_culled_tris);
+      return;
+   }
+
    if (!do_triangle_ccw(setup, position, v0, v1, v2, front)) {
       if (!lp_setup_flush_and_restart(setup))
          return;

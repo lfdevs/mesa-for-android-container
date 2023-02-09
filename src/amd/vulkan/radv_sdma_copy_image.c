@@ -134,8 +134,11 @@ radv_sdma_v4_v5_copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct 
                                   (tmz ? 4 : 0)) |
                      dcc << 19 | (is_v5 ? 0 : 0 /* tiled->buffer.b.b.last_level */) << 20 |
                      1u << 31);
-      radeon_emit(cmd_buffer->cs,
-                  (uint32_t)tiled_address | (image->planes[0].surface.tile_swizzle << 8));
+      radeon_emit(
+         cmd_buffer->cs,
+         (uint32_t)tiled_address |
+            (radv_adjust_tile_swizzle(device->physical_device, image->planes[0].surface.tile_swizzle)
+             << 8));
       radeon_emit(cmd_buffer->cs, (uint32_t)(tiled_address >> 32));
       radeon_emit(cmd_buffer->cs, 0);
       radeon_emit(cmd_buffer->cs, ((tiled_width - 1) << 16));
