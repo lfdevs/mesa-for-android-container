@@ -51,6 +51,7 @@ _mesa_glthread_reset_vao(struct glthread_vao *vao)
    vao->Enabled = 0;
    vao->BufferEnabled = 0;
    vao->UserPointerMask = 0;
+   vao->NonNullPointerMask = 0;
    vao->NonZeroDivisorMask = 0;
 
    for (unsigned i = 0; i < ARRAY_SIZE(vao->Attrib); i++) {
@@ -363,6 +364,11 @@ attrib_pointer(struct glthread_state *glthread, struct glthread_vao *vao,
       vao->UserPointerMask &= ~(1u << attrib);
    else
       vao->UserPointerMask |= 1u << attrib;
+
+   if (pointer)
+      vao->NonNullPointerMask |= 1u << attrib;
+   else
+      vao->NonNullPointerMask &= ~(1u << attrib);
 }
 
 void
@@ -447,6 +453,11 @@ bind_vertex_buffer(struct glthread_state *glthread, struct glthread_vao *vao,
       vao->UserPointerMask &= ~(1u << i);
    else
       vao->UserPointerMask |= 1u << i;
+
+   if (offset)
+      vao->NonNullPointerMask |= 1u << i;
+   else
+      vao->NonNullPointerMask &= ~(1u << i);
 }
 
 void

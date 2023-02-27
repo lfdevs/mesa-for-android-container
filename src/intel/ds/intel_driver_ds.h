@@ -109,7 +109,7 @@ struct intel_ds_device {
    struct u_trace_context trace_context;
 
    /* List of intel_ds_queue */
-   struct u_vector queues;
+   struct list_head queues;
 };
 
 struct intel_ds_stage {
@@ -124,6 +124,8 @@ struct intel_ds_stage {
 };
 
 struct intel_ds_queue {
+   struct list_head link;
+
    /* Device this queue belongs to */
    struct intel_ds_device *device;
 
@@ -160,9 +162,11 @@ void intel_ds_device_init(struct intel_ds_device *device,
                           enum intel_ds_api api);
 void intel_ds_device_fini(struct intel_ds_device *device);
 
-struct intel_ds_queue *intel_ds_device_add_queue(struct intel_ds_device *device,
-                                                 const char *fmt_name,
-                                                 ...);
+struct intel_ds_queue *
+intel_ds_device_init_queue(struct intel_ds_device *device,
+                           struct intel_ds_queue *queue,
+                           const char *fmt_name,
+                           ...);
 
 void intel_ds_flush_data_init(struct intel_ds_flush_data *data,
                               struct intel_ds_queue *queue,

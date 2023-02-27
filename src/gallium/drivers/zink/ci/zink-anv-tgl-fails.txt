@@ -202,8 +202,6 @@ glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 glx@glx-visuals-stencil,Crash
 
-shaders@glsl-fs-pointcoord,Fail
-
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_instanceid,Fail
@@ -340,15 +338,11 @@ spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 
-spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
-
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-mixed-const-non-const-uniform-index2,Fail
 spec@arb_arrays_of_arrays@execution@image_store@basic-imagestore-non-const-uniform-index,Fail
 
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
-
-spec@arb_framebuffer_object@fbo-gl_pointcoord,Fail
 
 spec@arb_gl_spirv@execution@xfb@vs_block_array,Fail
 

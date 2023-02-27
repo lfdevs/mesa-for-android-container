@@ -179,17 +179,22 @@ inline float dot(const float3& a, const float3& b) {
 
 inline float as_float(uint32_t i)
 {
-    return *reinterpret_cast<float*>(&i);
+    union { float f; uint32_t i; } fi;
+
+    fi.i = i;
+    return fi.f;
 }
 
 inline float3 as_float3(int3 i3)
 {
-    return *reinterpret_cast<float3*>(&i3);
+    float3 o = { as_float(i3.x), as_float(i3.y), as_float(i3.z) };
+    return o;
 }
 
 inline float4 as_float4(int4 i4)
 {
-    return *reinterpret_cast<float4*>(&i4);
+    float4 o = { as_float(i4.x), as_float(i4.y), as_float(i4.z), as_float(i4.w) };
+    return o;
 }
 
 inline float4 convert_float4_rtn(int4 i4)

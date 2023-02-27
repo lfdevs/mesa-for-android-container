@@ -1607,8 +1607,29 @@ static int
 radv_amdgpu_ctx_set_pstate(struct radeon_winsys_ctx *rwctx, enum radeon_ctx_pstate pstate)
 {
    struct radv_amdgpu_ctx *ctx = (struct radv_amdgpu_ctx *)rwctx;
-   uint32_t amdgpu_pstate = radv_to_amdgpu_pstate(pstate);
-   return amdgpu_cs_ctx_stable_pstate(ctx->ctx, AMDGPU_CTX_OP_SET_STABLE_PSTATE, amdgpu_pstate, NULL);
+   uint32_t new_pstate = radv_to_amdgpu_pstate(pstate);
+   uint32_t current_pstate = 0;
+   int r;
+
+   r = amdgpu_cs_ctx_stable_pstate(ctx->ctx, AMDGPU_CTX_OP_GET_STABLE_PSTATE, 0, &current_pstate);
+   if (r) {
+      fprintf(stderr, "radv/amdgpu: failed to get current pstate\n");
+      return r;
+   }
+
+   /* Do not try to set a new pstate when the current one is already what we want. Otherwise, the
+    * kernel might return -EBUSY if we have multiple AMDGPU contexts in flight.
+    */
+   if (current_pstate == new_pstate)
+      return 0;
+
+   r = amdgpu_cs_ctx_stable_pstate(ctx->ctx, AMDGPU_CTX_OP_SET_STABLE_PSTATE, new_pstate, NULL);
+   if (r) {
+      fprintf(stderr, "radv/amdgpu: failed to set new pstate\n");
+      return r;
+   }
+
+   return 0;
 }
 
 static void *

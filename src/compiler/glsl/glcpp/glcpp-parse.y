@@ -100,6 +100,9 @@ static token_list_t *
 _token_list_create(glcpp_parser_t *parser);
 
 static void
+_token_list_prepend(glcpp_parser_t *parser, token_list_t *list, token_t *token);
+
+static void
 _token_list_append(glcpp_parser_t *parser, token_list_t *list, token_t *token);
 
 static void
@@ -1091,6 +1094,18 @@ _token_list_create(glcpp_parser_t *parser)
 }
 
 void
+_token_list_prepend(glcpp_parser_t *parser, token_list_t *list, token_t *token)
+{
+   token_node_t *node;
+
+   node = linear_alloc_child(parser->linalloc, sizeof(token_node_t));
+   node->token = token;
+   node->next = list->head;
+
+   list->head = node;
+}
+
+void
 _token_list_append(glcpp_parser_t *parser, token_list_t *list, token_t *token)
 {
    token_node_t *node;
@@ -1954,8 +1969,8 @@ _glcpp_parser_expand_function(glcpp_parser_t *parser, token_node_t *node,
  */
 static token_list_t *
 _glcpp_parser_expand_node(glcpp_parser_t *parser, token_node_t *node,
-                          token_node_t **last, expansion_mode_t mode,
-                          int line)
+                          token_node_t *node_prev, token_node_t **last,
+                          expansion_mode_t mode, int line)
 {
    token_t *token = node->token;
    const char *identifier;
@@ -2018,6 +2033,22 @@ _glcpp_parser_expand_node(glcpp_parser_t *parser, token_node_t *node,
          return _token_list_create_with_one_space(parser);
 
       replacement = _token_list_copy(parser, macro->replacements);
+
+      /* If needed insert space in front of replacements to isolate them from
+       * the code they will be inserted into. For example:
+       *
+       *    #define VALUE -1.0
+       *    int a = -VALUE;
+       *
+       * Should be evaluated to int a = - -1.0; not int a = --1.0;
+       */
+      if (node_prev &&
+          (node_prev->token->type == '-' || node_prev->token->type == '+') &&
+          node_prev->token->type == replacement->head->token->type) {
+         token_t *new_token = _token_create_ival(parser, SPACE, SPACE);
+         _token_list_prepend(parser, replacement, new_token);
+      }
+
       _glcpp_parser_apply_pastes(parser, replacement);
       return replacement;
    }
@@ -2124,7 +2155,8 @@ _glcpp_parser_expand_token_list(glcpp_parser_t *parser, token_list_t *list,
       while (parser->active && parser->active->marker == node)
          _parser_active_list_pop (parser);
 
-      expansion = _glcpp_parser_expand_node (parser, node, &last, mode, line);
+      expansion =
+         _glcpp_parser_expand_node(parser, node, node_prev, &last, mode, line);
       if (expansion) {
          token_node_t *n;
 

@@ -31,11 +31,12 @@
 struct radv_acceleration_structure {
    struct vk_object_base base;
 
-   struct radeon_winsys_bo *bo;
-   uint64_t mem_offset;
+   struct radv_buffer *buffer;
+   uint64_t offset;
    uint64_t size;
-   uint64_t va;
 };
+
+uint64_t radv_acceleration_structure_get_va(struct radv_acceleration_structure *accel_struct);
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_acceleration_structure, base, VkAccelerationStructureKHR,
                                VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR)

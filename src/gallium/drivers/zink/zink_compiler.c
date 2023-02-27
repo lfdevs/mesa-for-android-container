@@ -2784,6 +2784,32 @@ prune_io(nir_shader *nir)
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_temp, NULL);
 }
 
+static bool
+invert_point_coord_instr(nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_load_deref)
+      return false;
+   nir_variable *deref_var = nir_intrinsic_get_var(intr, 0);
+   if (deref_var->data.location != VARYING_SLOT_PNTC)
+      return false;
+   b->cursor = nir_after_instr(instr);
+   nir_ssa_def *def = nir_vec2(b, nir_channel(b, &intr->dest.ssa, 0),
+                                  nir_fsub(b, nir_imm_float(b, 1.0), nir_channel(b, &intr->dest.ssa, 1)));
+   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa, def, def->parent_instr);
+   return true;
+}
+
+static bool
+invert_point_coord(nir_shader *nir)
+{
+   if (!(nir->info.inputs_read & BITFIELD64_BIT(VARYING_SLOT_PNTC)))
+      return false;
+   return nir_shader_instructions_pass(nir, invert_point_coord_instr, nir_metadata_dominance, NULL);
+}
+
 VkShaderModule
 zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shader *base_nir, const struct zink_shader_key *key)
 {
@@ -2894,10 +2920,10 @@ zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shad
          if (zink_fs_key_base(key)->force_dual_color_blend && nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DATA1)) {
             NIR_PASS_V(nir, lower_dual_blend);
          }
-         if (zink_fs_key_base(key)->coord_replace_bits) {
-            NIR_PASS_V(nir, nir_lower_texcoord_replace, zink_fs_key_base(key)->coord_replace_bits,
-                     false, zink_fs_key_base(key)->coord_replace_yinvert);
-         }
+         if (zink_fs_key_base(key)->coord_replace_bits)
+            NIR_PASS_V(nir, nir_lower_texcoord_replace, zink_fs_key_base(key)->coord_replace_bits, false, false);
+         if (zink_fs_key_base(key)->point_coord_yinvert)
+            NIR_PASS_V(nir, invert_point_coord);
          if (zink_fs_key_base(key)->force_persample_interp || zink_fs_key_base(key)->fbfetch_ms) {
             nir_foreach_shader_in_variable(var, nir)
                var->data.sample = true;
@@ -4250,6 +4276,16 @@ zink_shader_free(struct zink_screen *screen, struct zink_shader *shader)
          prog->base.removed = true;
          simple_mtx_unlock(&prog->ctx->program_lock[idx]);
          util_queue_fence_wait(&prog->base.cache_fence);
+
+         for (unsigned r = 0; r < ARRAY_SIZE(prog->pipelines); r++) {
+            for (int i = 0; i < ARRAY_SIZE(prog->pipelines[0]); ++i) {
+               hash_table_foreach(&prog->pipelines[r][i], entry) {
+                  struct zink_gfx_pipeline_cache_entry *pc_entry = entry->data;
+
+                  util_queue_fence_wait(&pc_entry->fence);
+               }
+            }
+         }
       }
       if (stage == MESA_SHADER_FRAGMENT || !shader->non_fs.is_generated) {
          prog->shaders[stage] = NULL;

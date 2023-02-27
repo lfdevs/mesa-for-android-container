@@ -254,7 +254,13 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
            cull_mask = s[VS].v->cull_mask;
    uint8_t clip_cull_mask = clip_mask | cull_mask;
 
-   clip_mask &= ctx->rasterizer->clip_plane_enable;
+   /* Unlike a6xx, we don't factor the rasterizer's clip enables in here.  It's
+    * already handled by the frontend by storing 0.0 to the clipdist in the
+    * shader variant (using either nir_lower_clip_disable for clip distances
+    * from the source shader, or nir_lower_clip_vs for user clip planes).
+    * Masking the disabled clipdists off causes GPU hangs in tests like
+    * spec@glsl-1.20@execution@clipping@vs-clip-vertex-enables.
+    */
 
    fssz = (s[FS].i->double_threadsize) ? FOUR_QUADS : TWO_QUADS;
 

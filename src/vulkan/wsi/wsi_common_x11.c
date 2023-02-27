@@ -1108,6 +1108,10 @@ x11_get_wsi_image(struct wsi_swapchain *wsi_chain, uint32_t image_index)
    return &chain->images[image_index].base;
 }
 
+/* XXX this belongs in presentproto */
+#ifndef PresentWindowDestroyed
+#define PresentWindowDestroyed (1 << 0)
+#endif
 /**
  * Process an X11 Present event. Does not update chain->status.
  */
@@ -1118,6 +1122,8 @@ x11_handle_dri3_present_event(struct x11_swapchain *chain,
    switch (event->evtype) {
    case XCB_PRESENT_CONFIGURE_NOTIFY: {
       xcb_present_configure_notify_event_t *config = (void *) event;
+      if (config->pixmap_flags & PresentWindowDestroyed)
+         return VK_ERROR_SURFACE_LOST_KHR;
 
       if (config->width != chain->extent.width ||
           config->height != chain->extent.height)

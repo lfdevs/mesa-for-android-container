@@ -573,7 +573,11 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
       /* Unable to recycle surface, allocate a new one */
       unsigned usage = 0;
 
-      if (!key->cachable)
+      /* mark the surface as shareable if the surface is not
+       * cachable or the RENDER_TARGET bind flag is set.
+       */
+      if (!key->cachable ||
+          ((bind_flags & PIPE_BIND_RENDER_TARGET) != 0))
          usage |= SVGA_SURFACE_USAGE_SHARED;
       if (key->scanout)
          usage |= SVGA_SURFACE_USAGE_SCANOUT;

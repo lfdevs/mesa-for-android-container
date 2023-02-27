@@ -1467,8 +1467,6 @@ void u_vbuf_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *inf
    boolean unroll_indices = FALSE;
    const uint32_t used_vb_mask = mgr->ve->used_vb_mask;
    uint32_t user_vb_mask = mgr->user_vb_mask & used_vb_mask;
-   struct pipe_draw_info new_info;
-   struct pipe_draw_start_count_bias new_draw;
    unsigned fixed_restart_index = info->index_size ? util_prim_restart_index_from_size(info->index_size) : 0;
 
    uint32_t misaligned = 0;
@@ -1505,12 +1503,10 @@ void u_vbuf_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *inf
     */
    if (num_draws > 1 && info->take_index_buffer_ownership)
       p_atomic_add(&info->index.resource->reference.count, num_draws - 1);
-   new_info = *info;
 
    for (unsigned d = 0; d < num_draws; d++) {
-      new_draw = draws[d];
-      if (info->increment_draw_id)
-         drawid_offset++;
+      struct pipe_draw_info new_info = *info;
+      struct pipe_draw_start_count_bias new_draw = draws[d];
 
       /* Handle indirect (multi)draws. */
       if (indirect && indirect->buffer) {
@@ -1786,6 +1782,8 @@ void u_vbuf_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *inf
          util_primconvert_draw_vbo(mgr->pc, &new_info, drawid_offset, indirect, &new_draw, 1);
       } else
          pipe->draw_vbo(pipe, &new_info, drawid_offset, indirect, &new_draw, 1);
+      if (info->increment_draw_id)
+         drawid_offset++;
    }
 
    if (mgr->using_translate) {

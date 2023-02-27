@@ -39,7 +39,6 @@ glx@glx-swap-pixmap-bad,Fail
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 
 
-shaders@glsl-fs-pointcoord,Fail
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_instanceid,Fail
@@ -60,7 +59,6 @@ spec@arb_fragment_program_shadow@txp-shadow2d,Fail
 spec@arb_fragment_program_shadow@txp-shadow2drect,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query,Fail
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@MS8,Fail
-spec@arb_framebuffer_object@fbo-gl_pointcoord,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
 spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
@@ -389,7 +387,6 @@ spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
-spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 

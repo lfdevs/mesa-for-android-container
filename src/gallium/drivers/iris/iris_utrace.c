@@ -95,7 +95,7 @@ iris_utrace_delete_flush_data(struct u_trace_context *utctx,
 void iris_utrace_flush(struct iris_batch *batch, uint64_t submission_id)
 {
    struct intel_ds_flush_data *flush_data = malloc(sizeof(*flush_data));
-   intel_ds_flush_data_init(flush_data, batch->ds, submission_id);
+   intel_ds_flush_data_init(flush_data, &batch->ds, submission_id);
    u_trace_flush(&batch->trace, flush_data, false);
 }
 
@@ -122,9 +122,8 @@ void iris_utrace_init(struct iris_context *ice)
                              iris_utrace_delete_flush_data);
 
    for (int i = 0; i < IRIS_BATCH_COUNT; i++) {
-      ice->batches[i].ds =
-         intel_ds_device_add_queue(&ice->ds, "%s",
-                                   iris_batch_name_to_string(i));
+      intel_ds_device_init_queue(&ice->ds, &ice->batches[i].ds, "%s",
+                                 iris_batch_name_to_string(i));
    }
 }
 

@@ -2147,7 +2147,7 @@ static LLVMValueRef get_global_address(struct ac_nir_context *ctx,
       LLVMTypeRef i8_ptr_type = LLVMPointerType(ctx->ac.i8, AC_ADDR_SPACE_GLOBAL);
       addr = LLVMBuildIntToPtr(ctx->ac.builder, addr, i8_ptr_type, "");
       addr = LLVMBuildGEP2(ctx->ac.builder, ctx->ac.i8, addr, &offset, 1, "");
-      return addr;
+      return LLVMBuildPointerCast(ctx->ac.builder, addr, ptr_type, "");
    } else {
       return LLVMBuildIntToPtr(ctx->ac.builder, addr, ptr_type, "");
    }

@@ -1344,7 +1344,8 @@ radv_update_descriptor_sets_impl(struct radv_device *device, struct radv_cmd_buf
          case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
             RADV_FROM_HANDLE(radv_acceleration_structure, accel_struct,
                              accel_structs->pAccelerationStructures[j]);
-            write_accel_struct(ptr, accel_struct ? accel_struct->va : 0);
+            write_accel_struct(ptr,
+                               accel_struct ? radv_acceleration_structure_get_va(accel_struct) : 0);
             break;
          }
          default:
@@ -1640,7 +1641,8 @@ radv_update_descriptor_set_with_template_impl(struct radv_device *device,
          case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
             RADV_FROM_HANDLE(radv_acceleration_structure, accel_struct,
                              *(const VkAccelerationStructureKHR *)pSrc);
-            write_accel_struct(pDst, accel_struct ? accel_struct->va : 0);
+            write_accel_struct(pDst,
+                               accel_struct ? radv_acceleration_structure_get_va(accel_struct) : 0);
             break;
          }
          default:

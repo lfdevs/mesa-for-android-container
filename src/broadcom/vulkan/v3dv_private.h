@@ -1711,6 +1711,9 @@ void v3dv_cmd_buffer_add_private_obj(struct v3dv_cmd_buffer *cmd_buffer,
 void v3dv_cmd_buffer_merge_barrier_state(struct v3dv_barrier_state *dst,
                                          struct v3dv_barrier_state *src);
 
+void v3dv_cmd_buffer_consume_bcl_sync(struct v3dv_cmd_buffer *cmd_buffer,
+                                      struct v3dv_job *job);
+
 bool v3dv_cmd_buffer_check_needs_load(const struct v3dv_cmd_buffer_state *state,
                                       VkImageAspectFlags aspect,
                                       uint32_t first_subpass_idx,

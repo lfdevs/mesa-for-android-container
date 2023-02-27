@@ -1,3 +1,9 @@
+mesa (23.0.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 27 Feb 2023 12:30:15 +0200
+
 mesa (23.0.0~rc4-1) experimental; urgency=medium
 
   [ Timo Aaltonen ]
@@ -17,6 +23,24 @@ mesa (23.0.0~rc1-1) experimental; urgency=medium
   * rusticl-ftbfs.diff: Fix rusticl dependencies to include valgrind.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Mon, 16 Jan 2023 11:20:46 +0200
+
+mesa (22.3.6-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #1029731)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 26 Feb 2023 11:19:29 +0200
+
+mesa (22.3.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 09 Feb 2023 20:43:32 +0200
+
+mesa (22.3.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sat, 28 Jan 2023 12:37:15 +0200
 
 mesa (22.3.3-1) unstable; urgency=medium
 

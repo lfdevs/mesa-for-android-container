@@ -795,6 +795,9 @@ ComputeTest::compile(const std::vector<const char *> &sources,
    };
    args.args = compile_args.data();
    args.num_args = (unsigned)compile_args.size();
+   args.features.images = true;
+   args.features.images_read_write = true;
+   args.features.int64 = true;
    ComputeTest::Shader shader;
 
    std::vector<Shader> shaders;

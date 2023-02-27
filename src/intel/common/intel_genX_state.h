@@ -51,6 +51,27 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
    bool enable_16 = prog_data->dispatch_16;
    bool enable_32 = prog_data->dispatch_32;
 
+#if GFX_VER >= 9
+   /* SKL PRMs, Volume 2a: Command Reference: Instructions:
+    *    3DSTATE_PS_BODY::8 Pixel Dispatch Enable:
+    *
+    *    "When Render Target Fast Clear Enable is ENABLED or Render Target
+    *     Resolve Type = RESOLVE_PARTIAL or RESOLVE_FULL, this bit must be
+    *     DISABLED."
+    */
+   if (ps->RenderTargetFastClearEnable ||
+       ps->RenderTargetResolveType == RESOLVE_PARTIAL ||
+       ps->RenderTargetResolveType == RESOLVE_FULL)
+      enable_8 = false;
+#elif GFX_VER >= 8
+   /* BDW has the same wording as SKL, except some of the fields mentioned
+    * don't exist...
+    */
+   if (ps->RenderTargetFastClearEnable ||
+       ps->RenderTargetResolveEnable)
+      enable_8 = false;
+#endif
+
    if (prog_data->persample_dispatch) {
       /* TGL PRMs, Volume 2d: Command Reference: Structures:
        *    3DSTATE_PS_BODY::32 Pixel Dispatch Enable:

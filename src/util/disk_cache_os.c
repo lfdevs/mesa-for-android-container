@@ -200,12 +200,24 @@ choose_lru_file_matching(const char *dir_path,
    if (dir == NULL)
       return NULL;
 
+   const int dir_fd = dirfd(dir);
+
    /* First count the number of files in the directory */
    unsigned total_file_count = 0;
    while ((dir_ent = readdir(dir)) != NULL) {
+#ifdef HAVE_DIRENT_D_TYPE
       if (dir_ent->d_type == DT_REG) { /* If the entry is a regular file */
          total_file_count++;
       }
+#else
+      struct stat st;
+
+      if (fstatat(dir_fd, dir_ent->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0) {
+         if (S_ISREG(st.st_mode)) {
+            total_file_count++;
+         }
+      }
+#endif
    }
 
    /* Reset to the start of the directory */
@@ -225,7 +237,7 @@ choose_lru_file_matching(const char *dir_path,
          break;
 
       struct stat sb;
-      if (fstatat(dirfd(dir), dir_ent->d_name, &sb, 0) == 0) {
+      if (fstatat(dir_fd, dir_ent->d_name, &sb, 0) == 0) {
          struct lru_file *entry = NULL;
          if (!list_is_empty(lru_file_list))
             entry = list_first_entry(lru_file_list, struct lru_file, node);

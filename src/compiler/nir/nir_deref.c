@@ -1024,19 +1024,28 @@ opt_remove_restricting_cast_alignments(nir_deref_instr *cast)
 static bool
 opt_remove_cast_cast(nir_deref_instr *cast)
 {
-   nir_deref_instr *first_cast = cast;
-
-   while (true) {
-      nir_deref_instr *parent = nir_deref_instr_parent(first_cast);
-      if (parent == NULL || parent->deref_type != nir_deref_type_cast)
-         break;
-      first_cast = parent;
-   }
-   if (cast == first_cast)
+   nir_deref_instr *parent = nir_deref_instr_parent(cast);
+   if (parent == NULL || parent->deref_type != nir_deref_type_cast)
       return false;
 
+   /* Copy align info from the parent cast if needed
+    *
+    * In the case that align_mul = 0, the alignment for this cast is inhereted
+    * from the parent deref (if any). If we aren't careful, removing our
+    * parent cast from the chain may lose alignment information so we need to
+    * copy the parent's alignment information (if any).
+    *
+    * opt_remove_restricting_cast_alignments() above is run before this pass
+    * and will will have cleared our alignment (set align_mul = 0) in the case
+    * where the parent's alignment information is somehow superior.
+    */
+   if (cast->cast.align_mul == 0) {
+      cast->cast.align_mul = parent->cast.align_mul;
+      cast->cast.align_offset = parent->cast.align_offset;
+   }
+
    nir_instr_rewrite_src(&cast->instr, &cast->parent,
-                         nir_src_for_ssa(first_cast->parent.ssa));
+                         nir_src_for_ssa(parent->parent.ssa));
    return true;
 }
 

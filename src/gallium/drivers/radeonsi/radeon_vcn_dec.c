@@ -3170,7 +3170,8 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    case CHIP_GFX1100:
    case CHIP_GFX1101:
    case CHIP_GFX1102:
-   case CHIP_GFX1103:
+   case CHIP_GFX1103_R1:
+   case CHIP_GFX1103_R2:
       dec->jpg.direct_reg = true;
       dec->addr_gfx_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX11;
       dec->av1_version = RDECODE_AV1_VER_1;

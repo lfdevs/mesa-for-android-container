@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2008-2009 VMware, Inc.  All rights reserved.
+ * Copyright 2008-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -84,6 +84,11 @@ struct svga_texture
     * Whether texture upload buffer can be used on this texture
     */
    boolean can_use_upload;
+
+   /**
+    * Whether texture is modified.  Set if any of the dirty bits is set.
+    */
+   boolean modified;
 
    unsigned size;  /**< Approximate size in bytes */
 
@@ -242,6 +247,7 @@ svga_set_texture_dirty(struct svga_texture *tex,
 {
    check_face_level(tex, face, level);
    tex->dirty[face] |= 1 << level;
+   tex->modified = TRUE;
 }
 
 static inline void
@@ -251,14 +257,21 @@ svga_clear_texture_dirty(struct svga_texture *tex)
    for (i = 0; i < tex->b.depth0 * tex->b.array_size; i++) {
       tex->dirty[i] = 0;
    }
+   tex->modified = FALSE;
 }
 
 static inline boolean
-svga_is_texture_dirty(const struct svga_texture *tex,
-                      unsigned face, unsigned level)
+svga_is_texture_level_dirty(const struct svga_texture *tex,
+                            unsigned face, unsigned level)
 {
    check_face_level(tex, face, level);
    return !!(tex->dirty[face] & (1 << level));
+}
+
+static inline boolean
+svga_is_texture_dirty(const struct svga_texture *tex)
+{
+   return tex->modified;
 }
 
 struct pipe_resource *

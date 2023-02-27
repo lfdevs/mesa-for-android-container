@@ -183,7 +183,8 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
       return "gfx1101";
    case CHIP_GFX1102:
       return "gfx1102";
-   case CHIP_GFX1103:
+   case CHIP_GFX1103_R1:
+   case CHIP_GFX1103_R2:
       return "gfx1103";
    default:
       return "";

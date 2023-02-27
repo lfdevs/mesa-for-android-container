@@ -1127,6 +1127,9 @@ struct VALUPartialForwardingHazardBlockState {
    enum VALUPartialForwardingHazardState state = nothing_written;
    unsigned num_valu_since_read = 0;
    unsigned num_valu_since_write = 0;
+
+   unsigned num_instrs = 0;
+   unsigned num_blocks = 0;
 };
 
 bool
@@ -1189,6 +1192,13 @@ handle_valu_partial_forwarding_hazard_instr(VALUPartialForwardingHazardGlobalSta
    if (block_state.num_vgprs_read == 0)
       return true; /* All VGPRs have been written and a hazard was never found. */
 
+   block_state.num_instrs++;
+   if (block_state.num_instrs > 256 || block_state.num_blocks > 32) {
+      /* Exit to limit compile times and set hazard_found=true to be safe. */
+      global_state.hazard_found = true;
+      return true;
+   }
+
    return false;
 }
 
@@ -1202,6 +1212,8 @@ handle_valu_partial_forwarding_hazard_block(VALUPartialForwardingHazardGlobalSta
          return false;
       global_state.loop_headers_visited.insert(block->index);
    }
+
+   block_state.num_blocks++;
 
    return true;
 }

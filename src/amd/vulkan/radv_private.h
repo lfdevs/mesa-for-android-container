@@ -3242,12 +3242,6 @@ radv_has_shader_buffer_float_minmax(const struct radv_physical_device *pdevice, 
           (pdevice->rad_info.gfx_level == GFX11 && bitsize == 32);
 }
 
-static inline unsigned
-radv_adjust_tile_swizzle(const struct radv_physical_device *dev, unsigned pipe_bank_xor)
-{
-   return pipe_bank_xor << (dev->rad_info.gfx_level >= GFX11 ? 2 : 0);
-}
-
 /* radv_perfcounter.c */
 void radv_perfcounter_emit_shaders(struct radeon_cmdbuf *cs, unsigned shaders);
 void radv_perfcounter_emit_spm_reset(struct radeon_cmdbuf *cs);

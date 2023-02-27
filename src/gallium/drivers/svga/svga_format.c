@@ -1438,7 +1438,10 @@ static const struct format_cap format_cap_table[] = {
 
 static const SVGA3dSurfaceFormat compat_x8r8g8b8[] = {
    SVGA3D_X8R8G8B8, SVGA3D_A8R8G8B8, SVGA3D_B8G8R8X8_UNORM,
-   SVGA3D_B8G8R8A8_UNORM, 0
+   SVGA3D_B8G8R8A8_UNORM, SVGA3D_B8G8R8X8_TYPELESS, SVGA3D_B8G8R8A8_TYPELESS, 0
+};
+static const SVGA3dSurfaceFormat compat_r8g8b8a8[] = {
+   SVGA3D_R8G8B8A8_UNORM, SVGA3D_R8G8B8A8_TYPELESS, 0
 };
 static const SVGA3dSurfaceFormat compat_r8[] = {
    SVGA3D_R8_UNORM, SVGA3D_NV12, SVGA3D_YV12, 0
@@ -1453,6 +1456,7 @@ static const SVGA3dSurfaceFormat compat_r5g6b5[] = {
 static const struct format_compat_entry format_compats[] = {
    {PIPE_FORMAT_B8G8R8X8_UNORM, compat_x8r8g8b8},
    {PIPE_FORMAT_B8G8R8A8_UNORM, compat_x8r8g8b8},
+   {PIPE_FORMAT_R8G8B8A8_UNORM, compat_r8g8b8a8},
    {PIPE_FORMAT_R8_UNORM, compat_r8},
    {PIPE_FORMAT_R8G8_UNORM, compat_g8r8},
    {PIPE_FORMAT_B5G6R5_UNORM, compat_r5g6b5}

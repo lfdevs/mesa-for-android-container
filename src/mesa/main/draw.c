@@ -1974,9 +1974,11 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
    min_index_ptr = (uintptr_t) indices[0];
    max_index_ptr = 0;
    for (i = 0; i < primcount; i++) {
-      min_index_ptr = MIN2(min_index_ptr, (uintptr_t) indices[i]);
-      max_index_ptr = MAX2(max_index_ptr, (uintptr_t) indices[i] +
-                           (count[i] << index_size_shift));
+      if (count[i]) {
+         min_index_ptr = MIN2(min_index_ptr, (uintptr_t) indices[i]);
+         max_index_ptr = MAX2(max_index_ptr, (uintptr_t) indices[i] +
+                              (count[i] << index_size_shift));
+      }
    }
 
    /* Check if we can handle this thing as a bunch of index offsets from the
@@ -1987,7 +1989,8 @@ _mesa_validated_multidrawelements(struct gl_context *ctx, GLenum mode,
     */
    if (index_size_shift) {
       for (i = 0; i < primcount; i++) {
-         if ((((uintptr_t) indices[i] - min_index_ptr) &
+         if (count[i] &&
+             (((uintptr_t)indices[i] - min_index_ptr) &
               ((1 << index_size_shift) - 1)) != 0) {
             fallback = true;
             break;

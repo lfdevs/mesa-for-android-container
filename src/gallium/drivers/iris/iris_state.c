@@ -1336,10 +1336,8 @@ struct iris_genx_state {
    bool pma_fix_enabled;
 #endif
 
-#if GFX_VER == 9
    /* Is object level preemption enabled? */
    bool object_preemption;
-#endif
 
 #if GFX_VERx10 == 120
    enum iris_depth_reg_mode depth_reg_mode;
@@ -5920,6 +5918,27 @@ genX(emit_depth_state_workarounds)(struct iris_context *ice,
 }
 
 static void
+iris_preemption_streamout_wa(struct iris_context *ice,
+                             struct iris_batch *batch,
+                             bool enable)
+{
+#if GFX_VERx10 >= 120
+   iris_emit_reg(batch, GENX(CS_CHICKEN1), reg) {
+      reg.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommand = !enable;
+      reg.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommandMask = true;
+   }
+
+   /* Emit CS_STALL and 250 noops. */
+   iris_emit_pipe_control_flush(batch, "workaround: Wa_16013994831",
+                                PIPE_CONTROL_CS_STALL);
+   for (unsigned i = 0; i < 250; i++)
+      iris_emit_cmd(batch, GENX(MI_NOOP), noop);
+
+   ice->state.genx->object_preemption = enable;
+#endif
+}
+
+static void
 iris_upload_dirty_render_state(struct iris_context *ice,
                                struct iris_batch *batch,
                                const struct pipe_draw_info *draw)
@@ -6421,6 +6440,14 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       if (dirty & IRIS_DIRTY_STREAMOUT) {
          const struct iris_rasterizer_state *cso_rast = ice->state.cso_rast;
 
+#if GFX_VERx10 >= 120
+         /* Wa_16013994831 - Disable preemption. */
+         if (batch->screen->devinfo->verx10 == 120 ||
+             intel_device_info_is_dg2(batch->screen->devinfo)) {
+            iris_preemption_streamout_wa(ice, batch, false);
+         }
+#endif
+
          uint32_t dynamic_sol[GENX(3DSTATE_STREAMOUT_length)];
          iris_pack_command(GENX(3DSTATE_STREAMOUT), dynamic_sol, sol) {
             sol.SOFunctionEnable = true;
@@ -6438,6 +6465,13 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       }
    } else {
       if (dirty & IRIS_DIRTY_STREAMOUT) {
+
+#if GFX_VERx10 >= 120
+         /* Wa_16013994831 - Enable preemption. */
+         if (!ice->state.genx->object_preemption)
+            iris_preemption_streamout_wa(ice, batch, true);
+#endif
+
          iris_emit_cmd(batch, GENX(3DSTATE_STREAMOUT), sol);
       }
    }
@@ -8678,6 +8712,10 @@ genX(init_state)(struct iris_context *ice)
    ice->state.prim_mode = PIPE_PRIM_MAX;
    ice->state.genx = calloc(1, sizeof(struct iris_genx_state));
    ice->draw.derived_params.drawid = -1;
+
+#if GFX_VERx10 >= 120
+   ice->state.genx->object_preemption = true;
+#endif
 
    /* Make a 1x1x1 null surface for unbound textures */
    void *null_surf_map =

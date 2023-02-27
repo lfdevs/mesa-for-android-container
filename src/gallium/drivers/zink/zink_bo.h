@@ -96,7 +96,7 @@ static inline unsigned
 zink_mem_type_idx_from_bits(struct zink_screen *screen, enum zink_heap heap, uint32_t bits)
 {
    for (unsigned i = 0; i < screen->heap_count[heap]; i++) {
-      if (bits & BITFIELD_BIT(screen->heap_map[heap][i])) {
+      if (bits & screen->info.mem_props.memoryTypes[screen->heap_map[heap][i]].propertyFlags) {
          return screen->heap_map[heap][i];
       }
    }

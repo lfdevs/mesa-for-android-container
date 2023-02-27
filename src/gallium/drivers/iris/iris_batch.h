@@ -137,14 +137,12 @@ struct iris_batch {
    struct iris_batch *other_batches[IRIS_BATCH_COUNT - 1];
    unsigned num_other_batches;
 
-   struct {
-      /**
-       * Set of struct brw_bo * that have been rendered to within this
-       * batchbuffer and would need flushing before being used from another
-       * cache domain that isn't coherent with it (i.e. the sampler).
-       */
-      struct hash_table *render;
-   } cache;
+   /**
+    * Table containing struct iris_bo * that have been accessed within this
+    * batchbuffer and would need flushing before being used with a different
+    * aux mode.
+    */
+   struct hash_table *bo_aux_modes;
 
    struct intel_batch_decode_ctx decoder;
    struct hash_table_u64 *state_sizes;
@@ -196,7 +194,7 @@ struct iris_batch {
    struct u_trace trace;
 
    /** Batch wrapper structure for perfetto */
-   struct intel_ds_queue *ds;
+   struct intel_ds_queue ds;
 };
 
 void iris_init_batches(struct iris_context *ice, int priority);

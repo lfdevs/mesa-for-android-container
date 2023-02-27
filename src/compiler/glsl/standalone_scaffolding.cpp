@@ -73,11 +73,9 @@ _mesa_problem(struct gl_context *ctx, const char *fmt, ...)
 }
 
 void
-_mesa_reference_shader_program_data(struct gl_context *ctx,
-                                    struct gl_shader_program_data **ptr,
+_mesa_reference_shader_program_data(struct gl_shader_program_data **ptr,
                                     struct gl_shader_program_data *data)
 {
-   (void) ctx;
    *ptr = data;
 }
 

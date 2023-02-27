@@ -2809,8 +2809,9 @@ cmd_buffer_binning_sync_required(struct v3dv_cmd_buffer *cmd_buffer,
    return false;
 }
 
-static void
-consume_bcl_sync(struct v3dv_cmd_buffer *cmd_buffer, struct v3dv_job *job)
+void
+v3dv_cmd_buffer_consume_bcl_sync(struct v3dv_cmd_buffer *cmd_buffer,
+                                 struct v3dv_job *job)
 {
    job->needs_bcl_sync = true;
    cmd_buffer->state.barrier.bcl_buffer_access = 0;
@@ -2910,7 +2911,7 @@ v3dv_cmd_buffer_emit_pre_draw(struct v3dv_cmd_buffer *cmd_buffer,
       assert(!job->needs_bcl_sync);
       if (cmd_buffer_binning_sync_required(cmd_buffer, pipeline,
                                            indexed, indirect)) {
-         consume_bcl_sync(cmd_buffer, job);
+         v3dv_cmd_buffer_consume_bcl_sync(cmd_buffer, job);
       }
    }
 

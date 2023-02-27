@@ -859,25 +859,6 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       if (GFX_VER == 11)
          ps.SamplerCount = 0;
 
-      if (prog_data) {
-         intel_set_ps_dispatch_state(&ps, devinfo, prog_data,
-                                     params->num_samples);
-
-         ps.DispatchGRFStartRegisterForConstantSetupData0 =
-            brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 0);
-         ps.DispatchGRFStartRegisterForConstantSetupData1 =
-            brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 1);
-         ps.DispatchGRFStartRegisterForConstantSetupData2 =
-            brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 2);
-
-         ps.KernelStartPointer0 = params->wm_prog_kernel +
-                                  brw_wm_prog_data_prog_offset(prog_data, ps, 0);
-         ps.KernelStartPointer1 = params->wm_prog_kernel +
-                                  brw_wm_prog_data_prog_offset(prog_data, ps, 1);
-         ps.KernelStartPointer2 = params->wm_prog_kernel +
-                                  brw_wm_prog_data_prog_offset(prog_data, ps, 2);
-      }
-
       /* 3DSTATE_PS expects the number of threads per PSD, which is always 64
        * for pre Gfx11 and 128 for gfx11+; On gfx11+ If a programmed value is
        * k, it implies 2(k+1) threads. It implicitly scales for different GT
@@ -914,6 +895,25 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          break;
       default:
          unreachable("Invalid fast clear op");
+      }
+
+      if (prog_data) {
+         intel_set_ps_dispatch_state(&ps, devinfo, prog_data,
+                                     params->num_samples);
+
+         ps.DispatchGRFStartRegisterForConstantSetupData0 =
+            brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 0);
+         ps.DispatchGRFStartRegisterForConstantSetupData1 =
+            brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 1);
+         ps.DispatchGRFStartRegisterForConstantSetupData2 =
+            brw_wm_prog_data_dispatch_grf_start_reg(prog_data, ps, 2);
+
+         ps.KernelStartPointer0 = params->wm_prog_kernel +
+                                  brw_wm_prog_data_prog_offset(prog_data, ps, 0);
+         ps.KernelStartPointer1 = params->wm_prog_kernel +
+                                  brw_wm_prog_data_prog_offset(prog_data, ps, 1);
+         ps.KernelStartPointer2 = params->wm_prog_kernel +
+                                  brw_wm_prog_data_prog_offset(prog_data, ps, 2);
       }
    }
 

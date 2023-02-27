@@ -346,12 +346,12 @@ static inline void
 zink_set_fs_point_coord_key(struct zink_context *ctx)
 {
    const struct zink_fs_key_base *fs = zink_get_fs_base_key(ctx);
-   bool disable = ctx->gfx_pipeline_state.rast_prim != PIPE_PRIM_POINTS || !ctx->rast_state->base.sprite_coord_enable;
+   bool disable = ctx->gfx_pipeline_state.rast_prim != PIPE_PRIM_POINTS;
    uint8_t coord_replace_bits = disable ? 0 : ctx->rast_state->base.sprite_coord_enable;
-   bool coord_replace_yinvert = disable ? false : !!ctx->rast_state->base.sprite_coord_mode;
-   if (fs->coord_replace_bits != coord_replace_bits || fs->coord_replace_yinvert != coord_replace_yinvert) {
+   bool point_coord_yinvert = disable ? false : !!ctx->rast_state->base.sprite_coord_mode;
+   if (fs->coord_replace_bits != coord_replace_bits || fs->point_coord_yinvert != point_coord_yinvert) {
       zink_set_fs_base_key(ctx)->coord_replace_bits = coord_replace_bits;
-      zink_set_fs_base_key(ctx)->coord_replace_yinvert = coord_replace_yinvert;
+      zink_set_fs_base_key(ctx)->point_coord_yinvert = point_coord_yinvert;
    }
 }
 

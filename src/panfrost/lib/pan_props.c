@@ -334,6 +334,7 @@ panfrost_close_device(struct panfrost_device *dev)
    if (dev->model) {
       pthread_mutex_destroy(&dev->submit_lock);
       panfrost_bo_unreference(dev->tiler_heap);
+      panfrost_bo_unreference(dev->sample_positions);
       panfrost_bo_cache_evict_all(dev);
       pthread_mutex_destroy(&dev->bo_cache.lock);
       util_sparse_array_finish(&dev->bo_map);

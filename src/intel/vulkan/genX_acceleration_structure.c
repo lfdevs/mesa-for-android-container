@@ -524,7 +524,8 @@ vk_to_grl_VertexFormat(VkFormat format)
 
 static struct Geo
 vk_to_grl_Geo(const VkAccelerationStructureGeometryKHR *pGeometry,
-              uint32_t prim_count)
+              uint32_t prim_count,
+              uint32_t transform_offset)
 {
    struct Geo geo = {
       .Flags = vk_to_grl_GeometryFlags(pGeometry->flags),
@@ -544,6 +545,9 @@ vk_to_grl_Geo(const VkAccelerationStructureGeometryKHR *pGeometry,
       geo.Desc.Triangles.pVertexBuffer =
          vk_tri->vertexData.deviceAddress;
       geo.Desc.Triangles.VertexBufferByteStride = vk_tri->vertexStride;
+
+      if (geo.Desc.Triangles.pTransformBuffer)
+         geo.Desc.Triangles.pTransformBuffer += transform_offset;
 
       if (vk_tri->indexType == VK_INDEX_TYPE_NONE_KHR) {
          geo.Desc.Triangles.IndexCount = 0;
@@ -819,7 +823,8 @@ cmd_build_acceleration_structures(
       for (unsigned g = 0; g < bs->num_geometries; g++) {
          const VkAccelerationStructureGeometryKHR *pGeometry = get_geometry(pInfo, g);
          uint32_t prim_count = pBuildRangeInfos[g].primitiveCount;
-         geos[g] = vk_to_grl_Geo(pGeometry, prim_count);
+         geos[g] = vk_to_grl_Geo(pGeometry, prim_count,
+                                 pBuildRangeInfos[g].transformOffset);
 
          prefixes[g] = prefix_sum;
          prefix_sum += prim_count;

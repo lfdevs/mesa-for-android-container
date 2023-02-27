@@ -114,14 +114,18 @@ v3dv_cl_ensure_space_with_branch(struct v3dv_cl *cl, uint32_t space)
     * end with a 'return from sub list' command.
     */
    bool needs_return_from_sub_list = false;
-   if (cl->job->type == V3DV_JOB_TYPE_GPU_CL_SECONDARY) {
-      if (cl->size > 0) {
+   if (cl->job->type == V3DV_JOB_TYPE_GPU_CL_SECONDARY && cl->size > 0)
          needs_return_from_sub_list = true;
-         space += cl_packet_length(RETURN_FROM_SUB_LIST);
-      }
-   } else {
-      space += cl_packet_length(BRANCH);
-   }
+
+   /*
+    * The CLE processor in the simulator tries to read V3D_CL_MAX_INSTR_SIZE
+    * bytes form the CL for each new instruction. If the last instruction in our
+    * CL is smaller than that, and there are not at least V3D_CL_MAX_INSTR_SIZE
+    * bytes until the end of the BO, it will read out of bounds and possibly
+    * cause a GMP violation interrupt to trigger. Ensure we always have at
+    * least that many bytes available to read with the last instruction.
+    */
+   space += V3D_CL_MAX_INSTR_SIZE;
 
    if (v3dv_cl_offset(cl) + space <= cl->size)
       return;

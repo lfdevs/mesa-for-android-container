@@ -849,12 +849,16 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
       ::llvm::sys::path::append(system_header_path, "opencl-c.h");
       c->getPreprocessorOpts().addRemappedFile(system_header_path.str(),
          ::llvm::MemoryBuffer::getMemBuffer(llvm::StringRef(opencl_c_source, ARRAY_SIZE(opencl_c_source) - 1)).release());
+      ::llvm::sys::path::remove_filename(system_header_path);
 #endif
 
-      ::llvm::sys::path::remove_filename(system_header_path);
       ::llvm::sys::path::append(system_header_path, "opencl-c-base.h");
       c->getPreprocessorOpts().addRemappedFile(system_header_path.str(),
          ::llvm::MemoryBuffer::getMemBuffer(llvm::StringRef(opencl_c_base_source, ARRAY_SIZE(opencl_c_base_source) - 1)).release());
+
+#if LLVM_VERSION_MAJOR >= 15
+      c->getPreprocessorOpts().Includes.push_back("opencl-c-base.h");
+#endif
    }
 #else
    // GetResourcePath is a way to retrive the actual libclang resource dir based on a given binary

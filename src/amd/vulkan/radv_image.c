@@ -285,6 +285,10 @@ radv_use_dcc_for_image_early(struct radv_device *device, struct radv_image *imag
    if (pCreateInfo->samples > 1 && !device->physical_device->use_fmask)
       return false;
 
+   /* FIXME: DCC with mipmaps is broken on GFX11. */
+   if (device->physical_device->rad_info.gfx_level == GFX11 && pCreateInfo->mipLevels > 1)
+      return false;
+
    return radv_are_formats_dcc_compatible(device->physical_device, pCreateInfo->pNext, format,
                                           pCreateInfo->flags, sign_reinterpret);
 }
@@ -794,8 +798,6 @@ si_set_mutable_tex_desc_fields(struct radv_device *device, struct radv_image *im
       }
    } else
       va += (uint64_t)base_level_info->offset_256B * 256;
-
-   swizzle = radv_adjust_tile_swizzle(device->physical_device, swizzle);
 
    state[0] = va >> 8;
    if (gfx_level >= GFX9 || base_level_info->mode == RADEON_SURF_MODE_2D)

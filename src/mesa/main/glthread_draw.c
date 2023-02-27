@@ -407,14 +407,31 @@ draw_arrays_async_user(struct gl_context *ctx, GLenum mode, GLint first,
       memcpy(cmd + 1, buffers, buffers_size);
 }
 
+static inline unsigned
+get_user_buffer_mask(struct gl_context *ctx)
+{
+   struct glthread_vao *vao = ctx->GLThread.CurrentVAO;
+
+   /* BufferEnabled means which attribs are enabled in terms of buffer
+    * binding slots (not attrib slots).
+    *
+    * UserPointerMask means which buffer bindings don't have a buffer bound.
+    *
+    * NonNullPointerMask means which buffer bindings have a NULL pointer.
+    * Those are not uploaded. This can happen when an attrib is enabled, but
+    * the shader doesn't use it, so it's ignored by mesa/state_tracker.
+    */
+   return vao->BufferEnabled & vao->UserPointerMask & vao->NonNullPointerMask;
+}
+
 static ALWAYS_INLINE void
 draw_arrays(GLenum mode, GLint first, GLsizei count, GLsizei instance_count,
             GLuint baseinstance, bool compiled_into_dlist)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   struct glthread_vao *vao = ctx->GLThread.CurrentVAO;
-   unsigned user_buffer_mask = vao->UserPointerMask & vao->BufferEnabled;
+   unsigned user_buffer_mask =
+      ctx->API == API_OPENGL_CORE ? 0 : get_user_buffer_mask(ctx);
 
    if (compiled_into_dlist && ctx->GLThread.ListMode) {
       _mesa_glthread_finish_before(ctx, "DrawArrays");
@@ -537,8 +554,9 @@ _mesa_marshal_MultiDrawArrays(GLenum mode, const GLint *first,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   struct glthread_vao *vao = ctx->GLThread.CurrentVAO;
-   unsigned user_buffer_mask = vao->UserPointerMask & vao->BufferEnabled;
+   unsigned user_buffer_mask =
+      ctx->API == API_OPENGL_CORE || draw_count <= 0 ?
+            0 : get_user_buffer_mask(ctx);
 
    if (ctx->GLThread.ListMode)
       goto sync;
@@ -880,10 +898,10 @@ draw_elements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices,
               bool compiled_into_dlist)
 {
    GET_CURRENT_CONTEXT(ctx);
-
    struct glthread_vao *vao = ctx->GLThread.CurrentVAO;
-   unsigned user_buffer_mask = vao->UserPointerMask & vao->BufferEnabled;
-   bool has_user_indices = vao->CurrentElementBufferName == 0;
+   unsigned user_buffer_mask =
+      ctx->API == API_OPENGL_CORE ? 0 : get_user_buffer_mask(ctx);
+   bool has_user_indices = vao->CurrentElementBufferName == 0 && indices;
 
    if (compiled_into_dlist && ctx->GLThread.ListMode)
       goto sync;
@@ -1103,9 +1121,9 @@ _mesa_marshal_MultiDrawElementsBaseVertex(GLenum mode, const GLsizei *count,
                                           const GLsizei *basevertex)
 {
    GET_CURRENT_CONTEXT(ctx);
-
    struct glthread_vao *vao = ctx->GLThread.CurrentVAO;
-   unsigned user_buffer_mask = vao->UserPointerMask & vao->BufferEnabled;
+   unsigned user_buffer_mask =
+      ctx->API == API_OPENGL_CORE ? 0 : get_user_buffer_mask(ctx);
    bool has_user_indices = vao->CurrentElementBufferName == 0;
 
    if (ctx->GLThread.ListMode)

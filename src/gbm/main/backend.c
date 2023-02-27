@@ -42,7 +42,9 @@
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define VER_MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#if defined(HAVE_DRI) || defined(HAVE_DRI2) || defined(HAVE_DRI3)
 extern const struct gbm_backend gbm_dri_backend;
+#endif
 
 struct gbm_backend_desc {
    const char *name;
@@ -51,7 +53,9 @@ struct gbm_backend_desc {
 };
 
 static const struct gbm_backend_desc builtin_backends[] = {
+#if defined(HAVE_DRI) || defined(HAVE_DRI2) || defined(HAVE_DRI3)
    { "dri", &gbm_dri_backend },
+#endif
 };
 
 #define BACKEND_LIB_SUFFIX "_gbm"

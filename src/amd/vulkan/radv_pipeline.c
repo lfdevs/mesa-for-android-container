@@ -1936,6 +1936,10 @@ radv_lower_io_to_scalar_early(nir_shader *nir, nir_variable_mode mask)
 {
    bool progress = false;
 
+   NIR_PASS(progress, nir, nir_lower_array_deref_of_vec, mask,
+            nir_lower_direct_array_deref_of_vec_load | nir_lower_indirect_array_deref_of_vec_load |
+               nir_lower_direct_array_deref_of_vec_store |
+               nir_lower_indirect_array_deref_of_vec_store);
    NIR_PASS(progress, nir, nir_lower_io_to_scalar_early, mask);
    if (progress) {
       /* Optimize the new vector code and then remove dead vars */

@@ -1662,6 +1662,38 @@ assign_spill_slots_helper(spill_ctx& ctx, RegType type, std::vector<bool>& is_as
 }
 
 void
+end_unused_spill_vgprs(spill_ctx& ctx, Block& block, std::vector<Temp>& vgpr_spill_temps,
+                       const std::vector<uint32_t>& slots,
+                       const std::unordered_map<Temp, uint32_t>& spills)
+{
+   std::vector<bool> is_used(vgpr_spill_temps.size());
+   for (std::pair<Temp, uint32_t> pair : spills) {
+      if (pair.first.type() == RegType::sgpr && ctx.is_reloaded[pair.second])
+         is_used[slots[pair.second] / ctx.wave_size] = true;
+   }
+
+   std::vector<Temp> temps;
+   for (unsigned i = 0; i < vgpr_spill_temps.size(); i++) {
+      if (vgpr_spill_temps[i].id() && !is_used[i]) {
+         temps.push_back(vgpr_spill_temps[i]);
+         vgpr_spill_temps[i] = Temp();
+      }
+   }
+   if (temps.empty())
+      return;
+
+   aco_ptr<Instruction> destr{create_instruction<Pseudo_instruction>(
+      aco_opcode::p_end_linear_vgpr, Format::PSEUDO, temps.size(), 0)};
+   for (unsigned i = 0; i < temps.size(); i++)
+      destr->operands[i] = Operand(temps[i]);
+
+   std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.begin();
+   while (is_phi(*it))
+      ++it;
+   block.instructions.insert(it, std::move(destr));
+}
+
+void
 assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
 {
    std::vector<uint32_t> slots(ctx.interferences.size());
@@ -1709,54 +1741,12 @@ assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
 
    /* replace pseudo instructions with actual hardware instructions */
    unsigned last_top_level_block_idx = 0;
-   std::vector<bool> reload_in_loop(vgpr_spill_temps.size());
    for (Block& block : ctx.program->blocks) {
-
-      /* after loops, we insert a user if there was a reload inside the loop */
-      if (block.loop_nest_depth == 0) {
-         int end_vgprs = 0;
-         for (unsigned i = 0; i < vgpr_spill_temps.size(); i++) {
-            if (reload_in_loop[i])
-               end_vgprs++;
-         }
-
-         if (end_vgprs > 0) {
-            aco_ptr<Instruction> destr{create_instruction<Pseudo_instruction>(
-               aco_opcode::p_end_linear_vgpr, Format::PSEUDO, end_vgprs, 0)};
-            int k = 0;
-            for (unsigned i = 0; i < vgpr_spill_temps.size(); i++) {
-               if (reload_in_loop[i])
-                  destr->operands[k++] = Operand(vgpr_spill_temps[i]);
-               reload_in_loop[i] = false;
-            }
-            /* find insertion point */
-            std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.begin();
-            while ((*it)->opcode == aco_opcode::p_linear_phi || (*it)->opcode == aco_opcode::p_phi)
-               ++it;
-            block.instructions.insert(it, std::move(destr));
-         }
-      }
 
       if (block.kind & block_kind_top_level && !block.linear_preds.empty()) {
          last_top_level_block_idx = block.index;
 
-         /* check if any spilled variables use a created linear vgpr, otherwise destroy them */
-         for (unsigned i = 0; i < vgpr_spill_temps.size(); i++) {
-            if (vgpr_spill_temps[i] == Temp())
-               continue;
-
-            bool can_destroy = true;
-            for (std::pair<Temp, uint32_t> pair : ctx.spills_entry[block.index]) {
-
-               if (ctx.interferences[pair.second].first.type() == RegType::sgpr &&
-                   slots[pair.second] / ctx.wave_size == i) {
-                  can_destroy = false;
-                  break;
-               }
-            }
-            if (can_destroy)
-               vgpr_spill_temps[i] = Temp();
-         }
+         end_unused_spill_vgprs(ctx, block, vgpr_spill_temps, slots, ctx.spills_entry[block.index]);
       }
 
       std::vector<aco_ptr<Instruction>>::iterator it;
@@ -1818,7 +1808,6 @@ assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
                reload_vgpr(ctx, block, instructions, *it, slots);
             } else {
                uint32_t spill_slot = slots[spill_id];
-               reload_in_loop[spill_slot / ctx.wave_size] = block.loop_nest_depth > 0;
 
                /* check if the linear vgpr already exists */
                if (vgpr_spill_temps[spill_slot / ctx.wave_size] == Temp()) {
@@ -1857,58 +1846,6 @@ assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
 
    /* update required scratch memory */
    ctx.program->config->scratch_bytes_per_wave += ctx.vgpr_spill_slots * 4 * ctx.program->wave_size;
-
-   /* SSA elimination inserts copies for logical phis right before p_logical_end
-    * So if a linear vgpr is used between that p_logical_end and the branch,
-    * we need to ensure logical phis don't choose a definition which aliases
-    * the linear vgpr.
-    * TODO: Moving the spills and reloads to before p_logical_end might produce
-    *       slightly better code. */
-   for (Block& block : ctx.program->blocks) {
-      /* loops exits are already handled */
-      if (block.logical_preds.size() <= 1)
-         continue;
-
-      bool has_logical_phis = false;
-      for (aco_ptr<Instruction>& instr : block.instructions) {
-         if (instr->opcode == aco_opcode::p_phi) {
-            has_logical_phis = true;
-            break;
-         } else if (instr->opcode != aco_opcode::p_linear_phi) {
-            break;
-         }
-      }
-      if (!has_logical_phis)
-         continue;
-
-      std::set<Temp> vgprs;
-      for (unsigned pred_idx : block.logical_preds) {
-         Block& pred = ctx.program->blocks[pred_idx];
-         for (int i = pred.instructions.size() - 1; i >= 0; i--) {
-            aco_ptr<Instruction>& pred_instr = pred.instructions[i];
-            if (pred_instr->opcode == aco_opcode::p_logical_end) {
-               break;
-            } else if (pred_instr->opcode == aco_opcode::p_spill ||
-                       pred_instr->opcode == aco_opcode::p_reload) {
-               vgprs.insert(pred_instr->operands[0].getTemp());
-            }
-         }
-      }
-      if (!vgprs.size())
-         continue;
-
-      aco_ptr<Instruction> destr{create_instruction<Pseudo_instruction>(
-         aco_opcode::p_end_linear_vgpr, Format::PSEUDO, vgprs.size(), 0)};
-      int k = 0;
-      for (Temp tmp : vgprs) {
-         destr->operands[k++] = Operand(tmp);
-      }
-      /* find insertion point */
-      std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.begin();
-      while ((*it)->opcode == aco_opcode::p_linear_phi || (*it)->opcode == aco_opcode::p_phi)
-         ++it;
-      block.instructions.insert(it, std::move(destr));
-   }
 }
 
 } /* end namespace */

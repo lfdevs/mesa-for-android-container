@@ -628,6 +628,7 @@ loader_bind_extensions(void *data,
                match->name, match->version);
          if (!match->optional)
             ret = false;
+         continue;
       }
 
       /* The loaders rely on the loaded DRI drivers being from the same Mesa

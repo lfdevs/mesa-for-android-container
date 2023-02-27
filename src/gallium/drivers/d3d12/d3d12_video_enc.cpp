@@ -179,8 +179,13 @@ d3d12_video_encoder_sync_completion(struct pipe_video_codec *codec, uint64_t fen
 
       d3d12_video_encoder_ensure_fence_finished(codec, fenceValueToWaitOn, timeout_ns);
 
-      debug_printf("[d3d12_video_encoder] d3d12_video_encoder_sync_completion - resetting ID3D12CommandAllocator %p suceeded.\n",
+      debug_printf("[d3d12_video_encoder] d3d12_video_encoder_sync_completion - resetting ID3D12CommandAllocator %p...",
          pD3D12Enc->m_inflightResourcesPool[fenceValueToWaitOn % D3D12_VIDEO_ENC_ASYNC_DEPTH].m_spCommandAllocator.Get());
+      hr = pD3D12Enc->m_inflightResourcesPool[fenceValueToWaitOn % D3D12_VIDEO_ENC_ASYNC_DEPTH].m_spCommandAllocator->Reset();
+      if(FAILED(hr)) {
+         debug_printf("failed with %x.\n", hr);
+         goto sync_with_token_fail;
+      }
 
       // Release references granted on end_frame for this inflight operations
       pD3D12Enc->m_inflightResourcesPool[fenceValueToWaitOn % D3D12_VIDEO_ENC_ASYNC_DEPTH].m_spEncoder.Reset();

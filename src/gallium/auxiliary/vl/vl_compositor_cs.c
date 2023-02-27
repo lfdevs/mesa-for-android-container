@@ -36,7 +36,9 @@ struct cs_viewport {
    float scale_x;
    float scale_y;
    struct u_rect area;
-   int translate_x;
+   int crop_x; /* src */
+   int crop_y;
+   int translate_x; /* dst */
    int translate_y;
    float sampler0_w;
    float sampler0_h;
@@ -593,7 +595,7 @@ static const char *compute_shader_yuv_y =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..5]\n"
+      "DCL CONST[0..6]\n"
       "DCL SVIEW[0..2], RECT, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -614,14 +616,17 @@ static const char *compute_shader_yuv_y =
 
       "UIF TEMP[1]\n"
          "MOV TEMP[2], TEMP[0]\n"
+
+         /* Translate */
+         "UADD TEMP[2].xy, TEMP[2], -CONST[5].xyxy\n"
          "U2F TEMP[2], TEMP[2]\n"
 
          /* Scale */
          "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
 
-         /* Translate */
-         "MOV TEMP[4].xy, CONST[5]\n"
-         "I2F TEMP[4], -TEMP[4]\n"
+         /* Crop */
+         "MOV TEMP[4].xy, CONST[6].zwww\n"
+         "I2F TEMP[4], TEMP[4]\n"
          "ADD TEMP[2], TEMP[2], TEMP[4]\n"
          "ADD TEMP[2].y, TEMP[2].yyyy, IMM[1].xxxx\n"
 
@@ -644,7 +649,7 @@ static const char *compute_shader_yuv_uv =
       "DCL SV[0], THREAD_ID\n"
       "DCL SV[1], BLOCK_ID\n"
 
-      "DCL CONST[0..5]\n"
+      "DCL CONST[0..6]\n"
       "DCL SVIEW[0..2], RECT, FLOAT\n"
       "DCL SAMP[0..2]\n"
 
@@ -665,14 +670,17 @@ static const char *compute_shader_yuv_uv =
 
       "UIF TEMP[1]\n"
          "MOV TEMP[2], TEMP[0]\n"
+
+         /* Translate */
+         "UADD TEMP[2].xy, TEMP[2], -CONST[5].xyxy\n"
          "U2F TEMP[2], TEMP[2]\n"
 
          /* Scale */
          "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
 
-         /* Translate */
-         "MOV TEMP[4].xy, CONST[5]\n"
-         "I2F TEMP[4], -TEMP[4]\n"
+         /* Crop */
+         "MOV TEMP[4].xy, CONST[6].zwww\n"
+         "I2F TEMP[4], TEMP[4]\n"
          "ADD TEMP[2], TEMP[2], TEMP[4]\n"
          "ADD TEMP[2].y, TEMP[2].yyyy, IMM[1].xxxx\n"
 
@@ -775,8 +783,8 @@ set_viewport(struct vl_compositor_state *s,
    *ptr_int++ = drawn->area.y0;
    *ptr_int++ = drawn->area.x1;
    *ptr_int++ = drawn->area.y1;
-   *ptr_int++ = -drawn->translate_x;
-   *ptr_int++ = -drawn->translate_y;
+   *ptr_int++ = drawn->translate_x;
+   *ptr_int++ = drawn->translate_y;
 
    ptr_float = (float *)ptr_int;
    *ptr_float++ = drawn->sampler0_w;
@@ -793,6 +801,14 @@ set_viewport(struct vl_compositor_state *s,
                      (float) samplers[0]->texture->height0;
       *ptr_float++ = v_ratio;
    }
+   else {
+      ptr_float++;
+      ptr_float++;
+   }
+   ptr_int = (int *)ptr_float;
+   *ptr_int++ = drawn->crop_x;
+   *ptr_int++ = drawn->crop_y;
+
    pipe_buffer_unmap(s->pipe, buf_transfer);
 
    return true;
@@ -822,8 +838,10 @@ draw_layers(struct vl_compositor       *c,
             ((float)layer->sampler_views[0]->texture->height0 *
              (s->interlaced ? 2.0 : 1.0) *
              (layer->src.br.y - layer->src.tl.y));
-         drawn.translate_x = (int)(layer->src.tl.x * layer->sampler_views[0]->texture->width0);
-         drawn.translate_y = (int)(layer->src.tl.y * layer->sampler_views[0]->texture->height0);
+         drawn.crop_x = (int)(layer->src.tl.x * layer->sampler_views[0]->texture->width0);
+         drawn.translate_x = layer->viewport.translate[0];
+         drawn.crop_y = (int)(layer->src.tl.y * layer->sampler_views[0]->texture->height0);
+         drawn.translate_y = layer->viewport.translate[1];
          drawn.sampler0_w = (float)layer->sampler_views[0]->texture->width0;
          drawn.sampler0_h = (float)layer->sampler_views[0]->texture->height0;
          set_viewport(s, &drawn, samplers);

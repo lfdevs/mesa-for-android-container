@@ -1788,9 +1788,11 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
          /* Adjust pitch like we did for surf_pitch */
          surf->u.gfx9.pitch[i] = align(mip_info[i].pitch / surf->blk_w, alignment);
       }
+      surf->u.gfx9.base_mip_width = surf->u.gfx9.surf_pitch;
+   } else {
+      surf->u.gfx9.base_mip_width = mip_info[0].pitch;
    }
 
-   surf->u.gfx9.base_mip_width = mip_info[0].pitch;
    surf->u.gfx9.base_mip_height = mip_info[0].height;
 
    if (in->flags.depth) {
@@ -1878,6 +1880,12 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
 
          assert(xout.pipeBankXor <= u_bit_consecutive(0, sizeof(surf->tile_swizzle) * 8));
          surf->tile_swizzle = xout.pipeBankXor;
+
+         /* Gfx11 should shift it by 10 bits instead of 8, and drivers already shift it by 8 bits,
+          * so shift it by 2 bits here.
+          */
+         if (info->gfx_level >= GFX11)
+            surf->tile_swizzle <<= 2;
       }
 
       bool use_dcc = false;

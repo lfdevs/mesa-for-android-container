@@ -111,7 +111,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
    if (!flush)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   intel_ds_flush_data_init(&flush->ds, queue->ds, queue->ds->submission_id);
+   intel_ds_flush_data_init(&flush->ds, &queue->ds, queue->ds.submission_id);
 
    result = vk_sync_create(&device->vk, &device->physical->sync_syncobj_type,
                            0, 0, &flush->sync);
@@ -284,10 +284,9 @@ anv_device_utrace_init(struct anv_device *device)
    for (uint32_t q = 0; q < device->queue_count; q++) {
       struct anv_queue *queue = &device->queues[q];
 
-      queue->ds =
-         intel_ds_device_add_queue(&device->ds, "%s%u",
-                                   intel_engines_class_to_string(queue->family->engine_class),
-                                   queue->index_in_family);
+      intel_ds_device_init_queue(&device->ds, &queue->ds, "%s%u",
+                                 intel_engines_class_to_string(queue->family->engine_class),
+                                 queue->vk.index_in_family);
    }
 }
 

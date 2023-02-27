@@ -717,7 +717,7 @@ oa_metrics_available(struct intel_perf_config *perf, int fd,
    perf->i915_perf_version = i915_perf_version(fd);
 
    /* TODO: We should query this from i915 */
-   if (intel_device_info_is_dg2(devinfo))
+   if (devinfo->verx10 >= 125)
       perf->oa_timestamp_shift = 1;
 
    perf->oa_timestamp_mask =

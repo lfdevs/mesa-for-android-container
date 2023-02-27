@@ -304,16 +304,6 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
        !(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
       genX(emit_depth_state_workarounds)(ice, batch, &params->depth.surf);
 
-   /* Flush the render cache in cases where the same surface is used with
-    * different aux modes, which can lead to GPU hangs.  Invalidation of
-    * sampler caches and flushing of any caches which had previously written
-    * the source surfaces should already have been handled by the caller.
-    */
-   if (params->dst.enabled) {
-      iris_cache_flush_for_render(batch, params->dst.addr.buffer,
-                                  params->dst.aux_usage);
-   }
-
    iris_require_command_space(batch, 1400);
 
 #if GFX_VER == 8

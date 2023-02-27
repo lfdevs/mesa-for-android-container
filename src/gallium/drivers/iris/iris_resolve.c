@@ -151,6 +151,12 @@ resolve_image_views(struct iris_context *ice,
                                                    res->aux.clear_color_unknown))
             clear_supported = false;
 
+         /* Issues with compressed cube array image views, see
+          * https://gitlab.freedesktop.org/mesa/mesa/-/issues/7987
+          */
+         if (pview->resource->target == PIPE_TEXTURE_CUBE_ARRAY)
+            clear_supported = false;
+
          iris_resource_prepare_access(ice, res,
                                       pview->u.tex.level, 1,
                                       pview->u.tex.first_layer, num_layers,
@@ -266,7 +272,8 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
                                       surf->view.array_len,
                                       aux_usage);
 
-         iris_cache_flush_for_render(batch, res->bo, aux_usage);
+         iris_emit_buffer_barrier_for(batch, res->bo,
+                                      IRIS_DOMAIN_RENDER_WRITE);
       }
    }
 }
@@ -381,21 +388,19 @@ iris_postdraw_update_resolve_tracking(struct iris_context *ice)
    }
 }
 
-void
-iris_cache_flush_for_render(struct iris_batch *batch,
-                            struct iris_bo *bo,
-                            enum isl_aux_usage aux_usage)
+static void
+flush_previous_aux_mode(struct iris_batch *batch,
+                        const struct iris_bo *bo,
+                        enum isl_aux_usage aux_usage)
 {
-   iris_emit_buffer_barrier_for(batch, bo, IRIS_DOMAIN_RENDER_WRITE);
-
-   /* Check to see if this bo has been used by a previous rendering operation
-    * but with a different aux usage.  If it has, flush the render cache so we
-    * ensure that it's only in there with one aux usage at a time.
+   /* Check to see if this BO has been put into caches by a previous operation
+    * but with a different aux usage.  If it has, flush those caches to ensure
+    * that it's only in there with one aux usage at a time.
     *
-    * Even though it's not obvious, this can easily happen in practice.
+    * Even though it's not obvious, this could easily happen in practice.
     * Suppose a client is blending on a surface with sRGB encode enabled on
     * gfx9.  This implies that you get AUX_USAGE_CCS_D at best.  If the client
-    * then disables sRGB decode and continues blending we will flip on
+    * then disables sRGB decode and continues blending we could flip on
     * AUX_USAGE_CCS_E without doing any sort of resolve in-between (this is
     * perfectly valid since CCS_E is a subset of CCS_D).  However, this means
     * that we have fragments in-flight which are rendering with UNORM+CCS_E
@@ -410,9 +415,9 @@ iris_cache_flush_for_render(struct iris_batch *batch,
     */
    void *v_aux_usage = (void *) (uintptr_t) aux_usage;
    struct hash_entry *entry =
-      _mesa_hash_table_search_pre_hashed(batch->cache.render, bo->hash, bo);
+      _mesa_hash_table_search_pre_hashed(batch->bo_aux_modes, bo->hash, bo);
    if (!entry) {
-      _mesa_hash_table_insert_pre_hashed(batch->cache.render, bo->hash, bo,
+      _mesa_hash_table_insert_pre_hashed(batch->bo_aux_modes, bo->hash, bo,
                                          v_aux_usage);
    } else if (entry->data != v_aux_usage) {
       iris_emit_pipe_control_flush(batch,
@@ -859,6 +864,8 @@ iris_resource_prepare_access(struct iris_context *ice,
          iris_resource_set_aux_state(ice, res, level, layer, 1, new_state);
       }
    }
+
+   flush_previous_aux_mode(batch, res->bo, aux_usage);
 }
 
 void

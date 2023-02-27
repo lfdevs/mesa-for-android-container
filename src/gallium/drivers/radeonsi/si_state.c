@@ -114,7 +114,7 @@ static void si_emit_cb_render_state(struct si_context *sctx)
       if (sctx->gfx_level >= GFX11) {
          radeon_opt_set_context_reg(sctx, R_028424_CB_FDCC_CONTROL, SI_TRACKED_CB_DCC_CONTROL,
                                     S_028424_SAMPLE_MASK_TRACKER_DISABLE(oc_disable) |
-                                    S_028424_SAMPLE_MASK_TRACKER_WATERMARK(15));
+                                    S_028424_SAMPLE_MASK_TRACKER_WATERMARK(0));
       } else {
          radeon_opt_set_context_reg(
             sctx, R_028424_CB_DCC_CONTROL, SI_TRACKED_CB_DCC_CONTROL,
@@ -193,7 +193,8 @@ static void si_emit_cb_render_state(struct si_context *sctx)
                 spi_format == V_028714_SPI_SHADER_UINT16_ABGR ||
                 spi_format == V_028714_SPI_SHADER_SINT16_ABGR) {
                sx_ps_downconvert |= V_028754_SX_RT_EXPORT_8_8_8_8 << (i * 4);
-               sx_blend_opt_epsilon |= V_028758_8BIT_FORMAT << (i * 4);
+               if (G_028C70_NUMBER_TYPE(surf->cb_color_info) != V_028C70_NUMBER_SRGB)
+                  sx_blend_opt_epsilon |= V_028758_8BIT_FORMAT << (i * 4);
             }
             break;
 

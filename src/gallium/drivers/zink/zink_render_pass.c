@@ -642,7 +642,6 @@ begin_render_pass(struct zink_context *ctx)
 {
    struct zink_batch *batch = &ctx->batch;
    struct pipe_framebuffer_state *fb_state = &ctx->fb_state;
-   bool zsbuf_used = ctx->fb_state.zsbuf && zink_is_zsbuf_used(ctx);
 
    VkRenderPassBeginInfo rpbi = {0};
    rpbi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -707,6 +706,7 @@ begin_render_pass(struct zink_context *ctx)
    /* this can be set if fbfetch is activated */
    ctx->rp_changed = false;
 #ifndef NDEBUG
+   bool zsbuf_used = ctx->fb_state.zsbuf && zink_is_zsbuf_used(ctx);
    const unsigned cresolve_offset = ctx->fb_state.nr_cbufs + !!zsbuf_used;
    for (int i = 0; i < ctx->fb_state.nr_cbufs; i++) {
       if (ctx->fb_state.cbufs[i]) {

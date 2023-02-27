@@ -76,6 +76,7 @@ struct glthread_vao {
    GLbitfield BufferEnabled; /**< "Enabled" converted to buffer bindings. */
    GLbitfield BufferInterleaved; /**< Bitmask of buffers used by multiple attribs. */
    GLbitfield UserPointerMask; /**< Bitmask of buffer bindings. */
+   GLbitfield NonNullPointerMask; /**< Bitmask of buffer bindings with non-NULL user pointers. */
    GLbitfield NonZeroDivisorMask; /**< Bitmask of buffer bindings. */
 
    struct {

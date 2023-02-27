@@ -53,7 +53,6 @@ glx@glx_ext_import_context@imported context has same context id,Fail
 glx@glx_ext_import_context@make current- multi process,Fail
 glx@glx_ext_import_context@make current- single process,Fail
 glx@glx_ext_import_context@query context info,Fail
-shaders@glsl-fs-pointcoord,Fail
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
@@ -92,9 +91,7 @@ spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
-spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
 spec@arb_depth_texture@depth-tex-modes,Fail
-spec@arb_framebuffer_object@fbo-gl_pointcoord,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail
 spec@arb_point_sprite@arb_point_sprite-checkerboard,Fail

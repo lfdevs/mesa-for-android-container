@@ -1755,12 +1755,7 @@ emit_task_state(struct anv_graphics_pipeline *pipeline)
       redistrib.SmallTaskThreshold = 1; /* 2^N */
       redistrib.TargetMeshBatchSize = devinfo->num_slices > 2 ? 3 : 5; /* 2^N */
       redistrib.TaskRedistributionLevel = TASKREDISTRIB_BOM;
-
-      /* TODO: We have an unknown issue with Task Payload when task redistribution
-       * is enabled. Disable it for now.
-       * See https://gitlab.freedesktop.org/mesa/mesa/-/issues/7141
-       */
-      redistrib.TaskRedistributionMode = TASKREDISTRIB_OFF;
+      redistrib.TaskRedistributionMode = TASKREDISTRIB_RR_STRICT;
    }
 }
 

@@ -355,7 +355,6 @@ load_text_file(void *ctx, const char *file_name)
          size_t bytes = fread(text + total_read,
                1, size - total_read, fp);
          if (bytes < size - total_read) {
-            free(text);
             text = NULL;
             goto error;
          }

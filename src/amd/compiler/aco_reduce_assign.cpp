@@ -64,30 +64,35 @@ setup_reduce_temp(Program* program)
    Temp vtmp(0, RegClass(RegType::vgpr, maxSize).as_linear());
    int inserted_at = -1;
    int vtmp_inserted_at = -1;
-   bool reduceTmp_in_loop = false;
    bool vtmp_in_loop = false;
 
    for (Block& block : program->blocks) {
 
-      /* insert p_end_linear_vgpr after the outermost loop */
-      if (reduceTmp_in_loop && block.loop_nest_depth == 0) {
-         assert(inserted_at == (int)last_top_level_block_idx);
-
-         aco_ptr<Instruction> end{create_instruction<Instruction>(
-            aco_opcode::p_end_linear_vgpr, Format::PSEUDO, vtmp_in_loop ? 2 : 1, 0)};
-         end->operands[0] = Operand(reduceTmp);
-         if (vtmp_in_loop)
-            end->operands[1] = Operand(vtmp);
-         /* insert after the phis of the loop exit block */
-         std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.begin();
-         while ((*it)->opcode == aco_opcode::p_linear_phi || (*it)->opcode == aco_opcode::p_phi)
-            ++it;
-         block.instructions.insert(it, std::move(end));
-         reduceTmp_in_loop = false;
-      }
-
-      if (block.kind & block_kind_top_level)
+      if (block.kind & block_kind_top_level) {
          last_top_level_block_idx = block.index;
+
+         /* TODO: this could be improved in this case:
+          *    start_linear_vgpr
+          *    if (...) {
+          *       use_linear_vgpr
+          *    }
+          *    end_linear_vgpr
+          * Here, the linear vgpr is used before any phi copies, so this isn't necessary.
+          */
+         if (inserted_at >= 0) {
+            aco_ptr<Instruction> end{create_instruction<Instruction>(
+               aco_opcode::p_end_linear_vgpr, Format::PSEUDO, vtmp_inserted_at >= 0 ? 2 : 1, 0)};
+            end->operands[0] = Operand(reduceTmp);
+            if (vtmp_inserted_at >= 0)
+               end->operands[1] = Operand(vtmp);
+            /* insert after the phis of the block */
+            std::vector<aco_ptr<Instruction>>::iterator it = block.instructions.begin();
+            while ((*it)->opcode == aco_opcode::p_linear_phi || (*it)->opcode == aco_opcode::p_phi)
+               ++it;
+            block.instructions.insert(it, std::move(end));
+            inserted_at = vtmp_inserted_at = -1;
+         }
+      }
 
       if (!hasReductions[block.index])
          continue;
@@ -99,8 +104,6 @@ setup_reduce_temp(Program* program)
              instr->opcode != aco_opcode::p_interp_gfx11 &&
              instr->opcode != aco_opcode::p_bpermute_gfx11w64)
             continue;
-
-         reduceTmp_in_loop |= block.loop_nest_depth > 0;
 
          if ((int)last_top_level_block_idx != inserted_at) {
             reduceTmp = program->allocateTmp(reduceTmp.regClass());

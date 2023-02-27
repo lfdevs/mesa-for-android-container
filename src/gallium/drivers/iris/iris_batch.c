@@ -215,7 +215,7 @@ iris_init_batch(struct iris_context *ice,
    batch->bos_written =
       rzalloc_array(NULL, BITSET_WORD, BITSET_WORDS(batch->exec_array_size));
 
-   batch->cache.render = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
+   batch->bo_aux_modes = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
                                                  _mesa_key_pointer_equal);
 
    batch->num_other_batches = 0;
@@ -596,7 +596,7 @@ iris_batch_free(const struct iris_context *ice, struct iris_batch *batch)
 
    u_trace_fini(&batch->trace);
 
-   _mesa_hash_table_destroy(batch->cache.render, NULL);
+   _mesa_hash_table_destroy(batch->bo_aux_modes, NULL);
 
    if (INTEL_DEBUG(DEBUG_ANY))
       intel_batch_decode_ctx_finish(&batch->decoder);
@@ -1047,10 +1047,10 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 
    }
 
-   uint64_t start_ts = intel_ds_begin_submit(batch->ds);
-   uint64_t submission_id = batch->ds->submission_id;
+   uint64_t start_ts = intel_ds_begin_submit(&batch->ds);
+   uint64_t submission_id = batch->ds.submission_id;
    int ret = submit_batch(batch);
-   intel_ds_end_submit(batch->ds, start_ts);
+   intel_ds_end_submit(&batch->ds, start_ts);
 
    /* When batch submission fails, our end-of-batch syncobj remains
     * unsignalled, and in fact is not even considered submitted.

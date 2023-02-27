@@ -607,6 +607,17 @@ blorp_clear(struct blorp_batch *batch,
    if (batch->blorp->isl_dev->info->ver < 6)
       use_simd16_replicated_data = false;
 
+   /* From the BSpec: 47719 Replicate Data:
+    *
+    * "Replicate Data Render Target Write message should not be used
+    *  on all projects TGL+."
+    *
+    *  See 14017879046, 14017880152 for additional information.
+    */
+   if (batch->blorp->isl_dev->info->ver >= 12 &&
+       format == ISL_FORMAT_R10G10B10_FLOAT_A2_UNORM)
+      use_simd16_replicated_data = false;
+
    if (compute)
       use_simd16_replicated_data = false;
 

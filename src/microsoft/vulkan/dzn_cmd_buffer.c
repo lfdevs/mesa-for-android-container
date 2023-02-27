@@ -28,6 +28,9 @@
 #include "vk_format.h"
 #include "vk_util.h"
 
+#if D3D12_SDK_VERSION >= 608
+static const D3D12_BARRIER_SYNC D3D12_BARRIER_SYNC_INPUT_ASSEMBLER = D3D12_BARRIER_SYNC_INDEX_INPUT;
+#endif
 
 static void
 dzn_cmd_buffer_exec_transition_barriers(struct dzn_cmd_buffer *cmdbuf,

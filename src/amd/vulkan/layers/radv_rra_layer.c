@@ -192,7 +192,7 @@ rra_CreateAccelerationStructureKHR(VkDevice _device,
       goto fail_as;
    }
 
-   data->va = structure->va;
+   data->va = structure->buffer->bo ? radv_acceleration_structure_get_va(structure) : 0;
    data->size = structure->size;
    data->type = pCreateInfo->type;
    data->is_dead = false;
@@ -210,7 +210,9 @@ rra_CreateAccelerationStructureKHR(VkDevice _device,
       goto fail_event;
 
    _mesa_hash_table_insert(device->rra_trace.accel_structs, structure, data);
-   _mesa_hash_table_u64_insert(device->rra_trace.accel_struct_vas, structure->va, structure);
+
+   if (data->va)
+      _mesa_hash_table_u64_insert(device->rra_trace.accel_struct_vas, data->va, structure);
 
    goto exit;
 fail_event:
@@ -251,18 +253,15 @@ copy_accel_struct_to_data(VkCommandBuffer commandBuffer,
 
    vk_common_CmdSetEvent(commandBuffer, data->build_event, 0);
 
-   struct radv_buffer tmp_buffer;
-   radv_buffer_init(&tmp_buffer, cmd_buffer->device, accel_struct->bo, accel_struct->size,
-                    accel_struct->mem_offset);
-
    VkBufferCopy2 region = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+      .srcOffset = accel_struct->offset,
       .size = accel_struct->size,
    };
 
    VkCopyBufferInfo2 copyInfo = {
       .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-      .srcBuffer = radv_buffer_to_handle(&tmp_buffer),
+      .srcBuffer = radv_buffer_to_handle(accel_struct->buffer),
       .dstBuffer = data->buffer,
       .regionCount = 1,
       .pRegions = &region,
@@ -270,7 +269,11 @@ copy_accel_struct_to_data(VkCommandBuffer commandBuffer,
 
    radv_CmdCopyBuffer2(commandBuffer, &copyInfo);
 
-   radv_buffer_finish(&tmp_buffer);
+   if (!data->va) {
+      data->va = radv_acceleration_structure_get_va(accel_struct);
+      _mesa_hash_table_u64_insert(cmd_buffer->device->rra_trace.accel_struct_vas, data->va,
+                                  accel_struct);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL

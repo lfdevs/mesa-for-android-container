@@ -767,7 +767,7 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
          ready[++ready_idx] = i;
    }
 
-   while (to_do_idx >= 0) {
+   while (1) {
       while (ready_idx >= 0) {
          int b = ready[ready_idx--];
          int a = pred[b];
@@ -783,11 +783,6 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
           */
          if (nir_src_is_divergent(values[a]) ==
              nir_src_is_divergent(values[b])) {
-            /* If any other copies want a they can find it at b but only if the
-             * two have the same divergence.
-             */
-            loc[a] = b;
-
             /* If a needs to be filled... */
             if (pred[a] != -1) {
                /* If any other copies want a they can find it at b */
@@ -798,6 +793,11 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
             }
          }
       }
+
+      assert(ready_idx < 0);
+      if (to_do_idx < 0)
+         break;
+
       int b = to_do[to_do_idx--];
       if (pred[b] == -1)
          continue;
@@ -810,6 +810,16 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
        * allocation, so we would rather not create extra register
        * dependencies for the backend to deal with.  If it wants, the
        * backend can coalesce the (possibly multiple) temporaries.
+       *
+       * We can also get here in the case where there is no cycle but our
+       * source value is convergent, is also used as a destination by another
+       * element of the parallel copy, and all the destinations of the
+       * parallel copy which copy from it are divergent. In this case, the
+       * above loop cannot detect that the value has moved due to all the
+       * divergent destinations and we'll end up emitting a copy to a
+       * temporary which never gets used. We can avoid this with additional
+       * tracking or we can just trust the back-end to dead-code the unused
+       * temporary (which is trivial).
        */
       assert(num_vals < num_copies * 2);
       nir_register *reg = nir_local_reg_create(state->builder.impl);

@@ -128,7 +128,7 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
       return false;
 
    if (util_format_is_depth_or_stencil(info->dst.format) &&
-       info->dst.format != info->src.format)
+       (info->dst.format != info->src.format || info->filter == PIPE_TEX_FILTER_LINEAR))
       return false;
 
    /* vkCmdBlitImage must not be used for multisampled source or destination images. */
@@ -252,7 +252,8 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
    VKCTX(CmdBlitImage)(cmdbuf, src->obj->image, src->layout,
                   dst->obj->image, dst->layout,
                   1, &region,
-                  zink_filter(info->filter));
+                  /* VUID-vkCmdBlitImage-srcImage-00232: zs formats must use NEAREST filtering */
+                  util_format_is_depth_or_stencil(info->src.format) ? VK_FILTER_NEAREST : zink_filter(info->filter));
 
    return true;
 }
@@ -355,7 +356,7 @@ zink_blit(struct pipe_context *pctx,
       util_blitter_clear_depth_stencil(ctx->blitter, dst_view, PIPE_CLEAR_STENCIL,
                                        0, 0, info->dst.box.x, info->dst.box.y,
                                        info->dst.box.width, info->dst.box.height);
-      zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
+      zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES | ZINK_BLIT_SAVE_FS_CONST_BUF);
       util_blitter_stencil_fallback(ctx->blitter,
                                     info->dst.resource,
                                     info->dst.level,
@@ -390,8 +391,10 @@ zink_blit_begin(struct zink_context *ctx, enum zink_blit_flags flags)
    util_blitter_save_rasterizer(ctx->blitter, ctx->rast_state);
    util_blitter_save_so_targets(ctx->blitter, ctx->num_so_targets, ctx->so_targets);
 
-   if (flags & ZINK_BLIT_SAVE_FS) {
+   if (flags & ZINK_BLIT_SAVE_FS_CONST_BUF)
       util_blitter_save_fragment_constant_buffer_slot(ctx->blitter, ctx->ubos[MESA_SHADER_FRAGMENT]);
+
+   if (flags & ZINK_BLIT_SAVE_FS) {
       util_blitter_save_blend(ctx->blitter, ctx->gfx_pipeline_state.blend_state);
       util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->dsa_state);
       util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);

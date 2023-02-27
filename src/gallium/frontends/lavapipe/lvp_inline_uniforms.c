@@ -101,7 +101,7 @@ src_only_uses_uniforms(const nir_src *src, int component,
 
          /* Record the uniform offset. */
          if (uni_offsets)
-            uni_offsets[ubo * MAX_INLINABLE_UNIFORMS + num_offsets[ubo]++] = offset;
+            uni_offsets[ubo * PIPE_MAX_CONSTANT_BUFFERS + num_offsets[ubo]++] = offset;
          return true;
       }
       return false;

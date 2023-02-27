@@ -345,7 +345,7 @@ struct radeon_surf {
     * - CMASK if it's TC-compatible or if the gen is GFX9
     * - depth/stencil if HTILE is not TC-compatible and if the gen is not GFX9
     */
-   uint8_t tile_swizzle;
+   uint16_t tile_swizzle; /* it has 16 bits because gfx11 shifts it by 2 bits */
    uint8_t fmask_tile_swizzle;
 
    /* Use (1 << log2) to compute the alignment. */

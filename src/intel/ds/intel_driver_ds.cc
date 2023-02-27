@@ -190,12 +190,10 @@ static void
 send_descriptors(IntelRenderpassDataSource::TraceContext &ctx,
                  struct intel_ds_device *device)
 {
-   struct intel_ds_queue *queue;
-
    PERFETTO_LOG("Sending renderstage descriptors");
 
    device->event_id = 0;
-   u_vector_foreach(queue, &device->queues) {
+   list_for_each_entry_safe(struct intel_ds_queue, queue, &device->queues, link) {
       for (uint32_t s = 0; s < ARRAY_SIZE(queue->stages); s++) {
          queue->stages[s].start_ns = 0;
       }
@@ -227,7 +225,7 @@ send_descriptors(IntelRenderpassDataSource::TraceContext &ctx,
       }
 
       /* Emit all the IID picked at device/queue creation. */
-      u_vector_foreach(queue, &device->queues) {
+      list_for_each_entry_safe(struct intel_ds_queue, queue, &device->queues, link) {
          for (unsigned s = 0; s < INTEL_DS_QUEUE_STAGE_N_STAGES; s++) {
             {
                /* We put the stage number in there so that all rows are order
@@ -534,29 +532,27 @@ intel_ds_device_init(struct intel_ds_device *device,
    device->info = *devinfo;
    device->iid = get_iid();
    device->api = api;
-   u_vector_init(&device->queues, 4, sizeof(struct intel_ds_queue));
+   list_inithead(&device->queues);
 }
 
 void
 intel_ds_device_fini(struct intel_ds_device *device)
 {
    u_trace_context_fini(&device->trace_context);
-   u_vector_finish(&device->queues);
 }
 
 struct intel_ds_queue *
-intel_ds_device_add_queue(struct intel_ds_device *device,
-                          const char *fmt_name,
-                          ...)
+intel_ds_device_init_queue(struct intel_ds_device *device,
+                           struct intel_ds_queue *queue,
+                           const char *fmt_name,
+                           ...)
 {
-   struct intel_ds_queue *queue =
-      (struct intel_ds_queue *) u_vector_add(&device->queues);
    va_list ap;
 
    memset(queue, 0, sizeof(*queue));
 
    queue->device = device;
-   queue->queue_id = u_vector_length(&device->queues) - 1;
+   queue->queue_id = list_length(&device->queues) - 1;
 
    va_start(ap, fmt_name);
    vsnprintf(queue->name, sizeof(queue->name), fmt_name, ap);
@@ -566,6 +562,8 @@ intel_ds_device_add_queue(struct intel_ds_device *device,
       queue->stages[s].queue_iid = get_iid();
       queue->stages[s].stage_iid = get_iid();
    }
+
+   list_add(&queue->link, &device->queues);
 
    return queue;
 }

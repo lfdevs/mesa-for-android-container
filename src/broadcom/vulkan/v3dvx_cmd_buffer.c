@@ -1623,6 +1623,20 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
 {
    assert(primary->state.job);
 
+   /* Typically we postpone applying binning syncs until we see a draw call
+    * that may actually access proteted resources in the binning stage. However,
+    * if the draw calls are recorded in a secondary command buffer and the
+    * barriers were recorded in a primary command buffer, that won't work
+    * and we will have to check if we need a binning sync when executing the
+    * secondary.
+    */
+   struct v3dv_job *primary_job = primary->state.job;
+   if (primary_job->serialize &&
+       (primary->state.barrier.bcl_buffer_access ||
+        primary->state.barrier.bcl_image_access)) {
+      v3dv_cmd_buffer_consume_bcl_sync(primary, primary_job);
+   }
+
    /* Emit occlusion query state if needed so the draw calls inside our
     * secondaries update the counters.
     */
@@ -1668,7 +1682,7 @@ v3dX(cmd_buffer_execute_inside_pass)(struct v3dv_cmd_buffer *primary,
              * the RETURN_FROM_SUB_LIST into the primary job to skip the
              * branch?
              */
-            struct v3dv_job *primary_job = primary->state.job;
+            primary_job = primary->state.job;
             if (!primary_job || secondary_job->serialize ||
                 pending_barrier.dst_mask) {
                const bool needs_bcl_barrier =

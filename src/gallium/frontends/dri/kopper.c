@@ -568,6 +568,7 @@ XXX do this once swapinterval is hooked up
       unsigned bind;
 
       dri_drawable_get_format(drawable, statts[i], &format, &bind);
+      templ.format = format;
 
       /* the texture already exists or not requested */
       if (!drawable->textures[statts[i]]) {
@@ -579,7 +580,6 @@ XXX do this once swapinterval is hooked up
          if (format == PIPE_FORMAT_NONE)
             continue;
 
-         templ.format = format;
          templ.bind = bind;
          templ.nr_samples = 0;
          templ.nr_storage_samples = 0;
@@ -606,7 +606,7 @@ XXX do this once swapinterval is hooked up
          }
       }
       if (drawable->stvis.samples > 1 && !drawable->msaa_textures[statts[i]]) {
-         templ.bind = templ.bind &
+         templ.bind = bind &
             ~(PIPE_BIND_SCANOUT | PIPE_BIND_SHARED | PIPE_BIND_DISPLAY_TARGET);
          templ.nr_samples = drawable->stvis.samples;
          templ.nr_storage_samples = drawable->stvis.samples;

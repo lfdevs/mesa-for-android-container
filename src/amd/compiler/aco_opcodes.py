@@ -710,85 +710,85 @@ for (gfx6, gfx7, gfx8, gfx9, gfx10, gfx11, name) in SMEM:
 # VOP2 instructions: 2 inputs, 1 output (+ optional vcc)
 # TODO: misses some GFX6_7 opcodes which were shifted to VOP3 in GFX8
 VOP2 = {
-  # GFX6, GFX7, GFX8, GFX9, GFX10,GFX11,name, input/output modifiers
-   (0x01, 0x01,   -1,   -1,   -1,   -1, "v_readlane_b32", False),
-   (0x02, 0x02,   -1,   -1,   -1,   -1, "v_writelane_b32", False),
-   (0x03, 0x03, 0x01, 0x01, 0x03, 0x03, "v_add_f32", True),
-   (0x04, 0x04, 0x02, 0x02, 0x04, 0x04, "v_sub_f32", True),
-   (0x05, 0x05, 0x03, 0x03, 0x05, 0x05, "v_subrev_f32", True),
-   (0x06, 0x06,   -1,   -1, 0x06,   -1, "v_mac_legacy_f32", True), #GFX6,7,10
-   (  -1,   -1,   -1,   -1, 0x06, 0x06, "v_fmac_legacy_f32", True), #GFX10.3+, v_fmac_dx9_zero_f32 in GFX11
-   (0x07, 0x07, 0x04, 0x04, 0x07, 0x07, "v_mul_legacy_f32", True), #v_mul_dx9_zero_f32 in GFX11
-   (0x08, 0x08, 0x05, 0x05, 0x08, 0x08, "v_mul_f32", True),
-   (0x09, 0x09, 0x06, 0x06, 0x09, 0x09, "v_mul_i32_i24", False),
-   (0x0a, 0x0a, 0x07, 0x07, 0x0a, 0x0a, "v_mul_hi_i32_i24", False),
-   (0x0b, 0x0b, 0x08, 0x08, 0x0b, 0x0b, "v_mul_u32_u24", False),
-   (0x0c, 0x0c, 0x09, 0x09, 0x0c, 0x0c, "v_mul_hi_u32_u24", False),
-   (  -1,   -1,   -1, 0x39, 0x0d,   -1, "v_dot4c_i32_i8", False),
-   (0x0d, 0x0d,   -1,   -1,   -1,   -1, "v_min_legacy_f32", True),
-   (0x0e, 0x0e,   -1,   -1,   -1,   -1, "v_max_legacy_f32", True),
-   (0x0f, 0x0f, 0x0a, 0x0a, 0x0f, 0x0f, "v_min_f32", True),
-   (0x10, 0x10, 0x0b, 0x0b, 0x10, 0x10, "v_max_f32", True),
-   (0x11, 0x11, 0x0c, 0x0c, 0x11, 0x11, "v_min_i32", False),
-   (0x12, 0x12, 0x0d, 0x0d, 0x12, 0x12, "v_max_i32", False),
-   (0x13, 0x13, 0x0e, 0x0e, 0x13, 0x13, "v_min_u32", False),
-   (0x14, 0x14, 0x0f, 0x0f, 0x14, 0x14, "v_max_u32", False),
-   (0x15, 0x15,   -1,   -1,   -1,   -1, "v_lshr_b32", False),
-   (0x16, 0x16, 0x10, 0x10, 0x16, 0x19, "v_lshrrev_b32", False),
-   (0x17, 0x17,   -1,   -1,   -1,   -1, "v_ashr_i32", False),
-   (0x18, 0x18, 0x11, 0x11, 0x18, 0x1a, "v_ashrrev_i32", False),
-   (0x19, 0x19,   -1,   -1,   -1,   -1, "v_lshl_b32", False),
-   (0x1a, 0x1a, 0x12, 0x12, 0x1a, 0x18, "v_lshlrev_b32", False),
-   (0x1b, 0x1b, 0x13, 0x13, 0x1b, 0x1b, "v_and_b32", False),
-   (0x1c, 0x1c, 0x14, 0x14, 0x1c, 0x1c, "v_or_b32", False),
-   (0x1d, 0x1d, 0x15, 0x15, 0x1d, 0x1d, "v_xor_b32", False),
-   (  -1,   -1,   -1,   -1, 0x1e, 0x1e, "v_xnor_b32", False),
-   (0x1f, 0x1f, 0x16, 0x16, 0x1f,   -1, "v_mac_f32", True),
-   (0x20, 0x20, 0x17, 0x17, 0x20,   -1, "v_madmk_f32", False),
-   (0x21, 0x21, 0x18, 0x18, 0x21,   -1, "v_madak_f32", False),
-   (0x24, 0x24,   -1,   -1,   -1,   -1, "v_mbcnt_hi_u32_b32", False),
-   (0x25, 0x25, 0x19, 0x19,   -1,   -1, "v_add_co_u32", False), # VOP3B only in RDNA
-   (0x26, 0x26, 0x1a, 0x1a,   -1,   -1, "v_sub_co_u32", False), # VOP3B only in RDNA
-   (0x27, 0x27, 0x1b, 0x1b,   -1,   -1, "v_subrev_co_u32", False), # VOP3B only in RDNA
-   (0x28, 0x28, 0x1c, 0x1c, 0x28, 0x20, "v_addc_co_u32", False), # v_add_co_ci_u32 in RDNA
-   (0x29, 0x29, 0x1d, 0x1d, 0x29, 0x21, "v_subb_co_u32", False), # v_sub_co_ci_u32 in RDNA
-   (0x2a, 0x2a, 0x1e, 0x1e, 0x2a, 0x22, "v_subbrev_co_u32", False), # v_subrev_co_ci_u32 in RDNA
-   (  -1,   -1,   -1,   -1, 0x2b, 0x2b, "v_fmac_f32", True),
-   (  -1,   -1,   -1,   -1, 0x2c, 0x2c, "v_fmamk_f32", True),
-   (  -1,   -1,   -1,   -1, 0x2d, 0x2d, "v_fmaak_f32", True),
-   (0x2f, 0x2f,   -1,   -1, 0x2f, 0x2f, "v_cvt_pkrtz_f16_f32", True), #v_cvt_pk_rtz_f16_f32 in GFX11
-   (  -1,   -1, 0x1f, 0x1f, 0x32, 0x32, "v_add_f16", True),
-   (  -1,   -1, 0x20, 0x20, 0x33, 0x33, "v_sub_f16", True),
-   (  -1,   -1, 0x21, 0x21, 0x34, 0x34, "v_subrev_f16", True),
-   (  -1,   -1, 0x22, 0x22, 0x35, 0x35, "v_mul_f16", True),
-   (  -1,   -1, 0x23, 0x23,   -1,   -1, "v_mac_f16", True),
-   (  -1,   -1, 0x24, 0x24,   -1,   -1, "v_madmk_f16", False),
-   (  -1,   -1, 0x25, 0x25,   -1,   -1, "v_madak_f16", False),
-   (  -1,   -1, 0x26, 0x26,   -1,   -1, "v_add_u16", False),
-   (  -1,   -1, 0x27, 0x27,   -1,   -1, "v_sub_u16", False),
-   (  -1,   -1, 0x28, 0x28,   -1,   -1, "v_subrev_u16", False),
-   (  -1,   -1, 0x29, 0x29,   -1,   -1, "v_mul_lo_u16", False),
-   (  -1,   -1, 0x2a, 0x2a,   -1,   -1, "v_lshlrev_b16", False),
-   (  -1,   -1, 0x2b, 0x2b,   -1,   -1, "v_lshrrev_b16", False),
-   (  -1,   -1, 0x2c, 0x2c,   -1,   -1, "v_ashrrev_i16", False),
-   (  -1,   -1, 0x2d, 0x2d, 0x39, 0x39, "v_max_f16", True),
-   (  -1,   -1, 0x2e, 0x2e, 0x3a, 0x3a, "v_min_f16", True),
-   (  -1,   -1, 0x2f, 0x2f,   -1,   -1, "v_max_u16", False),
-   (  -1,   -1, 0x30, 0x30,   -1,   -1, "v_max_i16", False),
-   (  -1,   -1, 0x31, 0x31,   -1,   -1, "v_min_u16", False),
-   (  -1,   -1, 0x32, 0x32,   -1,   -1, "v_min_i16", False),
-   (  -1,   -1, 0x33, 0x33, 0x3b, 0x3b, "v_ldexp_f16", False),
-   (  -1,   -1,   -1, 0x34, 0x25, 0x25, "v_add_u32", False), # called v_add_nc_u32 in RDNA
-   (  -1,   -1,   -1, 0x35, 0x26, 0x26, "v_sub_u32", False), # called v_sub_nc_u32 in RDNA
-   (  -1,   -1,   -1, 0x36, 0x27, 0x27, "v_subrev_u32", False), # called v_subrev_nc_u32 in RDNA
-   (  -1,   -1,   -1,   -1, 0x36, 0x36, "v_fmac_f16", False),
-   (  -1,   -1,   -1,   -1, 0x37, 0x37, "v_fmamk_f16", False),
-   (  -1,   -1,   -1,   -1, 0x38, 0x38, "v_fmaak_f16", False),
-   (  -1,   -1,   -1,   -1, 0x3c, 0x3c, "v_pk_fmac_f16", False),
-   (  -1,   -1,   -1, 0x37, 0x02, 0x02, "v_dot2c_f32_f16", False), #v_dot2acc_f32_f16 in GFX11
+  # GFX6, GFX7, GFX8, GFX9, GFX10,GFX11,name, input modifiers, output modifiers
+   (0x01, 0x01,   -1,   -1,   -1,   -1, "v_readlane_b32", False, False),
+   (0x02, 0x02,   -1,   -1,   -1,   -1, "v_writelane_b32", False, False),
+   (0x03, 0x03, 0x01, 0x01, 0x03, 0x03, "v_add_f32", True, True),
+   (0x04, 0x04, 0x02, 0x02, 0x04, 0x04, "v_sub_f32", True, True),
+   (0x05, 0x05, 0x03, 0x03, 0x05, 0x05, "v_subrev_f32", True, True),
+   (0x06, 0x06,   -1,   -1, 0x06,   -1, "v_mac_legacy_f32", True, True), #GFX6,7,10
+   (  -1,   -1,   -1,   -1, 0x06, 0x06, "v_fmac_legacy_f32", True, True), #GFX10.3+, v_fmac_dx9_zero_f32 in GFX11
+   (0x07, 0x07, 0x04, 0x04, 0x07, 0x07, "v_mul_legacy_f32", True, True), #v_mul_dx9_zero_f32 in GFX11
+   (0x08, 0x08, 0x05, 0x05, 0x08, 0x08, "v_mul_f32", True, True),
+   (0x09, 0x09, 0x06, 0x06, 0x09, 0x09, "v_mul_i32_i24", False, False),
+   (0x0a, 0x0a, 0x07, 0x07, 0x0a, 0x0a, "v_mul_hi_i32_i24", False, False),
+   (0x0b, 0x0b, 0x08, 0x08, 0x0b, 0x0b, "v_mul_u32_u24", False, False),
+   (0x0c, 0x0c, 0x09, 0x09, 0x0c, 0x0c, "v_mul_hi_u32_u24", False, False),
+   (  -1,   -1,   -1, 0x39, 0x0d,   -1, "v_dot4c_i32_i8", False, False),
+   (0x0d, 0x0d,   -1,   -1,   -1,   -1, "v_min_legacy_f32", True, True),
+   (0x0e, 0x0e,   -1,   -1,   -1,   -1, "v_max_legacy_f32", True, True),
+   (0x0f, 0x0f, 0x0a, 0x0a, 0x0f, 0x0f, "v_min_f32", True, True),
+   (0x10, 0x10, 0x0b, 0x0b, 0x10, 0x10, "v_max_f32", True, True),
+   (0x11, 0x11, 0x0c, 0x0c, 0x11, 0x11, "v_min_i32", False, False),
+   (0x12, 0x12, 0x0d, 0x0d, 0x12, 0x12, "v_max_i32", False, False),
+   (0x13, 0x13, 0x0e, 0x0e, 0x13, 0x13, "v_min_u32", False, False),
+   (0x14, 0x14, 0x0f, 0x0f, 0x14, 0x14, "v_max_u32", False, False),
+   (0x15, 0x15,   -1,   -1,   -1,   -1, "v_lshr_b32", False, False),
+   (0x16, 0x16, 0x10, 0x10, 0x16, 0x19, "v_lshrrev_b32", False, False),
+   (0x17, 0x17,   -1,   -1,   -1,   -1, "v_ashr_i32", False, False),
+   (0x18, 0x18, 0x11, 0x11, 0x18, 0x1a, "v_ashrrev_i32", False, False),
+   (0x19, 0x19,   -1,   -1,   -1,   -1, "v_lshl_b32", False, False),
+   (0x1a, 0x1a, 0x12, 0x12, 0x1a, 0x18, "v_lshlrev_b32", False, False),
+   (0x1b, 0x1b, 0x13, 0x13, 0x1b, 0x1b, "v_and_b32", False, False),
+   (0x1c, 0x1c, 0x14, 0x14, 0x1c, 0x1c, "v_or_b32", False, False),
+   (0x1d, 0x1d, 0x15, 0x15, 0x1d, 0x1d, "v_xor_b32", False, False),
+   (  -1,   -1,   -1,   -1, 0x1e, 0x1e, "v_xnor_b32", False, False),
+   (0x1f, 0x1f, 0x16, 0x16, 0x1f,   -1, "v_mac_f32", True, True),
+   (0x20, 0x20, 0x17, 0x17, 0x20,   -1, "v_madmk_f32", False, False),
+   (0x21, 0x21, 0x18, 0x18, 0x21,   -1, "v_madak_f32", False, False),
+   (0x24, 0x24,   -1,   -1,   -1,   -1, "v_mbcnt_hi_u32_b32", False, False),
+   (0x25, 0x25, 0x19, 0x19,   -1,   -1, "v_add_co_u32", False, False), # VOP3B only in RDNA
+   (0x26, 0x26, 0x1a, 0x1a,   -1,   -1, "v_sub_co_u32", False, False), # VOP3B only in RDNA
+   (0x27, 0x27, 0x1b, 0x1b,   -1,   -1, "v_subrev_co_u32", False, False), # VOP3B only in RDNA
+   (0x28, 0x28, 0x1c, 0x1c, 0x28, 0x20, "v_addc_co_u32", False, False), # v_add_co_ci_u32 in RDNA
+   (0x29, 0x29, 0x1d, 0x1d, 0x29, 0x21, "v_subb_co_u32", False, False), # v_sub_co_ci_u32 in RDNA
+   (0x2a, 0x2a, 0x1e, 0x1e, 0x2a, 0x22, "v_subbrev_co_u32", False, False), # v_subrev_co_ci_u32 in RDNA
+   (  -1,   -1,   -1,   -1, 0x2b, 0x2b, "v_fmac_f32", True, True),
+   (  -1,   -1,   -1,   -1, 0x2c, 0x2c, "v_fmamk_f32", True, True),
+   (  -1,   -1,   -1,   -1, 0x2d, 0x2d, "v_fmaak_f32", True, True),
+   (0x2f, 0x2f,   -1,   -1, 0x2f, 0x2f, "v_cvt_pkrtz_f16_f32", True, False), #v_cvt_pk_rtz_f16_f32 in GFX11
+   (  -1,   -1, 0x1f, 0x1f, 0x32, 0x32, "v_add_f16", True, True),
+   (  -1,   -1, 0x20, 0x20, 0x33, 0x33, "v_sub_f16", True, True),
+   (  -1,   -1, 0x21, 0x21, 0x34, 0x34, "v_subrev_f16", True, True),
+   (  -1,   -1, 0x22, 0x22, 0x35, 0x35, "v_mul_f16", True, True),
+   (  -1,   -1, 0x23, 0x23,   -1,   -1, "v_mac_f16", True, True),
+   (  -1,   -1, 0x24, 0x24,   -1,   -1, "v_madmk_f16", False, False),
+   (  -1,   -1, 0x25, 0x25,   -1,   -1, "v_madak_f16", False, False),
+   (  -1,   -1, 0x26, 0x26,   -1,   -1, "v_add_u16", False, False),
+   (  -1,   -1, 0x27, 0x27,   -1,   -1, "v_sub_u16", False, False),
+   (  -1,   -1, 0x28, 0x28,   -1,   -1, "v_subrev_u16", False, False),
+   (  -1,   -1, 0x29, 0x29,   -1,   -1, "v_mul_lo_u16", False, False),
+   (  -1,   -1, 0x2a, 0x2a,   -1,   -1, "v_lshlrev_b16", False, False),
+   (  -1,   -1, 0x2b, 0x2b,   -1,   -1, "v_lshrrev_b16", False, False),
+   (  -1,   -1, 0x2c, 0x2c,   -1,   -1, "v_ashrrev_i16", False, False),
+   (  -1,   -1, 0x2d, 0x2d, 0x39, 0x39, "v_max_f16", True, True),
+   (  -1,   -1, 0x2e, 0x2e, 0x3a, 0x3a, "v_min_f16", True, True),
+   (  -1,   -1, 0x2f, 0x2f,   -1,   -1, "v_max_u16", False, False),
+   (  -1,   -1, 0x30, 0x30,   -1,   -1, "v_max_i16", False, False),
+   (  -1,   -1, 0x31, 0x31,   -1,   -1, "v_min_u16", False, False),
+   (  -1,   -1, 0x32, 0x32,   -1,   -1, "v_min_i16", False, False),
+   (  -1,   -1, 0x33, 0x33, 0x3b, 0x3b, "v_ldexp_f16", False, False),
+   (  -1,   -1,   -1, 0x34, 0x25, 0x25, "v_add_u32", False, False), # called v_add_nc_u32 in RDNA
+   (  -1,   -1,   -1, 0x35, 0x26, 0x26, "v_sub_u32", False, False), # called v_sub_nc_u32 in RDNA
+   (  -1,   -1,   -1, 0x36, 0x27, 0x27, "v_subrev_u32", False, False), # called v_subrev_nc_u32 in RDNA
+   (  -1,   -1,   -1,   -1, 0x36, 0x36, "v_fmac_f16", False, False),
+   (  -1,   -1,   -1,   -1, 0x37, 0x37, "v_fmamk_f16", False, False),
+   (  -1,   -1,   -1,   -1, 0x38, 0x38, "v_fmaak_f16", False, False),
+   (  -1,   -1,   -1,   -1, 0x3c, 0x3c, "v_pk_fmac_f16", False, False),
+   (  -1,   -1,   -1, 0x37, 0x02, 0x02, "v_dot2c_f32_f16", False, False), #v_dot2acc_f32_f16 in GFX11
 }
-for (gfx6, gfx7, gfx8, gfx9, gfx10, gfx11, name, modifiers) in VOP2:
-   opcode(name, gfx7, gfx9, gfx10, gfx11, Format.VOP2, InstrClass.Valu32, modifiers, modifiers)
+for (gfx6, gfx7, gfx8, gfx9, gfx10, gfx11, name, in_mod, out_mod) in VOP2:
+   opcode(name, gfx7, gfx9, gfx10, gfx11, Format.VOP2, InstrClass.Valu32, in_mod, out_mod)
 
 if True:
     # v_cndmask_b32 can use input modifiers but not output modifiers
@@ -1186,18 +1186,18 @@ VOP3 = {
    (   -1,    -1,    -1,    -1,    -1, 0x25f, "v_minmax_f32", True, True),
    (   -1,    -1,    -1,    -1,    -1, 0x260, "v_maxmin_f16", True, True),
    (   -1,    -1,    -1,    -1,    -1, 0x261, "v_minmax_f16", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x262, "v_maxmin_u32", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x263, "v_minmax_u32", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x264, "v_maxmin_i32", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x265, "v_minmax_i32", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x266, "v_dot2_f16_f16", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x267, "v_dot2_bf16_bf16", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x306, "v_cvt_pk_i16_f32", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x307, "v_cvt_pk_u16_f32", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x362, "v_and_b16", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x363, "v_or_b16", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x364, "v_xor_b16", True, True),
-   (   -1,    -1,    -1,    -1,    -1, 0x25d, "v_cndmask_b16", True, True),
+   (   -1,    -1,    -1,    -1,    -1, 0x262, "v_maxmin_u32", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x263, "v_minmax_u32", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x264, "v_maxmin_i32", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x265, "v_minmax_i32", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x266, "v_dot2_f16_f16", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x267, "v_dot2_bf16_bf16", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x306, "v_cvt_pk_i16_f32", True, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x307, "v_cvt_pk_u16_f32", True, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x362, "v_and_b16", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x363, "v_or_b16", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x364, "v_xor_b16", False, False),
+   (   -1,    -1,    -1,    -1,    -1, 0x25d, "v_cndmask_b16", True, False),
 }
 for (gfx6, gfx7, gfx8, gfx9, gfx10, gfx11, name, in_mod, out_mod, cls) in default_class(VOP3, InstrClass.Valu32):
    opcode(name, gfx7, gfx9, gfx10, gfx11, Format.VOP3, cls, in_mod, out_mod)

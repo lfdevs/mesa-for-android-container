@@ -1146,6 +1146,7 @@ endif
 c_msvc_compat_args = []
 no_override_init_args = []
 cpp_msvc_compat_args = []
+ld_args_gc_sections = []
 if cc.get_argument_syntax() == 'msvc'
   _trial = [
     '/wd4018',  # signed/unsigned mismatch
@@ -1225,17 +1226,19 @@ else
   # own sections and GC the sections after linking.  This lets drivers
   # drop shared code unused by that specific driver (particularly
   # relevant for Vulkan drivers).
-  if cc.has_link_argument('-Wl,--gc-sections')
+  if cc.links('static char unused() { return 5; } int main() { return 0; }',
+              args : '-Wl,--gc-sections', name : 'gc-sections')
+    ld_args_gc_sections += '-Wl,--gc-sections'
     _trial_c += ['-ffunction-sections', '-fdata-sections']
     _trial_cpp += ['-ffunction-sections', '-fdata-sections']
   endif
 
-  # Variables that are only used for assertions are considered unused in release
-  # builds. Don't treat this as an error, since we build with -Werror even for
-  # release in CI.
-  if get_option('buildtype') == 'release'
-    _trial_c += ['-Wno-unused-variable', '-Wno-unused-but-set-variable']
-    _trial_cpp += ['-Wno-unused-variable', '-Wno-unused-but-set-variable']
+  # Variables that are only used for assertions are considered unused when assertions
+  # are disabled. Don't treat this as an error, since we build with -Werror even if
+  # assertions are disabled.
+  if get_option('b_ndebug') == 'true' or (get_option('buildtype') == 'release' and get_option('b_ndebug') == 'if-release')
+    _trial_c += ['-Wno-unused-variable', '-Wno-unused-but-set-variable', '/wd4189']
+    _trial_cpp += ['-Wno-unused-variable', '-Wno-unused-but-set-variable', '/wd4189']
   endif
 
   c_args += cc.get_supported_arguments(_trial_c)
@@ -1560,11 +1563,6 @@ ld_args_bsymbolic = []
 if cc.links('int main() { return 0; }', args : '-Wl,-Bsymbolic', name : 'Bsymbolic')
   ld_args_bsymbolic += '-Wl,-Bsymbolic'
 endif
-ld_args_gc_sections = []
-if cc.links('static char unused() { return 5; } int main() { return 0; }',
-            args : '-Wl,--gc-sections', name : 'gc-sections')
-  ld_args_gc_sections += '-Wl,--gc-sections'
-endif
 with_ld_version_script = false
 if cc.links('int main() { return 0; }',
             args : '-Wl,--version-script=@0@'.format(
@@ -1671,12 +1669,17 @@ if opt_xmlconfig.enabled() and not supports_xmlconfig
 endif
 use_xmlconfig = supports_xmlconfig and not opt_xmlconfig.disabled()
 
-if host_machine.system() == 'darwin'
-  dep_expat = meson.get_compiler('c').find_library('expat')
+if use_xmlconfig
+  if host_machine.system() == 'darwin'
+    dep_expat = meson.get_compiler('c').find_library('expat', required : opt_xmlconfig)
+  else
+    dep_expat = dependency('expat', fallback : ['expat', 'expat_dep'],
+                           required : opt_xmlconfig)
+  endif
 else
-  dep_expat = dependency('expat', fallback : ['expat', 'expat_dep'],
-                         required: use_xmlconfig)
+  dep_expat = null_dep
 endif
+
 # Predefined macros for windows
 if host_machine.system() == 'windows'
   pre_args += '-DWIN32_LEAN_AND_MEAN' # http://msdn2.microsoft.com/en-us/library/6dwk3a1z.aspx

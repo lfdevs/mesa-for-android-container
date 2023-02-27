@@ -1616,7 +1616,7 @@ anv_execbuf_add_syncobj(struct anv_device *device,
       .handle = syncobj,
       .flags = flags,
    };
-   if (timeline_value)
+   if (exec->syncobj_values)
       exec->syncobj_values[exec->syncobj_count] = timeline_value;
 
    exec->syncobj_count++;
@@ -1684,9 +1684,11 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
          return result;
    } else {
       /* Add surface dependencies (BOs) to the execbuf */
-      anv_execbuf_add_bo_bitset(cmd_buffer->device, execbuf,
-                                cmd_buffer->surface_relocs.dep_words,
-                                cmd_buffer->surface_relocs.deps, 0);
+      result = anv_execbuf_add_bo_bitset(cmd_buffer->device, execbuf,
+                                         cmd_buffer->surface_relocs.dep_words,
+                                         cmd_buffer->surface_relocs.deps, 0);
+      if (result != VK_SUCCESS)
+         return result;
    }
 
    /* First, we walk over all of the bos we've seen and add them and their
@@ -2383,14 +2385,14 @@ anv_queue_submit(struct vk_queue *vk_queue,
       return VK_SUCCESS;
    }
 
-   uint64_t start_ts = intel_ds_begin_submit(queue->ds);
+   uint64_t start_ts = intel_ds_begin_submit(&queue->ds);
 
    pthread_mutex_lock(&device->mutex);
    result = anv_queue_submit_locked(queue, submit);
    /* Take submission ID under lock */
    pthread_mutex_unlock(&device->mutex);
 
-   intel_ds_end_submit(queue->ds, start_ts);
+   intel_ds_end_submit(&queue->ds, start_ts);
 
    return result;
 }
