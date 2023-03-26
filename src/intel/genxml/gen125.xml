@@ -938,7 +938,7 @@
     <field name="Return Filter Weight for Null Texels" start="66" end="66" type="uint" />
     <field name="Return Filter Weight for Border Texels" start="67" end="67" type="uint" />
     <field name="Force gather4 Behavior" start="69" end="69" type="bool" />
-    <field name="Border Color Pointer" start="70" end="87" type="offset" />
+    <field name="Border Color Pointer" start="70" end="95" type="offset" />
     <field name="TCZ Address Control Mode" start="96" end="98" type="Texture Coordinate Mode" />
     <field name="TCY Address Control Mode" start="99" end="101" type="Texture Coordinate Mode" />
     <field name="TCX Address Control Mode" start="102" end="104" type="Texture Coordinate Mode" />
@@ -6817,7 +6817,7 @@
     <field name="Bindless Surface State Base Address Modify Enable" start="512" end="512" type="bool" />
     <field name="Bindless Surface State MOCS" start="516" end="522" type="uint" nonzero="true" />
     <field name="Bindless Surface State Base Address" start="524" end="575" type="address" />
-    <field name="Bindless Surface State Size" start="588" end="607" type="uint" />
+    <field name="Bindless Surface State Size" start="576" end="607" type="uint" />
     <field name="Bindless Sampler State Base Address Modify Enable" start="608" end="608" type="bool" />
     <field name="Bindless Sampler State MOCS" start="612" end="618" type="uint" nonzero="true" />
     <field name="Bindless Sampler State Base Address" start="620" end="671" type="address" />

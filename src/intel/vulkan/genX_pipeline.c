@@ -828,77 +828,6 @@ const uint32_t genX(vk_to_intel_primitive_type)[] = {
    [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
 };
 
-static inline uint32_t *
-write_disabled_blend(uint32_t *state)
-{
-   struct GENX(BLEND_STATE_ENTRY) entry = {
-      .WriteDisableAlpha = true,
-      .WriteDisableRed = true,
-      .WriteDisableGreen = true,
-      .WriteDisableBlue = true,
-   };
-   GENX(BLEND_STATE_ENTRY_pack)(NULL, state, &entry);
-   return state + GENX(BLEND_STATE_ENTRY_length);
-}
-
-static void
-emit_cb_state(struct anv_graphics_pipeline *pipeline,
-              const struct vk_color_blend_state *cb,
-              const struct vk_multisample_state *ms)
-{
-   uint32_t surface_count = 0;
-   struct anv_pipeline_bind_map *map;
-   if (anv_pipeline_has_stage(pipeline, MESA_SHADER_FRAGMENT)) {
-      map = &pipeline->shaders[MESA_SHADER_FRAGMENT]->bind_map;
-      surface_count = map->surface_count;
-   }
-
-   uint32_t *state_pos = pipeline->gfx8.blend_state;
-
-   state_pos += GENX(BLEND_STATE_length);
-   for (unsigned i = 0; i < surface_count; i++) {
-      struct anv_pipeline_binding *binding = &map->surface_to_descriptor[i];
-
-      /* All color attachments are at the beginning of the binding table */
-      if (binding->set != ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS)
-         break;
-
-      /* We can have at most 8 attachments */
-      assert(i < MAX_RTS);
-
-      if (cb == NULL || binding->index >= cb->attachment_count) {
-         state_pos = write_disabled_blend(state_pos);
-         continue;
-      }
-
-      struct GENX(BLEND_STATE_ENTRY) entry = {
-         /* Vulkan specification 1.2.168, VkLogicOp:
-          *
-          *   "Logical operations are controlled by the logicOpEnable and
-          *    logicOp members of VkPipelineColorBlendStateCreateInfo. If
-          *    logicOpEnable is VK_TRUE, then a logical operation selected by
-          *    logicOp is applied between each color attachment and the
-          *    fragment’s corresponding output value, and blending of all
-          *    attachments is treated as if it were disabled."
-          *
-          * From the Broadwell PRM Volume 2d: Command Reference: Structures:
-          * BLEND_STATE_ENTRY:
-          *
-          *   "Enabling LogicOp and Color Buffer Blending at the same time is
-          *    UNDEFINED"
-          *
-          * Above is handled during emit since these states are dynamic.
-          */
-         .ColorClampRange = COLORCLAMP_RTFORMAT,
-         .PreBlendColorClampEnable = true,
-         .PostBlendColorClampEnable = true,
-      };
-
-      GENX(BLEND_STATE_ENTRY_pack)(NULL, state_pos, &entry);
-      state_pos += GENX(BLEND_STATE_ENTRY_length);
-   }
-}
-
 static void
 emit_3dstate_clip(struct anv_graphics_pipeline *pipeline,
                   const struct vk_input_assembly_state *ia,
@@ -1842,7 +1771,6 @@ genX(graphics_pipeline_emit)(struct anv_graphics_pipeline *pipeline,
    emit_rs_state(pipeline, state->ia, state->rs, state->ms, state->rp,
                            urb_deref_block_size);
    emit_ms_state(pipeline, state->ms);
-   emit_cb_state(pipeline, state->cb, state->ms);
    compute_kill_pixel(pipeline, state->ms, state->rp);
 
    emit_3dstate_clip(pipeline, state->ia, state->vp, state->rs);

@@ -1779,14 +1779,18 @@ static int gfx9_compute_miptree(struct ac_addrlib *addrlib, const struct radeon_
          MAX2(surf->u.gfx9.surf_slice_size,
               surf->u.gfx9.surf_pitch * out.height * surf->bpe * surf->blk_w);
       surf->surf_size = surf->u.gfx9.surf_slice_size * in->numSlices;
-   }
 
-   if (in->swizzleMode == ADDR_SW_LINEAR) {
       int alignment = 256 / surf->bpe;
       for (unsigned i = 0; i < in->numMipLevels; i++) {
          surf->u.gfx9.offset[i] = mip_info[i].offset;
          /* Adjust pitch like we did for surf_pitch */
          surf->u.gfx9.pitch[i] = align(mip_info[i].pitch / surf->blk_w, alignment);
+      }
+      surf->u.gfx9.base_mip_width = surf->u.gfx9.surf_pitch;
+   } else if (in->swizzleMode == ADDR_SW_LINEAR) {
+      for (unsigned i = 0; i < in->numMipLevels; i++) {
+         surf->u.gfx9.offset[i] = mip_info[i].offset;
+         surf->u.gfx9.pitch[i] = mip_info[i].pitch;
       }
       surf->u.gfx9.base_mip_width = surf->u.gfx9.surf_pitch;
    } else {

@@ -51,14 +51,7 @@ void main()
    uint indirect_data_offset = item_idx * indirect_data_stride / 4;
    uint _3dprim_dw_size = 10;
    uint cmd_idx = item_idx * _3dprim_dw_size;
-
-   /* Loading a VkDrawIndexedIndirectCommand */
-   uint index_count    = indirect_data[indirect_data_offset + 0];
-   uint instance_count = indirect_data[indirect_data_offset + 1];
-   uint first_index    = indirect_data[indirect_data_offset + 2];
-   uint vertex_offset  = indirect_data[indirect_data_offset + 3];
-   uint first_instance = indirect_data[indirect_data_offset + 4];
-   uint draw_id        = draw_base + item_idx;
+   uint draw_id = draw_base + item_idx;
 
    if (draw_id < draw_count) {
       if (is_indexed != 0) {

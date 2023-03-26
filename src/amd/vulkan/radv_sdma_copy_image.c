@@ -94,7 +94,7 @@ radv_sdma_v4_v5_copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct 
 
       radeon_emit(cmd_buffer->cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
                                                   CIK_SDMA_COPY_SUB_OPCODE_LINEAR, (tmz ? 4 : 0)));
-      radeon_emit(cmd_buffer->cs, bytes);
+      radeon_emit(cmd_buffer->cs, bytes - 1);
       radeon_emit(cmd_buffer->cs, 0);
       radeon_emit(cmd_buffer->cs, src_address);
       radeon_emit(cmd_buffer->cs, src_address >> 32);

@@ -1044,6 +1044,9 @@ struct LdsDirectVALUHazardGlobalState {
 struct LdsDirectVALUHazardBlockState {
    unsigned num_valu = 0;
    bool has_trans = false;
+
+   unsigned num_instrs = 0;
+   unsigned num_blocks = 0;
 };
 
 bool
@@ -1074,6 +1077,14 @@ handle_lds_direct_valu_hazard_instr(LdsDirectVALUHazardGlobalState& global_state
    if (parse_vdst_wait(instr) == 0)
       return true;
 
+   block_state.num_instrs++;
+   if (block_state.num_instrs > 256 || block_state.num_blocks > 32) {
+      /* Exit to limit compile times and set wait_vdst to be safe. */
+      global_state.wait_vdst =
+         MIN2(global_state.wait_vdst, block_state.has_trans ? 0 : block_state.num_valu);
+      return true;
+   }
+
    return block_state.num_valu >= global_state.wait_vdst;
 }
 
@@ -1086,6 +1097,8 @@ handle_lds_direct_valu_hazard_block(LdsDirectVALUHazardGlobalState& global_state
          return false;
       global_state.loop_headers_visited.insert(block->index);
    }
+
+   block_state.num_blocks++;
 
    return true;
 }

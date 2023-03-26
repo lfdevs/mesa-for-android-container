@@ -28,8 +28,6 @@
     GALLIVM_PERF: "no_quad_lod"
 
 zink-lvp:
-  tags:
-    - mesa-swrast
   extends:
     - .test-gl
     - .deqp-test

@@ -37,12 +37,15 @@ void vlVaHandlePictureParameterBufferVP9(vlVaDriver *drv, vlVaContext *context, 
 
    assert(buf->size >= sizeof(VADecPictureParameterBufferVP9) && buf->num_elements == 1);
 
+   context->desc.vp9.picture_parameter.prev_frame_width = context->desc.vp9.picture_parameter.frame_width;
+   context->desc.vp9.picture_parameter.prev_frame_height = context->desc.vp9.picture_parameter.frame_height;
    context->desc.vp9.picture_parameter.frame_width = vp9->frame_width;
    context->desc.vp9.picture_parameter.frame_height = vp9->frame_height;
 
    context->desc.vp9.picture_parameter.pic_fields.subsampling_x = vp9->pic_fields.bits.subsampling_x;
    context->desc.vp9.picture_parameter.pic_fields.subsampling_y = vp9->pic_fields.bits.subsampling_y;
    context->desc.vp9.picture_parameter.pic_fields.frame_type = vp9->pic_fields.bits.frame_type;
+   context->desc.vp9.picture_parameter.pic_fields.prev_show_frame = context->desc.vp9.picture_parameter.pic_fields.show_frame;
    context->desc.vp9.picture_parameter.pic_fields.show_frame = vp9->pic_fields.bits.show_frame;
    context->desc.vp9.picture_parameter.pic_fields.error_resilient_mode = vp9->pic_fields.bits.error_resilient_mode;
    context->desc.vp9.picture_parameter.pic_fields.intra_only = vp9->pic_fields.bits.intra_only;

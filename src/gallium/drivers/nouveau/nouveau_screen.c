@@ -241,6 +241,8 @@ nouveau_pushbuf_create(struct nouveau_screen *screen, struct nouveau_context *co
 void
 nouveau_pushbuf_destroy(struct nouveau_pushbuf **push)
 {
+   if (!*push)
+      return;
    FREE((*push)->user_priv);
    nouveau_pushbuf_del(push);
 }

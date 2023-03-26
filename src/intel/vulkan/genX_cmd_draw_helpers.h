@@ -120,7 +120,7 @@ update_dirty_vbs_for_gfx8_vb_flush(struct anv_cmd_buffer *cmd_buffer,
       vb_used |= 1ull << ANV_DRAWID_VB_INDEX;
 
    genX(cmd_buffer_update_dirty_vbs_for_gfx8_vb_flush)(cmd_buffer,
-                                                       access_type == RANDOM,
+                                                       access_type,
                                                        vb_used);
 #endif
 }

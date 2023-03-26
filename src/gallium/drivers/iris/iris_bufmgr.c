@@ -308,8 +308,12 @@ bucket_info_for_heap(struct iris_bufmgr *bufmgr, enum iris_heap heap,
  */
 static struct bo_cache_bucket *
 bucket_for_size(struct iris_bufmgr *bufmgr, uint64_t size,
-                enum iris_heap heap)
+                enum iris_heap heap, unsigned flags)
 {
+   /* Protected bo needs special handling during allocation */
+   if (flags & BO_ALLOC_PROTECTED)
+      return NULL;
+
    /* Calculating the pages and rounding up to the page size. */
    const unsigned pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
@@ -872,8 +876,7 @@ alloc_bo_from_cache(struct iris_bufmgr *bufmgr,
                     unsigned flags,
                     bool match_zone)
 {
-   /* Don't put anything protected in the BO cache. */
-   if (!bucket || (flags & BO_ALLOC_PROTECTED))
+   if (!bucket)
       return NULL;
 
    struct iris_bo *bo = NULL;
@@ -1080,7 +1083,7 @@ iris_bo_alloc(struct iris_bufmgr *bufmgr,
    unsigned int page_size = getpagesize();
    enum iris_heap heap = flags_to_heap(bufmgr, flags);
    bool local = heap != IRIS_HEAP_SYSTEM_MEMORY;
-   struct bo_cache_bucket *bucket = bucket_for_size(bufmgr, size, heap);
+   struct bo_cache_bucket *bucket = bucket_for_size(bufmgr, size, heap, flags);
 
    if (memzone != IRIS_MEMZONE_OTHER || (flags & BO_ALLOC_COHERENT))
       flags |= BO_ALLOC_NO_SUBALLOC;
@@ -1480,7 +1483,7 @@ bo_unreference_final(struct iris_bo *bo, time_t time)
 
    bucket = NULL;
    if (bo->real.reusable)
-      bucket = bucket_for_size(bufmgr, bo->size, bo->real.heap);
+      bucket = bucket_for_size(bufmgr, bo->size, bo->real.heap, 0);
    /* Put the buffer into our internal cache for reuse if we can. */
    if (bucket && iris_bo_madvise(bo, I915_MADV_DONTNEED)) {
       bo->real.free_time = time;
@@ -2135,9 +2138,9 @@ add_bucket(struct iris_bufmgr *bufmgr, int size, enum iris_heap heap)
    list_inithead(&buckets[i].head);
    buckets[i].size = size;
 
-   assert(bucket_for_size(bufmgr, size, heap) == &buckets[i]);
-   assert(bucket_for_size(bufmgr, size - 2048, heap) == &buckets[i]);
-   assert(bucket_for_size(bufmgr, size + 1, heap) != &buckets[i]);
+   assert(bucket_for_size(bufmgr, size, heap, 0) == &buckets[i]);
+   assert(bucket_for_size(bufmgr, size - 2048, heap, 0) == &buckets[i]);
+   assert(bucket_for_size(bufmgr, size + 1, heap, 0) != &buckets[i]);
 }
 
 static void

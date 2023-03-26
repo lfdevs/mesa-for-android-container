@@ -2082,11 +2082,8 @@ get_reg_phi(ra_ctx& ctx, IDSet& live_in, RegisterFile& register_file,
 
       /* rename */
       std::unordered_map<unsigned, Temp>::iterator orig_it = ctx.orig_names.find(pc.first.tempId());
-      Temp orig = pc.first.getTemp();
-      if (orig_it != ctx.orig_names.end())
-         orig = orig_it->second;
-      else
-         ctx.orig_names[pc.second.tempId()] = orig;
+      Temp orig = orig_it != ctx.orig_names.end() ? orig_it->second : pc.first.getTemp();
+      ctx.orig_names[pc.second.tempId()] = orig;
       ctx.renames[block.index][orig.id()] = pc.second.getTemp();
 
       /* otherwise, this is a live-in and we need to create a new phi

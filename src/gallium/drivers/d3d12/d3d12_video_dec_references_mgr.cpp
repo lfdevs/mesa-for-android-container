@@ -69,7 +69,7 @@ d3d12_video_decoder_references_manager::get_current_frame_decode_output_texture(
    assert(m_DecodeTargetToOriginalIndex7Bits.count(pCurrentDecodeTarget) > 0); // Needs to already have a Index7Bits assigned for current pic params
    uint16_t remappedIdx = find_remapped_index(m_DecodeTargetToOriginalIndex7Bits[pCurrentDecodeTarget]);
 
-   if(remappedIdx != m_invalidIndex) { // If it already has a remapped index in use, reuse that allocation
+   if((remappedIdx != m_invalidIndex) && !(is_reference_only())) { // If it already has a remapped index in use, reuse that allocation
       // return the existing allocation for this decode target
       d3d12_video_reconstructed_picture reconPicture = m_upD3D12TexturesStorageManager->get_reference_frame(remappedIdx);
       *ppOutTexture2D       = reconPicture.pReconstructedPicture;

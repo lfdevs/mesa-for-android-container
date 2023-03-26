@@ -114,9 +114,10 @@ genX(cmd_buffer_emit_generate_draws_pipeline)(struct anv_cmd_buffer *cmd_buffer)
 
    cmd_buffer->state.current_l3_config = device->generated_draw_l3_config;
 
+   enum intel_urb_deref_block_size deref_block_size;
    genX(emit_urb_setup)(device, batch, device->generated_draw_l3_config,
                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                        entry_size, NULL);
+                        entry_size, &deref_block_size);
 
    anv_batch_emit(batch, GENX(3DSTATE_PS_BLEND), ps_blend) {
       ps_blend.HasWriteableRT = true;
@@ -152,7 +153,7 @@ genX(cmd_buffer_emit_generate_draws_pipeline)(struct anv_cmd_buffer *cmd_buffer)
 
    anv_batch_emit(batch, GENX(3DSTATE_SF), sf) {
 #if GFX_VER >= 12
-      sf.DerefBlockSize = INTEL_URB_DEREF_BLOCK_SIZE_32; // TODO
+      sf.DerefBlockSize = deref_block_size;
 #endif
    }
 
@@ -171,9 +172,7 @@ genX(cmd_buffer_emit_generate_draws_pipeline)(struct anv_cmd_buffer *cmd_buffer)
          sbe.AttributeActiveComponentFormat[i] = ACF_XYZW;
    }
 
-   anv_batch_emit(batch, GENX(3DSTATE_WM), wm) {
-      //wm.ForceThreadDispatchEnable = ForceON;
-   }
+   anv_batch_emit(batch, GENX(3DSTATE_WM), wm);
 
    anv_batch_emit(batch, GENX(3DSTATE_PS_EXTRA), psx) {
       psx.PixelShaderValid = true;
@@ -226,14 +225,9 @@ genX(cmd_buffer_emit_generate_draws_pipeline)(struct anv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.gfx.vb_dirty = BITFIELD_BIT(0) | BITFIELD_BIT(1);
    cmd_buffer->state.gfx.dirty |= ~(ANV_CMD_DIRTY_INDEX_BUFFER |
                                     ANV_CMD_DIRTY_XFB_ENABLE);
-   cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_ALL_GRAPHICS;
+   cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
    cmd_buffer->state.gfx.push_constant_stages = VK_SHADER_STAGE_FRAGMENT_BIT;
    vk_dynamic_graphics_state_dirty_all(&cmd_buffer->vk.dynamic_graphics_state);
-
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_STALL_AT_SCOREBOARD_BIT,
-                             "after generation batch BTI change");
 }
 
 static void
@@ -318,10 +312,9 @@ genX(cmd_buffer_emit_generated_push_data)(struct anv_cmd_buffer *cmd_buffer,
    return push_data_state;
 }
 
-static void
+static struct anv_generate_indirect_params *
 genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
                                      struct anv_address generated_cmds_addr,
-                                     uint32_t generated_cmds_size,
                                      struct anv_address indirect_data_addr,
                                      uint32_t indirect_data_stride,
                                      uint32_t item_base,
@@ -335,7 +328,7 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
       brw_wm_prog_data_const(draw_kernel->prog_data);
 
    anv_batch_emit(batch, GENX(3DSTATE_PS), ps) {
-      ps.BindingTableEntryCount = 2;
+      ps.BindingTableEntryCount = 0;
       ps.PushConstantEnable     = prog_data->base.nr_params > 0 ||
                                   prog_data->base.ubo_ranges[0].length;
 
@@ -389,6 +382,8 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
       prim.VertexCountPerInstance   = 3;
       prim.InstanceCount            = 1;
    }
+
+   return push_data;
 }
 
 static void
@@ -416,6 +411,22 @@ genX(cmd_buffer_emit_indirect_generated_draws_init)(struct anv_cmd_buffer *cmd_b
    trace_intel_end_generate_draws(&cmd_buffer->trace);
 
    genX(cmd_buffer_emit_generate_draws_pipeline)(cmd_buffer);
+}
+
+static void
+genX(cmd_buffer_rewrite_forward_end_addr)(struct anv_cmd_buffer *cmd_buffer,
+                                          struct anv_generate_indirect_params *params)
+{
+   /* We don't know the end_addr until we have emitted all the generation
+    * draws. Go and edit the address of all the push parameters.
+    */
+   uint64_t end_addr =
+      anv_address_physical(anv_batch_current_address(&cmd_buffer->batch));
+   while (params != NULL) {
+      params->draw_count.end_addr_ldw = end_addr & 0xffffffff;
+      params->draw_count.end_addr_udw = end_addr >> 32;
+      params = params->prev;
+   }
 }
 
 static void
@@ -455,6 +466,7 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
 
    const uint32_t draw_cmd_stride = 4 * GENX(3DPRIMITIVE_EXTENDED_length);
 
+   struct anv_generate_indirect_params *last_params = NULL;
    uint32_t item_base = 0;
    while (item_base < draw_count) {
       const uint32_t item_count = MIN2(draw_count - item_base,
@@ -473,26 +485,28 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
       if (result != VK_SUCCESS)
          return;
 
-      genX(cmd_buffer_emit_generate_draws)(
-         cmd_buffer,
-         anv_batch_current_address(&cmd_buffer->batch),
-         draw_cmd_size,
-         indirect_data_addr,
-         indirect_data_stride,
-         item_base,
-         item_count,
-         indexed);
+      struct anv_generate_indirect_params *params =
+         genX(cmd_buffer_emit_generate_draws)(
+            cmd_buffer,
+            anv_batch_current_address(&cmd_buffer->batch),
+            indirect_data_addr,
+            indirect_data_stride,
+            item_base,
+            item_count,
+            indexed);
 
       anv_batch_advance(&cmd_buffer->batch, draw_cmd_size);
 
       item_base += item_count;
+
+      params->prev = last_params;
+      last_params = params;
    }
 }
 
-static void
+static struct anv_generate_indirect_params *
 genX(cmd_buffer_emit_generate_draws_count)(struct anv_cmd_buffer *cmd_buffer,
                                            struct anv_address generated_cmds_addr,
-                                           uint32_t generated_cmds_size,
                                            struct anv_address indirect_data_addr,
                                            uint32_t indirect_data_stride,
                                            uint32_t item_base,
@@ -539,9 +553,6 @@ genX(cmd_buffer_emit_generate_draws_count)(struct anv_cmd_buffer *cmd_buffer,
       genX(cmd_buffer_alloc_generated_push_data)(cmd_buffer);
 
    struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
-   uint64_t end_cmd_addr =
-      anv_address_physical(
-         anv_address_add(generated_cmds_addr, generated_cmds_size));
 
    struct anv_generate_indirect_params *push_data = push_data_state.map;
    *push_data = (struct anv_generate_indirect_params) {
@@ -553,8 +564,6 @@ genX(cmd_buffer_emit_generate_draws_count)(struct anv_cmd_buffer *cmd_buffer,
          .draw_count             = 0, // Edit this through a the command streamer
          .instance_multiplier    = pipeline->instance_multiplier,
          .indirect_data_stride   = indirect_data_stride,
-         .end_addr_ldw           = end_cmd_addr & 0xffffffff,
-         .end_addr_udw           = end_cmd_addr >> 32,
       },
       .indirect_data_addr        = anv_address_physical(indirect_data_addr),
       .generated_cmds_addr       = anv_address_physical(generated_cmds_addr),
@@ -572,6 +581,12 @@ genX(cmd_buffer_emit_generate_draws_count)(struct anv_cmd_buffer *cmd_buffer,
                 },
                 offsetof(struct anv_generate_indirect_params, draw_count.draw_count)),
              count_addr, 4);
+   /* Make sure the memcpy landed for the generating draw call to pick up the
+    * value.
+    */
+   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+      pc.CommandStreamerStallEnable = true;
+   }
 
    /* Only emit the data after the memcpy above. */
    genX(cmd_buffer_emit_generated_push_data)(cmd_buffer, push_data_state);
@@ -582,6 +597,8 @@ genX(cmd_buffer_emit_generate_draws_count)(struct anv_cmd_buffer *cmd_buffer,
       prim.VertexCountPerInstance   = 3;
       prim.InstanceCount            = 1;
    }
+
+   return push_data;
 }
 
 static void
@@ -622,6 +639,7 @@ genX(cmd_buffer_emit_indirect_generated_draws_count)(struct anv_cmd_buffer *cmd_
 
    const uint32_t draw_cmd_stride = 4 * GENX(3DPRIMITIVE_EXTENDED_length);
 
+   struct anv_generate_indirect_params *last_params = NULL;
    uint32_t item_base = 0;
    while (item_base < max_draw_count) {
       const uint32_t item_count = MIN2(max_draw_count - item_base,
@@ -640,22 +658,27 @@ genX(cmd_buffer_emit_indirect_generated_draws_count)(struct anv_cmd_buffer *cmd_
       if (result != VK_SUCCESS)
          return;
 
-      genX(cmd_buffer_emit_generate_draws_count)(
-         cmd_buffer,
-         anv_batch_current_address(&cmd_buffer->batch),
-         draw_cmd_size,
-         anv_address_add(indirect_data_addr,
-                         item_base * indirect_data_stride),
-         indirect_data_stride,
-         item_base,
-         item_count,
-         count_addr,
-         indexed);
+      struct anv_generate_indirect_params *params =
+         genX(cmd_buffer_emit_generate_draws_count)(
+            cmd_buffer,
+            anv_batch_current_address(&cmd_buffer->batch),
+            anv_address_add(indirect_data_addr,
+                            item_base * indirect_data_stride),
+            indirect_data_stride,
+            item_base,
+            item_count,
+            count_addr,
+            indexed);
 
       anv_batch_advance(&cmd_buffer->batch, draw_cmd_size);
 
       item_base += item_count;
+
+      params->prev = last_params;
+      last_params = params;
    }
+
+   genX(cmd_buffer_rewrite_forward_end_addr)(cmd_buffer, last_params);
 }
 
 static void
@@ -679,17 +702,10 @@ genX(cmd_buffer_flush_generated_draws)(struct anv_cmd_buffer *cmd_buffer)
       arb.PreParserDisableMask = true;
       arb.PreParserDisable = false;
    }
-#endif
-
-#if GFX_VER < 12
-   /* Prior to Gfx12 we cannot disable the CS prefetch, so we have to emit a
-    * bunch of NOOPs to ensure we do not have generated commands loaded into
-    * the CS cache prior to them having been generated.
+#else
+   /* Prior to Gfx12 we cannot disable the CS prefetch but it doesn't matter
+    * as the prefetch shouldn't follow the MI_BATCH_BUFFER_START.
     */
-   const struct intel_device_info *devinfo = cmd_buffer->device->info;
-   const enum intel_engine_class engine_class = cmd_buffer->queue_family->engine_class;
-   for (uint32_t i = 0; i < devinfo->engine_class_prefetch[engine_class] / 4; i++)
-      anv_batch_emit(batch, GENX(MI_NOOP), noop);
 #endif
 
    /* Return to the main batch. */

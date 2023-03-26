@@ -402,6 +402,7 @@ int r600_pipe_shader_create(struct pipe_context *ctx,
 		sel->nir_blob = malloc(blob.size);
 		memcpy(sel->nir_blob, blob.data, blob.size);
 		sel->nir_blob_size = blob.size;
+		blob_finish(&blob);
 	}
 	ralloc_free(sel->nir);
 	sel->nir = NULL;

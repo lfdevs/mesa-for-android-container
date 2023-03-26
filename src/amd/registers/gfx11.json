@@ -10917,7 +10917,10 @@
     {"bits": [21, 21], "name": "SKIP_LOW_COMP_RATIO"},
     {"bits": [22, 22], "name": "FDCC_ENABLE"},
     {"bits": [23, 23], "name": "DCC_COMPRESS_DISABLE"},
-    {"bits": [24, 24], "name": "FRAGMENT_COMPRESS_DISABLE"}
+    {"bits": [24, 24], "name": "FRAGMENT_COMPRESS_DISABLE"},
+    {"bits": [25, 25], "name": "DISABLE_OVERRIDE_INCONSISTENT_KEYS"},
+    {"bits": [26, 26], "name": "ENABLE_MAX_COMP_FRAG_OVERRIDE"},
+    {"bits": [27, 29], "name": "MAX_COMP_FRAGS"}
    ]
   },
   "CB_COLOR0_INFO": {
@@ -14580,7 +14583,8 @@
    "fields": [
     {"bits": [1, 1], "name": "EN_REG_RT_INDEX"},
     {"bits": [3, 3], "name": "EN_PRIM_PAYLOAD"},
-    {"bits": [4, 4], "name": "EN_DRAW_VP"}
+    {"bits": [4, 4], "name": "EN_DRAW_VP"},
+    {"bits": [6, 6], "name": "EN_VRS_RATE"}
    ]
   },
   "VGT_ESGS_RING_ITEMSIZE": {

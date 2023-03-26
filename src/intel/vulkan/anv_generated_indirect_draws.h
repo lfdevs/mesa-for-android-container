@@ -66,6 +66,12 @@ struct anv_generate_indirect_params {
 
    /* Global address of binding 1 */
    uint64_t generated_cmds_addr;
+
+   /* CPU side pointer to the previous item when number of draws has to be
+    * split into smaller chunks, see while loop in
+    * genX(cmd_buffer_emit_indirect_generated_draws)
+    */
+   struct anv_generate_indirect_params *prev;
 };
 
 #endif /* ANV_GENERATED_INDIRECT_DRAWS_H */

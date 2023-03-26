@@ -61,6 +61,25 @@ lower_cube_size(nir_builder *b, nir_intrinsic_instr *intrin)
    nir_instr_free(&intrin->instr);
 }
 
+/* Adjust the sample index according to AMD FMASK (fragment mask).
+ *
+ * For uncompressed MSAA surfaces, FMASK should return 0x76543210,
+ * which is the identity mapping. Each nibble says which physical sample
+ * should be fetched to get that sample.
+ *
+ * For example, 0x11111100 means there are only 2 samples stored and
+ * the second sample covers 3/4 of the pixel. When reading samples 0
+ * and 1, return physical sample 0 (determined by the first two 0s
+ * in FMASK), otherwise return physical sample 1.
+ *
+ * The sample index should be adjusted as follows:
+ *   sample_index = ubfe(fmask, sample_index * 4, 3);
+ *
+ * Only extract 3 bits because EQAA can generate number 8 in FMASK, which
+ * means the physical sample index is unknown. We can map 8 to any valid
+ * sample index, and extracting only 3 bits will map it to 0, which works
+ * with all MSAA modes.
+ */
 static void
 lower_image_to_fragment_mask_load(nir_builder *b, nir_intrinsic_instr *intrin)
 {
@@ -96,7 +115,7 @@ lower_image_to_fragment_mask_load(nir_builder *b, nir_intrinsic_instr *intrin)
    /* extract real color buffer index from fmask buffer */
    nir_ssa_def *sample_index_old = intrin->src[2].ssa;
    nir_ssa_def *fmask_offset = nir_ishl_imm(b, sample_index_old, 2);
-   nir_ssa_def *fmask_width = nir_imm_int(b, 4);
+   nir_ssa_def *fmask_width = nir_imm_int(b, 3);
    nir_ssa_def *sample_index_new = nir_ubfe(b, fmask, fmask_offset, fmask_width);
 
    /* fix color buffer load */

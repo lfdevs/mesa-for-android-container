@@ -605,6 +605,9 @@ build_timestamp_query_shader(struct radv_device *device)
    return b.shader;
 }
 
+#define RADV_PGQ_STRIDE 32
+#define RADV_PGQ_STRIDE_GDS (RADV_PGQ_STRIDE + 4 * 2)
+
 static nir_shader *
 build_pg_query_shader(struct radv_device *device)
 {
@@ -665,8 +668,12 @@ build_pg_query_shader(struct radv_device *device)
    /* Compute global ID. */
    nir_ssa_def *global_id = get_global_ids(&b, 1);
 
+   /* Determine if the query pool uses GDS for NGG. */
+   nir_ssa_def *uses_gds =
+      nir_i2b(&b, nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 16), .range = 20));
+
    /* Compute src/dst strides. */
-   nir_ssa_def *input_stride = nir_imm_int(&b, 32);
+   nir_ssa_def *input_stride = nir_bcsel(&b, uses_gds, nir_imm_int(&b, RADV_PGQ_STRIDE_GDS), nir_imm_int(&b, RADV_PGQ_STRIDE));
    nir_ssa_def *input_base = nir_imul(&b, input_stride, global_id);
    nir_ssa_def *output_stride = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 4), .range = 16);
    nir_ssa_def *output_base = nir_imul(&b, output_stride, global_id);
@@ -698,8 +705,7 @@ build_pg_query_shader(struct radv_device *device)
 
    nir_store_var(&b, result, primitive_storage_needed, 0x1);
 
-   nir_ssa_def *uses_gds = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 16), .range = 20);
-   nir_push_if(&b, nir_i2b(&b, uses_gds));
+   nir_push_if(&b, uses_gds);
    {
       nir_ssa_def *gds_start =
          nir_load_ssbo(&b, 1, 32, src_buf, nir_iadd(&b, input_base, nir_imm_int(&b, 32)), .align_mul = 4);
@@ -1124,12 +1130,13 @@ radv_create_query_pool(struct radv_device *device, const VkQueryPoolCreateInfo *
       pool->stride = 32;
       break;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-      pool->stride = 32;
       if (pool->uses_gds && device->physical_device->rad_info.gfx_level < GFX11) {
          /* When the hardware can use both the legacy and the NGG paths in the same begin/end pair,
           * allocate 2x32-bit values for the GDS counters.
           */
-         pool->stride += 4 * 2;
+         pool->stride = RADV_PGQ_STRIDE_GDS;
+      } else {
+         pool->stride = RADV_PGQ_STRIDE;
       }
       break;
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR: {

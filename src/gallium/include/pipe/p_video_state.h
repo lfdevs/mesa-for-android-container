@@ -867,12 +867,15 @@ struct pipe_vp9_picture_desc
    struct {
       uint16_t frame_width;
       uint16_t frame_height;
+      uint16_t prev_frame_width;
+      uint16_t prev_frame_height;
 
       struct {
          uint32_t  subsampling_x:1;
          uint32_t  subsampling_y:1;
          uint32_t  frame_type:1;
          uint32_t  show_frame:1;
+         uint32_t  prev_show_frame:1;
          uint32_t  error_resilient_mode:1;
          uint32_t  intra_only:1;
          uint32_t  allow_high_precision_mv:1;

@@ -1234,7 +1234,8 @@ static void gfx10_emit_shader_ngg_tail(struct si_context *sctx, struct si_shader
                        (sctx->gfx_level >= GFX10 ? radeon_set_sh_reg_idx3_func : radeon_set_sh_reg_func));
       ac_set_reg_cu_en(&sctx->gfx_cs, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
                        shader->ctx_reg.ngg.spi_shader_pgm_rsrc4_gs,
-                       C_00B204_CU_EN_GFX10, 16, &sctx->screen->info,
+                       sctx->gfx_level >= GFX11 ? C_00B204_CU_EN_GFX11 : C_00B204_CU_EN_GFX10, 16,
+                       &sctx->screen->info,
                        (void (*)(void*, unsigned, uint32_t))
                        (sctx->gfx_level >= GFX10 ? radeon_set_sh_reg_idx3_func : radeon_set_sh_reg_func));
       sctx->tracked_regs.reg_saved &= ~BITFIELD64_BIT(SI_TRACKED_SPI_SHADER_PGM_RSRC4_GS) &

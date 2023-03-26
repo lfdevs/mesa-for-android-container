@@ -20,5 +20,3 @@ venus-lavapipe:
     FDO_CI_CONCURRENT: 32 # Seems to be the fastest value, more gets actually slower
     CROSVM_MEMORY: 3072
     FLAKES_CHANNEL: "#virgl-ci"
-  tags:
-    - mesa-swrast

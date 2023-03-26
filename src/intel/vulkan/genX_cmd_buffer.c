@@ -4104,10 +4104,13 @@ void genX(CmdDrawMultiEXT)(
          prim.ExtendedParameter1       = firstInstance;
          prim.ExtendedParameter2       = i;
       }
-#if GFX_VERx10 == 125
-   genX(emit_dummy_post_sync_op)(cmd_buffer, draw->vertexCount);
-#endif
    }
+#endif
+
+#if GFX_VERx10 == 125
+   genX(emit_dummy_post_sync_op)(cmd_buffer,
+                                 drawCount == 0 ? 0 :
+                                 pVertexInfo[drawCount - 1].vertexCount);
 #endif
 
    update_dirty_vbs_for_gfx8_vb_flush(cmd_buffer, SEQUENTIAL);
@@ -4305,10 +4308,13 @@ void genX(CmdDrawMultiIndexedEXT)(
          prim.ExtendedParameter1       = firstInstance;
          prim.ExtendedParameter2       = i;
       }
-#if GFX_VERx10 == 125
-      genX(emit_dummy_post_sync_op)(cmd_buffer, draw->indexCount);
-#endif
    }
+#endif
+
+#if GFX_VERx10 == 125
+   genX(emit_dummy_post_sync_op)(cmd_buffer,
+                                 drawCount == 0 ? 0 :
+                                 pIndexInfo[drawCount - 1].indexCount);
 #endif
 
    update_dirty_vbs_for_gfx8_vb_flush(cmd_buffer, RANDOM);
@@ -4551,10 +4557,11 @@ emit_indirect_draws(struct anv_cmd_buffer *cmd_buffer,
       }
 
 #if GFX_VERx10 == 125
-   genX(emit_dummy_post_sync_op)(cmd_buffer, 1);
+      genX(emit_dummy_post_sync_op)(cmd_buffer, 1);
 #endif
 
-      update_dirty_vbs_for_gfx8_vb_flush(cmd_buffer, SEQUENTIAL);
+      update_dirty_vbs_for_gfx8_vb_flush(cmd_buffer,
+                                         indexed ? RANDOM : SEQUENTIAL);
 
       offset += indirect_data_stride;
    }
@@ -5970,7 +5977,7 @@ mi_build_sbt_entry(struct mi_builder *b,
 {
    return mi_ior(b,
                  mi_iand(b, mi_mem64(anv_address_from_u64(addr_field_addr)),
-                            mi_imm(0xffffffffff)),
+                            mi_imm(BITFIELD64_BIT(49) - 1)),
                  mi_ishl_imm(b, mi_mem32(anv_address_from_u64(stride_field_addr)),
                                 48));
 }
@@ -6359,28 +6366,20 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
     */
    if (pipeline == GPGPU)
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CC_STATE_POINTERS), t);
+#endif
 
-   if (pipeline == _3D) {
-      /* There is a mid-object preemption workaround which requires you to
-       * re-emit MEDIA_VFE_STATE after switching from GPGPU to 3D.  However,
-       * even without preemption, we have issues with geometry flickering when
-       * GPGPU and 3D are back-to-back and this seems to fix it.  We don't
-       * really know why.
-       */
-      anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_VFE_STATE), vfe) {
-         vfe.MaximumNumberofThreads =
-            devinfo->max_cs_threads * devinfo->subslice_total - 1;
-         vfe.NumberofURBEntries     = 2;
-         vfe.URBEntryAllocationSize = 2;
-      }
-
-      /* We just emitted a dummy MEDIA_VFE_STATE so now that packet is
-       * invalid. Set the compute pipeline to dirty to force a re-emit of the
-       * pipeline in case we get back-to-back dispatch calls with the same
-       * pipeline and a PIPELINE_SELECT in between.
-       */
+#if GFX_VERx10 == 120
+   /* Undocumented workaround to force the re-emission of
+    * MEDIA_INTERFACE_DESCRIPTOR_LOAD when switching from 3D to Compute
+    * pipeline without rebinding a pipeline :
+    *    vkCmdBindPipeline(COMPUTE, cs_pipeline);
+    *    vkCmdDispatch(...);
+    *    vkCmdBindPipeline(GRAPHICS, gfx_pipeline);
+    *    vkCmdDraw(...);
+    *    vkCmdDispatch(...);
+    */
+   if (pipeline == _3D)
       cmd_buffer->state.compute.pipeline_dirty = true;
-   }
 #endif
 
 #if GFX_VER >= 12
@@ -6435,6 +6434,37 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
                              "flush and invalidate for PIPELINE_SELECT");
 #endif
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+#if GFX_VER == 9
+   if (pipeline == _3D) {
+      /* There is a mid-object preemption workaround which requires you to
+       * re-emit MEDIA_VFE_STATE after switching from GPGPU to 3D.  However,
+       * even without preemption, we have issues with geometry flickering when
+       * GPGPU and 3D are back-to-back and this seems to fix it.  We don't
+       * really know why.
+       *
+       * Also, from the Sky Lake PRM Vol 2a, MEDIA_VFE_STATE:
+       *
+       *    "A stalling PIPE_CONTROL is required before MEDIA_VFE_STATE unless
+       *    the only bits that are changed are scoreboard related ..."
+       *
+       * This is satisfied by applying pre-PIPELINE_SELECT pipe flushes above.
+       */
+      anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_VFE_STATE), vfe) {
+         vfe.MaximumNumberofThreads =
+            devinfo->max_cs_threads * devinfo->subslice_total - 1;
+         vfe.NumberofURBEntries     = 2;
+         vfe.URBEntryAllocationSize = 2;
+      }
+
+      /* We just emitted a dummy MEDIA_VFE_STATE so now that packet is
+       * invalid. Set the compute pipeline to dirty to force a re-emit of the
+       * pipeline in case we get back-to-back dispatch calls with the same
+       * pipeline and a PIPELINE_SELECT in between.
+       */
+      cmd_buffer->state.compute.pipeline_dirty = true;
+   }
+#endif
 
    genX(emit_pipeline_select)(&cmd_buffer->batch, pipeline);
 
@@ -7907,7 +7937,7 @@ genX(batch_emit_dummy_post_sync_op)(struct anv_batch *batch,
         primitive_topology == _3DPRIM_POINTLIST_BF ||
         primitive_topology == _3DPRIM_LINESTRIP_CONT ||
         primitive_topology == _3DPRIM_LINESTRIP_BF ||
-        primitive_topology == _3DPRIM_LINESTRIP_CONT_BF) ||
+        primitive_topology == _3DPRIM_LINESTRIP_CONT_BF) &&
        (vertex_count == 1 || vertex_count == 2)) {
       anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
          pc.PostSyncOperation = WriteImmediateData;

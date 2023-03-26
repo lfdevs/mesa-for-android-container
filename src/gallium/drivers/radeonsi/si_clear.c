@@ -1077,22 +1077,22 @@ static void si_fast_clear(struct si_context *sctx, unsigned *buffers,
          }
 
          zstex->need_flush_after_depth_decompression = update_db_depth_clear && sctx->gfx_level == GFX10_3;
+      }
 
-         /* Update DB_DEPTH_CLEAR. */
-         if (update_db_depth_clear &&
-             zstex->depth_clear_value[level] != (float)depth) {
-            zstex->depth_clear_value[level] = depth;
-            sctx->framebuffer.dirty_zsbuf = true;
-            si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
-         }
+      /* Update DB_DEPTH_CLEAR. */
+      if (update_db_depth_clear &&
+          zstex->depth_clear_value[level] != (float)depth) {
+         zstex->depth_clear_value[level] = depth;
+         sctx->framebuffer.dirty_zsbuf = true;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
+      }
 
-         /* Update DB_STENCIL_CLEAR. */
-         if (update_db_stencil_clear &&
-             zstex->stencil_clear_value[level] != stencil) {
-            zstex->stencil_clear_value[level] = stencil;
-            sctx->framebuffer.dirty_zsbuf = true;
-            si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
-         }
+      /* Update DB_STENCIL_CLEAR. */
+      if (update_db_stencil_clear &&
+          zstex->stencil_clear_value[level] != stencil) {
+         zstex->stencil_clear_value[level] = stencil;
+         sctx->framebuffer.dirty_zsbuf = true;
+         si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
       }
    }
 

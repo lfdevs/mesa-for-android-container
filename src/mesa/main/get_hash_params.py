@@ -343,8 +343,10 @@ descriptor=[
   [ "MAX_VARYING_VECTORS", "CONTEXT_INT(Const.MaxVarying), extra_ARB_ES2_compatibility_api_es2" ],
   [ "MAX_VERTEX_UNIFORM_VECTORS", "LOC_CUSTOM, TYPE_INT, 0, extra_ARB_ES2_compatibility_api_es2" ],
   [ "MAX_FRAGMENT_UNIFORM_VECTORS", "LOC_CUSTOM, TYPE_INT, 0, extra_ARB_ES2_compatibility_api_es2" ],
-  [ "NUM_SHADER_BINARY_FORMATS", "CONST(0), extra_ARB_ES2_compatibility_api_es2" ],
-  [ "SHADER_BINARY_FORMATS", "LOC_CUSTOM, TYPE_INVALID, 0, extra_ARB_ES2_compatibility_api_es2" ],
+
+# GL_ARB_ES2_compatibility / GL_ARB_gl_spirv
+  [ "NUM_SHADER_BINARY_FORMATS", "CONTEXT_UINT(Const.NumShaderBinaryFormats), extra_ARB_gl_spirv_or_es2_compat" ],
+  [ "SHADER_BINARY_FORMATS", "LOC_CUSTOM, TYPE_INT_N, 0, extra_ARB_gl_spirv_or_es2_compat" ],
 
 # GL_ARB_get_program_binary / GL_OES_get_program_binary
   [ "NUM_PROGRAM_BINARY_FORMATS", "CONTEXT_UINT(Const.NumProgramBinaryFormats), NO_EXTRA" ],

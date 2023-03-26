@@ -310,7 +310,7 @@ d3d12_video_decoder_dxva_picparams_from_pipe_picparams_vp9(
          dxvaStructure.ref_frame_coded_width[i]  = pipe_vp9->ref[i]->width;
          dxvaStructure.ref_frame_coded_height[i] = pipe_vp9->ref[i]->height;
       } else
-         dxvaStructure.ref_frame_map[i].bPicEntry = DXVA_VP9_INVALID_PICTURE_INDEX;
+         dxvaStructure.ref_frame_map[i].bPicEntry = DXVA_VP9_INVALID_PICTURE_ENTRY;
    }
 
    /* DXVA spec The enums and indices for ref_frame_sign_bias[] are defined */
@@ -319,7 +319,7 @@ d3d12_video_decoder_dxva_picparams_from_pipe_picparams_vp9(
    const uint8_t signbias_alt_index = 3;
 
    /* AssociatedFlag When Index7Bits does not contain an index to a valid uncompressed surface, the value shall be set to 127, to indicate that the index is invalid. */
-   memset(&dxvaStructure.frame_refs[0], DXVA_VP9_INVALID_PICTURE_INDEX, sizeof(dxvaStructure.frame_refs));
+   memset(&dxvaStructure.frame_refs[0], DXVA_VP9_INVALID_PICTURE_ENTRY, sizeof(dxvaStructure.frame_refs));
 
    if (pipe_vp9->ref[pipe_vp9->picture_parameter.pic_fields.last_ref_frame]) {
       /* AssociatedFlag When Index7Bits does not contain an index to a valid uncompressed surface, the value shall be set to 127, to indicate that the index is invalid. */
@@ -348,10 +348,16 @@ d3d12_video_decoder_dxva_picparams_from_pipe_picparams_vp9(
    dxvaStructure.filter_level    = pipe_vp9->picture_parameter.filter_level;
    dxvaStructure.sharpness_level = pipe_vp9->picture_parameter.sharpness_level;
 
-   bool use_last_frame_mvs = !pipe_vp9->picture_parameter.pic_fields.error_resilient_mode && pipe_vp9->picture_parameter.pic_fields.show_frame;
+   bool use_prev_in_find_mv_refs =
+      !pipe_vp9->picture_parameter.pic_fields.error_resilient_mode &&
+      !(pipe_vp9->picture_parameter.pic_fields.frame_type == 0 /*KEY_FRAME*/ || pipe_vp9->picture_parameter.pic_fields.intra_only) &&
+      pipe_vp9->picture_parameter.pic_fields.prev_show_frame &&
+      pipe_vp9->picture_parameter.frame_width == pipe_vp9->picture_parameter.prev_frame_width &&
+      pipe_vp9->picture_parameter.frame_height == pipe_vp9->picture_parameter.prev_frame_height;
+
    dxvaStructure.wControlInfoFlags = (pipe_vp9->picture_parameter.mode_ref_delta_enabled  << 0) |
                            (pipe_vp9->picture_parameter.mode_ref_delta_update             << 1) |
-                           (use_last_frame_mvs                                            << 2) |
+                           (use_prev_in_find_mv_refs                                      << 2) |
                            (0                                                             << 3);
 
    for (uint32_t i = 0; i < 4; i++)

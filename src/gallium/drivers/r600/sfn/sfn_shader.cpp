@@ -520,8 +520,7 @@ Shader::allocate_local_registers(const exec_list *registers)
 {
    if (value_factory().allocate_registers(registers))
       m_indirect_files |= 1 << TGSI_FILE_TEMPORARY;
-   m_required_registers = value_factory().next_register_index() ?
-                             value_factory().next_register_index() - 1 : 0;
+   m_required_registers = value_factory().array_registers();
 }
 
 bool

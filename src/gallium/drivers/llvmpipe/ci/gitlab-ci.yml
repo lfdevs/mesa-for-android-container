@@ -60,11 +60,10 @@ llvmpipe-traces:
     - .llvmpipe-test
 
 llvmpipe:
-  tags:
-    - mesa-swrast
   variables:
     DEQP_SUITE: llvmpipe
     XDG_RUNTIME_DIR: /run/user
+    DEQP_FRACTION: 4
   extends: .llvmpipe-deqp-test
   script:
     - mkdir -p $XDG_RUNTIME_DIR

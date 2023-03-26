@@ -525,7 +525,9 @@ vk_to_grl_VertexFormat(VkFormat format)
 static struct Geo
 vk_to_grl_Geo(const VkAccelerationStructureGeometryKHR *pGeometry,
               uint32_t prim_count,
-              uint32_t transform_offset)
+              uint32_t transform_offset,
+              uint32_t primitive_offset,
+              uint32_t first_vertex)
 {
    struct Geo geo = {
       .Flags = vk_to_grl_GeometryFlags(pGeometry->flags),
@@ -553,14 +555,18 @@ vk_to_grl_Geo(const VkAccelerationStructureGeometryKHR *pGeometry,
          geo.Desc.Triangles.IndexCount = 0;
          geo.Desc.Triangles.VertexCount = prim_count * 3;
          geo.Desc.Triangles.IndexFormat = INDEX_FORMAT_NONE;
+         geo.Desc.Triangles.pVertexBuffer += primitive_offset;
       } else {
          geo.Desc.Triangles.IndexCount = prim_count * 3;
          geo.Desc.Triangles.VertexCount = vk_tri->maxVertex;
          geo.Desc.Triangles.IndexFormat =
             vk_to_grl_IndexFormat(vk_tri->indexType);
+         geo.Desc.Triangles.pIndexBuffer += primitive_offset;
       }
+
       geo.Desc.Triangles.VertexFormat =
          vk_to_grl_VertexFormat(vk_tri->vertexFormat);
+      geo.Desc.Triangles.pVertexBuffer += vk_tri->vertexStride * first_vertex;
       break;
    }
 
@@ -568,7 +574,8 @@ vk_to_grl_Geo(const VkAccelerationStructureGeometryKHR *pGeometry,
       const VkAccelerationStructureGeometryAabbsDataKHR *vk_aabbs =
          &pGeometry->geometry.aabbs;
       geo.Type = GEOMETRY_TYPE_PROCEDURAL;
-      geo.Desc.Procedural.pAABBs_GPUVA = vk_aabbs->data.deviceAddress;
+      geo.Desc.Procedural.pAABBs_GPUVA =
+         vk_aabbs->data.deviceAddress + primitive_offset;
       geo.Desc.Procedural.AABBByteStride = vk_aabbs->stride;
       geo.Desc.Procedural.AABBCount = prim_count;
       break;
@@ -824,7 +831,9 @@ cmd_build_acceleration_structures(
          const VkAccelerationStructureGeometryKHR *pGeometry = get_geometry(pInfo, g);
          uint32_t prim_count = pBuildRangeInfos[g].primitiveCount;
          geos[g] = vk_to_grl_Geo(pGeometry, prim_count,
-                                 pBuildRangeInfos[g].transformOffset);
+                                 pBuildRangeInfos[g].transformOffset,
+                                 pBuildRangeInfos[g].primitiveOffset,
+                                 pBuildRangeInfos[g].firstVertex);
 
          prefixes[g] = prefix_sum;
          prefix_sum += prim_count;

@@ -63,13 +63,14 @@ static void si_pm4_set_reg_custom(struct si_pm4_state *state, unsigned reg, uint
 
    assert(state->ndw + 2 <= state->max_dw);
 
-   if (opcode != state->last_opcode || reg != (state->last_reg + 1)) {
+   if (opcode != state->last_opcode || reg != (state->last_reg + 1) || idx != state->last_idx) {
       si_pm4_cmd_begin(state, opcode);
       state->pm4[state->ndw++] = reg | (idx << 28);
    }
 
    assert(reg <= UINT16_MAX);
    state->last_reg = reg;
+   state->last_idx = idx;
    state->pm4[state->ndw++] = val;
    si_pm4_cmd_end(state, false);
 }

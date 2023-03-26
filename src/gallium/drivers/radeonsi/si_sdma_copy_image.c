@@ -134,7 +134,7 @@ bool si_sdma_v4_v5_copy_texture(struct si_context *sctx, struct si_texture *sdst
       radeon_emit(CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
                                   CIK_SDMA_COPY_SUB_OPCODE_LINEAR,
                                   (tmz ? 4 : 0)));
-      radeon_emit(bytes);
+      radeon_emit(bytes - 1);
       radeon_emit(0);
       radeon_emit(src_address);
       radeon_emit(src_address >> 32);

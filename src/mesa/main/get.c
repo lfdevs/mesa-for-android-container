@@ -583,6 +583,13 @@ EXTRA_EXT(ARB_spirv_extensions);
 EXTRA_EXT(NV_viewport_swizzle);
 EXTRA_EXT(ARB_sparse_texture);
 
+static const int extra_ARB_gl_spirv_or_es2_compat[] = {
+   EXT(ARB_gl_spirv),
+   EXT(ARB_ES2_compatibility),
+   EXTRA_API_ES2,
+   EXTRA_END
+};
+
 static const int
 extra_ARB_color_buffer_float_or_glcore[] = {
    EXT(ARB_color_buffer_float),
@@ -1300,6 +1307,14 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       v->value_int_n.n = MIN2(ctx->Const.NumProgramBinaryFormats, 1);
       if (ctx->Const.NumProgramBinaryFormats > 0) {
          v->value_int_n.ints[0] = GL_PROGRAM_BINARY_FORMAT_MESA;
+      }
+      break;
+   /* GL_ARB_gl_spirv */
+   case GL_SHADER_BINARY_FORMATS:
+      assert(ctx->Const.NumShaderBinaryFormats <= 1);
+      v->value_int_n.n = MIN2(ctx->Const.NumShaderBinaryFormats, 1);
+      if (ctx->Const.NumShaderBinaryFormats > 0) {
+         v->value_int_n.ints[0] = GL_SHADER_BINARY_FORMAT_SPIR_V;
       }
       break;
    /* ARB_spirv_extensions */

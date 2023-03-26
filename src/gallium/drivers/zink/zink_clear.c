@@ -455,8 +455,10 @@ zink_clear_texture(struct pipe_context *pctx,
       util_blitter_save_framebuffer(ctx->blitter, &ctx->fb_state);
       set_clear_fb(pctx, surf, NULL);
       ctx->blitting = true;
+      ctx->queries_disabled = true;
       pctx->clear(pctx, PIPE_CLEAR_COLOR0, &scissor, &color, 0, 0);
       util_blitter_restore_fb_state(ctx->blitter);
+      ctx->queries_disabled = false;
       ctx->blitting = false;
    } else {
       float depth = 0.0;
@@ -477,8 +479,10 @@ zink_clear_texture(struct pipe_context *pctx,
       util_blitter_save_framebuffer(ctx->blitter, &ctx->fb_state);
       ctx->blitting = true;
       set_clear_fb(pctx, NULL, surf);
+      ctx->queries_disabled = true;
       pctx->clear(pctx, flags, &scissor, NULL, depth, stencil);
       util_blitter_restore_fb_state(ctx->blitter);
+      ctx->queries_disabled = false;
       ctx->blitting = false;
    }
    /* this will never destroy the surface */

@@ -497,8 +497,20 @@ uint8_t AluInstr::allowed_src_chan_mask() const
     * is not important to know which is the old channel that will
     * be freed by the channel switch.*/
    int mask = 0;
+
+   /* Be conservative about channel use when using more than two
+    * slots. Currently a constellatioon of
+    *
+    *  ALU d.x = f(r0.x, r1.y)
+    *  ALU _.y = f(r2.y, r3.x)
+    *  ALU _.z = f(r4.x, r5.y)
+    *
+    * will fail to be split. To get constellations like this to be scheduled
+    * properly will need some work on the bank swizzle check.
+    */
+   int maxuse = m_alu_slots > 2 ? 2 : 3;
    for (int i = 0; i < 4; ++i) {
-       if (chan_use_count[i] < 3)
+       if (chan_use_count[i] < maxuse)
            mask |= 1 << i;
    }
    return mask;

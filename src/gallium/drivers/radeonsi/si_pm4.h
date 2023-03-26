@@ -47,6 +47,7 @@ struct si_pm4_state {
    uint16_t last_pm4;
    uint16_t ndw;        /* number of dwords in pm4 */
    uint8_t last_opcode;
+   uint8_t last_idx;
 
    /* For shader states only */
    bool is_shader;

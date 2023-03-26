@@ -9,7 +9,7 @@
     DEQP_EXPECTED_RENDERER: llvmpipe
     LVP_POISON_MEMORY: "1"
 
-lavapipe:
+.lavapipe:
   tags:
     - mesa-swrast
   variables:
@@ -20,7 +20,7 @@ lavapipe:
     - .deqp-test-vk
     - .lavapipe-test
 
-lavapipe-vk-asan:
+.lavapipe-vk-asan:
   extends:
     - .deqp-test-vk
     - .lavapipe-test
@@ -34,7 +34,7 @@ lavapipe-vk-asan:
     - debian/x86_test-vk
     - debian-testing-asan
 
-lavapipe-traces:
+.lavapipe-traces:
   variables:
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
     PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-lavapipe.yml"

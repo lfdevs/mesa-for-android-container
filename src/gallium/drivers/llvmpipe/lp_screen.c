@@ -564,7 +564,7 @@ llvmpipe_get_compute_param(struct pipe_screen *_screen,
    case PIPE_COMPUTE_CAP_ADDRESS_BITS:
       if (ret) {
          uint32_t *address_bits = ret;
-         *address_bits = 64;
+         *address_bits = sizeof(void*) * 8;
       }
       return sizeof(uint32_t);
    }

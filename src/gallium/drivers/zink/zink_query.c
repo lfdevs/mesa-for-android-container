@@ -1070,8 +1070,8 @@ zink_resume_queries(struct zink_context *ctx, struct zink_batch *batch)
 {
    struct zink_query *query, *next;
    LIST_FOR_EACH_ENTRY_SAFE(query, next, &ctx->suspended_queries, active_list) {
-      begin_query(ctx, batch, query);
       list_delinit(&query->active_list);
+      begin_query(ctx, batch, query);
    }
 }
 

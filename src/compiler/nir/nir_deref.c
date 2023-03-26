@@ -1143,7 +1143,12 @@ opt_replace_struct_wrapper_cast(nir_builder *b, nir_deref_instr *cast)
    if (glsl_get_struct_field_offset(parent->type, 0) != 0)
       return false;
 
-   if (cast->type != glsl_get_struct_field(parent->type, 0))
+   const struct glsl_type *field_type = glsl_get_struct_field(parent->type, 0);
+   if (cast->type != field_type)
+      return false;
+
+   /* we can't drop the stride information */
+   if (cast->cast.ptr_stride != glsl_get_explicit_stride(field_type))
       return false;
 
    nir_deref_instr *replace = nir_build_deref_struct(b, parent, 0);

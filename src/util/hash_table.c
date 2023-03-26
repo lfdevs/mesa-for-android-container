@@ -775,15 +775,15 @@ _mesa_hash_table_u64_create(void *mem_ctx)
    STATIC_ASSERT(FREED_KEY_VALUE != DELETED_KEY_VALUE);
    struct hash_table_u64 *ht;
 
-   ht = CALLOC_STRUCT(hash_table_u64);
+   ht = rzalloc(mem_ctx, struct hash_table_u64);
    if (!ht)
       return NULL;
 
    if (sizeof(void *) == 8) {
-      ht->table = _mesa_hash_table_create(mem_ctx, _mesa_hash_pointer,
+      ht->table = _mesa_hash_table_create(ht, _mesa_hash_pointer,
                                           _mesa_key_pointer_equal);
    } else {
-      ht->table = _mesa_hash_table_create(mem_ctx, key_u64_hash,
+      ht->table = _mesa_hash_table_create(ht, key_u64_hash,
                                           key_u64_equals);
    }
 
@@ -821,10 +821,7 @@ _mesa_hash_table_u64_destroy(struct hash_table_u64 *ht)
 {
    if (!ht)
       return;
-
-   _mesa_hash_table_u64_clear(ht);
-   _mesa_hash_table_destroy(ht->table, NULL);
-   free(ht);
+   ralloc_free(ht);
 }
 
 void

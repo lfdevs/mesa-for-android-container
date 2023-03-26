@@ -118,6 +118,8 @@ ValueFactory::allocate_registers(const exec_list *registers)
       length = a.length;
    }
 
+   m_required_array_registers = m_next_register_index ? m_next_register_index : 0;
+
    foreach_list_typed(nir_register, reg, node, registers)
    {
       if (!reg->num_array_elems) {

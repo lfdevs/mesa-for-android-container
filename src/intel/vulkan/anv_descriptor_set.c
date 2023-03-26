@@ -968,6 +968,8 @@ void anv_DestroyDescriptorPool(
       anv_descriptor_set_layout_unref(device, set->layout);
    }
 
+   util_vma_heap_finish(&pool->host_heap);
+
    if (pool->bo) {
       util_vma_heap_finish(&pool->bo_heap);
       anv_device_release_bo(device, pool->bo);

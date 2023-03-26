@@ -237,8 +237,8 @@ are required to be supported
 OpenGL 4.6
 ^^^^^^^^^^
 
-For OpenGL 4.6 support, the following additional ``VkPhysicalDeviceFeatures``
-are required to be supported
+For OpenGL 4.6 support, the following additional requirements must be
+supported:
 
 * ``VkPhysicalDeviceFeatures``:
 

@@ -302,6 +302,8 @@ wsi_display_alloc_connector(struct wsi_display *wsi,
    struct wsi_display_connector *connector =
       vk_zalloc(wsi->alloc, sizeof (struct wsi_display_connector),
                 8, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+   if (!connector)
+      return NULL;
 
    connector->id = connector_id;
    connector->wsi = wsi;

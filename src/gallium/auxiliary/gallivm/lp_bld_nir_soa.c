@@ -848,11 +848,14 @@ static LLVMValueRef lp_vec_add_offset_ptr(struct lp_build_nir_context *bld_base,
                                           LLVMValueRef ptr,
                                           LLVMValueRef offset)
 {
+   unsigned pointer_size = 8 * sizeof(void *);
    struct gallivm_state *gallivm = bld_base->base.gallivm;
    LLVMBuilderRef builder = gallivm->builder;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
-   LLVMValueRef result = LLVMBuildPtrToInt(builder, ptr, bld_base->uint64_bld.vec_type, "");
-   offset = LLVMBuildZExt(builder, offset, bld_base->uint64_bld.vec_type, "");
+   struct lp_build_context *ptr_bld = get_int_bld(bld_base, true, pointer_size);
+   LLVMValueRef result = LLVMBuildPtrToInt(builder, ptr, ptr_bld->vec_type, "");
+   if (pointer_size == 64)
+      offset = LLVMBuildZExt(builder, offset, ptr_bld->vec_type, "");
    result = LLVMBuildAdd(builder, offset, result, "");
    return global_addr_to_ptr_vec(gallivm, result, uint_bld->type.length, bit_size);
 }

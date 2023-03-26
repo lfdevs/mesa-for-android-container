@@ -1313,6 +1313,8 @@ restore_array_attrib(struct gl_context *ctx,
    }
 
    _mesa_update_edgeflag_state_vao(ctx);
+   _mesa_set_varying_vp_inputs(ctx, ctx->VertexProgram._VPModeInputFilter &
+                               ctx->Array.VAO->_EnabledWithMapMode);
 }
 
 

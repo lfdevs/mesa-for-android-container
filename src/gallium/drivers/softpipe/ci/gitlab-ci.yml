@@ -16,8 +16,6 @@
     DEQP_EXPECTED_RENDERER: softpipe
 
 softpipe:
-  tags:
-    - mesa-swrast
   variables:
     DEQP_SUITE: softpipe
   extends: .softpipe-deqp-test

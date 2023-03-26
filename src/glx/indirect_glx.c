@@ -383,7 +383,6 @@ indirect_create_screen(int screen, struct glx_display * priv)
       return NULL;
 
    glx_screen_init(psc, screen, priv);
-   glxSendClientInfo(priv, screen);
    psc->vtable = &indirect_screen_vtable;
 
    return psc;

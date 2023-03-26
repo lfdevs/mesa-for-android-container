@@ -285,6 +285,8 @@ public:
 
    int next_register_index() const { return m_next_register_index; }
 
+   uint32_t array_registers() const { return m_required_array_registers; }
+
 private:
    PVirtualValue ssa_src(const nir_ssa_def& dest, int chan);
 
@@ -326,6 +328,7 @@ private:
       126, pin_chan, {0, 1, 2, 3}
    };
    ChannelCounts m_channel_counts;
+   uint32_t m_required_array_registers{0};
 };
 
 } // namespace r600

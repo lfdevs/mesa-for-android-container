@@ -2527,7 +2527,7 @@ vk_common_CmdSetColorWriteMaskEXT(VkCommandBuffer commandBuffer,
       uint32_t a = firstAttachment + i;
       assert(a < ARRAY_SIZE(dyn->cb.attachments));
 
-      SET_DYN_VALUE(dyn, CB_BLEND_EQUATIONS,
+      SET_DYN_VALUE(dyn, CB_WRITE_MASKS,
                     cb.attachments[a].write_mask, pColorWriteMasks[i]);
    }
 }

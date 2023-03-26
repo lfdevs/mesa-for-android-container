@@ -887,7 +887,7 @@
     <field name="Return Filter Weight for Null Texels" start="66" end="66" type="uint" />
     <field name="Return Filter Weight for Border Texels" start="67" end="67" type="uint" />
     <field name="Force gather4 Behavior" start="69" end="69" type="bool" />
-    <field name="Border Color Pointer" start="70" end="87" type="offset" />
+    <field name="Border Color Pointer" start="70" end="95" type="offset" />
     <field name="TCZ Address Control Mode" start="96" end="98" type="Texture Coordinate Mode" />
     <field name="TCY Address Control Mode" start="99" end="101" type="Texture Coordinate Mode" />
     <field name="TCX Address Control Mode" start="102" end="104" type="Texture Coordinate Mode" />

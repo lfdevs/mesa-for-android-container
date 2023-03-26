@@ -767,7 +767,7 @@ iris_init_identifier_bo(struct iris_screen *screen)
    screen->workaround_address = (struct iris_address) {
       .bo = screen->workaround_bo,
       .offset = ALIGN(
-         intel_debug_write_identifiers(bo_map, 4096, "Iris") + 8, 8),
+         intel_debug_write_identifiers(bo_map, 4096, "Iris"), 32),
    };
 
    iris_bo_unmap(screen->workaround_bo);

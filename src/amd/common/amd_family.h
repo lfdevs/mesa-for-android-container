@@ -184,6 +184,8 @@ enum amd_vram_type {
    AMD_VRAM_TYPE_DDR4,
    AMD_VRAM_TYPE_GDDR6,
    AMD_VRAM_TYPE_DDR5,
+   AMD_VRAM_TYPE_LPDDR4,
+   AMD_VRAM_TYPE_LPDDR5,
 };
 
 const char *ac_get_family_name(enum radeon_family family);

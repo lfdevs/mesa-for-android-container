@@ -169,8 +169,13 @@ libvulkan_radeon_ld_args = []
 libvulkan_radeon_link_depends = []
 
 if with_ld_version_script
-  libvulkan_radeon_ld_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'vulkan.sym')]
-  libvulkan_radeon_link_depends += files('vulkan.sym')
+  if with_platform_android
+    libvulkan_radeon_ld_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'vulkan-android.sym')]
+    libvulkan_radeon_link_depends += files('vulkan-android.sym')
+  else
+    libvulkan_radeon_ld_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'vulkan.sym')]
+    libvulkan_radeon_link_depends += files('vulkan.sym')
+  endif
 endif
 
 radv_build_id = get_option('radv-build-id')
