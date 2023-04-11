@@ -313,16 +313,26 @@ isl_device_init(struct isl_device *dev,
       dev->ds.hiz_offset = 0;
    }
 
-   if (ISL_GFX_VER(dev) >= 7) {
-      /* From the IVB PRM, SURFACE_STATE::Height,
-       *
-       *    For typed buffer and structured buffer surfaces, the number
-       *    of entries in the buffer ranges from 1 to 2^27. For raw buffer
-       *    surfaces, the number of entries in the buffer is the number of bytes
-       *    which can range from 1 to 2^30.
-       *
-       * This limit is only concerned with raw buffers.
-       */
+   /* From the IVB PRM, SURFACE_STATE::Height,
+    *
+    *    For typed buffer and structured buffer surfaces, the number
+    *    of entries in the buffer ranges from 1 to 2^27. For raw buffer
+    *    surfaces, the number of entries in the buffer is the number of bytes
+    *    which can range from 1 to 2^30.
+    *
+    * From the SKL PRM, SURFACE_STATE::Width/Height/Depth for RAW buffers,
+    *
+    *    Width  : bits [6:0]
+    *    Height : bits [20:7]
+    *    Depth  : bits [31:21]
+    *
+    *    So we can address 4Gb
+    *
+    * This limit is only concerned with raw buffers.
+    */
+   if (ISL_GFX_VER(dev) >= 9) {
+      dev->max_buffer_size = 1ull << 32;
+   } else if (ISL_GFX_VER(dev) >= 7) {
       dev->max_buffer_size = 1ull << 30;
    } else {
       dev->max_buffer_size = 1ull << 27;

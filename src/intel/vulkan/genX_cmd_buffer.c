@@ -1595,9 +1595,27 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
     *    "Driver must ensure that the engine is IDLE but ensure it doesn't
     *    add extra flushes in the case it knows that the engine is already
     *    IDLE."
+    *
+    * HSD 22012751911: SW Programming sequence when issuing aux invalidation:
+    *
+    *    "Render target Cache Flush + L3 Fabric Flush + State Invalidation + CS Stall"
+    *
+    * Notice we don't set the L3 Fabric Flush here, because we have
+    * ANV_PIPE_END_OF_PIPE_SYNC_BIT which inserts a CS stall. The
+    * PIPE_CONTROL::L3 Fabric Flush documentation says :
+    *
+    *    "L3 Fabric Flush will ensure all the pending transactions in the L3
+    *     Fabric are flushed to global observation point. HW does implicit L3
+    *     Fabric Flush on all stalling flushes (both explicit and implicit)
+    *     and on PIPECONTROL having Post Sync Operation enabled."
+    *
+    * Therefore setting L3 Fabric Flush here would be redundant.
     */
-   if (GFX_VER == 12 && (bits & ANV_PIPE_AUX_TABLE_INVALIDATE_BIT))
-      bits |= ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT;
+   if (GFX_VER == 12 && (bits & ANV_PIPE_AUX_TABLE_INVALIDATE_BIT)) {
+      bits |= (ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT |
+               ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+               ANV_PIPE_STATE_CACHE_INVALIDATE_BIT);
+   }
 
    /* If we're going to do an invalidate and we have a pending end-of-pipe
     * sync that has yet to be resolved, we do the end-of-pipe sync now.
@@ -1815,6 +1833,19 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
          anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
             lri.RegisterOffset = GENX(GFX_CCS_AUX_INV_num);
             lri.DataDWord = 1;
+         }
+         /* HSD 22012751911: SW Programming sequence when issuing aux invalidation:
+          *
+          *    "Poll Aux Invalidation bit once the invalidation is set
+          *     (Register 4208 bit 0)"
+          */
+         anv_batch_emit(batch, GENX(MI_SEMAPHORE_WAIT), sem) {
+            sem.CompareOperation = COMPARE_SAD_EQUAL_SDD;
+            sem.WaitMode = PollingMode;
+            sem.RegisterPollMode = true;
+            sem.SemaphoreDataDword = 0x0;
+            sem.SemaphoreAddress =
+               anv_address_from_u64(GENX(GFX_CCS_AUX_INV_num));
          }
       }
 #endif

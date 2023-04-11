@@ -59,8 +59,8 @@ anv_utrace_delete_flush_data(struct u_trace_context *utctx,
    if (flush->trace_bo) {
       assert(flush->batch_bo);
       anv_reloc_list_finish(&flush->relocs, &device->vk.alloc);
-      anv_device_release_bo(device, flush->batch_bo);
-      anv_device_release_bo(device, flush->trace_bo);
+      anv_bo_pool_free(&device->utrace_bo_pool, flush->batch_bo);
+      anv_bo_pool_free(&device->utrace_bo_pool, flush->trace_bo);
    }
 
    vk_sync_destroy(&device->vk, flush->sync);

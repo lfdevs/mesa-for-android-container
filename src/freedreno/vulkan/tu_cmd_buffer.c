@@ -4614,6 +4614,9 @@ tu6_emit_user_consts(struct tu_cs *cs,
    for (unsigned i = 0; i < link->tu_const_state.num_inline_ubos; i++) {
       const struct tu_inline_ubo *ubo = &link->tu_const_state.ubos[i];
 
+      if (link->constlen <= ubo->const_offset_vec4)
+         continue;
+
       uint64_t va = descriptors->set_iova[ubo->base] & ~0x3f;
 
       tu_cs_emit_pkt7(cs, tu6_stage2opcode(type), ubo->push_address ? 7 : 3);
@@ -4621,7 +4624,7 @@ tu6_emit_user_consts(struct tu_cs *cs,
             CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
             CP_LOAD_STATE6_0_STATE_SRC(ubo->push_address ? SS6_DIRECT : SS6_INDIRECT) |
             CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(type)) |
-            CP_LOAD_STATE6_0_NUM_UNIT(ubo->size_vec4));
+            CP_LOAD_STATE6_0_NUM_UNIT(MIN2(ubo->size_vec4, link->constlen - ubo->const_offset_vec4)));
       if (ubo->push_address) {
          tu_cs_emit(cs, 0);
          tu_cs_emit(cs, 0);

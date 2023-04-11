@@ -2459,6 +2459,11 @@ _mesa_MultiDrawElementsIndirect(GLenum mode, GLenum type,
          /* Fast path for u_threaded_context to eliminate atomics. */
          info.index.resource = _mesa_get_bufferobj_reference(ctx, index_bo);
          info.take_index_buffer_ownership = true;
+         /* Increase refcount so be able to use take_index_buffer_ownership with
+          * multiple draws.
+          */
+         if (primcount > 1 && info.index.resource)
+            p_atomic_add(&info.index.resource->reference.count, primcount - 1);
       } else {
          info.index.resource = index_bo->buffer;
       }

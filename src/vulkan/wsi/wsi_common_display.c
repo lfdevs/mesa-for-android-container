@@ -305,6 +305,9 @@ wsi_display_alloc_connector(struct wsi_display *wsi,
    if (!connector)
       return NULL;
 
+   if (!connector)
+      return NULL;
+
    connector->id = connector_id;
    connector->wsi = wsi;
    connector->active = false;
@@ -3107,8 +3110,10 @@ wsi_GetDrmDisplayEXT(VkPhysicalDevice physicalDevice,
    VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
    struct wsi_device *wsi_device = pdevice->wsi_device;
 
-   if (!wsi_device_matches_drm_fd(wsi_device, drmFd))
+   if (!wsi_device_matches_drm_fd(wsi_device, drmFd)) {
+      *pDisplay = VK_NULL_HANDLE;
       return VK_ERROR_UNKNOWN;
+   }
 
    struct wsi_display_connector *connector =
       wsi_display_get_connector(wsi_device, drmFd, connectorId);

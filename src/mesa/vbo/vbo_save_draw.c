@@ -86,8 +86,12 @@ copy_vao(struct gl_context *ctx, const struct gl_vertex_array_object *vao,
       }
 
       if (type != currval->Format.User.Type ||
-          (size >> dmul_shift) != currval->Format.User.Size)
+          (size >> dmul_shift) != currval->Format.User.Size) {
          vbo_set_vertex_format(&currval->Format, size >> dmul_shift, type);
+         /* The format changed. We need to update gallium vertex elements. */
+         if (state == _NEW_CURRENT_ATTRIB)
+            ctx->NewState |= state;
+      }
 
       *data += size;
    }

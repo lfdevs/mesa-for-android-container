@@ -834,6 +834,59 @@ const uint32_t mmec597_conservative_raster_state[] = {
                  ADD, ZERO,  ZERO,  ZERO,                 0,   NONE,      NONE),
 };
 
+const uint32_t mmec597_set_priv_reg[] = {
+// r0 = load();
+// mthd(WAIT_FOR_IDLE, 0);
+// send(0);
+// mthd(SET_MME_SHADOW_SCRATCH(0), 1);
+// send(0);
+   MME_INSN(0,   ADD,   R0,     LOAD0,      ZERO, (0<<12)|0x0110/4,     IMMED0, IMMEDHIGH0,
+                 ADD, ZERO,      ZERO,      ZERO, (1<<12)|0x3400/4,     IMMED1, IMMEDHIGH0),
+// send(load());
+   MME_INSN(0,   ADD, ZERO,      ZERO,      ZERO,                0,       NONE,      LOAD0,
+                 ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE),
+// alu0 = r0;
+// r0 = read(NVC597_SET_MME_SHADOW_SCRATCH(26));
+// send(load());
+// mthd(SET_FALCON04, 0);
+// send(alu0);
+   MME_INSN(0,   ADD, ZERO,        R0,      ZERO, (0<<12)|0x2310/4,       NONE,      LOAD0,
+               STATE,   R0,     IMMED,      ZERO,         0x3468/4,     IMMED0,       ALU0),
+// r0 &= 0xffff;
+   MME_INSN(0, MERGE,   R0,      ZERO,        R0, (0<<10)|(8<<5)|0,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE),
+// if (r0 == 2) {
+   MME_INSN(0,   BEQ, ZERO,        R0, IMMEDPAIR,   (2<<14)|0x0004,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,                2,       NONE,       NONE),
+//    do {
+//       r0 = read(NVC597_SET_MME_SHADOW_SCRATCH(0));
+//       mthd(NO_OPERATION);
+//       send(0);
+   MME_INSN(0, STATE,   R0,     IMMED,      ZERO,         0x3400/4,     IMMED1, IMMEDHIGH1,
+                 ADD, ZERO,      ZERO,      ZERO,         0x0100/4,       NONE,       NONE),
+//    } while(r0 != 1);
+   MME_INSN(1,   BEQ, ZERO,        R0, IMMEDPAIR,   (1<<14)|0x1fff,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,                1,       NONE,       NONE),
+// } else {
+   MME_INSN(0,   JAL, ZERO,      ZERO,      ZERO,   (1<<15)|0x0003,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE),
+//    while (HW_LOOP_COUNT < 10) {
+   MME_INSN(0,  LOOP, ZERO, IMMEDPAIR,      ZERO,                2,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,               10,       NONE,       NONE),
+//       mthd(NO_OPERATION, 0);
+//       send(0);
+//    }
+// }
+   MME_INSN(0,   ADD, ZERO,      ZERO,      ZERO, (0<<12)|0x0100/4,     IMMED0,     IMMED1,
+                 ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE),
+// nop
+   MME_INSN(1,   ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE),
+// nop
+   MME_INSN(0,   ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE,
+                 ADD, ZERO,      ZERO,      ZERO,                0,       NONE,       NONE),
+};
+
 const uint32_t mmec597_compute_counter[] = {
 // r0 = load();
 // r1 = 1;

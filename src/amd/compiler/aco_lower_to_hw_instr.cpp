@@ -2622,7 +2622,8 @@ lower_to_hw_instr(Program* program)
          } else if (instr->isBranch()) {
             Pseudo_branch_instruction* branch = &instr->branch();
             const uint32_t target = branch->target[0];
-            const bool uniform_branch = !(branch->opcode == aco_opcode::p_cbranch_z &&
+            const bool uniform_branch = !((branch->opcode == aco_opcode::p_cbranch_z ||
+                                           branch->opcode == aco_opcode::p_cbranch_nz) &&
                                           branch->operands[0].physReg() == exec);
 
             /* Check if the branch instruction can be removed.

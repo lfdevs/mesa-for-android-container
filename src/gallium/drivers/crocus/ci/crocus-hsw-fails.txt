@@ -1,7 +1,6 @@
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth32f_stencil8,Fail
 
 # frontbuffer reading failures?
 spec@!opengl 1.1@read-front,Fail
@@ -28,8 +27,6 @@ spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
-
-spec@!opengl 3.0@clearbuffer-bug,Fail
 
 spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail

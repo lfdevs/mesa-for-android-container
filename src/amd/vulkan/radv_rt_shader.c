@@ -765,6 +765,48 @@ lower_hit_attrib_derefs(nir_shader *shader)
 }
 
 static void
+inline_constants(nir_shader *dst, nir_shader *src)
+{
+   if (!src->constant_data_size)
+      return;
+
+   uint32_t align_mul = 1;
+   if (dst->constant_data_size) {
+      nir_foreach_block (block, nir_shader_get_entrypoint(src)) {
+         nir_foreach_instr (instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
+            if (intrinsic->intrinsic == nir_intrinsic_load_constant)
+               align_mul = MAX2(align_mul, nir_intrinsic_align_mul(intrinsic));
+         }
+      }
+   }
+
+   uint32_t old_constant_data_size = dst->constant_data_size;
+   uint32_t base_offset = align(dst->constant_data_size, align_mul);
+   dst->constant_data_size = base_offset + src->constant_data_size;
+   dst->constant_data =
+      rerzalloc_size(dst, dst->constant_data, old_constant_data_size, dst->constant_data_size);
+   memcpy((char *)dst->constant_data + base_offset, src->constant_data, src->constant_data_size);
+
+   if (!base_offset)
+      return;
+
+   nir_foreach_block (block, nir_shader_get_entrypoint(src)) {
+      nir_foreach_instr (instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(instr);
+         if (intrinsic->intrinsic == nir_intrinsic_load_constant)
+            nir_intrinsic_set_base(intrinsic, base_offset + nir_intrinsic_base(intrinsic));
+      }
+   }
+}
+
+static void
 insert_rt_case(nir_builder *b, nir_shader *shader, struct rt_variables *vars, nir_ssa_def *idx,
                uint32_t call_idx_base, uint32_t call_idx)
 {
@@ -783,6 +825,8 @@ insert_rt_case(nir_builder *b, nir_shader *shader, struct rt_variables *vars, ni
    NIR_PASS(_, shader, nir_opt_dce);
 
    reserve_stack_size(vars, shader->scratch_size);
+
+   inline_constants(b->shader, shader);
 
    nir_push_if(b, nir_ieq_imm(b, idx, call_idx));
    nir_inline_function_impl(b, nir_shader_get_entrypoint(shader), NULL, var_remap);
@@ -855,6 +899,11 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
          .num_components = 1,
          .bit_size = 32,
       },
+      {
+         /* Scratch offset */
+         .num_components = 1,
+         .bit_size = 32,
+      },
    };
    impl->function->num_params = ARRAY_SIZE(params);
    impl->function->params = ralloc_array(any_hit, nir_parameter, ARRAY_SIZE(params));
@@ -869,6 +918,7 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
    nir_ssa_def *commit_ptr = nir_load_param(b, 0);
    nir_ssa_def *hit_t = nir_load_param(b, 1);
    nir_ssa_def *hit_kind = nir_load_param(b, 2);
+   nir_ssa_def *scratch_offset = nir_load_param(b, 3);
 
    nir_deref_instr *commit =
       nir_build_deref_cast(b, commit_ptr, nir_var_function_temp, glsl_bool_type(), 0);
@@ -906,6 +956,26 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
             case nir_intrinsic_load_ray_hit_kind:
                nir_ssa_def_rewrite_uses(&intrin->dest.ssa, hit_kind);
                nir_instr_remove(&intrin->instr);
+               break;
+
+            /* We place all any_hit scratch variables after intersection scratch variables.
+             * For that reason, we increment the scratch offset by the intersection scratch
+             * size. For call_data, we have to subtract the offset again.
+             */
+            case nir_intrinsic_load_scratch:
+               b->cursor = nir_before_instr(instr);
+               nir_instr_rewrite_src_ssa(instr, &intrin->src[0],
+                                         nir_iadd_nuw(b, scratch_offset, intrin->src[0].ssa));
+               break;
+            case nir_intrinsic_store_scratch:
+               b->cursor = nir_before_instr(instr);
+               nir_instr_rewrite_src_ssa(instr, &intrin->src[1],
+                                         nir_iadd_nuw(b, scratch_offset, intrin->src[1].ssa));
+               break;
+            case nir_intrinsic_load_rt_arg_scratch_offset_amd:
+               b->cursor = nir_after_instr(instr);
+               nir_ssa_def *arg_offset = nir_isub(b, &intrin->dest.ssa, scratch_offset);
+               nir_ssa_def_rewrite_uses_after(&intrin->dest.ssa, arg_offset, arg_offset->parent_instr);
                break;
 
             default:
@@ -950,6 +1020,9 @@ nir_lower_intersection_shader(nir_shader *intersection, nir_shader *any_hit)
    if (any_hit) {
       any_hit = nir_shader_clone(dead_ctx, any_hit);
       NIR_PASS(_, any_hit, nir_opt_dce);
+
+      inline_constants(intersection, any_hit);
+
       any_hit_impl = lower_any_hit_for_intersection(any_hit);
       any_hit_var_remap = _mesa_pointer_hash_table_create(dead_ctx);
    }
@@ -996,6 +1069,7 @@ nir_lower_intersection_shader(nir_shader *intersection, nir_shader *any_hit)
                      &nir_build_deref_var(b, commit_tmp)->dest.ssa,
                      hit_t,
                      hit_kind,
+                     nir_imm_int(b, intersection->scratch_size),
                   };
                   nir_inline_function_impl(b, any_hit_impl, params, any_hit_var_remap);
                }
@@ -1014,7 +1088,8 @@ nir_lower_intersection_shader(nir_shader *intersection, nir_shader *any_hit)
          nir_ssa_def_rewrite_uses(&intrin->dest.ssa, accepted);
       }
    }
-
+   /* Any-hit scratch variables are placed after intersection scratch variables. */
+   intersection->scratch_size += any_hit->scratch_size;
    nir_metadata_preserve(impl, nir_metadata_none);
 
    /* We did some inlining; have to re-index SSA defs */

@@ -769,6 +769,8 @@ rematerialize_deref_in_block(nir_deref_instr *deref,
 
    case nir_deref_type_cast:
       new_deref->cast.ptr_stride = deref->cast.ptr_stride;
+      new_deref->cast.align_mul = deref->cast.align_mul;
+      new_deref->cast.align_offset = deref->cast.align_offset;
       break;
 
    case nir_deref_type_array:

@@ -64,7 +64,6 @@ setup_reduce_temp(Program* program)
    Temp vtmp(0, RegClass(RegType::vgpr, maxSize).as_linear());
    int inserted_at = -1;
    int vtmp_inserted_at = -1;
-   bool vtmp_in_loop = false;
 
    for (Block& block : program->blocks) {
 
@@ -150,7 +149,6 @@ setup_reduce_temp(Program* program)
             need_vtmp |= cluster_size == 32;
          }
 
-         vtmp_in_loop |= need_vtmp && block.loop_nest_depth > 0;
          if (need_vtmp && (int)last_top_level_block_idx != vtmp_inserted_at) {
             vtmp = program->allocateTmp(vtmp.regClass());
             aco_ptr<Pseudo_instruction> create{create_instruction<Pseudo_instruction>(

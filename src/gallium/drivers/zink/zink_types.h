@@ -244,6 +244,7 @@ struct zink_fence {
    uint64_t batch_id;
    bool submitted;
    bool completed;
+   struct util_dynarray mfences;
 };
 
 

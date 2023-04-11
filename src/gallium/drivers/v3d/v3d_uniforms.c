@@ -450,7 +450,7 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
 void
 v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader)
 {
-        uint32_t dirty = 0;
+        uint64_t dirty = 0;
 
         for (int i = 0; i < shader->prog_data.base->uniforms.count; i++) {
                 switch (shader->prog_data.base->uniforms.contents[i]) {

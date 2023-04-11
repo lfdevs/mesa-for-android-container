@@ -4436,7 +4436,6 @@ batch_get_polygon_list(struct panfrost_batch *batch)
       bool has_draws = batch->scoreboard.first_tiler != NULL;
       unsigned size = panfrost_tiler_get_polygon_list_size(
          dev, batch->key.width, batch->key.height, has_draws);
-      size = util_next_power_of_two(size);
 
       /* Create the BO as invisible if we can. If there are no draws,
        * we need to write the polygon list manually because there's

@@ -1179,6 +1179,9 @@ sqtt_CreateRayTracingPipelinesKHR(VkDevice _device, VkDeferredOperationKHR defer
       if (!pipeline)
          continue;
 
+      if (pCreateInfos[i].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)
+         continue;
+
       result = radv_register_pipeline(device, pipeline);
       if (result != VK_SUCCESS)
          goto fail;

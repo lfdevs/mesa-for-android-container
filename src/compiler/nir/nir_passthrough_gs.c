@@ -49,7 +49,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
 
    nir_variable *in_vars[VARYING_SLOT_MAX];
    nir_variable *out_vars[VARYING_SLOT_MAX];
-   unsigned num_vars = 0;
+   unsigned num_inputs = 0, num_outputs = 0;
 
    /* Create input/output variables. */
    nir_foreach_shader_out_variable(var, prev_stage) {
@@ -72,6 +72,15 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       in->data.interpolation = var->data.interpolation;
       in->data.compact = var->data.compact;
 
+      in_vars[num_inputs++] = in;
+
+      nir->num_inputs++;
+      if (in->data.location == VARYING_SLOT_EDGE)
+         continue;
+
+      if (var->data.location != VARYING_SLOT_POS)
+         nir->num_outputs++;
+
       if (var->name)
          snprintf(name, sizeof(name), "out_%s", var->name);
       else
@@ -85,17 +94,38 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       out->data.interpolation = var->data.interpolation;
       out->data.compact = var->data.compact;
 
-      in_vars[num_vars] = in;
-      out_vars[num_vars++] = out;
+      out_vars[num_outputs++] = out;
    }
 
-   for (unsigned i = 0; i < vertices; ++i) {
+   unsigned int start_vert = 0;
+   unsigned int end_vert = vertices;
+   unsigned int vert_step = 1;
+   switch (primitive_type) {
+   case PIPE_PRIM_LINES_ADJACENCY:
+   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+      start_vert = 1;
+      end_vert += 1;
+      break;
+   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      end_vert = 5;
+      vert_step = 2;
+      break;
+   default:
+      break;
+   }
+
+   for (unsigned i = start_vert; i < end_vert; i += vert_step) {
       /* Copy inputs to outputs. */
-      for (unsigned j = 0; j < num_vars; ++j) {
+      for (unsigned j = 0, oj = 0; j < num_inputs; ++j) {
+         if (in_vars[j]->data.location == VARYING_SLOT_EDGE) {
+            continue;
+         }
          /* no need to use copy_var to save a lower pass */
          nir_ssa_def *value = nir_load_array_var_imm(&b, in_vars[j], i);
-         nir_store_var(&b, out_vars[j], value,
+         nir_store_var(&b, out_vars[oj], value,
                        (1u << value->num_components) - 1);
+         ++oj;
       }
       nir_emit_vertex(&b, 0);
    }

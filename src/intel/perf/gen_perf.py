@@ -962,12 +962,7 @@ def main():
             c("{\n")
             c_indent(3)
 
-            if gen.chipset == "hsw":
-                c("struct intel_perf_query_info *query = hsw_query_alloc(perf, %u);\n" % len(counters))
-            elif gen.chipset.startswith("acm"):
-                c("struct intel_perf_query_info *query = xehp_query_alloc(perf, %u);\n" % len(counters))
-            else:
-                c("struct intel_perf_query_info *query = bdw_query_alloc(perf, %u);\n" % len(counters))
+            c("struct intel_perf_query_info *query = intel_query_alloc(perf, %u);\n" % len(counters))
             c("\n")
             c("query->name = \"" + set.name + "\";\n")
             c("query->symbol_name = \"" + set.symbol_name + "\";\n")

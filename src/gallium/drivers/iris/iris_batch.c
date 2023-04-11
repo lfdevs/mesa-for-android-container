@@ -981,9 +981,14 @@ submit_batch(struct iris_batch *batch)
    }
 
    int ret = 0;
-   if (!batch->screen->devinfo->no_hw &&
-       intel_ioctl(batch->screen->fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf))
-      ret = -errno;
+   if (!batch->screen->devinfo->no_hw) {
+      do {
+         ret = intel_ioctl(batch->screen->fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf);
+      } while (ret && errno == ENOMEM);
+
+      if (ret)
+	 ret = -errno;
+   }
 
    simple_mtx_unlock(bo_deps_lock);
 
@@ -1092,9 +1097,8 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
     * with a new logical context, and inform iris_context that all state
     * has been lost and needs to be re-initialized.  If this succeeds,
     * dubiously claim success...
-    * Also handle ENOMEM here.
     */
-   if ((ret == -EIO || ret == -ENOMEM) && replace_kernel_ctx(batch)) {
+   if (ret == -EIO && replace_kernel_ctx(batch)) {
       if (batch->reset->reset) {
          /* Tell gallium frontends the device is lost and it was our fault. */
          batch->reset->reset(batch->reset->data, PIPE_GUILTY_CONTEXT_RESET);

@@ -658,14 +658,8 @@ void trace_dump_nir(void *nir)
    if (!dumping)
       return;
 
-   if (nir_count < 0) {
+   if (--nir_count < 0) {
       fputs("<string>...</string>", stream);
-      return;
-   }
-
-   if ((nir_count--) == 0) {
-      fputs("<string>Set GALLIUM_TRACE_NIR to a sufficiently big number "
-            "to enable NIR shader dumping.</string>", stream);
       return;
    }
 

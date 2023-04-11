@@ -5709,9 +5709,27 @@ genX(invalidate_aux_map_state)(struct iris_batch *batch)
        *
        * An end of pipe sync is needed here, otherwise we see GPU hangs in
        * dEQP-GLES31.functional.copy_image.* tests.
+       *
+       * HSD 22012751911: SW Programming sequence when issuing aux invalidation:
+       *
+       *    "Render target Cache Flush + L3 Fabric Flush + State Invalidation + CS Stall"
+       *
+       * Notice we don't set the L3 Fabric Flush here, because we have
+       * PIPE_CONTROL_CS_STALL. The PIPE_CONTROL::L3 Fabric Flush
+       * documentation says :
+       *
+       *    "L3 Fabric Flush will ensure all the pending transactions in the
+       *     L3 Fabric are flushed to global observation point. HW does
+       *     implicit L3 Fabric Flush on all stalling flushes (both explicit
+       *     and implicit) and on PIPECONTROL having Post Sync Operation
+       *     enabled."
+       *
+       * Therefore setting L3 Fabric Flush here would be redundant.
        */
       iris_emit_end_of_pipe_sync(batch, "Invalidate aux map table",
-                                 PIPE_CONTROL_CS_STALL);
+                                 PIPE_CONTROL_CS_STALL |
+                                 PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                 PIPE_CONTROL_STATE_CACHE_INVALIDATE);
 
       /* If the aux-map state number increased, then we need to rewrite the
        * register. Rewriting the register is used to both set the aux-map
@@ -5719,6 +5737,20 @@ genX(invalidate_aux_map_state)(struct iris_batch *batch)
        * cached translations.
        */
       iris_load_register_imm32(batch, GENX(GFX_CCS_AUX_INV_num), 1);
+
+      /* HSD 22012751911: SW Programming sequence when issuing aux invalidation:
+       *
+       *    "Poll Aux Invalidation bit once the invalidation is set (Register
+       *     4208 bit 0)"
+       */
+      iris_emit_cmd(batch, GENX(MI_SEMAPHORE_WAIT), sem) {
+         sem.CompareOperation = COMPARE_SAD_EQUAL_SDD;
+         sem.WaitMode = PollingMode;
+         sem.RegisterPollMode = true;
+         sem.SemaphoreDataDword = 0x0;
+         sem.SemaphoreAddress = ro_bo(NULL, GENX(GFX_CCS_AUX_INV_num));
+      }
+
       batch->last_aux_map_state = aux_map_state_num;
    }
 }

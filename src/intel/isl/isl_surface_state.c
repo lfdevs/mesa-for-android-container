@@ -907,7 +907,11 @@ isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 #endif
 
-#if GFX_VER >= 7
+#if GFX_VER >= 9
+   s.Height = ((num_elements - 1) >> 7) & 0x3fff;
+   s.Width = (num_elements - 1) & 0x7f;
+   s.Depth = ((num_elements - 1) >> 21) & 0x7ff;
+#elif GFX_VER >= 7
    s.Height = ((num_elements - 1) >> 7) & 0x3fff;
    s.Width = (num_elements - 1) & 0x7f;
    s.Depth = ((num_elements - 1) >> 21) & 0x3ff;

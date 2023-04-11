@@ -5436,7 +5436,8 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
        * FS), bound the invocation to the dispatch size.
        */
       fs_reg bound_invocation;
-      if (bld.dispatch_width() < bld.shader->nir->info.subgroup_size) {
+      if (api_subgroup_size == 0 ||
+          bld.dispatch_width() < api_subgroup_size) {
          bound_invocation = bld.vgrf(BRW_REGISTER_TYPE_UD);
          bld.AND(bound_invocation, invocation, brw_imm_ud(dispatch_width - 1));
       } else {

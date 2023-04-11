@@ -1512,6 +1512,13 @@ get_subgroup_size(const struct shader_info *info, unsigned max_subgroup_size)
    unreachable("Invalid subgroup size type");
 }
 
+unsigned
+brw_nir_api_subgroup_size(const nir_shader *nir,
+                          unsigned hw_subgroup_size)
+{
+   return get_subgroup_size(&nir->info, hw_subgroup_size);
+}
+
 void
 brw_nir_apply_key(nir_shader *nir,
                   const struct brw_compiler *compiler,

@@ -178,6 +178,12 @@ struct backend_instruction {
                                  *   the scratch surface offset to build
                                  *   extended descriptor
                                  */
+   bool predicate_trivial:1; /**< The predication mask applied to this
+                              *   instruction is guaranteed to be uniform and
+                              *   a superset of the execution mask of the
+                              *   present block, no currently enabled channels
+                              *   will be disabled by the predicate.
+                              */
    bool eot:1;
 
    /* Chooses which flag subregister (f0.0 to f1.1) is used for conditional

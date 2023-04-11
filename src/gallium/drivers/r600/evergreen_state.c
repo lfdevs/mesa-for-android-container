@@ -4274,7 +4274,7 @@ static void evergreen_set_shader_images(struct pipe_context *ctx,
 
 		bool is_buffer = image->target == PIPE_BUFFER;
 		struct r600_texture *rtex = (struct r600_texture *)image;
-		if (!is_buffer & rtex->db_compatible)
+		if (!is_buffer && rtex->db_compatible)
 			istate->compressed_depthtex_mask |= 1 << i;
 		else
 			istate->compressed_depthtex_mask &= ~(1 << i);

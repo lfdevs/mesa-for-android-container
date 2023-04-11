@@ -625,6 +625,9 @@ compile_vertex_list(struct gl_context *ctx)
       GLubyte mode = original_prims[i].mode;
       bool converted_prim = false;
       unsigned index_size;
+      bool outputting_quads = !!(ctx->Const.DriverSupportedPrimMask &
+                                 (BITFIELD_MASK(PIPE_PRIM_QUADS) | BITFIELD_MASK(PIPE_PRIM_QUAD_STRIP)));
+      unsigned verts_per_primitive = outputting_quads ? 4 : 3;
 
       int vertex_count = original_prims[i].count;
       if (!vertex_count) {
@@ -632,8 +635,8 @@ compile_vertex_list(struct gl_context *ctx)
       }
 
       /* Increase indices storage if the original estimation was too small. */
-      if (idx + 3 * vertex_count > max_index_count) {
-         max_index_count = max_index_count + 3 * vertex_count;
+      if (idx + verts_per_primitive * vertex_count > max_index_count) {
+         max_index_count = max_index_count + verts_per_primitive * vertex_count;
          indices = (uint32_t*) realloc(indices, max_index_count * sizeof(uint32_t));
          tmp_indices = all_prims_supported ? NULL : realloc(tmp_indices, max_index_count * sizeof(uint32_t));
       }

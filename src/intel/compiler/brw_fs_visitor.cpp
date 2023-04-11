@@ -29,6 +29,7 @@
  */
 #include "brw_eu.h"
 #include "brw_fs.h"
+#include "brw_nir.h"
 #include "compiler/glsl_types.h"
 
 using namespace brw;
@@ -1201,9 +1202,14 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
      live_analysis(this), regpressure_analysis(this),
      performance_analysis(this),
      dispatch_width(dispatch_width),
+     api_subgroup_size(brw_nir_api_subgroup_size(shader, dispatch_width)),
      bld(fs_builder(this, dispatch_width).at_end())
 {
    init();
+   assert(api_subgroup_size == 0 ||
+          api_subgroup_size == 8 ||
+          api_subgroup_size == 16 ||
+          api_subgroup_size == 32);
 }
 
 fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
@@ -1219,9 +1225,14 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
      live_analysis(this), regpressure_analysis(this),
      performance_analysis(this),
      dispatch_width(8),
+     api_subgroup_size(brw_nir_api_subgroup_size(shader, dispatch_width)),
      bld(fs_builder(this, dispatch_width).at_end())
 {
    init();
+   assert(api_subgroup_size == 0 ||
+          api_subgroup_size == 8 ||
+          api_subgroup_size == 16 ||
+          api_subgroup_size == 32);
 }
 
 void

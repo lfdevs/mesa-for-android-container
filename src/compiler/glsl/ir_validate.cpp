@@ -805,7 +805,7 @@ ir_validate::visit_leave(ir_expression *ir)
    case ir_binop_lshift:
    case ir_binop_rshift:
       assert(ir->operands[0]->type->is_integer_16_32_64() &&
-             ir->operands[1]->type->is_integer_16_32());
+             ir->operands[1]->type->is_integer_16_32_64());
       if (ir->operands[0]->type->is_scalar()) {
           assert(ir->operands[1]->type->is_scalar());
       }

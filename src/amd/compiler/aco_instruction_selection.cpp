@@ -7394,7 +7394,8 @@ emit_scoped_barrier(isel_context* ctx, nir_intrinsic_instr* instr)
       storage_allowed |= storage_task_payload;
 
    /* Allow VMEM output for all stages that can have outputs. */
-   if (ctx->stage.hw != HWStage::CS && ctx->stage.hw != HWStage::FS)
+   if ((ctx->stage.hw != HWStage::CS && ctx->stage.hw != HWStage::FS) ||
+       ctx->stage.has(SWStage::TS))
       storage_allowed |= storage_vmem_output;
 
    /* Workgroup barriers can hang merged shaders that can potentially have 0 threads in either half.

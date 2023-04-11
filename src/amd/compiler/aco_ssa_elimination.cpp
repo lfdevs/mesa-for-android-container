@@ -603,7 +603,15 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
 
       /* See if we found an unused exec write. */
       if (writes_exec && !exec_write_used) {
-         instr.reset();
+         /* Don't eliminate an instruction that writes registers other than exec and scc.
+          * It is possible that this is eg. an s_and_saveexec and the saved value is
+          * used by a later branch.
+          */
+         bool writes_other = std::any_of(instr->definitions.begin(), instr->definitions.end(),
+                                         [](const Definition& def) -> bool
+                                         { return def.physReg() != exec && def.physReg() != scc; });
+         if (!writes_other)
+            instr.reset();
          continue;
       }
 

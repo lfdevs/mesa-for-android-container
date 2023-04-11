@@ -290,26 +290,25 @@ pub trait ReferenceCountedAPIPointer<T, const ERR: i32> {
 
 #[macro_export]
 macro_rules! impl_cl_type_trait {
-    ($cl: ident, $t: ty, $err: ident) => {
+    ($cl: ident, $t: path, $err: ident) => {
         impl $crate::api::icd::ReferenceCountedAPIPointer<$t, $err> for $cl {
             fn get_ptr(&self) -> CLResult<*const $t> {
                 type Base = $crate::api::icd::CLObjectBase<$err>;
                 Base::check_ptr(self.cast())?;
 
-                // Now that we've verified the object, it should be safe to
-                // dereference it.  As one more double check, make sure that
-                // the CLObjectBase is at the start of the object
-                let obj_ptr: *const $t = self.cast();
-                unsafe {
-                    let base_ptr = ::std::ptr::addr_of!((*obj_ptr).base);
-                    assert!((obj_ptr as usize) == (base_ptr as usize));
-                }
-
-                Ok(obj_ptr)
+                let offset = ::mesa_rust_util::offset_of!($t, base);
+                let mut obj_ptr: *const u8 = self.cast();
+                // SAFETY: We offset the pointer back from the ICD specified base type to our
+                //         internal type.
+                unsafe { obj_ptr = obj_ptr.sub(offset) }
+                Ok(obj_ptr.cast())
             }
 
             fn from_ptr(ptr: *const $t) -> Self {
-                ptr as Self
+                let offset = ::mesa_rust_util::offset_of!($t, base);
+                // SAFETY: The resulting pointer is safe as we simply offset into the ICD specified
+                //         base type.
+                unsafe { (ptr as *const u8).add(offset) as Self }
             }
         }
 

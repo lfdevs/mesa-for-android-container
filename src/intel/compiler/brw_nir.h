@@ -160,6 +160,9 @@ void brw_nir_apply_key(nir_shader *nir,
                        unsigned max_subgroup_size,
                        bool is_scalar);
 
+unsigned brw_nir_api_subgroup_size(const nir_shader *nir,
+                                   unsigned hw_subgroup_size);
+
 enum brw_conditional_mod brw_cmod_for_nir_comparison(nir_op op);
 uint32_t brw_aop_for_nir_intrinsic(const nir_intrinsic_instr *atomic);
 enum brw_reg_type brw_type_for_nir_type(const struct intel_device_info *devinfo,

@@ -1657,7 +1657,7 @@ get_module_flags(struct ntd_context *ctx)
    if (ctx->mod.feats.resource_descriptor_heap_indexing)
       flags |= (1 << 30);
    if (ctx->mod.feats.sampler_descriptor_heap_indexing)
-      flags |= (1 << 31);
+      flags |= (1ull << 31);
    if (ctx->mod.feats.atomic_int64_heap_resource)
       flags |= (1ull << 32);
    if (ctx->mod.feats.advanced_texture_ops)

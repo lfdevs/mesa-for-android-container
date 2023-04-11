@@ -747,7 +747,7 @@ shift_result_type(const struct glsl_type *type_a,
      return glsl_type::error_type;
 
    }
-   if (!type_b->is_integer_32()) {
+   if (!type_b->is_integer_32_64()) {
       _mesa_glsl_error(loc, state, "RHS of operator %s must be an integer or "
                        "integer vector", ast_expression::operator_string(op));
      return glsl_type::error_type;

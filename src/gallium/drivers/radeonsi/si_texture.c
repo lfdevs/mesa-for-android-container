@@ -1638,8 +1638,7 @@ static struct pipe_resource *si_texture_from_winsys_buffer(struct si_screen *ssc
    }
 
    if (ac_surface_get_plane_offset(sscreen->info.gfx_level, &tex->surface, 0, 0) +
-        tex->surface.total_size > buf->size ||
-       buf->alignment_log2 < tex->surface.alignment_log2) {
+        tex->surface.total_size > buf->size) {
       si_texture_reference(&tex, NULL);
       return NULL;
    }

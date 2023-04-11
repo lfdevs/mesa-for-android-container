@@ -498,6 +498,19 @@ emit_3dstate_sbe(struct anv_graphics_pipeline *pipeline)
       sbe.VertexURBEntryReadLength = DIV_ROUND_UP(max_source_attr + 1, 2);
       sbe.ForceVertexURBEntryReadOffset = true;
       sbe.ForceVertexURBEntryReadLength = true;
+
+      /* Ask the hardware to supply PrimitiveID if the fragment shader
+       * reads it but a previous stage didn't write one.
+       */
+      if ((wm_prog_data->inputs & VARYING_BIT_PRIMITIVE_ID) &&
+          fs_input_map->varying_to_slot[VARYING_SLOT_PRIMITIVE_ID] == -1) {
+         sbe.PrimitiveIDOverrideAttributeSelect =
+            wm_prog_data->urb_setup[VARYING_SLOT_PRIMITIVE_ID];
+         sbe.PrimitiveIDOverrideComponentX = true;
+         sbe.PrimitiveIDOverrideComponentY = true;
+         sbe.PrimitiveIDOverrideComponentZ = true;
+         sbe.PrimitiveIDOverrideComponentW = true;
+      }
    } else {
       assert(anv_pipeline_is_mesh(pipeline));
 #if GFX_VERx10 >= 125

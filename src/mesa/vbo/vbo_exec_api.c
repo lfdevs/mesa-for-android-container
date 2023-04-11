@@ -230,6 +230,11 @@ vbo_exec_copy_to_current(struct vbo_exec_context *exec)
          vbo_set_vertex_format(&vbo->current[i].Format,
                                exec->vtx.attr[i].size >> dmul_shift,
                                exec->vtx.attr[i].type);
+         /* The format changed. We need to update gallium vertex elements.
+          * Material attributes don't need this because they don't have formats.
+          */
+         if (i <= VBO_ATTRIB_EDGEFLAG)
+            ctx->NewState |= _NEW_CURRENT_ATTRIB;
       }
    }
 

@@ -1232,7 +1232,13 @@ resource_create(struct pipe_screen *pscreen,
                                                          templ->height0,
                                                          64, loader_private,
                                                          &res->dt_stride);
-         assert(res->obj->dt);
+         if (!res->obj->dt) {
+            mesa_loge("zink: could not create swapchain");
+            FREE(res->obj);
+            free(res->modifiers);
+            FREE_CL(res);
+            return NULL;
+         }
       } else {
          /* frontbuffer */
          struct zink_resource *back = (void*)loader_private;

@@ -196,7 +196,6 @@ libgrl = static_library(
   ],
   link_whole : [grl_genX_libs],
   dependencies : [libgrl_deps, idep_anv_headers],
-  install : true,
 )
 idep_grl = declare_dependency(
   link_with : libgrl,

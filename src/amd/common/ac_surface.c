@@ -3045,7 +3045,7 @@ ac_surface_addr_from_coord(struct ac_addrlib *addrlib, const struct radeon_info 
    assert(info->gfx_level >= GFX9);
 
    ADDR2_COMPUTE_SURFACE_ADDRFROMCOORD_INPUT input = {0};
-   input.size = sizeof(ADDR_COMPUTE_SURFACE_ADDRFROMCOORD_INPUT);
+   input.size = sizeof(ADDR2_COMPUTE_SURFACE_ADDRFROMCOORD_INPUT);
    input.slice = layer;
    input.mipId = level;
    input.unalignedWidth = DIV_ROUND_UP(surf_info->width, surf->blk_w);

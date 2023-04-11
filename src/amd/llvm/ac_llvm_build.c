@@ -1343,23 +1343,28 @@ LLVMValueRef ac_build_buffer_load(struct ac_llvm_context *ctx, LLVMValueRef rsrc
       if (soffset)
          offset = LLVMBuildAdd(ctx->builder, offset, soffset, "");
 
+      char name[256], type_name[8];
+      ac_build_type_name_for_intr(channel_type, type_name, sizeof(type_name));
+      snprintf(name, sizeof(name), "llvm.amdgcn.s.buffer.load.%s", type_name);
+
+      LLVMValueRef channel_size = LLVMConstInt(ctx->i32, ac_get_type_size(channel_type), 0);
+
       for (int i = 0; i < num_channels; i++) {
          if (i) {
-            offset = LLVMBuildAdd(ctx->builder, offset, LLVMConstInt(ctx->i32, 4, 0), "");
+            offset = LLVMBuildAdd(ctx->builder, offset, channel_size, "");
          }
          LLVMValueRef args[3] = {
             rsrc,
             offset,
             LLVMConstInt(ctx->i32, get_load_cache_policy(ctx, cache_policy), 0),
          };
-         result[i] = ac_build_intrinsic(ctx, "llvm.amdgcn.s.buffer.load.f32", ctx->f32, args, 3,
-                                        AC_ATTR_INVARIANT_LOAD);
+         result[i] = ac_build_intrinsic(ctx, name, channel_type, args, 3, AC_ATTR_INVARIANT_LOAD);
       }
       if (num_channels == 1)
          return result[0];
 
       if (num_channels == 3 && !ac_has_vec3_support(ctx->gfx_level, false))
-         result[num_channels++] = LLVMGetUndef(ctx->f32);
+         result[num_channels++] = LLVMGetUndef(channel_type);
       return ac_build_gather_values(ctx, result, num_channels);
    }
 

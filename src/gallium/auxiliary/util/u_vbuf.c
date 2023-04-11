@@ -1724,6 +1724,8 @@ void u_vbuf_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *inf
          }
 
          if (unroll_indices) {
+            if (!new_info.has_user_indices && info->take_index_buffer_ownership)
+               pipe_drop_resource_references(new_info.index.resource, 1);
             new_info.index_size = 0;
             new_draw.index_bias = 0;
             new_info.index_bounds_valid = true;

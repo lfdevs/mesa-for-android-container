@@ -1625,10 +1625,15 @@ check_for_layout_update(struct zink_context *ctx, struct zink_resource *res, boo
 {
    VkImageLayout layout = res->bind_count[is_compute] ? zink_descriptor_util_image_layout_eval(ctx, res, is_compute) : VK_IMAGE_LAYOUT_UNDEFINED;
    VkImageLayout other_layout = res->bind_count[!is_compute] ? zink_descriptor_util_image_layout_eval(ctx, res, !is_compute) : VK_IMAGE_LAYOUT_UNDEFINED;
-   if (res->bind_count[is_compute] && layout && res->layout != layout)
-      _mesa_set_add(ctx->need_barriers[is_compute], res);
-   if (res->bind_count[!is_compute] && other_layout && (layout != other_layout || res->layout != other_layout))
-      _mesa_set_add(ctx->need_barriers[!is_compute], res);
+   if (!is_compute && res->fb_binds && !(ctx->feedback_loops & res->fb_binds)) {
+      /* always double check feedback loops */
+      _mesa_set_add(ctx->need_barriers[0], res);
+   } else {
+      if (res->bind_count[is_compute] && layout && res->layout != layout)
+         _mesa_set_add(ctx->need_barriers[is_compute], res);
+      if (res->bind_count[!is_compute] && other_layout && (layout != other_layout || res->layout != other_layout))
+         _mesa_set_add(ctx->need_barriers[!is_compute], res);
+   }
 }
 
 static void
@@ -3804,10 +3809,13 @@ zink_flush(struct pipe_context *pctx,
          *pfence = (struct pipe_fence_handle *)mfence;
       }
 
+      assert(!mfence->fence);
       mfence->fence = fence;
       mfence->sem = export_sem;
-      if (fence)
+      if (fence) {
          mfence->submit_count = submit_count;
+         util_dynarray_append(&fence->mfences, struct zink_tc_fence *, mfence);
+      }
 
       if (deferred_fence) {
          assert(fence);

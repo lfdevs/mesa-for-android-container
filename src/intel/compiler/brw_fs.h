@@ -538,6 +538,9 @@ public:
    const unsigned dispatch_width; /**< 8, 16 or 32 */
    unsigned max_dispatch_width;
 
+   /* The API selected subgroup size */
+   unsigned api_subgroup_size; /**< 0, 8, 16, 32 */
+
    struct shader_stats shader_stats;
 
    brw::fs_builder bld;

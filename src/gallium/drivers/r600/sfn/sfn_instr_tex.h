@@ -196,7 +196,7 @@ private:
    unsigned m_resource_id;
 
    static const std::map<Opcode, std::string> s_opcode_map;
-   std::list<TexInstr *> m_prepare_instr;
+   std::list<TexInstr *, Allocator<TexInstr *>> m_prepare_instr;
 };
 
 bool

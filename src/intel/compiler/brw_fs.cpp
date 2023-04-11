@@ -644,10 +644,19 @@ fs_visitor::limit_dispatch_width(unsigned n, const char *msg)
 bool
 fs_inst::is_partial_write() const
 {
-   return ((this->predicate && this->opcode != BRW_OPCODE_SEL) ||
-           (this->exec_size * type_sz(this->dst.type)) < 32 ||
-           !this->dst.is_contiguous() ||
-           this->dst.offset % REG_SIZE != 0);
+   if (this->predicate && !this->predicate_trivial &&
+       this->opcode != BRW_OPCODE_SEL)
+      return true;
+
+   if (this->dst.offset % REG_SIZE != 0)
+      return true;
+
+   /* SEND instructions always write whole registers */
+   if (this->opcode == SHADER_OPCODE_SEND)
+      return false;
+
+   return this->exec_size * type_sz(this->dst.type) < 32 ||
+          !this->dst.is_contiguous();
 }
 
 unsigned
@@ -2626,6 +2635,7 @@ fs_visitor::opt_algebraic()
          /* a * 1.0 = a */
          if (inst->src[1].is_one()) {
             inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
             inst->src[1] = reg_undef;
             progress = true;
             break;
@@ -2634,6 +2644,7 @@ fs_visitor::opt_algebraic()
          /* a * -1.0 = -a */
          if (inst->src[1].is_negative_one()) {
             inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
             inst->src[0].negate = !inst->src[0].negate;
             inst->src[1] = reg_undef;
             progress = true;
@@ -2648,6 +2659,7 @@ fs_visitor::opt_algebraic()
          if (brw_reg_type_is_integer(inst->src[1].type) &&
              inst->src[1].is_zero()) {
             inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
             inst->src[1] = reg_undef;
             progress = true;
             break;
@@ -2656,6 +2668,7 @@ fs_visitor::opt_algebraic()
          if (inst->src[0].file == IMM) {
             assert(inst->src[0].type == BRW_REGISTER_TYPE_F);
             inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
             inst->src[0].f += inst->src[1].f;
             inst->src[1] = reg_undef;
             progress = true;
@@ -2671,9 +2684,11 @@ fs_visitor::opt_algebraic()
              */
             if (inst->src[0].negate) {
                inst->opcode = BRW_OPCODE_NOT;
+               inst->sources = 1;
                inst->src[0].negate = false;
             } else {
                inst->opcode = BRW_OPCODE_MOV;
+               inst->sources = 1;
             }
             inst->src[1] = reg_undef;
             progress = true;
@@ -2720,6 +2735,7 @@ fs_visitor::opt_algebraic()
          }
          if (inst->src[0].equals(inst->src[1])) {
             inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
             inst->src[1] = reg_undef;
             inst->predicate = BRW_PREDICATE_NONE;
             inst->predicate_inverse = false;
@@ -2732,6 +2748,7 @@ fs_visitor::opt_algebraic()
                case BRW_REGISTER_TYPE_F:
                   if (inst->src[1].f >= 1.0f) {
                      inst->opcode = BRW_OPCODE_MOV;
+                     inst->sources = 1;
                      inst->src[1] = reg_undef;
                      inst->conditional_mod = BRW_CONDITIONAL_NONE;
                      progress = true;
@@ -2747,6 +2764,7 @@ fs_visitor::opt_algebraic()
                case BRW_REGISTER_TYPE_F:
                   if (inst->src[1].f <= 0.0f) {
                      inst->opcode = BRW_OPCODE_MOV;
+                     inst->sources = 1;
                      inst->src[1] = reg_undef;
                      inst->conditional_mod = BRW_CONDITIONAL_NONE;
                      progress = true;
@@ -2767,11 +2785,13 @@ fs_visitor::opt_algebraic()
             break;
          if (inst->src[1].is_one()) {
             inst->opcode = BRW_OPCODE_ADD;
+            inst->sources = 2;
             inst->src[1] = inst->src[2];
             inst->src[2] = reg_undef;
             progress = true;
          } else if (inst->src[2].is_one()) {
             inst->opcode = BRW_OPCODE_ADD;
+            inst->sources = 2;
             inst->src[2] = reg_undef;
             progress = true;
          }
@@ -6551,15 +6571,18 @@ fs_visitor::fixup_nomask_control_flow()
                 */
                const bool save_flag = flag_liveout &
                                       flag_mask(flag, dispatch_width / 8);
-               const fs_reg tmp = ubld.group(1, 0).vgrf(flag.type);
+               const fs_reg tmp = ubld.group(8, 0).vgrf(flag.type);
 
-               if (save_flag)
+               if (save_flag) {
+                  ubld.group(8, 0).UNDEF(tmp);
                   ubld.group(1, 0).MOV(tmp, flag);
+               }
 
                ubld.emit(FS_OPCODE_LOAD_LIVE_CHANNELS);
 
                set_predicate(pred, inst);
                inst->flag_subreg = 0;
+               inst->predicate_trivial = true;
 
                if (save_flag)
                   ubld.group(1, 0).at(block, inst->next).MOV(flag, tmp);

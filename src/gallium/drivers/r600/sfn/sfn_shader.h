@@ -340,12 +340,14 @@ private:
    uint32_t m_indirect_files{0};
    std::bitset<sh_flags_count> m_flags;
    uint32_t nhwatomic_ranges{0};
-   std::vector<r600_shader_atomic> m_atomics;
+   std::vector<r600_shader_atomic, Allocator<r600_shader_atomic>> m_atomics;
 
    uint32_t m_nhwatomic{0};
    uint32_t m_atomic_base{0};
    uint32_t m_next_hwatomic_loc{0};
-   std::unordered_map<int, int> m_atomic_base_map;
+   std::unordered_map<int, int,
+                      std::hash<int>,  std::equal_to<int>,
+                      Allocator<std::pair<const int, int>>> m_atomic_base_map;
    uint32_t m_atomic_file_count{0};
    PRegister m_atomic_update{nullptr};
    PRegister m_rat_return_address{nullptr};

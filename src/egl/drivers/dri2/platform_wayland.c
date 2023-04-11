@@ -1522,6 +1522,19 @@ dri2_wl_swap_buffers_with_damage(_EGLDisplay *disp,
    if (!dri2_surf->wl_win)
       return _eglError(EGL_BAD_NATIVE_WINDOW, "dri2_swap_buffers");
 
+   /* Flush (and finish glthread) before:
+    *   - update_buffers_if_needed because the unmarshalling thread
+    *     may be running currently, and we would concurrently alloc/free
+    *     the back bo.
+    *   - swapping current/back because flushing may free the buffer and
+    *     dri_image and reallocate them using get_back_bo (which causes a
+    *     a crash because 'current' becomes NULL).
+    *   - using any wl_* function because accessing them from this thread
+    *     and glthread causes troubles (see #7624 and #8136)
+    */
+   dri2_flush_drawable_for_swapbuffers(disp, draw);
+   dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
+
    while (dri2_surf->throttle_callback != NULL)
       if (wl_display_dispatch_queue(dri2_dpy->wl_dpy,
                                     dri2_surf->wl_queue) == -1)
@@ -1530,17 +1543,6 @@ dri2_wl_swap_buffers_with_damage(_EGLDisplay *disp,
    for (int i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++)
       if (dri2_surf->color_buffers[i].age > 0)
          dri2_surf->color_buffers[i].age++;
-
-   /* Flush (and finish glthread) before:
-    *   - update_buffers_if_needed because the unmarshalling thread
-    *     may be running currently, and we would concurrently alloc/free
-    *     the back bo.
-    *   - swapping current/back because flushing may free the buffer and
-    *     dri_image and reallocate them using get_back_bo (which causes a
-    *     a crash because 'current' becomes NULL).
-    */
-   dri2_flush_drawable_for_swapbuffers(disp, draw);
-   dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
 
    /* Make sure we have a back buffer in case we're swapping without ever
     * rendering. */
