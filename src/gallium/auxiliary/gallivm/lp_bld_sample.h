@@ -36,6 +36,7 @@
 #define LP_BLD_SAMPLE_H
 
 
+#include "pipe/p_state.h"
 #include "util/format/u_formats.h"
 #include "util/u_debug.h"
 #include "gallivm/lp_bld.h"
@@ -46,10 +47,6 @@
 extern "C" {
 #endif
 
-struct pipe_resource;
-struct pipe_sampler_view;
-struct pipe_sampler_state;
-struct pipe_image_view;
 struct util_format_description;
 struct lp_type;
 struct lp_build_context;
@@ -528,7 +525,6 @@ apply_sampler_swizzle(struct lp_build_sample_context *bld,
 
    lp_build_swizzle_soa_inplace(&bld->texel_bld, texel, swizzles);
 }
-
 
 /*
  * not really dimension as such, this indicates the amount of

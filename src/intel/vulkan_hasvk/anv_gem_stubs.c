@@ -140,10 +140,3 @@ anv_gem_fd_to_handle(struct anv_device *device, int fd)
 {
    unreachable("Unused");
 }
-
-int
-anv_i915_query(int fd, uint64_t query_id, void *buffer,
-               int32_t *buffer_len)
-{
-   unreachable("Unused");
-}

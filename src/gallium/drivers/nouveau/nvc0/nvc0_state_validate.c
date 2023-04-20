@@ -760,7 +760,7 @@ nvc0_validate_fbread(struct nvc0_context *nvc0)
        nvc0->fragprog->fp.reads_framebuffer &&
        nvc0->framebuffer.nr_cbufs &&
        nvc0->framebuffer.cbufs[0]) {
-      struct pipe_sampler_view tmpl;
+      struct pipe_sampler_view tmpl = {0};
       struct pipe_surface *sf = nvc0->framebuffer.cbufs[0];
 
       tmpl.target = PIPE_TEXTURE_2D_ARRAY;

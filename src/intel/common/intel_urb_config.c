@@ -85,7 +85,7 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
     *    only 124KB (per bank). More detailed description available in "L3
     *    Cache" section of the B-Spec."
     */
-   if (devinfo->verx10 == 120) {
+   if (devinfo->verx10 == 120 && devinfo->has_compute_engine) {
       assert(devinfo->num_slices == 1);
       urb_size_kB -= 4 * devinfo->l3_banks;
    }
@@ -315,7 +315,7 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
     * of entries, so we need to discount the space for constants for all of
     * them.  See 3DSTATE_URB_ALLOC_MESH and 3DSTATE_URB_ALLOC_TASK.
     */
-   const unsigned push_constant_kb = devinfo->max_constant_urb_size_kb;
+   const unsigned push_constant_kb = devinfo->mesh_max_constant_urb_size_kb;
    total_urb_kb -= push_constant_kb;
 
    /* TODO(mesh): Take push constant size as parameter instead of considering always
@@ -339,15 +339,31 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
    }
 
    const unsigned one_task_urb_kb = ALIGN(r.task_entry_size_64b * 64, 1024) / 1024;
+   unsigned task_urb_kb = MAX2(total_urb_kb * task_urb_share, one_task_urb_kb);
+   unsigned mesh_urb_kb = total_urb_kb - task_urb_kb;
 
-   const unsigned task_urb_kb = ALIGN(MAX2(total_urb_kb * task_urb_share, one_task_urb_kb), 8);
-
-   const unsigned mesh_urb_kb = total_urb_kb - task_urb_kb;
+   if (r.task_entry_size_64b > 0) {
+      mesh_urb_kb = ROUND_DOWN_TO(mesh_urb_kb, 8);
+      task_urb_kb = total_urb_kb - mesh_urb_kb;
+   }
 
    /* TODO(mesh): Could we avoid allocating URB for Mesh if rasterization is
     * disabled? */
 
    unsigned next_address_8kb = DIV_ROUND_UP(push_constant_kb, 8);
+
+   r.mesh_entries = MIN2((mesh_urb_kb * 16) / r.mesh_entry_size_64b, 1548);
+   /* 3DSTATE_URB_ALLOC_MESH_BODY says
+    *
+    *   MESH Number of URB Entries must be divisible by 8 if the MESH URB
+    *   Entry Allocation Size is less than 9 512-bit URB entries.
+    */
+   if (r.mesh_entry_size_64b < 9)
+      r.mesh_entries = ROUND_DOWN_TO(r.mesh_entries, 8);
+
+   r.mesh_starting_address_8kb = next_address_8kb;
+   assert(mesh_urb_kb % 8 == 0);
+   next_address_8kb += mesh_urb_kb / 8;
 
    if (r.task_entry_size_64b > 0) {
       r.task_entries = MIN2((task_urb_kb * 16) / r.task_entry_size_64b, 1548);
@@ -361,18 +377,7 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
          r.task_entries = ROUND_DOWN_TO(r.task_entries, 8);
 
       r.task_starting_address_8kb = next_address_8kb;
-
-      assert(task_urb_kb % 8 == 0);
-      next_address_8kb += task_urb_kb / 8;
    }
-
-   r.mesh_entries = MIN2((mesh_urb_kb * 16) / r.mesh_entry_size_64b, 1548);
-
-   /* Similar restriction to TASK. */
-   if (r.mesh_entry_size_64b < 9)
-      r.mesh_entries = ROUND_DOWN_TO(r.mesh_entries, 8);
-
-   r.mesh_starting_address_8kb = next_address_8kb;
 
    r.deref_block_size = r.mesh_entries > 32 ?
       INTEL_URB_DEREF_BLOCK_SIZE_MESH :

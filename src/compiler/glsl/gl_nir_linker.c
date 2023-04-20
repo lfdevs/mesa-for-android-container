@@ -904,12 +904,11 @@ validate_sampler_array_indexing(const struct gl_constants *consts,
                            "expressions is forbidden in GLSL %s %u";
          /* Backend has indicated that it has no dynamic indexing support. */
          if (no_dynamic_indexing) {
-            linker_error(prog, msg, prog->IsES ? "ES" : "",
-                         prog->data->Version);
+            linker_error(prog, msg, prog->IsES ? "ES" : "", prog->GLSL_Version);
             return false;
          } else {
             linker_warning(prog, msg, prog->IsES ? "ES" : "",
-                           prog->data->Version);
+                           prog->GLSL_Version);
          }
       }
    }
@@ -933,8 +932,8 @@ gl_nir_link_glsl(const struct gl_constants *consts,
     * with loop induction variable. This check emits a warning or error
     * depending if backend can handle dynamic indexing.
     */
-   if ((!prog->IsES && prog->data->Version < 130) ||
-       (prog->IsES && prog->data->Version < 300)) {
+   if ((!prog->IsES && prog->GLSL_Version < 130) ||
+       (prog->IsES && prog->GLSL_Version < 300)) {
       if (!validate_sampler_array_indexing(consts, prog))
          return false;
    }
@@ -993,6 +992,41 @@ gl_nir_link_glsl(const struct gl_constants *consts,
    check_image_resources(consts, exts, prog);
    gl_nir_link_assign_atomic_counter_resources(consts, prog);
    gl_nir_link_check_atomic_counter_resources(consts, prog);
+
+   /* OpenGL ES < 3.1 requires that a vertex shader and a fragment shader both
+    * be present in a linked program. GL_ARB_ES2_compatibility doesn't say
+    * anything about shader linking when one of the shaders (vertex or
+    * fragment shader) is absent. So, the extension shouldn't change the
+    * behavior specified in GLSL specification.
+    *
+    * From OpenGL ES 3.1 specification (7.3 Program Objects):
+    *     "Linking can fail for a variety of reasons as specified in the
+    *     OpenGL ES Shading Language Specification, as well as any of the
+    *     following reasons:
+    *
+    *     ...
+    *
+    *     * program contains objects to form either a vertex shader or
+    *       fragment shader, and program is not separable, and does not
+    *       contain objects to form both a vertex shader and fragment
+    *       shader."
+    *
+    * However, the only scenario in 3.1+ where we don't require them both is
+    * when we have a compute shader. For example:
+    *
+    * - No shaders is a link error.
+    * - Geom or Tess without a Vertex shader is a link error which means we
+    *   always require a Vertex shader and hence a Fragment shader.
+    * - Finally a Compute shader linked with any other stage is a link error.
+    */
+   if (!prog->SeparateShader && _mesa_is_api_gles2(api) &&
+       !prog->_LinkedShaders[MESA_SHADER_COMPUTE]) {
+      if (prog->_LinkedShaders[MESA_SHADER_VERTEX] == NULL) {
+         linker_error(prog, "program lacks a vertex shader\n");
+      } else if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] == NULL) {
+         linker_error(prog, "program lacks a fragment shader\n");
+      }
+   }
 
    if (prog->data->LinkStatus == LINKING_FAILURE)
       return false;

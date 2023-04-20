@@ -33,6 +33,13 @@ files_mesa_format = [
   'u_format_zs.c',
 ]
 
+# TODO: remove the quirk when GCC get test and fix inside release
+# See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108163
+arm_neon_workaround = []
+if cc.get_id() == 'gcc' and host_machine.cpu_family().contains('arm')
+  arm_neon_workaround = gcc_lto_quirk
+endif
+
 u_format_pack_h = custom_target(
   'u_format_pack.h',
   input : ['u_format_table.py', 'u_format.csv'],
@@ -58,7 +65,7 @@ libmesa_format = static_library(
   # NOTE dep_valgrind used here instead of idep_mesautil due to chicken/egg
   # dependencies between util and util/format
   dependencies : [dep_m, dep_valgrind],
-  c_args : [c_msvc_compat_args],
+  c_args : [c_msvc_compat_args, arm_neon_workaround],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false
 )

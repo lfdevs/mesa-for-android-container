@@ -22,7 +22,9 @@
  */
 #include "helpers.h"
 
-TEST_F(spirv_test, opload_volatile)
+class Volatile : public spirv_test {};
+
+TEST_F(Volatile, opload_volatile)
 {
    /*
                OpCapability Shader
@@ -78,7 +80,7 @@ TEST_F(spirv_test, opload_volatile)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opstore_volatile)
+TEST_F(Volatile, opstore_volatile)
 {
    /*
                OpCapability Shader
@@ -134,7 +136,7 @@ TEST_F(spirv_test, opstore_volatile)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opcopymemory_volatile_both)
+TEST_F(Volatile, opcopymemory_volatile_both)
 {
    /*
                OpCapability Shader
@@ -192,7 +194,7 @@ TEST_F(spirv_test, opcopymemory_volatile_both)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opcopymemory_volatile_target)
+TEST_F(Volatile, opcopymemory_volatile_target)
 {
    /*
                OpCapability Shader
@@ -250,7 +252,7 @@ TEST_F(spirv_test, opcopymemory_volatile_target)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opcopymemory_volatile_source)
+TEST_F(Volatile, opcopymemory_volatile_source)
 {
    /*
                OpCapability Shader
@@ -308,7 +310,7 @@ TEST_F(spirv_test, opcopymemory_volatile_source)
    EXPECT_EQ(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opimageread_volatile)
+TEST_F(Volatile, opimageread_volatile)
 {
    /*
                OpCapability Shader
@@ -371,7 +373,7 @@ TEST_F(spirv_test, opimageread_volatile)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opimagewrite_volatile)
+TEST_F(Volatile, opimagewrite_volatile)
 {
    /*
                OpCapability Shader
@@ -434,7 +436,7 @@ TEST_F(spirv_test, opimagewrite_volatile)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opatomicload_image_volatile)
+TEST_F(Volatile, opatomicload_image_volatile)
 {
    /*
                OpCapability Shader
@@ -504,7 +506,7 @@ TEST_F(spirv_test, opatomicload_image_volatile)
    EXPECT_NE(nir_intrinsic_access(intrinsic) & ACCESS_VOLATILE, 0);
 }
 
-TEST_F(spirv_test, opatomicstore_image_volatile)
+TEST_F(Volatile, opatomicstore_image_volatile)
 {
    /*
                OpCapability Shader

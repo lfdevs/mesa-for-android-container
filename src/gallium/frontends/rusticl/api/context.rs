@@ -1,10 +1,10 @@
 use crate::api::device::get_devs_for_type;
 use crate::api::icd::*;
-use crate::api::platform::*;
 use crate::api::types::*;
 use crate::api::util::*;
 use crate::cl_closure;
 use crate::core::context::*;
+use crate::core::platform::*;
 
 use mesa_rust_util::properties::Properties;
 use rusticl_opencl_gen::*;

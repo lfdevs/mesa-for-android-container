@@ -118,53 +118,6 @@ d3d12_lower_yflip(nir_shader *nir)
 }
 
 static void
-lower_load_face(nir_builder *b, struct nir_instr *instr, nir_variable *var)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   if (intr->intrinsic != nir_intrinsic_load_front_face)
-      return;
-
-   b->cursor = nir_before_instr(&intr->instr);
-
-   nir_ssa_def *load = nir_ine_imm(b, nir_load_var(b, var), 0);
-
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, load);
-   nir_instr_remove(instr);
-}
-
-void
-d3d12_forward_front_face(nir_shader *nir)
-{
-   assert(nir->info.stage == MESA_SHADER_FRAGMENT);
-
-   nir_variable *var = nir_variable_create(nir, nir_var_shader_in,
-                                           glsl_uint_type(),
-                                           "gl_FrontFacing");
-   var->data.location = VARYING_SLOT_VAR12;
-   var->data.interpolation = INTERP_MODE_FLAT;
-
-
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
-
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               lower_load_face(&b, instr, var);
-            }
-         }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
-      }
-   }
-}
-
-static void
 lower_pos_read(nir_builder *b, struct nir_instr *instr,
                nir_variable **depth_transform_var)
 {
@@ -552,7 +505,7 @@ lower_instr(nir_intrinsic_instr *instr, nir_builder *b,
    nir_ssa_def *load =
       nir_load_ubo(b, instr->num_components, instr->dest.ssa.bit_size,
                    ubo_idx, ubo_offset,
-                   .align_mul = instr->dest.ssa.bit_size / 8,
+                   .align_mul = 16,
                    .align_offset = 0,
                    .range_base = 0,
                    .range = ~0,
@@ -706,7 +659,8 @@ lower_load_ubo_packed_impl(nir_builder *b, nir_instr *instr,
       build_load_ubo_dxil(b, buffer,
                           offset,
                           nir_dest_num_components(intr->dest),
-                          nir_dest_bit_size(intr->dest));
+                          nir_dest_bit_size(intr->dest),
+                          nir_intrinsic_align(intr));
    return result;
 }
 
@@ -946,6 +900,8 @@ d3d12_disable_multisampling(nir_shader *s)
       var->data.sample = false;
    }
    BITSET_CLEAR(s->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID);
+   s->info.fs.uses_sample_qualifier = false;
+   s->info.fs.uses_sample_shading = false;
    return progress;
 }
 

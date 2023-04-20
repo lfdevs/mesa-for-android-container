@@ -17,7 +17,8 @@ mingw-w64-x86_64-zstd-1.5.2-2-any.pkg.tar.zst
 
 for i in $MINGW_PACKET_LIST
 do
-  wget -q https://mirror.msys2.org/mingw/mingw64/$i
+  curl -L -s --retry 4 -f --retry-all-errors --retry-delay 60 \
+    -O "https://mirror.msys2.org/mingw/mingw64/$i"
   tar xf $i --strip-components=1 -C /usr/x86_64-w64-mingw32/
 done
 popd

@@ -81,7 +81,7 @@ Frank Binns (1):
 
 - egl/dri2: only take a dri2_dpy reference when binding a new context/surfaces
 
-Jason Ekstrand (2):
+Faith Ekstrand (2):
 
 - intel/eu: Use non-coherent mode (BTI=253) for stateless A64 messages
 - nir/deref: Don't try to compare derefs containing casts

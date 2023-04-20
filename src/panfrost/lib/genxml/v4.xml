@@ -518,7 +518,7 @@
     <field name="High Depth Cull" size="1" start="0:17" type="bool" default="true"/>
     <field name="Primitive restart" size="2" start="0:19" type="Primitive Restart"/>
     <field name="Job Task Split" size="6" start="0:26" type="uint"/>
-    <field name="Base vertex offset" size="32" start="1:0" type="uint"/>
+    <field name="Base vertex offset" size="32" start="1:0" type="int"/>
     <field name="Primitive Restart Index" size="32" start="2:0" type="uint"/>
     <field name="Index count" size="32" start="3:0" type="uint" modifier="minus(1)"/>
     <field name="Indices" size="64" start="4:0" type="address"/>
@@ -571,9 +571,9 @@
     <field name="Mipmap Mode" size="2" start="3" type="Mipmap Mode" default="Nearest"/>
     <field name="Normalized Coordinates" size="1" start="5" type="bool" default="true"/>
     <field name="Isotropic LOD" size="1" start="6" type="bool"/>
-    <field name="LOD Bias" size="16" start="0:16" type="int" default="0"/>
-    <field name="Minimum LOD" size="16" start="1:0" type="uint" default="0"/>
-    <field name="Maximum LOD" size="16" start="1:16" type="uint" default="1"/>
+    <field name="LOD Bias" size="16" start="0:16" type="slod" default="0"/>
+    <field name="Minimum LOD" size="16" start="1:0" type="ulod" default="0"/>
+    <field name="Maximum LOD" size="16" start="1:16" type="ulod" default="0"/>
     <field name="Wrap Mode S" size="4" start="2:0" type="Wrap Mode" default="Clamp to Edge"/>
     <field name="Wrap Mode T" size="4" start="2:4" type="Wrap Mode" default="Clamp to Edge"/>
     <field name="Wrap Mode R" size="4" start="2:8" type="Wrap Mode" default="Clamp to Edge"/>

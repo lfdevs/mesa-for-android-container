@@ -39,18 +39,19 @@ libintel_perf = static_library(
   include_directories : [
     inc_include, inc_src, inc_intel,
   ],
-  c_args : [no_override_init_args, c_sse2_arg],
-  cpp_args : [c_sse2_arg],
+  c_args : [no_override_init_args, sse2_arg],
+  cpp_args : [sse2_arg],
   gnu_symbol_visibility : 'hidden',
+  dependencies : [idep_intel_dev],
 )
 
 if with_intel_tools
   intel_perf_query_layout = executable(
     'intel_perf_query_layout',
     files('intel_perf_query_layout.c'),
-    dependencies : [idep_mesautil, dep_dl, dep_thread, dep_m],
+    dependencies : [idep_mesautil, dep_dl, dep_thread, dep_m, idep_intel_dev],
     include_directories : [inc_include, inc_src, inc_intel],
-    link_with : [libintel_dev, libintel_common, libintel_perf],
+    link_with : [libintel_common, libintel_perf],
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
     install : false

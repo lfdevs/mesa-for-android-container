@@ -23,21 +23,22 @@
  */
 
 #include <errno.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include "util/format/u_format.h"
 #include "util/os_file.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
+#include "util/u_screen.h"
 
 #include "drm-uapi/drm.h"
+#include "panfrost/pan_public.h"
 #include "renderonly/renderonly.h"
 #include "panfrost_drm_public.h"
-#include "panfrost/pan_public.h"
 #include "xf86drm.h"
 
-static struct renderonly_scanout *
+struct renderonly_scanout *
 panfrost_create_kms_dumb_buffer_for_resource(struct pipe_resource *rsc,
                                              struct renderonly *ro,
                                              struct winsys_handle *out_handle)
@@ -51,7 +52,7 @@ panfrost_create_kms_dumb_buffer_for_resource(struct pipe_resource *rsc,
    for (unsigned i = 1; i <= blk_sz; i++) {
       if (!((64 * i) % blk_sz)) {
          align_w = (64 * i) / blk_sz;
-	 break;
+         break;
       }
    }
 
@@ -72,7 +73,7 @@ panfrost_create_kms_dumb_buffer_for_resource(struct pipe_resource *rsc,
    int err = drmIoctl(ro->kms_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_dumb);
    if (err < 0) {
       fprintf(stderr, "DRM_IOCTL_MODE_CREATE_DUMB failed: %s\n",
-            strerror(errno));
+              strerror(errno));
       goto free_scanout;
    }
 
@@ -107,18 +108,19 @@ free_scanout:
    FREE(scanout);
 
    return NULL;
-
 }
 
 struct pipe_screen *
 panfrost_drm_screen_create(int fd)
 {
-   return panfrost_create_screen(os_dupfd_cloexec(fd), NULL);
+   return u_pipe_screen_lookup_or_create(os_dupfd_cloexec(fd), NULL, NULL,
+                                         panfrost_create_screen);
 }
 
 struct pipe_screen *
-panfrost_drm_screen_create_renderonly(struct renderonly *ro)
+panfrost_drm_screen_create_renderonly(int fd, struct renderonly *ro,
+                                      const struct pipe_screen_config *config)
 {
-   ro->create_for_resource = panfrost_create_kms_dumb_buffer_for_resource;
-   return panfrost_create_screen(os_dupfd_cloexec(ro->gpu_fd), ro);
+   return u_pipe_screen_lookup_or_create(os_dupfd_cloexec(fd), config, ro,
+                                         panfrost_create_screen);
 }

@@ -12,7 +12,7 @@ traces:
   SirYouAreBeingHunted/sir-f750-v2.trace:
     freedreno-a630:
       label: [slow]
-      checksum: 3f6d0626b9ebe1d73860fc9faa0475b5
+      checksum: 7472199555fd2817f6c4ae156250e521
   SpecOps/specops-s0-1088-f1300-v2.trace:
     freedreno-a630:
       label: [slow, skip, flakes]

@@ -201,6 +201,17 @@ lower_image_instr(nir_builder *b, nir_instr *instr, void *state)
       }
       return false;
 
+   case nir_intrinsic_image_samples:
+   case nir_intrinsic_image_deref_samples:
+   case nir_intrinsic_bindless_image_samples: {
+      if (options->lower_image_samples_to_one) {
+         b->cursor = nir_after_instr(&intrin->instr);
+         nir_ssa_def *samples = nir_imm_intN_t(b, 1, nir_dest_bit_size(intrin->dest));
+         nir_ssa_def_rewrite_uses(&intrin->dest.ssa, samples);
+         return true;
+      }
+      return false;
+   }
    default:
       return false;
    }

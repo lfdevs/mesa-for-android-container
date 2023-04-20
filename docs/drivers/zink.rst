@@ -12,14 +12,14 @@ Features
 --------
 
 The feature-level of Zink depends on two things; what's implemented in Zink,
-as well as the capabilities of the Vulkan driver. 
+as well as the capabilities of the Vulkan driver.
 
 The feature-levels implemented by Zink are exposed by `Vulkan Profiles
 <https://dev.vulkan.org/tools#vulkan-profiles>`__ in the
 :file:`VP_ZINK_requirements.json` profiles file.
 
 Used with the `Vulkan Profiles tools <https://github.com/KhronosGroup/Vulkan-Profiles>`__,
-we can compare the ZINK profiles with Vulkan devices profiles generated with 
+we can compare the ZINK profiles with Vulkan devices profiles generated with
 `Vulkaninfo <https://vulkan.lunarg.com/doc/view/latest/windows/vulkaninfo.html>`__
 or `downloaded from GPUinfo.org`_
 to establish the feature-levels supported by these drivers.
@@ -37,10 +37,10 @@ Here's a list of those requirements:
 * Vulkan 1.0
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``logicOp``
-  * ``fillModeNonSolid``
-  * ``alphaToOne``
-  * ``shaderClipDistance``
+  * :vk-feat:`logicOp`
+  * :vk-feat:`fillModeNonSolid`
+  * :vk-feat:`alphaToOne`
+  * :vk-feat:`shaderClipDistance`
 
 * Device extensions:
 
@@ -52,12 +52,12 @@ Here's a list of those requirements:
   * :ext:`VK_EXT_provoking_vertex`
   * :ext:`VK_EXT_line_rasterization`, with the following ``VkPhysicalDeviceLineRasterizationFeaturesEXT``:
 
-    * ``rectangularLines``
-    * ``bresenhamLines``
-    * ``smoothLines``
-    * ``stippledRectangularLines``
-    * ``stippledBresenhamLines``
-    * ``stippledSmoothLines``
+    * :vk-feat:`rectangularLines`
+    * :vk-feat:`bresenhamLines`
+    * :vk-feat:`smoothLines`
+    * :vk-feat:`stippledRectangularLines`
+    * :vk-feat:`stippledBresenhamLines`
+    * :vk-feat:`stippledSmoothLines`
 
   * :ext:`VK_KHR_swapchain_mutable_format`
   * :ext:`VK_EXT_border_color_swizzle`
@@ -67,18 +67,18 @@ In addition to this, :ext:`VK_KHR_external_memory` is required to support the
 DRI code-path.
 
 We also require either the :ext:`VK_EXT_scalar_block_layout` extension or
-Vulkan 1.2, with the ``scalarBlockLayout`` feature.
+Vulkan 1.2, with the :vk-feat:`scalarBlockLayout` feature.
 
 OpenGL 3.0
 ^^^^^^^^^^
 
 
 For OpenGL 3.0 support, the following additional requirements must be
-supported:
+met:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``independentBlend``
+  * :vk-feat:`independentBlend`
 
 * Device extensions:
 
@@ -97,13 +97,13 @@ OpenGL 3.2
 ^^^^^^^^^^
 
 For OpenGL 3.2 support, the following additional requirements must be
-supported, although some of these might not actually get verified:
+met, although some of these might not actually get verified:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``depthClamp``
-  * ``geometryShader``
-  * ``shaderTessellationAndGeometryPointSize``
+  * :vk-feat:`depthClamp`
+  * :vk-feat:`geometryShader`
+  * :vk-feat:`shaderTessellationAndGeometryPointSize`
 
 * Device extensions:
 
@@ -113,11 +113,11 @@ OpenGL 3.3
 ^^^^^^^^^^
 
 For OpenGL 3.3 support, the following additional requirements must be
-supported, although some of these might not actually get verified:
+met, although some of these might not actually get verified:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``dualSrcBlend``
+  * :vk-feat:`dualSrcBlend`
 
 * Device extensions:
 
@@ -127,13 +127,13 @@ OpenGL 4.0
 ^^^^^^^^^^
 
 For OpenGL 4.0 support, the following additional requirements must be
-supported:
+met:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``sampleRateShading``
-  * ``tessellationShader``
-  * ``imageCubeArray``
+  * :vk-feat:`sampleRateShading`
+  * :vk-feat:`tessellationShader`
+  * :vk-feat:`imageCubeArray`
 
 * Device extensions:
 
@@ -149,11 +149,11 @@ OpenGL 4.1
 ^^^^^^^^^^
 
 For OpenGL 4.1 support, the following additional requirements must be
-supported:
+met:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``multiViewport``
+  * :vk-feat:`multiViewport`
 
 * ``VkPhysicalDeviceLimits``
 
@@ -168,7 +168,7 @@ OpenGL 4.2
 ^^^^^^^^^^
 
 For OpenGL 4.2 support, the following additional requirements must be
-supported:
+met:
 
 * Device extensions:
     * :ext:`VK_EXT_image_2d_view_of_3d`
@@ -184,7 +184,7 @@ supported:
 
   * ``VkPhysicalDeviceVulkan11Features``:
 
-    * ``shaderDrawParameters``
+    * :vk-feat:`shaderDrawParameters`
 
 * For Vulkan 1.1 and below:
 
@@ -196,11 +196,11 @@ OpenGL 4.3
 ^^^^^^^^^^
 
 For OpenGL 4.3 support, the following additional requirements must be
-supported:
+met:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``robustBufferAccess``
+  * :vk-feat:`robustBufferAccess`
 
 * Formats requiring ``VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT``:
 
@@ -216,15 +216,23 @@ OpenGL 4.4
 ^^^^^^^^^^
 
 For OpenGL 4.4 support, the following additional requirements must be
-supported:
+met:
 
 * Formats requiring ``VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT``:
 
   * ``VK_FORMAT_B10G11R11_UFLOAT_PACK32``
 
-* Device extensions:
+* For Vulkan 1.2 and above:
 
-  * :ext:`VK_KHR_sampler_mirror_clamp_to_edge`
+  * ``VkPhysicalDeviceVulkan12Features``:
+
+    * ``samplerMirrorClampToEdge``
+
+* For Vulkan 1.1 and below:
+
+  * Device extensions:
+
+    * :ext:`VK_KHR_sampler_mirror_clamp_to_edge`
 
 OpenGL 4.5
 ^^^^^^^^^^
@@ -232,18 +240,18 @@ OpenGL 4.5
 For OpenGL 4.5 support, the following additional ``VkPhysicalDeviceFeatures``
 are required to be supported
 
-* ``shaderCullDistance``
+* :vk-feat:`shaderCullDistance`
 
 OpenGL 4.6
 ^^^^^^^^^^
 
 For OpenGL 4.6 support, the following additional requirements must be
-supported:
+met:
 
 * ``VkPhysicalDeviceFeatures``:
 
-  * ``samplerAnisotropy``
-  * ``depthBiasClamp``
+  * :vk-feat:`samplerAnisotropy`
+  * :vk-feat:`depthBiasClamp`
 
 * Device extensions:
 
@@ -291,6 +299,14 @@ variable:
     Do not reorder or optimize GL command streams
   ``gpl``
     Force using Graphics Pipeline Library for all shaders
+  ``rp``
+    Enable renderpass optimizations (for tiling GPUs)
+  ``norp``
+    Disable renderpass optimizations (for tiling GPUs)
+  ``map``
+    Print info about mapped VRAM
+  ``flushsync``
+    Force synchronous flushes/presents
 
 Vulkan Validation Layers
 ^^^^^^^^^^^^^^^^^^^^^^^^

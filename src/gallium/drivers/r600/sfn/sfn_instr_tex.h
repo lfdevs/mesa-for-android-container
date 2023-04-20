@@ -186,12 +186,14 @@ private:
    bool set_coord_offsets(nir_src *offset);
    void set_rect_coordinate_flags(nir_tex_instr *instr);
    void add_prepare_instr(TexInstr *ir) { m_prepare_instr.push_back(ir); };
+   void forward_set_blockid(int id, int index) override;
+
 
    Opcode m_opcode;
 
    RegisterVec4 m_src;
    std::bitset<num_tex_flag> m_tex_flags;
-   int m_offset[3];
+   int m_coord_offset[3];
    int m_inst_mode;
    unsigned m_resource_id;
 

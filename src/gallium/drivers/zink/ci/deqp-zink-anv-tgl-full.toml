@@ -120,8 +120,3 @@ piglit_folder = "/piglit"
 profile = "gpu"
 process_isolation = true
 timeout = 180.0
-# We use gbm because X can die:
-# MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
-# Xorg: ../src/gallium/drivers/zink/zink_batch.c:599: zink_end_batch: Assertion `!ctx->batch_states' failed.
-  [piglit.env]
-  PIGLIT_PLATFORM = "gbm"

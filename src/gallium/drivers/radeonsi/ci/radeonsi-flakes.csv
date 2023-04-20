@@ -6,6 +6,7 @@ glx@glx-visuals-stencil -pixmap
 spec@egl_mesa_configless_context@basic
 glx@glx-visuals-depth -pixmap
 glx@glx-visuals-stencil -pixmap
+spec@arb_timer_query@timestamp-get
 spec@egl_mesa_configless_context@basic
 spec@egl_chromium_sync_control@conformance
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
@@ -13,3 +14,7 @@ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_
 # glcts
 
 KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup
+
+# NGG culling (gfx10-gfx10.3) breaks this statistic. Only reproducible with AMD_DEBUG=mono
+# or when asynchronous compilation finishes before the test is finished.
+KHR-GL46.pipeline_statistics_query_tests_ARB.functional_primitives_vertices_submitted_and_clipping_input_output_primitives

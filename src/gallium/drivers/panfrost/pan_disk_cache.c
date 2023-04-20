@@ -89,10 +89,12 @@ panfrost_disk_cache_store(struct disk_cache *cache,
     * 1. Size of program binary
     * 2. Program binary
     * 3. Shader info
+    * 4. System values
     */
    blob_write_uint32(&blob, binary->binary.size);
    blob_write_bytes(&blob, binary->binary.data, binary->binary.size);
    blob_write_bytes(&blob, &binary->info, sizeof(binary->info));
+   blob_write_bytes(&blob, &binary->sysvals, sizeof(binary->sysvals));
 
    disk_cache_put(cache, cache_key, blob.data, blob.size, NULL);
    blob_finish(&blob);
@@ -140,6 +142,7 @@ panfrost_disk_cache_retrieve(struct disk_cache *cache,
 
    blob_copy_bytes(&blob, ptr, binary_size);
    blob_copy_bytes(&blob, &binary->info, sizeof(binary->info));
+   blob_copy_bytes(&blob, &binary->sysvals, sizeof(binary->sysvals));
 
    free(buffer);
 

@@ -120,16 +120,6 @@ spec@!opengl 1.1@depthstencil-default_fb-readpixels-float-and-ushort samples=4,F
 spec@!opengl 1.1@depthstencil-default_fb-readpixels-float-and-ushort samples=6,Fail
 spec@!opengl 1.1@depthstencil-default_fb-readpixels-float-and-ushort samples=8,Fail
 spec@!opengl 1.1@getteximage-formats,Fail
-spec@!opengl 1.1@read-front,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=2,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=4,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=6,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=8,Fail
-spec@!opengl 1.1@read-front samples=2,Fail
-spec@!opengl 1.1@read-front samples=4,Fail
-spec@!opengl 1.1@read-front samples=6,Fail
-spec@!opengl 1.1@read-front samples=8,Fail
 spec@!opengl 1.2@getteximage-targets 3d,Fail
 spec@!opengl 3.1@vao-broken-attrib,Crash
 spec@!opengl 3.2@gl-3.2-adj-prims cull-back pv-first,Fail
@@ -464,8 +454,6 @@ spec@arb_shader_image_load_store@max-size@image2DMS max size test/8x8x16384x1,Fa
 
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
-
-spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 
 # "../nouveau/pushbuf.c:730: nouveau_pushbuf_data: Assertion `kref' failed."
 spec@arb_texture_buffer_object@render-no-bo,Crash

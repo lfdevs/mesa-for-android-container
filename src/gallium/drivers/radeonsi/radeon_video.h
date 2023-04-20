@@ -42,6 +42,13 @@ struct rvid_buffer {
    struct si_resource *res;
 };
 
+/* video buffer offset info representation */
+struct rvid_buf_offset_info {
+   unsigned num_units;
+   unsigned old_offset;
+   unsigned new_offset;
+};
+
 /* generate an stream handle */
 unsigned si_vid_alloc_stream_handle(void);
 
@@ -58,7 +65,8 @@ void si_vid_destroy_buffer(struct rvid_buffer *buffer);
 
 /* reallocate a buffer, preserving its content */
 bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
-                          struct rvid_buffer *new_buf, unsigned new_size);
+                          struct rvid_buffer *new_buf, unsigned new_size,
+                          struct rvid_buf_offset_info *buf_ofst_info);
 
 /* clear the buffer with zeros */
 void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer *buffer);

@@ -24,7 +24,14 @@
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 #include "nir/nir_search_helpers.h"
-#include "rogue_nir.h"
+#include "rogue.h"
+#include "util/macros.h"
+
+/**
+ * \file rogue_nir_pfo.c
+ *
+ * \brief Contains the rogue_nir_pfo pass.
+ */
 
 static void insert_pfo(nir_builder *b,
                        nir_intrinsic_instr *store_output,
@@ -44,6 +51,7 @@ static void insert_pfo(nir_builder *b,
    nir_intrinsic_set_src_type(store_output, nir_type_uint32);
 }
 
+PUBLIC
 void rogue_nir_pfo(nir_shader *shader)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);

@@ -93,6 +93,7 @@ lower_trivial_continues_list(struct exec_list *cf_list,
 
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(cf_node);
+         assert(!nir_loop_has_continue_construct(loop));
          if (lower_trivial_continues_list(&loop->body, true, loop))
             progress = true;
          if (lower_trivial_continues_block(nir_loop_last_block(loop), loop))

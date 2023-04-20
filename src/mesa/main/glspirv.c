@@ -243,7 +243,6 @@ _mesa_spirv_to_nir(struct gl_context *ctx,
 
    const struct spirv_to_nir_options spirv_options = {
       .environment = NIR_SPIRV_OPENGL,
-      .use_deref_buffer_array_length = true,
       .subgroup_size = SUBGROUP_SIZE_UNIFORM,
       .caps = ctx->Const.SpirVCapabilities,
       .ubo_addr_format = nir_address_format_32bit_index_offset,

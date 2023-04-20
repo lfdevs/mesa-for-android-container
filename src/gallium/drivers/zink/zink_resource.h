@@ -93,6 +93,13 @@ zink_is_swapchain(const struct zink_resource *res)
    return res->swapchain;
 }
 
+bool
+zink_resource_copy_box_intersects(struct zink_resource *res, unsigned level, const struct pipe_box *box);
+void
+zink_resource_copy_box_add(struct zink_resource *res, unsigned level, const struct pipe_box *box);
+void
+zink_resource_copies_reset(struct zink_resource *res);
+
 #include "zink_batch.h"
 #include "zink_bo.h"
 #include "zink_kopper.h"
@@ -132,6 +139,12 @@ static inline bool
 zink_resource_usage_check_completion(struct zink_screen *screen, struct zink_resource *res, enum zink_resource_access access)
 {
    return zink_bo_usage_check_completion(screen, res->obj->bo, access);
+}
+
+static inline bool
+zink_resource_usage_check_completion_fast(struct zink_screen *screen, struct zink_resource *res, enum zink_resource_access access)
+{
+   return zink_bo_usage_check_completion_fast(screen, res->obj->bo, access);
 }
 
 static inline void

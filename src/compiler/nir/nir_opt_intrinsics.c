@@ -39,8 +39,10 @@ src_is_single_use_shuffle(nir_src src, nir_ssa_def **data, nir_ssa_def **index)
     * uses is reasonable.  If we ever want to use this from an if statement,
     * we can change it then.
     */
-   if (!list_is_empty(&shuffle->dest.ssa.if_uses) ||
-       !list_is_singular(&shuffle->dest.ssa.uses))
+   if (!list_is_singular(&shuffle->dest.ssa.uses))
+      return false;
+
+   if (nir_ssa_def_used_by_if(&shuffle->dest.ssa))
       return false;
 
    assert(shuffle->src[0].is_ssa);

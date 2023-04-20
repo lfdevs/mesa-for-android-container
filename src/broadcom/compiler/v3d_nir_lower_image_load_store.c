@@ -43,6 +43,13 @@
 bool
 v3d_gl_format_is_return_32(enum pipe_format format)
 {
+        /* We can get a NONE format in Vulkan because we support the
+         * shaderStorageImageReadWithoutFormat feature. We consider these to
+         * always use 32-bit precision.
+         */
+        if (format == PIPE_FORMAT_NONE)
+                return true;
+
         const struct util_format_description *desc =
                 util_format_description(format);
         const struct util_format_channel_description *chan = &desc->channel[0];
@@ -182,13 +189,13 @@ v3d_nir_lower_image_load(nir_builder *b, nir_intrinsic_instr *instr)
         } else if (util_format_is_pure_sint(format)) {
                 result = nir_format_unpack_sint(b, result, bits16, 4);
         } else {
-            nir_ssa_def *rg = nir_channel(b, result, 0);
-            nir_ssa_def *ba = nir_channel(b, result, 1);
-            result = nir_vec4(b,
-                              nir_unpack_half_2x16_split_x(b, rg),
-                              nir_unpack_half_2x16_split_y(b, rg),
-                              nir_unpack_half_2x16_split_x(b, ba),
-                              nir_unpack_half_2x16_split_y(b, ba));
+                nir_ssa_def *rg = nir_channel(b, result, 0);
+                nir_ssa_def *ba = nir_channel(b, result, 1);
+                result = nir_vec4(b,
+                                  nir_unpack_half_2x16_split_x(b, rg),
+                                  nir_unpack_half_2x16_split_y(b, rg),
+                                  nir_unpack_half_2x16_split_x(b, ba),
+                                  nir_unpack_half_2x16_split_y(b, ba));
         }
 
         nir_ssa_def_rewrite_uses_after(&instr->dest.ssa, result,

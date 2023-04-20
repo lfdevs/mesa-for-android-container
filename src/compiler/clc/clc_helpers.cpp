@@ -1149,6 +1149,17 @@ clc_link_spirv_binaries(const struct clc_linker_args *args,
    return 0;
 }
 
+bool
+clc_validate_spirv(const struct clc_binary *spirv,
+                   const struct clc_logger *logger)
+{
+   SPIRVMessageConsumer msgconsumer(logger);
+   spvtools::SpirvTools tools(spirv_target);
+   tools.SetMessageConsumer(msgconsumer);
+   const uint32_t *data = static_cast<const uint32_t *>(spirv->data);
+   return tools.Validate(data, spirv->size / 4);
+}
+
 int
 clc_spirv_specialize(const struct clc_binary *in_spirv,
                      const struct clc_parsed_spirv *parsed_data,

@@ -215,6 +215,7 @@ lower_make_visible(nir_cf_node *cf_node, uint32_t *cur_modes)
    }
    case nir_cf_node_loop: {
       nir_loop *loop = nir_cf_node_as_loop(cf_node);
+      assert(!nir_loop_has_continue_construct(loop));
       bool loop_progress;
       do {
          loop_progress = false;
@@ -254,6 +255,7 @@ lower_make_available(nir_cf_node *cf_node, uint32_t *cur_modes)
    }
    case nir_cf_node_loop: {
       nir_loop *loop = nir_cf_node_as_loop(cf_node);
+      assert(!nir_loop_has_continue_construct(loop));
       bool loop_progress;
       do {
          loop_progress = false;

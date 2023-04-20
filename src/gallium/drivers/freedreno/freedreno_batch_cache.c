@@ -196,7 +196,8 @@ fd_bc_flush(struct fd_context *ctx, bool deferred) assert_dt
       }
 
       for (unsigned i = 0; i < n; i++) {
-         if (batches[i] && (batches[i] != current_batch)) {
+         if (batches[i] && (batches[i] != current_batch) &&
+               (batches[i]->ctx == current_batch->ctx)) {
             fd_batch_add_dep(current_batch, batches[i]);
          }
       }
@@ -238,7 +239,8 @@ fd_bc_flush_writer(struct fd_context *ctx, struct fd_resource *rsc) assert_dt
    fd_screen_unlock(ctx->screen);
 
    if (write_batch) {
-      fd_batch_flush(write_batch);
+      if (write_batch->ctx == ctx)
+         fd_batch_flush(write_batch);
       fd_batch_reference(&write_batch, NULL);
    }
 }
@@ -263,7 +265,8 @@ fd_bc_flush_readers(struct fd_context *ctx, struct fd_resource *rsc) assert_dt
    fd_screen_unlock(ctx->screen);
 
    for (int i = 0; i < batch_count; i++) {
-      fd_batch_flush(batches[i]);
+      if (batches[i]->ctx == ctx)
+         fd_batch_flush(batches[i]);
       fd_batch_reference(&batches[i], NULL);
    }
 }
@@ -427,7 +430,7 @@ alloc_batch_locked(struct fd_batch_cache *cache, struct fd_context *ctx,
    if (!batch)
       return NULL;
 
-   batch->seqno = cache->cnt++;
+   batch->seqno = seqno_next(&cache->cnt);
    batch->idx = idx;
    cache->batch_mask |= (1 << idx);
 

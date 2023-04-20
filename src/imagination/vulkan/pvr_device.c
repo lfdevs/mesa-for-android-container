@@ -49,18 +49,20 @@
 #include "pvr_hardcode.h"
 #include "pvr_job_render.h"
 #include "pvr_limits.h"
-#include "pvr_nop_usc.h"
 #include "pvr_pds.h"
 #include "pvr_private.h"
+#include "pvr_robustness.h"
 #include "pvr_tex_state.h"
 #include "pvr_types.h"
+#include "pvr_uscgen.h"
 #include "pvr_winsys.h"
-#include "rogue/rogue_compiler.h"
+#include "rogue/rogue.h"
 #include "util/build_id.h"
 #include "util/log.h"
 #include "util/macros.h"
 #include "util/mesa-sha1.h"
 #include "util/os_misc.h"
+#include "util/u_dynarray.h"
 #include "util/u_math.h"
 #include "vk_alloc.h"
 #include "vk_log.h"
@@ -86,6 +88,11 @@
    {                                                \
       .name = str_name, .len = sizeof(str_name) - 1 \
    }
+
+/* Amount of padding required for VkBuffers to ensure we don't read beyond
+ * a page boundary.
+ */
+#define PVR_BUFFER_MEMORY_PADDING_SIZE 4
 
 struct pvr_drm_device_info {
    const char *name;
@@ -127,6 +134,7 @@ static void pvr_physical_device_get_supported_extensions(
    *extensions = (struct vk_device_extension_table){
       .KHR_external_memory = true,
       .KHR_external_memory_fd = true,
+      .KHR_timeline_semaphore = true,
 #if defined(PVR_USE_WSI_PLATFORM)
       .KHR_swapchain = true,
 #endif
@@ -213,7 +221,7 @@ static void pvr_physical_device_finish(struct pvr_physical_device *pdevice)
     */
 
    if (pdevice->compiler)
-      rogue_compiler_destroy(pdevice->compiler);
+      ralloc_free(pdevice->compiler);
 
    pvr_wsi_finish(pdevice);
 
@@ -602,16 +610,15 @@ void pvr_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
    PVR_FROM_HANDLE(pvr_physical_device, pdevice, physicalDevice);
 
    pFeatures->features = (VkPhysicalDeviceFeatures){
-      .robustBufferAccess =
-         PVR_HAS_FEATURE(&pdevice->dev_info, robust_buffer_access),
+      .robustBufferAccess = true,
       .fullDrawIndexUint32 = true,
       .imageCubeArray = true,
-      .independentBlend = true,
+      .independentBlend = false,
       .geometryShader = false,
       .tessellationShader = false,
       .sampleRateShading = true,
       .dualSrcBlend = false,
-      .logicOp = true,
+      .logicOp = false,
       .multiDrawIndirect = true,
       .drawIndirectFirstInstance = true,
       .depthClamp = true,
@@ -620,13 +627,13 @@ void pvr_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       .depthBounds = false,
       .wideLines = true,
       .largePoints = true,
-      .alphaToOne = true,
+      .alphaToOne = false,
       .multiViewport = false,
       .samplerAnisotropy = false,
       .textureCompressionETC2 = true,
       .textureCompressionASTC_LDR = PVR_HAS_FEATURE(&pdevice->dev_info, astc),
       .textureCompressionBC = false,
-      .occlusionQueryPrecise = true,
+      .occlusionQueryPrecise = false,
       .pipelineStatisticsQuery = false,
       .vertexPipelineStoresAndAtomics = true,
       .fragmentStoresAndAtomics = true,
@@ -640,8 +647,8 @@ void pvr_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       .shaderSampledImageArrayDynamicIndexing = true,
       .shaderStorageBufferArrayDynamicIndexing = true,
       .shaderStorageImageArrayDynamicIndexing = true,
-      .shaderClipDistance = true,
-      .shaderCullDistance = true,
+      .shaderClipDistance = false,
+      .shaderCullDistance = false,
       .shaderFloat64 = false,
       .shaderInt64 = true,
       .shaderInt16 = true,
@@ -661,7 +668,18 @@ void pvr_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
    };
 
    vk_foreach_struct (ext, pFeatures->pNext) {
-      pvr_debug_ignored_stype(ext->sType);
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES: {
+         VkPhysicalDeviceTimelineSemaphoreFeatures *pFeature =
+            (VkPhysicalDeviceTimelineSemaphoreFeatures *)ext;
+         pFeature->timelineSemaphore = VK_TRUE;
+         break;
+      }
+      default: {
+         pvr_debug_ignored_stype(ext->sType);
+         break;
+      }
+      }
    }
 }
 
@@ -903,9 +921,11 @@ void pvr_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
 
       .maxDescriptorSetSamplers = 256U,
       .maxDescriptorSetUniformBuffers = 256U,
-      .maxDescriptorSetUniformBuffersDynamic = 8U,
+      .maxDescriptorSetUniformBuffersDynamic =
+         PVR_MAX_DESCRIPTOR_SET_UNIFORM_DYNAMIC_BUFFERS,
       .maxDescriptorSetStorageBuffers = 256U,
-      .maxDescriptorSetStorageBuffersDynamic = 8U,
+      .maxDescriptorSetStorageBuffersDynamic =
+         PVR_MAX_DESCRIPTOR_SET_STORAGE_DYNAMIC_BUFFERS,
       .maxDescriptorSetSampledImages = 256U,
       .maxDescriptorSetStorageImages = 256U,
       .maxDescriptorSetInputAttachments = 256U,
@@ -1035,7 +1055,18 @@ void pvr_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
           VK_UUID_SIZE);
 
    vk_foreach_struct (ext, pProperties->pNext) {
-      pvr_debug_ignored_stype(ext->sType);
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES: {
+         VkPhysicalDeviceTimelineSemaphoreProperties *pProperties =
+            (VkPhysicalDeviceTimelineSemaphoreProperties *)ext;
+         pProperties->maxTimelineSemaphoreValueDifference = UINT64_MAX;
+         break;
+      }
+      default: {
+         pvr_debug_ignored_stype(ext->sType);
+         break;
+      }
+      }
    }
 }
 
@@ -1344,13 +1375,14 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
 {
    uint64_t sampler_state[ROGUE_NUM_TEXSTATE_SAMPLER_WORDS];
    uint64_t image_state[ROGUE_NUM_TEXSTATE_IMAGE_WORDS];
-   const struct rogue_shader_binary *usc_program;
+   struct util_dynarray usc_program;
    struct pvr_texture_state_info tex_info;
    uint32_t *dword_ptr;
    uint32_t usc_shareds;
    uint32_t usc_temps;
    VkResult result;
 
+   util_dynarray_init(&usc_program, NULL);
    pvr_hard_code_get_idfwdf_program(&device->pdevice->dev_info,
                                     &usc_program,
                                     &usc_shareds,
@@ -1360,10 +1392,12 @@ static VkResult pvr_device_init_compute_idfwdf_state(struct pvr_device *device)
 
    /* FIXME: Figure out the define for alignment of 16. */
    result = pvr_gpu_upload_usc(device,
-                               usc_program->data,
-                               usc_program->size,
+                               usc_program.data,
+                               usc_program.size,
                                16,
                                &device->idfwdf_state.usc);
+   util_dynarray_fini(&usc_program);
+
    if (result != VK_SUCCESS)
       return result;
 
@@ -1514,15 +1548,19 @@ static VkResult pvr_device_init_nop_program(struct pvr_device *device)
    const uint32_t cache_line_size =
       rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
    struct pvr_pds_kickusc_program program = { 0 };
+   struct util_dynarray nop_usc_bin;
    uint32_t staging_buffer_size;
    uint32_t *staging_buffer;
    VkResult result;
 
+   pvr_uscgen_nop(&nop_usc_bin);
+
    result = pvr_gpu_upload_usc(device,
-                               pvr_nop_usc_code,
-                               sizeof(pvr_nop_usc_code),
+                               util_dynarray_begin(&nop_usc_bin),
+                               nop_usc_bin.size,
                                cache_line_size,
                                &device->nop_program.usc);
+   util_dynarray_fini(&nop_usc_bin);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1729,6 +1767,13 @@ VkResult pvr_CreateDevice(VkPhysicalDevice physicalDevice,
       goto err_close_master_fd;
    }
 
+   if (device->ws->features.supports_threaded_submit) {
+      /* Queue submission can be blocked if the kernel CCBs become full,
+       * so enable threaded submit to not block the submitter.
+       */
+      vk_device_enable_threaded_submit(&device->vk);
+   }
+
    device->ws->ops->get_heaps_info(device->ws, &device->heaps);
 
    result = pvr_bo_store_create(device);
@@ -1769,6 +1814,10 @@ VkResult pvr_CreateDevice(VkPhysicalDevice physicalDevice,
    if (result != VK_SUCCESS)
       goto err_pvr_finish_compute_idfwdf;
 
+   result = pvr_device_init_spm_load_state(device);
+   if (result != VK_SUCCESS)
+      goto err_pvr_finish_graphics_static_clear_state;
+
    pvr_device_init_tile_buffer_state(device);
 
    result = pvr_queues_create(device, pCreateInfo);
@@ -1776,6 +1825,12 @@ VkResult pvr_CreateDevice(VkPhysicalDevice physicalDevice,
       goto err_pvr_finish_tile_buffer_state;
 
    pvr_device_init_default_sampler_state(device);
+
+   pvr_spm_init_scratch_buffer_store(device);
+
+   result = pvr_init_robustness_buffer(device);
+   if (result != VK_SUCCESS)
+      goto err_pvr_spm_finish_scratch_buffer_store;
 
    if (pCreateInfo->pEnabledFeatures)
       memcpy(&device->features,
@@ -1790,15 +1845,23 @@ VkResult pvr_CreateDevice(VkPhysicalDevice physicalDevice,
       &pdevice->dev_info,
       &device->pixel_event_data_size_in_dwords);
 
-   device->global_queue_job_count = 0;
+   device->global_cmd_buffer_submit_count = 0;
    device->global_queue_present_count = 0;
 
    *pDevice = pvr_device_to_handle(device);
 
    return VK_SUCCESS;
 
+err_pvr_spm_finish_scratch_buffer_store:
+   pvr_spm_finish_scratch_buffer_store(device);
+
+   pvr_queues_destroy(device);
+
 err_pvr_finish_tile_buffer_state:
    pvr_device_finish_tile_buffer_state(device);
+   pvr_device_finish_spm_load_state(device);
+
+err_pvr_finish_graphics_static_clear_state:
    pvr_device_finish_graphics_static_clear_state(device);
 
 err_pvr_finish_compute_idfwdf:
@@ -1846,8 +1909,11 @@ void pvr_DestroyDevice(VkDevice _device,
 {
    PVR_FROM_HANDLE(pvr_device, device, _device);
 
+   pvr_robustness_buffer_finish(device);
+   pvr_spm_finish_scratch_buffer_store(device);
    pvr_queues_destroy(device);
    pvr_device_finish_tile_buffer_state(device);
+   pvr_device_finish_spm_load_state(device);
    pvr_device_finish_graphics_static_clear_state(device);
    pvr_device_finish_compute_idfwdf_state(device);
    pvr_device_destroy_compute_query_programs(device);
@@ -2618,11 +2684,15 @@ VkResult pvr_CreateFramebuffer(VkDevice _device,
                                const VkAllocationCallbacks *pAllocator,
                                VkFramebuffer *pFramebuffer)
 {
+   PVR_FROM_HANDLE(pvr_render_pass, pass, pCreateInfo->renderPass);
    PVR_FROM_HANDLE(pvr_device, device, _device);
+   struct pvr_spm_bgobj_state *spm_bgobj_state_per_render;
+   struct pvr_spm_eot_state *spm_eot_state_per_render;
    struct pvr_render_target *render_targets;
    struct pvr_framebuffer *framebuffer;
    struct pvr_image_view **attachments;
    uint32_t render_targets_count;
+   uint64_t scratch_buffer_size;
    VkResult result;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO);
@@ -2640,6 +2710,14 @@ VkResult pvr_CreateFramebuffer(VkDevice _device,
                      &render_targets,
                      __typeof__(*render_targets),
                      render_targets_count);
+   vk_multialloc_add(&ma,
+                     &spm_eot_state_per_render,
+                     __typeof__(*spm_eot_state_per_render),
+                     pass->hw_setup->render_count);
+   vk_multialloc_add(&ma,
+                     &spm_bgobj_state_per_render,
+                     __typeof__(*spm_bgobj_state_per_render),
+                     pass->hw_setup->render_count);
 
    if (!vk_multialloc_zalloc2(&ma,
                               &device->vk.alloc,
@@ -2674,9 +2752,61 @@ VkResult pvr_CreateFramebuffer(VkDevice _device,
       goto err_free_ppp_state_bo;
    }
 
+   scratch_buffer_size =
+      pvr_spm_scratch_buffer_calc_required_size(pass,
+                                                framebuffer->width,
+                                                framebuffer->height);
+
+   result = pvr_spm_scratch_buffer_get_buffer(device,
+                                              scratch_buffer_size,
+                                              &framebuffer->scratch_buffer);
+   if (result != VK_SUCCESS)
+      goto err_finish_render_targets;
+
+   for (uint32_t i = 0; i < pass->hw_setup->render_count; i++) {
+      uint32_t emit_count;
+
+      result = pvr_spm_init_eot_state(device,
+                                      &spm_eot_state_per_render[i],
+                                      framebuffer,
+                                      &pass->hw_setup->renders[i],
+                                      &emit_count);
+      if (result != VK_SUCCESS)
+         goto err_finish_eot_state;
+
+      result = pvr_spm_init_bgobj_state(device,
+                                        &spm_bgobj_state_per_render[i],
+                                        framebuffer,
+                                        &pass->hw_setup->renders[i],
+                                        emit_count);
+      if (result != VK_SUCCESS)
+         goto err_finish_bgobj_state;
+
+      continue;
+
+err_finish_bgobj_state:
+      pvr_spm_finish_eot_state(device, &spm_eot_state_per_render[i]);
+
+      for (uint32_t j = 0; j < i; j++)
+         pvr_spm_finish_bgobj_state(device, &spm_bgobj_state_per_render[j]);
+
+err_finish_eot_state:
+      for (uint32_t j = 0; j < i; j++)
+         pvr_spm_finish_eot_state(device, &spm_eot_state_per_render[j]);
+
+      goto err_finish_render_targets;
+   }
+
+   framebuffer->render_count = pass->hw_setup->render_count;
+   framebuffer->spm_eot_state_per_render = spm_eot_state_per_render;
+   framebuffer->spm_bgobj_state_per_render = spm_bgobj_state_per_render;
+
    *pFramebuffer = pvr_framebuffer_to_handle(framebuffer);
 
    return VK_SUCCESS;
+
+err_finish_render_targets:
+   pvr_render_targets_fini(framebuffer->render_targets, render_targets_count);
 
 err_free_ppp_state_bo:
    pvr_bo_free(device, framebuffer->ppp_state_bo);
@@ -2692,12 +2822,21 @@ void pvr_DestroyFramebuffer(VkDevice _device,
                             VkFramebuffer _fb,
                             const VkAllocationCallbacks *pAllocator)
 {
-   PVR_FROM_HANDLE(pvr_device, device, _device);
    PVR_FROM_HANDLE(pvr_framebuffer, framebuffer, _fb);
+   PVR_FROM_HANDLE(pvr_device, device, _device);
 
    if (!framebuffer)
       return;
 
+   for (uint32_t i = 0; i < framebuffer->render_count; i++) {
+      pvr_spm_finish_bgobj_state(device,
+                                 &framebuffer->spm_bgobj_state_per_render[i]);
+
+      pvr_spm_finish_eot_state(device,
+                               &framebuffer->spm_eot_state_per_render[i]);
+   }
+
+   pvr_spm_scratch_buffer_release(device, framebuffer->scratch_buffer);
    pvr_render_targets_fini(framebuffer->render_targets,
                            framebuffer->render_targets_count);
    pvr_bo_free(device, framebuffer->ppp_state_bo);
@@ -2937,6 +3076,7 @@ void pvr_GetBufferMemoryRequirements2(
 {
    PVR_FROM_HANDLE(pvr_buffer, buffer, pInfo->buffer);
    PVR_FROM_HANDLE(pvr_device, device, _device);
+   uint64_t size;
 
    /* The Vulkan 1.0.166 spec says:
     *
@@ -2951,8 +3091,21 @@ void pvr_GetBufferMemoryRequirements2(
       (1ul << device->pdevice->memory.memoryTypeCount) - 1;
 
    pMemoryRequirements->memoryRequirements.alignment = buffer->alignment;
+
+   size = buffer->vk.size;
+
+   if (size % device->ws->page_size == 0 ||
+       size % device->ws->page_size >
+          device->ws->page_size - PVR_BUFFER_MEMORY_PADDING_SIZE) {
+      /* TODO: We can save memory by having one extra virtual page mapped
+       * in and having the first and last virtual page mapped to the first
+       * physical address.
+       */
+      size += PVR_BUFFER_MEMORY_PADDING_SIZE;
+   }
+
    pMemoryRequirements->memoryRequirements.size =
-      ALIGN_POT(buffer->vk.size, buffer->alignment);
+      ALIGN_POT(size, buffer->alignment);
 }
 
 void pvr_GetImageMemoryRequirements2(VkDevice _device,

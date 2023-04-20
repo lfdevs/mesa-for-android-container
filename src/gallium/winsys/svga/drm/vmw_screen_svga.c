@@ -875,11 +875,20 @@ vmw_svga_winsys_stats_time_pop_noop(struct svga_winsys_screen *sws)
    /* noop */
 }
 
+static int
+vmw_svga_winsys_get_fd(struct svga_winsys_screen *sws)
+{
+   struct vmw_winsys_screen *const vws = vmw_winsys_screen(sws);
+
+   return vws->ioctl.drm_fd;
+}
+
 boolean
 vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
 {
    vws->base.destroy = vmw_svga_winsys_destroy;
    vws->base.get_hw_version = vmw_svga_winsys_get_hw_version;
+   vws->base.get_fd = vmw_svga_winsys_get_fd;
    vws->base.get_cap = vmw_svga_winsys_get_cap;
    vws->base.context_create = vmw_svga_winsys_context_create;
    vws->base.surface_create = vmw_svga_winsys_surface_create;

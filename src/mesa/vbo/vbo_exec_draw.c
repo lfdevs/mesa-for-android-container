@@ -283,7 +283,7 @@ vbo_exec_vtx_map(struct vbo_exec_context *exec)
       vbo_install_exec_vtxfmt_noop(ctx);
    }
    else {
-      if (_mesa_using_noop_vtxfmt(ctx->Exec)) {
+      if (_mesa_using_noop_vtxfmt(ctx->Dispatch.Exec)) {
          /* The no-op functions are installed so switch back to regular
           * functions.  We do this test just to avoid frequent and needless
           * calls to vbo_install_exec_vtxfmt().

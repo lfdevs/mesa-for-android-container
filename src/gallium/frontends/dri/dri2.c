@@ -2218,24 +2218,19 @@ dri2_init_screen_extensions(struct dri_screen *screen,
       screen->image_extension.setInFenceFd = dri2_set_in_fence_fd;
    }
 
-   if (pscreen->get_param(pscreen, PIPE_CAP_DMABUF)) {
-      uint64_t cap;
-
-      if (drmGetCap(screen->fd, DRM_CAP_PRIME, &cap) == 0 &&
-          (cap & DRM_PRIME_CAP_IMPORT)) {
-         screen->image_extension.createImageFromFds = dri2_from_fds;
-         screen->image_extension.createImageFromFds2 = dri2_from_fds2;
-         screen->image_extension.createImageFromDmaBufs = dri2_from_dma_bufs;
-         screen->image_extension.createImageFromDmaBufs2 = dri2_from_dma_bufs2;
-         screen->image_extension.createImageFromDmaBufs3 = dri2_from_dma_bufs3;
-         screen->image_extension.queryDmaBufFormats =
-            dri2_query_dma_buf_formats;
-         screen->image_extension.queryDmaBufModifiers =
-            dri2_query_dma_buf_modifiers;
-         if (!is_kms_screen) {
-            screen->image_extension.queryDmaBufFormatModifierAttribs =
-               dri2_query_dma_buf_format_modifier_attribs;
-         }
+   if (pscreen->get_param(pscreen, PIPE_CAP_DMABUF) & DRM_PRIME_CAP_IMPORT) {
+      screen->image_extension.createImageFromFds = dri2_from_fds;
+      screen->image_extension.createImageFromFds2 = dri2_from_fds2;
+      screen->image_extension.createImageFromDmaBufs = dri2_from_dma_bufs;
+      screen->image_extension.createImageFromDmaBufs2 = dri2_from_dma_bufs2;
+      screen->image_extension.createImageFromDmaBufs3 = dri2_from_dma_bufs3;
+      screen->image_extension.queryDmaBufFormats =
+         dri2_query_dma_buf_formats;
+      screen->image_extension.queryDmaBufModifiers =
+         dri2_query_dma_buf_modifiers;
+      if (!is_kms_screen) {
+         screen->image_extension.queryDmaBufFormatModifierAttribs =
+            dri2_query_dma_buf_format_modifier_attribs;
       }
    }
    *nExt++ = &screen->image_extension.base;

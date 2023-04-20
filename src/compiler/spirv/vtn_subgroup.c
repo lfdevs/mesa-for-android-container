@@ -342,6 +342,20 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
       break;
    }
 
+   case SpvOpGroupNonUniformRotateKHR: {
+      const nir_scope scope = vtn_scope_to_nir_scope(b, vtn_constant_uint(b, w[3]));
+      const uint32_t cluster_size = count > 6 ? vtn_constant_uint(b, w[6]) : 0;
+      vtn_fail_if(cluster_size && !IS_POT(cluster_size),
+                  "Behavior is undefined unless ClusterSize is at least 1 and a power of 2.");
+
+      struct vtn_ssa_value *value = vtn_ssa_value(b, w[4]);
+      struct vtn_ssa_value *delta = vtn_ssa_value(b, w[5]);
+      vtn_push_nir_ssa(b, w[2],
+         vtn_build_subgroup_instr(b, nir_intrinsic_rotate,
+                                  value, delta->def, scope, cluster_size)->def);
+      break;
+   }
+
    case SpvOpGroupNonUniformQuadBroadcast:
       vtn_push_ssa_value(b, w[2],
          vtn_build_subgroup_instr(b, nir_intrinsic_quad_broadcast,

@@ -29,6 +29,7 @@
 #include "amd_kernel_code_t.h"
 #include "nir/tgsi_to_nir.h"
 #include "si_build_pm4.h"
+#include "si_shader_internal.h"
 #include "util/u_async_debug.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
@@ -246,6 +247,9 @@ static void *si_create_compute_state(struct pipe_context *ctx, const struct pipe
    program->ir_type = cso->ir_type;
    program->input_size = cso->req_input_mem;
 
+   if (si_can_dump_shader(sscreen, sel->stage, SI_DUMP_INIT_NIR))
+      nir_print_shader(sel->nir, stderr);
+
    if (cso->ir_type != PIPE_SHADER_IR_NATIVE) {
       if (cso->ir_type == PIPE_SHADER_IR_TGSI) {
          program->ir_type = PIPE_SHADER_IR_NIR;
@@ -291,6 +295,23 @@ static void *si_create_compute_state(struct pipe_context *ctx, const struct pipe
    }
 
    return program;
+}
+
+static void si_get_compute_state_info(struct pipe_context *ctx, void *state,
+                                      struct pipe_compute_state_object_info *info)
+{
+   struct si_compute *program = (struct si_compute *)state;
+   struct si_shader_selector *sel = &program->sel;
+
+   assert(program->ir_type != PIPE_SHADER_IR_NATIVE);
+
+   /* Wait because we need the compilation to finish first */
+   util_queue_fence_wait(&sel->ready);
+
+   uint8_t wave_size = program->shader.wave_size;
+   info->private_memory = DIV_ROUND_UP(program->shader.config.scratch_bytes_per_wave, wave_size);
+   info->preferred_simd_size = wave_size;
+   info->max_threads = si_get_max_workgroup_size(&program->shader);
 }
 
 static void si_bind_compute_state(struct pipe_context *ctx, void *state)
@@ -379,98 +400,6 @@ static void si_set_global_binding(struct pipe_context *ctx, unsigned first, unsi
    }
 }
 
-void si_emit_initial_compute_regs(struct si_context *sctx, struct radeon_cmdbuf *cs)
-{
-   const struct radeon_info *info = &sctx->screen->info;
-
-   radeon_begin(cs);
-   radeon_set_sh_reg(R_00B834_COMPUTE_PGM_HI,
-                     S_00B834_DATA(sctx->screen->info.address32_hi >> 8));
-
-   radeon_set_sh_reg_seq(R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0, 2);
-   /* R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE0 / SE1,
-    * renamed COMPUTE_DESTINATION_EN_SEn on gfx10. */
-   radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-   radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-
-   if (sctx->gfx_level == GFX6) {
-      /* This register has been moved to R_00CD20_COMPUTE_MAX_WAVE_ID
-       * and is now per pipe, so it should be handled in the
-       * kernel if we want to use something other than the default value.
-       *
-       * TODO: This should be:
-       * (number of compute units) * 4 * (waves per simd) - 1
-       */
-      radeon_set_sh_reg(R_00B82C_COMPUTE_MAX_WAVE_ID, 0x190 /* Default value */);
-      radeon_set_config_reg(R_00950C_TA_CS_BC_BASE_ADDR, sctx->border_color_buffer->gpu_address >> 8);
-   }
-
-   if (sctx->gfx_level >= GFX7) {
-      /* Also set R_00B858_COMPUTE_STATIC_THREAD_MGMT_SE2 / SE3 */
-      radeon_set_sh_reg_seq(R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2, 2);
-      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-
-      /* Disable profiling on compute queues. */
-      if (cs != &sctx->gfx_cs || !sctx->screen->info.has_graphics) {
-         radeon_set_sh_reg(R_00B82C_COMPUTE_PERFCOUNT_ENABLE, 0);
-         radeon_set_sh_reg(R_00B878_COMPUTE_THREAD_TRACE_ENABLE, 0);
-      }
-
-      /* Set the pointer to border colors. */
-      /* MI200 doesn't support border colors. */
-      if (sctx->border_color_buffer) {
-         uint64_t bc_va = sctx->border_color_buffer->gpu_address;
-
-         radeon_set_uconfig_reg_seq(R_030E00_TA_CS_BC_BASE_ADDR, 2, false);
-         radeon_emit(bc_va >> 8);                    /* R_030E00_TA_CS_BC_BASE_ADDR */
-         radeon_emit(S_030E04_ADDRESS(bc_va >> 40)); /* R_030E04_TA_CS_BC_BASE_ADDR_HI */
-      }
-   }
-
-   /* cs_preamble_state initializes this for the gfx queue, so only do this
-    * if we are on a compute queue.
-    */
-   if (sctx->gfx_level >= GFX9 && sctx->gfx_level < GFX11 &&
-       (cs != &sctx->gfx_cs || !sctx->screen->info.has_graphics)) {
-      radeon_set_uconfig_reg(R_0301EC_CP_COHER_START_DELAY,
-                             sctx->gfx_level >= GFX10 ? 0x20 : 0);
-   }
-
-   if (!info->has_graphics && info->family >= CHIP_MI100) {
-      radeon_set_sh_reg_seq(R_00B894_COMPUTE_STATIC_THREAD_MGMT_SE4, 4);
-      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-      radeon_emit(S_00B858_SH0_CU_EN(info->spi_cu_en) | S_00B858_SH1_CU_EN(info->spi_cu_en));
-   }
-
-   if (sctx->gfx_level >= GFX10) {
-      radeon_set_sh_reg_seq(R_00B890_COMPUTE_USER_ACCUM_0, 4);
-      radeon_emit(0); /* R_00B890_COMPUTE_USER_ACCUM_0 */
-      radeon_emit(0); /* R_00B894_COMPUTE_USER_ACCUM_1 */
-      radeon_emit(0); /* R_00B898_COMPUTE_USER_ACCUM_2 */
-      radeon_emit(0); /* R_00B89C_COMPUTE_USER_ACCUM_3 */
-
-      radeon_set_sh_reg(R_00B9F4_COMPUTE_DISPATCH_TUNNEL, 0);
-
-      if (sctx->gfx_level < GFX11)
-         radeon_set_sh_reg(R_00B8A0_COMPUTE_PGM_RSRC3, 0);
-   }
-
-   if (sctx->gfx_level >= GFX11) {
-      radeon_set_sh_reg_seq(R_00B8AC_COMPUTE_STATIC_THREAD_MGMT_SE4, 4);
-      radeon_emit(S_00B8AC_SA0_CU_EN(info->spi_cu_en) | S_00B8AC_SA1_CU_EN(info->spi_cu_en)); /* SE4 */
-      radeon_emit(S_00B8AC_SA0_CU_EN(info->spi_cu_en) | S_00B8AC_SA1_CU_EN(info->spi_cu_en)); /* SE5 */
-      radeon_emit(S_00B8AC_SA0_CU_EN(info->spi_cu_en) | S_00B8AC_SA1_CU_EN(info->spi_cu_en)); /* SE6 */
-      radeon_emit(S_00B8AC_SA0_CU_EN(info->spi_cu_en) | S_00B8AC_SA1_CU_EN(info->spi_cu_en)); /* SE7 */
-
-      radeon_set_sh_reg(R_00B8BC_COMPUTE_DISPATCH_INTERLEAVE, 64);
-   }
-
-   radeon_end();
-}
-
 static bool si_setup_compute_scratch_buffer(struct si_context *sctx, struct si_shader *shader)
 {
    uint64_t scratch_bo_size, scratch_needed;
@@ -494,7 +423,8 @@ static bool si_setup_compute_scratch_buffer(struct si_context *sctx, struct si_s
    }
 
    if (sctx->compute_scratch_buffer != shader->scratch_bo && scratch_needed) {
-      if (sctx->gfx_level < GFX11) {
+      if (sctx->gfx_level < GFX11 &&
+          (sctx->family < CHIP_GFX940 || sctx->screen->info.has_graphics)) {
          uint64_t scratch_va = sctx->compute_scratch_buffer->gpu_address;
 
          if (!si_shader_binary_upload(sctx->screen, shader, scratch_va))
@@ -596,7 +526,9 @@ static bool si_switch_compute_shader(struct si_context *sctx, struct si_compute 
                         S_00B8A0_INST_PREF_SIZE(si_get_shader_prefetch_size(shader)));
    }
 
-   if (sctx->gfx_level >= GFX11 && shader->scratch_bo) {
+   if ((sctx->gfx_level >= GFX11 ||
+        (sctx->family >= CHIP_GFX940 && !sctx->screen->info.has_graphics)) &&
+       shader->scratch_bo) {
       radeon_set_sh_reg_seq(R_00B840_COMPUTE_DISPATCH_SCRATCH_BASE_LO, 4);
       radeon_emit(sctx->compute_scratch_buffer->gpu_address >> 8);
       radeon_emit(sctx->compute_scratch_buffer->gpu_address >> 40);
@@ -851,8 +783,11 @@ static void si_emit_dispatch_packets(struct si_context *sctx, const struct pipe_
 
    unsigned dispatch_initiator = S_00B800_COMPUTE_SHADER_EN(1) | S_00B800_FORCE_START_AT_000(1) |
                                  /* If the KMD allows it (there is a KMD hw register for it),
-                                  * allow launching waves out-of-order. (same as Vulkan) */
-                                 S_00B800_ORDER_MODE(sctx->gfx_level >= GFX7) |
+                                  * allow launching waves out-of-order. (same as Vulkan)
+                                  * Not available in gfx940.
+                                  */
+                                 S_00B800_ORDER_MODE(sctx->gfx_level >= GFX7 &&
+                                                     (sctx->family < CHIP_GFX940 || sctx->screen->info.has_graphics)) |
                                  S_00B800_CS_W32_EN(sctx->cs_shader_state.program->shader.wave_size == 32);
 
    const uint *last_block = info->last_block;
@@ -1015,13 +950,6 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
    if (sctx->bo_list_add_all_compute_resources)
       si_compute_resources_add_all_to_bo_list(sctx);
 
-   if (!sctx->cs_shader_state.initialized) {
-      si_emit_initial_compute_regs(sctx, &sctx->gfx_cs);
-
-      sctx->cs_shader_state.emitted_program = NULL;
-      sctx->cs_shader_state.initialized = true;
-   }
-
    /* First emit registers. */
    bool prefetch;
    if (!si_switch_compute_shader(sctx, program, &program->shader, code_object, info->pc, &prefetch,
@@ -1132,6 +1060,7 @@ void si_init_compute_functions(struct si_context *sctx)
    sctx->b.create_compute_state = si_create_compute_state;
    sctx->b.delete_compute_state = si_delete_compute_state;
    sctx->b.bind_compute_state = si_bind_compute_state;
+   sctx->b.get_compute_state_info = si_get_compute_state_info;
    sctx->b.set_compute_resources = si_set_compute_resources;
    sctx->b.set_global_binding = si_set_global_binding;
    sctx->b.launch_grid = si_launch_grid;

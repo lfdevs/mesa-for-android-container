@@ -43,7 +43,7 @@
 gc2000_gles2:
   extends:
     - .etnaviv-armhf-gc2000
-    - .test-manual-mr
+    - .etnaviv-manual-rules
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     DEQP_VER: gles2
@@ -52,15 +52,16 @@ gc2000_piglit:
   extends:
     - .piglit-test
     - .etnaviv-armhf-gc2000
-    - .test-manual-mr
+    - .etnaviv-manual-rules
   variables:
     PIGLIT_PLATFORM: gbm
     PIGLIT_PROFILES: gpu
+    TEST_PHASE_TIMEOUT: 40
 
 gc7000_gles2:
   extends:
     - .etnaviv-arm64-gc7000
-    - .test-manual-mr
+    - .etnaviv-manual-rules
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     DEQP_VER: gles2

@@ -7,23 +7,13 @@
 AlignAfterOpenBracket: true
 AlignConsecutiveMacros: true
 AllowAllArgumentsOnNextLine: false
-AllowShortCaseLabelsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: false
 AlwaysBreakAfterReturnType: TopLevelDefinitions
 BasedOnStyle: LLVM
-BraceWrapping:
-  AfterControlStatement: false
-  AfterEnum: false
-  AfterFunction: true
-  AfterStruct: false
-  BeforeElse: false
-  SplitEmptyFunction: true
 BinPackArguments: true
 BinPackParameters: true
 BreakBeforeBraces: Custom
 ColumnLimit: 100
 ContinuationIndentWidth: 3
-Cpp11BracedListStyle: false
 Cpp11BracedListStyle: true
 ForEachMacros:
   - LIST_FOR_EACH_ENTRY
@@ -87,20 +77,11 @@ ForEachMacros:
   - u_foreach_bit
   - u_foreach_bit64
 
-IncludeBlocks: Preserve
-IncludeCategories:
-  - Regex:           '<[[:alnum:].]+>'
-    Priority:        1
-  - Regex:           '.*\/.*'
-    Priority:        2
-  - Regex:           '.*'
-    Priority:        3
 IndentWidth: 3
 PenaltyBreakBeforeFirstCallParameter: 1
 PenaltyExcessCharacter: 100
 SpaceAfterCStyleCast: false
 SpaceBeforeCpp11BracedList: false
-SpaceBeforeCtorInitializerColon: false
 SpacesInContainerLiterals: false
 
 
@@ -147,3 +128,6 @@ IncludeCategories:
   - Regex:           '.*'
     Priority:        5
 
+MacroBlockBegin: 'BEGIN_TEST'
+MacroBlockEnd: 'END_TEST'
+CommentPragmas: '^(!|;|>>|~)'

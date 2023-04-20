@@ -1157,7 +1157,7 @@ nv50_blit_set_src(struct nv50_blitctx *blit,
 {
    struct nv50_context *nv50 = blit->nv50;
    struct pipe_context *pipe = &nv50->base.pipe;
-   struct pipe_sampler_view templ;
+   struct pipe_sampler_view templ = {0};
    uint32_t flags;
    enum pipe_texture_target target;
 

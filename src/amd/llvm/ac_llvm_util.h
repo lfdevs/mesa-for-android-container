@@ -78,6 +78,7 @@ struct ac_llvm_compiler {
 
 LLVMTargetRef ac_get_llvm_target(const char *triple);
 const char *ac_get_llvm_processor_name(enum radeon_family family);
+void ac_llvm_run_atexit_for_destructors(void);
 bool ac_is_llvm_processor_supported(LLVMTargetMachineRef tm, const char *processor);
 void ac_reset_llvm_all_options_occurences();
 void ac_add_attr_dereferenceable(LLVMValueRef val, uint64_t bytes);
@@ -109,7 +110,8 @@ struct ac_compiler_passes *ac_create_llvm_passes(LLVMTargetMachineRef tm);
 void ac_destroy_llvm_passes(struct ac_compiler_passes *p);
 bool ac_compile_module_to_elf(struct ac_compiler_passes *p, LLVMModuleRef module,
                               char **pelf_buffer, size_t *pelf_size);
-void ac_llvm_add_barrier_noop_pass(LLVMPassManagerRef passmgr);
+LLVMPassManagerRef ac_create_passmgr(LLVMTargetLibraryInfoRef target_library_info,
+                                     bool check_ir);
 
 static inline bool ac_has_vec3_support(enum amd_gfx_level chip, bool use_format)
 {

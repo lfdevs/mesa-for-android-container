@@ -42,6 +42,7 @@
 #endif
 
 #include "vk_util.h"
+#include "vk_format.h"
 
 static void
 genX(emit_slice_hashing_state)(struct anv_device *device,
@@ -182,6 +183,20 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
     * those are relative to STATE_BASE_ADDRESS::DynamicStateBaseAddress.
     */
 #if GFX_VER >= 12
+
+#if GFX_VERx10 >= 125
+   anv_batch_emit(batch, GENX(PIPE_CONTROL), pc) {
+      /* Wa_14016407139:
+       *
+       * "On Surface state base address modification, for 3D workloads, SW must
+       *  always program PIPE_CONTROL either with CS Stall or PS sync stall. In
+       *  both the cases set Render Target Cache Flush Enable".
+       */
+      pc.RenderTargetCacheFlushEnable = true;
+      pc.CommandStreamerStallEnable = true;
+   }
+#endif
+
    /* GEN:BUG:1607854226:
     *
     *  Non-pipelined state has issues with not applying in MEDIA/GPGPU mode.
@@ -273,6 +288,15 @@ init_render_queue_state(struct anv_queue *queue)
       .next = cmds,
       .end = (void *) cmds + sizeof(cmds),
    };
+
+   struct GENX(VERTEX_ELEMENT_STATE) empty_ve = {
+      .Valid = true,
+      .Component0Control = VFCOMP_STORE_0,
+      .Component1Control = VFCOMP_STORE_0,
+      .Component2Control = VFCOMP_STORE_0,
+      .Component3Control = VFCOMP_STORE_0,
+   };
+   GENX(VERTEX_ELEMENT_STATE_pack)(NULL, device->empty_vs_input, &empty_ve);
 
    genX(emit_pipeline_select)(&batch, _3D);
 
@@ -503,6 +527,7 @@ genX(init_physical_device_state)(ASSERTED struct anv_physical_device *pdevice)
    assert(pdevice->info.verx10 == GFX_VERx10);
 #if GFX_VERx10 >= 125 && ANV_SUPPORT_RT
    genX(grl_load_rt_uuid)(pdevice->rt_uuid);
+   pdevice->max_grl_scratch_size = genX(grl_max_scratch_size)();
 #endif
 }
 
@@ -520,6 +545,9 @@ genX(init_device_state)(struct anv_device *device)
          break;
       case INTEL_ENGINE_CLASS_COMPUTE:
          res = init_compute_queue_state(queue);
+         break;
+      case INTEL_ENGINE_CLASS_VIDEO:
+         res = VK_SUCCESS;
          break;
       default:
          res = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
@@ -834,23 +862,28 @@ VkResult genX(CreateSampler)(
    unsigned sampler_reduction_mode = STD_FILTER;
    bool enable_sampler_reduction = false;
 
+   const struct vk_format_ycbcr_info *ycbcr_info = NULL;
    vk_foreach_struct_const(ext, pCreateInfo->pNext) {
       switch (ext->sType) {
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO: {
          VkSamplerYcbcrConversionInfo *pSamplerConversion =
             (VkSamplerYcbcrConversionInfo *) ext;
-         ANV_FROM_HANDLE(anv_ycbcr_conversion, conversion,
-                         pSamplerConversion->conversion);
+         VK_FROM_HANDLE(vk_ycbcr_conversion, conversion,
+                        pSamplerConversion->conversion);
 
          /* Ignore conversion for non-YUV formats. This fulfills a requirement
           * for clients that want to utilize same code path for images with
           * external formats (VK_FORMAT_UNDEFINED) and "regular" RGBA images
           * where format is known.
           */
-         if (conversion == NULL || !conversion->format->can_ycbcr)
+         if (conversion == NULL)
             break;
 
-         sampler->n_planes = conversion->format->n_planes;
+         ycbcr_info = vk_format_get_ycbcr_info(conversion->state.format);
+         if (ycbcr_info == NULL)
+            break;
+
+         sampler->n_planes = ycbcr_info->n_planes;
          sampler->conversion = conversion;
          break;
       }
@@ -918,19 +951,23 @@ VkResult genX(CreateSampler)(
 
    for (unsigned p = 0; p < sampler->n_planes; p++) {
       const bool plane_has_chroma =
-         sampler->conversion && sampler->conversion->format->planes[p].has_chroma;
+         ycbcr_info && ycbcr_info->planes[p].has_chroma;
       const VkFilter min_filter =
-         plane_has_chroma ? sampler->conversion->chroma_filter : pCreateInfo->minFilter;
+         plane_has_chroma ? sampler->conversion->state.chroma_filter : pCreateInfo->minFilter;
       const VkFilter mag_filter =
-         plane_has_chroma ? sampler->conversion->chroma_filter : pCreateInfo->magFilter;
+         plane_has_chroma ? sampler->conversion->state.chroma_filter : pCreateInfo->magFilter;
       const bool enable_min_filter_addr_rounding = min_filter != VK_FILTER_NEAREST;
       const bool enable_mag_filter_addr_rounding = mag_filter != VK_FILTER_NEAREST;
       /* From Broadwell PRM, SAMPLER_STATE:
        *   "Mip Mode Filter must be set to MIPFILTER_NONE for Planar YUV surfaces."
        */
-      const bool isl_format_is_planar_yuv = sampler->conversion &&
-         isl_format_is_yuv(sampler->conversion->format->planes[0].isl_format) &&
-         isl_format_is_planar(sampler->conversion->format->planes[0].isl_format);
+      enum isl_format plane0_isl_format = sampler->conversion ?
+         anv_get_format(sampler->conversion->state.format)->planes[0].isl_format :
+         ISL_FORMAT_UNSUPPORTED;
+      const bool isl_format_is_planar_yuv =
+         plane0_isl_format != ISL_FORMAT_UNSUPPORTED &&
+         isl_format_is_yuv(plane0_isl_format) &&
+         isl_format_is_planar(plane0_isl_format);
 
       const uint32_t mip_filter_mode =
          isl_format_is_planar_yuv ?

@@ -85,8 +85,7 @@ update_gl_clamp(struct st_context *st, struct gl_program *prog, uint32_t *gl_cla
    for (unit = 0; samplers_used; unit++, samplers_used >>= 1) {
       unsigned tex_unit = prog->SamplerUnits[unit];
       if (samplers_used & 1 &&
-          (st->ctx->Texture.Unit[tex_unit]._Current->Target != GL_TEXTURE_BUFFER ||
-           st->texture_buffer_sampler)) {
+          (st->ctx->Texture.Unit[tex_unit]._Current->Target != GL_TEXTURE_BUFFER)) {
          ASSERTED const struct gl_texture_object *texobj;
          struct gl_context *ctx = st->ctx;
          const struct gl_sampler_object *msamp;

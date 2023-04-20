@@ -408,8 +408,12 @@ st_nir_preprocess(struct st_context *st, struct gl_program *prog,
    }
 
    if (options->lower_to_scalar) {
-     NIR_PASS_V(nir, nir_lower_alu_to_scalar,
-                options->lower_to_scalar_filter, NULL);
+      NIR_PASS_V(nir, nir_remove_dead_variables,
+                 nir_var_function_temp | nir_var_shader_temp |
+                 nir_var_mem_shared, NULL);
+      NIR_PASS_V(nir, nir_opt_copy_prop_vars);
+      NIR_PASS_V(nir, nir_lower_alu_to_scalar,
+                 options->lower_to_scalar_filter, NULL);
    }
 
    /* before buffers and vars_to_ssa */
@@ -538,6 +542,14 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
             NIR_PASS(revectorize, nir, nir_lower_alu_to_scalar, filter_64_bit_instr, nullptr);
             NIR_PASS(revectorize, nir, nir_lower_phis_to_scalar, false);
          }
+         /* doubles lowering requires frexp to be lowered first if it will be,
+          * since the pass generates other 64-bit ops.  Most backends lower
+          * frexp, and using doubles is rare, and using frexp is even more rare
+          * (no instances in shader-db), so we're not too worried about
+          * accidentally lowering a 32-bit frexp here.
+          */
+         NIR_PASS(lowered_64bit_ops, nir, nir_lower_frexp);
+
          NIR_PASS(lowered_64bit_ops, nir, nir_lower_doubles,
                   st->ctx->SoftFP64, nir->options->lower_doubles_options);
       }
@@ -771,6 +783,13 @@ st_link_nir(struct gl_context *ctx,
       nir_opt_access_options opt_access_options;
       opt_access_options.is_vulkan = false;
       NIR_PASS_V(nir, nir_opt_access, &opt_access_options);
+
+      /* Combine clip and cull outputs into one array and set:
+       * - shader_info::clip_distance_array_size
+       * - shader_info::cull_distance_array_size
+       */
+      if (!st->screen->get_param(st->screen, PIPE_CAP_CULL_DISTANCE_NOCOMBINE))
+         NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
    }
 
    if (shader_program->data->spirv) {
@@ -837,9 +856,6 @@ st_link_nir(struct gl_context *ctx,
 
       NIR_PASS_V(nir, nir_lower_system_values);
       NIR_PASS_V(nir, nir_lower_compute_system_values, NULL);
-
-      if (!st->screen->get_param(st->screen, PIPE_CAP_CULL_DISTANCE_NOCOMBINE))
-         NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
 
       if (i >= 1) {
          struct gl_program *prev_shader = linked_shader[i - 1]->Program;

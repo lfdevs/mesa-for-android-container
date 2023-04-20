@@ -61,11 +61,11 @@ extern uint64_t intel_debug;
 #define DEBUG_CLIP                (1ull << 13)
 #define DEBUG_STALL               (1ull << 14)
 #define DEBUG_BLORP               (1ull << 15)
-#define DEBUG_NO16                (1ull << 16)
+/* reserved                       (1ull << 16) */
 #define DEBUG_NO_DUAL_OBJECT_GS   (1ull << 17)
 #define DEBUG_OPTIMIZER           (1ull << 18)
 #define DEBUG_ANNOTATION          (1ull << 19)
-#define DEBUG_NO8                 (1ull << 20)
+/* reserved                       (1ull << 20) */
 #define DEBUG_NO_OACONFIG         (1ull << 21)
 #define DEBUG_SPILL_FS            (1ull << 22)
 #define DEBUG_SPILL_VEC4          (1ull << 23)
@@ -84,11 +84,13 @@ extern uint64_t intel_debug;
 #define DEBUG_BT                  (1ull << 36)
 #define DEBUG_PIPE_CONTROL        (1ull << 37)
 #define DEBUG_NO_FAST_CLEAR       (1ull << 38)
-#define DEBUG_NO32                (1ull << 39)
+/* reserved                       (1ull << 39) */
 #define DEBUG_RT                  (1ull << 40)
 #define DEBUG_TASK                (1ull << 41)
 #define DEBUG_MESH                (1ull << 42)
 #define DEBUG_CAPTURE_ALL         (1ull << 43)
+#define DEBUG_PERF_SYMBOL_NAMES   (1ull << 44)
+#define DEBUG_SWSB_STALL          (1ull << 45)
 
 #define DEBUG_ANY                 (~0ull)
 
@@ -97,9 +99,35 @@ extern uint64_t intel_debug;
 
 /* These flags may affect program generation */
 #define DEBUG_DISK_CACHE_MASK \
-   (DEBUG_NO16 | DEBUG_NO_DUAL_OBJECT_GS | DEBUG_NO8 |  DEBUG_SPILL_FS | \
-   DEBUG_SPILL_VEC4 | DEBUG_NO_COMPACTION | DEBUG_DO32 | DEBUG_SOFT64 | \
-   DEBUG_NO32)
+   (DEBUG_NO_DUAL_OBJECT_GS | DEBUG_SPILL_FS | \
+   DEBUG_SPILL_VEC4 | DEBUG_NO_COMPACTION | DEBUG_DO32 | DEBUG_SOFT64)
+
+extern uint64_t intel_simd;
+
+#define INTEL_SIMD(type, size)        (!!(intel_simd & (DEBUG_ ## type ## _SIMD ## size)))
+
+/* VS, TCS, TES and GS stages are dispatched in one size */
+#define DEBUG_FS_SIMD8    (1ull << 0)
+#define DEBUG_FS_SIMD16   (1ull << 1)
+#define DEBUG_FS_SIMD32   (1ull << 2)
+
+#define DEBUG_CS_SIMD8    (1ull << 3)
+#define DEBUG_CS_SIMD16   (1ull << 4)
+#define DEBUG_CS_SIMD32   (1ull << 5)
+
+#define DEBUG_TS_SIMD8    (1ull << 6)
+#define DEBUG_TS_SIMD16   (1ull << 7)
+#define DEBUG_TS_SIMD32   (1ull << 8)
+
+#define DEBUG_MS_SIMD8    (1ull << 9)
+#define DEBUG_MS_SIMD16   (1ull << 10)
+#define DEBUG_MS_SIMD32   (1ull << 11)
+
+#define DEBUG_RT_SIMD8    (1ull << 12)
+#define DEBUG_RT_SIMD16   (1ull << 13)
+#define DEBUG_RT_SIMD32   (1ull << 14)
+
+#define SIMD_DISK_CACHE_MASK ((1ull << 15) - 1)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"

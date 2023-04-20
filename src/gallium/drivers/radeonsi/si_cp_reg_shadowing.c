@@ -27,159 +27,6 @@
 #include "ac_shadowed_regs.h"
 #include "util/u_memory.h"
 
-static void si_build_load_reg(struct si_screen *sscreen, struct si_pm4_state *pm4,
-                              enum ac_reg_range_type type,
-                              struct si_resource *shadow_regs)
-{
-   uint64_t gpu_address = shadow_regs->gpu_address;
-   unsigned packet, num_ranges, offset;
-   const struct ac_reg_range *ranges;
-
-   ac_get_reg_ranges(sscreen->info.gfx_level, sscreen->info.family,
-                     type, &num_ranges, &ranges);
-
-   switch (type) {
-   case SI_REG_RANGE_UCONFIG:
-      gpu_address += SI_SHADOWED_UCONFIG_REG_OFFSET;
-      offset = CIK_UCONFIG_REG_OFFSET;
-      packet = PKT3_LOAD_UCONFIG_REG;
-      break;
-   case SI_REG_RANGE_CONTEXT:
-      gpu_address += SI_SHADOWED_CONTEXT_REG_OFFSET;
-      offset = SI_CONTEXT_REG_OFFSET;
-      packet = PKT3_LOAD_CONTEXT_REG;
-      break;
-   default:
-      gpu_address += SI_SHADOWED_SH_REG_OFFSET;
-      offset = SI_SH_REG_OFFSET;
-      packet = PKT3_LOAD_SH_REG;
-      break;
-   }
-
-   si_pm4_cmd_add(pm4, PKT3(packet, 1 + num_ranges * 2, 0));
-   si_pm4_cmd_add(pm4, gpu_address);
-   si_pm4_cmd_add(pm4, gpu_address >> 32);
-   for (unsigned i = 0; i < num_ranges; i++) {
-      si_pm4_cmd_add(pm4, (ranges[i].offset - offset) / 4);
-      si_pm4_cmd_add(pm4, ranges[i].size / 4);
-   }
-}
-
-static struct si_pm4_state *
-si_create_shadowing_ib_preamble(struct si_context *sctx)
-{
-   struct si_shadow_preamble {
-      struct si_pm4_state pm4;
-      uint32_t more_pm4[150]; /* Add more space because the command buffer is large. */
-   };
-   struct si_pm4_state *pm4 = (struct si_pm4_state *)CALLOC_STRUCT(si_shadow_preamble);
-
-   /* Add all the space that we allocated. */
-   pm4->max_dw = (sizeof(struct si_shadow_preamble) - offsetof(struct si_shadow_preamble, pm4.pm4)) / 4;
-
-   if (sctx->screen->dpbb_allowed) {
-      si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));
-      si_pm4_cmd_add(pm4, EVENT_TYPE(V_028A90_BREAK_BATCH) | EVENT_INDEX(0));
-   }
-
-   /* Wait for idle, because we'll update VGT ring pointers. */
-   si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));
-   si_pm4_cmd_add(pm4, EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
-
-   /* VGT_FLUSH is required even if VGT is idle. It resets VGT pointers. */
-   si_pm4_cmd_add(pm4, PKT3(PKT3_EVENT_WRITE, 0, 0));
-   si_pm4_cmd_add(pm4, EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
-
-   if (sctx->gfx_level >= GFX11) {
-      /* We must wait for idle using an EOP event before changing the attribute ring registers.
-       * Use the bottom-of-pipe EOP event, but increment the PWS counter instead of writing memory.
-       */
-      si_pm4_cmd_add(pm4, PKT3(PKT3_RELEASE_MEM, 6, 0));
-      si_pm4_cmd_add(pm4, S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) |
-                          S_490_EVENT_INDEX(5) |
-                          S_490_PWS_ENABLE(1));
-      si_pm4_cmd_add(pm4, 0); /* DST_SEL, INT_SEL, DATA_SEL */
-      si_pm4_cmd_add(pm4, 0); /* ADDRESS_LO */
-      si_pm4_cmd_add(pm4, 0); /* ADDRESS_HI */
-      si_pm4_cmd_add(pm4, 0); /* DATA_LO */
-      si_pm4_cmd_add(pm4, 0); /* DATA_HI */
-      si_pm4_cmd_add(pm4, 0); /* INT_CTXID */
-
-      unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
-                          S_586_GLM_INV(1) | S_586_GLM_WB(1) |
-                          S_586_GL1_INV(1) | S_586_GLV_INV(1) |
-                          S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
-
-      /* Wait for the PWS counter. */
-      si_pm4_cmd_add(pm4, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
-      si_pm4_cmd_add(pm4, S_580_PWS_STAGE_SEL(V_580_CP_PFP) |
-                          S_580_PWS_COUNTER_SEL(V_580_TS_SELECT) |
-                          S_580_PWS_ENA2(1) |
-                          S_580_PWS_COUNT(0));
-      si_pm4_cmd_add(pm4, 0xffffffff); /* GCR_SIZE */
-      si_pm4_cmd_add(pm4, 0x01ffffff); /* GCR_SIZE_HI */
-      si_pm4_cmd_add(pm4, 0); /* GCR_BASE_LO */
-      si_pm4_cmd_add(pm4, 0); /* GCR_BASE_HI */
-      si_pm4_cmd_add(pm4, S_585_PWS_ENA(1));
-      si_pm4_cmd_add(pm4, gcr_cntl); /* GCR_CNTL */
-   } else if (sctx->gfx_level >= GFX10) {
-      unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
-                          S_586_GLM_INV(1) | S_586_GLM_WB(1) |
-                          S_586_GL1_INV(1) | S_586_GLV_INV(1) |
-                          S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
-
-      si_pm4_cmd_add(pm4, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
-      si_pm4_cmd_add(pm4, 0);           /* CP_COHER_CNTL */
-      si_pm4_cmd_add(pm4, 0xffffffff);  /* CP_COHER_SIZE */
-      si_pm4_cmd_add(pm4, 0xffffff);    /* CP_COHER_SIZE_HI */
-      si_pm4_cmd_add(pm4, 0);           /* CP_COHER_BASE */
-      si_pm4_cmd_add(pm4, 0);           /* CP_COHER_BASE_HI */
-      si_pm4_cmd_add(pm4, 0x0000000A);  /* POLL_INTERVAL */
-      si_pm4_cmd_add(pm4, gcr_cntl);    /* GCR_CNTL */
-
-      si_pm4_cmd_add(pm4, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
-      si_pm4_cmd_add(pm4, 0);
-   } else if (sctx->gfx_level == GFX9) {
-      unsigned cp_coher_cntl = S_0301F0_SH_ICACHE_ACTION_ENA(1) |
-                               S_0301F0_SH_KCACHE_ACTION_ENA(1) |
-                               S_0301F0_TC_ACTION_ENA(1) |
-                               S_0301F0_TCL1_ACTION_ENA(1) |
-                               S_0301F0_TC_WB_ACTION_ENA(1);
-
-      si_pm4_cmd_add(pm4, PKT3(PKT3_ACQUIRE_MEM, 5, 0));
-      si_pm4_cmd_add(pm4, cp_coher_cntl); /* CP_COHER_CNTL */
-      si_pm4_cmd_add(pm4, 0xffffffff);    /* CP_COHER_SIZE */
-      si_pm4_cmd_add(pm4, 0xffffff);      /* CP_COHER_SIZE_HI */
-      si_pm4_cmd_add(pm4, 0);             /* CP_COHER_BASE */
-      si_pm4_cmd_add(pm4, 0);             /* CP_COHER_BASE_HI */
-      si_pm4_cmd_add(pm4, 0x0000000A);    /* POLL_INTERVAL */
-
-      si_pm4_cmd_add(pm4, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
-      si_pm4_cmd_add(pm4, 0);
-   } else {
-      unreachable("invalid chip");
-   }
-
-   si_pm4_cmd_add(pm4, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-   si_pm4_cmd_add(pm4,
-                  CC0_UPDATE_LOAD_ENABLES(1) |
-                  CC0_LOAD_PER_CONTEXT_STATE(1) |
-                  CC0_LOAD_CS_SH_REGS(1) |
-                  CC0_LOAD_GFX_SH_REGS(1) |
-                  CC0_LOAD_GLOBAL_UCONFIG(1));
-   si_pm4_cmd_add(pm4,
-                  CC1_UPDATE_SHADOW_ENABLES(1) |
-                  CC1_SHADOW_PER_CONTEXT_STATE(1) |
-                  CC1_SHADOW_CS_SH_REGS(1) |
-                  CC1_SHADOW_GFX_SH_REGS(1) |
-                  CC1_SHADOW_GLOBAL_UCONFIG(1));
-
-   for (unsigned i = 0; i < SI_NUM_SHADOWED_REG_RANGES; i++)
-      si_build_load_reg(sctx->screen, pm4, i, sctx->shadowed_regs);
-
-   return pm4;
-}
-
 static void si_set_context_reg_array(struct radeon_cmdbuf *cs, unsigned reg, unsigned num,
                                      const uint32_t *values)
 {
@@ -191,8 +38,9 @@ static void si_set_context_reg_array(struct radeon_cmdbuf *cs, unsigned reg, uns
 
 void si_init_cp_reg_shadowing(struct si_context *sctx)
 {
-   if (sctx->screen->info.mid_command_buffer_preemption_enabled ||
-       sctx->screen->debug_flags & DBG(SHADOW_REGS)) {
+   if (sctx->has_graphics &&
+       (sctx->screen->info.mid_command_buffer_preemption_enabled ||
+        sctx->screen->debug_flags & DBG(SHADOW_REGS))) {
       sctx->shadowed_regs =
             si_aligned_buffer_create(sctx->b.screen,
                                      PIPE_RESOURCE_FLAG_UNMAPPABLE | SI_RESOURCE_FLAG_DRIVER_INTERNAL,
@@ -212,8 +60,19 @@ void si_init_cp_reg_shadowing(struct si_context *sctx)
                              SI_COHERENCY_CP, L2_BYPASS);
 
       /* Create the shadowing preamble. */
-      struct si_pm4_state *shadowing_preamble =
-            si_create_shadowing_ib_preamble(sctx);
+      struct si_shadow_preamble {
+         struct si_pm4_state pm4;
+         uint32_t more_pm4[150]; /* Add more space because the command buffer is large. */
+      };
+      struct si_pm4_state *shadowing_preamble = (struct si_pm4_state *)CALLOC_STRUCT(si_shadow_preamble);
+
+      /* Add all the space that we allocated. */
+      shadowing_preamble->max_dw = (sizeof(struct si_shadow_preamble) -
+                                    offsetof(struct si_shadow_preamble, pm4.pm4)) / 4;
+
+      ac_create_shadowing_ib_preamble(&sctx->screen->info,
+                                      (pm4_cmd_add_fn)si_pm4_cmd_add, shadowing_preamble,
+                                      sctx->shadowed_regs->gpu_address, sctx->screen->dpbb_allowed);
 
       /* Initialize shadowed registers as follows. */
       radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, sctx->shadowed_regs,

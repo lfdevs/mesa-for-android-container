@@ -132,6 +132,11 @@ struct stw_framebuffer
    int swap_interval;
    int64_t prev_swap_time;
 
+#ifdef _GAMING_XBOX
+   /* For the WndProc hook chain */
+   WNDPROC prev_wndproc;
+#endif
+
    /** 
     * This is protected by stw_device::fb_mutex, not the mutex above.
     * 

@@ -175,6 +175,56 @@ finished:
 
 
 /*
+ * Check if the given nir_src comes directly from a FS input.
+ */
+static bool
+is_fs_input(const nir_src *src)
+{
+   if (!src->is_ssa) {
+      return false;
+   }
+
+   const nir_instr *parent = src->ssa[0].parent_instr;
+   if (!parent) {
+      return false;
+   }
+
+   if (parent->type == nir_instr_type_alu) {
+      const nir_alu_instr *alu = nir_instr_as_alu(parent);
+      if (alu->op == nir_op_vec2 ||
+          alu->op == nir_op_vec3 ||
+          alu->op == nir_op_vec4) {
+         /* Check if any of the components come from an FS input */
+         unsigned num_src = nir_op_infos[alu->op].num_inputs;
+         for (unsigned i = 0; i < num_src; i++) {
+            if (is_fs_input(&alu->src[i].src)) {
+               return true;
+            }
+         }
+      }
+   } else if (parent->type == nir_instr_type_intrinsic) {
+      const nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(parent);
+      /* loading from an FS input? */
+      if (intrin->intrinsic == nir_intrinsic_load_deref) {
+         if (is_fs_input(&intrin->src[0])) {
+            return true;
+         }
+      }
+   } else if (parent->type == nir_instr_type_deref) {
+      const nir_deref_instr *deref = nir_instr_as_deref(parent);
+      /* deref'ing an FS input? */
+      if (deref &&
+          deref->deref_type == nir_deref_type_var &&
+          deref->modes == nir_var_shader_in) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+
+/*
  * Determine whether the given alu src comes directly from an input
  * register.  If so, return true and the input register index and
  * component.  Return false otherwise.
@@ -305,6 +355,11 @@ check_load_const_in_zero_one(const nir_load_const_instr *load)
 
 /*
  * Examine the NIR shader to determine if it's "linear".
+ * For the linear path, we're optimizing the case of rendering a window-
+ * aligned, textured quad.  Basically, FS must get the output color from
+ * a texture lookup and, possibly, a constant color.  If the color comes
+ * from some other sort of computation or from a VS output (FS input), we
+ * can't use the linear path.
  */
 static bool
 llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
@@ -337,6 +392,17 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
                   nir_instr_as_load_const(intrin->src[0].ssa->parent_instr);
                if (load->value[0].u32 != 0)
                   return false;
+            } else if (intrin->intrinsic == nir_intrinsic_store_deref) {
+               /*
+                * Assume the store destination is the FS output color.
+                * Check if the store src comes directly from a FS input.
+                * If so, we cannot use the linear path since we don't have
+                * code to convert VS outputs / FS inputs to ubyte with the
+                * needed swizzling.
+                */
+               if (is_fs_input(&intrin->src[1])) {
+                  return false;
+               }
             }
             break;
          }
@@ -412,6 +478,9 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
                      if (!check_load_const_in_zero_one(load)) {
                         return false;
                      }
+                  } else if (is_fs_input(&alu->src[s].src)) {
+                     /* we don't know if the fs inputs are in [0,1] */
+                     return false;
                   }
                }
                break;

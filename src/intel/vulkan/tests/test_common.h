@@ -32,3 +32,8 @@
          abort();                                                       \
       }                                                                 \
    } while (false)
+
+static inline void test_device_info_init(struct intel_device_info *info)
+{
+   info->mem_alignment = 4096;
+}

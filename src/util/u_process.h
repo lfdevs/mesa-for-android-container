@@ -42,16 +42,6 @@ size_t
 util_get_process_exec_path(char* process_path, size_t len);
 
 /**
- * Return the name of the current process.
- * \param env_name  the environment variable name used to override
- * \param procname  returns the process name
- * \param size  size of the procname buffer
- * \return  true or false for success, failure
- */
-bool
-util_get_process_name_may_override(const char *env_name, char *procname, size_t size);
-
-/**
  * Return the command line for the calling process.  This is basically
  * the argv[] array with the arguments separated by spaces.
  * \param cmdline  returns the command line string

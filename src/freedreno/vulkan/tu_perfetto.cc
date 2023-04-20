@@ -9,12 +9,13 @@
 
 #include "util/hash_table.h"
 #include "util/perf/u_perfetto.h"
+#include "util/perf/u_perfetto_renderpass.h"
 
 #include "tu_tracepoints.h"
 #include "tu_tracepoints_perfetto.h"
 
-/* we can't include tu_drm.h and tu_device.h */
-extern "C" {
+/* we can't include tu_knl.h and tu_device.h */
+
 int
 tu_device_get_gpu_timestamp(struct tu_device *dev,
                             uint64_t *ts);
@@ -26,7 +27,6 @@ tu_device_ticks_to_ns(struct tu_device *dev, uint64_t ts);
 
 struct u_trace_context *
 tu_device_get_u_trace(struct tu_device *device);
-}
 
 /**
  * Queue-id's
@@ -105,21 +105,11 @@ struct TuRenderpassTraits : public perfetto::DefaultDataSourceTraits {
    using IncrementalStateType = TuRenderpassIncrementalState;
 };
 
-class TuRenderpassDataSource : public perfetto::DataSource<TuRenderpassDataSource, TuRenderpassTraits> {
-public:
-   void OnSetup(const SetupArgs &) override
+class TuRenderpassDataSource : public MesaRenderpassDataSource<TuRenderpassDataSource,
+                                                               TuRenderpassTraits> {
+   void OnStart(const StartArgs &args) override
    {
-      // Use this callback to apply any custom configuration to your data source
-      // based on the TraceConfig in SetupArgs.
-   }
-
-   void OnStart(const StartArgs &) override
-   {
-      // This notification can be used to initialize the GPU driver, enable
-      // counters, etc. StartArgs will contains the DataSourceDescriptor,
-      // which can be extended.
-      u_trace_perfetto_start();
-      PERFETTO_LOG("Tracing started");
+      MesaRenderpassDataSource<TuRenderpassDataSource, TuRenderpassTraits>::OnStart(args);
 
       /* Note: clock_id's below 128 are reserved.. for custom clock sources,
        * using the hash of a namespaced string is the recommended approach.
@@ -131,21 +121,6 @@ public:
       gpu_timestamp_offset = 0;
       gpu_max_timestamp = 0;
       last_suspend_count = 0;
-   }
-
-   void OnStop(const StopArgs &) override
-   {
-      PERFETTO_LOG("Tracing stopped");
-
-      // Undo any initialization done in OnStart.
-      u_trace_perfetto_stop();
-      // TODO we should perhaps block until queued traces are flushed?
-
-      Trace([](TuRenderpassDataSource::TraceContext ctx) {
-         auto packet = ctx.NewTracePacket();
-         packet->Finalize();
-         ctx.Flush();
-      });
    }
 };
 
@@ -365,32 +340,15 @@ sync_timestamp(struct tu_device *dev)
       return;
    }
 
-   gpu_max_timestamp = gpu_ts;
-
-   TuRenderpassDataSource::Trace([=](TuRenderpassDataSource::TraceContext tctx) {
-      auto packet = tctx.NewTracePacket();
-
-      packet->set_timestamp(cpu_ts);
-
-      auto event = packet->set_clock_snapshot();
-
-      {
-         auto clock = event->add_clocks();
-
-         clock->set_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
-         clock->set_timestamp(cpu_ts);
-      }
-
-      {
-         auto clock = event->add_clocks();
-
-         clock->set_clock_id(gpu_clock_id);
-         clock->set_timestamp(gpu_ts);
-      }
-
-      sync_gpu_ts = gpu_ts;
-      next_clock_sync_ns = cpu_ts + 30000000;
+   TuRenderpassDataSource::Trace([=](auto tctx) {
+      MesaRenderpassDataSource<TuRenderpassDataSource,
+                               TuRenderpassTraits>::EmitClockSync(tctx, cpu_ts,
+                                                                  gpu_ts, gpu_clock_id);
    });
+
+   gpu_max_timestamp = gpu_ts;
+   sync_gpu_ts = gpu_ts;
+   next_clock_sync_ns = cpu_ts + 30000000;
 }
 
 static void

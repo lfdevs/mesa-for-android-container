@@ -936,7 +936,7 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
        * Since OpenGL ES 3.1 adds support for multisampled integer formats, we
        * have to check the version for 30 exactly.
        */
-      if (pname == GL_NUM_SAMPLE_COUNTS && ctx->API == API_OPENGLES2 &&
+      if (pname == GL_NUM_SAMPLE_COUNTS && _mesa_is_gles2(ctx) &&
           ctx->Version == 30 && _mesa_is_enum_format_integer(internalformat)) {
          goto end;
       }

@@ -58,6 +58,14 @@ v3dv_cl_destroy(struct v3dv_cl *cl)
 static bool
 cl_alloc_bo(struct v3dv_cl *cl, uint32_t space, bool use_branch)
 {
+   /* If we are growing, double the BO allocation size to reduce the number
+    * of allocations with large command buffers. This has a very significant
+    * impact on the number of draw calls per second reported by vkoverhead.
+    */
+   space = align(space, 4096);
+   if (cl->bo)
+      space = MAX2(cl->bo->size * 2, space);
+
    struct v3dv_bo *bo = v3dv_bo_alloc(cl->job->device, space, "CL", true);
    if (!bo) {
       fprintf(stderr, "failed to allocate memory for command list\n");

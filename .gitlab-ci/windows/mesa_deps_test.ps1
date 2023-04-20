@@ -132,7 +132,7 @@ cargo install --git https://gitlab.freedesktop.org/anholt/deqp-runner.git
 
 Get-Date
 Write-Host "Downloading DirectX 12 Agility SDK"
-Invoke-WebRequest -Uri https://www.nuget.org/api/v2/package/Microsoft.Direct3D.D3D12/1.706.3-preview -OutFile 'agility.zip'
+Invoke-WebRequest -Uri https://www.nuget.org/api/v2/package/Microsoft.Direct3D.D3D12/1.710.0-preview -OutFile 'agility.zip'
 Expand-Archive -Path 'agility.zip' -DestinationPath 'C:\agility'
 Remove-Item 'agility.zip'
 
@@ -148,7 +148,7 @@ Remove-Item -Recurse 'C:\agility'
 
 Get-Date
 Write-Host "Downloading Updated WARP"
-Invoke-WebRequest -Uri https://www.nuget.org/api/v2/package/Microsoft.Direct3D.WARP/1.0.2 -OutFile 'warp.zip'
+Invoke-WebRequest -Uri https://www.nuget.org/api/v2/package/Microsoft.Direct3D.WARP/1.0.5 -OutFile 'warp.zip'
 Expand-Archive -Path 'warp.zip' -DestinationPath 'C:\warp'
 Remove-Item 'warp.zip'
 

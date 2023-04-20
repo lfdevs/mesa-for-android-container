@@ -4,7 +4,8 @@
 set -ex
 
 mkdir -p kernel
-wget -qO- ${KERNEL_URL} | tar -xj --strip-components=1 -C kernel
+curl -L -s --retry 4 -f --retry-all-errors --retry-delay 60 ${KERNEL_URL} \
+    | tar -xj --strip-components=1 -C kernel
 pushd kernel
 
 # The kernel doesn't like the gold linker (or the old lld in our debians).

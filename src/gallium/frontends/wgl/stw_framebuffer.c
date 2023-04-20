@@ -37,6 +37,7 @@
 #include "frontend/api.h"
 
 #include <GL/gl.h>
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_framebuffer.h"
 #include "stw_device.h"
@@ -178,11 +179,13 @@ stw_framebuffer_get_size(struct stw_framebuffer *fb)
 
    client_pos.x = 0;
    client_pos.y = 0;
+#ifndef _GAMING_XBOX
    if (ClientToScreen(fb->hWnd, &client_pos) &&
        GetWindowRect(fb->hWnd, &window_rect)) {
       fb->client_rect.left = client_pos.x - window_rect.left;
       fb->client_rect.top  = client_pos.y - window_rect.top;
    }
+#endif
 
    fb->client_rect.right  = fb->client_rect.left + fb->width;
    fb->client_rect.bottom = fb->client_rect.top  + fb->height;
@@ -204,6 +207,7 @@ stw_framebuffer_get_size(struct stw_framebuffer *fb)
 }
 
 
+#ifndef _GAMING_XBOX
 /**
  * @sa http://msdn.microsoft.com/en-us/library/ms644975(VS.85).aspx
  * @sa http://msdn.microsoft.com/en-us/library/ms644960(VS.85).aspx
@@ -263,6 +267,40 @@ stw_call_window_proc(int nCode, WPARAM wParam, LPARAM lParam)
 
    return CallNextHookEx(tls_data->hCallWndProcHook, nCode, wParam, lParam);
 }
+#else
+LRESULT CALLBACK
+stw_call_window_proc_xbox(HWND hWnd, UINT message,
+                          WPARAM wParam, LPARAM lParam)
+{
+   WNDPROC prev_wndproc = NULL;
+
+   /* We check that the stw_dev object is initialized before we try to do
+    * anything with it.  Otherwise, in multi-threaded programs there's a
+    * chance of executing this code before the stw_dev object is fully
+    * initialized.
+    */
+   if (stw_dev && stw_dev->initialized) {
+      if (message == WM_DESTROY) {
+         stw_lock_framebuffers(stw_dev);
+         struct stw_framebuffer *fb = stw_framebuffer_from_hwnd_locked(hWnd);
+         if (fb) {
+            struct stw_context *current_context = stw_current_context();
+            struct st_context *st = current_context &&
+               current_context->current_framebuffer == fb ? current_context->st : NULL;
+            prev_wndproc = fb->prev_wndproc;
+            stw_framebuffer_release_locked(fb, st);
+         }
+         stw_unlock_framebuffers(stw_dev);
+      }
+   }
+
+   /* Pass the parameters up the chain, if applicable */
+   if (prev_wndproc)
+      return prev_wndproc(hWnd, message, wParam, lParam);
+
+   return 0;
+}
+#endif /* _GAMING_XBOX */
 
 
 /**
@@ -285,6 +323,10 @@ stw_framebuffer_create(HWND hWnd, const struct stw_pixelformat_info *pfi, enum s
    if (stw_dev->stw_winsys->create_framebuffer)
       fb->winsys_framebuffer =
          stw_dev->stw_winsys->create_framebuffer(stw_dev->screen, hWnd, pfi->iPixelFormat);
+
+#ifdef _GAMING_XBOX
+   fb->prev_wndproc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)&stw_call_window_proc_xbox);
+#endif
 
    /*
     * We often need a displayable pixel format to make GDI happy. Set it

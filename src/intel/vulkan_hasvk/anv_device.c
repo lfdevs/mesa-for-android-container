@@ -69,6 +69,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_VK_XWAYLAND_WAIT_READY(true)
       DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(false)
       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
+      DRI_CONF_NO_16BIT(false)
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
@@ -191,7 +192,7 @@ get_device_extensions(const struct anv_physical_device *device,
 
    *ext = (struct vk_device_extension_table) {
       .KHR_8bit_storage                      = device->info.ver >= 8,
-      .KHR_16bit_storage                     = device->info.ver >= 8,
+      .KHR_16bit_storage                     = device->info.ver >= 8 && !device->instance->no_16bit,
       .KHR_bind_memory2                      = true,
       .KHR_buffer_device_address             = device->has_a64_buffer_access,
       .KHR_copy_commands2                    = true,
@@ -235,8 +236,8 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_separate_depth_stencil_layouts    = true,
       .KHR_shader_clock                      = true,
       .KHR_shader_draw_parameters            = true,
-      .KHR_shader_float16_int8               = device->info.ver >= 8,
-      .KHR_shader_float_controls             = device->info.ver >= 8,
+      .KHR_shader_float16_int8               = device->info.ver >= 8 && !device->instance->no_16bit,
+      .KHR_shader_float_controls             = true,
       .KHR_shader_integer_dot_product        = true,
       .KHR_shader_non_semantic_info          = true,
       .KHR_shader_subgroup_extended_types    = device->info.ver >= 8,
@@ -403,14 +404,23 @@ anv_physical_device_init_heaps(struct anv_physical_device *device, int fd)
 
       /* Big core GPUs share LLC with the CPU and thus one memory type can be
        * both cached and coherent at the same time.
+       *
+       * But some game engines can't handle single type well
+       * https://gitlab.freedesktop.org/mesa/mesa/-/issues/7360#note_1719438
+       *
+       * And Intel on Windows uses 3 types so it's better to add extra one here
        */
-      device->memory.type_count = 1;
+      device->memory.type_count = 2;
       device->memory.types[0] = (struct anv_memory_type) {
-         .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
-                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                          VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-         .heapIndex = 0,
+          .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+          .heapIndex = 0,
+      };
+      device->memory.types[1] = (struct anv_memory_type) {
+          .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                           VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+          .heapIndex = 0,
       };
    } else {
       device->memory.heap_count = 1;
@@ -679,12 +689,16 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    }
 
    bool is_alpha = true;
+   bool warn = !debug_get_bool_option("MESA_VK_IGNORE_CONFORMANCE_WARNING", false);
    if (devinfo.platform == INTEL_PLATFORM_HSW) {
-      mesa_logw("Haswell Vulkan support is incomplete");
+      if (warn)
+         mesa_logw("Haswell Vulkan support is incomplete");
    } else if (devinfo.platform == INTEL_PLATFORM_IVB) {
-      mesa_logw("Ivy Bridge Vulkan support is incomplete");
+      if (warn)
+         mesa_logw("Ivy Bridge Vulkan support is incomplete");
    } else if (devinfo.platform == INTEL_PLATFORM_BYT) {
-      mesa_logw("Bay Trail Vulkan support is incomplete");
+      if (warn)
+         mesa_logw("Bay Trail Vulkan support is incomplete");
    } else if (devinfo.ver == 8) {
       /* Gfx8 fully supported */
       is_alpha = false;
@@ -853,7 +867,9 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
 
    /* Check if we can read the GPU timestamp register from the CPU */
    uint64_t u64_ignore;
-   device->has_reg_timestamp = intel_gem_read_render_timestamp(fd, &u64_ignore);
+   device->has_reg_timestamp = intel_gem_read_render_timestamp(fd,
+                                                               device->info.kmd_type,
+                                                               &u64_ignore);
 
    device->always_flush_cache = INTEL_DEBUG(DEBUG_STALL) ||
       driQueryOptionb(&instance->dri_options, "always_flush_cache");
@@ -882,7 +898,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       master_fd = open(primary_path, O_RDWR | O_CLOEXEC);
       if (master_fd >= 0) {
          /* fail if we don't have permission to even render on this device */
-         if (!intel_gem_can_render_on_fd(master_fd)) {
+         if (!intel_gem_can_render_on_fd(master_fd, device->info.kmd_type)) {
             close(master_fd);
             master_fd = -1;
          }
@@ -890,7 +906,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    }
    device->master_fd = master_fd;
 
-   device->engine_info = intel_engine_get_info(fd);
+   device->engine_info = intel_engine_get_info(fd, device->info.kmd_type);
    anv_physical_device_init_queue_families(device);
 
    device->local_fd = fd;
@@ -1001,6 +1017,8 @@ anv_init_dri_options(struct anv_instance *instance)
             driQueryOptionb(&instance->dri_options, "anv_sample_mask_out_opengl_behaviour");
     instance->lower_depth_range_rate =
             driQueryOptionf(&instance->dri_options, "lower_depth_range_rate");
+    instance->no_16bit =
+            driQueryOptionb(&instance->dri_options, "no_16bit");
 }
 
 VkResult anv_CreateInstance(
@@ -1147,8 +1165,8 @@ anv_get_physical_device_features_1_1(struct anv_physical_device *pdevice,
 {
    assert(f->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES);
 
-   f->storageBuffer16BitAccess            = pdevice->info.ver >= 8;
-   f->uniformAndStorageBuffer16BitAccess  = pdevice->info.ver >= 8;
+   f->storageBuffer16BitAccess            = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit;
+   f->uniformAndStorageBuffer16BitAccess  = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit;
    f->storagePushConstant16               = pdevice->info.ver >= 8;
    f->storageInputOutput16                = false;
    f->multiview                           = true;
@@ -1174,8 +1192,8 @@ anv_get_physical_device_features_1_2(struct anv_physical_device *pdevice,
    f->storagePushConstant8                = pdevice->info.ver >= 8;
    f->shaderBufferInt64Atomics            = false;
    f->shaderSharedInt64Atomics            = false;
-   f->shaderFloat16                       = pdevice->info.ver >= 8;
-   f->shaderInt8                          = pdevice->info.ver >= 8;
+   f->shaderFloat16                       = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit;
+   f->shaderInt8                          = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit;
 
    f->descriptorIndexing                                 = false;
    f->shaderInputAttachmentArrayDynamicIndexing          = false;
@@ -1869,7 +1887,7 @@ anv_get_physical_device_properties_1_2(struct anv_physical_device *pdevice,
    p->shaderSignedZeroInfNanPreserveFloat16  = true;
 
    p->shaderDenormFlushToZeroFloat32         = true;
-   p->shaderDenormPreserveFloat32            = true;
+   p->shaderDenormPreserveFloat32            = pdevice->info.ver >= 8;
    p->shaderRoundingModeRTEFloat32           = true;
    p->shaderRoundingModeRTZFloat32           = true;
    p->shaderSignedZeroInfNanPreserveFloat32  = true;
@@ -2674,28 +2692,6 @@ VkResult anv_CreateDevice(
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
 
-   /* Check enabled features */
-   bool robust_buffer_access = false;
-   if (pCreateInfo->pEnabledFeatures) {
-      if (pCreateInfo->pEnabledFeatures->robustBufferAccess)
-         robust_buffer_access = true;
-   }
-
-   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
-      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2: {
-         const VkPhysicalDeviceFeatures2 *features = (const void *)ext;
-         if (features->features.robustBufferAccess)
-            robust_buffer_access = true;
-         break;
-      }
-
-      default:
-         /* Don't warn */
-         break;
-      }
-   }
-
    /* Check requested queues and fail if we are requested to create any
     * queues with flags we don't support.
     */
@@ -2834,8 +2830,6 @@ VkResult anv_CreateDevice(
     */
    device->can_chain_batches = device->info->ver >= 8;
 
-   device->robust_buffer_access = robust_buffer_access;
-
    if (pthread_mutex_init(&device->mutex, NULL) != 0) {
       result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
       goto fail_vmas;
@@ -2930,7 +2924,7 @@ VkResult anv_CreateDevice(
       .bo = device->workaround_bo,
       .offset = align(intel_debug_write_identifiers(device->workaround_bo->map,
                                                     device->workaround_bo->size,
-                                                    "Anv") + 8, 8),
+                                                    "hasvk"), 32),
    };
 
    device->workarounds.doom64_images = NULL;
@@ -3897,7 +3891,7 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
     * This would ensure that not internal padding would be needed for
     * 16-bit types.
     */
-   if (device->robust_buffer_access &&
+   if (device->vk.enabled_features.robustBufferAccess &&
        (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ||
         usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
       pMemoryRequirements->memoryRequirements.size = align64(size, 4);
@@ -4127,7 +4121,9 @@ VkResult anv_GetCalibratedTimestampsEXT(
    for (d = 0; d < timestampCount; d++) {
       switch (pTimestampInfos[d].timeDomain) {
       case VK_TIME_DOMAIN_DEVICE_EXT:
-         if (!intel_gem_read_render_timestamp(device->fd, &pTimestamps[d])) {
+         if (!intel_gem_read_render_timestamp(device->fd,
+                                              device->info->kmd_type,
+                                              &pTimestamps[d])) {
             return vk_device_set_lost(&device->vk, "Failed to read the "
                                       "TIMESTAMP register: %m");
          }

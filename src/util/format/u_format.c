@@ -1367,3 +1367,70 @@ util_format_rgbx_to_rgba(enum pipe_format format)
    }
    }
 }
+
+enum pipe_format
+util_format_get_array(const enum util_format_type type, const unsigned bits,
+                      const unsigned nr_components, const bool normalized,
+                      const bool pure_integer)
+{
+#define CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS, NR_VAR) \
+   case BITS: \
+      switch (NR_VAR) { \
+      case 1: \
+         return PIPE_FORMAT_R##BITS##_##TYPE; \
+      case 2: \
+         return PIPE_FORMAT_R##BITS##G##BITS##_##TYPE; \
+      case 3: \
+         return PIPE_FORMAT_R##BITS##G##BITS##B##BITS##_##TYPE; \
+      case 4: \
+         return PIPE_FORMAT_R##BITS##G##BITS##B##BITS##A##BITS##_##TYPE; \
+      default: \
+         return PIPE_FORMAT_NONE; \
+      }
+
+#define SWITCH_BY_BITS_CASEX3(TYPE, BITS_VAR, BITS1, BITS2, BITS3, NR_VAR) \
+   switch (BITS_VAR) { \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS1, NR_VAR) \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS2, NR_VAR) \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS3, NR_VAR) \
+   default: \
+      return PIPE_FORMAT_NONE; \
+   }
+
+#define SWITCH_BY_BITS_CASEX4(TYPE, BITS_VAR, BITS1, BITS2, BITS3, BITS4, NR_VAR) \
+   switch (BITS_VAR) { \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS1, NR_VAR) \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS2, NR_VAR) \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS3, NR_VAR) \
+   CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4(TYPE, BITS4, NR_VAR) \
+   default: \
+      return PIPE_FORMAT_NONE; \
+   }
+
+   switch (type) {
+   case UTIL_FORMAT_TYPE_UNSIGNED:
+      if (normalized)
+         SWITCH_BY_BITS_CASEX3(UNORM, bits, 8, 16, 32, nr_components)
+      else if (!pure_integer)
+         SWITCH_BY_BITS_CASEX3(USCALED, bits, 8, 16, 32, nr_components)
+      else
+         SWITCH_BY_BITS_CASEX4(UINT, bits, 8, 16, 32, 64, nr_components)
+   case UTIL_FORMAT_TYPE_SIGNED:
+      if (normalized)
+         SWITCH_BY_BITS_CASEX3(SNORM, bits, 8, 16, 32, nr_components)
+      else if (!pure_integer)
+         SWITCH_BY_BITS_CASEX3(SSCALED, bits, 8, 16, 32, nr_components)
+      else
+         SWITCH_BY_BITS_CASEX4(SINT, bits, 8, 16, 32, 64, nr_components)
+   case UTIL_FORMAT_TYPE_FLOAT:
+      SWITCH_BY_BITS_CASEX3(FLOAT, bits, 16, 32, 64, nr_components)
+   default:
+      return PIPE_FORMAT_NONE;
+   }
+
+#undef CASE_BY_BIT_SWITCH_BY_NR_COMPONENTS_1TO4
+#undef SWITCH_BY_BITS_CASEX3
+#undef SWITCH_BY_BITS_CASEX4
+
+   return PIPE_FORMAT_NONE;
+}

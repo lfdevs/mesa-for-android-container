@@ -1251,62 +1251,28 @@ brw_PLN(struct brw_codegen *p, struct brw_reg dest,
 brw_inst *
 brw_F32TO16(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
 {
-   const struct intel_device_info *devinfo = p->devinfo;
-   const bool align16 = brw_get_default_access_mode(p) == BRW_ALIGN_16;
-   /* The F32TO16 instruction doesn't support 32-bit destination types in
-    * Align1 mode, and neither does the Gfx8 implementation in terms of a
-    * converting MOV.  Gfx7 does zero out the high 16 bits in Align16 mode as
-    * an undocumented feature.
-    */
-   const bool needs_zero_fill = (dst.type == BRW_REGISTER_TYPE_UD &&
-                                 (!align16 || devinfo->ver >= 8));
-   brw_inst *inst;
+   assert(p->devinfo->ver == 7);
 
-   if (align16) {
+   /* The F32TO16 instruction doesn't support 32-bit destination types in
+    * Align1 mode.  Gfx7 (only) does zero out the high 16 bits in Align16
+    * mode as an undocumented feature.
+    */
+   if (BRW_ALIGN_16 == brw_get_default_access_mode(p)) {
       assert(dst.type == BRW_REGISTER_TYPE_UD);
    } else {
-      if (devinfo->ver <= 7) {
-         assert(dst.type == BRW_REGISTER_TYPE_W ||
-                dst.type == BRW_REGISTER_TYPE_UW);
-      } else {
-         assert(dst.type == BRW_REGISTER_TYPE_HF);
-      }
+      assert(dst.type == BRW_REGISTER_TYPE_W ||
+             dst.type == BRW_REGISTER_TYPE_UW);
    }
 
-   brw_push_insn_state(p);
-
-   if (needs_zero_fill) {
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      dst = spread(retype(dst, BRW_REGISTER_TYPE_W), 2);
-   }
-
-   if (devinfo->ver >= 8) {
-      inst = brw_MOV(p, retype(dst, BRW_REGISTER_TYPE_HF), src);
-   } else {
-      assert(devinfo->ver == 7);
-      inst = brw_alu1(p, BRW_OPCODE_F32TO16, dst, src);
-   }
-
-   if (needs_zero_fill) {
-      if (devinfo->ver < 12)
-         brw_inst_set_no_dd_clear(devinfo, inst, true);
-      brw_set_default_swsb(p, tgl_swsb_null());
-      inst = brw_MOV(p, suboffset(dst, 1), brw_imm_w(0));
-      if (devinfo->ver < 12)
-         brw_inst_set_no_dd_check(devinfo, inst, true);
-   }
-
-   brw_pop_insn_state(p);
-   return inst;
+   return brw_alu1(p, BRW_OPCODE_F32TO16, dst, src);
 }
 
 brw_inst *
 brw_F16TO32(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
 {
-   const struct intel_device_info *devinfo = p->devinfo;
-   bool align16 = brw_get_default_access_mode(p) == BRW_ALIGN_16;
+   assert(p->devinfo->ver == 7);
 
-   if (align16) {
+   if (BRW_ALIGN_16 == brw_get_default_access_mode(p)) {
       assert(src.type == BRW_REGISTER_TYPE_UD);
    } else {
       /* From the Ivybridge PRM, Vol4, Part3, Section 6.26 f16to32:
@@ -1315,20 +1281,11 @@ brw_F16TO32(struct brw_codegen *p, struct brw_reg dst, struct brw_reg src)
        *   type, the source data type must be Word (W). The destination type
        *   must be F (Float).
        */
-      if (src.type == BRW_REGISTER_TYPE_UD)
-         src = spread(retype(src, BRW_REGISTER_TYPE_W), 2);
-
       assert(src.type == BRW_REGISTER_TYPE_W ||
-             src.type == BRW_REGISTER_TYPE_UW ||
-             src.type == BRW_REGISTER_TYPE_HF);
+             src.type == BRW_REGISTER_TYPE_UW);
    }
 
-   if (devinfo->ver >= 8) {
-      return brw_MOV(p, dst, retype(src, BRW_REGISTER_TYPE_HF));
-   } else {
-      assert(devinfo->ver == 7);
-      return brw_alu1(p, BRW_OPCODE_F16TO32, dst, src);
-   }
+   return brw_alu1(p, BRW_OPCODE_F16TO32, dst, src);
 }
 
 
@@ -1612,10 +1569,27 @@ patch_IF_ELSE(struct brw_codegen *p,
          brw_inst_set_jip(devinfo, if_inst, br * (else_inst - if_inst + 1));
 	 /* The IF instruction's UIP and ELSE's JIP should point to ENDIF */
          brw_inst_set_uip(devinfo, if_inst, br * (endif_inst - if_inst));
-         brw_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst));
+
+         if (devinfo->ver >= 8 && devinfo->ver < 11) {
+            /* Set the ELSE instruction to use branch_ctrl with a join
+             * jump target pointing at the NOP inserted right before
+             * the ENDIF instruction in order to make sure it is
+             * executed in all cases, since attempting to do the same
+             * as on other generations could cause the EU to jump at
+             * the instruction immediately after the ENDIF due to
+             * Wa_220160235, which could cause the program to continue
+             * running with all channels disabled.
+             */
+            brw_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst - 1));
+            brw_inst_set_branch_control(devinfo, else_inst, true);
+         } else {
+            brw_inst_set_jip(devinfo, else_inst, br * (endif_inst - else_inst));
+         }
+
          if (devinfo->ver >= 8) {
-            /* Since we don't set branch_ctrl, the ELSE's JIP and UIP both
-             * should point to ENDIF.
+            /* Since we don't set branch_ctrl on Gfx11+, the ELSE's
+             * JIP and UIP both should point to ENDIF on those
+             * platforms.
              */
             brw_inst_set_uip(devinfo, else_inst, br * (endif_inst - else_inst));
          }
@@ -1671,6 +1645,22 @@ brw_ENDIF(struct brw_codegen *p)
    brw_inst *if_inst = NULL;
    brw_inst *tmp;
    bool emit_endif = true;
+
+   assert(p->if_stack_depth > 0);
+
+   if (devinfo->ver >= 8 && devinfo->ver < 11 &&
+       brw_inst_opcode(p->isa, &p->store[p->if_stack[
+                             p->if_stack_depth - 1]]) == BRW_OPCODE_ELSE) {
+      /* Insert a NOP to be specified as join instruction within the
+       * ELSE block, which is valid for an ELSE instruction with
+       * branch_ctrl on.  The ELSE instruction will be set to jump
+       * here instead of to the ENDIF instruction, since attempting to
+       * do the latter would prevent the ENDIF from being executed in
+       * some cases due to Wa_220160235, which could cause the program
+       * to continue running with all channels disabled.
+       */
+      brw_NOP(p);
+   }
 
    /* In single program flow mode, we can express IF and ELSE instructions
     * equivalently as ADD instructions that operate on IP.  On platforms prior
@@ -3291,7 +3281,7 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
          flush_type = LSC_FLUSH_TYPE_EVICT;
       }
 
-      /* Wa_14014435656:
+      /* Wa_14012437816:
        *
        *   "For any fence greater than local scope, always set flush type to
        *    at least invalidate so that fence goes on properly."
@@ -3302,7 +3292,7 @@ gfx12_set_memory_fence_message(struct brw_codegen *p,
        * Here set scope to NONE_6 instead of NONE, which has the same effect
        * as NONE but avoids the downgrade to scope LOCAL.
        */
-      if (intel_device_info_is_dg2(p->devinfo) &&
+      if (intel_needs_workaround(p->devinfo, 14012437816) &&
           scope > LSC_FENCE_LOCAL &&
           flush_type == LSC_FLUSH_TYPE_NONE) {
          flush_type = LSC_FLUSH_TYPE_NONE_6;
@@ -3343,38 +3333,6 @@ brw_memory_fence(struct brw_codegen *p,
       gfx12_set_memory_fence_message(p, insn, sfid, desc);
    else
       brw_set_memory_fence_message(p, insn, sfid, commit_enable, bti);
-}
-
-void
-brw_pixel_interpolator_query(struct brw_codegen *p,
-                             struct brw_reg dest,
-                             struct brw_reg mrf,
-                             bool noperspective,
-                             bool coarse_pixel_rate,
-                             unsigned mode,
-                             struct brw_reg data,
-                             unsigned msg_length,
-                             unsigned response_length)
-{
-   const struct intel_device_info *devinfo = p->devinfo;
-   const uint16_t exec_size = brw_get_default_exec_size(p);
-   const unsigned slot_group = brw_get_default_group(p) / 16;
-   const unsigned simd_mode = (exec_size == BRW_EXECUTE_16);
-   const unsigned desc =
-      brw_message_desc(devinfo, msg_length, response_length, false) |
-      brw_pixel_interp_desc(devinfo, mode, noperspective, coarse_pixel_rate,
-                            simd_mode, slot_group);
-
-   /* brw_send_indirect_message will automatically use a direct send message
-    * if data is actually immediate.
-    */
-   brw_send_indirect_message(p,
-                             GFX7_SFID_PIXEL_INTERPOLATOR,
-                             dest,
-                             mrf,
-                             vec1(data),
-                             desc,
-                             false);
 }
 
 void
@@ -3656,6 +3614,8 @@ void
 brw_float_controls_mode(struct brw_codegen *p,
                         unsigned mode, unsigned mask)
 {
+   assert(p->current->mask_control == BRW_MASK_DISABLE);
+
    /* From the Skylake PRM, Volume 7, page 760:
     *  "Implementation Restriction on Register Access: When the control
     *   register is used as an explicit source and/or destination, hardware

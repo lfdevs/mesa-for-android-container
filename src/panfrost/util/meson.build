@@ -34,7 +34,6 @@ libpanfrost_util_files = files(
   'pan_lower_writeout.c',
   'pan_lower_xfb.c',
   'pan_lower_64bit_intrin.c',
-  'pan_sysval.c',
 )
 
 libpanfrost_util = static_library(

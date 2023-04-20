@@ -37,7 +37,7 @@
  */
 
 void
-v3d_blitter_save(struct v3d_context *v3d, bool op_blit)
+v3d_blitter_save(struct v3d_context *v3d, bool op_blit, bool render_cond)
 {
         util_blitter_save_fragment_constant_buffer_slot(v3d->blitter,
                                                         v3d->constbuf[PIPE_SHADER_FRAGMENT].cb);
@@ -66,6 +66,11 @@ v3d_blitter_save(struct v3d_context *v3d, bool op_blit)
                 util_blitter_save_fragment_sampler_views(v3d->blitter,
                                                          v3d->tex[PIPE_SHADER_FRAGMENT].num_textures,
                                                          v3d->tex[PIPE_SHADER_FRAGMENT].textures);
+        }
+
+        if (!render_cond) {
+                util_blitter_save_render_condition(v3d->blitter, v3d->cond_query,
+                                                   v3d->cond_cond, v3d->cond_mode);
         }
 }
 
@@ -120,7 +125,7 @@ v3d_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                 return;
         }
 
-        v3d_blitter_save(v3d, true);
+        v3d_blitter_save(v3d, true, info->render_condition_enable);
         util_blitter_blit(v3d->blitter, info);
 
         pipe_resource_reference(&tiled, NULL);
@@ -188,7 +193,7 @@ v3d_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         struct pipe_sampler_view *src_view =
                 ctx->create_sampler_view(ctx, &src->base, &src_tmpl);
 
-        v3d_blitter_save(v3d, true);
+        v3d_blitter_save(v3d, true, info->render_condition_enable);
         util_blitter_blit_generic(v3d->blitter, dst_surf, &info->dst.box,
                                   src_view, &info->src.box,
                                   src->base.width0, src->base.height0,
@@ -775,7 +780,7 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         assert(info->src.box.width == info->dst.box.width);
         assert(info->src.box.height == info->dst.box.height);
 
-        v3d_blitter_save(v3d, true);
+        v3d_blitter_save(v3d, true, info->render_condition_enable);
 
         struct pipe_surface dst_tmpl;
         util_blitter_default_dst_texture(&dst_tmpl, info->dst.resource,
@@ -981,7 +986,7 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
          * for UV frame, but as we are reading 4 10-bit-values at a time we
          * will have 24 groups (pixels) of 4 10-bit values.
          */
-        nir_ssa_def *pixels_stripe = nir_imm_int(&b, 24);
+        uint32_t pixels_stripe = 24;
 
         nir_ssa_def *x = nir_f2i32(&b, nir_channel(&b, pos, 0));
         nir_ssa_def *y = nir_f2i32(&b, nir_channel(&b, pos, 1));
@@ -1028,7 +1033,7 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
         nir_ssa_def *real_x = nir_ior(&b, nir_iand_imm(&b, x, 1),
                                       nir_ishl_imm(&b,nir_ushr_imm(&b, x, 2),
                                       1));
-        nir_ssa_def *x_pos_in_stripe = nir_umod(&b, real_x, pixels_stripe);
+        nir_ssa_def *x_pos_in_stripe = nir_umod_imm(&b, real_x, pixels_stripe);
         nir_ssa_def *component = nir_umod(&b, real_x, three);
         nir_ssa_def *intra_utile_x_offset = nir_ishl_imm(&b, component, 2);
 
@@ -1038,7 +1043,7 @@ v3d_get_sand30_fs(struct pipe_context *pctx)
         nir_ssa_def *stripe_offset=
                 nir_ishl_imm(&b,
                              nir_imul(&b,
-                                      nir_udiv(&b, real_x, pixels_stripe),
+                                      nir_udiv_imm(&b, real_x, pixels_stripe),
                                       stride),
                              7);
 
@@ -1101,7 +1106,7 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         assert(info->src.box.width == info->dst.box.width);
         assert(info->src.box.height == info->dst.box.height);
 
-        v3d_blitter_save(v3d, true);
+        v3d_blitter_save(v3d, true, info->render_condition_enable);
 
         struct pipe_surface dst_tmpl;
         util_blitter_default_dst_texture(&dst_tmpl, info->dst.resource,
@@ -1180,6 +1185,9 @@ v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 {
         struct v3d_context *v3d = v3d_context(pctx);
         struct pipe_blit_info info = *blit_info;
+
+        if (info.render_condition_enable && !v3d_render_condition_check(v3d))
+                return;
 
         v3d_sand30_blit(pctx, &info);
 

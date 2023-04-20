@@ -26,6 +26,7 @@
 #include "spirv_to_dxil.h"
 #include "nir_to_dxil.h"
 #include "nir_builder.h"
+#include "nir_builtin_builder.h"
 #include "nir_vulkan.h"
 
 static nir_ssa_def *
@@ -581,10 +582,20 @@ dzn_nir_blit_vs(void)
    out_coords->data.driver_location = 1;
 
    nir_ssa_def *vertex = nir_load_vertex_id(&b);
-   nir_ssa_def *base = nir_imul_imm(&b, vertex, 4 * sizeof(float));
+   nir_ssa_def *coords_arr[4] = {
+      nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 0),
+                   .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0),
+      nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 16),
+                   .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0),
+      nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 32),
+                   .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0),
+      nir_load_ubo(&b, 4, 32, params_desc, nir_imm_int(&b, 48),
+                   .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0),
+   };
    nir_ssa_def *coords =
-      nir_load_ubo(&b, 4, 32, params_desc, base,
-                   .align_mul = 16, .align_offset = 0, .range_base = 0, .range = ~0);
+      nir_bcsel(&b, nir_ieq_imm(&b, vertex, 0), coords_arr[0],
+                nir_bcsel(&b, nir_ieq_imm(&b, vertex, 1), coords_arr[1],
+                          nir_bcsel(&b, nir_ieq_imm(&b, vertex, 2), coords_arr[2], coords_arr[3])));
    nir_ssa_def *pos =
       nir_vec4(&b, nir_channel(&b, coords, 0), nir_channel(&b, coords, 1),
                nir_imm_float(&b, 0.0), nir_imm_float(&b, 1.0));
@@ -737,4 +748,154 @@ dzn_nir_blit_fs(const struct dzn_nir_blit_info *info)
    nir_store_var(&b, out, nir_channels(&b, res, (1 << out_comps) - 1), 0xf);
 
    return b.shader;
+}
+
+static nir_ssa_def *
+cull_face(nir_builder *b, nir_variable *vertices, bool ccw)
+{
+   nir_ssa_def *v0 =
+      nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, vertices), nir_imm_int(b, 0)));
+   nir_ssa_def *v1 =
+      nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, vertices), nir_imm_int(b, 1)));
+   nir_ssa_def *v2 =
+      nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, vertices), nir_imm_int(b, 2)));
+
+   nir_ssa_def *dir = nir_fdot(b, nir_cross4(b, nir_fsub(b, v1, v0),
+                                                nir_fsub(b, v2, v0)),
+                               nir_imm_vec4(b, 0.0, 0.0, -1.0, 0.0));
+   if (ccw)
+      return nir_fge(b, nir_imm_int(b, 0), dir);
+   else
+      return nir_flt(b, nir_imm_int(b, 0), dir);
+}
+
+static void
+copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
+{
+   assert(glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type));
+   if (glsl_type_is_struct(dst->type)) {
+      for (unsigned i = 0; i < glsl_get_length(dst->type); ++i) {
+         copy_vars(b, nir_build_deref_struct(b, dst, i), nir_build_deref_struct(b, src, i));
+      }
+   } else if (glsl_type_is_array_or_matrix(dst->type)) {
+      copy_vars(b, nir_build_deref_array_wildcard(b, dst), nir_build_deref_array_wildcard(b, src));
+   } else {
+      nir_copy_deref(b, dst, src);
+   }
+}
+
+nir_shader *
+dzn_nir_polygon_point_mode_gs(const nir_shader *previous_shader, unsigned cull_mode, bool front_ccw)
+{
+   nir_builder builder;
+   nir_builder *b = &builder;
+   nir_variable *pos_var = NULL;
+
+   unsigned num_vars = 0;
+   nir_variable *in[VARYING_SLOT_MAX];
+   nir_variable *out[VARYING_SLOT_MAX];
+
+
+   builder = nir_builder_init_simple_shader(MESA_SHADER_GEOMETRY,
+                                            dxil_get_nir_compiler_options(),
+                                            "implicit_gs");
+
+   nir_shader *nir = b->shader;
+   nir->info.inputs_read = nir->info.outputs_written = previous_shader->info.outputs_written;
+   nir->info.outputs_written |= (1ull << VARYING_SLOT_VAR12);
+   nir->info.gs.input_primitive = PIPE_PRIM_TRIANGLES;
+   nir->info.gs.output_primitive = PIPE_PRIM_POINTS;
+   nir->info.gs.vertices_in = 3;
+   nir->info.gs.vertices_out = 3;
+   nir->info.gs.invocations = 1;
+   nir->info.gs.active_stream_mask = 1;
+
+   nir_foreach_shader_out_variable(var, previous_shader) {
+      char tmp[100];
+      snprintf(tmp, ARRAY_SIZE(tmp), "in_%d", num_vars);
+      in[num_vars] = nir_variable_create(nir,
+                                         nir_var_shader_in,
+                                         glsl_array_type(var->type, 3, 0),
+                                         tmp);
+      in[num_vars]->data = var->data;
+      in[num_vars]->data.mode = nir_var_shader_in;
+
+      if (var->data.location == VARYING_SLOT_POS)
+         pos_var = in[num_vars];
+
+      snprintf(tmp, ARRAY_SIZE(tmp), "out_%d", num_vars);
+      out[num_vars] = nir_variable_create(nir, nir_var_shader_out, var->type, tmp);
+      out[num_vars]->data = var->data;
+
+      num_vars++;
+   }
+
+   nir_variable *front_facing_var = nir_variable_create(nir,
+                                                        nir_var_shader_out,
+                                                        glsl_uint_type(),
+                                                        "gl_FrontFacing");
+   front_facing_var->data.location = VARYING_SLOT_VAR12;
+   front_facing_var->data.driver_location = num_vars;
+   front_facing_var->data.interpolation = INTERP_MODE_FLAT;
+
+   /* Temporary variable "loop_index" to loop over input vertices */
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_variable *loop_index_var =
+      nir_local_variable_create(impl, glsl_uint_type(), "loop_index");
+   nir_deref_instr *loop_index_deref = nir_build_deref_var(b, loop_index_var);
+   nir_store_deref(b, loop_index_deref, nir_imm_int(b, 0), 1);
+
+   nir_ssa_def *cull_pass = nir_imm_bool(b, true);
+   nir_ssa_def *front_facing;
+   assert(cull_mode != VK_CULL_MODE_FRONT_AND_BACK);
+   if (cull_mode == VK_CULL_MODE_FRONT_BIT) {
+      cull_pass = cull_face(b, pos_var, front_ccw);
+      front_facing = nir_b2i32(b, cull_pass);
+   } else if (cull_mode == VK_CULL_MODE_BACK_BIT) {
+      cull_pass = cull_face(b, pos_var, !front_ccw);
+      front_facing = nir_inot(b, nir_b2i32(b, cull_pass));
+   } else
+      front_facing = nir_i2i32(b, cull_face(b, pos_var, front_ccw));
+
+   /**
+    *  if (cull_pass) {
+    *     while {
+    *        if (loop_index >= 3)
+    *           break;
+    */
+   nir_if *cull_check = nir_push_if(b, cull_pass);
+   nir_loop *loop = nir_push_loop(b);
+
+   nir_ssa_def *loop_index = nir_load_deref(b, loop_index_deref);
+   nir_ssa_def *cmp = nir_ige(b, loop_index,
+                              nir_imm_int(b, 3));
+   nir_if *loop_check = nir_push_if(b, cmp);
+   nir_jump(b, nir_jump_break);
+   nir_pop_if(b, loop_check);
+
+   /**
+    *        [...] // Copy all variables
+    *        EmitVertex();
+    */
+   for (unsigned i = 0; i < num_vars; ++i) {
+      nir_ssa_def *index = loop_index;
+      nir_deref_instr *in_value = nir_build_deref_array(b, nir_build_deref_var(b, in[i]), index);
+      copy_vars(b, nir_build_deref_var(b, out[i]), in_value);
+   }
+   nir_store_var(b, front_facing_var, front_facing, 0x1);
+   nir_emit_vertex(b, 0);
+
+   /**
+    *        loop_index++;
+    *     }
+    *  }
+    */
+   nir_store_deref(b, loop_index_deref, nir_iadd_imm(b, loop_index, 1), 1);
+   nir_pop_loop(b, loop);
+   nir_pop_if(b, cull_check);
+
+   nir_validate_shader(nir, "in dzn_nir_polygon_point_mode_gs");
+
+   NIR_PASS_V(nir, nir_lower_var_copies);
+   return b->shader;
 }

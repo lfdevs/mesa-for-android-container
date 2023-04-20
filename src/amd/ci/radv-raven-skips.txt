@@ -1,0 +1,2 @@
+# timeout
+dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576

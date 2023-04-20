@@ -212,6 +212,31 @@ reg_padding(const fs_reg &r)
    return (MAX2(1, stride) - 1) * type_sz(r.type);
 }
 
+/* Do not call this directly. Call regions_overlap() instead. */
+static inline bool
+regions_overlap_MRF(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
+{
+   if (r.nr & BRW_MRF_COMPR4) {
+      fs_reg t = r;
+      t.nr &= ~BRW_MRF_COMPR4;
+      /* COMPR4 regions are translated by the hardware during decompression
+       * into two separate half-regions 4 MRFs apart from each other.
+       *
+       * Note: swapping s and t in this parameter list eliminates one possible
+       * level of recursion (since the s in the called versions of
+       * regions_overlap_MRF can't be COMPR4), and that makes the compiled
+       * code a lot smaller.
+       */
+      return regions_overlap_MRF(s, ds, t, dr / 2) ||
+             regions_overlap_MRF(s, ds, byte_offset(t, 4 * REG_SIZE), dr / 2);
+   } else if (s.nr & BRW_MRF_COMPR4) {
+      return regions_overlap_MRF(s, ds, r, dr);
+   }
+
+   return !((r.nr * REG_SIZE + r.offset + dr) <= (s.nr * REG_SIZE + s.offset) ||
+            (s.nr * REG_SIZE + s.offset + ds) <= (r.nr * REG_SIZE + r.offset));
+}
+
 /**
  * Return whether the register region starting at \p r and spanning \p dr
  * bytes could potentially overlap the register region starting at \p s and
@@ -220,22 +245,17 @@ reg_padding(const fs_reg &r)
 static inline bool
 regions_overlap(const fs_reg &r, unsigned dr, const fs_reg &s, unsigned ds)
 {
-   if (r.file == MRF && (r.nr & BRW_MRF_COMPR4)) {
-      fs_reg t = r;
-      t.nr &= ~BRW_MRF_COMPR4;
-      /* COMPR4 regions are translated by the hardware during decompression
-       * into two separate half-regions 4 MRFs apart from each other.
-       */
-      return regions_overlap(t, dr / 2, s, ds) ||
-             regions_overlap(byte_offset(t, 4 * REG_SIZE), dr / 2, s, ds);
+   if (r.file != s.file)
+      return false;
 
-   } else if (s.file == MRF && (s.nr & BRW_MRF_COMPR4)) {
-      return regions_overlap(s, ds, r, dr);
-
-   } else {
-      return reg_space(r) == reg_space(s) &&
-             !(reg_offset(r) + dr <= reg_offset(s) ||
+   if (r.file == VGRF) {
+      return r.nr == s.nr &&
+             !(r.offset + dr <= s.offset || s.offset + ds <= r.offset);
+   } else if (r.file != MRF) {
+      return !(reg_offset(r) + dr <= reg_offset(s) ||
                reg_offset(s) + ds <= reg_offset(r));
+   } else {
+      return regions_overlap_MRF(r, dr, s, ds);
    }
 }
 

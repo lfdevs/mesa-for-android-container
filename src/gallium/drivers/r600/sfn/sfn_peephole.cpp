@@ -124,7 +124,7 @@ PeepholeVisitor::convert_to_mov(AluInstr *alu, int src_idx)
 }
 
 void
-PeepholeVisitor::visit(AluGroup *instr)
+PeepholeVisitor::visit(UNUSED AluGroup *instr)
 {
 }
 

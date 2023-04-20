@@ -258,8 +258,4 @@ _mesa_ClearBufferSubData_sw(struct gl_context *ctx,
                             GLsizeiptr clearValueSize,
                             struct gl_buffer_object *bufObj);
 
-void
-_mesa_InternalBindElementBuffer(struct gl_context *ctx,
-                                struct gl_buffer_object *buf);
-
 #endif

@@ -48,6 +48,18 @@ panfrost_batch_idx(struct panfrost_batch *batch)
    return batch - batch->ctx->batches.slots;
 }
 
+static bool
+panfrost_any_batch_other_than(struct panfrost_context *ctx, unsigned index)
+{
+   unsigned i;
+   foreach_batch(ctx, i) {
+      if (i != index)
+         return true;
+   }
+
+   return false;
+}
+
 /* Adds the BO backing surface to a batch if the surface is non-null */
 
 static void
@@ -166,8 +178,10 @@ panfrost_get_batch(struct panfrost_context *ctx,
    assert(batch);
 
    /* The selected slot is used, we need to flush the batch */
-   if (batch->seqnum)
+   if (batch->seqnum) {
+      perf_debug_ctx(ctx, "Flushing batch due to seqnum overflow");
       panfrost_batch_submit(ctx, batch);
+   }
 
    panfrost_batch_init(ctx, key, batch);
 
@@ -233,6 +247,17 @@ panfrost_batch_update_access(struct panfrost_batch *batch,
 {
    struct panfrost_context *ctx = batch->ctx;
    uint32_t batch_idx = panfrost_batch_idx(batch);
+
+   if (writes) {
+      _mesa_hash_table_insert(ctx->writers, rsrc, batch);
+   }
+
+   /* The rest of this routine is just about flushing other batches. If there
+    * aren't any, we can skip a lot of work.
+    */
+   if (!panfrost_any_batch_other_than(ctx, batch_idx))
+      return;
+
    struct hash_entry *entry = _mesa_hash_table_search(ctx->writers, rsrc);
    struct panfrost_batch *writer = entry ? entry->data : NULL;
 
@@ -254,10 +279,6 @@ panfrost_batch_update_access(struct panfrost_batch *batch,
          if (panfrost_batch_uses_resource(batch, rsrc))
             panfrost_batch_submit(ctx, batch);
       }
-   }
-
-   if (writes) {
-      _mesa_hash_table_insert(ctx->writers, rsrc, batch);
    }
 }
 
@@ -827,16 +848,15 @@ out:
 void
 panfrost_flush_all_batches(struct panfrost_context *ctx, const char *reason)
 {
+   if (reason)
+      perf_debug_ctx(ctx, "Flushing everything due to: %s", reason);
+
    struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
    panfrost_batch_submit(ctx, batch);
 
    for (unsigned i = 0; i < PAN_MAX_BATCHES; i++) {
-      if (ctx->batches.slots[i].seqnum) {
-         if (reason)
-            perf_debug_ctx(ctx, "Flushing everything due to: %s", reason);
-
+      if (ctx->batches.slots[i].seqnum)
          panfrost_batch_submit(ctx, &ctx->batches.slots[i]);
-      }
    }
 }
 

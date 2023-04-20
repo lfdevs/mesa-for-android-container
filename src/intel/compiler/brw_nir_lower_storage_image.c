@@ -725,6 +725,7 @@ brw_nir_lower_storage_image(nir_shader *shader,
 
    const nir_lower_image_options image_options = {
       .lower_cube_size = true,
+      .lower_image_samples_to_one = true,
    };
 
    progress |= nir_lower_image(shader, &image_options);

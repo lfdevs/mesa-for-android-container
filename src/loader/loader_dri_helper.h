@@ -37,3 +37,6 @@ int dri_get_initial_swap_interval(__DRIscreen *driScreen,
 
 bool dri_valid_swap_interval(__DRIscreen *driScreen,
                              const __DRI2configQueryExtension *config, int interval);
+
+int
+loader_image_format_to_fourcc(int format);

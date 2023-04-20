@@ -58,6 +58,7 @@ public:
    bool end_group() const override { return true; }
 
    void set_scheduled() override;
+   bool replace_source(PRegister old_src, PVirtualValue new_src) override;
 
    void set_nesting_depth(int depth) { m_nesting_depth = depth; }
 
@@ -86,10 +87,14 @@ public:
       m_readports_evaluator = rr;
    };
 
+   void update_readport_reserver();
+
    static bool has_t() { return s_max_slots == 5; }
 
    bool addr_for_src() const { return m_addr_for_src; }
    bool has_kill_op() const { return m_has_kill_op; }
+
+   void set_origin(AluInstr *o) { m_origin = o;}
 
 private:
    void forward_set_blockid(int id, int index) override;
@@ -115,6 +120,7 @@ private:
    bool m_addr_is_index{false};
    bool m_addr_for_src{false};
    bool m_has_kill_op{false};
+   AluInstr *m_origin{nullptr};
 };
 
 } // namespace r600

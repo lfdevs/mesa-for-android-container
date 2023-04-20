@@ -1748,7 +1748,7 @@ Jan Zielinski (3):
 -  swr/rasterizer: Fix GS attributes processing
 -  gallium/swr: Fix depth values for blit scenario
 
-Jason Ekstrand (57):
+Faith Ekstrand (57):
 
 -  nir: Add explicit signs to image min/max intrinsics
 -  intel/nir: Add a helper for getting BRW_AOP from an intrinsic

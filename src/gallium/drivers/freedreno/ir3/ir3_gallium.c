@@ -41,6 +41,7 @@
 
 #include "ir3/ir3_cache.h"
 #include "ir3/ir3_compiler.h"
+#include "ir3/ir3_descriptor.h"
 #include "ir3/ir3_gallium.h"
 #include "ir3/ir3_nir.h"
 #include "ir3/ir3_shader.h"
@@ -306,6 +307,9 @@ ir3_shader_compute_state_create(struct pipe_context *pctx,
       nir = tgsi_to_nir(cso->prog, pctx->screen, false);
    }
 
+   if (ctx->screen->gen >= 6)
+      ir3_nir_lower_io_to_bindless(nir);
+
    struct ir3_shader *shader =
       ir3_shader_from_nir(compiler, nir, &(struct ir3_shader_options){
                               /* TODO: force to single on a6xx with legacy
@@ -363,6 +367,9 @@ ir3_shader_state_create(struct pipe_context *pctx,
       }
       nir = tgsi_to_nir(cso->tokens, pctx->screen, false);
    }
+
+   if (ctx->screen->gen >= 6)
+      ir3_nir_lower_io_to_bindless(nir);
 
    /*
     * Create ir3_shader:
@@ -547,8 +554,13 @@ ir3_screen_init(struct pipe_screen *pscreen)
 {
    struct fd_screen *screen = fd_screen(pscreen);
 
-   screen->compiler = ir3_compiler_create(screen->dev, screen->dev_id,
-                                          &(struct ir3_compiler_options) {});
+   struct ir3_compiler_options options = {
+      .bindless_fb_read_descriptor =
+         ir3_shader_descriptor_set(PIPE_SHADER_FRAGMENT),
+      .bindless_fb_read_slot = IR3_BINDLESS_IMAGE_OFFSET +
+                               IR3_BINDLESS_IMAGE_COUNT - 1 - screen->max_rts,
+   };
+   screen->compiler = ir3_compiler_create(screen->dev, screen->dev_id, &options);
 
    /* TODO do we want to limit things to # of fast cores, or just limit
     * based on total # of both big and little cores.  The little cores

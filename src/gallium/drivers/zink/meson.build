@@ -42,6 +42,7 @@ files_libzink = files(
   'zink_screen.c',
   'zink_state.c',
   'zink_surface.c',
+  'zink_synchronization.cpp',
 )
 
 zink_device_info = custom_target(
@@ -98,7 +99,7 @@ libzink = static_library(
   link_args : [ld_args_build_id],
   dependencies: [
     idep_nir_headers, idep_mesautil, idep_vulkan_util_headers,
-    idep_vulkan_wsi_headers, idep_vulkan_util, dep_libdrm
+    idep_vulkan_wsi_defines, idep_vulkan_util, dep_libdrm
   ],
   c_args: zink_c_args,
 )

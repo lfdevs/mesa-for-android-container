@@ -116,6 +116,7 @@ enum radeon_family
    CHIP_RENOIR,         /* Ryzen 4000, 5000 */
    CHIP_MI100,
    CHIP_MI200,
+   CHIP_GFX940,
    /* GFX10.1 (RDNA 1) */
    CHIP_NAVI10,         /* Radeon 5600, 5700 */
    CHIP_NAVI12,         /* Radeon Pro 5600M */
@@ -127,7 +128,7 @@ enum radeon_family
    CHIP_NAVI23,         /* Radeon 6600 (formerly "Dimgrey Cavefish") */
    CHIP_NAVI24,         /* Radeon 6400, 6500 (formerly "Beige Goby") */
    CHIP_REMBRANDT,      /* Ryzen 6000 (formerly "Yellow Carp") */
-   CHIP_GFX1036,
+   CHIP_RAPHAEL_MENDOCINO, /* Ryzen 7000(X), Ryzen 7045, Ryzen 7020 */
    CHIP_GFX1100,
    CHIP_GFX1101,
    CHIP_GFX1102,

@@ -250,8 +250,8 @@ lvp_create_imageview(const struct lvp_image_view *iv)
       view.format = lvp_vk_format_to_pipe_format(iv->vk.format);
 
    if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_3D) {
-      view.u.tex.first_layer = 0;
-      view.u.tex.last_layer = iv->vk.extent.depth - 1;
+      view.u.tex.first_layer = iv->vk.storage.z_slice_offset;
+      view.u.tex.last_layer = view.u.tex.first_layer + iv->vk.storage.z_slice_count - 1;
    } else {
       view.u.tex.first_layer = iv->vk.base_array_layer,
       view.u.tex.last_layer = iv->vk.base_array_layer + iv->vk.layer_count - 1;

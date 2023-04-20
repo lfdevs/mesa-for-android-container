@@ -539,7 +539,7 @@
     <field name="High Depth Cull" size="1" start="0:17" type="bool" default="true"/>
     <field name="Primitive restart" size="2" start="0:19" type="Primitive Restart"/>
     <field name="Job Task Split" size="6" start="0:26" type="uint"/>
-    <field name="Base vertex offset" size="32" start="1:0" type="uint"/>
+    <field name="Base vertex offset" size="32" start="1:0" type="int"/>
     <field name="Primitive Restart Index" size="32" start="2:0" type="uint"/>
     <field name="Index count" size="32" start="3:0" type="uint" modifier="minus(1)"/>
     <field name="Indices" size="64" start="4:0" type="address"/>
@@ -593,9 +593,9 @@
     <field name="Mipmap Mode" size="2" start="3" type="Mipmap Mode" default="Nearest"/>
     <field name="Normalized Coordinates" size="1" start="5" type="bool" default="true"/>
     <field name="Isotropic LOD" size="1" start="6" type="bool"/>
-    <field name="LOD Bias" size="16" start="0:16" type="int" default="0"/>
-    <field name="Minimum LOD" size="16" start="1:0" type="uint" default="0"/>
-    <field name="Maximum LOD" size="16" start="1:16" type="uint" default="1"/>
+    <field name="LOD Bias" size="16" start="0:16" type="slod" default="0"/>
+    <field name="Minimum LOD" size="16" start="1:0" type="ulod" default="0"/>
+    <field name="Maximum LOD" size="16" start="1:16" type="ulod" default="0"/>
     <field name="Wrap Mode S" size="4" start="2:0" type="Wrap Mode" default="Clamp to Edge"/>
     <field name="Wrap Mode T" size="4" start="2:4" type="Wrap Mode" default="Clamp to Edge"/>
     <field name="Wrap Mode R" size="4" start="2:8" type="Wrap Mode" default="Clamp to Edge"/>
@@ -874,12 +874,6 @@
     <value name="D32" value="2"/>
   </enum>
 
-  <enum name="FBD Tag">
-    <value name="IS_MFBD" value="1"/>
-    <value name="HAS_ZS_RT" value="2"/>
-    <value name="MASK" value="63"/>
-  </enum>
-
   <struct name="Framebuffer Parameters">
     <field name="Width" size="16" start="0:0" type="uint" modifier="minus(1)"/>
     <field name="Height" size="16" start="0:16" type="uint" modifier="minus(1)"/>
@@ -1023,13 +1017,19 @@
     <field name="Clear" size="128" start="12:0" type="RT Clear"/>
   </struct>
 
-
   <aggregate name="Framebuffer" align="64">
     <section name="Local Storage" offset="0" type="Local Storage"/>
     <section name="Parameters" offset="32" type="Framebuffer Parameters"/>
     <section name="Tiler" offset="56" type="Tiler Context"/>
     <section name="Tiler Weights" offset="96" type="Tiler Weights"/>
   </aggregate>
+
+  <struct name="Framebuffer pointer">
+    <field name="Type" start="0" size="1" type="bool" default="true"/>
+    <field name="ZS CRC Extension present" start="1" size="1" type="bool"/>
+    <field name="Render target count" start="2" size="4" type="uint" modifier="minus(1)"/>
+    <field name="Pointer" start="6" size="58" type="address" modifier="shr(6)"/>
+  </struct>
 
   <struct name="Job Header" align="64">
     <field name="Exception Status" size="32" start="0:0" type="uint"/>

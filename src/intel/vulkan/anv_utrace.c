@@ -1,29 +1,33 @@
 /*
-* Copyright © 2021 Intel Corporation
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*/
+ * Copyright © 2021 Intel Corporation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
 
 #include "anv_private.h"
 
+#include "ds/intel_tracepoints.h"
+#include "genxml/gen8_pack.h"
 #include "perf/intel_perf.h"
+
+#include "vulkan/runtime/vk_common_entrypoints.h"
 
 static uint32_t
 command_buffers_count_utraces(struct anv_device *device,
@@ -47,25 +51,25 @@ command_buffers_count_utraces(struct anv_device *device,
 }
 
 static void
-anv_utrace_delete_flush_data(struct u_trace_context *utctx,
-                             void *flush_data)
+anv_utrace_delete_submit(struct u_trace_context *utctx, void *submit_data)
 {
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
-   struct anv_utrace_flush_copy *flush = flush_data;
+   struct anv_utrace_submit *submit = submit_data;
 
-   intel_ds_flush_data_fini(&flush->ds);
+   intel_ds_flush_data_fini(&submit->ds);
 
-   if (flush->trace_bo) {
-      assert(flush->batch_bo);
-      anv_reloc_list_finish(&flush->relocs, &device->vk.alloc);
-      anv_bo_pool_free(&device->utrace_bo_pool, flush->batch_bo);
-      anv_bo_pool_free(&device->utrace_bo_pool, flush->trace_bo);
+   if (submit->trace_bo)
+      anv_bo_pool_free(&device->utrace_bo_pool, submit->trace_bo);
+
+   if (submit->batch_bo) {
+      anv_reloc_list_finish(&submit->relocs, &device->vk.alloc);
+      anv_bo_pool_free(&device->utrace_bo_pool, submit->batch_bo);
    }
 
-   vk_sync_destroy(&device->vk, flush->sync);
+   vk_sync_destroy(&device->vk, submit->sync);
 
-   vk_free(&device->vk.alloc, flush);
+   vk_free(&device->vk.alloc, submit);
 }
 
 static void
@@ -77,13 +81,13 @@ anv_device_utrace_emit_copy_ts_buffer(struct u_trace_context *utctx,
 {
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
-   struct anv_utrace_flush_copy *flush = cmdstream;
+   struct anv_utrace_submit *submit = cmdstream;
    struct anv_address from_addr = (struct anv_address) {
       .bo = ts_from, .offset = from_offset * sizeof(uint64_t) };
    struct anv_address to_addr = (struct anv_address) {
       .bo = ts_to, .offset = to_offset * sizeof(uint64_t) };
 
-   anv_genX(device->info, emit_so_memcpy)(&flush->memcpy_state,
+   anv_genX(device->info, emit_so_memcpy)(&submit->memcpy_state,
                                            to_addr, from_addr, count * sizeof(uint64_t));
 }
 
@@ -91,7 +95,7 @@ VkResult
 anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
                                     uint32_t cmd_buffer_count,
                                     struct anv_cmd_buffer **cmd_buffers,
-                                    struct anv_utrace_flush_copy **out_flush_data)
+                                    struct anv_utrace_submit **out_submit)
 {
    struct anv_device *device = queue->device;
    uint32_t utrace_copies = 0;
@@ -100,94 +104,96 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
                                                     cmd_buffers,
                                                     &utrace_copies);
    if (!utraces) {
-      *out_flush_data = NULL;
+      *out_submit = NULL;
       return VK_SUCCESS;
    }
 
    VkResult result;
-   struct anv_utrace_flush_copy *flush =
-      vk_zalloc(&device->vk.alloc, sizeof(struct anv_utrace_flush_copy),
+   struct anv_utrace_submit *submit =
+      vk_zalloc(&device->vk.alloc, sizeof(struct anv_utrace_submit),
                 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!flush)
+   if (!submit)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   intel_ds_flush_data_init(&flush->ds, &queue->ds, queue->ds.submission_id);
+   intel_ds_flush_data_init(&submit->ds, &queue->ds, queue->ds.submission_id);
 
    result = vk_sync_create(&device->vk, &device->physical->sync_syncobj_type,
-                           0, 0, &flush->sync);
+                           0, 0, &submit->sync);
    if (result != VK_SUCCESS)
       goto error_sync;
 
    if (utrace_copies > 0) {
       result = anv_bo_pool_alloc(&device->utrace_bo_pool,
                                  utrace_copies * 4096,
-                                 &flush->trace_bo);
+                                 &submit->trace_bo);
       if (result != VK_SUCCESS)
          goto error_trace_buf;
 
       result = anv_bo_pool_alloc(&device->utrace_bo_pool,
                                  /* 128 dwords of setup + 64 dwords per copy */
                                  align(512 + 64 * utrace_copies, 4096),
-                                 &flush->batch_bo);
+                                 &submit->batch_bo);
       if (result != VK_SUCCESS)
          goto error_batch_buf;
 
-      result = anv_reloc_list_init(&flush->relocs, &device->vk.alloc);
+      result = anv_reloc_list_init(&submit->relocs, &device->vk.alloc);
       if (result != VK_SUCCESS)
          goto error_reloc_list;
 
-      flush->batch.alloc = &device->vk.alloc;
-      flush->batch.relocs = &flush->relocs;
-      anv_batch_set_storage(&flush->batch,
-                            (struct anv_address) { .bo = flush->batch_bo, },
-                            flush->batch_bo->map, flush->batch_bo->size);
+      submit->batch.alloc = &device->vk.alloc;
+      submit->batch.relocs = &submit->relocs;
+      anv_batch_set_storage(&submit->batch,
+                            (struct anv_address) { .bo = submit->batch_bo, },
+                            submit->batch_bo->map, submit->batch_bo->size);
 
       /* Emit the copies */
-      anv_genX(device->info, emit_so_memcpy_init)(&flush->memcpy_state,
-                                                   device,
-                                                   &flush->batch);
+      anv_genX(device->info, emit_so_memcpy_init)(&submit->memcpy_state,
+                                                  device,
+                                                  &submit->batch);
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          if (cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) {
-            u_trace_flush(&cmd_buffers[i]->trace, flush, false);
+            u_trace_flush(&cmd_buffers[i]->trace, submit, false);
          } else {
             u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
                                  u_trace_end_iterator(&cmd_buffers[i]->trace),
-                                 &flush->ds.trace,
-                                 flush,
+                                 &submit->ds.trace,
+                                 submit,
                                  anv_device_utrace_emit_copy_ts_buffer);
          }
       }
-      anv_genX(device->info, emit_so_memcpy_fini)(&flush->memcpy_state);
+      anv_genX(device->info, emit_so_memcpy_fini)(&submit->memcpy_state);
+      anv_genX(device->info, emit_so_memcpy_end)(&submit->memcpy_state);
 
-      u_trace_flush(&flush->ds.trace, flush, true);
+      u_trace_flush(&submit->ds.trace, submit, true);
 
-      if (flush->batch.status != VK_SUCCESS) {
-         result = flush->batch.status;
+      if (submit->batch.status != VK_SUCCESS) {
+         result = submit->batch.status;
          goto error_batch;
       }
    } else {
       for (uint32_t i = 0; i < cmd_buffer_count; i++) {
          assert(cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-         u_trace_flush(&cmd_buffers[i]->trace, flush, i == (cmd_buffer_count - 1));
+         u_trace_flush(&cmd_buffers[i]->trace, submit, i == (cmd_buffer_count - 1));
       }
    }
 
-   flush->queue = queue;
+   submit->queue = queue;
 
-   *out_flush_data = flush;
+   *out_submit = submit;
 
    return VK_SUCCESS;
 
  error_batch:
-   anv_reloc_list_finish(&flush->relocs, &device->vk.alloc);
+   anv_reloc_list_finish(&submit->relocs, &device->vk.alloc);
  error_reloc_list:
-   anv_bo_pool_free(&device->utrace_bo_pool, flush->batch_bo);
+   anv_bo_pool_free(&device->utrace_bo_pool, submit->batch_bo);
  error_batch_buf:
-   anv_bo_pool_free(&device->utrace_bo_pool, flush->trace_bo);
+   anv_bo_pool_free(&device->utrace_bo_pool, submit->trace_bo);
  error_trace_buf:
-   vk_sync_destroy(&device->vk, flush->sync);
+   vk_sync_destroy(&device->vk, submit->sync);
  error_sync:
-   vk_free(&device->vk.alloc, flush);
+   intel_ds_flush_data_fini(&submit->ds);
+   vk_free(&device->vk.alloc, submit);
    return result;
 }
 
@@ -222,15 +228,17 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
                      void *timestamps, unsigned idx,
                      bool end_of_pipe)
 {
-   struct anv_cmd_buffer *cmd_buffer =
-      container_of(ut, struct anv_cmd_buffer, trace);
-   struct anv_device *device = cmd_buffer->device;
+   struct anv_device *device =
+      container_of(ut->utctx, struct anv_device, ds.trace_context);
+   struct anv_batch *batch =
+      cs != NULL ? cs :
+      &container_of(ut, struct anv_cmd_buffer, trace)->batch;
    struct anv_bo *bo = timestamps;
 
    enum anv_timestamp_capture_type capture_type =
       (end_of_pipe) ? ANV_TIMESTAMP_CAPTURE_END_OF_PIPE
                     : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
-   device->physical->cmd_emit_timestamp(&cmd_buffer->batch, device,
+   device->physical->cmd_emit_timestamp(batch, device,
                                         (struct anv_address) {
                                            .bo = bo,
                                            .offset = idx * sizeof(uint64_t) },
@@ -244,13 +252,13 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
    struct anv_bo *bo = timestamps;
-   struct anv_utrace_flush_copy *flush = flush_data;
+   struct anv_utrace_submit *submit = flush_data;
 
    /* Only need to stall on results for the first entry: */
    if (idx == 0) {
       UNUSED VkResult result =
          vk_sync_wait(&device->vk,
-                      flush->sync,
+                      submit->sync,
                       0,
                       VK_SYNC_WAIT_COMPLETE,
                       os_time_get_absolute_timeout(OS_TIMEOUT_INFINITE));
@@ -279,7 +287,7 @@ anv_device_utrace_init(struct anv_device *device)
                         anv_utrace_destroy_ts_buffer,
                         anv_utrace_record_ts,
                         anv_utrace_read_ts,
-                        anv_utrace_delete_flush_data);
+                        anv_utrace_delete_submit);
 
    for (uint32_t q = 0; q < device->queue_count; q++) {
       struct anv_queue *queue = &device->queues[q];
@@ -320,6 +328,7 @@ anv_pipe_flush_bit_to_ds_stall_flag(enum anv_pipe_bits bits)
       { .anv = ANV_PIPE_STALL_AT_SCOREBOARD_BIT,          .ds = INTEL_DS_STALL_AT_SCOREBOARD_BIT, },
       { .anv = ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT, .ds = INTEL_DS_UNTYPED_DATAPORT_CACHE_FLUSH_BIT, },
       { .anv = ANV_PIPE_PSS_STALL_SYNC_BIT,               .ds = INTEL_DS_PSS_STALL_SYNC_BIT, },
+      { .anv = ANV_PIPE_END_OF_PIPE_SYNC_BIT,             .ds = INTEL_DS_END_OF_PIPE_BIT, },
    };
 
    enum intel_ds_stall_flag ret = 0;
@@ -329,4 +338,141 @@ anv_pipe_flush_bit_to_ds_stall_flag(enum anv_pipe_bits bits)
    }
 
    return ret;
+}
+
+void anv_CmdBeginDebugUtilsLabelEXT(
+   VkCommandBuffer _commandBuffer,
+   const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+   VK_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, _commandBuffer);
+
+   vk_common_CmdBeginDebugUtilsLabelEXT(_commandBuffer, pLabelInfo);
+
+   trace_intel_begin_cmd_buffer_annotation(&cmd_buffer->trace);
+}
+
+void anv_CmdEndDebugUtilsLabelEXT(VkCommandBuffer _commandBuffer)
+{
+   VK_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, _commandBuffer);
+
+   if (cmd_buffer->vk.labels.size > 0) {
+      const VkDebugUtilsLabelEXT *label =
+         util_dynarray_top_ptr(&cmd_buffer->vk.labels, VkDebugUtilsLabelEXT);
+
+      trace_intel_end_cmd_buffer_annotation(&cmd_buffer->trace,
+                                            strlen(label->pLabelName),
+                                            label->pLabelName);
+   }
+
+   vk_common_CmdEndDebugUtilsLabelEXT(_commandBuffer);
+}
+
+void
+anv_queue_trace(struct anv_queue *queue, const char *label, bool frame, bool begin)
+{
+   struct anv_device *device = queue->device;
+
+   VkResult result;
+   struct anv_utrace_submit *submit =
+      vk_zalloc(&device->vk.alloc, sizeof(struct anv_utrace_submit),
+                8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!submit)
+      return;
+
+   submit->queue = queue;
+
+   intel_ds_flush_data_init(&submit->ds, &queue->ds, queue->ds.submission_id);
+
+   result = vk_sync_create(&device->vk, &device->physical->sync_syncobj_type,
+                           0, 0, &submit->sync);
+   if (result != VK_SUCCESS)
+      goto error_trace;
+
+   result = anv_bo_pool_alloc(&device->utrace_bo_pool, 4096,
+                              &submit->batch_bo);
+   if (result != VK_SUCCESS)
+      goto error_sync;
+
+   result = anv_reloc_list_init(&submit->relocs, &device->vk.alloc);
+   if (result != VK_SUCCESS)
+      goto error_batch_bo;
+
+   submit->batch.alloc = &device->vk.alloc;
+   submit->batch.relocs = &submit->relocs;
+   anv_batch_set_storage(&submit->batch,
+                         (struct anv_address) { .bo = submit->batch_bo, },
+                         submit->batch_bo->map, submit->batch_bo->size);
+
+   if (frame) {
+      if (begin)
+         trace_intel_begin_frame(&submit->ds.trace, &submit->batch);
+      else
+         trace_intel_end_frame(&submit->ds.trace, &submit->batch,
+                               device->debug_frame_desc->frame_id);
+   } else {
+      if (begin) {
+         trace_intel_begin_queue_annotation(&submit->ds.trace, &submit->batch);
+      } else {
+         trace_intel_end_queue_annotation(&submit->ds.trace,
+                                          &submit->batch,
+                                          strlen(label),
+                                          label);
+      }
+   }
+
+   anv_batch_emit(&submit->batch, GFX8_MI_BATCH_BUFFER_END, bbs);
+   anv_batch_emit(&submit->batch, GFX8_MI_NOOP, noop);
+
+   if (submit->batch.status != VK_SUCCESS) {
+      result = submit->batch.status;
+      goto error_reloc_list;
+   }
+
+   u_trace_flush(&submit->ds.trace, submit, true);
+
+   pthread_mutex_lock(&device->mutex);
+   device->kmd_backend->queue_exec_trace(queue, submit);
+   pthread_mutex_unlock(&device->mutex);
+
+   return;
+
+ error_reloc_list:
+   anv_reloc_list_finish(&submit->relocs, &device->vk.alloc);
+ error_batch_bo:
+   anv_bo_pool_free(&device->utrace_bo_pool, submit->batch_bo);
+ error_sync:
+   vk_sync_destroy(&device->vk, submit->sync);
+ error_trace:
+   intel_ds_flush_data_fini(&submit->ds);
+   vk_free(&device->vk.alloc, submit);
+}
+
+void
+anv_QueueBeginDebugUtilsLabelEXT(
+   VkQueue _queue,
+   const VkDebugUtilsLabelEXT *pLabelInfo)
+{
+   VK_FROM_HANDLE(anv_queue, queue, _queue);
+
+   vk_common_QueueBeginDebugUtilsLabelEXT(_queue, pLabelInfo);
+
+   anv_queue_trace(queue, pLabelInfo->pLabelName,
+                   false /* frame */, true /* begin */);
+}
+
+void
+anv_QueueEndDebugUtilsLabelEXT(VkQueue _queue)
+{
+   VK_FROM_HANDLE(anv_queue, queue, _queue);
+
+   if (queue->vk.labels.size > 0) {
+      const VkDebugUtilsLabelEXT *label =
+         util_dynarray_top_ptr(&queue->vk.labels, VkDebugUtilsLabelEXT);
+      anv_queue_trace(queue, label->pLabelName,
+                      false /* frame */, false /* begin */);
+
+      u_trace_context_process(&queue->device->ds.trace_context, true);
+   }
+
+   vk_common_QueueEndDebugUtilsLabelEXT(_queue);
 }

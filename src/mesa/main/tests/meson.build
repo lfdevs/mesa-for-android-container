@@ -47,5 +47,5 @@ test(
     link_with : [libmesa, libgallium, link_main_test],
   ),
   suite : ['mesa'],
-  protocol : gtest_test_protocol,
+  protocol : 'gtest',
 )

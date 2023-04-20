@@ -175,6 +175,10 @@ nir_cf_node_remove(nir_cf_node *node)
 /** inserts undef phi sources from predcessor into phis of the block */
 void nir_insert_phi_undef(nir_block *block, nir_block *pred);
 
+/** Modify loop continue behavior */
+void nir_loop_add_continue_construct(nir_loop *loop);
+void nir_loop_remove_continue_construct(nir_loop *loop);
+
 #ifdef __cplusplus
 }
 #endif

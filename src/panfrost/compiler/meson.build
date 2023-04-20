@@ -185,6 +185,6 @@ if with_tests
       link_with : [libpanfrost_bifrost],
     ),
     suite : ['panfrost'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif

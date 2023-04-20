@@ -2892,7 +2892,7 @@ Jan Beich (1):
 
 - anv: adjust headers for non-GNU after e9e1e0362b6c
 
-Jason Ekstrand (139):
+Faith Ekstrand (139):
 
 - intel/compiler: Don't insert barriers for NULL sources
 - anv: Use the same re-order mode for streamout as for GS

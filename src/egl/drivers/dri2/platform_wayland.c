@@ -34,7 +34,8 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <unistd.h>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_wayland.h>
 #include <fcntl.h>
 #include <xf86drm.h>
 #include "drm-uapi/drm_fourcc.h"
@@ -886,26 +887,6 @@ dri2_wl_release_buffers(struct dri2_egl_surface *dri2_surf)
 }
 
 static void
-create_dri_image_diff_gpu(struct dri2_egl_surface *dri2_surf,
-                          unsigned int linear_dri_image_format, uint32_t use_flags)
-{
-   struct dri2_egl_display *dri2_dpy =
-      dri2_egl_display(dri2_surf->base.Resource.Display);
-   uint64_t linear_mod;
-
-   /* The LINEAR modifier should be a perfect alias of the LINEAR use flag */
-   linear_mod = DRM_FORMAT_MOD_LINEAR;
-
-   dri2_surf->back->linear_copy =
-      loader_dri_create_image(dri2_dpy->dri_screen, dri2_dpy->image,
-                              dri2_surf->base.Width,
-                              dri2_surf->base.Height,
-                              linear_dri_image_format,
-                              use_flags | __DRI_IMAGE_USE_LINEAR,
-                              &linear_mod, 1, NULL);
-}
-
-static void
 create_dri_image_from_dmabuf_feedback(struct dri2_egl_surface *dri2_surf,
                                       unsigned int dri_image_format, uint32_t use_flags)
 {
@@ -954,11 +935,11 @@ create_dri_image_from_dmabuf_feedback(struct dri2_egl_surface *dri2_surf,
          flags |= __DRI_IMAGE_USE_SCANOUT;
 
       dri2_surf->back->dri_image =
-         loader_dri_create_image(dri2_dpy->dri_screen, dri2_dpy->image,
+         loader_dri_create_image(dri2_dpy->dri_screen_render_gpu, dri2_dpy->image,
                                  dri2_surf->base.Width,
                                  dri2_surf->base.Height,
                                  dri_image_format,
-                                 dri2_dpy->is_different_gpu ? 0 : flags,
+                                 (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) ? 0 : flags,
                                  modifiers, num_modifiers, NULL);
 
       if (dri2_surf->back->dri_image)
@@ -992,11 +973,11 @@ create_dri_image(struct dri2_egl_surface *dri2_surf,
     * then fall back to the old createImage, and hope it allocates an image
     * which is acceptable to the winsys. */
    dri2_surf->back->dri_image =
-      loader_dri_create_image(dri2_dpy->dri_screen, dri2_dpy->image,
+      loader_dri_create_image(dri2_dpy->dri_screen_render_gpu, dri2_dpy->image,
                               dri2_surf->base.Width,
                               dri2_surf->base.Height,
                               dri_image_format,
-                              dri2_dpy->is_different_gpu ? 0 : use_flags,
+                              (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) ? 0 : use_flags,
                               modifiers, num_modifiers, NULL);
 }
 
@@ -1066,15 +1047,100 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
 
    if (dri2_surf->base.ProtectedContent) {
       /* Protected buffers can't be read from another GPU */
-      if (dri2_dpy->is_different_gpu)
+      if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu)
          return -1;
       use_flags |= __DRI_IMAGE_USE_PROTECTED;
    }
 
-   if (dri2_dpy->is_different_gpu && dri2_surf->back->linear_copy == NULL) {
-      create_dri_image_diff_gpu(dri2_surf, linear_dri_image_format, use_flags);
+   if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu &&
+       dri2_surf->back->linear_copy == NULL) {
+      uint64_t linear_mod = DRM_FORMAT_MOD_LINEAR;
+      __DRIimage *linear_copy_display_gpu_image = NULL;
+
+      if (dri2_dpy->dri_screen_display_gpu) {
+         linear_copy_display_gpu_image =
+               loader_dri_create_image(dri2_dpy->dri_screen_display_gpu,
+                                       dri2_dpy->image,
+                                       dri2_surf->base.Width,
+                                       dri2_surf->base.Height,
+                                       linear_dri_image_format,
+                                       use_flags | __DRI_IMAGE_USE_LINEAR,
+                                       &linear_mod, 1, NULL);
+
+         if (linear_copy_display_gpu_image) {
+            int i, ret;
+            int num_planes = 0;
+            int buffer_fds[4];
+            int strides[4];
+            int offsets[4];
+
+            if (!dri2_dpy->image->queryImage(linear_copy_display_gpu_image,
+                                             __DRI_IMAGE_ATTRIB_NUM_PLANES, &num_planes))
+               num_planes = 1;
+
+            for (i = 0; i < num_planes; i++) {
+               __DRIimage *image = dri2_dpy->image->fromPlanar(
+                                      linear_copy_display_gpu_image, i, NULL);
+
+               if (!image) {
+                  assert(i == 0);
+                  image = linear_copy_display_gpu_image;
+               }
+
+               buffer_fds[i] = -1;
+               ret = dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_FD,
+                                                 &buffer_fds[i]);
+               ret &= dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_STRIDE,
+                                                  &strides[i]);
+               ret &= dri2_dpy->image->queryImage(image, __DRI_IMAGE_ATTRIB_OFFSET,
+                                                  &offsets[i]);
+
+               if (image != linear_copy_display_gpu_image)
+                  dri2_dpy->image->destroyImage(image);
+
+               if (!ret) {
+                  do {
+                     if (buffer_fds[i] != -1)
+                        close(buffer_fds[i]);
+                  } while (--i >= 0);
+                  dri2_dpy->image->destroyImage(linear_copy_display_gpu_image);
+                  return -1;
+               }
+            }
+
+            /* The linear buffer was created in the display GPU's vram, so we
+             * need to make it visible to render GPU
+             */
+            dri2_surf->back->linear_copy =
+               dri2_dpy->image->createImageFromFds(dri2_dpy->dri_screen_render_gpu,
+                                                   dri2_surf->base.Width,
+                                                   dri2_surf->base.Height,
+                                                   loader_image_format_to_fourcc(
+                                                      linear_dri_image_format),
+                                                   &buffer_fds[0], num_planes,
+                                                   &strides[0],
+                                                   &offsets[0],
+                                                   dri2_surf->back);
+            for (i = 0; i < num_planes; ++i) {
+               if (buffer_fds[i] != -1)
+                  close(buffer_fds[i]);
+            }
+            dri2_dpy->image->destroyImage(linear_copy_display_gpu_image);
+         }
+      }
+
+      if (!dri2_surf->back->linear_copy) {
+         dri2_surf->back->linear_copy =
+               loader_dri_create_image(dri2_dpy->dri_screen_render_gpu, dri2_dpy->image,
+                                       dri2_surf->base.Width,
+                                       dri2_surf->base.Height,
+                                       linear_dri_image_format,
+                                       use_flags | __DRI_IMAGE_USE_LINEAR,
+                                       &linear_mod, 1, NULL);
+      }
+
       if (dri2_surf->back->linear_copy == NULL)
-          return -1;
+         return -1;
    }
 
    if (dri2_surf->back->dri_image == NULL) {
@@ -1158,7 +1224,7 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
           dri2_surf->color_buffers[i].age > BUFFER_TRIM_AGE_HYSTERESIS) {
          wl_buffer_destroy(dri2_surf->color_buffers[i].wl_buffer);
          dri2_dpy->image->destroyImage(dri2_surf->color_buffers[i].dri_image);
-         if (dri2_dpy->is_different_gpu)
+         if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu)
             dri2_dpy->image->destroyImage(dri2_surf->color_buffers[i].linear_copy);
          dri2_surf->color_buffers[i].wl_buffer = NULL;
          dri2_surf->color_buffers[i].dri_image = NULL;
@@ -1563,7 +1629,7 @@ dri2_wl_swap_buffers_with_damage(_EGLDisplay *disp,
    if (!dri2_surf->current->wl_buffer) {
       __DRIimage *image;
 
-      if (dri2_dpy->is_different_gpu)
+      if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu)
          image = dri2_surf->current->linear_copy;
       else
          image = dri2_surf->current->dri_image;
@@ -1594,7 +1660,7 @@ dri2_wl_swap_buffers_with_damage(_EGLDisplay *disp,
       wl_surface_damage(dri2_surf->wl_surface_wrapper,
                         0, 0, INT32_MAX, INT32_MAX);
 
-   if (dri2_dpy->is_different_gpu) {
+   if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
       _EGLContext *ctx = _eglGetCurrentContext();
       struct dri2_egl_context *dri2_ctx = dri2_egl_context(ctx);
       dri2_dpy->image->blitImage(dri2_ctx->dri_context,
@@ -1714,8 +1780,8 @@ drm_handle_device(void *data, struct wl_drm *drm, const char *device)
    if (!dri2_dpy->device_name)
       return;
 
-   dri2_dpy->fd = loader_open_device(dri2_dpy->device_name);
-   if (dri2_dpy->fd == -1) {
+   dri2_dpy->fd_render_gpu = loader_open_device(dri2_dpy->device_name);
+   if (dri2_dpy->fd_render_gpu == -1) {
       _eglLog(_EGL_WARNING, "wayland-egl: could not open %s (%s)",
               dri2_dpy->device_name, strerror(errno));
       free(dri2_dpy->device_name);
@@ -1723,12 +1789,12 @@ drm_handle_device(void *data, struct wl_drm *drm, const char *device)
       return;
    }
 
-   if (drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER) {
+   if (drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER) {
       dri2_dpy->authenticated = true;
    } else {
-      if (drmGetMagic(dri2_dpy->fd, &magic)) {
-         close(dri2_dpy->fd);
-         dri2_dpy->fd = -1;
+      if (drmGetMagic(dri2_dpy->fd_render_gpu, &magic)) {
+         close(dri2_dpy->fd_render_gpu);
+         dri2_dpy->fd_render_gpu = -1;
          free(dri2_dpy->device_name);
          dri2_dpy->device_name = NULL;
          _eglLog(_EGL_WARNING, "wayland-egl: drmGetMagic failed");
@@ -1853,7 +1919,7 @@ default_dmabuf_feedback_main_device(void *data,
    }
 
    dri2_dpy->device_name = node;
-   dri2_dpy->fd = fd;
+   dri2_dpy->fd_render_gpu = fd;
    dri2_dpy->authenticated = true;
 }
 
@@ -2035,7 +2101,7 @@ dri2_wl_add_configs_for_visuals(_EGLDisplay *disp)
          }
       }
 
-      if (!assigned && dri2_dpy->is_different_gpu) {
+      if (!assigned && dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
          struct dri2_egl_config *dri2_conf;
          int alt_dri_image_format, c, s;
 
@@ -2094,7 +2160,8 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    disp->DriverData = (void *) dri2_dpy;
 
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
@@ -2150,7 +2217,7 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
 
    /* We couldn't retrieve a render node from the dma-buf feedback (or the
     * feedback was not advertised at all), so we must fallback to wl_drm. */
-   if (dri2_dpy->fd == -1) {
+   if (dri2_dpy->fd_render_gpu == -1) {
       /* wl_drm not advertised by compositor, so can't continue */
       if (dri2_dpy->wl_drm_name == 0)
          goto cleanup;
@@ -2158,7 +2225,7 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
 
       if (dri2_dpy->wl_drm == NULL)
          goto cleanup;
-      if (roundtrip(dri2_dpy) < 0 || dri2_dpy->fd == -1)
+      if (roundtrip(dri2_dpy) < 0 || dri2_dpy->fd_render_gpu == -1)
          goto cleanup;
 
       if (!dri2_dpy->authenticated &&
@@ -2166,9 +2233,9 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
          goto cleanup;
    }
 
-   dri2_dpy->fd = loader_get_user_preferred_fd(dri2_dpy->fd,
-                                               &dri2_dpy->is_different_gpu);
-   dev = _eglAddDevice(dri2_dpy->fd, false);
+   loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu, &dri2_dpy->fd_display_gpu);
+
+   dev = _eglAddDevice(dri2_dpy->fd_render_gpu, false);
    if (!dev) {
       _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
       goto cleanup;
@@ -2176,9 +2243,9 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
 
    disp->Device = dev;
 
-   if (dri2_dpy->is_different_gpu) {
+   if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
       free(dri2_dpy->device_name);
-      dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd);
+      dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
       if (!dri2_dpy->device_name) {
          _eglError(EGL_BAD_ALLOC, "wayland-egl: failed to get device name "
                                   "for requested GPU");
@@ -2190,9 +2257,9 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
     * will return a render-node when the requested gpu is different
     * to the server, but also if the client asks for the same gpu than
     * the server by requesting its pci-id */
-   dri2_dpy->is_render_node = drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER;
+   dri2_dpy->is_render_node = drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER;
 
-   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd);
+   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    if (dri2_dpy->driver_name == NULL) {
       _eglError(EGL_BAD_ALLOC, "DRI2: failed to get driver name");
       goto cleanup;
@@ -2237,7 +2304,7 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
       }
    }
 
-   if (dri2_dpy->is_different_gpu &&
+   if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu &&
        (dri2_dpy->image->base.version < 9 ||
         dri2_dpy->image->blitImage == NULL)) {
       _eglLog(_EGL_WARNING, "wayland-egl: Different GPU selected, but the "
@@ -2257,7 +2324,7 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
     * because the buffer of the EGLImage has likely a tiling mode the server
     * gpu won't support. These is no way to check for now. Thus do not support the
     * extension */
-   if (!dri2_dpy->is_different_gpu)
+   if (dri2_dpy->fd_render_gpu == dri2_dpy->fd_display_gpu)
       disp->Extensions.WL_create_wayland_buffer_from_image = EGL_TRUE;
 
    disp->Extensions.EXT_buffer_age = EGL_TRUE;
@@ -2700,7 +2767,7 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
    disp->DriverData = (void *) dri2_dpy;
 
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
@@ -2715,7 +2782,7 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
       dri2_dpy->wl_dpy = disp->PlatformDisplay;
    }
 
-   dev = _eglAddDevice(dri2_dpy->fd, true);
+   dev = _eglAddDevice(dri2_dpy->fd_render_gpu, true);
    if (!dev) {
       _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
       goto cleanup;
@@ -2800,10 +2867,10 @@ dri2_teardown_wayland(struct dri2_egl_display *dri2_dpy)
       wl_shm_destroy(dri2_dpy->wl_shm);
    if (dri2_dpy->wl_registry)
       wl_registry_destroy(dri2_dpy->wl_registry);
-   if (dri2_dpy->wl_queue)
-      wl_event_queue_destroy(dri2_dpy->wl_queue);
    if (dri2_dpy->wl_dpy_wrapper)
       wl_proxy_wrapper_destroy(dri2_dpy->wl_dpy_wrapper);
+   if (dri2_dpy->wl_queue)
+      wl_event_queue_destroy(dri2_dpy->wl_queue);
 
    if (dri2_dpy->own_device)
       wl_display_disconnect(dri2_dpy->wl_dpy);

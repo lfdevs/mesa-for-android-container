@@ -617,7 +617,7 @@ static bool si_query_hw_prepare_buffer(struct si_context *sctx, struct si_query_
        query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE ||
        query->b.type == PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE) {
       unsigned max_rbs = screen->info.max_render_backends;
-      unsigned enabled_rb_mask = screen->info.enabled_rb_mask;
+      uint64_t enabled_rb_mask = screen->info.enabled_rb_mask;
       unsigned num_results;
       unsigned i, j;
 
@@ -625,7 +625,7 @@ static bool si_query_hw_prepare_buffer(struct si_context *sctx, struct si_query_
       num_results = qbuf->buf->b.b.width0 / query->result_size;
       for (j = 0; j < num_results; j++) {
          for (i = 0; i < max_rbs; i++) {
-            if (!(enabled_rb_mask & (1 << i))) {
+            if (!(enabled_rb_mask & (1ull << i))) {
                results[(i * 4) + 1] = 0x80000000;
                results[(i * 4) + 3] = 0x80000000;
             }
@@ -813,22 +813,16 @@ static void si_query_hw_do_emit_start(struct si_context *sctx, struct si_query_h
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE: {
       radeon_begin(cs);
-      if (sctx->gfx_level >= GFX11) {
-         uint64_t rb_mask = BITFIELD64_MASK(sctx->screen->info.max_render_backends);
-
+      if (sctx->gfx_level >= GFX11 &&
+          sctx->screen->info.pfp_fw_version >= EVENT_WRITE_ZPASS_PFP_VERSION) {
+         radeon_emit(PKT3(PKT3_EVENT_WRITE_ZPASS, 1, 0));
+      } else {
          radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
-         radeon_emit(EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_CONTROL) | EVENT_INDEX(1));
-         radeon_emit(PIXEL_PIPE_STATE_CNTL_COUNTER_ID(0) |
-                     PIXEL_PIPE_STATE_CNTL_STRIDE(2) |
-                     PIXEL_PIPE_STATE_CNTL_INSTANCE_EN_LO(rb_mask));
-         radeon_emit(PIXEL_PIPE_STATE_CNTL_INSTANCE_EN_HI(rb_mask));
+         if (sctx->gfx_level >= GFX11)
+            radeon_emit(EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_DUMP) | EVENT_INDEX(1));
+         else
+            radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
       }
-
-      radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
-      if (sctx->gfx_level >= GFX11)
-         radeon_emit(EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_DUMP) | EVENT_INDEX(1));
-      else
-         radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
       radeon_emit(va);
       radeon_emit(va >> 32);
       radeon_end();
@@ -935,11 +929,16 @@ static void si_query_hw_do_emit_stop(struct si_context *sctx, struct si_query_hw
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE: {
       va += 8;
       radeon_begin(cs);
-      radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
-      if (sctx->gfx_level >= GFX11)
-         radeon_emit(EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_DUMP) | EVENT_INDEX(1));
-      else
-         radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
+      if (sctx->gfx_level >= GFX11 &&
+          sctx->screen->info.pfp_fw_version >= EVENT_WRITE_ZPASS_PFP_VERSION) {
+         radeon_emit(PKT3(PKT3_EVENT_WRITE_ZPASS, 1, 0));
+      } else {
+         radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
+         if (sctx->gfx_level >= GFX11)
+            radeon_emit(EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_DUMP) | EVENT_INDEX(1));
+         else
+            radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
+      }
       radeon_emit(va);
       radeon_emit(va >> 32);
       radeon_end();

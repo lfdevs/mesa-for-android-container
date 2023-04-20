@@ -385,7 +385,8 @@ BEGIN_TEST(optimize.sdwa.from_vop3)
       //! p_unit_test 0, %res0
       Temp byte0_b = bld.pseudo(aco_opcode::p_extract, bld.def(v1), inputs[1], Operand::zero(),
                                 Operand::c32(8u), Operand::zero());
-      VOP3_instruction *mul = &bld.vop2_e64(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], byte0_b)->vop3();
+      VALU_instruction* mul =
+         &bld.vop2_e64(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], byte0_b)->valu();
       mul->neg[0] = true;
       mul->abs[0] = true;
       writeout(0, mul->definitions[0].getTemp());
@@ -396,7 +397,7 @@ BEGIN_TEST(optimize.sdwa.from_vop3)
       //! p_unit_test 1, %res1
       byte0_b = bld.pseudo(aco_opcode::p_extract, bld.def(v1), inputs[1], Operand::zero(),
                            Operand::c32(8u), Operand::zero());
-      mul = &bld.vop2_e64(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], byte0_b)->vop3();
+      mul = &bld.vop2_e64(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], byte0_b)->valu();
       mul->omod = 2;
       writeout(1, mul->definitions[0].getTemp());
 

@@ -31,6 +31,8 @@
 
 #include "ir3/ir3_shader.h"
 
+BEGINC;
+
 /*
  * An in-memory cache for mapping shader state objects plus shader key to
  * hw specific state object for the specified shader variant.  This is to
@@ -84,5 +86,7 @@ struct ir3_program_state *ir3_cache_lookup(struct ir3_cache *cache,
  * cache entries which reference that state object.
  */
 void ir3_cache_invalidate(struct ir3_cache *cache, void *stobj);
+
+ENDC;
 
 #endif /* IR3_CACHE_H_ */

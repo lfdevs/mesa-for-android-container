@@ -17,6 +17,7 @@ include = [
     "dEQP-VK.draw.*",
     "dEQP-VK.dynamic_state.*",
     "dEQP-VK.geometry.*",
+    "dEQP-VK.image.*",
     "dEQP-VK.info.*",
     "dEQP-VK.memory.*",
     "dEQP-VK.pipeline*cache.*",

@@ -70,7 +70,7 @@ foreach g : [['40', isl_gfx4_files], ['50', []], ['60', isl_gfx6_files],
     'isl_per_hw_ver@0@'.format(_gfx_ver),
     [g[1], isl_per_hw_ver_files, gen_xml_pack],
     include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
-    dependencies : idep_mesautil,
+    dependencies : [idep_mesautil, idep_intel_dev],
     c_args : [
       no_override_init_args,
       '-DGFX_VERx10=@0@'.format(_gfx_ver)
@@ -100,8 +100,9 @@ isl_tiled_memcpy = static_library(
   include_directories : [
     inc_include, inc_src, inc_mesa, inc_gallium, inc_intel,
   ],
-  dependencies : idep_mesautil,
-  c_args : [no_override_init_args, c_sse2_arg],
+
+  dependencies : [idep_mesautil, idep_intel_dev],
+  c_args : [no_override_init_args, sse2_arg],
   gnu_symbol_visibility : 'hidden',
   extra_files : ['isl_tiled_memcpy.c']
 )
@@ -113,9 +114,9 @@ if with_sse41
     include_directories : [
       inc_include, inc_src, inc_mesa, inc_gallium, inc_intel,
     ],
-    dependencies : idep_mesautil,
+    dependencies : [idep_mesautil, idep_intel_dev],
     link_args : ['-Wl,--exclude-libs=ALL'],
-    c_args : [no_override_init_args, '-msse2', sse41_args],
+    c_args : [no_override_init_args, sse2_arg, sse41_args],
     gnu_symbol_visibility : 'hidden',
     extra_files : ['isl_tiled_memcpy.c']
   )
@@ -139,7 +140,7 @@ libisl = static_library(
   [libisl_files, isl_format_layout_c, genX_bits_h],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   link_with : [isl_per_hw_ver_libs, isl_tiled_memcpy, isl_tiled_memcpy_sse41],
-  dependencies : idep_mesautil,
+  dependencies : [idep_mesautil, idep_intel_dev],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
 )
@@ -150,9 +151,9 @@ if with_tests
     executable(
       'isl_surf_get_image_offset_test',
       'tests/isl_surf_get_image_offset_test.c',
-      dependencies : [dep_m, idep_mesautil],
+      dependencies : [dep_m, idep_mesautil, idep_intel_dev],
+      link_with:  libisl,
       include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
-      link_with : [libisl, libintel_dev],
     ),
     suite : ['intel'],
   )
@@ -164,12 +165,12 @@ if with_tests
         'tests/isl_aux_info_test.cpp',
         'isl_aux_info.c',
       ],
-      dependencies : [dep_m, idep_gtest, idep_mesautil],
+      dependencies : [dep_m, idep_gtest, idep_mesautil, idep_intel_dev],
       include_directories : [inc_include, inc_src, inc_gallium, inc_intel],
       c_args : '-DIN_UNIT_TEST',
       cpp_args : '-DIN_UNIT_TEST',
     ),
     suite : ['intel'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif

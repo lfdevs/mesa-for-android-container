@@ -372,6 +372,8 @@ struct rogue_fwif_transfer_regs {
    uint32_t isp_render_origin;
    uint32_t isp_ctl;
 
+   /* Only used when feature S7_TOP_INFRASTRUCTURE present. */
+   uint32_t isp_xtp_pipe_enable;
    uint32_t isp_aa;
 
    uint32_t event_pixel_pds_info;
@@ -381,22 +383,20 @@ struct rogue_fwif_transfer_regs {
 
    uint32_t isp_render;
    uint32_t isp_rgn;
-   /* FIXME: HIGH: RGX_FEATURE_GPU_MULTICORE_SUPPORT changes the structure's
-    * layout. Commenting out for now as it's not supported by 4.V.2.51.
-    */
-   /* uint32_t frag_screen; */
+
+   /* Only used when feature GPU_MULTICORE_SUPPORT present. */
+   uint32_t frag_screen;
+
    /** All values below the ALIGN_ATTR must be 64 bit. */
    uint64_t ALIGN_ATTR(8) pds_bgnd0_base;
    uint64_t pds_bgnd1_base;
    uint64_t pds_bgnd3_sizeinfo;
 
    uint64_t isp_mtile_base;
-   /* FIXME: HIGH: RGX_PBE_WORDS_REQUIRED_FOR_TQS changes the structure's
-    * layout.
-    */
    /* TQ_MAX_RENDER_TARGETS * PBE_STATE_SIZE */
+#define ROGUE_PBE_WORDS_REQUIRED_FOR_TQS 3
    uint64_t pbe_wordx_mrty[PVR_TRANSFER_MAX_RENDER_TARGETS *
-                           ROGUE_NUM_PBESTATE_REG_WORDS];
+                           ROGUE_PBE_WORDS_REQUIRED_FOR_TQS];
 };
 
 /**
@@ -408,6 +408,8 @@ struct rogue_fwif_cmd_transfer {
    struct rogue_fwif_transfer_regs ALIGN_ATTR(8) regs;
 
    uint32_t flags;
+
+   uint32_t padding;
 };
 
 static_assert(

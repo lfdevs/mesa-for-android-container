@@ -489,7 +489,7 @@ BlockSheduler::schedule_alu(Shader::ShaderBlocks& out_blocks)
       }
    }
 
-   /* Schedule groups first. unless we have a pending LDS instuction
+   /* Schedule groups first. unless we have a pending LDS instruction
     * We don't want the LDS instructions to be too far apart because the
     * fetch + read from queue has to be in the same ALU CF block */
    if (!alu_groups_ready.empty() && !has_lds_ready) {

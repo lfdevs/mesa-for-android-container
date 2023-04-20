@@ -150,6 +150,20 @@ AluReadportReservation::schedule_trans_instruction(const AluInstr& alu,
    return visitor2.success;
 }
 
+void AluReadportReservation::print(std::ostream& os) const
+{
+   os << "AluReadportReservation\n";
+   for (int i = 0; i < max_chan_channels; ++i) {
+      os << "  chan " << i << ":";
+      for (int j = 0; j < max_gpr_readports; ++j) {
+         os << m_hw_gpr[j][i] << " ";
+      }
+      os << "\n";
+   }
+   os << "\n";
+
+}
+
 AluReadportReservation::AluReadportReservation()
 {
    for (int i = 0; i < max_chan_channels; ++i) {
@@ -219,8 +233,8 @@ AluReadportReservation::cycle_vec(AluBankSwizzle swz, int src)
    static const int mapping[AluBankSwizzle::alu_vec_unknown][max_gpr_readports] = {
       {0, 1, 2},
       {0, 2, 1},
-      {1, 0, 2},
       {1, 2, 0},
+      {1, 0, 2},
       {2, 0, 1},
       {2, 1, 0}
    };

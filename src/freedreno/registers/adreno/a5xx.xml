@@ -1689,24 +1689,6 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 
 	<reg32 offset="0x8800" name="GPMU_INST_RAM_BASE"/>
 	<reg32 offset="0x9800" name="GPMU_DATA_RAM_BASE"/>
-	<reg32 offset="0xa881" name="GPMU_SP_POWER_CNTL"/>
-	<reg32 offset="0xa886" name="GPMU_RBCCU_CLOCK_CNTL"/>
-	<reg32 offset="0xa887" name="GPMU_RBCCU_POWER_CNTL"/>
-	<reg32 offset="0xa88b" name="GPMU_SP_PWR_CLK_STATUS">
-		<bitfield name="PWR_ON" pos="20" type="boolean"/>
-	</reg32>
-	<reg32 offset="0xa88d" name="GPMU_RBCCU_PWR_CLK_STATUS">
-		<bitfield name="PWR_ON" pos="20" type="boolean"/>
-	</reg32>
-	<reg32 offset="0xa891" name="GPMU_PWR_COL_STAGGER_DELAY"/>
-	<reg32 offset="0xa892" name="GPMU_PWR_COL_INTER_FRAME_CTRL"/>
-	<reg32 offset="0xa893" name="GPMU_PWR_COL_INTER_FRAME_HYST"/>
-	<reg32 offset="0xa894" name="GPMU_PWR_COL_BINNING_CTRL"/>
-	<reg32 offset="0xa8c1" name="GPMU_WFI_CONFIG"/>
-	<reg32 offset="0xa8d6" name="GPMU_RBBM_INTR_INFO"/>
-	<reg32 offset="0xa8d8" name="GPMU_CM3_SYSRESET"/>
-	<reg32 offset="0xa8e0" name="GPMU_GENERAL_0"/>
-	<reg32 offset="0xa8e1" name="GPMU_GENERAL_1"/>
 
 <!--
 /* COUNTABLE FOR SP PERFCOUNTER */
@@ -1779,8 +1761,28 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<reg32 offset="0xa87b" name="GPMU_ALWAYS_ON_COUNTER_RESET"/>
 	<reg32 offset="0xa87c" name="GPMU_POWER_COUNTER_SELECT_0"/>
 	<reg32 offset="0xa87d" name="GPMU_POWER_COUNTER_SELECT_1"/>
+
+	<reg32 offset="0xa880" name="GPMU_GPMU_SP_CLOCK_CONTROL"/>
+	<reg32 offset="0xa881" name="GPMU_SP_POWER_CNTL"/>
+	<reg32 offset="0xa886" name="GPMU_RBCCU_CLOCK_CNTL"/>
+	<reg32 offset="0xa887" name="GPMU_RBCCU_POWER_CNTL"/>
+	<reg32 offset="0xa88b" name="GPMU_SP_PWR_CLK_STATUS">
+		<bitfield name="PWR_ON" pos="20" type="boolean"/>
+	</reg32>
+	<reg32 offset="0xa88d" name="GPMU_RBCCU_PWR_CLK_STATUS">
+		<bitfield name="PWR_ON" pos="20" type="boolean"/>
+	</reg32>
+	<reg32 offset="0xa891" name="GPMU_PWR_COL_STAGGER_DELAY"/>
+	<reg32 offset="0xa892" name="GPMU_PWR_COL_INTER_FRAME_CTRL"/>
+	<reg32 offset="0xa893" name="GPMU_PWR_COL_INTER_FRAME_HYST"/>
+	<reg32 offset="0xa894" name="GPMU_PWR_COL_BINNING_CTRL"/>
 	<reg32 offset="0xa8a3" name="GPMU_CLOCK_THROTTLE_CTRL"/>
 	<reg32 offset="0xa8a8" name="GPMU_THROTTLE_UNMASK_FORCE_CTRL"/>
+	<reg32 offset="0xa8c1" name="GPMU_WFI_CONFIG"/>
+	<reg32 offset="0xa8d6" name="GPMU_RBBM_INTR_INFO"/>
+	<reg32 offset="0xa8d8" name="GPMU_CM3_SYSRESET"/>
+	<reg32 offset="0xa8e0" name="GPMU_GENERAL_0"/>
+	<reg32 offset="0xa8e1" name="GPMU_GENERAL_1"/>
 	<reg32 offset="0xac00" name="GPMU_TEMP_SENSOR_ID"/>
 	<reg32 offset="0xac01" name="GPMU_TEMP_SENSOR_CONFIG"/>
 	<reg32 offset="0xac02" name="GPMU_TEMP_VAL"/>

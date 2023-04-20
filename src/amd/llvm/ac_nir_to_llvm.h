@@ -50,8 +50,7 @@ static inline unsigned ac_llvm_reg_index_soa(unsigned index, unsigned chan)
 bool ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
                       const struct ac_shader_args *args, struct nir_shader *nir);
 
-void ac_handle_shader_output_decl(struct ac_llvm_context *ctx, struct ac_shader_abi *abi,
-                                  struct nir_shader *nir, struct nir_variable *variable,
-                                  gl_shader_stage stage);
+void ac_fixup_ls_hs_input_vgprs(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
+                                const struct ac_shader_args *args);
 
 #endif /* AC_NIR_TO_LLVM_H */

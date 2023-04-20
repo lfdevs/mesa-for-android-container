@@ -130,12 +130,12 @@ get_additional_semantic_info(nir_shader *s, nir_variable *var, struct semantic_i
 
    bool is_depth = is_depth_output(info->kind);
 
-   if (!glsl_type_is_struct(type)) {
+   if (!glsl_type_is_struct(glsl_without_array(type))) {
       info->sig_comp_type = dxil_get_comp_type(type);
-   } else if (var->data.interpolation == INTERP_MODE_FLAT) {
-      info->sig_comp_type = DXIL_COMP_TYPE_U32;
-      info->comp_type = DXIL_PROG_SIG_COMP_TYPE_UINT32;
    } else {
+      /* For structs, just emit them as float registers. This way, they can be
+       * interpolated or not, and it doesn't matter, and it avoids linking issues
+       * that we'd see if the type here tried to depend on (e.g.) interp mode. */
       info->sig_comp_type = DXIL_COMP_TYPE_F32;
       info->comp_type = DXIL_PROG_SIG_COMP_TYPE_FLOAT32;
    }

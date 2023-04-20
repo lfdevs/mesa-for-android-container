@@ -1,9 +1,6 @@
 # CTS bug: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4200
 KHR-GLES31.core.compute_shader.max,Fail
 
-# "Invalid result. Region (0x0). Expected: 0 got 1"
-KHR-GLES31.core.viewport_array.dynamic_viewport_index,Fail
-
 # "Fail, buffer content is not well preserved when age > 0 (Fail)"
 dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_clear_clear,Fail
 dEQP-EGL.functional.buffer_age.no_preserve.no_resize.odd_clear_clear_even_clear,Fail
@@ -89,81 +86,14 @@ dEQP-EGL.functional.buffer_age.no_preserve.resize_before_swap.odd_render_render_
 
 dEQP-EGL.functional.query_context.get_current_context.rgba8888_window,Crash
 
-# Around the time of running these tests there are some warnings from the kernel in dma_resv.c, and at least
-# some failures look like not waiting for rendering to complete.
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2_gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2_gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2_gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1_gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles1.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_context.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2_gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_context.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer,Fail
-
-565-nozs-dEQP-GLES3.functional.color_clear.complex_rgb,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_width,Fail
+wayland-dEQP-EGL.functional.resize.surface_size.stretch_height,Fail
 
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_ust_test,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@egl_chromium_sync_control@conformance,Fail
-
-# "GLX_MESA_copy_sub_buffer found in both client and server extension strings, but missing from unified string."
-glx@extension string sanity,Fail
 
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
@@ -185,22 +115,13 @@ glx@glx_ext_import_context@query context info,Fail
 glx@glx-buffer-age,Fail
 glx@glx-buffer-age vblank_mode=0,Fail
 
-glx@glx-make-current,Crash
 glx@glx-multi-window-single-context,Crash
-glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-tfp,Crash
 
-# errors like:
-# X Error of failed request:  BadWindow (invalid Window parameter)
-# ../src/gallium/drivers/zink/zink_resource.c:1215: resource_create: Assertion `res->obj->dt' failed.
-glx@glx-visuals-depth,Crash
-
 # ../src/gallium/drivers/zink/zink_kopper.c:859: zink_kopper_update: Assertion `pres->bind & PIPE_BIND_DISPLAY_TARGET' failed.
 glx@glx-visuals-depth -pixmap,Crash
-
 glx@glx-visuals-stencil -pixmap,Crash
-glx@glx-visuals-stencil,Crash
 
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
@@ -209,9 +130,6 @@ shaders@point-vertex-id gl_vertexid divisor,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
 shaders@point-vertex-id gl_vertexid,Fail
-
-spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
-spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 
@@ -224,8 +142,7 @@ spec@!opengl 1.1@depthstencil-default_fb-blit samples=2,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=6,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=8,Fail
 
-spec@!opengl 1.1@line-aa-width,Fail
-spec@!opengl 1.1@line-flat-clip-color,Fail
+spec@!opengl 1.1@line-smooth-stipple,Fail
 
 spec@!opengl 1.1@polygon-mode-facing,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
@@ -257,72 +174,6 @@ spec@!opengl 1.1@linestipple,Fail
 # (and more)
 spec@!opengl 1.1@polygon-mode,Fail
 
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@read-front samples=16,Fail
-spec@!opengl 1.1@read-front samples=2,Fail
-spec@!opengl 1.1@read-front samples=4,Fail
-spec@!opengl 1.1@read-front samples=6,Fail
-spec@!opengl 1.1@read-front samples=8,Fail
-spec@!opengl 1.1@read-front,Fail
-
-# depth texturing: zink is returning intensity shadow comparisons and depth samples, regardless of depth mode.
-# Check out the "splat" in zink_compiler.c around !is_new_style_shadow, and the swizzle rewrite for depth
-# textures in zink_create_sampler_view().
-spec@!opengl 2.0@depth-tex-modes-glsl,Fail
-spec@arb_depth_texture@depth-tex-modes,Fail
-spec@arb_fragment_program_shadow@tex-shadow1d,Fail
-spec@arb_fragment_program_shadow@tex-shadow2d,Fail
-spec@arb_fragment_program_shadow@tex-shadow2drect,Fail
-spec@arb_fragment_program_shadow@txp-shadow1d,Fail
-spec@arb_fragment_program_shadow@txp-shadow2d,Fail
-spec@arb_fragment_program_shadow@txp-shadow2drect,Fail
-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-01,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-03,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-07,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-08,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative,Fail
-spec@arb_texture_rectangle@glsl-fs-shadow2drect-01,Fail
-spec@arb_texture_rectangle@glsl-fs-shadow2drect-03,Fail
-spec@arb_texture_rectangle@glsl-fs-shadow2drect-07,Fail
-spec@arb_texture_rectangle@glsl-fs-shadow2drect-08,Fail
-spec@arb_texture_rectangle@glsl-fs-shadow2drect,Fail
-spec@arb_texture_rectangle@glsl-fs-shadow2drectproj,Fail
-spec@arb_texture_rg@execution@fs-shadow2d-red-01,Fail
-spec@arb_texture_rg@execution@fs-shadow2d-red-02,Fail
-spec@arb_texture_rg@execution@fs-shadow2d-red-03,Fail
-spec@ext_texture_array@glsl-fs-shadow1darray-01,Fail
-spec@ext_texture_array@glsl-fs-shadow1darray-03,Fail
-spec@ext_texture_array@glsl-fs-shadow1darray-07,Fail
-spec@ext_texture_array@glsl-fs-shadow1darray-08,Fail
-spec@ext_texture_array@glsl-fs-shadow1darray-bias,Fail
-spec@ext_texture_array@glsl-fs-shadow1darray,Fail
-spec@ext_texture_array@glsl-fs-shadow2darray-01,Fail
-spec@ext_texture_array@glsl-fs-shadow2darray-03,Fail
-spec@ext_texture_array@glsl-fs-shadow2darray-07,Fail
-spec@ext_texture_array@glsl-fs-shadow2darray-08,Fail
-spec@ext_texture_array@glsl-fs-shadow2darray,Fail
-spec@ext_texture_swizzle@depth_texture_mode_and_swizzle,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-01,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-03,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-07,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-08,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-bias,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1dproj-bias,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow1dproj,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-01,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-03,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-07,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-08,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-bias,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2dproj-bias,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2dproj,Fail
-
-spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
-spec@!opengl 2.0@gl-2.0-edgeflag,Fail
-
 spec@!opengl 2.0@vs-point_size-zero,Fail
 
 spec@!opengl 2.1@pbo,Fail
@@ -350,11 +201,15 @@ spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
 spec@arb_gpu_shader_fp64@execution@glsl-fs-loop-unroll-mul-fp64,Fail
 spec@arb_gpu_shader_fp64@uniform_buffers@fs-ubo-load.indirect.3,Fail
 
-spec@arb_point_sprite@arb_point_sprite-checkerboard,Fail
-spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
-
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
+
+# failing since at least e82369d0 (2023-02-03)
+spec@arb_query_buffer_object@qbo,Fail
+spec@arb_query_buffer_object@qbo@query-GL_CLIPPING_INPUT_PRIMITIVES-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
+spec@arb_query_buffer_object@qbo@query-GL_PRIMITIVES_SUBMITTED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
+spec@arb_query_buffer_object@qbo@query-GL_SAMPLES_PASSED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
 
 spec@arb_sample_locations@test,Fail
 spec@arb_sample_locations@test@MSAA: 1- X: 0- Y: 0- Grid: false,Fail
@@ -721,7 +576,7 @@ spec@arb_shader_image_load_store@host-mem-barrier@Transform feedback/WaW/one bit
 spec@arb_shader_image_load_store@host-mem-barrier@Transform feedback/WaW/one bit barrier test/4x4,Fail
 spec@arb_shader_image_load_store@host-mem-barrier@Transform feedback/WaW/one bit barrier test/64x64,Fail
 
-spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-swiz-index-wr,Fail
+spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 
 # "../src/gallium/drivers/zink/zink_compiler.c:2071: assign_producer_var_io: Assertion `*reserved < MAX_VARYING' failed."
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-float-index-rd,Crash
@@ -794,12 +649,6 @@ spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8I_EXT,Fail
 spec@arb_texture_buffer_object@formats (vs- arb)@GL_LUMINANCE8UI_EXT,Fail
 
-spec@arb_texture_cube_map@copyteximage cube samples=16,Fail
-spec@arb_texture_cube_map@copyteximage cube samples=2,Fail
-spec@arb_texture_cube_map@copyteximage cube samples=4,Fail
-spec@arb_texture_cube_map@copyteximage cube samples=6,Fail
-spec@arb_texture_cube_map@copyteximage cube samples=8,Fail
-
 spec@egl 1.4@eglterminate then unbind context,Fail
 
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -837,18 +686,9 @@ spec@ext_framebuffer_multisample@interpolation 8 non-centroid-disabled,Fail
 
 spec@ext_packed_float@query-rgba-signed-components,Fail
 
-spec@ext_texture_array@copyteximage 1d_array samples=16,Fail
-spec@ext_texture_array@copyteximage 1d_array samples=2,Fail
-spec@ext_texture_array@copyteximage 1d_array samples=4,Fail
-spec@ext_texture_array@copyteximage 1d_array samples=6,Fail
-spec@ext_texture_array@copyteximage 1d_array samples=8,Fail
-spec@ext_texture_array@copyteximage 2d_array samples=16,Fail
-spec@ext_texture_array@copyteximage 2d_array samples=2,Fail
-spec@ext_texture_array@copyteximage 2d_array samples=4,Fail
-spec@ext_texture_array@copyteximage 2d_array samples=6,Fail
-spec@ext_texture_array@copyteximage 2d_array samples=8,Fail
-
 spec@ext_transform_feedback@tessellation triangle_fan flat_first,Fail
+spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
+spec@ext_transform_feedback@tessellation quads wireframe,Fail
 
 spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
@@ -861,3 +701,7 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
+
+# New CTS failures in 1.3.5.0
+KHR-GL46.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
+KHR-GL46.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail

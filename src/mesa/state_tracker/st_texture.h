@@ -186,6 +186,13 @@ st_texture_image_insert_transfer(struct gl_texture_image *stImage,
                                  unsigned index,
                                  struct pipe_transfer *transfer);
 
+/**
+ * Returns the level of the gl_texture_image with respect to the resource it
+ * is allocated within. Example: returns 0 for non-finalized texture.
+ */
+GLuint
+st_texture_image_resource_level(struct gl_texture_image *stImage);
+
 /* Return a pointer to an image within a texture.  Return image stride as
  * well.
  */

@@ -37,8 +37,7 @@
 #include "vk_enum_to_str.h"
 
 /** Log an error message.  */
-void panvk_printflike(1, 2)
-panvk_logi(const char *format, ...)
+void panvk_printflike(1, 2) panvk_logi(const char *format, ...)
 {
    va_list va;
 

@@ -5,7 +5,8 @@ set -e
 dxvk_install_release() {
     local DXVK_VERSION=${1:-"1.10.3"}
 
-    wget "https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz"
+    curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+	-O "https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz"
     tar xzpf dxvk-"${DXVK_VERSION}".tar.gz
     # https://github.com/doitsujin/dxvk/issues/2921
     sed -i 's/wine="wine"/wine="wine32"/' "dxvk-${DXVK_VERSION}"/setup_dxvk.sh

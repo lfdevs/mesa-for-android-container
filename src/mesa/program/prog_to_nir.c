@@ -1036,7 +1036,7 @@ prog_to_nir(const struct gl_context *ctx, const struct gl_program *prog,
    s->info.uses_texture_gather = false;
    s->info.clip_distance_array_size = 0;
    s->info.cull_distance_array_size = 0;
-   s->info.separate_shader = false;
+   s->info.separate_shader = true;
    s->info.io_lowered = false;
    s->info.internal = false;
 

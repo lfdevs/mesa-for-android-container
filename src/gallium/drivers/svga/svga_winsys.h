@@ -505,6 +505,9 @@ struct svga_winsys_screen
    SVGA3dHardwareVersion
    (*get_hw_version)(struct svga_winsys_screen *sws);
 
+   int
+   (*get_fd)(struct svga_winsys_screen *sws);
+
    boolean
    (*get_cap)(struct svga_winsys_screen *sws,
               SVGA3dDevCapIndex index,

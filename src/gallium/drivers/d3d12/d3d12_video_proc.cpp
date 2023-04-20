@@ -185,7 +185,6 @@ d3d12_video_processor_process_frame(struct pipe_video_codec *codec,
 
     // Setup process frame arguments for current input texture.
 
-    unsigned curInputStreamIndex = pD3D12Proc->m_ProcessInputs.size();
     D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1 InputArguments = {
         {
         { // D3D12_VIDEO_PROCESS_INPUT_STREAM InputStream[0];
@@ -227,7 +226,7 @@ d3d12_video_processor_process_frame(struct pipe_video_codec *codec,
             // } RECT;
             { process_properties->src_region.x0/*left*/, process_properties->src_region.y0/*top*/, process_properties->src_region.x1/*right*/, process_properties->src_region.y1/*bottom*/ },
             { process_properties->dst_region.x0/*left*/, process_properties->dst_region.y0/*top*/, process_properties->dst_region.x1/*right*/, process_properties->dst_region.y1/*bottom*/ }, // D3D12_RECT DestinationRectangle;
-            pD3D12Proc->m_inputStreamDescs[curInputStreamIndex].EnableOrientation ? d3d12_video_processor_convert_pipe_rotation(process_properties->orientation) : D3D12_VIDEO_PROCESS_ORIENTATION_DEFAULT, // D3D12_VIDEO_PROCESS_ORIENTATION Orientation;
+            pD3D12Proc->m_inputStreamDescs[0].EnableOrientation ? d3d12_video_processor_convert_pipe_rotation(process_properties->orientation) : D3D12_VIDEO_PROCESS_ORIENTATION_DEFAULT, // D3D12_VIDEO_PROCESS_ORIENTATION Orientation;
         },
         D3D12_VIDEO_PROCESS_INPUT_STREAM_FLAG_NONE,
         { // D3D12_VIDEO_PROCESS_INPUT_STREAM_RATE RateInfo;
@@ -281,23 +280,6 @@ d3d12_video_processor_flush(struct pipe_video_codec * codec)
     assert(pD3D12Proc->m_spD3D12VideoDevice);
     assert(pD3D12Proc->m_spCommandQueue);
 
-    // Make the resources permanently resident for video use
-    d3d12_promote_to_permanent_residency(pD3D12Proc->m_pD3D12Screen, pD3D12Proc->m_OutputArguments.buffer->texture);
-    // Synchronize against the resources that are going to be read/written to
-    d3d12_resource_wait_idle(d3d12_context(pD3D12Proc->base.context),
-                        pD3D12Proc->m_OutputArguments.buffer->texture,
-                        true /*wantToWrite*/);
-
-    for(auto curInput : pD3D12Proc->m_InputBuffers)
-    {
-        // Make the resources permanently resident for video use
-        d3d12_promote_to_permanent_residency(pD3D12Proc->m_pD3D12Screen, curInput->texture);
-        // Synchronize against the resources that are going to be read/written to
-        d3d12_resource_wait_idle(d3d12_context(pD3D12Proc->base.context),
-                            curInput->texture,
-                            false /*wantToWrite*/);
-    }
-
     debug_printf("[d3d12_video_processor] d3d12_video_processor_flush started. Will flush video queue work and CPU wait on "
                     "fenceValue: %d\n",
                     pD3D12Proc->m_fenceValue);
@@ -305,6 +287,28 @@ d3d12_video_processor_flush(struct pipe_video_codec * codec)
     if (!pD3D12Proc->m_needsGPUFlush) {
         debug_printf("[d3d12_video_processor] d3d12_video_processor_flush started. Nothing to flush, all up to date.\n");
     } else {
+        debug_printf("[d3d12_video_processor] d3d12_video_processor_flush - Promoting the output texture %p to d3d12_permanently_resident.\n", 
+                     pD3D12Proc->m_OutputArguments.buffer->texture);
+
+        // Make the resources permanently resident for video use
+        d3d12_promote_to_permanent_residency(pD3D12Proc->m_pD3D12Screen, pD3D12Proc->m_OutputArguments.buffer->texture);
+        // Synchronize against the resources that are going to be read/written to
+        d3d12_resource_wait_idle(d3d12_context(pD3D12Proc->base.context),
+                            pD3D12Proc->m_OutputArguments.buffer->texture,
+                            true /*wantToWrite*/);
+
+        for(auto curInput : pD3D12Proc->m_InputBuffers)
+        {
+            debug_printf("[d3d12_video_processor] d3d12_video_processor_flush - Promoting the input texture %p to d3d12_permanently_resident.\n", 
+                         curInput->texture);
+            // Make the resources permanently resident for video use
+            d3d12_promote_to_permanent_residency(pD3D12Proc->m_pD3D12Screen, curInput->texture);
+            // Synchronize against the resources that are going to be read/written to
+            d3d12_resource_wait_idle(d3d12_context(pD3D12Proc->base.context),
+                                curInput->texture,
+                                false /*wantToWrite*/);
+        }
+
         HRESULT hr = pD3D12Proc->m_pD3D12Screen->dev->GetDeviceRemovedReason();
         if (hr != S_OK) {
             debug_printf("[d3d12_video_processor] d3d12_video_processor_flush"

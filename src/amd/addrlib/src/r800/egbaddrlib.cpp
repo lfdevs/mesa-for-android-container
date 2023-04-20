@@ -1559,6 +1559,8 @@ ADDR_E_RETURNCODE EgBasedLib::ComputeMacroTileEquation(
                     pEquation->xor2[bankBitStart + i] = equation.xor2[i];
                     pEquation->numBits++;
                 }
+
+                FillEqBitComponents(pEquation);
             }
         }
     }

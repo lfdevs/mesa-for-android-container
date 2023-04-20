@@ -58,11 +58,6 @@ traces:
   humus/VolumetricFogging2-v2.trace:
     gl-virgl:
       checksum: 7946d847e0d381495db96e25f4cfa0f6
-  itoral-gl-terrain-demo/demo-v2.trace:
-    gl-virgl:
-      label: [crash]
-      checksum: eb35b96d94ff1eda37aae5e5cc505bad
-      text: virtio_gpu OOM
   neverball/neverball-v2.trace:
     gl-virgl:
       checksum: f481391fd77e7339a44fe73304fce2f8

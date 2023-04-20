@@ -109,7 +109,9 @@ brw_nir_link_shaders(const struct brw_compiler *compiler,
                      nir_shader *producer, nir_shader *consumer);
 
 bool brw_nir_lower_cs_intrinsics(nir_shader *nir);
-bool brw_nir_lower_alpha_to_coverage(nir_shader *shader);
+bool brw_nir_lower_alpha_to_coverage(nir_shader *shader,
+                                     const struct brw_wm_prog_key *key,
+                                     const struct brw_wm_prog_data *prog_data);
 void brw_nir_lower_vs_inputs(nir_shader *nir,
                              bool edgeflag_is_last,
                              const uint8_t *vs_attrib_wa_flags);
@@ -125,8 +127,6 @@ void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue,
 void brw_nir_lower_fs_outputs(nir_shader *nir);
 
 bool brw_nir_lower_conversions(nir_shader *nir);
-
-bool brw_nir_lower_scoped_barriers(nir_shader *nir);
 
 bool brw_nir_lower_shading_rate_output(nir_shader *nir);
 
@@ -164,7 +164,7 @@ unsigned brw_nir_api_subgroup_size(const nir_shader *nir,
                                    unsigned hw_subgroup_size);
 
 enum brw_conditional_mod brw_cmod_for_nir_comparison(nir_op op);
-uint32_t brw_aop_for_nir_intrinsic(const nir_intrinsic_instr *atomic);
+enum lsc_opcode lsc_aop_for_nir_intrinsic(const nir_intrinsic_instr *atomic);
 enum brw_reg_type brw_type_for_nir_type(const struct intel_device_info *devinfo,
                                         nir_alu_type type);
 
@@ -187,10 +187,12 @@ bool brw_nir_opt_peephole_imul32x16(nir_shader *shader);
 bool brw_nir_clamp_per_vertex_loads(nir_shader *shader,
                                     unsigned input_vertices);
 
+bool brw_nir_blockify_uniform_loads(nir_shader *shader,
+                                    const struct intel_device_info *devinfo);
+
 void brw_nir_optimize(nir_shader *nir,
                       const struct brw_compiler *compiler,
-                      bool is_scalar,
-                      bool allow_copies);
+                      bool is_scalar);
 
 nir_shader *brw_nir_create_passthrough_tcs(void *mem_ctx,
                                            const struct brw_compiler *compiler,

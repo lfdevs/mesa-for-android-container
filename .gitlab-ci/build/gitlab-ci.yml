@@ -10,6 +10,7 @@
       - _build/meson-logs/*.txt
       - _build/meson-logs/strace
       - shader-db
+      - artifacts
 
 # Just Linux
 .build-linux:
@@ -21,15 +22,16 @@
   # Use ccache transparently, and print stats before/after
   before_script:
     - !reference [default, before_script]
-    - export PATH="/usr/lib/ccache:$PATH"
-    - export CCACHE_BASEDIR="$PWD"
-    - echo -e "\e[0Ksection_start:$(date +%s):ccache_before[collapsed=true]\r\e[0Kccache stats before build"
-    - ccache --show-stats
-    - echo -e "\e[0Ksection_end:$(date +%s):ccache_before\r\e[0K"
+    - |
+      export PATH="/usr/lib/ccache:$PATH"
+      export CCACHE_BASEDIR="$PWD"
+      if test -x /usr/bin/ccache; then
+        section_start ccache_before "ccache stats before build"
+        ccache --show-stats
+        section_end ccache_before
+      fi
   after_script:
-    - echo -e "\e[0Ksection_start:$(date +%s):ccache_after[collapsed=true]\r\e[0Kccache stats after build"
-    - ccache --show-stats
-    - echo -e "\e[0Ksection_end:$(date +%s):ccache_after\r\e[0K"
+    - if test -x /usr/bin/ccache; then ccache --show-stats | grep "cache hit rate"; fi
     - !reference [default, after_script]
 
 .build-windows:
@@ -73,16 +75,17 @@ debian-testing:
       -D glx=dri
       -D gbm=enabled
       -D egl=enabled
-      -D platforms=x11
+      -D platforms=x11,wayland
     GALLIUM_ST: >
       -D dri3=enabled
       -D gallium-va=enabled
     GALLIUM_DRIVERS: "swrast,virgl,radeonsi,zink,crocus,iris,i915"
-    VULKAN_DRIVERS: "swrast,amd,intel,virtio-experimental"
+    VULKAN_DRIVERS: "swrast,amd,intel,intel_hasvk,virtio-experimental"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
-      -D valgrind=false
+      -D valgrind=disabled
+      -D perfetto=true
     MINIO_ARTIFACT_NAME: mesa-amd64
     LLVM_VERSION: "13"
   script:
@@ -100,7 +103,7 @@ debian-testing-asan:
       -Wno-error=stringop-truncation
     EXTRA_OPTION: >
       -D b_sanitize=address
-      -D valgrind=false
+      -D valgrind=disabled
       -D tools=dlclose-skip
     MINIO_ARTIFACT_NAME: ""
     ARTIFACTS_DEBUG_SYMBOLS: 1
@@ -137,12 +140,13 @@ debian-testing-msan:
     GALLIUM_DRIVERS: "swrast"
     BUILDTYPE: "debugoptimized"
     EXTRA_OPTION: >
-      -D valgrind=false
+      -D valgrind=disabled
   script:
     - .gitlab-ci/meson/build.sh
     - .gitlab-ci/prepare-artifacts.sh
 
-debian-clover-testing:
+# TODO: remove together with Clover
+.debian-clover-testing:
   extends:
     - .debian-cl-testing
   variables:
@@ -185,12 +189,17 @@ debian-build-testing:
       -D tools=drm-shim,etnaviv,freedreno,glsl,intel,intel-ui,nir,nouveau,lima,panfrost,asahi
       -D b_lto=true
     LLVM_VERSION: 13
-  script:
-    - .gitlab-ci/lava/lava-pytest.sh
-    - .gitlab-ci/run-shellcheck.sh
-    - .gitlab-ci/run-yamllint.sh
-    - .gitlab-ci/meson/build.sh
-    - .gitlab-ci/run-shader-db.sh
+  script: |
+    section_start lava-pytest "lava-pytest"
+    .gitlab-ci/lava/lava-pytest.sh
+    section_switch shellcheck "shellcheck"
+    .gitlab-ci/run-shellcheck.sh
+    section_switch yamllint "yamllint"
+    .gitlab-ci/run-yamllint.sh
+    section_switch meson "meson"
+    .gitlab-ci/meson/build.sh
+    section_switch shader-db "shader-db"
+    .gitlab-ci/run-shader-db.sh
 
 # Test a release build with -Werror so new warnings don't sneak in.
 debian-release:
@@ -216,15 +225,17 @@ debian-release:
       -D llvm=enabled
     GALLIUM_DRIVERS: "i915,iris,nouveau,kmsro,freedreno,r300,svga,swrast,v3d,vc4,virgl,etnaviv,panfrost,lima,zink,d3d12,crocus"
     VULKAN_DRIVERS: "amd,imagination-experimental,microsoft-experimental"
-    BUILDTYPE: "release"
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
       -D osmesa=true
       -D tools=all
       -D intel-clc=enabled
       -D imagination-srv=true
+    BUILDTYPE: "release"
+    MINIO_ARTIFACT_NAME: "mesa-amd64-${BUILDTYPE}"
   script:
     - .gitlab-ci/meson/build.sh
+    - 'if [ -n "$MESA_CI_PERFORMANCE_ENABLED" ]; then .gitlab-ci/prepare-artifacts.sh; fi'
 
 alpine-build-testing:
   extends:
@@ -270,8 +281,13 @@ fedora-release:
     - .use-fedora/x86_build
   variables:
     BUILDTYPE: "release"
-    C_ARGS: >
+    C_LINK_ARGS: >
       -Wno-error=array-bounds
+      -Wno-error=stringop-overflow
+      -Wno-error=stringop-overread
+    CPP_LINK_ARGS: >
+      -Wno-error=array-bounds
+      -Wno-error=stringop-overflow
       -Wno-error=stringop-overread
     DRI_LOADERS: >
       -D glx=dri
@@ -279,15 +295,15 @@ fedora-release:
       -D egl=enabled
       -D glvnd=true
       -D platforms=x11,wayland
-    # intel-clc disabled, we need llvm-spirv-translator 13.0+, Fedora 34 only packages 12.0.
     EXTRA_OPTION: >
+      -D b_lto=true
       -D osmesa=true
       -D selinux=true
       -D tools=drm-shim,etnaviv,freedreno,glsl,intel,nir,nouveau,lima,panfrost,imagination
       -D vulkan-layers=device-select,overlay
-      -D intel-clc=disabled
+      -D intel-clc=enabled
       -D imagination-srv=true
-    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,iris,kmsro,lima,nouveau,panfrost,r300,r600,radeonsi,svga,swrast,tegra,v3d,vc4,virgl,zink"
+    GALLIUM_DRIVERS: "crocus,etnaviv,freedreno,i915,iris,kmsro,lima,nouveau,panfrost,r300,r600,radeonsi,svga,swrast,tegra,v3d,vc4,virgl,zink"
     GALLIUM_ST: >
       -D dri3=enabled
       -D gallium-extra-hud=true
@@ -305,7 +321,7 @@ fedora-release:
       -D shared-llvm=enabled
     LLVM_VERSION: ""
     UNWIND: "disabled"
-    VULKAN_DRIVERS: "amd,broadcom,freedreno,intel,imagination-experimental"
+    VULKAN_DRIVERS: "amd,broadcom,freedreno,imagination-experimental,intel,intel_hasvk"
   script:
     - .gitlab-ci/meson/build.sh
 
@@ -313,6 +329,7 @@ debian-android:
   extends:
     - .meson-cross
     - .use-debian/android_build
+    - .ci-deqp-artifacts
   variables:
     UNWIND: "disabled"
     C_ARGS: >
@@ -320,8 +337,13 @@ debian-android:
       -Wno-error=constant-conversion
       -Wno-error=enum-conversion
       -Wno-error=initializer-overrides
-      -Wno-error=missing-braces
       -Wno-error=sometimes-uninitialized
+      -Wno-error=implicit-const-int-float-conversion
+    CPP_ARGS: >
+      -Wno-error=c99-designator
+      -Wno-error=unused-variable
+      -Wno-error=unused-but-set-variable
+      -Wno-error=self-assign
     DRI_LOADERS: >
       -D glx=disabled
       -D gbm=disabled
@@ -330,8 +352,9 @@ debian-android:
     EXTRA_OPTION: >
       -D android-stub=true
       -D llvm=disabled
-      -D platform-sdk-version=29
-      -D valgrind=false
+      -D platform-sdk-version=33
+      -D valgrind=disabled
+      -D android-libbacktrace=disabled
     GALLIUM_ST: >
       -D dri3=disabled
       -D gallium-vdpau=disabled
@@ -343,14 +366,17 @@ debian-android:
       -D gallium-rusticl=false
     LLVM_VERSION: ""
     PKG_CONFIG_LIBDIR: "/disable/non/android/system/pc/files"
+    ARTIFACTS_DEBUG_SYMBOLS: 1
+    MINIO_ARTIFACT_NAME: mesa-x86_64-android
   script:
-    - PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/pkgconfig/ CROSS=aarch64-linux-android GALLIUM_DRIVERS=etnaviv,freedreno,lima,panfrost,vc4,v3d VULKAN_DRIVERS=freedreno,broadcom,virtio-experimental .gitlab-ci/meson/build.sh
+    - CROSS=aarch64-linux-android GALLIUM_DRIVERS=etnaviv,freedreno,lima,panfrost,vc4,v3d VULKAN_DRIVERS=freedreno,broadcom,virtio-experimental .gitlab-ci/meson/build.sh
     # x86_64 build:
     # Can't do Intel because gen_decoder.c currently requires libexpat, which
     # is not a dependency that AOSP wants to accept.  Can't do Radeon Gallium
     # drivers because they requires LLVM, which we don't have an Android build
     # of.
-    - PKG_CONFIG_PATH=/usr/local/lib/x86_64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/pkgconfig/ CROSS=x86_64-linux-android GALLIUM_DRIVERS=iris VULKAN_DRIVERS=amd,intel .gitlab-ci/meson/build.sh
+    - CROSS=x86_64-linux-android GALLIUM_DRIVERS=iris,virgl VULKAN_DRIVERS=amd,intel .gitlab-ci/meson/build.sh
+    - .gitlab-ci/prepare-artifacts.sh
 
 .meson-cross:
   extends:
@@ -393,7 +419,7 @@ debian-armhf:
     CROSS: armhf
     EXTRA_OPTION: >
       -D llvm=disabled
-      -D valgrind=false
+      -D valgrind=disabled
     MINIO_ARTIFACT_NAME: mesa-armhf
     # The strip command segfaults, failing to strip the binary and leaving
     # tempfiles in our artifacts.
@@ -410,8 +436,9 @@ debian-arm64:
     VULKAN_DRIVERS: "freedreno,broadcom,panfrost,imagination-experimental"
     EXTRA_OPTION: >
       -D llvm=disabled
-      -D valgrind=false
+      -D valgrind=disabled
       -D imagination-srv=true
+      -D perfetto=true
     MINIO_ARTIFACT_NAME: mesa-arm64
   script:
     - .gitlab-ci/meson/build.sh
@@ -424,7 +451,7 @@ debian-arm64-asan:
     EXTRA_OPTION: >
       -D llvm=disabled
       -D b_sanitize=address
-      -D valgrind=false
+      -D valgrind=disabled
       -D tools=dlclose-skip
     ARTIFACTS_DEBUG_SYMBOLS: 1
     MINIO_ARTIFACT_NAME: mesa-arm64-asan
@@ -440,6 +467,18 @@ debian-arm64-build-test:
       -Dtools=panfrost,imagination
   script:
     - .gitlab-ci/meson/build.sh
+
+debian-arm64-release:
+  extends:
+    - debian-arm64
+  variables:
+    BUILDTYPE: release
+    MINIO_ARTIFACT_NAME: mesa-arm64-${BUILDTYPE}
+    C_ARGS: >
+      -Wno-error=stringop-truncation
+  script:
+    - .gitlab-ci/meson/build.sh
+    - 'if [ -n "$MESA_CI_PERFORMANCE_ENABLED" ]; then .gitlab-ci/prepare-artifacts.sh; fi'
 
 debian-clang:
   extends: .meson-build
@@ -525,9 +564,10 @@ windows-vs2019:
       -D egl=disabled
       -D gbm=disabled
     EXTRA_OPTION: >
-      -D valgrind=false
+      -D valgrind=disabled
 
-debian-clover:
+# TODO: remove with Clover
+.debian-clover:
   extends: .debian-cl
   variables:
     GALLIUM_DRIVERS: "r600,radeonsi,swrast"
@@ -621,26 +661,21 @@ debian-ppc64el:
     GALLIUM_DRIVERS: "nouveau,radeonsi,swrast,virgl,zink"
     VULKAN_DRIVERS: "amd,swrast"
 
-debian-mingw32-x86_64:
+# Disabled as it hangs with winedbg on shared runners
+.debian-mingw32-x86_64:
   extends: .meson-build_mingw
   stage: build-misc
   variables:
     UNWIND: "disabled"
     C_ARGS: >
       -Wno-error=format
-      -Wno-error=format-extra-args
-      -Wno-error=deprecated-declarations
+      -Wno-error=unused-but-set-variable
+    CPP_ARGS: >
+      -Wno-error=format
       -Wno-error=unused-function
       -Wno-error=unused-variable
-      -Wno-error=unused-but-set-variable
-      -Wno-error=unused-value
-      -Wno-error=switch
-      -Wno-error=parentheses
-      -Wno-error=missing-prototypes
       -Wno-error=sign-compare
       -Wno-error=narrowing
-      -Wno-error=overflow
-    CPP_ARGS: $C_ARGS
     GALLIUM_DRIVERS: "swrast,d3d12,zink"
     VULKAN_DRIVERS: "swrast,amd,microsoft-experimental"
     GALLIUM_ST: >
@@ -650,7 +685,7 @@ debian-mingw32-x86_64:
       -D microsoft-clc=enabled
       -D static-libclc=all
       -D llvm=enabled
-      -D gallium-va=true
+      -D gallium-va=enabled
       -D video-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec
     EXTRA_OPTION: >
       -D min-windows-version=7

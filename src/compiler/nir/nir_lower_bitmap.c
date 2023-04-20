@@ -109,8 +109,9 @@ lower_bitmap(nir_shader *shader, nir_builder *b,
    nir_builder_instr_insert(b, &tex->instr);
 
    /* kill if tex != 0.0.. take .x or .w channel according to format: */
-   cond = nir_f2b(b, nir_channel(b, &tex->dest.ssa,
-                  options->swizzle_xxxx ? 0 : 3));
+   cond = nir_fneu(b, nir_channel(b, &tex->dest.ssa,
+                                  options->swizzle_xxxx ? 0 : 3),
+                   nir_imm_floatN_t(b, 0.0, tex->dest.ssa.bit_size));
 
    nir_discard_if(b, cond);
 

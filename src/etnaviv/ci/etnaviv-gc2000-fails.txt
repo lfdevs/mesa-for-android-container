@@ -71,9 +71,12 @@ dEQP-GLES2.functional.fragment_ops.depth_stencil.random.8,Fail
 dEQP-GLES2.functional.fragment_ops.depth_stencil.random.9,Fail
 dEQP-GLES2.functional.fragment_ops.depth_stencil.write_mask.both,Fail
 dEQP-GLES2.functional.fragment_ops.depth_stencil.write_mask.stencil,Fail
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.0,Fail
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.31,Fail
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.40,Fail
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.92,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.23,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.27,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.2,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.35,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.39,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.41,Fail
@@ -88,9 +91,7 @@ dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.60,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.70,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.72,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.74,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.75,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.76,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.77,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.78,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.82,Fail
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.87,Fail
@@ -138,10 +139,156 @@ dEQP-GLES2.functional.fragment_ops.random.97,Fail
 dEQP-GLES2.functional.fragment_ops.random.98,Fail
 dEQP-GLES2.functional.fragment_ops.random.9,Fail
 dEQP-GLES2.functional.rasterization.limits.points,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec3_const_write_dynamic_read_vertex,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_fragment,Fail
-dEQP-GLES2.functional.shaders.indexing.tmp_array.vec4_const_write_dynamic_read_vertex,Fail
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.highp_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.lowp_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div.mediump_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.highp_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.lowp_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_effect.mediump_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.highp_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.lowp_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec2_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec2_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec2_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec2_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec3_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec3_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec3_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec3_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec4_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec4_int_fragment,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec4_int_vertex,Crash
+dEQP-GLES2.functional.shaders.operator.binary_operator.div_assign_result.mediump_ivec4_vertex,Crash
+dEQP-GLES2.functional.shaders.random.basic_expression.combined.12,Fail
+dEQP-GLES2.functional.shaders.random.basic_expression.combined.30,Fail
+dEQP-GLES2.functional.shaders.random.basic_expression.combined.63,Fail
+dEQP-GLES2.functional.shaders.random.basic_expression.combined.66,Fail
+dEQP-GLES2.functional.shaders.random.conditionals.combined.14,Fail
+dEQP-GLES2.functional.shaders.random.conditionals.combined.48,Fail
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear_clamp,Fail
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear_mirror,Fail
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear_repeat,Fail
@@ -152,6 +299,9 @@ dEQP-GLES2.functional.uniform_api.random.0,Fail
 fast_color_clear@fcc-read-after-clear blit tex,Fail
 fast_color_clear@fcc-read-after-clear copy rb,Fail
 fast_color_clear@fcc-read-after-clear copy tex,Fail
+
+hiz@hiz-stencil-test-fbo-d0-s8,Fail
+
 shaders@glsl-bug-110796,Fail
 shaders@glsl-fs-flat-color,Fail
 shaders@glsl-fs-loop-nested,Crash
@@ -166,7 +316,11 @@ shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Timeout
 shaders@glsl-uniform-interstage-limits@subdivide 5,Timeout
 shaders@glsl-vs-loop-nested,Crash
 shaders@glsl-vs-point-size,Fail
+
+spec@amd_shader_trinary_minmax@execution@built-in-functions@fs-max3-float-float-float,Fail
+
 spec@arb_arrays_of_arrays@execution@glsl-arrays-copy-size-mismatch,Fail
+spec@arb_depth_texture@fbo-depth-gl_depth_component16-drawpixels,Fail
 spec@arb_depth_texture@fbo-depth-gl_depth_component16-tex1d,Fail
 spec@arb_depth_texture@fbo-depth-gl_depth_component24-blit,Fail
 spec@arb_depth_texture@texwrap formats bordercolor,Fail
@@ -185,7 +339,6 @@ spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizz
 spec@arb_fragment_program@fp-fragment-position,Crash
 spec@arb_fragment_program@fp-indirections2,Fail
 spec@arb_fragment_program@sparse-samplers,Crash
-spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit depth_stencil gl_depth24_stencil8,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_depth24_stencil8,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index16,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index1,Fail
@@ -194,17 +347,20 @@ spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl
 spec@arb_framebuffer_object@fbo-alpha,Crash
 spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Crash
 spec@arb_framebuffer_object@fbo-blit-stretch,Fail
-spec@arb_framebuffer_object@fbo-generatemipmap-3d,Crash
+
 spec@arb_framebuffer_object@fbo-generatemipmap-cubemap s3tc_dxt1,Crash
+
 spec@arb_framebuffer_object@fbo-gl_pointcoord,Fail
-spec@arb_framebuffer_object@fbo-incomplete,Crash
+
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
 spec@arb_framebuffer_object@same-attachment-glframebuffertexture2d-gl_depth_stencil_attachment,Fail
+spec@arb_framebuffer_object@same-attachment-tex2d-depth_stencil,Fail
+
 spec@arb_internalformat_query2@all internalformat_<x>_type pname checks,Timeout
 spec@arb_internalformat_query2@max dimensions related pname checks,Fail
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_LAYERS,Fail
-spec@arb_map_buffer_alignment@arb_map_buffer_alignment-sanity_test,Fail
+
 spec@arb_occlusion_query2@render,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
 spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi1,Fail
@@ -219,43 +375,42 @@ spec@arb_point_sprite@arb_point_sprite-interactions 1.0,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-clipped-geometry-flatshading,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Crash
-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Crash
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-01,Crash
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-04,Crash
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-07,Crash
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1d,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1dshadow,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2d,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2drect,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2drectshadow,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2dshadow,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 3d,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb cube,Crash
+spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
+spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
+spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-07,Fail
+spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-08,Fail
+spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1d,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1dshadow,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2d,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2drect,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2drectshadow,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 2dshadow,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 3d,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb cube,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 1d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 1dshadow,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 2d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 2dshadow,Fail
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 3d,Crash
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod 3d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *lod cube,Fail
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 1d,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 1d_projvec4,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 1dshadow,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d_projvec4,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drect,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drect_projvec4,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drectshadow,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2dshadow,Crash
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Crash
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 1d,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 1d_projvec4,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 1dshadow,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d_projvec4,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drect,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drect_projvec4,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2drectshadow,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2dshadow,Fail
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 1d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 1d_projvec4,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 1dshadow,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 2d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 2d_projvec4,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 2dshadow,Fail
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 3d,Crash
+spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projlod 3d,Fail
 spec@arb_texture_compression@texwrap formats bordercolor,Fail
 spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_ALPHA- border color only,Fail
 spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_INTENSITY- border color only,Fail
@@ -270,17 +425,32 @@ spec@arb_texture_compression@texwrap formats bordercolor-swizzled@GL_COMPRESSED_
 spec@arb_texture_compression@texwrap formats bordercolor-swizzled@GL_COMPRESSED_LUMINANCE- swizzled- border color only,Fail
 spec@arb_texture_compression@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA- swizzled- border color only,Fail
 spec@arb_texture_compression@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB- swizzled- border color only,Fail
+
+spec@ati_texture_compression_3dc@texwrap formats bordercolor,Fail
+spec@ati_texture_compression_3dc@texwrap formats bordercolor-swizzled,Fail
+spec@ati_texture_compression_3dc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI- swizzled- border color only,Fail
+spec@ati_texture_compression_3dc@texwrap formats bordercolor@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI- border color only,Fail
+
 spec@arb_texture_cube_map@cubemap npot,Fail
+
+spec@arb_texture_rectangle@copyteximage rect,Fail
+spec@arb_texture_rectangle@fbo-blit rect,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-07,Fail
 spec@arb_texture_rectangle@texwrap rect bordercolor,Fail
 spec@arb_texture_rectangle@texwrap rect bordercolor@GL_RGBA8- border color only,Fail
 spec@arb_texture_rectangle@texwrap rect proj bordercolor,Fail
 spec@arb_texture_rectangle@texwrap rect proj bordercolor@GL_RGBA8- projected- border color only,Fail
+
 spec@arb_texture_storage@texture-storage@2D mipmap rendering ,Fail
 spec@arb_texture_storage@texture-storage,Fail
 spec@arb_vertex_buffer_object@pos-array,Fail
 spec@arb_vertex_program@big-param,Fail
 spec@arb_vertex_program@clip-plane-transformation arb,Fail
+spec@arb_vertex_program@vp-arl-constant-array-huge-offset,Fail
+spec@arb_vertex_program@vp-arl-constant-array-varying,Fail
+
+spec@glsl-1.10@execution@copy-propagation@glsl-fs-copy-propagation-texcoords-2,Fail
+
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_ext_protected_content@conformance,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -313,7 +483,7 @@ spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw depthstencil,
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw small depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve small depthstencil,Fail
-spec@ext_framebuffer_object@fbo-3d,Crash
+
 spec@ext_framebuffer_object@fbo-alphatest-formats,Crash
 spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
 spec@ext_framebuffer_object@fbo-blending-formats,Crash
@@ -343,7 +513,6 @@ spec@ext_packed_depth_stencil@fbo-clear-formats stencil,Fail
 spec@ext_packed_depth_stencil@fbo-clear-formats stencil@GL_DEPTH24_STENCIL8,Fail
 spec@ext_packed_depth_stencil@fbo-clear-formats stencil@GL_DEPTH_STENCIL,Fail
 spec@ext_packed_depth_stencil@fbo-depth-gl_depth24_stencil8-copypixels,Fail
-spec@ext_packed_depth_stencil@fbo-depthstencil-gl_depth24_stencil8-clear,Fail
 spec@ext_packed_depth_stencil@fbo-stencil-gl_depth24_stencil8-blit,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor@GL_DEPTH24_STENCIL8- border color only,Fail
@@ -363,7 +532,9 @@ spec@ext_texture_array@glsl-fs-shadow2darray-07,Fail
 spec@ext_texture_array@maxlayers,Fail
 spec@ext_texture_array@render-1darray,Fail
 spec@ext_texture_array@texsubimage array,Fail
-spec@ext_texture_compression_s3tc@s3tc-targeted,Fail
+
+spec@ext_texture_compression_s3tc@getteximage-targets 2d s3tc,Fail
+spec@ext_texture_compression_s3tc@s3tc-teximage,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- border color only,Fail
@@ -517,12 +688,7 @@ spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-min,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
 spec@glsl-1.20@execution@out-parameter-indexing@fs-inout-index-two-level,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 3d,Crash
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Crash
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) cube,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() cube,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 3d,Crash
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Crash
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-varying-array-mat4-index-col-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-varying-array-mat4-index-col-row-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat4-index-col-rd,Fail
@@ -545,12 +711,8 @@ spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,
 spec@nv_copy_image@nv_copy_image-simple --tex-to-tex,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-lines,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-triangles,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth24,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth24_stencil8,Fail
-spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
-spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@gl-1.0-blend-func,Fail
-spec@!opengl 1.0@gl-1.0-dlist-bitmap,Crash
+
 spec@!opengl 1.0@gl-1.0-dlist-materials,Fail
 spec@!opengl 1.0@gl-1.0-dlist-shademodel,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
@@ -1876,8 +2038,8 @@ spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)-
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right middle PV: LAST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: LAST,Fail
-spec@!opengl 1.1@depthstencil-default_fb-clear,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels,Fail
+spec@!opengl 1.1@fog-modes,Fail
 spec@!opengl 1.1@getteximage-luminance,Crash
 spec@!opengl 1.1@gl-1.1-xor-copypixels,Fail
 spec@!opengl 1.1@gl-1.1-xor,Fail
@@ -1888,6 +2050,8 @@ spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
 spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
+spec@!opengl 1.1@line-smooth-coverage,Fail
+spec@!opengl 1.1@line-smooth-stipple,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on right edge,Fail
@@ -1914,8 +2078,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on right edg
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail
 spec@!opengl 1.1@polygon-offset,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@read-front,Fail
 spec@!opengl 1.1@streaming-texture-leak,Timeout
 spec@!opengl 1.1@texwrap 1d bordercolor,Fail
 spec@!opengl 1.1@texwrap 1d bordercolor@GL_RGBA8- border color only,Fail
@@ -1993,7 +2155,7 @@ spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA4- swizzled- border
 spec@!opengl 1.1@texwrap formats bordercolor-swizzled@GL_RGBA8- swizzled- border color only,Fail
 spec@!opengl 1.1@two-sided-lighting,Fail
 spec@!opengl 1.1@user-clip,Fail
-spec@!opengl 1.2@copyteximage 3d,Crash
+spec@!opengl 1.2@copyteximage 3d,Fail
 spec@!opengl 1.2@lodclamp-between-max,Fail
 spec@!opengl 1.2@texwrap 3d bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d bordercolor@GL_RGBA8- border color only,Fail
@@ -2003,6 +2165,9 @@ spec@!opengl 1.2@two-sided-lighting-separate-specular,Fail
 spec@!opengl 1.3@gl-1.3-texture-env,Fail
 spec@!opengl 1.3@tex3d-depth1,Fail
 spec@!opengl 1.3@tex-border-1,Fail
+
+spec@!opengl 1.4@blendminmax,Fail
+
 spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
 spec@!opengl 1.5@depth-tex-compare,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail

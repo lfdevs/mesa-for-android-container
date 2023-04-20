@@ -201,7 +201,6 @@ void r300_translate_vertex_shader(struct r300_context *r300,
     compiler.Base.has_half_swizzles = FALSE;
     compiler.Base.has_presub = FALSE;
     compiler.Base.has_omod = FALSE;
-    compiler.Base.needs_trig_input_transform = DBG_ON(r300, DBG_USE_TGSI);
     compiler.Base.max_temp_regs = 32;
     compiler.Base.max_constants = 256;
     compiler.Base.max_alu_insts = r300->screen->caps.is_r500 ? 1024 : 256;

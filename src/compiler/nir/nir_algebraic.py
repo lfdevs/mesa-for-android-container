@@ -19,9 +19,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
-#
-# Authors:
-#    Jason Ekstrand (jason@jlekstrand.net)
 
 import ast
 from collections import defaultdict
@@ -939,12 +936,12 @@ class TreeAutomaton(object):
             stripped = opcode.rstrip('0123456789')
             if stripped in conv_opcode_types:
                # Matches that use conversion opcodes with a specific type,
-               # like f2b1, are tricky.  Either we construct the automaton to
-               # match specific NIR opcodes like nir_op_f2b1, in which case we
+               # like f2i1, are tricky.  Either we construct the automaton to
+               # match specific NIR opcodes like nir_op_f2i1, in which case we
                # need to create separate items for each possible NIR opcode
-               # for patterns that have a generic opcode like f2b, or we
+               # for patterns that have a generic opcode like f2i, or we
                # construct it to match the search opcode, in which case we
-               # need to map f2b1 to f2b when constructing the automaton. Here
+               # need to map f2i1 to f2i when constructing the automaton. Here
                # we do the latter.
                opcode = stripped
             self.opcodes.add(opcode)

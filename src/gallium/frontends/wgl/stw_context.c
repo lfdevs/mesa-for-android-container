@@ -42,6 +42,7 @@
 #include "util/u_atomic.h"
 #include "hud/hud_context.h"
 
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_device.h"
 #include "stw_winsys.h"

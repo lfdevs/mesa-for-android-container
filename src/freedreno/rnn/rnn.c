@@ -1259,8 +1259,18 @@ static void prepdelem(struct rnndb *db, struct rnndelem *elem, char *prefix, str
 		elem->length = 1;
 		elem->name = 0;
 	}
-	if (elem->name)
-		elem->fullname = catstr(prefix, elem->name);
+	if (elem->name) {
+		if (elem->varinfo.variantsstr && !strstr(elem->varinfo.variantsstr, "-")) {
+			/* Special hack for headergen2 to deal with variant regs (like a6xx vs
+			 * a7xx).. gen_header.py handles this differently by generating C++
+			 * template based reg builder to handle variants.  But for now we still
+			 * need something that can be used for kernel headers.
+			 */
+			elem->fullname = catstr(elem->varinfo.variantsstr, elem->name);
+		} else {
+			elem->fullname = catstr(prefix, elem->name);
+		}
+	}
 	prepvarinfo (db, elem->fullname?elem->fullname:prefix, &elem->varinfo, parvi);
 	if (elem->varinfo.dead)
 		return;

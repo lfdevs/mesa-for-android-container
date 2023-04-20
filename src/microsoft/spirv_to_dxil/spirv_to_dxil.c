@@ -46,7 +46,6 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
               struct dxil_spirv_specialization *specializations,
               unsigned int num_specializations, dxil_spirv_shader_stage stage,
               const char *entry_point_name,
-              enum dxil_shader_model shader_model_max,
               enum dxil_validator_version validator_version_max,
               const struct dxil_spirv_debug_options *dgb_opts,
               const struct dxil_spirv_runtime_conf *conf,
@@ -56,29 +55,15 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
    if (stage == DXIL_SPIRV_SHADER_NONE || stage == DXIL_SPIRV_SHADER_KERNEL)
       return false;
 
-   struct spirv_to_nir_options spirv_opts = {
-      .caps = {
-         .draw_parameters = true,
-      },
-      .ubo_addr_format = nir_address_format_32bit_index_offset,
-      .ssbo_addr_format = nir_address_format_32bit_index_offset,
-      .shared_addr_format = nir_address_format_32bit_offset_as_64bit,
-
-      // use_deref_buffer_array_length + nir_lower_explicit_io force
-      //  get_ssbo_size to take in the return from load_vulkan_descriptor
-      //  instead of vulkan_resource_index. This makes it much easier to
-      //  get the DXIL handle for the SSBO.
-      .use_deref_buffer_array_length = true
-   };
-
    glsl_type_singleton_init_or_ref();
 
    struct nir_to_dxil_options opts = {
       .environment = DXIL_ENVIRONMENT_VULKAN,
-      .shader_model_max = shader_model_max,
+      .shader_model_max = conf->shader_model_max,
       .validator_version_max = validator_version_max,
    };
 
+   const struct spirv_to_nir_options *spirv_opts = dxil_spirv_nir_get_spirv_options();
    struct nir_shader_compiler_options nir_options = *dxil_get_nir_compiler_options();
    // We will manually handle base_vertex when vertex_id and instance_id have
    // have been already converted to zero-base.
@@ -88,7 +73,7 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
    nir_shader *nir = spirv_to_nir(
       words, word_count, (struct nir_spirv_specialization *)specializations,
       num_specializations, (gl_shader_stage)stage, entry_point_name,
-      &spirv_opts, &nir_options);
+      spirv_opts, &nir_options);
    if (!nir) {
       glsl_type_singleton_decref();
       return false;

@@ -43,7 +43,8 @@ lower_load_base_global_invocation_id(nir_builder *b, nir_intrinsic_instr *intr,
                                       offsetof(struct clc_work_properties_data,
                                                global_offset_x)),
                           nir_dest_num_components(intr->dest),
-                          nir_dest_bit_size(intr->dest));
+                          nir_dest_bit_size(intr->dest),
+                          sizeof(uint32_t) * 4);
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, offset);
    nir_instr_remove(&intr->instr);
    return true;
@@ -61,7 +62,8 @@ lower_load_work_dim(nir_builder *b, nir_intrinsic_instr *intr,
                                       offsetof(struct clc_work_properties_data,
                                                work_dim)),
                           nir_dest_num_components(intr->dest),
-                          nir_dest_bit_size(intr->dest));
+                          nir_dest_bit_size(intr->dest),
+                          sizeof(uint32_t));
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, dim);
    nir_instr_remove(&intr->instr);
    return true;
@@ -79,7 +81,8 @@ lower_load_num_workgroups(nir_builder *b, nir_intrinsic_instr *intr,
                                      offsetof(struct clc_work_properties_data,
                                               group_count_total_x)),
                          nir_dest_num_components(intr->dest),
-                         nir_dest_bit_size(intr->dest));
+                         nir_dest_bit_size(intr->dest),
+                         sizeof(uint32_t) * 4);
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, count);
    nir_instr_remove(&intr->instr);
    return true;
@@ -97,7 +100,8 @@ lower_load_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intr,
                                      offsetof(struct clc_work_properties_data,
                                               group_id_offset_x)),
                          nir_dest_num_components(intr->dest),
-                         nir_dest_bit_size(intr->dest));
+                         nir_dest_bit_size(intr->dest),
+                         sizeof(uint32_t) * 4);
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, offset);
    nir_instr_remove(&intr->instr);
    return true;

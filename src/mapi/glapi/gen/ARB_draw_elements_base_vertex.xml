@@ -35,7 +35,7 @@
         <param name="basevertex" type="const GLint *" count="primcount"/>
     </function>
 
-    <function name="DrawElementsInstancedBaseVertex" es2="3.2" marshal="custom" exec="dlist">
+    <function name="DrawElementsInstancedBaseVertex" es2="2.0" marshal="custom" exec="dlist">
         <param name="mode" type="GLenum"/>
         <param name="count" type="GLsizei"/>
         <param name="type" type="GLenum"/>

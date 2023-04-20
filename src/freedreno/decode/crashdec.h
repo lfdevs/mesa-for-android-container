@@ -86,6 +86,7 @@ is_gmu_legacy(void)
 
 void dump_register(struct regacc *r);
 void dump_cp_mem_pool(uint32_t *mempool);
+void handle_prefetch(uint32_t *dwords, uint32_t sizedwords);
 
 struct a6xx_hfi_state {
    uint64_t iova;

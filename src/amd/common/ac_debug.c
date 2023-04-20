@@ -127,6 +127,11 @@ static const struct si_reg *find_register(enum amd_gfx_level gfx_level, enum rad
       table_size = ARRAY_SIZE(gfx10_reg_table);
       break;
    case GFX9:
+      if (family == CHIP_GFX940) {
+         table = gfx940_reg_table;
+         table_size = ARRAY_SIZE(gfx940_reg_table);
+         break;
+      }
       table = gfx9_reg_table;
       table_size = ARRAY_SIZE(gfx9_reg_table);
       break;

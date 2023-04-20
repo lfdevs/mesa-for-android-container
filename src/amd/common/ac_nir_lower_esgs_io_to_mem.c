@@ -269,6 +269,12 @@ gs_per_vertex_input_offset(nir_builder *b,
       ? gs_per_vertex_input_vertex_offset_gfx9(b, st, vertex_src)
       : gs_per_vertex_input_vertex_offset_gfx6(b, st, vertex_src);
 
+   /* Gfx6-8 can't emulate VGT_ESGS_RING_ITEMSIZE because it uses the register to determine
+    * the allocation size of the ESGS ring buffer in memory.
+    */
+   if (st->gfx_level >= GFX9)
+      vertex_offset = nir_imul(b, vertex_offset, nir_load_esgs_vertex_stride_amd(b));
+
    unsigned base_stride = st->gfx_level >= GFX9 ? 1 : 64 /* Wave size on GFX6-8 */;
    nir_ssa_def *io_off = ac_nir_calc_io_offset(b, instr, nir_imm_int(b, base_stride * 4u), base_stride, st->map_io);
    nir_ssa_def *off = nir_iadd(b, io_off, vertex_offset);

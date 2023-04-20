@@ -29,7 +29,7 @@
 #include "util/log.h"
 
 VkResult
-dzn_enumerate_physical_devices_dxcore(struct dzn_instance *instance)
+dzn_enumerate_physical_devices_dxcore(struct vk_instance *instance)
 {
    util_dl_library *dxcore = util_dl_open(UTIL_DL_PREFIX "dxcore" UTIL_DL_EXT);
    if (!dxcore) {

@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 inc_st_dri = include_directories('.')
+deps_for_libdri = []
 
 files_libdri = files(
   'dri_context.c',
@@ -51,6 +52,7 @@ if with_gallium_zink and not with_platform_android
     libdri_c_args += '-DKOPPER_LIB_NAMES="libEGL and libGLX"'
   endif
   files_libdri += files('kopper.c')
+  deps_for_libdri += idep_vulkan_wsi_defines
 endif
 
 if with_gallium_softpipe
@@ -69,6 +71,7 @@ libdri = static_library(
   dependencies : [
     dep_libdrm,
     idep_mesautil,
+    deps_for_libdri,
   ],
 )
 

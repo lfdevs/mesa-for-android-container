@@ -327,6 +327,30 @@ static nir_ssa_def *convert_linear_to_srgb(nir_builder *b, nir_ssa_def *input)
    return nir_vec(b, comp, 4);
 }
 
+static nir_ssa_def *average_samples(nir_builder *b, nir_ssa_def **samples, unsigned num_samples)
+{
+   /* This works like add-reduce by computing the sum of each pair independently, and then
+    * computing the sum of each pair of sums, and so on, to get better instruction-level
+    * parallelism.
+    */
+   if (num_samples == 16) {
+      for (unsigned i = 0; i < 8; i++)
+         samples[i] = nir_fadd(b, samples[i * 2], samples[i * 2 + 1]);
+   }
+   if (num_samples >= 8) {
+      for (unsigned i = 0; i < 4; i++)
+         samples[i] = nir_fadd(b, samples[i * 2], samples[i * 2 + 1]);
+   }
+   if (num_samples >= 4) {
+      for (unsigned i = 0; i < 2; i++)
+         samples[i] = nir_fadd(b, samples[i * 2], samples[i * 2 + 1]);
+   }
+   if (num_samples >= 2)
+      samples[0] = nir_fadd(b, samples[0], samples[1]);
+
+   return nir_fmul_imm(b, samples[0], 1.0 / num_samples); /* average the sum */
+}
+
 static nir_ssa_def *image_resolve_msaa(nir_builder *b, nir_variable *img, unsigned num_samples,
                                        nir_ssa_def *coord, enum amd_gfx_level gfx_level)
 {
@@ -363,12 +387,7 @@ static nir_ssa_def *image_resolve_msaa(nir_builder *b, nir_variable *img, unsign
                                         coord, sample_index[i], zero);
    }
 
-   /* Average all samples. (the only options on gfx11) */
-   result = NULL;
-   for (unsigned i = 0; i < num_samples; i++) {
-      result = i ? nir_fadd(b, result, samples[i]) : samples[i];
-   }
-   result = nir_fmul_imm(b, result, 1.0 / num_samples); /* average the sum */
+   result = average_samples(b, samples, num_samples);
 
    if (gfx_level < GFX11) {
       /* Exit the conditional branch and get the result out of the branch. */

@@ -196,9 +196,14 @@ cleanup:
 }
 
 static uint32_t
+compute_mask_dwords_from_vectors(uint32_t vectors)
+{
+   return ((vectors + 7) >> 3);
+}
+static uint32_t
 compute_input_output_table_dwords(unsigned input_vectors, unsigned output_vectors)
 {
-   return ((output_vectors + 7) >> 3) * input_vectors * 4;
+   return compute_mask_dwords_from_vectors(output_vectors) * input_vectors * 4;
 }
 
 bool
@@ -237,7 +242,19 @@ dxil_container_add_state_validation(struct dxil_container *c,
    for (unsigned i = 0; i < 4; ++i)
       state->state.psv1.sig_output_vectors[i] = (uint8_t)m->num_psv_outputs[i];
 
-   // TODO: Add viewID records size
+   uint32_t view_id_table_size = 0;
+   if (state->state.psv1.uses_view_id) {
+      for (unsigned i = 0; i < 4; ++i) {
+         if (state->state.psv1.sig_output_vectors[i] > 0)
+            view_id_table_size += sizeof(uint32_t) *
+            compute_mask_dwords_from_vectors(state->state.psv1.sig_output_vectors[i]);
+      }
+      if (state->state.psv1.shader_stage == DXIL_HULL_SHADER && state->state.psv1.sig_patch_const_or_prim_vectors) {
+         view_id_table_size += sizeof(uint32_t) *
+            compute_mask_dwords_from_vectors(state->state.psv1.sig_patch_const_or_prim_vectors);
+      }
+   }
+   size += view_id_table_size;
 
    uint32_t dependency_table_size = 0;
    if (state->state.psv1.sig_input_vectors > 0) {
@@ -259,7 +276,6 @@ dxil_container_add_state_validation(struct dxil_container *c,
          state->state.psv1.sig_patch_const_or_prim_vectors, state->state.psv1.sig_output_vectors[0]);
    }
    size += dependency_table_size;
-   // TODO: Domain shader table goes here
 
    if (!add_part_header(c, DXIL_PSV0, size))
       return false;
@@ -310,9 +326,10 @@ dxil_container_add_state_validation(struct dxil_container *c,
    }
 
    // TODO: Handle case when ViewID is used
+   for (uint32_t i = 0; i < view_id_table_size; ++i)
+      blob_write_uint8(&c->parts, 0);
 
    // TODO: Handle sig input output dependency table
-
    for (uint32_t i = 0; i < dependency_table_size; ++i)
       blob_write_uint8(&c->parts, 0);
 

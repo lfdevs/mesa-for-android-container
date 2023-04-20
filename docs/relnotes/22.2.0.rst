@@ -2707,7 +2707,7 @@ Jan Palus (1):
 
 - pvr: use UINT64_C for 64-bit constant
 
-Jason Ekstrand (312):
+Faith Ekstrand (312):
 
 - clc: Only initialize LLVM once
 - clc: Rework logging a bit

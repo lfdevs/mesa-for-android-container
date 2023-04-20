@@ -20,6 +20,7 @@ from typing import Optional, Union
 from lava.exceptions import MesaCITimeoutError
 from lava.utils.console_format import CONSOLE_LOG
 from lava.utils.gitlab_section import GitlabSection
+from lava.utils.lava_farm import LavaFarm, get_lava_farm
 from lava.utils.lava_log_hints import LAVALogHints
 from lava.utils.log_section import (
     DEFAULT_GITLAB_SECTION_TIMEOUTS,
@@ -38,6 +39,8 @@ class LogFollower:
     fallback_timeout: timedelta = FALLBACK_GITLAB_SECTION_TIMEOUT
     _buffer: list[str] = field(default_factory=list, init=False)
     log_hints: LAVALogHints = field(init=False)
+    lava_farm: LavaFarm = field(init=False, default=get_lava_farm())
+    _merge_next_line: str = field(default_factory=str, init=False)
 
     def __post_init__(self):
         section_is_created = bool(self.current_section)
@@ -124,6 +127,52 @@ class LogFollower:
 
         return False
 
+    def remove_trailing_whitespace(self, line: dict[str, str]) -> None:
+        """
+        Removes trailing whitespace from the end of the `msg` value in the log line dictionary.
+
+        Args:
+            line: A dictionary representing a single log line.
+
+        Note:
+            LAVA treats carriage return characters as a line break, so each carriage return in an output console
+            is mapped to a console line in LAVA. This method removes trailing `\r\n` characters from log lines.
+        """
+        msg: Optional[str] = line.get("msg")
+        if not msg:
+            return False
+
+        messages = [msg] if isinstance(msg, str) else msg
+
+        for message in messages:
+            # LAVA logs brings raw messages, which includes newlines characters as \r\n.
+            line["msg"]: str = re.sub(r"\r\n$", "", message)
+
+    def merge_carriage_return_lines(self, line: dict[str, str]) -> bool:
+        """
+        Merges lines that end with a carriage return character into a single line.
+
+        Args:
+            line: A dictionary representing a single log line.
+
+        Returns:
+            A boolean indicating whether the current line has been merged with the next line.
+
+        Note:
+            LAVA treats carriage return characters as a line break, so each carriage return in an output console
+            is mapped to a console line in LAVA.
+        """
+        if line["msg"].endswith("\r"):
+            self._merge_next_line += line["msg"]
+            return True
+
+        if self._merge_next_line:
+            line["msg"] = self._merge_next_line + line["msg"]
+            self._merge_next_line = ""
+
+        return False
+
+
     def feed(self, new_lines: list[dict[str, str]]) -> bool:
         """Input data to be processed by LogFollower instance
         Returns true if the DUT (device under test) seems to be alive.
@@ -135,7 +184,12 @@ class LogFollower:
         is_job_healthy = False
 
         for line in new_lines:
+            self.remove_trailing_whitespace(line)
+
             if self.detect_kernel_dump_line(line):
+                continue
+
+            if self.merge_carriage_return_lines(line):
                 continue
 
             # At least we are fed with a non-kernel dump log, it seems that the
@@ -166,7 +220,7 @@ class LogFollower:
         elif line["lvl"] == "input":
             prefix = "$ "
             suffix = ""
-        elif line["lvl"] == "target":
+        elif line["lvl"] == "target" and self.lava_farm != LavaFarm.COLLABORA:
             # gl_section_fix_gen will output the stored line if it can't find a
             # match for the first split line
             # So we can recover it and put it back to the buffer
@@ -211,7 +265,7 @@ def fix_lava_gitlab_section_log():
 
 
 
-def print_log(msg):
+def print_log(msg: str) -> None:
     # Reset color from timestamp, since `msg` can tint the terminal color
     print(f"{CONSOLE_LOG['RESET']}{datetime.now()}: {msg}")
 

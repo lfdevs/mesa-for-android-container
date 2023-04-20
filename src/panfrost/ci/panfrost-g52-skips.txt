@@ -16,3 +16,9 @@ dEQP-VK.spirv_assembly.instruction.compute.vector_shuffle.vector_shuffle
 
 # Seems to timeout occasionally
 dEQP-VK.api.object_management.max_concurrent.query_pool
+
+# Causes a GPU timeout
+spec@!opengl 1.1@longprim
+
+# OOMs
+spec@!opengl 1.1@streaming-texture-leak

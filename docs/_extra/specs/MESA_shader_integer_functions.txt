@@ -46,7 +46,7 @@ Overview
 
     GL_ARB_gpu_shader5 extends GLSL in a number of useful ways.  Much of this
     added functionality requires significant hardware support.  There are many
-    aspects, however, that can be easily implmented on any GPU with "real"
+    aspects, however, that can be easily implemented on any GPU with "real"
     integer support (as opposed to simulating integers using floating point
     calculations).
 

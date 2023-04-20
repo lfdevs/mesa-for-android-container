@@ -110,25 +110,19 @@ vn_feedback_set_counter(struct vn_feedback_slot *slot, uint64_t counter)
 void
 vn_feedback_event_cmd_record(VkCommandBuffer cmd_handle,
                              VkEvent ev_handle,
-                             VkPipelineStageFlags stage_mask,
-                             VkResult status);
-
-void
-vn_feedback_event_cmd_record2(VkCommandBuffer cmd_handle,
-                              VkEvent event,
-                              VkPipelineStageFlags2 src_stage_mask,
-                              VkResult status);
-
+                             VkPipelineStageFlags2 src_stage_mask,
+                             VkResult status,
+                             bool sync2);
 VkResult
-vn_feedback_fence_cmd_alloc(VkDevice dev_handle,
-                            struct vn_feedback_cmd_pool *pool,
-                            struct vn_feedback_slot *slot,
-                            VkCommandBuffer *out_cmd_handle);
-
+vn_feedback_cmd_alloc(VkDevice dev_handle,
+                      struct vn_feedback_cmd_pool *pool,
+                      struct vn_feedback_slot *dst_slot,
+                      struct vn_feedback_slot *src_slot,
+                      VkCommandBuffer *out_cmd_handle);
 void
-vn_feedback_fence_cmd_free(VkDevice dev_handle,
-                           struct vn_feedback_cmd_pool *pool,
-                           VkCommandBuffer cmd_handle);
+vn_feedback_cmd_free(VkDevice dev_handle,
+                     struct vn_feedback_cmd_pool *pool,
+                     VkCommandBuffer cmd_handle);
 
 VkResult
 vn_feedback_cmd_pools_init(struct vn_device *dev);

@@ -340,7 +340,7 @@ ir3_collect_info(struct ir3_shader_variant *v)
             if (instr->opc == OPC_NOP) {
                nops_count = 1 + instr->repeat;
                info->instrs_per_cat[0] += nops_count;
-            } else {
+            } else if (!is_meta(instr)) {
                info->instrs_per_cat[opc_cat(instr->opc)] += 1 + instr->repeat;
                info->instrs_per_cat[0] += nops_count;
             }
@@ -449,6 +449,10 @@ ir3_collect_info(struct ir3_shader_variant *v)
       (compiler->gen >= 6 ? ((info->max_half_reg + 2) / 2) : 0);
 
    info->double_threadsize = ir3_should_double_threadsize(v, regs_count);
+
+   /* TODO this is different for earlier gens, but earlier gens don't use this */
+   info->subgroup_size = v->info.double_threadsize ? 128 : 64;
+
    unsigned reg_independent_max_waves =
       ir3_get_reg_independent_max_waves(v, info->double_threadsize);
    unsigned reg_dependent_max_waves = ir3_get_reg_dependent_max_waves(

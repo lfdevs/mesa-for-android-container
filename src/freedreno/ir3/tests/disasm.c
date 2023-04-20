@@ -177,6 +177,8 @@ static const struct test {
    /* dEQP-VK.subgroups.quad.graphics.subgroupquadswapdiagonal_int */
    INSTR_6XX(b7e03104_00180001, "(sy)quad_shuffle.diag (u32)(x)r1.x, r0.x"), /* (sy)quad_shuffle.diag (u32)(xOOO)r1.x, r0.x */
 
+   INSTR_6XX(a7000000_00000000, "tcinv"),
+
    /* cat6 */
 
    INSTR_5XX(c6e60000_00010600, "ldgb.untyped.4d.u32.1 r0.x, g[0], r1.x, r0.x"), /* ldgb.a.untyped.1dtype.u32.1 r0.x, g[r1.x], r0.x, 0 */
@@ -416,6 +418,10 @@ static const struct test {
    INSTR_6XX(e0fa0000_00000000, "fence.g.l.r.w"),
    INSTR_6XX(e09a0000_00000000, "fence.r.w"),
    INSTR_6XX(f0420000_00000000, "(sy)bar.g"),
+   INSTR_6XX(e1080000_00000000, "sleep.l"),
+   INSTR_6XX(e2080000_00000000, "dccln.all"),
+
+   INSTR_6XX(ffffffff_ffffffff, "raw 0xFFFFFFFFFFFFFFFF"),
    /* clang-format on */
 };
 
@@ -462,6 +468,7 @@ main(int argc, char **argv)
                  &(struct isa_decode_options){
                     .gpu_id = test->gpu_id,
                     .show_errors = true,
+                    .no_match_cb = print_raw,
                  });
       fflush(fdisasm);
 

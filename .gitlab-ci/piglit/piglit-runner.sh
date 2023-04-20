@@ -76,6 +76,14 @@ if [ -e "$INSTALL/$GPU_VERSION-skips.txt" ]; then
     PIGLIT_SKIPS="$PIGLIT_SKIPS $INSTALL/$GPU_VERSION-skips.txt"
 fi
 
+if [ "$PIGLIT_PLATFORM" != "gbm" ] ; then
+    PIGLIT_SKIPS="$PIGLIT_SKIPS $INSTALL/x11-skips.txt"
+fi
+
+if [ "$PIGLIT_PLATFORM" = "gbm" ]; then
+    PIGLIT_SKIPS="$PIGLIT_SKIPS $INSTALL/gbm-skips.txt"
+fi
+
 set +e
 
 piglit-runner \
@@ -113,5 +121,10 @@ if [ -n "$FLAKES_CHANNEL" ]; then
          --branch "${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME:-$CI_COMMIT_BRANCH}" \
          --branch-title "${CI_MERGE_REQUEST_TITLE:-$CI_COMMIT_TITLE}"
 fi
+
+# Compress results.csv to save on bandwidth during the upload of artifacts to
+# GitLab. This reduces a full piglit run to 550 KB, down from 6 MB, and takes
+# 55ms on my Ryzen 5950X (with or without parallelism).
+zstd --rm -T0 -8qc $RESULTS/results.csv -o $RESULTS/results.csv.zst
 
 exit $PIGLIT_EXITCODE

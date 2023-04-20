@@ -1252,7 +1252,7 @@ brw_blorp_build_nir_shader(struct blorp_context *blorp,
        */
       assert(dst_pos->num_components == 2);
       nir_ssa_def *dst_x = nir_channel(&b, dst_pos, 0);
-      comp = nir_umod(&b, dst_x, nir_imm_int(&b, 3));
+      comp = nir_umod_imm(&b, dst_x, 3);
       dst_pos = nir_vec2(&b, nir_idiv(&b, dst_x, nir_imm_int(&b, 3)),
                              nir_channel(&b, dst_pos, 1));
    }
@@ -1527,7 +1527,7 @@ brw_blorp_get_blit_kernel_fs(struct blorp_batch *batch,
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
-   wm_key.multisample_fbo = key->rt_samples > 1;
+   wm_key.multisample_fbo = key->rt_samples > 1 ? BRW_ALWAYS : BRW_NEVER;
 
    program = blorp_compile_fs(blorp, mem_ctx, nir, &wm_key, false,
                               &prog_data);

@@ -711,7 +711,6 @@ init_attrib_groups(struct gl_context *ctx)
    ctx->NewDriverState = ST_ALL_STATES_MASK;
    ctx->ErrorValue = GL_NO_ERROR;
    ctx->ShareGroupReset = false;
-   ctx->VertexProgram._VaryingInputs = VERT_BIT_ALL;
    ctx->IntelBlackholeRender = debug_get_bool_option("INTEL_BLACKHOLE_DEFAULT", false);
 
    return GL_TRUE;
@@ -904,18 +903,60 @@ _mesa_alloc_dispatch_table(bool glthread)
    return table;
 }
 
-void
+/**
+ * Allocate dispatch tables and set all functions to nop.
+ * It also makes the OutsideBeginEnd dispatch table current within gl_dispatch.
+ *
+ * \param glthread Whether to set nop dispatch for glthread or regular dispatch
+ */
+bool
+_mesa_alloc_dispatch_tables(gl_api api, struct gl_dispatch *d, bool glthread)
+{
+   d->OutsideBeginEnd = _mesa_alloc_dispatch_table(glthread);
+   if (!d->OutsideBeginEnd)
+      return false;
+
+   if (api == API_OPENGL_COMPAT) {
+      d->BeginEnd = _mesa_alloc_dispatch_table(glthread);
+      d->Save = _mesa_alloc_dispatch_table(glthread);
+      if (!d->BeginEnd || !d->Save)
+         return false;
+   }
+
+   d->Current = d->Exec = d->OutsideBeginEnd;
+   return true;
+}
+
+static void
+_mesa_free_dispatch_tables(struct gl_dispatch *d)
+{
+   free(d->OutsideBeginEnd);
+   free(d->BeginEnd);
+   free(d->HWSelectModeBeginEnd);
+   free(d->Save);
+   free(d->ContextLost);
+}
+
+bool
 _mesa_initialize_dispatch_tables(struct gl_context *ctx)
 {
-   /* Do the code-generated setup of the exec table in api_exec_init.c. */
+   if (!_mesa_alloc_dispatch_tables(ctx->API, &ctx->Dispatch, false))
+      return false;
+
+   /* Do the code-generated initialization of dispatch tables. */
    _mesa_init_dispatch(ctx);
-
-   if (ctx->Save)
-      _mesa_init_dispatch_save(ctx);
-
    vbo_init_dispatch_begin_end(ctx);
-   if (ctx->API == API_OPENGL_COMPAT)
+
+   if (_mesa_is_desktop_gl_compat(ctx)) {
+      _mesa_init_dispatch_save(ctx);
       _mesa_init_dispatch_save_begin_end(ctx);
+   }
+
+   /* This binds the dispatch table to the context, but MakeCurrent will
+    * bind it for the user. If glthread is enabled, it will override it.
+    */
+   ctx->GLApi = ctx->Dispatch.Current;
+   return true;
 }
 
 /**
@@ -1005,13 +1046,6 @@ _mesa_initialize_context(struct gl_context *ctx,
    if (no_error)
       ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_NO_ERROR_BIT_KHR;
 
-   /* setup the API dispatch tables with all nop functions */
-   ctx->OutsideBeginEnd = _mesa_alloc_dispatch_table(false);
-   if (!ctx->OutsideBeginEnd)
-      goto fail;
-   ctx->Exec = ctx->OutsideBeginEnd;
-   ctx->CurrentClientDispatch = ctx->CurrentServerDispatch = ctx->OutsideBeginEnd;
-
    _mesa_reset_vertex_processing_mode(ctx);
 
    /* Mesa core handles all the formats that mesa core knows about.
@@ -1023,12 +1057,6 @@ _mesa_initialize_context(struct gl_context *ctx,
 
    switch (ctx->API) {
    case API_OPENGL_COMPAT:
-      ctx->BeginEnd = _mesa_alloc_dispatch_table(false);
-      ctx->Save = _mesa_alloc_dispatch_table(false);
-      if (!ctx->BeginEnd || !ctx->Save)
-         goto fail;
-
-      FALLTHROUGH;
    case API_OPENGL_CORE:
    case API_OPENGLES2:
       break;
@@ -1050,7 +1078,7 @@ _mesa_initialize_context(struct gl_context *ctx,
       }
       break;
    }
-   ctx->VertexProgram.PointSizeEnabled = ctx->API == API_OPENGLES2;
+   ctx->VertexProgram.PointSizeEnabled = _mesa_is_gles2(ctx);
    ctx->PointSizeIsSet = GL_TRUE;
 
    ctx->FirstTimeCurrent = GL_TRUE;
@@ -1059,9 +1087,6 @@ _mesa_initialize_context(struct gl_context *ctx,
 
 fail:
    _mesa_reference_shared_state(ctx, &ctx->Shared, NULL);
-   free(ctx->BeginEnd);
-   free(ctx->OutsideBeginEnd);
-   free(ctx->Save);
    return GL_FALSE;
 }
 
@@ -1136,12 +1161,8 @@ _mesa_free_context_data(struct gl_context *ctx, bool destroy_debug_output)
    _mesa_free_buffer_objects(ctx);
 
    /* free dispatch tables */
-   free(ctx->BeginEnd);
-   free(ctx->OutsideBeginEnd);
-   free(ctx->Save);
-   free(ctx->ContextLost);
+   _mesa_free_dispatch_tables(&ctx->Dispatch);
    free(ctx->MarshalExec);
-   free(ctx->HWSelectModeBeginEnd);
 
    /* Shared context state (display lists, textures, etc) */
    _mesa_reference_shared_state(ctx, &ctx->Shared, NULL);
@@ -1402,8 +1423,8 @@ handle_first_current(struct gl_context *ctx)
        * that will erroneously allow this usage in a 3.0 forward-compatible
        * context too.
        */
-      ctx->_AttribZeroAliasesVertex = (ctx->API == API_OPENGLES
-                                       || (ctx->API == API_OPENGL_COMPAT
+      ctx->_AttribZeroAliasesVertex = (_mesa_is_gles1(ctx)
+                                       || (_mesa_is_desktop_gl_compat(ctx)
                                            && !is_forward_compatible_context));
    }
 
@@ -1483,7 +1504,7 @@ _mesa_make_current( struct gl_context *newCtx,
    else {
       _glapi_set_context((void *) newCtx);
       assert(_mesa_get_current_context() == newCtx);
-      _glapi_set_dispatch(newCtx->CurrentClientDispatch);
+      _glapi_set_dispatch(newCtx->GLApi);
 
       if (drawBuffer && readBuffer) {
          assert(_mesa_is_winsys_fbo(drawBuffer));

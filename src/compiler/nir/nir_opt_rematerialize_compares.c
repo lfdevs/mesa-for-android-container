@@ -124,49 +124,49 @@ nir_opt_rematerialize_compares_impl(nir_shader *shader, nir_function_impl *impl)
           * instruction must be duplicated only once in each block because CSE
           * cannot be run after this pass.
           */
-         nir_foreach_use_safe(use, &alu->dest.dest.ssa) {
-            nir_instr *const use_instr = use->parent_instr;
+         nir_foreach_use_including_if_safe(use, &alu->dest.dest.ssa) {
+            if (use->is_if) {
+               nir_if *const if_stmt = use->parent_if;
 
-            /* If the use is in the same block as the def, don't
-             * rematerialize.
-             */
-            if (use_instr->block == alu->instr.block)
-               continue;
+               nir_block *const prev_block =
+                  nir_cf_node_as_block(nir_cf_node_prev(&if_stmt->cf_node));
 
-            nir_alu_instr *clone = nir_alu_instr_clone(shader, alu);
+               /* If the compare is from the previous block, don't
+                * rematerialize.
+                */
+               if (prev_block == alu->instr.block)
+                  continue;
 
-            nir_instr_insert_before(use_instr, &clone->instr);
+               nir_alu_instr *clone = nir_alu_instr_clone(shader, alu);
 
-            nir_alu_instr *const use_alu = nir_instr_as_alu(use_instr);
-            for (unsigned i = 0; i < nir_op_infos[use_alu->op].num_inputs; i++) {
-               if (use_alu->src[i].src.ssa == &alu->dest.dest.ssa) {
-                  nir_instr_rewrite_src(&use_alu->instr,
-                                        &use_alu->src[i].src,
+               nir_instr_insert_after_block(prev_block, &clone->instr);
+
+               nir_if_rewrite_condition(if_stmt,
                                         nir_src_for_ssa(&clone->dest.dest.ssa));
-                  progress = true;
+               progress = true;
+            } else {
+               nir_instr *const use_instr = use->parent_instr;
+
+               /* If the use is in the same block as the def, don't
+                * rematerialize.
+                */
+               if (use_instr->block == alu->instr.block)
+                  continue;
+
+               nir_alu_instr *clone = nir_alu_instr_clone(shader, alu);
+
+               nir_instr_insert_before(use_instr, &clone->instr);
+
+               nir_alu_instr *const use_alu = nir_instr_as_alu(use_instr);
+               for (unsigned i = 0; i < nir_op_infos[use_alu->op].num_inputs; i++) {
+                  if (use_alu->src[i].src.ssa == &alu->dest.dest.ssa) {
+                     nir_instr_rewrite_src(&use_alu->instr,
+                                           &use_alu->src[i].src,
+                                           nir_src_for_ssa(&clone->dest.dest.ssa));
+                     progress = true;
+                  }
                }
             }
-         }
-
-         nir_foreach_if_use_safe(use, &alu->dest.dest.ssa) {
-            nir_if *const if_stmt = use->parent_if;
-
-            nir_block *const prev_block =
-               nir_cf_node_as_block(nir_cf_node_prev(&if_stmt->cf_node));
-
-            /* If the compare is from the previous block, don't
-             * rematerialize.
-             */
-            if (prev_block == alu->instr.block)
-               continue;
-
-            nir_alu_instr *clone = nir_alu_instr_clone(shader, alu);
-
-            nir_instr_insert_after_block(prev_block, &clone->instr);
-
-            nir_if_rewrite_condition(if_stmt,
-                                     nir_src_for_ssa(&clone->dest.dest.ssa));
-            progress = true;
          }
       }
    }

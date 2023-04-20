@@ -33,6 +33,7 @@ extern "C" {
 
 struct d3d12_shader;
 struct d3d12_image_format_conversion_info;
+struct d3d12_image_format_conversion_info_arr;
 enum d3d12_state_var;
 
 nir_ssa_def *
@@ -61,9 +62,6 @@ d3d12_lower_state_vars(struct nir_shader *s, struct d3d12_shader *shader);
 
 void
 d3d12_lower_yflip(nir_shader *s);
-
-void
-d3d12_forward_front_face(nir_shader *nir);
 
 void
 d3d12_lower_depth_range(nir_shader *nir);
@@ -100,7 +98,7 @@ void
 d3d12_lower_triangle_strip(nir_shader *shader);
 
 bool
-d3d12_lower_image_casts(nir_shader *s, struct d3d12_image_format_conversion_info *info);
+d3d12_lower_image_casts(nir_shader *s, struct d3d12_image_format_conversion_info_arr *info);
 
 bool
 d3d12_disable_multisampling(nir_shader *s);

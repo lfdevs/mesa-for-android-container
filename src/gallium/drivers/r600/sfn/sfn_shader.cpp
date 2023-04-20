@@ -29,6 +29,7 @@
 #include "gallium/drivers/r600/r600_shader.h"
 #include "nir.h"
 #include "nir_intrinsics.h"
+#include "nir_intrinsics_indices.h"
 #include "sfn_debug.h"
 #include "sfn_instr.h"
 #include "sfn_instr_alugroup.h"
@@ -232,7 +233,8 @@ Shader::emit_instruction_from_string(const std::string& s)
       return;
    }
 
-   auto ir = m_instr_factory->from_string(s, m_current_block->nesting_depth());
+   auto ir = m_instr_factory->from_string(s, m_current_block->nesting_depth(),
+                                          m_chip_class == ISA_CC_CAYMAN);
    if (ir) {
       emit_instruction(ir);
       if (ir->end_block())
@@ -771,6 +773,7 @@ Shader::emit_control_flow(ControlFlowInstr::CFType type)
 bool
 Shader::process_loop(nir_loop *node)
 {
+   assert(!nir_loop_has_continue_construct(node));
    SFN_TRACE_FUNC(SfnLog::flow, "LOOP");
    if (!emit_control_flow(ControlFlowInstr::cf_loop_begin))
       return false;
@@ -946,7 +949,8 @@ Shader::evaluate_resource_offset(nir_intrinsic_instr *instr, int src_id)
    auto& vf = value_factory();
 
    PRegister uav_id{nullptr};
-   int offset = 0;
+   int offset = nir_intrinsic_has_range_base(instr) ?
+                   nir_intrinsic_range_base(instr) : 0;
 
    auto uav_id_const = nir_src_as_const_value(instr->src[src_id]);
    if (uav_id_const) {

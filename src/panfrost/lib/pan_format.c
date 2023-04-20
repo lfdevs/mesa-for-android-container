@@ -398,6 +398,17 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R32G32B32A32_FIXED,      RGBA32_FIXED,    RGBA, L, V___),
    FMT(R11G11B10_FLOAT,         R11F_G11F_B10F,  RGB1, L, VTR_),
    FMT(R9G9B9E5_FLOAT,          R9F_G9F_B9F_E5F, RGB1, L, VT__),
+#if PAN_ARCH >= 6
+   /* SNORM is renderable on Bifrost (with blend shaders) */
+   FMT(R8_SNORM,                R8_SNORM,        R001, L, VTR_),
+   FMT(R16_SNORM,               R16_SNORM,       R001, L, VTR_),
+   FMT(R8G8_SNORM,              RG8_SNORM,       RG01, L, VTR_),
+   FMT(R16G16_SNORM,            RG16_SNORM,      RG01, L, VTR_),
+   FMT(R8G8B8_SNORM,            RGB8_SNORM,      RGB1, L, VTR_),
+   FMT(R8G8B8A8_SNORM,          RGBA8_SNORM,     RGBA, L, VTR_),
+   FMT(R16G16B16A16_SNORM,      RGBA16_SNORM,    RGBA, L, VTR_),
+#else
+   /* So far we haven't needed SNORM rendering on Midgard */
    FMT(R8_SNORM,                R8_SNORM,        R001, L, VT__),
    FMT(R16_SNORM,               R16_SNORM,       R001, L, VT__),
    FMT(R8G8_SNORM,              RG8_SNORM,       RG01, L, VT__),
@@ -405,6 +416,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R8G8B8_SNORM,            RGB8_SNORM,      RGB1, L, VT__),
    FMT(R8G8B8A8_SNORM,          RGBA8_SNORM,     RGBA, L, VT__),
    FMT(R16G16B16A16_SNORM,      RGBA16_SNORM,    RGBA, L, VT__),
+#endif
    FMT(I8_SINT,                 R8I,             RRRR, L, VTR_),
    FMT(L8_SINT,                 R8I,             RRR1, L, VTR_),
    FMT(I8_UINT,                 R8UI,            RRRR, L, VTR_),
@@ -417,9 +429,9 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(L32_SINT,                R32I,            RRR1, L, VTR_),
    FMT(I32_UINT,                R32UI,           RRRR, L, VTR_),
    FMT(L32_UINT,                R32UI,           RRR1, L, VTR_),
-   FMT(B8G8R8_UINT,             RGB8UI,          BGR1, L, VTR_),
+   FMT(B8G8R8_UINT,             RGB8UI,          BGR1, L, V___),
+   FMT(B8G8R8_SINT,             RGB8I,           BGR1, L, V___),
    FMT(B8G8R8A8_UINT,           RGBA8UI,         BGRA, L, VTR_),
-   FMT(B8G8R8_SINT,             RGB8I,           BGR1, L, VTR_),
    FMT(B8G8R8A8_SINT,           RGBA8I,          BGRA, L, VTR_),
    FMT(A8R8G8B8_UINT,           RGBA8UI,         GBAR, L, VTR_),
    FMT(A8B8G8R8_UINT,           RGBA8UI,         ABGR, L, VTR_),
@@ -429,7 +441,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R8G8_UINT,               RG8UI,           RG01, L, VTR_),
    FMT(R16G16_UINT,             RG16UI,          RG01, L, VTR_),
    FMT(R32G32_UINT,             RG32UI,          RG01, L, VTR_),
-   FMT(R8G8B8_UINT,             RGB8UI,          RGB1, L, VTR_),
+   FMT(R8G8B8_UINT,             RGB8UI,          RGB1, L, V___),
    FMT(R32G32B32_UINT,          RGB32UI,         RGB1, L, VTR_),
    FMT(R8G8B8A8_UINT,           RGBA8UI,         RGBA, L, VTR_),
    FMT(R16G16B16A16_UINT,       RGBA16UI,        RGBA, L, VTR_),
@@ -442,7 +454,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R16_UNORM,               R16_UNORM,       R001, L, VTR_),
    FMT(R8G8_UNORM,              RG8_UNORM,       RG01, L, VTR_),
    FMT(R16G16_UNORM,            RG16_UNORM,      RG01, L, VTR_),
-   FMT(R8G8B8_UNORM,            RGB8_UNORM,      RGB1, L, VTR_),
+   FMT(R8G8B8_UNORM,            RGB8_UNORM,      RGB1, L, V___),
 
    /* 32-bit NORM is not texturable in v7 onwards. It's renderable
     * everywhere, but rendering without texturing is not useful.
@@ -503,8 +515,8 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(L8_SRGB,                 R8_UNORM,        RRR1, S, VTR_),
    FMT(R8_SRGB,                 R8_UNORM,        R001, S, VTR_),
    FMT(R8G8_SRGB,               RG8_UNORM,       RG01, S, VTR_),
-   FMT(R8G8B8_SRGB,             RGB8_UNORM,      RGB1, S, VTR_),
-   FMT(B8G8R8_SRGB,             RGB8_UNORM,      BGR1, S, VTR_),
+   FMT(R8G8B8_SRGB,             RGB8_UNORM,      RGB1, S, V___),
+   FMT(B8G8R8_SRGB,             RGB8_UNORM,      BGR1, S, V___),
    FMT(R8G8B8A8_SRGB,           RGBA8_UNORM,     RGBA, S, VTR_),
    FMT(A8B8G8R8_SRGB,           RGBA8_UNORM,     ABGR, S, VTR_),
    FMT(X8B8G8R8_SRGB,           RGBA8_UNORM,     ABG1, S, VTR_),
@@ -520,7 +532,7 @@ const struct panfrost_format GENX(panfrost_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R16G16_SINT,             RG16I,           RG01, L, VTR_),
    FMT(R32G32_SINT,             RG32I,           RG01, L, VTR_),
    FMT(R16G16_FLOAT,            RG16F,           RG01, L, VTR_),
-   FMT(R8G8B8_SINT,             RGB8I,           RGB1, L, VTR_),
+   FMT(R8G8B8_SINT,             RGB8I,           RGB1, L, V___),
    FMT(R32G32B32_SINT,          RGB32I,          RGB1, L, VTR_),
    FMT(R8G8B8A8_SINT,           RGBA8I,          RGBA, L, VTR_),
    FMT(R16G16B16A16_SINT,       RGBA16I,         RGBA, L, VTR_),

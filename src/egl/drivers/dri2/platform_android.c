@@ -419,7 +419,7 @@ droid_create_image_from_buffer_info(struct dri2_egl_display *dri2_dpy,
    if (dri2_dpy->image->base.version >= 15 &&
        dri2_dpy->image->createImageFromDmaBufs2 != NULL) {
       return dri2_dpy->image->createImageFromDmaBufs2(
-         dri2_dpy->dri_screen, buf_info->width, buf_info->height,
+         dri2_dpy->dri_screen_render_gpu, buf_info->width, buf_info->height,
          buf_info->drm_fourcc, buf_info->modifier, buf_info->fds,
          buf_info->num_planes, buf_info->pitches, buf_info->offsets,
          buf_info->yuv_color_space, buf_info->sample_range,
@@ -428,7 +428,7 @@ droid_create_image_from_buffer_info(struct dri2_egl_display *dri2_dpy,
    }
 
    return dri2_dpy->image->createImageFromDmaBufs(
-      dri2_dpy->dri_screen, buf_info->width, buf_info->height,
+      dri2_dpy->dri_screen_render_gpu, buf_info->width, buf_info->height,
       buf_info->drm_fourcc, buf_info->fds, buf_info->num_planes,
       buf_info->pitches, buf_info->offsets, buf_info->yuv_color_space,
       buf_info->sample_range, buf_info->horizontal_siting,
@@ -835,7 +835,7 @@ get_front_bo(struct dri2_egl_surface *dri2_surf, unsigned int format)
       _eglLog(_EGL_DEBUG, "DRI driver requested unsupported front buffer for window surface");
    } else if (dri2_surf->base.Type == EGL_PBUFFER_BIT) {
       dri2_surf->dri_image_front =
-          dri2_dpy->image->createImage(dri2_dpy->dri_screen,
+          dri2_dpy->image->createImage(dri2_dpy->dri_screen_render_gpu,
                                               dri2_surf->base.Width,
                                               dri2_surf->base.Height,
                                               format,
@@ -997,7 +997,7 @@ droid_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
    if (dri2_surf->back)
       dri2_surf->back->age = 1;
 
-   dri2_flush_drawable_for_swapbuffers(disp, draw);
+   dri2_flush_drawable_for_swapbuffers_flags(disp, draw, -1);
 
    /* dri2_surf->buffer can be null even when no error has occured. For
     * example, if the user has called no GL rendering commands since the
@@ -1066,7 +1066,7 @@ droid_create_image_from_name(_EGLDisplay *disp,
        return NULL;
 
    return
-      dri2_dpy->image->createImageFromName(dri2_dpy->dri_screen,
+      dri2_dpy->image->createImageFromName(dri2_dpy->dri_screen_render_gpu,
 					   buf->width,
 					   buf->height,
 					   format,
@@ -1469,7 +1469,7 @@ droid_load_driver(_EGLDisplay *disp, bool swrast)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd);
+   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    if (dri2_dpy->driver_name == NULL)
       return false;
 
@@ -1574,11 +1574,11 @@ droid_open_device(_EGLDisplay *disp, bool swrast)
       return EGL_FALSE;
    }
 
-   dri2_dpy->fd = os_dupfd_cloexec(fd);
-   if (dri2_dpy->fd < 0)
+   dri2_dpy->fd_render_gpu = os_dupfd_cloexec(fd);
+   if (dri2_dpy->fd_render_gpu < 0)
       return EGL_FALSE;
 
-   if (drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER)
+   if (drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER)
       return EGL_FALSE;
 
    return droid_probe_device(disp, swrast);
@@ -1614,8 +1614,8 @@ droid_open_device(_EGLDisplay *disp, bool swrast)
       if (!(device->available_nodes & (1 << node_type)))
          continue;
 
-      dri2_dpy->fd = loader_open_device(device->nodes[node_type]);
-      if (dri2_dpy->fd < 0) {
+      dri2_dpy->fd_render_gpu = loader_open_device(device->nodes[node_type]);
+      if (dri2_dpy->fd_render_gpu < 0) {
          _eglLog(_EGL_WARNING, "%s() Failed to open DRM device %s",
                  __func__, device->nodes[node_type]);
          continue;
@@ -1625,18 +1625,18 @@ droid_open_device(_EGLDisplay *disp, bool swrast)
        * Otherwise we fall-back the first device that is supported.
        */
       if (vendor_name) {
-         if (droid_filter_device(disp, dri2_dpy->fd, vendor_name)) {
+         if (droid_filter_device(disp, dri2_dpy->fd_render_gpu, vendor_name)) {
             /* Device does not match - try next device */
-            close(dri2_dpy->fd);
-            dri2_dpy->fd = -1;
+            close(dri2_dpy->fd_render_gpu);
+            dri2_dpy->fd_render_gpu = -1;
             continue;
          }
          /* If the requested device matches - use it. Regardless if
           * init fails, do not fall-back to any other device.
           */
          if (!droid_probe_device(disp, false)) {
-            close(dri2_dpy->fd);
-            dri2_dpy->fd = -1;
+            close(dri2_dpy->fd_render_gpu);
+            dri2_dpy->fd_render_gpu = -1;
          }
 
          break;
@@ -1645,12 +1645,12 @@ droid_open_device(_EGLDisplay *disp, bool swrast)
          break;
 
       /* No explicit request - attempt the next device */
-      close(dri2_dpy->fd);
-      dri2_dpy->fd = -1;
+      close(dri2_dpy->fd_render_gpu);
+      dri2_dpy->fd_render_gpu = -1;
    }
    drmFreeDevices(devices, num_devices);
 
-   if (dri2_dpy->fd < 0) {
+   if (dri2_dpy->fd_render_gpu < 0) {
       _eglLog(_EGL_WARNING, "Failed to open %s DRM device",
             vendor_name ? "desired": "any");
       return EGL_FALSE;
@@ -1675,7 +1675,8 @@ dri2_initialize_android(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
                        (const hw_module_t **)&dri2_dpy->gralloc);
    if (ret) {
@@ -1691,7 +1692,9 @@ dri2_initialize_android(_EGLDisplay *disp)
       goto cleanup;
    }
 
-   dev = _eglAddDevice(dri2_dpy->fd, false);
+   dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
+
+   dev = _eglAddDevice(dri2_dpy->fd_render_gpu, false);
    if (!dev) {
       err = "DRI2: failed to find EGLDevice";
       goto cleanup;

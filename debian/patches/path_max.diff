@@ -21,7 +21,7 @@
 +#define PATH_MAX (4096)
 +#endif
 +
- bool error = false;
+ static bool error = false;
  
  static void
 --- a/src/gallium/auxiliary/pipe-loader/pipe_loader.c

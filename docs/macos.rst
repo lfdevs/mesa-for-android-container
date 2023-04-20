@@ -22,5 +22,3 @@ to X11 applications on macOS running via XQuartz.
 Mesa's software rasterizers also work on macOS. To build, set the build options
 ``-Dosmesa=true -Dglx=xlib`` and select an appropriate Gallium software
 rasterizer.
-
-For native hardware, stay tuned for updates here!

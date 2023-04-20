@@ -382,17 +382,17 @@ static void si_emit_guardband(struct si_context *ctx)
     * R_028BF0_PA_CL_GB_HORZ_CLIP_ADJ, R_028BF4_PA_CL_GB_HORZ_DISC_ADJ
     */
    radeon_begin(&ctx->gfx_cs);
-   radeon_opt_set_context_reg4(ctx, R_028BE8_PA_CL_GB_VERT_CLIP_ADJ,
-                               SI_TRACKED_PA_CL_GB_VERT_CLIP_ADJ, fui(guardband_y), fui(discard_y),
+   radeon_opt_set_context_reg5(ctx, R_028BE4_PA_SU_VTX_CNTL, SI_TRACKED_PA_SU_VTX_CNTL,
+                               S_028BE4_PIX_CENTER(rs->half_pixel_center) |
+                               S_028BE4_ROUND_MODE(V_028BE4_X_ROUND_TO_EVEN) |
+                               S_028BE4_QUANT_MODE(V_028BE4_X_16_8_FIXED_POINT_1_256TH +
+                                                   vp_as_scissor.quant_mode),
+                               fui(guardband_y), fui(discard_y),
                                fui(guardband_x), fui(discard_x));
    radeon_opt_set_context_reg(ctx, R_028234_PA_SU_HARDWARE_SCREEN_OFFSET,
                               SI_TRACKED_PA_SU_HARDWARE_SCREEN_OFFSET,
                               S_028234_HW_SCREEN_OFFSET_X(hw_screen_offset_x >> 4) |
-                                 S_028234_HW_SCREEN_OFFSET_Y(hw_screen_offset_y >> 4));
-   radeon_opt_set_context_reg(
-      ctx, R_028BE4_PA_SU_VTX_CNTL, SI_TRACKED_PA_SU_VTX_CNTL,
-      S_028BE4_PIX_CENTER(rs->half_pixel_center) | S_028BE4_ROUND_MODE(V_028BE4_X_ROUND_TO_EVEN) |
-         S_028BE4_QUANT_MODE(V_028BE4_X_16_8_FIXED_POINT_1_256TH + vp_as_scissor.quant_mode));
+                              S_028234_HW_SCREEN_OFFSET_Y(hw_screen_offset_y >> 4));
    radeon_end_update_context_roll(ctx);
 }
 
@@ -641,7 +641,7 @@ static void si_emit_window_rectangles(struct si_context *sctx)
    static const unsigned outside[4] = {
       /* outside rectangle 0 */
       V_02820C_OUT | V_02820C_IN_1 | V_02820C_IN_2 | V_02820C_IN_21 | V_02820C_IN_3 |
-         V_02820C_IN_31 | V_02820C_IN_32 | V_02820C_IN_321,
+      V_02820C_IN_31 | V_02820C_IN_32 | V_02820C_IN_321,
       /* outside rectangles 0, 1 */
       V_02820C_OUT | V_02820C_IN_2 | V_02820C_IN_3 | V_02820C_IN_32,
       /* outside rectangles 0, 1, 2 */

@@ -1526,7 +1526,8 @@ d3d12_video_encoder_encode_bitstream(struct pipe_video_codec * codec,
 
    // If driver needs offset alignment for bitstream resource, we will pad zeroes on the codec header to this end.
    if (
-      (pD3D12Enc->m_currentEncodeCapabilities.m_ResourceRequirementsCaps.CompressedBitstreamBufferAccessAlignment > 1)
+      (prefixGeneratedHeadersByteSize > 0)
+      && (pD3D12Enc->m_currentEncodeCapabilities.m_ResourceRequirementsCaps.CompressedBitstreamBufferAccessAlignment > 1)
       && ((prefixGeneratedHeadersByteSize % pD3D12Enc->m_currentEncodeCapabilities.m_ResourceRequirementsCaps.CompressedBitstreamBufferAccessAlignment) != 0)
    ) {
       prefixGeneratedHeadersByteSize = ALIGN(prefixGeneratedHeadersByteSize, pD3D12Enc->m_currentEncodeCapabilities.m_ResourceRequirementsCaps.CompressedBitstreamBufferAccessAlignment);
@@ -1581,15 +1582,16 @@ d3d12_video_encoder_encode_bitstream(struct pipe_video_codec * codec,
    // Store this info for get_feedback to be able to calculate final bitstream size
    pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].codecHeadersSize = prefixGeneratedHeadersByteSize;
 
-   pD3D12Enc->base.context->buffer_subdata(
-      pD3D12Enc->base.context,   // context
-      destination,               // dst buffer - "destination" is the pipe_resource object
-                                 // wrapping pOutputBitstreamBuffer and eventually pOutputBufferD3D12Res
-      PIPE_MAP_WRITE,            // usage PIPE_MAP_x
-      0,                         // offset
-      pD3D12Enc->m_BitstreamHeadersBuffer.size(),
-      pD3D12Enc->m_BitstreamHeadersBuffer.data());
-
+   if (prefixGeneratedHeadersByteSize > 0) {
+      pD3D12Enc->base.context->buffer_subdata(
+         pD3D12Enc->base.context,   // context
+         destination,               // dst buffer - "destination" is the pipe_resource object
+                                    // wrapping pOutputBitstreamBuffer and eventually pOutputBufferD3D12Res
+         PIPE_MAP_WRITE,            // usage PIPE_MAP_x
+         0,                         // offset
+         pD3D12Enc->m_BitstreamHeadersBuffer.size(),
+         pD3D12Enc->m_BitstreamHeadersBuffer.data());
+   }
    // Note: The buffer_subdata is queued in pD3D12Enc->base.context but doesn't execute immediately
    // Will flush and sync this batch in d3d12_video_encoder_flush with the rest of the Video Encode Queue GPU work
 

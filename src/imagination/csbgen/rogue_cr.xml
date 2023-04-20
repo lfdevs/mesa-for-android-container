@@ -479,6 +479,10 @@ SOFTWARE.
     <field name="y" start="0" end="9" type="uint"/>
   </struct>
 
+  <struct name="ISP_MTILE_BASE" length="2">
+    <field name="addr" start="2" end="39" shift="2" type="address"/>
+  </struct>
+
   <struct name="ISP_MTILE_SIZE" length="1">
     <field name="x" start="16" end="25" type="uint"/>
     <field name="y" start="0" end="9" type="uint"/>
@@ -583,7 +587,9 @@ SOFTWARE.
     <field name="downscale" start="56" end="56" type="bool"/>
     <field name="size_z" start="52" end="55" type="SIZE"/>
     <field name="rotation" start="50" end="51" type="ROTATION_TYPE"/>
-    <field name="linestride" start="34" end="49" type="uint"/>
+    <field name="linestride" start="34" end="49" type="uint">
+      <define name="ALIGNMENT" value="2"/>
+    </field>
     <field name="memlayout" start="32" end="33" type="MEMLAYOUT"/>
     <field name="swiz_chan3" start="29" end="31" type="SWIZ"/>
     <field name="swiz_chan2" start="26" end="28" type="SWIZ"/>
@@ -639,6 +645,22 @@ SOFTWARE.
     <field name="partition_mask" start="3" end="20" type="uint"/>
     <field name="enable_4th_partition" start="2" end="2" type="bool"/>
     <field name="width" start="0" end="1" type="PIXEL_WIDTH"/>
+  </struct>
+
+  <struct name="USC_CLEAR_REGISTER0" length="1">
+    <field name="val" start="0" end="31" type="uint"/>
+  </struct>
+
+  <struct name="USC_CLEAR_REGISTER1" length="1">
+    <field name="val" start="0" end="31" type="uint"/>
+  </struct>
+
+  <struct name="USC_CLEAR_REGISTER2" length="1">
+    <field name="val" start="0" end="31" type="uint"/>
+  </struct>
+
+  <struct name="USC_CLEAR_REGISTER3" length="1">
+    <field name="val" start="0" end="31" type="uint"/>
   </struct>
 
 </csbgen>

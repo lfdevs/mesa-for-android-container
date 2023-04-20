@@ -21,10 +21,21 @@
  * IN THE SOFTWARE.
  */
 
+#include <sys/stat.h>
+
 #include "pipe/p_screen.h"
 #include "util/u_screen.h"
 #include "util/u_debug.h"
+#include "util/os_file.h"
 #include "util/os_time.h"
+#include "util/simple_mtx.h"
+#include "util/u_hash_table.h"
+#include "util/u_pointer.h"
+#include "util/macros.h"
+
+#ifdef HAVE_LIBDRM
+#include <xf86drm.h>
+#endif
 
 /**
  * Helper to use from a pipe_screen->get_param() implementation to return
@@ -37,6 +48,9 @@ int
 u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
                                  enum pipe_cap param)
 {
+   UNUSED uint64_t cap;
+   UNUSED int fd;
+
    assert(param < PIPE_CAP_LAST);
 
    /* Let's keep these sorted by position in p_defines.h. */
@@ -158,7 +172,6 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
    case PIPE_CAP_TGSI_TEXCOORD:
-   case PIPE_CAP_TEXTURE_BUFFER_SAMPLER:
       return 0;
 
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
@@ -172,6 +185,12 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT:
       /* GL_EXT_texture_buffer minimum value. */
       return 65536;
+
+   case PIPE_CAP_LINEAR_IMAGE_PITCH_ALIGNMENT:
+      return 0;
+
+   case PIPE_CAP_LINEAR_IMAGE_BASE_ADDRESS_ALIGNMENT:
+      return 0;
 
    case PIPE_CAP_MAX_VIEWPORTS:
       return 1;
@@ -423,8 +442,12 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
       return 0;
 
    case PIPE_CAP_DMABUF:
-#if DETECT_OS_LINUX || DETECT_OS_BSD
-      return 1;
+#if defined(HAVE_LIBDRM) && (DETECT_OS_LINUX || DETECT_OS_BSD)
+      fd = pscreen->get_screen_fd(pscreen);
+      if (fd != -1 && (drmGetCap(fd, DRM_CAP_PRIME, &cap) == 0))
+         return cap;
+      else
+         return 0;
 #else
       return 0;
 #endif
@@ -524,6 +547,8 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
       return 64;
 
    case PIPE_CAP_VALIDATE_ALL_DIRTY_STATES:
+   case PIPE_CAP_NULL_TEXTURES:
+   case PIPE_CAP_ASTC_VOID_EXTENTS_NEED_DENORM_FLUSH:
       return 0;
 
    default:
@@ -534,4 +559,129 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 uint64_t u_default_get_timestamp(UNUSED struct pipe_screen *screen)
 {
    return os_time_get_nano();
+}
+
+static uint32_t
+hash_file_description(const void *key)
+{
+   int fd = pointer_to_intptr(key);
+   struct stat stat;
+
+   // File descriptions can't be hashed, but it should be safe to assume
+   // that the same file description will always refer to he same file
+   if (fstat(fd, &stat) == -1)
+      return ~0; // Make sure fstat failing won't result in a random hash
+
+   return stat.st_dev ^ stat.st_ino ^ stat.st_rdev;
+}
+
+
+static bool
+equal_file_description(const void *key1, const void *key2)
+{
+   int ret;
+   int fd1 = pointer_to_intptr(key1);
+   int fd2 = pointer_to_intptr(key2);
+   struct stat stat1, stat2;
+
+   // If the file descriptors are the same, the file description will be too
+   // This will also catch sentinels, such as -1
+   if (fd1 == fd2)
+      return true;
+
+   ret = os_same_file_description(fd1, fd2);
+   if (ret >= 0)
+      return (ret == 0);
+
+   {
+      static bool has_warned;
+      if (!has_warned)
+         fprintf(stderr, "os_same_file_description couldn't determine if "
+                 "two DRM fds reference the same file description. (%s)\n"
+                 "Let's just assume that file descriptors for the same file probably"
+                 "share the file description instead. This may cause problems when"
+                 "that isn't the case.\n", strerror(errno));
+      has_warned = true;
+   }
+
+   // Let's at least check that it's the same file, different files can't
+   // have the same file descriptions
+   fstat(fd1, &stat1);
+   fstat(fd2, &stat2);
+
+   return stat1.st_dev == stat2.st_dev &&
+          stat1.st_ino == stat2.st_ino &&
+          stat1.st_rdev == stat2.st_rdev;
+}
+
+
+static struct hash_table *
+hash_table_create_file_description_keys(void)
+{
+   return _mesa_hash_table_create(NULL, hash_file_description, equal_file_description);
+}
+
+static struct hash_table *fd_tab = NULL;
+
+static simple_mtx_t screen_mutex = SIMPLE_MTX_INITIALIZER;
+
+static void
+drm_screen_destroy(struct pipe_screen *pscreen)
+{
+   boolean destroy;
+
+   simple_mtx_lock(&screen_mutex);
+   destroy = --pscreen->refcnt == 0;
+   if (destroy) {
+      int fd = pscreen->get_screen_fd(pscreen);
+      _mesa_hash_table_remove_key(fd_tab, intptr_to_pointer(fd));
+
+      if (!fd_tab->entries) {
+         _mesa_hash_table_destroy(fd_tab, NULL);
+         fd_tab = NULL;
+      }
+   }
+   simple_mtx_unlock(&screen_mutex);
+
+   if (destroy) {
+      pscreen->destroy = pscreen->winsys_priv;
+      pscreen->destroy(pscreen);
+   }
+}
+
+struct pipe_screen *
+u_pipe_screen_lookup_or_create(int gpu_fd,
+                               const struct pipe_screen_config *config,
+                               struct renderonly *ro,
+                               pipe_screen_create_function screen_create)
+{
+   struct pipe_screen *pscreen = NULL;
+
+   simple_mtx_lock(&screen_mutex);
+   if (!fd_tab) {
+      fd_tab = hash_table_create_file_description_keys();
+      if (!fd_tab)
+         goto unlock;
+   }
+
+   pscreen = util_hash_table_get(fd_tab, intptr_to_pointer(gpu_fd));
+   if (pscreen) {
+      pscreen->refcnt++;
+   } else {
+      pscreen = screen_create(gpu_fd, config, ro);
+      if (pscreen) {
+         pscreen->refcnt = 1;
+         _mesa_hash_table_insert(fd_tab, intptr_to_pointer(gpu_fd), pscreen);
+
+         /* Bit of a hack, to avoid circular linkage dependency,
+          * ie. pipe driver having to call in to winsys, we
+          * override the pipe drivers screen->destroy() */
+         pscreen->winsys_priv = pscreen->destroy;
+         pscreen->destroy = drm_screen_destroy;
+      }
+   }
+
+unlock:
+   simple_mtx_unlock(&screen_mutex);
+   return pscreen;
 }

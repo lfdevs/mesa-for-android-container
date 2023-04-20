@@ -100,6 +100,9 @@ static const struct debug_named_value debug_control[] = {
           "Don't try to merge subpasses in the same job even if they share framebuffer configuration (v3dv only)" },
         { "opt_compile_time", V3D_DEBUG_OPT_COMPILE_TIME,
           "Don't try to reduce shader spilling, might improve compile times with expensive shaders." },
+        /* disable_tfu is v3dv only because v3d has some uses of the TFU without alternative codepaths */
+        { "disable_tfu", V3D_DEBUG_DISABLE_TFU,
+          "Disable TFU (v3dv only)" },
         DEBUG_NAMED_VALUE_END
 };
 

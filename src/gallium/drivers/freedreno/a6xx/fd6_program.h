@@ -59,6 +59,11 @@ struct fd6_program_state {
    uint16_t num_viewports;
 
    /**
+    * The # of shader stages that need driver params.
+    */
+   uint8_t num_driver_params;
+
+   /**
     * Output components from frag shader.  It is possible to have
     * a fragment shader that only writes a subset of the bound
     * render targets.
@@ -70,6 +75,11 @@ struct fd6_program_state {
     * calculate it up-front.
     */
    uint32_t user_consts_cmdstream_size;
+
+   /**
+    * The FS contribution to LRZ state
+    */
+   struct fd6_lrz_state lrz_mask;
 };
 
 static inline struct fd6_program_state *
@@ -89,11 +99,15 @@ fd6_last_shader(const struct fd6_program_state *state)
       return state->vs;
 }
 
+BEGINC;
+
 void fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                      const struct ir3_shader_variant *so) assert_dt;
 
 struct fd_ringbuffer *fd6_program_interp_state(struct fd6_emit *emit) assert_dt;
 
 void fd6_prog_init(struct pipe_context *pctx);
+
+ENDC;
 
 #endif /* FD6_PROGRAM_H_ */

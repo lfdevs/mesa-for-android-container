@@ -44,14 +44,8 @@ KHR-GL43.shader_image_load_store.basic-allFormats-loadGeometryStages,Fail
 KHR-GL43.shader_image_load_store.basic-allFormats-storeGeometryStages,Fail
 KHR-GL43.shader_image_load_store.basic-allTargets-store,Fail
 KHR-GL43.shader_image_load_store.incomplete_textures,Fail
-KHR-GL43.shader_storage_buffer_object.advanced-indirectAddressing-case2,Fail
-KHR-GL43.shader_storage_buffer_object.advanced-usage-case1,Fail
-KHR-GL43.shader_storage_buffer_object.advanced-usage-sync,Fail
-KHR-GL43.shader_storage_buffer_object.basic-atomic-case1,Fail
-KHR-GL43.shader_storage_buffer_object.basic-atomic-case2,Fail
 KHR-GL43.shader_subroutine.ssbo_atomic_image_load_store,Fail
 
-KHR-Single-GL43.arrays_of_arrays_gl.AtomicUsage,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.InteractionArgumentAliasing1,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.InteractionArgumentAliasing2,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.InteractionArgumentAliasing3,Fail
@@ -67,11 +61,6 @@ KHR-Single-GL43.arrays_of_arrays_gl.SubroutineArgumentAliasing4,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.SubroutineFunctionCalls1,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.SubroutineFunctionCalls2,Fail
 
-# virglrenderer translates TGSI IMAGE declaration "WR" ("image is not readonly")
-# into the writeonly qualifier, which works for gles (where each image is either
-# RO or WO) but not for desktop GL.
-KHR-GL43.shading_language_420pack.binding_image_array,Fail
-
 KHR-GL43.shading_language_420pack.binding_images,Fail
 KHR-GL43.texture_view.view_sampling,Fail
 KHR-GL43.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
@@ -81,11 +70,10 @@ KHR-GL43.transform_feedback_overflow_query_ARB.basic-single-stream-separate-attr
 KHR-GL43.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
 KHR-GL43.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail
 
-glx@glx-make-current,Crash
+glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-multithread-clearbuffer,Crash
 glx@glx-multithread-texture,Crash
-glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-tfp,Crash
 glx@glx-visuals-depth,Crash
@@ -148,12 +136,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 0: Expected blue pixel in center,Fai
 spec@!opengl 1.1@polygon-mode-offset@config 1: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 2: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected blue pixel in center,Fail
-spec@!opengl 1.1@read-front,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=2,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=4,Fail
-spec@!opengl 1.1@read-front samples=2,Fail
-spec@!opengl 1.1@read-front samples=4,Fail
 spec@!opengl 1.1@texwrap 1d bordercolor,Fail
 spec@!opengl 1.1@texwrap 1d bordercolor@GL_RGBA8- border color only,Fail
 spec@!opengl 1.1@texwrap 1d proj bordercolor,Fail
@@ -396,11 +378,6 @@ spec@arb_shader_texture_image_samples@texturesamples@vs-usampler2dms-2,Fail
 spec@arb_shader_texture_image_samples@texturesamples@vs-usampler2dmsarray-2,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_tessellation_shader@execution@gs-primitiveid-instanced,Fail
-
-# "	intrinsic copy_deref (ssa_2, ssa_3) (dst_access=0, src_access=0)
-#  error: glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type) (../src/compiler/nir/nir_validate.c:643)"
-# since ntt copy-deref optimization, probably.
-spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 
 spec@arb_texture_compression@texwrap formats bordercolor,Fail
 spec@arb_texture_compression@texwrap formats bordercolor-swizzled,Fail
@@ -730,10 +707,4 @@ spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7152
-spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail
-
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7154
-spec@arb_enhanced_layouts@matching_fp64_types_1,Crash
-spec@arb_enhanced_layouts@matching_fp64_types_2,Crash
-spec@arb_enhanced_layouts@matching_fp64_types_3,Crash
+spec@!opengl 1.1@line-smooth-stipple,Fail

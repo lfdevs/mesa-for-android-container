@@ -1218,7 +1218,7 @@ Jan Vesely (2):
 -  amd: Make vgpr-spilling depend on llvm version
 -  clover: Fix build after clang r348827
 
-Jason Ekstrand (207):
+Faith Ekstrand (207):
 
 -  vulkan: Update the XML and headers to 1.1.91
 -  intel/fs,vec4: Clean up a repeated pattern with SSBOs

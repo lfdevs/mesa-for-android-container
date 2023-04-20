@@ -6,7 +6,7 @@
     GALLIVM_PERF: nopt
     FLAKES_CHANNEL: "#virgl-ci"
   script:
-    - xvfb-run --server-args='-noreset' sh -c "GALLIUM_DRIVER=virpipe install/deqp-runner.sh"
+    - xvfb-run --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && GALLIUM_DRIVER=virpipe install/deqp-runner.sh"
 
 virpipe-on-gl:
   extends:
@@ -15,6 +15,8 @@ virpipe-on-gl:
   variables:
     DEQP_SUITE: virpipe-gl
     GPU_VERSION: virpipe-gl
+    PIGLIT_PLATFORM: x11_egl
+    DEQP_FRACTION: 4
 
 .virgl-test:
   extends:
@@ -61,6 +63,7 @@ virgl-traces:
   tags:
     - kvm
   script:
+    - . "$SCRIPTS_DIR"/setup-test-env.sh
     # Use all threads for rendering and only run one job at a time
     # Couldn't get GitLab CI to correctly substitute the variable in the yaml
     - LP_NUM_THREADS=${FDO_CI_CONCURRENT} FDO_CI_CONCURRENT=1 install/crosvm-runner.sh install/piglit/piglit-traces.sh
@@ -87,7 +90,7 @@ virgl-traces:
 virgl-iris-traces:
   extends:
     - .virgl-iris-test
-    - .virgl-rules
+    - .virgl-iris-manual-rules
   variables:
     PIGLIT_REPLAY_EXTRA_ARGS: "--keep-image --download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
 
@@ -100,4 +103,13 @@ virgl-iris-traces-performance:
     PIGLIT_REPLAY_SUBCOMMAND: profile
     PIGLIT_REPLAY_LOOP_TIMES: 150
     PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
-  allow_failure: true
+
+android-virgl-llvmpipe:
+  extends:
+    - .test-android
+    - .virgl-rules
+  variables:
+    ANDROID_GPU_MODE: drm_virgl
+    ANDROID_DRIVER: virtio_gpu
+    GPU_VERSION: virgl-gl
+    DEQP_SUITE: android-virgl

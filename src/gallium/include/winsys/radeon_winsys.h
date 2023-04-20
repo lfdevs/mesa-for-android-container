@@ -316,14 +316,17 @@ struct radeon_winsys {
    void (*destroy)(struct radeon_winsys *ws);
 
    /**
+    * Get FD for winsys if winsys provides one
+    */
+   int (*get_fd)(struct radeon_winsys *ws);
+
+   /**
     * Query an info structure from winsys.
     *
     * \param ws        The winsys this function is called from.
     * \param info      Return structure
     */
-   void (*query_info)(struct radeon_winsys *ws, struct radeon_info *info,
-                      bool enable_smart_access_memory,
-                      bool disable_smart_access_memory);
+   void (*query_info)(struct radeon_winsys *ws, struct radeon_info *info);
 
    /**
     * A hint for the winsys that it should pin its execution threads to

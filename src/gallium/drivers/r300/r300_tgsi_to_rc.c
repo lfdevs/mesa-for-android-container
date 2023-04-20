@@ -177,6 +177,8 @@ static void transform_srcreg(
 {
     dst->File = translate_register_file(src->Register.File);
     dst->Index = translate_register_index(ttr, src->Register.File, src->Register.Index);
+    /* Negative offsets to relative addressing should have been lowered in NIR */
+    assert(dst->Index >= 0);
     dst->RelAddr = src->Register.Indirect;
     dst->Swizzle = tgsi_util_get_full_src_register_swizzle(src, 0);
     dst->Swizzle |= tgsi_util_get_full_src_register_swizzle(src, 1) << 3;

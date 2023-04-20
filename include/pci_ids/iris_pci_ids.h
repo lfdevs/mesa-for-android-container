@@ -138,11 +138,11 @@ CHIPSET(0x8A5C, icl_gt1_5, "ICL GT1.5", "Intel(R) Iris(R) Plus Graphics")
 CHIPSET(0x8A5D, icl_gt1,   "ICL GT1",   "Intel(R) HD Graphics")
 CHIPSET(0x8A71, icl_gt0_5, "ICL GT0.5", "Intel(R) HD Graphics")
 
-CHIPSET(0x4500, ehl_4x8, "EHL", "Intel(R) UHD Graphics")
 CHIPSET(0x4541, ehl_2x4, "EHL", "Intel(R) UHD Graphics")
 CHIPSET(0x4551, ehl_4x4, "EHL", "Intel(R) UHD Graphics")
 CHIPSET(0x4555, ehl_2x8, "EHL", "Intel(R) UHD Graphics")
 CHIPSET(0x4557, ehl_4x5, "EHL", "Intel(R) UHD Graphics")
+CHIPSET(0x4570, ehl_4x8, "EHL", "Intel(R) UHD Graphics")
 CHIPSET(0x4571, ehl_4x8, "EHL", "Intel(R) UHD Graphics")
 CHIPSET(0x4E51, ehl_4x4, "JSL", "Intel(R) UHD Graphics")
 CHIPSET(0x4E55, ehl_2x8, "JSL", "Intel(R) UHD Graphics")
@@ -245,8 +245,8 @@ CHIPSET(0x56b3, dg2_g12, "DG2", "Intel(R) Graphics")
 CHIPSET(0x56c0, dg2_g10, "ATS-M", "Intel(R) Data Center GPU Flex Series 170 Graphics")
 CHIPSET(0x56c1, dg2_g11, "ATS-M", "Intel(R) Data Center GPU Flex Series 140 Graphics")
 
-/* CHIPSET(0x7d40, mtl_m, "MTL", "Intel(R) Graphics") */
-/* CHIPSET(0x7d45, mtl_p, "MTL", "Intel(R) Graphics") */
-/* CHIPSET(0x7d55, mtl_p, "MTL", "Intel(R) Graphics") */
-/* CHIPSET(0x7d60, mtl_m, "MTL", "Intel(R) Graphics") */
-/* CHIPSET(0x7dd5, mtl_p, "MTL", "Intel(R) Graphics") */
+CHIPSET(0x7d40, mtl_m, "MTL", "Intel(R) Graphics")
+CHIPSET(0x7d45, mtl_p, "MTL", "Intel(R) Graphics")
+CHIPSET(0x7d55, mtl_p, "MTL", "Intel(R) Graphics")
+CHIPSET(0x7d60, mtl_m, "MTL", "Intel(R) Graphics")
+CHIPSET(0x7dd5, mtl_p, "MTL", "Intel(R) Graphics")

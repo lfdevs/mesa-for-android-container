@@ -81,9 +81,6 @@ public:
 
    void create_function(ir_function_signature *ir);
 
-   /* True if we have any output rvalues */
-   bool has_output_rvalue;
-
 private:
    void add_instr(nir_instr *instr, unsigned num_components, unsigned bit_size);
    nir_ssa_def *evaluate_rvalue(ir_rvalue *ir);
@@ -125,6 +122,8 @@ private:
 
    void adjust_sparse_variable(nir_deref_instr *var_deref, const glsl_type *type,
                                nir_ssa_def *dest);
+
+   const struct gl_constants *consts;
 };
 
 /*
@@ -231,15 +230,19 @@ glsl_to_nir(const struct gl_constants *consts,
    sh->ir = NULL;
 
    nir_validate_shader(shader, "after glsl to nir, before function inline");
+   if (should_print_nir(shader)) {
+      printf("glsl_to_nir\n");
+      nir_print_shader(shader, stdout);
+   }
 
    /* We have to lower away local constant initializers right before we
     * inline functions.  That way they get properly initialized at the top
     * of the function and not at the top of its caller.
     */
-   nir_lower_variable_initializers(shader, nir_var_all);
-   nir_lower_returns(shader);
-   nir_inline_functions(shader);
-   nir_opt_deref(shader);
+   NIR_PASS_V(shader, nir_lower_variable_initializers, nir_var_all);
+   NIR_PASS_V(shader, nir_lower_returns);
+   NIR_PASS_V(shader, nir_inline_functions);
+   NIR_PASS_V(shader, nir_opt_deref);
 
    nir_validate_shader(shader, "after function inlining and return lowering");
 
@@ -263,9 +266,7 @@ glsl_to_nir(const struct gl_constants *consts,
       shader->info.fs.origin_upper_left = sh->Program->info.fs.origin_upper_left;
       shader->info.fs.advanced_blend_modes = sh->Program->info.fs.advanced_blend_modes;
 
-      nir_foreach_variable_with_modes(var, shader,
-                                      nir_var_shader_in |
-                                      nir_var_system_value) {
+      nir_foreach_variable_in_shader(var, shader) {
          if (var->data.mode == nir_var_system_value &&
              (var->data.location == SYSTEM_VALUE_SAMPLE_ID ||
               var->data.location == SYSTEM_VALUE_SAMPLE_POS))
@@ -273,10 +274,10 @@ glsl_to_nir(const struct gl_constants *consts,
 
          if (var->data.mode == nir_var_shader_in && var->data.sample)
             shader->info.fs.uses_sample_shading = true;
-      }
 
-      if (v1.has_output_rvalue)
-         shader->info.fs.uses_sample_shading = true;
+         if (var->data.mode == nir_var_shader_out && var->data.fb_fetch_output)
+            shader->info.fs.uses_sample_shading = true;
+      }
    }
 
    return shader;
@@ -284,10 +285,10 @@ glsl_to_nir(const struct gl_constants *consts,
 
 nir_visitor::nir_visitor(const struct gl_constants *consts, nir_shader *shader)
 {
+   this->consts = consts;
    this->supports_std430 = consts->UseSTD430AsDefaultPacking;
    this->shader = shader;
    this->is_global = true;
-   this->has_output_rvalue = false;
    this->var_table = _mesa_pointer_hash_table_create(NULL);
    this->overload_table = _mesa_pointer_hash_table_create(NULL);
    this->sparse_variable_set = _mesa_pointer_set_create(NULL);
@@ -709,7 +710,13 @@ nir_visitor::visit(ir_variable *ir)
       var->state_slots = NULL;
    }
 
-   var->constant_initializer = constant_copy(ir->constant_initializer, var);
+   /* Values declared const will have ir->constant_value instead of
+    * ir->constant_initializer.
+    */
+   if (ir->constant_initializer)
+      var->constant_initializer = constant_copy(ir->constant_initializer, var);
+   else
+      var->constant_initializer = constant_copy(ir->constant_value, var);
 
    if (var->data.mode == nir_var_function_temp)
       nir_function_impl_add_variable(impl, var);
@@ -1091,7 +1098,9 @@ nir_visitor::visit(ir_call *ir)
          op = nir_intrinsic_image_deref_atomic_dec_wrap;
          break;
       case ir_intrinsic_memory_barrier:
-         op = nir_intrinsic_memory_barrier;
+         op = shader->options->use_scoped_barrier
+            ? nir_intrinsic_scoped_barrier
+            : nir_intrinsic_memory_barrier;
          break;
       case ir_intrinsic_image_size:
          op = nir_intrinsic_image_deref_size;
@@ -1112,19 +1121,29 @@ nir_visitor::visit(ir_call *ir)
          op = nir_intrinsic_end_invocation_interlock;
          break;
       case ir_intrinsic_group_memory_barrier:
-         op = nir_intrinsic_group_memory_barrier;
+         op = shader->options->use_scoped_barrier
+            ? nir_intrinsic_scoped_barrier
+            : nir_intrinsic_group_memory_barrier;
          break;
       case ir_intrinsic_memory_barrier_atomic_counter:
-         op = nir_intrinsic_memory_barrier_atomic_counter;
+         op = shader->options->use_scoped_barrier
+            ? nir_intrinsic_scoped_barrier
+            : nir_intrinsic_memory_barrier_atomic_counter;
          break;
       case ir_intrinsic_memory_barrier_buffer:
-         op = nir_intrinsic_memory_barrier_buffer;
+         op = shader->options->use_scoped_barrier
+            ? nir_intrinsic_scoped_barrier
+            : nir_intrinsic_memory_barrier_buffer;
          break;
       case ir_intrinsic_memory_barrier_image:
-         op = nir_intrinsic_memory_barrier_image;
+         op = shader->options->use_scoped_barrier
+            ? nir_intrinsic_scoped_barrier
+            : nir_intrinsic_memory_barrier_image;
          break;
       case ir_intrinsic_memory_barrier_shared:
-         op = nir_intrinsic_memory_barrier_shared;
+         op = shader->options->use_scoped_barrier
+            ? nir_intrinsic_scoped_barrier
+            : nir_intrinsic_memory_barrier_shared;
          break;
       case ir_intrinsic_shared_load:
          op = nir_intrinsic_load_shared;
@@ -1443,6 +1462,62 @@ nir_visitor::visit(ir_call *ir)
       case nir_intrinsic_memory_barrier_shared:
          nir_builder_instr_insert(&b, &instr->instr);
          break;
+      case nir_intrinsic_scoped_barrier: {
+         /* The nir_intrinsic_scoped_barrier follows the general
+          * semantics of SPIR-V memory barriers, so this and other memory
+          * barriers use the mapping based on GLSL->SPIR-V from
+          *
+          *   https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_gl_spirv.txt
+          */
+         nir_scope scope;
+         unsigned modes;
+         switch (ir->callee->intrinsic_id) {
+         case ir_intrinsic_memory_barrier:
+            scope = NIR_SCOPE_DEVICE;
+            modes = nir_var_image |
+                    nir_var_mem_ssbo |
+                    nir_var_mem_shared |
+                    nir_var_mem_global;
+            break;
+         case ir_intrinsic_memory_barrier_buffer:
+            scope = NIR_SCOPE_DEVICE;
+            modes = nir_var_mem_ssbo |
+                    nir_var_mem_global;
+            break;
+         case ir_intrinsic_memory_barrier_image:
+            scope = NIR_SCOPE_DEVICE;
+            modes = nir_var_image;
+            break;
+         case ir_intrinsic_memory_barrier_shared:
+            /* Both ARB_gl_spirv and glslang lower this to Device scope, so
+             * follow their lead.  Note GL_KHR_vulkan_glsl also does
+             * something similar.
+             */
+            scope = NIR_SCOPE_DEVICE;
+            modes = nir_var_mem_shared;
+            break;
+         case ir_intrinsic_group_memory_barrier:
+            scope = NIR_SCOPE_WORKGROUP;
+            modes = nir_var_image |
+                    nir_var_mem_ssbo |
+                    nir_var_mem_shared |
+                    nir_var_mem_global;
+            break;
+         case ir_intrinsic_memory_barrier_atomic_counter:
+            /* There's no nir_var_atomic_counter, but since atomic counters are lowered
+             * to SSBOs, we use nir_var_mem_ssbo instead.
+             */
+            scope = NIR_SCOPE_DEVICE;
+            modes = nir_var_mem_ssbo;
+            break;
+         default:
+               unreachable("invalid intrinsic id for memory barrier");
+         }
+
+         nir_scoped_memory_barrier(&b, scope, NIR_MEMORY_ACQ_REL,
+                                   (nir_variable_mode)modes);
+         break;
+      }
       case nir_intrinsic_shader_clock:
          nir_ssa_dest_init(&instr->instr, &instr->dest, 2, 32, NULL);
          nir_intrinsic_set_memory_scope(instr, NIR_SCOPE_SUBGROUP);
@@ -1826,9 +1901,6 @@ nir_visitor::evaluate_rvalue(ir_rvalue* ir)
 
       enum gl_access_qualifier access = deref_get_qualifier(this->deref);
       this->result = nir_load_deref_with_access(&b, this->deref, access);
-
-      if (nir_deref_mode_is(this->deref, nir_var_shader_out))
-         this->has_output_rvalue = true;
    }
 
    return this->result;
@@ -1965,8 +2037,19 @@ nir_visitor::visit(ir_expression *ir)
                                        : nir_isign(&b, srcs[0]);
       break;
    case ir_unop_rcp:  result = nir_frcp(&b, srcs[0]);  break;
-   case ir_unop_rsq:  result = nir_frsq(&b, srcs[0]);  break;
-   case ir_unop_sqrt: result = nir_fsqrt(&b, srcs[0]); break;
+
+   case ir_unop_rsq:
+      if (consts->ForceGLSLAbsSqrt)
+         srcs[0] = nir_fabs(&b, srcs[0]);
+      result = nir_frsq(&b, srcs[0]);
+      break;
+
+   case ir_unop_sqrt:
+      if (consts->ForceGLSLAbsSqrt)
+         srcs[0] = nir_fabs(&b, srcs[0]);
+      result = nir_fsqrt(&b, srcs[0]);
+      break;
+
    case ir_unop_exp:  result = nir_fexp2(&b, nir_fmul_imm(&b, srcs[0], M_LOG2E)); break;
    case ir_unop_log:  result = nir_fmul_imm(&b, nir_flog2(&b, srcs[0]), 1.0 / M_LOG2E); break;
    case ir_unop_exp2: result = nir_fexp2(&b, srcs[0]); break;
@@ -2322,8 +2405,12 @@ nir_visitor::visit(ir_expression *ir)
    case ir_binop_dot:
       result = nir_fdot(&b, srcs[0], srcs[1]);
       break;
+
    case ir_binop_vector_extract:
       result = nir_vector_extract(&b, srcs[0], srcs[1]);
+      break;
+   case ir_triop_vector_insert:
+      result = nir_vector_insert(&b, srcs[0], srcs[1], srcs[2]);
       break;
 
    case ir_binop_atan2:
@@ -2702,12 +2789,22 @@ nir_visitor::visit(ir_dereference_array *ir)
 void
 nir_visitor::visit(ir_barrier *)
 {
-   if (shader->info.stage == MESA_SHADER_COMPUTE)
-      nir_memory_barrier_shared(&b);
-   else if (shader->info.stage == MESA_SHADER_TESS_CTRL)
-      nir_memory_barrier_tcs_patch(&b);
+   if (shader->options->use_scoped_barrier) {
+      if (shader->info.stage == MESA_SHADER_COMPUTE) {
+         nir_scoped_barrier(&b, NIR_SCOPE_WORKGROUP, NIR_SCOPE_WORKGROUP,
+                            NIR_MEMORY_ACQ_REL, nir_var_mem_shared);
+      } else if (shader->info.stage == MESA_SHADER_TESS_CTRL) {
+         nir_scoped_barrier(&b, NIR_SCOPE_WORKGROUP, NIR_SCOPE_WORKGROUP,
+                            NIR_MEMORY_ACQ_REL, nir_var_shader_out);
+      }
+   } else {
+      if (shader->info.stage == MESA_SHADER_COMPUTE)
+         nir_memory_barrier_shared(&b);
+      else if (shader->info.stage == MESA_SHADER_TESS_CTRL)
+         nir_memory_barrier_tcs_patch(&b);
 
-   nir_control_barrier(&b);
+      nir_control_barrier(&b);
+   }
 }
 
 nir_shader *
@@ -2755,6 +2852,7 @@ glsl_float64_funcs_to_nir(struct gl_context *ctx,
     * with compile times.
     */
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
    NIR_PASS_V(nir, nir_copy_prop);
    NIR_PASS_V(nir, nir_opt_dce);
    NIR_PASS_V(nir, nir_opt_cse);

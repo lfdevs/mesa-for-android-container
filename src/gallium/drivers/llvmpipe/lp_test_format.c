@@ -150,7 +150,7 @@ test_format_float(unsigned verbose, FILE *fp,
    unsigned i, j, k, l;
 
    context = LLVMContextCreate();
-#if LLVM_VERSION_MAJOR >= 15
+#if LLVM_VERSION_MAJOR == 15
    LLVMContextSetOpaquePointers(context, false);
 #endif
    gallivm = gallivm_create("test_module_float", context, NULL);
@@ -254,7 +254,7 @@ test_format_unorm8(unsigned verbose, FILE *fp,
    unsigned i, j, k, l;
 
    context = LLVMContextCreate();
-#if LLVM_VERSION_MAJOR >= 15
+#if LLVM_VERSION_MAJOR == 15
    LLVMContextSetOpaquePointers(context, false);
 #endif
    gallivm = gallivm_create("test_module_unorm8", context, NULL);

@@ -318,14 +318,16 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
 
         NIR_PASS(_, s, nir_lower_load_const_to_scalar);
 
-        v3d_optimize_nir(NULL, s, true);
+        v3d_optimize_nir(NULL, s);
 
         NIR_PASS(_, s, nir_lower_var_copies);
 
         /* Get rid of split copies */
-        v3d_optimize_nir(NULL, s, false);
+        v3d_optimize_nir(NULL, s);
 
         NIR_PASS(_, s, nir_remove_dead_variables, nir_var_function_temp, NULL);
+
+        NIR_PASS(_, s, nir_lower_frexp);
 
         /* Garbage collect dead instructions */
         nir_sweep(s);
@@ -467,22 +469,12 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
         for (int i = 0; i < texstate->num_textures; i++) {
                 struct pipe_sampler_view *sampler = texstate->textures[i];
                 struct v3d_sampler_view *v3d_sampler = v3d_sampler_view(sampler);
-                struct pipe_sampler_state *sampler_state =
-                        texstate->samplers[i];
 
                 if (!sampler)
                         continue;
 
-                assert(sampler->target == PIPE_BUFFER || sampler_state);
-
-                unsigned compare_mode = sampler_state ?
-                        sampler_state->compare_mode :
-                        PIPE_TEX_COMPARE_NONE;
-
                 key->sampler[i].return_size =
-                        v3d_get_tex_return_size(devinfo,
-                                                sampler->format,
-                                                compare_mode);
+                        v3d_get_tex_return_size(devinfo, sampler->format);
 
                 /* For 16-bit, we set up the sampler to always return 2
                  * channels (meaning no recompiles for most statechanges),

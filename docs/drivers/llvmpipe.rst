@@ -258,7 +258,7 @@ Recommended Reading
    -  `Optimizing Pixomatic For Modern x86
       Processors <https://www.drdobbs.com/optimizing-pixomatic-for-modern-x86-proc/184405807>`__
    -  `Intel 64 and IA-32 Architectures Optimization Reference
-      Manual <https://cdrdv2-public.intel.com/671488/248966_software_optimization_manual.pdf>`__
+      Manual <https://www.intel.com/content/www/us/en/content-details/671488/intel-64-and-ia-32-architectures-optimization-reference-manual.html>`__
    -  `Software optimization
       resources <https://www.agner.org/optimize/>`__
    -  `Intel Intrinsics

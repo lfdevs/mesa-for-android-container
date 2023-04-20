@@ -50,9 +50,10 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst, nir_rounding_mode rnd
       return nir_op_mov;
    }
 
-   /* i2b and u2b do not exist.  Use ine (via nir_type_conversion) instead */
-   assert((src_base != nir_type_int && src_base != nir_type_uint) ||
-          dst_base != nir_type_bool);
+   /* f2b, i2b, and u2b do not exist.  Use ine or fne (via nir_type_conversion)
+    * instead.
+    */
+   assert(src_base == dst_base || dst_base != nir_type_bool);
 
    switch (src_base) {
 %     for src_t in ['int', 'uint', 'float', 'bool']:
@@ -72,7 +73,7 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst, nir_rounding_mode rnd
 %                 else:
 <%                   dst_t = 'int' %>
 %                 endif
-%              elif src_t in ['int', 'uint'] and dst_t == 'bool':
+%              elif src_t != 'bool' and dst_t == 'bool':
 <%                   continue %>
 %              endif
                switch (dst_bit_size) {

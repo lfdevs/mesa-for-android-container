@@ -65,8 +65,8 @@ static void si_set_es_return_value_for_gs(struct si_shader_context *ctx)
    ret = si_insert_input_ptr(ctx, ret, ctx->args->internal_bindings, 8 + SI_SGPR_INTERNAL_BINDINGS);
    ret = si_insert_input_ptr(ctx, ret, ctx->args->bindless_samplers_and_images,
                              8 + SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES);
+   ret = si_insert_input_ptr(ctx, ret, ctx->args->vs_state_bits, 8 + SI_SGPR_VS_STATE_BITS);
    if (ctx->screen->use_ngg) {
-      ret = si_insert_input_ptr(ctx, ret, ctx->args->vs_state_bits, 8 + SI_SGPR_VS_STATE_BITS);
       ret = si_insert_input_ptr(ctx, ret, ctx->args->small_prim_cull_info, 8 + GFX9_SGPR_SMALL_PRIM_CULL_INFO);
       if (ctx->screen->info.gfx_level >= GFX11)
          ret = si_insert_input_ptr(ctx, ret, ctx->args->gs_attr_address, 8 + GFX9_SGPR_ATTRIBUTE_RING_ADDR);
@@ -96,65 +96,10 @@ static LLVMValueRef si_get_gs_wave_id(struct si_shader_context *ctx)
       return ac_get_arg(&ctx->ac, ctx->args->ac.gs_wave_id);
 }
 
-static LLVMValueRef ngg_get_emulated_counters_buf(struct si_shader_context *ctx)
-{
-   return ac_build_load_to_sgpr(&ctx->ac,
-                                ac_get_ptr_arg(&ctx->ac, &ctx->args->ac, ctx->args->internal_bindings),
-                                LLVMConstInt(ctx->ac.i32, SI_GS_QUERY_EMULATED_COUNTERS_BUF, false));
-}
-
 void si_llvm_gs_build_end(struct si_shader_context *ctx)
 {
-   struct si_shader_info UNUSED *info = &ctx->shader->selector->info;
-
-   assert(info->num_outputs <= AC_LLVM_MAX_OUTPUTS);
-
    if (ctx->screen->info.gfx_level >= GFX10)
       ac_build_waitcnt(&ctx->ac, AC_WAIT_VSTORE);
-
-   if (ctx->screen->use_ngg) {
-      /* Implement PIPE_STAT_QUERY_GS_PRIMITIVES for non-ngg draws because we can't
-       * use pipeline statistics (they would be correct but when screen->use_ngg, we
-       * can't know when the query is started if the next draw(s) will use ngg or not).
-       */
-      LLVMValueRef tmp = GET_FIELD(ctx, GS_STATE_PIPELINE_STATS_EMU);
-      tmp = LLVMBuildTrunc(ctx->ac.builder, tmp, ctx->ac.i1, "");
-      ac_build_ifcc(&ctx->ac, tmp, 5229); /* if (GS_PIPELINE_STATS_EMU) */
-      {
-         LLVMValueRef prim = ctx->ac.i32_0;
-         switch (ctx->shader->selector->info.base.gs.output_primitive) {
-         case SHADER_PRIM_POINTS:
-            prim = ctx->gs_emitted_vertices;
-            break;
-         case SHADER_PRIM_LINE_STRIP:
-            prim = LLVMBuildSub(ctx->ac.builder, ctx->gs_emitted_vertices, ctx->ac.i32_1, "");
-            prim = ac_build_imax(&ctx->ac, prim, ctx->ac.i32_0);
-            break;
-         case SHADER_PRIM_TRIANGLE_STRIP:
-            prim = LLVMBuildSub(ctx->ac.builder, ctx->gs_emitted_vertices, LLVMConstInt(ctx->ac.i32, 2, 0), "");
-            prim = ac_build_imax(&ctx->ac, prim, ctx->ac.i32_0);
-            break;
-         }
-
-         LLVMValueRef args[] = {
-            prim,
-            ngg_get_emulated_counters_buf(ctx),
-            LLVMConstInt(ctx->ac.i32,
-                         si_query_pipestat_end_dw_offset(ctx->screen, PIPE_STAT_QUERY_GS_PRIMITIVES) * 4,
-                         false),
-            ctx->ac.i32_0,                            /* soffset */
-            ctx->ac.i32_0,                            /* cachepolicy */
-         };
-         ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.raw.buffer.atomic.add.i32", ctx->ac.i32, args, 5, 0);
-
-         args[0] = ctx->ac.i32_1;
-         args[2] = LLVMConstInt(ctx->ac.i32,
-                                si_query_pipestat_end_dw_offset(ctx->screen, PIPE_STAT_QUERY_GS_INVOCATIONS) * 4,
-                                false);
-         ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.raw.buffer.atomic.add.i32", ctx->ac.i32, args, 5, 0);
-      }
-      ac_build_endif(&ctx->ac, 5229);
-   }
 
    ac_build_sendmsg(&ctx->ac, AC_SENDMSG_GS_OP_NOP | AC_SENDMSG_GS_DONE, si_get_gs_wave_id(ctx));
 
@@ -170,40 +115,9 @@ static void si_llvm_emit_vertex(struct ac_shader_abi *abi, unsigned stream,
 
    assert(!ctx->shader->key.ge.as_ngg);
 
-   struct si_shader_info *info = &ctx->shader->selector->info;
-   struct si_shader *shader = ctx->shader;
-   LLVMValueRef soffset = ac_get_arg(&ctx->ac, ctx->args->ac.gs2vs_offset);
-
-   unsigned offset = 0;
-   for (unsigned i = 0; i < info->num_outputs; i++) {
-      for (unsigned chan = 0; chan < 4; chan++) {
-         if (!(info->output_usagemask[i] & (1 << chan)) ||
-             ((info->output_streams[i] >> (2 * chan)) & 3) != stream)
-            continue;
-
-         LLVMValueRef out_val = LLVMBuildLoad2(ctx->ac.builder, ctx->ac.f32, addrs[4 * i + chan], "");
-         LLVMValueRef voffset =
-            LLVMConstInt(ctx->ac.i32, offset * shader->selector->info.base.gs.vertices_out, 0);
-         offset++;
-
-         voffset = LLVMBuildAdd(ctx->ac.builder, voffset, vertexidx, "");
-         voffset = LLVMBuildMul(ctx->ac.builder, voffset, LLVMConstInt(ctx->ac.i32, 4, 0), "");
-
-         out_val = ac_to_integer(&ctx->ac, out_val);
-
-         ac_build_buffer_store_dword(&ctx->ac, ctx->gsvs_ring[stream], out_val, NULL,
-                                     voffset, soffset, ac_glc | ac_slc | ac_swizzled);
-      }
-   }
-
-   /* Signal vertex emission if vertex data was written. */
-   if (offset) {
-      ac_build_sendmsg(&ctx->ac, AC_SENDMSG_GS_OP_EMIT | AC_SENDMSG_GS | (stream << 8),
-                       si_get_gs_wave_id(ctx));
-
-      ctx->gs_emitted_vertices = LLVMBuildAdd(ctx->ac.builder, ctx->gs_emitted_vertices,
-                                              ctx->ac.i32_1, "vert");
-   }
+   /* Signal vertex emission */
+   ac_build_sendmsg(&ctx->ac, AC_SENDMSG_GS_OP_EMIT | AC_SENDMSG_GS | (stream << 8),
+                    si_get_gs_wave_id(ctx));
 }
 
 /* Cut one primitive from the geometry shader */
@@ -337,234 +251,6 @@ void si_preload_gs_rings(struct si_shader_context *ctx)
 
       ctx->gsvs_ring[stream] = ring;
    }
-}
-
-/**
- * Vertex color clamping.
- *
- * This uses a state constant loaded in a user data SGPR and
- * an IF statement is added that clamps all colors if the constant
- * is true.
- */
-static void si_vertex_color_clamping(struct si_shader_context *ctx,
-                                     struct si_shader_output_values *outputs, unsigned noutput)
-{
-   LLVMValueRef addr[SI_MAX_VS_OUTPUTS][4];
-   bool has_colors = false;
-
-   /* Store original colors to alloca variables. */
-   for (unsigned i = 0; i < noutput; i++) {
-      if (outputs[i].semantic != VARYING_SLOT_COL0 &&
-          outputs[i].semantic != VARYING_SLOT_COL1 &&
-          outputs[i].semantic != VARYING_SLOT_BFC0 &&
-          outputs[i].semantic != VARYING_SLOT_BFC1)
-         continue;
-
-      for (unsigned j = 0; j < 4; j++)
-         addr[i][j] = ac_build_alloca_init(&ctx->ac, outputs[i].values[j], "");
-
-      has_colors = true;
-   }
-
-   if (!has_colors)
-      return;
-
-   /* The state is in the first bit of the user SGPR. */
-   LLVMValueRef cond = GET_FIELD(ctx, VS_STATE_CLAMP_VERTEX_COLOR);
-   cond = LLVMBuildTrunc(ctx->ac.builder, cond, ctx->ac.i1, "");
-
-   ac_build_ifcc(&ctx->ac, cond, 6502);
-
-   /* Store clamped colors to alloca variables within the conditional block. */
-   for (unsigned i = 0; i < noutput; i++) {
-      if (outputs[i].semantic != VARYING_SLOT_COL0 &&
-          outputs[i].semantic != VARYING_SLOT_COL1 &&
-          outputs[i].semantic != VARYING_SLOT_BFC0 &&
-          outputs[i].semantic != VARYING_SLOT_BFC1)
-         continue;
-
-      for (unsigned j = 0; j < 4; j++) {
-         LLVMBuildStore(ctx->ac.builder, ac_build_clamp(&ctx->ac, outputs[i].values[j]),
-                        addr[i][j]);
-      }
-   }
-   ac_build_endif(&ctx->ac, 6502);
-
-   /* Load clamped colors */
-   for (unsigned i = 0; i < noutput; i++) {
-      if (outputs[i].semantic != VARYING_SLOT_COL0 &&
-          outputs[i].semantic != VARYING_SLOT_COL1 &&
-          outputs[i].semantic != VARYING_SLOT_BFC0 &&
-          outputs[i].semantic != VARYING_SLOT_BFC1)
-         continue;
-
-      for (unsigned j = 0; j < 4; j++) {
-         outputs[i].values[j] = LLVMBuildLoad2(ctx->ac.builder, ctx->ac.f32, addr[i][j], "");
-      }
-   }
-}
-
-/* Generate code for the hardware VS shader stage to go with a geometry shader */
-struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
-                                             struct ac_llvm_compiler *compiler,
-                                             struct si_shader_selector *gs_selector,
-                                             const struct pipe_stream_output_info *so,
-                                             struct util_debug_callback *debug)
-{
-   struct si_shader_context ctx;
-   struct si_shader *shader;
-   LLVMBuilderRef builder;
-   struct si_shader_output_values outputs[SI_MAX_VS_OUTPUTS];
-   struct si_shader_info *gsinfo = &gs_selector->info;
-   int i;
-
-   shader = CALLOC_STRUCT(si_shader);
-   if (!shader)
-      return NULL;
-
-   /* We can leave the fence as permanently signaled because the GS copy
-    * shader only becomes visible globally after it has been compiled. */
-   util_queue_fence_init(&shader->ready);
-
-   shader->selector = gs_selector;
-   shader->is_gs_copy_shader = true;
-   shader->wave_size = si_determine_wave_size(sscreen, shader);
-
-   STATIC_ASSERT(sizeof(shader->info.vs_output_param_offset[0]) == 1);
-   memset(shader->info.vs_output_param_offset, AC_EXP_PARAM_DEFAULT_VAL_0000,
-          sizeof(shader->info.vs_output_param_offset));
-
-   for (unsigned i = 0; i < gsinfo->num_outputs; i++) {
-      unsigned semantic = gsinfo->output_semantic[i];
-
-      /* Skip if no channel writes to stream 0. */
-      if (!nir_slot_is_varying(semantic) ||
-          (gsinfo->output_streams[i] & 0x03 &&
-           gsinfo->output_streams[i] & 0x0c &&
-           gsinfo->output_streams[i] & 0x30 &&
-           gsinfo->output_streams[i] & 0xc0))
-         continue;
-
-      shader->info.vs_output_param_offset[semantic] = shader->info.nr_param_exports++;
-      shader->info.vs_output_param_mask |= BITFIELD64_BIT(i);
-   }
-
-   si_llvm_context_init(&ctx, sscreen, compiler, shader->wave_size, false, false);
-   ctx.shader = shader;
-   ctx.stage = MESA_SHADER_VERTEX;
-   ctx.so = *so;
-
-   struct si_shader_args args;
-   si_init_shader_args(shader, &args);
-   ctx.args = &args;
-
-   builder = ctx.ac.builder;
-
-   /* Build the main function. */
-   si_llvm_create_main_func(&ctx);
-
-   ctx.gsvs_ring[0] =
-      ac_build_load_to_sgpr(&ctx.ac,
-         ac_get_ptr_arg(&ctx.ac, &ctx.args->ac, ctx.args->internal_bindings), LLVMConstInt(ctx.ac.i32, SI_RING_GSVS, 0));
-
-   LLVMValueRef voffset =
-      LLVMBuildMul(ctx.ac.builder, ctx.abi.vertex_id, LLVMConstInt(ctx.ac.i32, 4, 0), "");
-
-   /* Fetch the vertex stream ID.*/
-   LLVMValueRef stream_id;
-
-   if (!sscreen->use_ngg_streamout && ctx.so.num_outputs)
-      stream_id = si_unpack_param(&ctx, ctx.args->ac.streamout_config, 24, 2);
-   else
-      stream_id = ctx.ac.i32_0;
-
-   /* Fill in output information. */
-   for (i = 0; i < gsinfo->num_outputs; ++i) {
-      outputs[i].semantic = gsinfo->output_semantic[i];
-      outputs[i].vertex_streams = gsinfo->output_streams[i];
-   }
-
-   LLVMBasicBlockRef end_bb;
-   LLVMValueRef switch_inst;
-
-   end_bb = LLVMAppendBasicBlockInContext(ctx.ac.context, ctx.main_fn.value, "end");
-   switch_inst = LLVMBuildSwitch(builder, stream_id, end_bb, 4);
-
-   for (int stream = 0; stream < 4; stream++) {
-      LLVMBasicBlockRef bb;
-      unsigned offset;
-
-      if (!gsinfo->num_stream_output_components[stream])
-         continue;
-
-      if (stream > 0 && !ctx.so.num_outputs)
-         continue;
-
-      bb = LLVMInsertBasicBlockInContext(ctx.ac.context, end_bb, "out");
-      LLVMAddCase(switch_inst, LLVMConstInt(ctx.ac.i32, stream, 0), bb);
-      LLVMPositionBuilderAtEnd(builder, bb);
-
-      /* Fetch vertex data from GSVS ring */
-      offset = 0;
-      for (i = 0; i < gsinfo->num_outputs; ++i) {
-         for (unsigned chan = 0; chan < 4; chan++) {
-            if (!(gsinfo->output_usagemask[i] & (1 << chan)) ||
-                ((outputs[i].vertex_streams >> (chan * 2)) & 0x3) != stream) {
-               outputs[i].values[chan] = LLVMGetUndef(ctx.ac.f32);
-               continue;
-            }
-
-            LLVMValueRef soffset =
-               LLVMConstInt(ctx.ac.i32, offset * gs_selector->info.base.gs.vertices_out * 16 * 4, 0);
-            offset++;
-
-            outputs[i].values[chan] =
-               ac_build_buffer_load(&ctx.ac, ctx.gsvs_ring[0], 1, ctx.ac.i32_0, voffset, soffset,
-                                    ctx.ac.f32, ac_glc | ac_slc, true, false);
-         }
-      }
-
-      /* Streamout and exports. */
-      if (!sscreen->use_ngg_streamout && ctx.so.num_outputs) {
-         si_llvm_emit_streamout(&ctx, outputs, gsinfo->num_outputs, stream);
-      }
-
-      if (stream == 0) {
-         si_vertex_color_clamping(&ctx, outputs, gsinfo->num_outputs);
-         si_llvm_build_vs_exports(&ctx, outputs, gsinfo->num_outputs);
-      }
-
-      LLVMBuildBr(builder, end_bb);
-   }
-
-   LLVMPositionBuilderAtEnd(builder, end_bb);
-
-   LLVMBuildRetVoid(ctx.ac.builder);
-
-   ctx.stage = MESA_SHADER_GEOMETRY; /* override for shader dumping */
-   si_llvm_optimize_module(&ctx);
-
-   bool ok = false;
-   if (si_compile_llvm(sscreen, &ctx.shader->binary, &ctx.shader->config, ctx.compiler, &ctx.ac,
-                       debug, MESA_SHADER_GEOMETRY, "GS Copy Shader", false)) {
-      assert(!ctx.shader->config.scratch_bytes_per_wave);
-      if (!ctx.shader->config.scratch_bytes_per_wave)
-         ok = si_shader_binary_upload(sscreen, ctx.shader, 0);
-
-      if (si_can_dump_shader(sscreen, MESA_SHADER_GEOMETRY))
-         fprintf(stderr, "GS Copy Shader:\n");
-      si_shader_dump(sscreen, ctx.shader, debug, stderr, true);
-   }
-
-   si_llvm_dispose(&ctx);
-
-   if (!ok) {
-      FREE(shader);
-      shader = NULL;
-   } else {
-      si_fix_resource_usage(sscreen, shader);
-   }
-   return shader;
 }
 
 void si_llvm_init_gs_callbacks(struct si_shader_context *ctx)

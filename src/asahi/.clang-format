@@ -70,7 +70,8 @@ ForEachMacros:
   - nir_foreach_variable_with_modes_safe
   - nir_foreach_variable_with_modes
   - nir_foreach_shader_out_variable
-  - foreach_batch
+  - foreach_active
+  - foreach_submitted
   - AGX_BATCH_FOREACH_BO_HANDLE
   - hash_table_foreach
   - set_foreach

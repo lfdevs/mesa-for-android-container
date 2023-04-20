@@ -55,7 +55,7 @@ struct cache_entry;
 
 struct tu_lrz_pipeline
 {
-   uint32_t force_disable_mask;
+   uint32_t lrz_status;
 
    struct {
       bool has_kill;

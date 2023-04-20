@@ -161,7 +161,8 @@ void IntelDriver::enable_perfcnt(uint64_t sampling_period_ns)
 {
    this->sampling_period_ns = sampling_period_ns;
 
-   intel_gem_read_render_timestamp(drm_device.fd, &gpu_timestamp_udw);
+   intel_gem_read_render_timestamp(drm_device.fd, perf->devinfo.kmd_type,
+                                   &gpu_timestamp_udw);
    gpu_timestamp_udw &= ~perf->cfg->oa_timestamp_mask;
    if (!perf->open(sampling_period_ns, selected_query)) {
       PPS_LOG_FATAL("Failed to open intel perf");
@@ -216,7 +217,9 @@ std::vector<PerfRecord> IntelDriver::parse_perf_records(const std::vector<uint8_
           */
          if (gpu_timestamp_udw == 0 ||
              (gpu_timestamp_udw | gpu_timestamp_ldw) < last_gpu_timestamp) {
-            intel_gem_read_render_timestamp(drm_device.fd, &gpu_timestamp_udw);
+            intel_gem_read_render_timestamp(drm_device.fd,
+                                            perf->devinfo.kmd_type,
+                                            &gpu_timestamp_udw);
             gpu_timestamp_udw &= ~perf->cfg->oa_timestamp_mask;
          }
 
@@ -334,7 +337,8 @@ uint32_t IntelDriver::gpu_clock_id() const
 uint64_t IntelDriver::gpu_timestamp() const
 {
    uint64_t timestamp;
-   intel_gem_read_render_timestamp(drm_device.fd, &timestamp);
+   intel_gem_read_render_timestamp(drm_device.fd, perf->devinfo.kmd_type,
+                                   &timestamp);
    return intel_device_info_timebase_scale(&perf->devinfo, timestamp);
 }
 

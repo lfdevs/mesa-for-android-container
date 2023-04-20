@@ -17,15 +17,17 @@ EPHEMERAL="
         make
         openssl-dev
         unzip
-        wget
         xz
 	zstd-dev
         "
 
 apk add \
+    bash \
     bison \
     ccache \
     clang-dev \
+    coreutils \
+    curl \
     flex \
     gcc \
     g++ \

@@ -15,7 +15,6 @@ KHR-GL45.texture_swizzle.smoke
 KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing2
 KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing3
 KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing4
-KHR-GLES31.core.arrays_of_arrays.InteractionFunctionCalls2
 arb_pipeline_statistics_query-comp
 gl-1.0-blend-func
 
@@ -28,10 +27,6 @@ maxsize
 
 # Slow, not obviously fixable test
 spec@arb_compute_shader@local-id-explosion
-
-# Too slow, fixed in https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/624
-glsl-max-varyings
-longprim
 
 # Unreliable on shared runners due to timing
 ext_timer_query@time-elapsed

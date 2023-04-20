@@ -59,7 +59,7 @@ private:
     * The number of counters assigned per perfcntr group, the index
     * into this matches the index into perfcntrs
     */
-   std::vector<int> assigned_counters;
+   std::vector<unsigned> assigned_counters;
 
    /*
     * Values that can be used by derived counters evaluation

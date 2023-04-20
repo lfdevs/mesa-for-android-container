@@ -57,7 +57,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	</doc>
 	<reg32 name="REG_WRITE" offset="0x025"/>
 
-	<doc> After setting these, read result from $addr2 </doc>
+	<doc> After setting these, read result from $regdata </doc>
 	<reg32 name="REG_READ_DWORDS" offset="0x026"/>
 	<reg32 name="REG_READ_ADDR" offset="0x027"/>
 
@@ -147,6 +147,13 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<reg32 name="PACKET_TABLE_WRITE_ADDR" offset="0x060"/>
 	<reg32 name="PACKET_TABLE_WRITE" offset="0x061"/>
 
+	<doc>
+		The zap shader uses the base address of itself, adding the offset of the embedded
+		shader instructions, to program SP_CS_OBJ_START with the address of the shader
+		part of the zap "shader"
+	</doc>
+	<reg64 name="ZAP_SHADER_ADDR" offset="0x062"/>
+
 	<doc> Resettable counter used to implement PERF_CP_LONG_PREEMPTIONS </doc>
 	<reg32 name="PREEMPTION_TIMER" offset="0x06e"/>
 	<doc> Seemingly used to start/stop PREEMPTION_TIMER </doc>
@@ -223,6 +230,27 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<reg32 name="SCRATCH_REG5" offset="0x175"/>
 	<reg32 name="SCRATCH_REG6" offset="0x176"/>
 	<reg32 name="SCRATCH_REG7" offset="0x177"/>
+
+	<!-- new in gen3+ -->
+	<reg32 name="PRED_REG" offset="0x17f"/>
+</domain>
+
+<domain name="A7XX_CONTROL_REG" width="32">
+
+	<reg64 name="MEM_READ_ADDR" offset="0x01c"/>
+	<reg32 name="MEM_READ_DWORDS" offset="0x01e"/>
+
+	<reg32 name="REG_WRITE_ADDR" offset="0x036"/>
+	<reg32 name="REG_WRITE" offset="0x037"/>
+
+	<doc> After setting these, read result from $regdata </doc>
+	<reg32 name="REG_READ_DWORDS" offset="0x038"/>
+	<reg32 name="REG_READ_ADDR" offset="0x039"/>
+
+	<doc> Used to initialize the jump table for handling packets at bootup </doc>
+	<reg32 name="PACKET_TABLE_WRITE_ADDR" offset="0x060"/>
+	<reg32 name="PACKET_TABLE_WRITE" offset="0x061"/>
+
 </domain>
 
 </database>

@@ -144,29 +144,6 @@ sa_release(struct fd_bo *bo)
 }
 
 static int
-sa_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
-{
-   simple_mtx_lock(&fence_lock);
-   unsigned nr = bo->nr_fences;
-   struct fd_fence *fences[nr];
-   for (unsigned i = 0; i < nr; i++)
-      fences[i] = fd_fence_ref_locked(bo->fences[i]);
-   simple_mtx_unlock(&fence_lock);
-
-   for (unsigned i = 0; i < nr; i++) {
-      fd_fence_wait(fences[i]);
-      fd_fence_del(fences[i]);
-   }
-
-   /* expire completed fences */
-   fd_bo_state(bo);
-
-   assert(fd_bo_state(bo) == FD_BO_STATE_IDLE);
-
-   return 0;
-}
-
-static int
 sa_madvise(struct fd_bo *bo, int willneed)
 {
    return willneed;
@@ -197,7 +174,6 @@ sa_destroy(struct fd_bo *bo)
 }
 
 static struct fd_bo_funcs heap_bo_funcs = {
-      .cpu_prep = sa_cpu_prep,
       .madvise = sa_madvise,
       .iova = sa_iova,
       .set_name = sa_set_name,
@@ -223,7 +199,7 @@ heap_clean(struct fd_bo_heap *heap, bool idle)
    foreach_bo_safe (bo, &heap->freelist) {
       /* It might be nice if we could keep freelist sorted by fence # */
       if (idle && !sa_idle(bo))
-         continue;
+         break;
       sa_release(bo);
    }
    simple_mtx_unlock(&heap->lock);

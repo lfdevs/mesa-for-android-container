@@ -25,6 +25,7 @@ libspirv_to_dxil = both_libraries(
     files(
       'dxil_spirv_nir.c',
       'dxil_spirv_nir.h',
+      'dxil_spirv_nir_lower_bindless.c',
       'spirv_to_dxil.c',
       'spirv_to_dxil.h',
     ),

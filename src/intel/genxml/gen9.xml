@@ -1876,7 +1876,7 @@
     </field>
     <field name="Pixel Shader Kills Pixel" start="60" end="60" type="bool" />
     <field name="oMask Present to Render Target" start="61" end="61" type="bool" />
-    <field name="Pixel Shader Does not write to RT" start="62" end="62" type="bool" />
+    <field name="Pixel Shader Does not write to RT" start="62" end="62" type="mbz" />
     <field name="Pixel Shader Valid" start="63" end="63" type="bool" />
   </instruction>
   <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_DS" bias="2" length="2" engine="render">
@@ -3763,11 +3763,11 @@
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="Indirect BSD Data Length" start="32" end="63" type="uint" />
-    <field name="Indirect BSD Data Start Address" start="64" end="92" type="address" />
+    <field name="Indirect BSD Data Start Address" start="64" end="92" type="offset" />
     <field name="Inline Data" start="96" end="191" type="INLINE_DATA_DESCRIPTION_FOR_MFD_AVC_BSD_OBJECT" />
   </instruction>
   <instruction name="MFD_AVC_DPB_STATE" bias="2" length="27" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" default="9" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="25" />
     <field name="SubOpcode B" start="16" end="20" type="uint" default="6" />
     <field name="SubOpcode A" start="21" end="23" type="uint" default="1" />
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1" />
@@ -3791,10 +3791,7 @@
       </field>
     </group>
     <group count="16" start="96" size="16">
-      <field name="LTST Frame Number List" start="0" end="15" type="uint" prefix="LTST">
-        <value name="Long Term Frame" value="1" />
-        <value name="Short Term Frame" value="0" />
-      </field>
+      <field name="LTST Frame Number List" start="0" end="15" type="uint"/>
     </group>
     <group count="16" start="352" size="16">
       <field name="View ID" start="0" end="15" type="uint" />
@@ -3829,7 +3826,7 @@
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="Indirect BSD Data Length" start="32" end="63" type="uint" />
-    <field name="Indirect BSD Data Start Address" start="64" end="92" type="address" />
+    <field name="Indirect BSD Data Start Address" start="64" end="92" type="offset" />
   </instruction>
   <instruction name="MFD_IT_OBJECT" bias="2" engine="video">
     <field name="DWord Length" start="0" end="11" type="uint" default="6" />
@@ -4088,8 +4085,8 @@
       <field name="POC List" start="0" end="31" type="uint" />
     </group>
   </instruction>
-  <instruction name="MFX_AVC_IMG_STATE" bias="2" length="14" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" default="12" />
+  <instruction name="MFX_AVC_IMG_STATE" bias="2" length="21" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="19" />
     <field name="SubOpcode B" start="16" end="20" type="uint" default="0" />
     <field name="SubOpcode A" start="21" end="23" type="uint" default="0" />
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1" />
@@ -4111,8 +4108,8 @@
     </field>
     <field name="Weighted Prediction Enable" start="108" end="108" type="bool" />
     <field name="Rho Domain Rate Control Enable" start="109" end="109" type="bool" />
-    <field name="First Chroma QP Offset" start="112" end="116" type="uint" />
-    <field name="Second Chroma QP Offset" start="120" end="124" type="uint" />
+    <field name="First Chroma QP Offset" start="112" end="116" type="int" />
+    <field name="Second Chroma QP Offset" start="120" end="124" type="int" />
     <field name="Field Picture" start="128" end="128" type="bool" />
     <field name="MBAFF Mode" start="129" end="129" type="bool" />
     <field name="Frame MB Only" start="130" end="130" type="bool" />

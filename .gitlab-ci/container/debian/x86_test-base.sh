@@ -63,6 +63,7 @@ apt-get install -y \
       sysvinit-core
 
 apt-get install -y --no-remove \
+      curl \
       git \
       git-lfs \
       inetutils-syslogd \
@@ -94,7 +95,6 @@ apt-get install -y --no-remove \
       socat \
       vulkan-tools \
       waffle-utils \
-      wget \
       xauth \
       xvfb \
       zlib1g \

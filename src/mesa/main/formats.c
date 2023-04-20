@@ -412,7 +412,7 @@ _mesa_array_format_flip_channels(mesa_array_format format)
       for (unsigned i = 0; i < 4; i++)
          assert(swizzle[i] != 2 && swizzle[i] != 3);
 
-      static const uint8_t flip_xy[6] = { 1, 0, 2, 3, 4, 5 };
+      static const uint8_t flip_xy[7] = { 1, 0, 2, 3, 4, 5, 6 };
       _mesa_array_format_set_swizzle(&format,
                                      flip_xy[swizzle[0]], flip_xy[swizzle[1]],
                                      flip_xy[swizzle[2]], flip_xy[swizzle[3]]);
@@ -420,7 +420,7 @@ _mesa_array_format_flip_channels(mesa_array_format format)
    }
 
    if (num_channels == 4) {
-      static const uint8_t flip[6] = { 3, 2, 1, 0, 4, 5 };
+      static const uint8_t flip[7] = { 3, 2, 1, 0, 4, 5, 6 };
       _mesa_array_format_set_swizzle(&format,
                                      flip[swizzle[0]], flip[swizzle[1]],
                                      flip[swizzle[2]], flip[swizzle[3]]);

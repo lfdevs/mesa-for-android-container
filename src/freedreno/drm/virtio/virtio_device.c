@@ -330,6 +330,14 @@ virtio_execbuf_flush(struct fd_device *dev)
 }
 
 int
+virtio_execbuf_flush_locked(struct fd_device *dev)
+{
+   struct virtio_device *virtio_dev = to_virtio_device(dev);
+   simple_mtx_assert_locked(&virtio_dev->eb_lock);
+   return execbuf_flush_locked(dev, NULL);
+}
+
+int
 virtio_execbuf(struct fd_device *dev, struct msm_ccmd_req *req, bool sync)
 {
    MESA_TRACE_FUNC();

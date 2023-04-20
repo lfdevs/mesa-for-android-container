@@ -25,11 +25,95 @@
 #include "nir.h"
 #include "nir_range_analysis.h"
 #include "util/hash_table.h"
+#include "util/u_math.h"
+#include "util/u_dynarray.h"
+#include "c99_alloca.h"
 
 /**
  * Analyzes a sequence of operations to determine some aspects of the range of
  * the result.
  */
+
+struct analysis_query {
+   uint32_t pushed_queries;
+   uint32_t result_index;
+};
+
+struct analysis_state {
+   nir_shader *shader;
+   const nir_unsigned_upper_bound_config *config;
+   struct hash_table *range_ht;
+
+   struct util_dynarray query_stack;
+   struct util_dynarray result_stack;
+
+   size_t query_size;
+   uintptr_t (*get_key)(struct analysis_query *q);
+   void (*process_query)(struct analysis_state *state, struct analysis_query *q,
+                         uint32_t *result, const uint32_t *src);
+};
+
+static void *
+push_analysis_query(struct analysis_state *state, size_t size)
+{
+   struct analysis_query *q = util_dynarray_grow_bytes(&state->query_stack, 1, size);
+   q->pushed_queries = 0;
+   q->result_index = util_dynarray_num_elements(&state->result_stack, uint32_t);
+
+   util_dynarray_append(&state->result_stack, uint32_t, 0);
+
+   return q;
+}
+
+/* Helper for performing range analysis without recursion. */
+static uint32_t
+perform_analysis(struct analysis_state *state)
+{
+   while (state->query_stack.size) {
+      struct analysis_query *cur =
+         (struct analysis_query *)((char*)util_dynarray_end(&state->query_stack) - state->query_size);
+      uint32_t *result = util_dynarray_element(&state->result_stack, uint32_t, cur->result_index);
+
+      uintptr_t key = state->get_key(cur);
+      struct hash_entry *he = NULL;
+      /* There might be a cycle-resolving entry for loop header phis. Ignore this when finishing
+       * them by testing pushed_queries.
+       */
+      if (cur->pushed_queries == 0 && key &&
+          (he = _mesa_hash_table_search(state->range_ht, (void*)key))) {
+         *result = (uintptr_t)he->data;
+         state->query_stack.size -= state->query_size;
+         continue;
+      }
+
+      uint32_t *src = (uint32_t*)util_dynarray_end(&state->result_stack) - cur->pushed_queries;
+      state->result_stack.size -= sizeof(uint32_t) * cur->pushed_queries;
+
+      uint32_t prev_num_queries = state->query_stack.size;
+      state->process_query(state, cur, result, src);
+
+      uint32_t num_queries = state->query_stack.size;
+      if (num_queries > prev_num_queries) {
+         cur = (struct analysis_query *)util_dynarray_element(&state->query_stack, char,
+                                                              prev_num_queries - state->query_size);
+         cur->pushed_queries = (num_queries - prev_num_queries) / state->query_size;
+         continue;
+      }
+
+      if (key)
+         _mesa_hash_table_insert(state->range_ht, (void*)key, (void*)(uintptr_t)*result);
+
+      state->query_stack.size -= state->query_size;
+   }
+
+   assert(state->result_stack.size == sizeof(uint32_t));
+
+   uint32_t res = util_dynarray_top(&state->result_stack, uint32_t);
+   util_dynarray_fini(&state->query_stack);
+   util_dynarray_fini(&state->result_stack);
+
+   return res;
+}
 
 static bool
 is_not_negative(enum ssa_ranges r)
@@ -43,49 +127,21 @@ is_not_zero(enum ssa_ranges r)
    return r == gt_zero || r == lt_zero || r == ne_zero;
 }
 
-static void *
+static uint32_t
 pack_data(const struct ssa_result_range r)
 {
-   return (void *)(uintptr_t)(r.range | r.is_integral << 8 | r.is_finite << 9 |
-                              r.is_a_number << 10);
+   return r.range | r.is_integral << 8 | r.is_finite << 9 | r.is_a_number << 10;
 }
 
 static struct ssa_result_range
-unpack_data(const void *p)
+unpack_data(uint32_t v)
 {
-   const uintptr_t v = (uintptr_t) p;
-
    return (struct ssa_result_range){
       .range       = v & 0xff,
       .is_integral = (v & 0x00100) != 0,
       .is_finite   = (v & 0x00200) != 0,
       .is_a_number = (v & 0x00400) != 0
    };
-}
-
-static void *
-pack_key(const struct nir_alu_instr *instr, nir_alu_type type)
-{
-   uintptr_t type_encoding;
-   uintptr_t ptr = (uintptr_t) instr;
-
-   /* The low 2 bits have to be zero or this whole scheme falls apart. */
-   assert((ptr & 0x3) == 0);
-
-   /* NIR is typeless in the sense that sequences of bits have whatever
-    * meaning is attached to them by the instruction that consumes them.
-    * However, the number of bits must match between producer and consumer.
-    * As a result, the number of bits does not need to be encoded here.
-    */
-   switch (nir_alu_type_get_base_type(type)) {
-   case nir_type_int:   type_encoding = 0; break;
-   case nir_type_uint:  type_encoding = 1; break;
-   case nir_type_bool:  type_encoding = 2; break;
-   case nir_type_float: type_encoding = 3; break;
-   default: unreachable("Invalid base type.");
-   }
-
-   return (void *)(ptr | type_encoding);
 }
 
 static nir_alu_type
@@ -236,7 +292,7 @@ analyze_constant(const struct nir_alu_instr *instr, unsigned src,
 }
 
 /**
- * Short-hand name for use in the tables in analyze_expression.  If this name
+ * Short-hand name for use in the tables in process_fp_query.  If this name
  * becomes a problem on some compiler, we can change it to _.
  */
 #define _______ unknown
@@ -419,6 +475,53 @@ union_ranges(enum ssa_ranges a, enum ssa_ranges b)
 #define ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_2_SOURCE(t)
 #endif /* !defined(NDEBUG) */
 
+struct fp_query {
+   struct analysis_query head;
+   const nir_alu_instr *instr;
+   unsigned src;
+   nir_alu_type use_type;
+};
+
+static void
+push_fp_query(struct analysis_state *state, const nir_alu_instr *alu, unsigned src, nir_alu_type type)
+{
+   struct fp_query *pushed_q = push_analysis_query(state, sizeof(struct fp_query));
+   pushed_q->instr = alu;
+   pushed_q->src = src;
+   pushed_q->use_type = type == nir_type_invalid ? nir_alu_src_type(alu, src) : type;
+}
+
+static uintptr_t
+get_fp_key(struct analysis_query *q)
+{
+   struct fp_query *fp_q = (struct fp_query *)q;
+   const nir_src *src = &fp_q->instr->src[fp_q->src].src;
+
+   if (!src->is_ssa || src->ssa->parent_instr->type != nir_instr_type_alu)
+      return 0;
+
+   uintptr_t type_encoding;
+   uintptr_t ptr = (uintptr_t)nir_instr_as_alu(src->ssa->parent_instr);
+
+   /* The low 2 bits have to be zero or this whole scheme falls apart. */
+   assert((ptr & 0x3) == 0);
+
+   /* NIR is typeless in the sense that sequences of bits have whatever
+    * meaning is attached to them by the instruction that consumes them.
+    * However, the number of bits must match between producer and consumer.
+    * As a result, the number of bits does not need to be encoded here.
+    */
+   switch (nir_alu_type_get_base_type(fp_q->use_type)) {
+   case nir_type_int:   type_encoding = 0; break;
+   case nir_type_uint:  type_encoding = 1; break;
+   case nir_type_bool:  type_encoding = 2; break;
+   case nir_type_float: type_encoding = 3; break;
+   default: unreachable("Invalid base type.");
+   }
+
+   return ptr | type_encoding;
+}
+
 /**
  * Analyze an expression to determine the range of its result
  *
@@ -428,21 +531,32 @@ union_ranges(enum ssa_ranges a, enum ssa_ranges b)
  * This function implements this grammar as a recursive-descent parser.  Some
  * (but not all) of the grammar is listed in-line in the function.
  */
-static struct ssa_result_range
-analyze_expression(const nir_alu_instr *instr, unsigned src,
-                   struct hash_table *ht, nir_alu_type use_type)
+static void
+process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32_t *result,
+                 const uint32_t *src_res)
 {
    /* Ensure that the _Pragma("GCC unroll 7") above are correct. */
    STATIC_ASSERT(last_range + 1 == 7);
 
-   if (!instr->src[src].src.is_ssa)
-      return (struct ssa_result_range){unknown, false, false, false};
+   struct fp_query q = *(struct fp_query *)aq;
+   const nir_alu_instr *instr = q.instr;
+   unsigned src = q.src;
+   nir_alu_type use_type = q.use_type;
 
-   if (nir_src_is_const(instr->src[src].src))
-      return analyze_constant(instr, src, use_type);
+   if (!instr->src[src].src.is_ssa) {
+      *result = pack_data((struct ssa_result_range){unknown, false, false, false});
+      return;
+   }
 
-   if (instr->src[src].src.ssa->parent_instr->type != nir_instr_type_alu)
-      return (struct ssa_result_range){unknown, false, false, false};
+   if (nir_src_is_const(instr->src[src].src)) {
+      *result = pack_data(analyze_constant(instr, src, use_type));
+      return;
+   }
+
+   if (instr->src[src].src.ssa->parent_instr->type != nir_instr_type_alu) {
+      *result = pack_data((struct ssa_result_range){unknown, false, false, false});
+      return;
+   }
 
    const struct nir_alu_instr *const alu =
        nir_instr_as_alu(instr->src[src].src.ssa->parent_instr);
@@ -461,13 +575,62 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       if (use_base_type != src_base_type &&
           (use_base_type == nir_type_float ||
            src_base_type == nir_type_float)) {
-         return (struct ssa_result_range){unknown, false, false, false};
+         *result = pack_data((struct ssa_result_range){unknown, false, false, false});
+         return;
       }
    }
 
-   struct hash_entry *he = _mesa_hash_table_search(ht, pack_key(alu, use_type));
-   if (he != NULL)
-      return unpack_data(he->data);
+   if (!aq->pushed_queries) {
+      switch (alu->op) {
+      case nir_op_bcsel:
+         push_fp_query(state, alu, 1, use_type);
+         push_fp_query(state, alu, 2, use_type);
+         return;
+      case nir_op_mov:
+         push_fp_query(state, alu, 0, use_type);
+         return;
+      case nir_op_i2f32:
+      case nir_op_u2f32:
+      case nir_op_fabs:
+      case nir_op_fexp2:
+      case nir_op_frcp:
+      case nir_op_fneg:
+      case nir_op_fsat:
+      case nir_op_fsign:
+      case nir_op_ffloor:
+      case nir_op_fceil:
+      case nir_op_ftrunc:
+      case nir_op_fdot2:
+      case nir_op_fdot3:
+      case nir_op_fdot4:
+      case nir_op_fdot8:
+      case nir_op_fdot16:
+      case nir_op_fdot2_replicated:
+      case nir_op_fdot3_replicated:
+      case nir_op_fdot4_replicated:
+      case nir_op_fdot8_replicated:
+      case nir_op_fdot16_replicated:
+         push_fp_query(state, alu, 0, nir_type_invalid);
+         return;
+      case nir_op_fadd:
+      case nir_op_fmax:
+      case nir_op_fmin:
+      case nir_op_fmul:
+      case nir_op_fmulz:
+      case nir_op_fpow:
+         push_fp_query(state, alu, 0, nir_type_invalid);
+         push_fp_query(state, alu, 1, nir_type_invalid);
+         return;
+      case nir_op_ffma:
+      case nir_op_flrp:
+         push_fp_query(state, alu, 0, nir_type_invalid);
+         push_fp_query(state, alu, 1, nir_type_invalid);
+         push_fp_query(state, alu, 2, nir_type_invalid);
+         return;
+      default:
+         break;
+      }
+   }
 
    struct ssa_result_range r = {unknown, false, false, false};
 
@@ -583,10 +746,8 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       break;
 
    case nir_op_bcsel: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 1, ht, use_type);
-      const struct ssa_result_range right =
-         analyze_expression(alu, 2, ht, use_type);
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
 
       r.is_integral = left.is_integral && right.is_integral;
 
@@ -611,7 +772,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
 
    case nir_op_i2f32:
    case nir_op_u2f32:
-      r = analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      r = unpack_data(src_res[0]);
 
       r.is_integral = true;
       r.is_a_number = true;
@@ -623,7 +784,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       break;
 
    case nir_op_fabs:
-      r = analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      r = unpack_data(src_res[0]);
 
       switch (r.range) {
       case unknown:
@@ -645,10 +806,8 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       break;
 
    case nir_op_fadd: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range right =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
 
       r.is_integral = left.is_integral && right.is_integral;
       r.range = fadd_table[left.range][right.range];
@@ -672,7 +831,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
          ge_zero, ge_zero, ge_zero, gt_zero, gt_zero, ge_zero, gt_zero
       };
 
-      r = analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      r = unpack_data(src_res[0]);
 
       ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_1_SOURCE(table);
       ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_1_SOURCE(table);
@@ -687,10 +846,8 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    }
 
    case nir_op_fmax: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range right =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
 
       r.is_integral = left.is_integral && right.is_integral;
 
@@ -773,10 +930,8 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    }
 
    case nir_op_fmin: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range right =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
 
       r.is_integral = left.is_integral && right.is_integral;
 
@@ -860,10 +1015,8 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
 
    case nir_op_fmul:
    case nir_op_fmulz: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range right =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
 
       r.is_integral = left.is_integral && right.is_integral;
 
@@ -898,7 +1051,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
 
    case nir_op_frcp:
       r = (struct ssa_result_range){
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0)).range,
+         unpack_data(src_res[0]).range,
          false,
          false, /* Various cases can result in NaN, so assume the worst. */
          false  /*    "      "    "     "    "  "    "    "    "    "    */
@@ -906,18 +1059,16 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       break;
 
    case nir_op_mov:
-      r = analyze_expression(alu, 0, ht, use_type);
+      r = unpack_data(src_res[0]);
       break;
 
    case nir_op_fneg:
-      r = analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-
+      r = unpack_data(src_res[0]);
       r.range = fneg_table[r.range];
       break;
 
    case nir_op_fsat: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
 
       /* fsat(NaN) = 0. */
       r.is_a_number = true;
@@ -952,7 +1103,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
 
    case nir_op_fsign:
       r = (struct ssa_result_range){
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0)).range,
+         unpack_data(src_res[0]).range,
          true,
          true, /* fsign is -1, 0, or 1, even for NaN, so it must be a number. */
          true  /* fsign is -1, 0, or 1, even for NaN, so it must be finite. */
@@ -965,8 +1116,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
       break;
 
    case nir_op_ffloor: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
 
       r.is_integral = true;
 
@@ -987,8 +1137,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    }
 
    case nir_op_fceil: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
 
       r.is_integral = true;
 
@@ -1009,8 +1158,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    }
 
    case nir_op_ftrunc: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
 
       r.is_integral = true;
 
@@ -1056,8 +1204,7 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    case nir_op_fdot4_replicated:
    case nir_op_fdot8_replicated:
    case nir_op_fdot16_replicated: {
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
 
       /* If the two sources are the same SSA value, then the result is either
        * NaN or some number >= 0.  If one source is the negation of the other,
@@ -1128,10 +1275,8 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
          /* eq_zero */ { ge_zero, gt_zero, gt_zero, eq_zero, ge_zero, ge_zero, gt_zero },
       };
 
-      const struct ssa_result_range left =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range right =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
+      const struct ssa_result_range left = unpack_data(src_res[0]);
+      const struct ssa_result_range right = unpack_data(src_res[1]);
 
       ASSERT_UNION_OF_DISJOINT_MATCHES_UNKNOWN_2_SOURCE(table);
       ASSERT_UNION_OF_EQ_AND_STRICT_INEQ_MATCHES_NONSTRICT_2_SOURCE(table);
@@ -1147,12 +1292,9 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    }
 
    case nir_op_ffma: {
-      const struct ssa_result_range first =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range second =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
-      const struct ssa_result_range third =
-         analyze_expression(alu, 2, ht, nir_alu_src_type(alu, 2));
+      const struct ssa_result_range first = unpack_data(src_res[0]);
+      const struct ssa_result_range second = unpack_data(src_res[1]);
+      const struct ssa_result_range third = unpack_data(src_res[2]);
 
       r.is_integral = first.is_integral && second.is_integral &&
                       third.is_integral;
@@ -1178,12 +1320,9 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    }
 
    case nir_op_flrp: {
-      const struct ssa_result_range first =
-         analyze_expression(alu, 0, ht, nir_alu_src_type(alu, 0));
-      const struct ssa_result_range second =
-         analyze_expression(alu, 1, ht, nir_alu_src_type(alu, 1));
-      const struct ssa_result_range third =
-         analyze_expression(alu, 2, ht, nir_alu_src_type(alu, 2));
+      const struct ssa_result_range first = unpack_data(src_res[0]);
+      const struct ssa_result_range second = unpack_data(src_res[1]);
+      const struct ssa_result_range third = unpack_data(src_res[2]);
 
       r.is_integral = first.is_integral && second.is_integral &&
                       third.is_integral;
@@ -1213,18 +1352,29 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    /* Just like isfinite(), the is_finite flag implies the value is a number. */
    assert((int) r.is_finite <= (int) r.is_a_number);
 
-   _mesa_hash_table_insert(ht, pack_key(alu, use_type), pack_data(r));
-   return r;
+   *result = pack_data(r);
 }
 
 #undef _______
 
 struct ssa_result_range
 nir_analyze_range(struct hash_table *range_ht,
-                  const nir_alu_instr *instr, unsigned src)
+                  const nir_alu_instr *alu, unsigned src)
 {
-   return analyze_expression(instr, src, range_ht,
-                             nir_alu_src_type(instr, src));
+   struct fp_query query_alloc[64];
+   uint32_t result_alloc[64];
+
+   struct analysis_state state;
+   state.range_ht = range_ht;
+   util_dynarray_init_from_stack(&state.query_stack, query_alloc, sizeof(query_alloc));
+   util_dynarray_init_from_stack(&state.result_stack, result_alloc, sizeof(result_alloc));
+   state.query_size = sizeof(struct fp_query);
+   state.get_key = &get_fp_key;
+   state.process_query = &process_fp_query;
+
+   push_fp_query(&state, alu, src, nir_type_invalid);
+
+   return unpack_data(perform_analysis(&state));
 }
 
 static uint32_t bitmask(uint32_t size) {
@@ -1254,7 +1404,7 @@ search_phi_bcsel(nir_ssa_scalar scalar, nir_ssa_scalar *buf, unsigned buf_size, 
          unsigned total_added = 0;
          nir_foreach_phi_src(src, phi) {
             num_sources_left--;
-            unsigned added = search_phi_bcsel(nir_get_ssa_scalar(src->src.ssa, 0),
+            unsigned added = search_phi_bcsel(nir_get_ssa_scalar(src->src.ssa, scalar.comp),
                buf + total_added, buf_size - num_sources_left, visited);
             assert(added <= buf_size);
             buf_size -= added;
@@ -1315,402 +1465,465 @@ static const nir_unsigned_upper_bound_config default_ub_config = {
    },
 };
 
-static uint32_t
-nir_unsigned_upper_bound_impl(nir_shader *shader, struct hash_table *range_ht,
-                              nir_ssa_scalar scalar,
-                              const nir_unsigned_upper_bound_config *config,
-                              unsigned stack_depth)
+struct uub_query {
+   struct analysis_query head;
+   nir_ssa_scalar scalar;
+};
+
+static void
+push_uub_query(struct analysis_state *state, nir_ssa_scalar scalar)
 {
-   assert(scalar.def->bit_size <= 32);
+   struct uub_query *pushed_q = push_analysis_query(state, sizeof(struct uub_query));
+   pushed_q->scalar = scalar;
+}
 
-   if (!config)
-      config = &default_ub_config;
-   if (nir_ssa_scalar_is_const(scalar))
-      return nir_ssa_scalar_as_uint(scalar);
-
+static uintptr_t
+get_uub_key(struct analysis_query *q)
+{
+   nir_ssa_scalar scalar = ((struct uub_query *)q)->scalar;
    /* keys can't be 0, so we have to add 1 to the index */
-   void *key = (void*)(((uintptr_t)(scalar.def->index + 1) << 4) | scalar.comp);
-   struct hash_entry *he = _mesa_hash_table_search(range_ht, key);
-   if (he != NULL)
-      return (uintptr_t)he->data;
+   unsigned shift_amount = ffs(NIR_MAX_VEC_COMPONENTS) - 1;
+   return nir_ssa_scalar_is_const(scalar)
+          ? 0
+          : ((uintptr_t)(scalar.def->index + 1) << shift_amount) | scalar.comp;
+}
 
-   uint32_t max = bitmask(scalar.def->bit_size);
+static void
+get_intrinsic_uub(struct analysis_state *state, struct uub_query q, uint32_t *result,
+                  const uint32_t *src)
+{
+   nir_shader *shader = state->shader;
+   const nir_unsigned_upper_bound_config *config = state->config;
 
-   /* Avoid stack overflows. 200 is just a random setting, that happened to work with wine stacks
-    * which tend to be smaller than normal Linux ones. */
-   if (stack_depth >= 200)
-      return max;
-
-   if (scalar.def->parent_instr->type == nir_instr_type_intrinsic) {
-      uint32_t res = max;
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(scalar.def->parent_instr);
-      switch (intrin->intrinsic) {
-      case nir_intrinsic_load_local_invocation_index:
-         /* The local invocation index is used under the hood by RADV for
-          * some non-compute-like shaders (eg. LS and NGG). These technically
-          * run in workgroups on the HW, even though this fact is not exposed
-          * by the API.
-          * They can safely use the same code path here as variable sized
-          * compute-like shader stages.
-          */
-         if (!gl_shader_stage_uses_workgroup(shader->info.stage) ||
-             shader->info.workgroup_size_variable) {
-            res = config->max_workgroup_invocations - 1;
-         } else {
-            res = (shader->info.workgroup_size[0] *
-                   shader->info.workgroup_size[1] *
-                   shader->info.workgroup_size[2]) - 1u;
-         }
-         break;
-      case nir_intrinsic_load_local_invocation_id:
-         if (shader->info.workgroup_size_variable)
-            res = config->max_workgroup_size[scalar.comp] - 1u;
-         else
-            res = shader->info.workgroup_size[scalar.comp] - 1u;
-         break;
-      case nir_intrinsic_load_workgroup_id:
-         res = config->max_workgroup_count[scalar.comp] - 1u;
-         break;
-      case nir_intrinsic_load_num_workgroups:
-         res = config->max_workgroup_count[scalar.comp];
-         break;
-      case nir_intrinsic_load_global_invocation_id:
-         if (shader->info.workgroup_size_variable) {
-            res = mul_clamp(config->max_workgroup_size[scalar.comp],
-                            config->max_workgroup_count[scalar.comp]) - 1u;
-         } else {
-            res = (shader->info.workgroup_size[scalar.comp] *
-                   config->max_workgroup_count[scalar.comp]) - 1u;
-         }
-         break;
-      case nir_intrinsic_load_invocation_id:
-         if (shader->info.stage == MESA_SHADER_TESS_CTRL)
-            res = shader->info.tess.tcs_vertices_out
-                  ? (shader->info.tess.tcs_vertices_out - 1)
-                  : 511; /* Generous maximum output patch size of 512 */
-         break;
-      case nir_intrinsic_load_subgroup_invocation:
-      case nir_intrinsic_first_invocation:
-         res = config->max_subgroup_size - 1;
-         break;
-      case nir_intrinsic_mbcnt_amd: {
-         uint32_t src0 = config->max_subgroup_size - 1;
-         uint32_t src1 = nir_unsigned_upper_bound_impl(shader, range_ht, nir_get_ssa_scalar(intrin->src[1].ssa, 0),
-                                                       config, stack_depth + 1);
-
-         if (src0 + src1 < src0)
-            res = max; /* overflow */
-         else
-            res = src0 + src1;
-         break;
-      }
-      case nir_intrinsic_load_subgroup_size:
-         res = config->max_subgroup_size;
-         break;
-      case nir_intrinsic_load_subgroup_id:
-      case nir_intrinsic_load_num_subgroups: {
-         uint32_t workgroup_size = config->max_workgroup_invocations;
-         if (gl_shader_stage_uses_workgroup(shader->info.stage) &&
-             !shader->info.workgroup_size_variable) {
-            workgroup_size = shader->info.workgroup_size[0] *
-                             shader->info.workgroup_size[1] *
-                             shader->info.workgroup_size[2];
-         }
-         res = DIV_ROUND_UP(workgroup_size, config->min_subgroup_size);
-         if (intrin->intrinsic == nir_intrinsic_load_subgroup_id)
-            res--;
-         break;
-      }
-      case nir_intrinsic_load_input: {
-         if (shader->info.stage == MESA_SHADER_VERTEX && nir_src_is_const(intrin->src[0])) {
-            nir_variable *var = lookup_input(shader, nir_intrinsic_base(intrin));
-            if (var) {
-               int loc = var->data.location - VERT_ATTRIB_GENERIC0;
-               if (loc >= 0)
-                  res = config->vertex_attrib_max[loc];
-            }
-         }
-         break;
-      }
-      case nir_intrinsic_reduce:
-      case nir_intrinsic_inclusive_scan:
-      case nir_intrinsic_exclusive_scan: {
-         nir_op op = nir_intrinsic_reduction_op(intrin);
-         if (op == nir_op_umin || op == nir_op_umax || op == nir_op_imin || op == nir_op_imax)
-            res = nir_unsigned_upper_bound_impl(shader, range_ht, nir_get_ssa_scalar(intrin->src[0].ssa, 0),
-                                                config, stack_depth + 1);
-         break;
-      }
-      case nir_intrinsic_read_first_invocation:
-      case nir_intrinsic_read_invocation:
-      case nir_intrinsic_shuffle:
-      case nir_intrinsic_shuffle_xor:
-      case nir_intrinsic_shuffle_up:
-      case nir_intrinsic_shuffle_down:
-      case nir_intrinsic_quad_broadcast:
-      case nir_intrinsic_quad_swap_horizontal:
-      case nir_intrinsic_quad_swap_vertical:
-      case nir_intrinsic_quad_swap_diagonal:
-      case nir_intrinsic_quad_swizzle_amd:
-      case nir_intrinsic_masked_swizzle_amd:
-         res = nir_unsigned_upper_bound_impl(shader, range_ht, nir_get_ssa_scalar(intrin->src[0].ssa, 0),
-                                             config, stack_depth + 1);
-         break;
-      case nir_intrinsic_write_invocation_amd: {
-         uint32_t src0 = nir_unsigned_upper_bound_impl(shader, range_ht, nir_get_ssa_scalar(intrin->src[0].ssa, 0),
-                                                       config, stack_depth + 1);
-         uint32_t src1 = nir_unsigned_upper_bound_impl(shader, range_ht, nir_get_ssa_scalar(intrin->src[1].ssa, 0),
-                                                       config, stack_depth + 1);
-         res = MAX2(src0, src1);
-         break;
-      }
-      case nir_intrinsic_load_tess_rel_patch_id_amd:
-      case nir_intrinsic_load_tcs_num_patches_amd:
-         /* Very generous maximum: TCS/TES executed by largest possible workgroup */
-         res = config->max_workgroup_invocations / MAX2(shader->info.tess.tcs_vertices_out, 1u);
-         break;
-      case nir_intrinsic_load_scalar_arg_amd:
-      case nir_intrinsic_load_vector_arg_amd: {
-         uint32_t upper_bound = nir_intrinsic_arg_upper_bound_u32_amd(intrin);
-         if (upper_bound)
-            res = upper_bound;
-         break;
-      }
-      default:
-         break;
-      }
-      if (res != max)
-         _mesa_hash_table_insert(range_ht, key, (void*)(uintptr_t)res);
-      return res;
-   }
-
-   if (scalar.def->parent_instr->type == nir_instr_type_phi) {
-      nir_cf_node *prev = nir_cf_node_prev(&scalar.def->parent_instr->block->cf_node);
-
-      uint32_t res = 0;
-      if (!prev || prev->type == nir_cf_node_block) {
-         _mesa_hash_table_insert(range_ht, key, (void*)(uintptr_t)max);
-
-         struct set *visited = _mesa_pointer_set_create(NULL);
-         nir_ssa_scalar defs[64];
-         unsigned def_count = search_phi_bcsel(scalar, defs, 64, visited);
-         _mesa_set_destroy(visited, NULL);
-
-         for (unsigned i = 0; i < def_count; i++)
-            res = MAX2(res, nir_unsigned_upper_bound_impl(shader, range_ht, defs[i], config, stack_depth + 1));
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(q.scalar.def->parent_instr);
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_local_invocation_index:
+      /* The local invocation index is used under the hood by RADV for
+       * some non-compute-like shaders (eg. LS and NGG). These technically
+       * run in workgroups on the HW, even though this fact is not exposed
+       * by the API.
+       * They can safely use the same code path here as variable sized
+       * compute-like shader stages.
+       */
+      if (!gl_shader_stage_uses_workgroup(shader->info.stage) ||
+          shader->info.workgroup_size_variable) {
+         *result = config->max_workgroup_invocations - 1;
       } else {
-         nir_foreach_phi_src(src, nir_instr_as_phi(scalar.def->parent_instr)) {
-            res = MAX2(res, nir_unsigned_upper_bound_impl(
-               shader, range_ht, nir_get_ssa_scalar(src->src.ssa, 0), config, stack_depth + 1));
-         }
+         *result = (shader->info.workgroup_size[0] *
+                    shader->info.workgroup_size[1] *
+                    shader->info.workgroup_size[2]) - 1u;
       }
-
-      _mesa_hash_table_insert(range_ht, key, (void*)(uintptr_t)res);
-      return res;
+      break;
+   case nir_intrinsic_load_local_invocation_id:
+      if (shader->info.workgroup_size_variable)
+         *result = config->max_workgroup_size[q.scalar.comp] - 1u;
+      else
+         *result = shader->info.workgroup_size[q.scalar.comp] - 1u;
+      break;
+   case nir_intrinsic_load_workgroup_id:
+      *result = config->max_workgroup_count[q.scalar.comp] - 1u;
+      break;
+   case nir_intrinsic_load_num_workgroups:
+      *result = config->max_workgroup_count[q.scalar.comp];
+      break;
+   case nir_intrinsic_load_global_invocation_id:
+      if (shader->info.workgroup_size_variable) {
+         *result = mul_clamp(config->max_workgroup_size[q.scalar.comp],
+                             config->max_workgroup_count[q.scalar.comp]) - 1u;
+      } else {
+         *result = (shader->info.workgroup_size[q.scalar.comp] *
+                    config->max_workgroup_count[q.scalar.comp]) - 1u;
+      }
+      break;
+   case nir_intrinsic_load_invocation_id:
+      if (shader->info.stage == MESA_SHADER_TESS_CTRL)
+         *result = shader->info.tess.tcs_vertices_out
+                   ? (shader->info.tess.tcs_vertices_out - 1)
+                   : 511; /* Generous maximum output patch size of 512 */
+      break;
+   case nir_intrinsic_load_subgroup_invocation:
+   case nir_intrinsic_first_invocation:
+      *result = config->max_subgroup_size - 1;
+      break;
+   case nir_intrinsic_mbcnt_amd: {
+      if (!q.head.pushed_queries) {
+         push_uub_query(state, nir_get_ssa_scalar(intrin->src[1].ssa, 0));
+         return;
+      } else {
+         uint32_t src0 = config->max_subgroup_size - 1;
+         uint32_t src1 = src[0];
+         if (src0 + src1 >= src0) /* check overflow */
+            *result = src0 + src1;
+      }
+      break;
    }
-
-   if (nir_ssa_scalar_is_alu(scalar)) {
-      nir_op op = nir_ssa_scalar_alu_op(scalar);
-
-      switch (op) {
-      case nir_op_umin:
-      case nir_op_imin:
-      case nir_op_imax:
-      case nir_op_umax:
-      case nir_op_iand:
-      case nir_op_ior:
-      case nir_op_ixor:
-      case nir_op_ishl:
-      case nir_op_imul:
-      case nir_op_ushr:
-      case nir_op_ishr:
-      case nir_op_iadd:
-      case nir_op_umod:
-      case nir_op_udiv:
-      case nir_op_bcsel:
-      case nir_op_b32csel:
-      case nir_op_ubfe:
-      case nir_op_bfm:
-      case nir_op_fmul:
-      case nir_op_fmulz:
-      case nir_op_extract_u8:
-      case nir_op_extract_i8:
-      case nir_op_extract_u16:
-      case nir_op_extract_i16:
-      case nir_op_b2i8:
-      case nir_op_b2i16:
-      case nir_op_b2i32:
-         break;
-      case nir_op_u2u1:
-      case nir_op_u2u8:
-      case nir_op_u2u16:
-      case nir_op_u2u32:
-      case nir_op_f2u32:
-         if (nir_ssa_scalar_chase_alu_src(scalar, 0).def->bit_size > 32) {
-            /* If src is >32 bits, return max */
-            return max;
+   case nir_intrinsic_load_subgroup_size:
+      *result = config->max_subgroup_size;
+      break;
+   case nir_intrinsic_load_subgroup_id:
+   case nir_intrinsic_load_num_subgroups: {
+      uint32_t workgroup_size = config->max_workgroup_invocations;
+      if (gl_shader_stage_uses_workgroup(shader->info.stage) &&
+          !shader->info.workgroup_size_variable) {
+         workgroup_size = shader->info.workgroup_size[0] *
+                          shader->info.workgroup_size[1] *
+                          shader->info.workgroup_size[2];
+      }
+      *result = DIV_ROUND_UP(workgroup_size, config->min_subgroup_size);
+      if (intrin->intrinsic == nir_intrinsic_load_subgroup_id)
+         (*result)--;
+      break;
+   }
+   case nir_intrinsic_load_input: {
+      if (shader->info.stage == MESA_SHADER_VERTEX && nir_src_is_const(intrin->src[0])) {
+         nir_variable *var = lookup_input(shader, nir_intrinsic_base(intrin));
+         if (var) {
+            int loc = var->data.location - VERT_ATTRIB_GENERIC0;
+            if (loc >= 0)
+               *result = config->vertex_attrib_max[loc];
          }
-         break;
-      default:
-         return max;
       }
-
-      uint32_t src0 = nir_unsigned_upper_bound_impl(shader, range_ht, nir_ssa_scalar_chase_alu_src(scalar, 0),
-                                                    config, stack_depth + 1);
-      uint32_t src1 = max, src2 = max;
-      if (nir_op_infos[op].num_inputs > 1)
-         src1 = nir_unsigned_upper_bound_impl(shader, range_ht, nir_ssa_scalar_chase_alu_src(scalar, 1),
-                                              config, stack_depth + 1);
-      if (nir_op_infos[op].num_inputs > 2)
-         src2 = nir_unsigned_upper_bound_impl(shader, range_ht, nir_ssa_scalar_chase_alu_src(scalar, 2),
-                                              config, stack_depth + 1);
-
-      uint32_t res = max;
-      switch (op) {
-      case nir_op_umin:
-         res = src0 < src1 ? src0 : src1;
-         break;
-      case nir_op_imin:
-      case nir_op_imax:
-      case nir_op_umax:
-         res = src0 > src1 ? src0 : src1;
-         break;
-      case nir_op_iand:
-         res = bitmask(util_last_bit64(src0)) & bitmask(util_last_bit64(src1));
-         break;
-      case nir_op_ior:
-      case nir_op_ixor:
-         res = bitmask(util_last_bit64(src0)) | bitmask(util_last_bit64(src1));
-         break;
-      case nir_op_ishl:
-         if (util_last_bit64(src0) + src1 > scalar.def->bit_size)
-            res = max; /* overflow */
-         else
-            res = src0 << MIN2(src1, scalar.def->bit_size - 1u);
-         break;
-      case nir_op_imul:
-         if (src0 != 0 && (src0 * src1) / src0 != src1)
-            res = max;
-         else
-            res = src0 * src1;
-         break;
-      case nir_op_ushr: {
-         nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(scalar, 1);
-         if (nir_ssa_scalar_is_const(src1_scalar))
-            res = src0 >> nir_ssa_scalar_as_uint(src1_scalar);
-         else
-            res = src0;
-         break;
-      }
-      case nir_op_ishr: {
-         nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(scalar, 1);
-         if (src0 <= 2147483647 && nir_ssa_scalar_is_const(src1_scalar))
-            res = src0 >> nir_ssa_scalar_as_uint(src1_scalar);
-         else
-            res = src0;
-         break;
-      }
-      case nir_op_iadd:
-         if (src0 + src1 < src0)
-            res = max; /* overflow */
-         else
-            res = src0 + src1;
-         break;
-      case nir_op_umod:
-         res = src1 ? src1 - 1 : 0;
-         break;
-      case nir_op_udiv: {
-         nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(scalar, 1);
-         if (nir_ssa_scalar_is_const(src1_scalar))
-            res = nir_ssa_scalar_as_uint(src1_scalar) ? src0 / nir_ssa_scalar_as_uint(src1_scalar) : 0;
-         else
-            res = src0;
-         break;
-      }
-      case nir_op_bcsel:
-      case nir_op_b32csel:
-         res = src1 > src2 ? src1 : src2;
-         break;
-      case nir_op_ubfe:
-         res = bitmask(MIN2(src2, scalar.def->bit_size));
-         break;
-      case nir_op_bfm: {
-         nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(scalar, 1);
-         if (nir_ssa_scalar_is_const(src1_scalar)) {
-            src0 = MIN2(src0, 31);
-            src1 = nir_ssa_scalar_as_uint(src1_scalar) & 0x1fu;
-            res = bitmask(src0) << src1;
+      break;
+   }
+   case nir_intrinsic_reduce:
+   case nir_intrinsic_inclusive_scan:
+   case nir_intrinsic_exclusive_scan: {
+      nir_op op = nir_intrinsic_reduction_op(intrin);
+      if (op == nir_op_umin || op == nir_op_umax || op == nir_op_imin || op == nir_op_imax) {
+         if (!q.head.pushed_queries) {
+            push_uub_query(state, nir_get_ssa_scalar(intrin->src[0].ssa, q.scalar.comp));
+            return;
          } else {
-            src0 = MIN2(src0, 31);
-            src1 = MIN2(src1, 31);
-            res = bitmask(MIN2(src0 + src1, 32));
+            *result = src[0];
          }
+      }
+      break;
+   }
+   case nir_intrinsic_read_first_invocation:
+   case nir_intrinsic_read_invocation:
+   case nir_intrinsic_shuffle:
+   case nir_intrinsic_shuffle_xor:
+   case nir_intrinsic_shuffle_up:
+   case nir_intrinsic_shuffle_down:
+   case nir_intrinsic_quad_broadcast:
+   case nir_intrinsic_quad_swap_horizontal:
+   case nir_intrinsic_quad_swap_vertical:
+   case nir_intrinsic_quad_swap_diagonal:
+   case nir_intrinsic_quad_swizzle_amd:
+   case nir_intrinsic_masked_swizzle_amd:
+      if (!q.head.pushed_queries) {
+         push_uub_query(state, nir_get_ssa_scalar(intrin->src[0].ssa, q.scalar.comp));
+         return;
+      } else {
+         *result = src[0];
+      }
+      break;
+   case nir_intrinsic_write_invocation_amd:
+      if (!q.head.pushed_queries) {
+         push_uub_query(state, nir_get_ssa_scalar(intrin->src[0].ssa, q.scalar.comp));
+         push_uub_query(state, nir_get_ssa_scalar(intrin->src[1].ssa, q.scalar.comp));
+         return;
+      } else {
+         *result = MAX2(src[0], src[1]);
+      }
+      break;
+   case nir_intrinsic_load_tess_rel_patch_id_amd:
+   case nir_intrinsic_load_tcs_num_patches_amd:
+      /* Very generous maximum: TCS/TES executed by largest possible workgroup */
+      *result = config->max_workgroup_invocations / MAX2(shader->info.tess.tcs_vertices_out, 1u);
+      break;
+   case nir_intrinsic_load_typed_buffer_amd: {
+      const enum pipe_format format = nir_intrinsic_format(intrin);
+      if (format == PIPE_FORMAT_NONE)
+         break;
+
+      const struct util_format_description* desc = util_format_description(format);
+      if (desc->channel[q.scalar.comp].type != UTIL_FORMAT_TYPE_UNSIGNED)
+         break;
+
+      if (desc->channel[q.scalar.comp].normalized) {
+         *result = fui(1.0);
          break;
       }
-      /* limited floating-point support for f2u32(fmul(load_input(), <constant>)) */
-      case nir_op_f2u32:
-         /* infinity/NaN starts at 0x7f800000u, negative numbers at 0x80000000 */
-         if (src0 < 0x7f800000u) {
-            float val;
-            memcpy(&val, &src0, 4);
-            res = (uint32_t)val;
-         }
-         break;
-      case nir_op_fmul:
-      case nir_op_fmulz:
-         /* infinity/NaN starts at 0x7f800000u, negative numbers at 0x80000000 */
-         if (src0 < 0x7f800000u && src1 < 0x7f800000u) {
-            float src0_f, src1_f;
-            memcpy(&src0_f, &src0, 4);
-            memcpy(&src1_f, &src1, 4);
-            /* not a proper rounding-up multiplication, but should be good enough */
-            float max_f = ceilf(src0_f) * ceilf(src1_f);
-            memcpy(&res, &max_f, 4);
-         }
-         break;
-      case nir_op_u2u1:
-      case nir_op_u2u8:
-      case nir_op_u2u16:
-      case nir_op_u2u32:
-         res = MIN2(src0, max);
-         break;
-      case nir_op_b2i8:
-      case nir_op_b2i16:
-      case nir_op_b2i32:
-         res = 1;
-         break;
-      case nir_op_sad_u8x4:
-         res = src2 + 4 * 255;
-         break;
-      case nir_op_extract_u8:
-         res = MIN2(src0, UINT8_MAX);
-         break;
-      case nir_op_extract_i8:
-         res = (src0 >= 0x80) ? max : MIN2(src0, INT8_MAX);
-         break;
-      case nir_op_extract_u16:
-         res = MIN2(src0, UINT16_MAX);
-         break;
-      case nir_op_extract_i16:
-         res = (src0 >= 0x8000) ? max : MIN2(src0, INT16_MAX);
-         break;
-      default:
-         res = max;
-         break;
+
+      const uint32_t chan_max = u_uintN_max(desc->channel[q.scalar.comp].size);
+      *result = desc->channel[q.scalar.comp].pure_integer ? chan_max : fui(chan_max);
+      break;
+   }
+   case nir_intrinsic_load_scalar_arg_amd:
+   case nir_intrinsic_load_vector_arg_amd: {
+      uint32_t upper_bound = nir_intrinsic_arg_upper_bound_u32_amd(intrin);
+      if (upper_bound)
+         *result = upper_bound;
+      break;
+   }
+   default:
+      break;
+   }
+}
+
+static void
+get_alu_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, const uint32_t *src)
+{
+   nir_op op = nir_ssa_scalar_alu_op(q.scalar);
+
+   /* Early exit for unsupported ALU opcodes. */
+   switch (op) {
+   case nir_op_umin:
+   case nir_op_imin:
+   case nir_op_imax:
+   case nir_op_umax:
+   case nir_op_iand:
+   case nir_op_ior:
+   case nir_op_ixor:
+   case nir_op_ishl:
+   case nir_op_imul:
+   case nir_op_ushr:
+   case nir_op_ishr:
+   case nir_op_iadd:
+   case nir_op_umod:
+   case nir_op_udiv:
+   case nir_op_bcsel:
+   case nir_op_b32csel:
+   case nir_op_ubfe:
+   case nir_op_bfm:
+   case nir_op_fmul:
+   case nir_op_fmulz:
+   case nir_op_extract_u8:
+   case nir_op_extract_i8:
+   case nir_op_extract_u16:
+   case nir_op_extract_i16:
+   case nir_op_b2i8:
+   case nir_op_b2i16:
+   case nir_op_b2i32:
+      break;
+   case nir_op_u2u1:
+   case nir_op_u2u8:
+   case nir_op_u2u16:
+   case nir_op_u2u32:
+   case nir_op_f2u32:
+      if (nir_ssa_scalar_chase_alu_src(q.scalar, 0).def->bit_size > 32) {
+         /* If src is >32 bits, return max */
+         return;
       }
-      _mesa_hash_table_insert(range_ht, key, (void*)(uintptr_t)res);
-      return res;
+      break;
+   default:
+      return;
    }
 
-   return max;
+   if (!q.head.pushed_queries) {
+      for (unsigned i = 0; i < nir_op_infos[op].num_inputs; i++)
+         push_uub_query(state, nir_ssa_scalar_chase_alu_src(q.scalar, i));
+      return;
+   }
+
+   uint32_t max = bitmask(q.scalar.def->bit_size);
+   switch (op) {
+   case nir_op_umin:
+      *result = src[0] < src[1] ? src[0] : src[1];
+      break;
+   case nir_op_imin:
+   case nir_op_imax:
+   case nir_op_umax:
+      *result = src[0] > src[1] ? src[0] : src[1];
+      break;
+   case nir_op_iand:
+      *result = bitmask(util_last_bit64(src[0])) & bitmask(util_last_bit64(src[1]));
+      break;
+   case nir_op_ior:
+   case nir_op_ixor:
+      *result = bitmask(util_last_bit64(src[0])) | bitmask(util_last_bit64(src[1]));
+      break;
+   case nir_op_ishl: {
+      uint32_t src1 = MIN2(src[1], q.scalar.def->bit_size - 1u);
+      if (util_last_bit64(src[0]) + src1 <= q.scalar.def->bit_size) /* check overflow */
+         *result = src[0] << src1;
+      break;
+   }
+   case nir_op_imul:
+      if (src[0] == 0 || (src[0] * src[1]) / src[0] == src[1]) /* check overflow */
+         *result = src[0] * src[1];
+      break;
+   case nir_op_ushr: {
+      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
+      uint32_t mask = q.scalar.def->bit_size - 1u;
+      if (nir_ssa_scalar_is_const(src1_scalar))
+         *result = src[0] >> (nir_ssa_scalar_as_uint(src1_scalar) & mask);
+      else
+         *result = src[0];
+      break;
+   }
+   case nir_op_ishr: {
+      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
+      uint32_t mask = q.scalar.def->bit_size - 1u;
+      if (src[0] <= 2147483647 && nir_ssa_scalar_is_const(src1_scalar))
+         *result = src[0] >> (nir_ssa_scalar_as_uint(src1_scalar) & mask);
+      else
+         *result = src[0];
+      break;
+   }
+   case nir_op_iadd:
+      if (src[0] + src[1] >= src[0]) /* check overflow */
+         *result = src[0] + src[1];
+      break;
+   case nir_op_umod:
+      *result = src[1] ? src[1] - 1 : 0;
+      break;
+   case nir_op_udiv: {
+      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
+      if (nir_ssa_scalar_is_const(src1_scalar))
+         *result = nir_ssa_scalar_as_uint(src1_scalar)
+                   ? src[0] / nir_ssa_scalar_as_uint(src1_scalar) : 0;
+      else
+         *result = src[0];
+      break;
+   }
+   case nir_op_bcsel:
+   case nir_op_b32csel:
+      *result = src[1] > src[2] ? src[1] : src[2];
+      break;
+   case nir_op_ubfe:
+      *result = bitmask(MIN2(src[2], q.scalar.def->bit_size));
+      break;
+   case nir_op_bfm: {
+      nir_ssa_scalar src1_scalar = nir_ssa_scalar_chase_alu_src(q.scalar, 1);
+      if (nir_ssa_scalar_is_const(src1_scalar)) {
+         uint32_t src0 = MIN2(src[0], 31);
+         uint32_t src1 = nir_ssa_scalar_as_uint(src1_scalar) & 0x1fu;
+         *result = bitmask(src0) << src1;
+      } else {
+         uint32_t src0 = MIN2(src[0], 31);
+         uint32_t src1 = MIN2(src[1], 31);
+         *result = bitmask(MIN2(src0 + src1, 32));
+      }
+      break;
+   }
+   /* limited floating-point support for f2u32(fmul(load_input(), <constant>)) */
+   case nir_op_f2u32:
+      /* infinity/NaN starts at 0x7f800000u, negative numbers at 0x80000000 */
+      if (src[0] < 0x7f800000u) {
+         float val;
+         memcpy(&val, &src[0], 4);
+         *result = (uint32_t)val;
+      }
+      break;
+   case nir_op_fmul:
+   case nir_op_fmulz:
+      /* infinity/NaN starts at 0x7f800000u, negative numbers at 0x80000000 */
+      if (src[0] < 0x7f800000u && src[1] < 0x7f800000u) {
+         float src0_f, src1_f;
+         memcpy(&src0_f, &src[0], 4);
+         memcpy(&src1_f, &src[1], 4);
+         /* not a proper rounding-up multiplication, but should be good enough */
+         float max_f = ceilf(src0_f) * ceilf(src1_f);
+         memcpy(result, &max_f, 4);
+      }
+      break;
+   case nir_op_u2u1:
+   case nir_op_u2u8:
+   case nir_op_u2u16:
+   case nir_op_u2u32:
+      *result = MIN2(src[0], max);
+      break;
+   case nir_op_b2i8:
+   case nir_op_b2i16:
+   case nir_op_b2i32:
+      *result = 1;
+      break;
+   case nir_op_sad_u8x4:
+      *result = src[2] + 4 * 255;
+      break;
+   case nir_op_extract_u8:
+      *result = MIN2(src[0], UINT8_MAX);
+      break;
+   case nir_op_extract_i8:
+      *result = (src[0] >= 0x80) ? max : MIN2(src[0], INT8_MAX);
+      break;
+   case nir_op_extract_u16:
+      *result = MIN2(src[0], UINT16_MAX);
+      break;
+   case nir_op_extract_i16:
+      *result = (src[0] >= 0x8000) ? max : MIN2(src[0], INT16_MAX);
+      break;
+   default:
+      break;
+   }
+}
+
+static void
+get_phi_uub(struct analysis_state *state, struct uub_query q, uint32_t *result, const uint32_t *src)
+{
+   nir_phi_instr *phi = nir_instr_as_phi(q.scalar.def->parent_instr);
+
+   if (exec_list_is_empty(&phi->srcs))
+      return;
+
+   if (q.head.pushed_queries) {
+      *result = src[0];
+      for (unsigned i = 1; i < q.head.pushed_queries; i++)
+         *result = MAX2(*result, src[i]);
+      return;
+   }
+
+   nir_cf_node *prev = nir_cf_node_prev(&phi->instr.block->cf_node);
+   if (!prev || prev->type == nir_cf_node_block) {
+      /* Resolve cycles by inserting max into range_ht. */
+      uint32_t max = bitmask(q.scalar.def->bit_size);
+      _mesa_hash_table_insert(state->range_ht, (void*)get_uub_key(&q.head), (void*)(uintptr_t)max);
+
+      struct set *visited = _mesa_pointer_set_create(NULL);
+      nir_ssa_scalar *defs = alloca(sizeof(nir_ssa_scalar) * 64);
+      unsigned def_count = search_phi_bcsel(q.scalar, defs, 64, visited);
+      _mesa_set_destroy(visited, NULL);
+
+      for (unsigned i = 0; i < def_count; i++)
+         push_uub_query(state, defs[i]);
+   } else {
+      nir_foreach_phi_src(src, phi)
+         push_uub_query(state, nir_get_ssa_scalar(src->src.ssa, q.scalar.comp));
+   }
+}
+
+static void
+process_uub_query(struct analysis_state *state, struct analysis_query *aq, uint32_t *result,
+                  const uint32_t *src)
+{
+   struct uub_query q = *(struct uub_query *)aq;
+
+   *result = bitmask(q.scalar.def->bit_size);
+   if (nir_ssa_scalar_is_const(q.scalar))
+      *result = nir_ssa_scalar_as_uint(q.scalar);
+   else if (q.scalar.def->parent_instr->type == nir_instr_type_intrinsic)
+      get_intrinsic_uub(state, q, result, src);
+   else if (nir_ssa_scalar_is_alu(q.scalar))
+      get_alu_uub(state, q, result, src);
+   else if (q.scalar.def->parent_instr->type == nir_instr_type_phi)
+      get_phi_uub(state, q, result, src);
 }
 
 uint32_t
 nir_unsigned_upper_bound(nir_shader *shader, struct hash_table *range_ht,
                          nir_ssa_scalar scalar,
-                         const nir_unsigned_upper_bound_config *config)
-{
-   return nir_unsigned_upper_bound_impl(shader, range_ht, scalar, config, 0);
+                         const nir_unsigned_upper_bound_config *config) {
+   if (!config)
+      config = &default_ub_config;
+
+   struct uub_query query_alloc[16];
+   uint32_t result_alloc[16];
+
+   struct analysis_state state;
+   state.shader = shader;
+   state.config = config;
+   state.range_ht = range_ht;
+   util_dynarray_init_from_stack(&state.query_stack, query_alloc, sizeof(query_alloc));
+   util_dynarray_init_from_stack(&state.result_stack, result_alloc, sizeof(result_alloc));
+   state.query_size = sizeof(struct uub_query);
+   state.get_key = &get_uub_key;
+   state.process_query = &process_uub_query;
+
+   push_uub_query(&state, scalar);
+
+   return perform_analysis(&state);
 }
 
 bool

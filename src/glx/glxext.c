@@ -262,6 +262,9 @@ glx_display_free(struct glx_display *priv)
 
    gc = __glXGetCurrentContext();
    if (priv->dpy == gc->currentDpy) {
+      if (gc != &dummyContext)
+         gc->vtable->unbind(gc);
+
       gc->vtable->destroy(gc);
       __glXSetCurrentContextNull();
    }
@@ -651,18 +654,15 @@ createConfigsFromProperties(Display * dpy, int nvisuals, int nprops,
    m = modes;
    for (i = 0; i < nvisuals; i++) {
       _XRead(dpy, (char *) props, prop_size);
-#ifdef GLX_USE_APPLEGL
-       /* Older X servers don't send this so we default it here. */
-      m->drawableType = GLX_WINDOW_BIT;
-#else
-      /*
-       * The XQuartz 2.3.2.1 X server doesn't set this properly, so
-       * set the proper bits here.
-       * AppleSGLX supports windows, pixmaps, and pbuffers with all config.
+      /* If this is GLXGetVisualConfigs then the reply will not include
+       * any drawable type info, but window support is implied because
+       * that's what a Visual describes, and pixmap support is implied
+       * because you almost certainly have a pixmap format corresponding
+       * to your visual format. 
        */
-      m->drawableType = GLX_WINDOW_BIT | GLX_PIXMAP_BIT | GLX_PBUFFER_BIT;
-#endif
-       __glXInitializeVisualConfigFromTags(m, nprops, props,
+      if (!tagged_only)
+         m->drawableType = GLX_WINDOW_BIT | GLX_PIXMAP_BIT;
+      __glXInitializeVisualConfigFromTags(m, nprops, props,
                                           tagged_only, GL_TRUE);
       m->screen = screen;
       m = m->next;

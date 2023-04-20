@@ -39,9 +39,41 @@ struct amdgpu_cs;
 
 #define NUM_SLAB_ALLOCATORS 3
 
+/* DRM file descriptors, file descriptions and buffer sharing.
+ *
+ * amdgpu_device_initialize first argument is a file descriptor (fd)
+ * representing a specific GPU.
+ * If a fd is duplicated using os_dupfd_cloexec,
+ * the file description will remain the same (os_same_file_description will
+ * return 0).
+ * But if the same device is re-opened, the fd and the file description will
+ * be different.
+ *
+ * amdgpu_screen_winsys's fd tracks the file description which was
+ * given to amdgpu_winsys_create. This is the fd used by the application
+ * using the driver and may be used in other ioctl (eg: drmModeAddFB)
+ *
+ * amdgpu_winsys's fd is the file description used to initialize the
+ * device handle in libdrm_amdgpu.
+ *
+ * The 2 fds can be different, even in systems with a single GPU, eg: if
+ * radv is initialized before radeonsi.
+ *
+ * This fd tracking is useful for buffer sharing because KMS/GEM handles are
+ * specific to a DRM file description, i.e. the same handle value may refer
+ * to different underlying BOs in different DRM file descriptions.
+ * As an example, if an app wants to use drmModeAddFB it'll need a KMS handle
+ * valid for its fd (== amdgpu_screen_winsys::fd).
+ * If both fds are identical, there's nothing to do: bo->u.real.kms_handle
+ * can be used directly (see amdgpu_bo_get_handle).
+ * If they're different, the BO has to be exported from the device fd as
+ * a dma-buf, then imported from the app fd as a KMS handle.
+ */
+
 struct amdgpu_screen_winsys {
    struct radeon_winsys base;
    struct amdgpu_winsys *aws;
+   /* See comment above */
    int fd;
    struct pipe_reference reference;
    struct amdgpu_screen_winsys *next;
@@ -54,8 +86,7 @@ struct amdgpu_screen_winsys {
 
 struct amdgpu_winsys {
    struct pipe_reference reference;
-
-   /* File descriptor which was passed to amdgpu_device_initialize */
+   /* See comment above */
    int fd;
 
    struct pb_cache bo_cache;

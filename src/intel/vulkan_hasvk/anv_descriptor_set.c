@@ -1400,6 +1400,10 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
    void *desc_map = set->desc_mem.map + bind_layout->descriptor_offset +
                     element * bind_layout->descriptor_stride;
    memset(desc_map, 0, bind_layout->descriptor_stride);
+
+   if (image_view == NULL && sampler == NULL)
+      return;
+
    enum anv_descriptor_data data =
       bind_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_VALVE ?
       anv_descriptor_data_for_type(device->physical, type) :

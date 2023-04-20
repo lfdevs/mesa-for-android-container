@@ -6,6 +6,7 @@
 #ifndef AGX_INTERNAL_FORMATS_H
 #define AGX_INTERNAL_FORMATS_H
 
+#include <stdbool.h>
 #include "util/format/u_formats.h"
 
 /* Define aliases for the subset formats that are accessible in the ISA. These
@@ -26,5 +27,22 @@ enum agx_internal_formats {
    AGX_INTERNAL_FORMAT_RG11B10F = PIPE_FORMAT_R11G11B10_FLOAT,
    AGX_INTERNAL_FORMAT_RGB9E5 = PIPE_FORMAT_R9G9B9E5_FLOAT
 };
+
+/*
+ * The architecture load/store instructions support masking, but packed formats
+ * are not compatible with masking. Check if a format is packed.
+ */
+static inline bool
+agx_internal_format_supports_mask(enum agx_internal_formats format)
+{
+   switch (format) {
+   case AGX_INTERNAL_FORMAT_RGB10A2:
+   case AGX_INTERNAL_FORMAT_RG11B10F:
+   case AGX_INTERNAL_FORMAT_RGB9E5:
+      return false;
+   default:
+      return true;
+   }
+}
 
 #endif

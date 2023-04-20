@@ -35,7 +35,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
-#include <vulkan/vulkan.h>
+#include <xcb/xcb.h>
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_xcb.h>
 #ifdef HAVE_LIBDRM
 #include <xf86drm.h>
 #endif
@@ -634,7 +636,7 @@ dri2_x11_local_authenticate(struct dri2_egl_display *dri2_dpy)
 #ifdef HAVE_LIBDRM
    drm_magic_t magic;
 
-   if (drmGetMagic(dri2_dpy->fd, &magic)) {
+   if (drmGetMagic(dri2_dpy->fd_render_gpu, &magic)) {
       _eglLog(_EGL_WARNING, "DRI2: failed to get drm magic");
       return EGL_FALSE;
    }
@@ -716,8 +718,8 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
 
    device_name = xcb_dri2_connect_device_name (connect);
 
-   dri2_dpy->fd = loader_open_device(device_name);
-   if (dri2_dpy->fd == -1) {
+   dri2_dpy->fd_render_gpu = loader_open_device(device_name);
+   if (dri2_dpy->fd_render_gpu == -1) {
       _eglLog(_EGL_WARNING,
               "DRI2: could not open %s (%s)", device_name, strerror(errno));
       free(connect);
@@ -725,7 +727,7 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
    }
 
    if (!dri2_x11_local_authenticate(dri2_dpy)) {
-      close(dri2_dpy->fd);
+      close(dri2_dpy->fd_render_gpu);
       free(connect);
       return EGL_FALSE;
    }
@@ -735,7 +737,7 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
    /* If Mesa knows about the appropriate driver for this fd, then trust it.
     * Otherwise, default to the server's value.
     */
-   loader_driver_name = loader_get_driver_for_fd(dri2_dpy->fd);
+   loader_driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    if (loader_driver_name) {
       dri2_dpy->driver_name = loader_driver_name;
    } else {
@@ -745,7 +747,7 @@ dri2_x11_connect(struct dri2_egl_display *dri2_dpy)
    }
 
    if (dri2_dpy->driver_name == NULL) {
-      close(dri2_dpy->fd);
+      close(dri2_dpy->fd_render_gpu);
       free(connect);
       return EGL_FALSE;
    }
@@ -878,10 +880,8 @@ dri2_copy_region(_EGLDisplay *disp,
    if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
       return EGL_TRUE;
 
-   if (dri2_dpy->flush)
-      dri2_dpy->flush->flush(dri2_surf->dri_drawable);
-   else
-      dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
+   assert(!dri2_dpy->kopper);
+   dri2_dpy->flush->flush(dri2_surf->dri_drawable);
 
    if (dri2_surf->have_fake_front)
       render_attachment = XCB_DRI2_ATTACHMENT_BUFFER_FAKE_FRONT_LEFT;
@@ -954,7 +954,16 @@ dri2_x11_swap_buffers(_EGLDisplay *disp, _EGLSurface *draw)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
 
-   if (!dri2_dpy->flush) {
+   if (dri2_dpy->kopper) {
+      /* From the EGL 1.4 spec (page 52):
+       *
+       *     "The contents of ancillary buffers are always undefined
+       *      after calling eglSwapBuffers."
+       */
+      dri2_dpy->kopper->swapBuffers(dri2_surf->dri_drawable, __DRI2_FLUSH_INVALIDATE_ANCILLARY);
+      return EGL_TRUE;
+   } else if (!dri2_dpy->flush) {
+      /* aka the swrast path, which does the swap in the gallium driver. */
       dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
       return EGL_TRUE;
    }
@@ -1036,8 +1045,15 @@ dri2_x11_copy_buffers(_EGLDisplay *disp, _EGLSurface *surf, void *native_pixmap_
 
    if (dri2_dpy->flush)
       dri2_dpy->flush->flush(dri2_surf->dri_drawable);
-   else
+   else {
+      /* This should not be a swapBuffers, because it could present an
+       * incomplete frame, and it could invalidate the back buffer if it's not
+       * preserved.  We really do want to flush.  But it ends up working out
+       * okay-ish on swrast because those aren't invalidating the back buffer on
+       * swap.
+       */
       dri2_dpy->core->swapBuffers(dri2_surf->dri_drawable);
+   }
 
    gc = xcb_generate_id(dri2_dpy->conn);
    xcb_create_gc(dri2_dpy->conn, gc, target, 0, NULL);
@@ -1142,7 +1158,7 @@ dri2_create_image_khr_pixmap(_EGLDisplay *disp, _EGLContext *ctx,
 
    stride = buffers[0].pitch / buffers[0].cpp;
    dri2_img->dri_image =
-      dri2_dpy->image->createImageFromName(dri2_dpy->dri_screen,
+      dri2_dpy->image->createImageFromName(dri2_dpy->dri_screen_render_gpu,
 					   buffers_reply->width,
 					   buffers_reply->height,
 					   format,
@@ -1510,11 +1526,12 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    if (!dri2_get_xcb_connection(disp, dri2_dpy))
       goto cleanup;
 
-   dev = _eglAddDevice(dri2_dpy->fd, true);
+   dev = _eglAddDevice(dri2_dpy->fd_render_gpu, true);
    if (!dev) {
       _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
       goto cleanup;
@@ -1547,7 +1564,7 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
 #endif
       dri2_dpy->swap_available = EGL_TRUE;
       dri2_x11_setup_swap_interval(disp);
-      if (!dri2_dpy->is_different_gpu)
+      if (dri2_dpy->fd_render_gpu == dri2_dpy->fd_display_gpu)
          disp->Extensions.KHR_image_pixmap = EGL_TRUE;
       disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
       disp->Extensions.CHROMIUM_sync_control = EGL_TRUE;
@@ -1599,14 +1616,15 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    if (!dri2_get_xcb_connection(disp, dri2_dpy))
       goto cleanup;
 
    if (!dri3_x11_connect(dri2_dpy))
       goto cleanup;
 
-   dev = _eglAddDevice(dri2_dpy->fd, false);
+   dev = _eglAddDevice(dri2_dpy->fd_render_gpu, false);
    if (!dev) {
       _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
       goto cleanup;
@@ -1632,7 +1650,7 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
 
    dri2_x11_setup_swap_interval(disp);
 
-   if (!dri2_dpy->is_different_gpu)
+   if (dri2_dpy->fd_render_gpu == dri2_dpy->fd_display_gpu)
       disp->Extensions.KHR_image_pixmap = EGL_TRUE;
    disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
    disp->Extensions.CHROMIUM_sync_control = EGL_TRUE;
@@ -1711,14 +1729,15 @@ dri2_initialize_x11_dri2(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    if (!dri2_get_xcb_connection(disp, dri2_dpy))
       goto cleanup;
 
    if (!dri2_x11_connect(dri2_dpy))
       goto cleanup;
 
-   dev = _eglAddDevice(dri2_dpy->fd, false);
+   dev = _eglAddDevice(dri2_dpy->fd_render_gpu, false);
    if (!dev) {
       _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
       goto cleanup;

@@ -54,6 +54,13 @@ struct vk_${type}_extension_table {
          bool ${ext.name[3:]};
 %endfor
       };
+
+      /* Workaround for "error: too many initializers for vk_${type}_extension_table" */
+      struct {
+%for ext in extensions:
+         bool ${ext.name[3:]};
+%endfor
+      } table;
    };
 };
 </%def>

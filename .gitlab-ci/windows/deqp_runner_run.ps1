@@ -9,9 +9,14 @@ $results = New-Item -ItemType Directory results
 $baseline = ".\_install\warp-fails.txt"
 $suite = ".\_install\deqp-dozen.toml"
 
+$jobs = ""
+if ($null -ne $env:FDO_CI_CONCURRENT) {
+  $jobs = "--jobs", "$($env:FDO_CI_CONCURRENT)"
+}
+
 $env:DZN_DEBUG = "warp"
 $env:MESA_VK_IGNORE_CONFORMANCE_WARNING = "true"
-deqp-runner suite --suite $($suite) --output $($results) --baseline $($baseline) --testlog-to-xml C:\deqp\executor\testlog-to-xml.exe --jobs 4 --fraction 3
+deqp-runner suite --suite $($suite) --output $($results) --baseline $($baseline) --testlog-to-xml C:\deqp\executor\testlog-to-xml.exe $jobs --fraction 3
 $deqpstatus = $?
 
 $template = "See https://$($env:CI_PROJECT_ROOT_NAMESPACE).pages.freedesktop.org/-/$($env:CI_PROJECT_NAME)/-/jobs/$($env:CI_JOB_ID)/artifacts/results/{{testcase}}.xml"

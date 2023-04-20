@@ -104,12 +104,8 @@ TEST_F(nir_cf_test, delete_break_in_loop)
    EXPECT_TRUE(_mesa_set_search(block_2->predecessors, block_1));
    EXPECT_TRUE(_mesa_set_search(block_3->predecessors, block_2));
 
-   nir_print_shader(b.shader, stderr);
-
    /* Now remove the break. */
    nir_instr_remove(&jump->instr);
-
-   nir_print_shader(b.shader, stderr);
 
    /* At this point, we should have:
     *

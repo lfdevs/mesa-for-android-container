@@ -1639,7 +1639,7 @@ Jakob Bornecrantz (1):
 
 - vulkan-device-select: Don't leak xcb_query_extension_reply_t
 
-Jason Ekstrand (179):
+Faith Ekstrand (179):
 
 - vulkan,lavapipe: Simplify command recording code-gen
 - zink: Re-interpret formats when using vkCmdClearColorImage()

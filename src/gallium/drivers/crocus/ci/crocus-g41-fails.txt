@@ -73,9 +73,6 @@ shaders@glsl-routing,Crash
 
 # frontbuffer reading failures?
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
-spec@!opengl 1.1@read-front,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@windowoverlap,Fail
 
 spec@!opengl 1.1@line-aa-width,Fail
 spec@!opengl 1.1@linestipple,Fail

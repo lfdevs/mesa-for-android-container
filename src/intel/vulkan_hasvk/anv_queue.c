@@ -57,9 +57,6 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
 
    assert(queue->vk.queue_family_index < pdevice->queue.family_count);
    queue->family = &pdevice->queue.families[queue->vk.queue_family_index];
-
-   queue->index_in_family = index_in_family;
-
    queue->exec_flags = exec_flags;
 
    return VK_SUCCESS;

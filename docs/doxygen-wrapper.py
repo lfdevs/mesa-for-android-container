@@ -28,6 +28,7 @@ import os
 import subprocess
 import tempfile
 
+# You must update the paths in docs/gitlab-ci.yml's pages job when changing this.
 INPUT_PATHS = [
     'src/compiler/nir/nir.h',
     'src/intel/isl',

@@ -44,9 +44,6 @@ struct vn_instance {
    mtx_t ring_idx_mutex;
    uint64_t ring_idx_used_mask;
 
-   /* XXX staged features to be merged to core venus protocol */
-   VkVenusExperimentalFeatures100000MESA experimental;
-
    struct {
       mtx_t mutex;
       struct vn_renderer_shmem *shmem;
@@ -58,8 +55,11 @@ struct vn_instance {
 
       /* to synchronize renderer/ring */
       mtx_t roundtrip_mutex;
-      uint32_t roundtrip_next;
+      uint64_t roundtrip_next;
    } ring;
+
+   /* XXX staged features to be merged to core venus protocol */
+   VkVenusExperimentalFeatures100000MESA experimental;
 
    /* Between the driver and the app, VN_MAX_API_VERSION is what we advertise
     * and base.base.app_info.api_version is what the app requests.
@@ -95,16 +95,16 @@ VK_DEFINE_HANDLE_CASTS(vn_instance,
 
 VkResult
 vn_instance_submit_roundtrip(struct vn_instance *instance,
-                             uint32_t *roundtrip_seqno);
+                             uint64_t *roundtrip_seqno);
 
 void
 vn_instance_wait_roundtrip(struct vn_instance *instance,
-                           uint32_t roundtrip_seqno);
+                           uint64_t roundtrip_seqno);
 
 static inline void
 vn_instance_roundtrip(struct vn_instance *instance)
 {
-   uint32_t roundtrip_seqno;
+   uint64_t roundtrip_seqno;
    if (vn_instance_submit_roundtrip(instance, &roundtrip_seqno) == VK_SUCCESS)
       vn_instance_wait_roundtrip(instance, roundtrip_seqno);
 }
@@ -123,6 +123,10 @@ struct vn_instance_submit_command {
    /* when reply_size is non-zero, NULL can be returned on errors */
    struct vn_renderer_shmem *reply_shmem;
    struct vn_cs_decoder reply;
+
+   /* valid when instance ring submission succeeds */
+   bool ring_seqno_valid;
+   uint32_t ring_seqno;
 };
 
 static inline struct vn_cs_encoder *

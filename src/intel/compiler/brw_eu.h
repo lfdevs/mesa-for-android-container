@@ -1240,6 +1240,98 @@ lsc_opcode_is_atomic(enum lsc_opcode opcode)
    }
 }
 
+static inline bool
+lsc_opcode_is_atomic_float(enum lsc_opcode opcode)
+{
+   switch (opcode) {
+   case LSC_OP_ATOMIC_FADD:
+   case LSC_OP_ATOMIC_FSUB:
+   case LSC_OP_ATOMIC_FMIN:
+   case LSC_OP_ATOMIC_FMAX:
+   case LSC_OP_ATOMIC_FCMPXCHG:
+      return true;
+
+   default:
+      return false;
+   }
+}
+
+static inline unsigned
+lsc_op_num_data_values(unsigned _op)
+{
+   enum lsc_opcode op = (enum lsc_opcode) _op;
+
+   switch (op) {
+   case LSC_OP_ATOMIC_CMPXCHG:
+   case LSC_OP_ATOMIC_FCMPXCHG:
+      return 2;
+   case LSC_OP_ATOMIC_INC:
+   case LSC_OP_ATOMIC_DEC:
+   case LSC_OP_LOAD:
+   case LSC_OP_LOAD_CMASK:
+   case LSC_OP_FENCE:
+      /* XXX: actually check docs */
+      return 0;
+   default:
+      return 1;
+   }
+}
+
+static inline unsigned
+lsc_op_to_legacy_atomic(unsigned _op)
+{
+   enum lsc_opcode op = (enum lsc_opcode) _op;
+
+   switch (op) {
+   case LSC_OP_ATOMIC_INC:
+      return BRW_AOP_INC;
+   case LSC_OP_ATOMIC_DEC:
+      return BRW_AOP_DEC;
+   case LSC_OP_ATOMIC_STORE:
+      return BRW_AOP_MOV;
+   case LSC_OP_ATOMIC_ADD:
+      return BRW_AOP_ADD;
+   case LSC_OP_ATOMIC_SUB:
+      return BRW_AOP_SUB;
+   case LSC_OP_ATOMIC_MIN:
+      return BRW_AOP_IMIN;
+   case LSC_OP_ATOMIC_MAX:
+      return BRW_AOP_IMAX;
+   case LSC_OP_ATOMIC_UMIN:
+      return BRW_AOP_UMIN;
+   case LSC_OP_ATOMIC_UMAX:
+      return BRW_AOP_UMAX;
+   case LSC_OP_ATOMIC_CMPXCHG:
+      return BRW_AOP_CMPWR;
+   case LSC_OP_ATOMIC_FADD:
+      return BRW_AOP_FADD;
+   case LSC_OP_ATOMIC_FMIN:
+      return BRW_AOP_FMIN;
+   case LSC_OP_ATOMIC_FMAX:
+      return BRW_AOP_FMAX;
+   case LSC_OP_ATOMIC_FCMPXCHG:
+      return BRW_AOP_FCMPWR;
+   case LSC_OP_ATOMIC_AND:
+      return BRW_AOP_AND;
+   case LSC_OP_ATOMIC_OR:
+      return BRW_AOP_OR;
+   case LSC_OP_ATOMIC_XOR:
+      return BRW_AOP_XOR;
+   /* No LSC op maps to BRW_AOP_PREDEC */
+   case LSC_OP_ATOMIC_LOAD:
+   case LSC_OP_ATOMIC_FSUB:
+      unreachable("no corresponding legacy atomic operation");
+   case LSC_OP_LOAD:
+   case LSC_OP_LOAD_CMASK:
+   case LSC_OP_STORE:
+   case LSC_OP_STORE_CMASK:
+   case LSC_OP_FENCE:
+      unreachable("not an atomic op");
+   }
+
+   unreachable("invalid LSC op");
+}
+
 static inline uint32_t
 lsc_data_size_bytes(enum lsc_data_size data_size)
 {
@@ -1579,9 +1671,13 @@ brw_pixel_interp_desc(UNUSED const struct intel_device_info *devinfo,
                       unsigned msg_type,
                       bool noperspective,
                       bool coarse_pixel_rate,
-                      unsigned simd_mode,
-                      unsigned slot_group)
+                      unsigned exec_size,
+                      unsigned group)
 {
+   assert(exec_size == 8 || exec_size == 16);
+   const bool simd_mode = exec_size == 16;
+   const bool slot_group = group >= 16;
+
    assert(devinfo->ver >= 10 || !coarse_pixel_rate);
    return (SET_BITS(slot_group, 11, 11) |
            SET_BITS(msg_type, 13, 12) |

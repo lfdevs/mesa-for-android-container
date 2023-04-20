@@ -39,6 +39,13 @@ extern "C" {
 
 struct spirv_supported_capabilities {
    bool address;
+   bool amd_fragment_mask;
+   bool amd_gcn_shader;
+   bool amd_image_gather_bias_lod;
+   bool amd_image_read_write_lod;
+   bool amd_shader_ballot;
+   bool amd_shader_explicit_vertex_parameter;
+   bool amd_trinary_minmax;
    bool atomic_storage;
    bool demote_to_helper_invocation;
    bool derivative_group;
@@ -47,35 +54,39 @@ struct spirv_supported_capabilities {
    bool descriptor_indexing;
    bool device_group;
    bool draw_parameters;
+   bool float_controls;
    bool float16_atomic_add;
    bool float16_atomic_min_max;
+   bool float16;
    bool float32_atomic_add;
    bool float32_atomic_min_max;
-   bool float64;
    bool float64_atomic_add;
    bool float64_atomic_min_max;
-   bool fragment_shader_sample_interlock;
+   bool float64;
+   bool fragment_density;
+   bool fragment_fully_covered;
    bool fragment_shader_pixel_interlock;
+   bool fragment_shader_sample_interlock;
    bool fragment_shading_rate;
    bool generic_pointers;
    bool geometry_streams;
    bool groups;
+   bool image_atomic_int64;
    bool image_ms_array;
    bool image_read_without_format;
    bool image_write_without_format;
-   bool image_atomic_int64;
-   bool int8;
    bool int16;
-   bool int64;
    bool int64_atomics;
+   bool int64;
+   bool int8;
    bool integer_functions2;
-   bool kernel;
-   bool kernel_image;
    bool kernel_image_read_write;
+   bool kernel_image;
+   bool kernel;
    bool linkage;
    bool literal_sampler;
-   bool mesh_shading;
    bool mesh_shading_nv;
+   bool mesh_shading;
    bool min_lod;
    bool multiview;
    bool per_view_attributes_nv;
@@ -83,41 +94,33 @@ struct spirv_supported_capabilities {
    bool post_depth_coverage;
    bool printf;
    bool ray_cull_mask;
-   bool ray_tracing;
    bool ray_query;
+   bool ray_tracing;
    bool ray_traversal_primitive_culling;
    bool runtime_descriptor_array;
-   bool float_controls;
    bool shader_clock;
    bool shader_viewport_index_layer;
    bool shader_viewport_mask_nv;
    bool sparse_residency;
    bool stencil_export;
-   bool storage_8bit;
    bool storage_16bit;
+   bool storage_8bit;
    bool storage_image_ms;
    bool subgroup_arithmetic;
    bool subgroup_ballot;
    bool subgroup_basic;
    bool subgroup_dispatch;
    bool subgroup_quad;
+   bool subgroup_rotate;
    bool subgroup_shuffle;
    bool subgroup_uniform_control_flow;
    bool subgroup_vote;
    bool tessellation;
    bool transform_feedback;
    bool variable_pointers;
-   bool vk_memory_model;
    bool vk_memory_model_device_scope;
+   bool vk_memory_model;
    bool workgroup_memory_explicit_layout;
-   bool float16;
-   bool amd_fragment_mask;
-   bool amd_gcn_shader;
-   bool amd_shader_ballot;
-   bool amd_trinary_minmax;
-   bool amd_image_read_write_lod;
-   bool amd_shader_explicit_vertex_parameter;
-   bool amd_image_gather_bias_lod;
 
    bool intel_subgroup_shuffle;
    bool intel_subgroup_buffer_block_io;
@@ -297,6 +300,11 @@ typedef struct shader_info {
     */
    bool io_lowered:1;
 
+   /** Has nir_lower_var_copies called. To avoid calling any
+    * lowering/optimization that would introduce any copy_deref later.
+    */
+   bool var_copies_lowered:1;
+
    /* Whether the shader writes memory, including transform feedback. */
    bool writes_memory:1;
 
@@ -396,6 +404,7 @@ typedef struct shader_info {
          bool uses_discard:1;
          bool uses_demote:1;
          bool uses_fbfetch_output:1;
+         bool fbfetch_coherent:1;
          bool color_is_dual_source:1;
 
          /**
@@ -505,6 +514,11 @@ typedef struct shader_info {
           */
          enum gl_derivative_group derivative_group:2;
 
+         /*
+          * If the shader might run with shared mem on top of `shared_size`.
+          */
+         bool has_variable_shared_mem:1;
+
          /**
           * pointer size is:
           *   AddressingModelLogical:    0    (default)
@@ -537,12 +551,18 @@ typedef struct shader_info {
          uint64_t tcs_cross_invocation_outputs_read;
       } tess;
 
-      /* Applies to MESH. */
+      /* Applies to MESH and TASK. */
       struct {
          /* Bit mask of MS outputs that are used
           * with an index that is NOT the local invocation index.
           */
          uint64_t ms_cross_invocation_output_access;
+
+         /* Dimensions of task->mesh dispatch (EmitMeshTasksEXT)
+          * when they are known compile-time constants.
+          * 0 means they are not known.
+          */
+         uint32_t ts_mesh_dispatch_dimensions[3];
 
          uint16_t max_vertices_out;
          uint16_t max_primitives_out;

@@ -32,6 +32,7 @@
 #ifndef MENUMS_H
 #define MENUMS_H
 
+#include <stdbool.h>
 #include "util/macros.h"
 
 /**
@@ -48,6 +49,19 @@ typedef enum
    API_OPENGL_CORE,
    API_OPENGL_LAST = API_OPENGL_CORE
 } gl_api;
+
+/**
+ * Checks if the api is for GLES 2.0 or later
+ */
+static inline bool
+_mesa_is_api_gles2(gl_api api)
+{
+#if HAVE_OPENGL_ES_2
+   return api == API_OPENGLES2;
+#else
+   return false;
+#endif
+}
 
 /**
  * An index for each type of texture object.  These correspond to the GL

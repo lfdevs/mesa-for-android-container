@@ -103,8 +103,12 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
           * idle when we leave the IB, otherwise another process
           * might overwrite it while our shaders are busy.
           */
-         if (sscreen->use_ngg_streamout)
-            wait_flags |= SI_CONTEXT_PS_PARTIAL_FLUSH;
+         if (sscreen->use_ngg_streamout) {
+            if (ctx->gfx_level >= GFX11)
+               wait_flags |= SI_CONTEXT_VS_PARTIAL_FLUSH;
+            else
+               wait_flags |= SI_CONTEXT_PS_PARTIAL_FLUSH;
+         }
       }
    }
 
@@ -209,32 +213,37 @@ static void si_begin_gfx_cs_debug(struct si_context *ctx)
 
 static void si_add_gds_to_buffer_list(struct si_context *sctx)
 {
-   if (sctx->screen->gds) {
+   if (sctx->screen->gds)
       sctx->ws->cs_add_buffer(&sctx->gfx_cs, sctx->screen->gds, RADEON_USAGE_READWRITE, 0);
-      if (sctx->screen->gds_oa) {
-         sctx->ws->cs_add_buffer(&sctx->gfx_cs, sctx->screen->gds_oa, RADEON_USAGE_READWRITE, 0);
-      }
-   }
+   if (sctx->screen->gds_oa)
+      sctx->ws->cs_add_buffer(&sctx->gfx_cs, sctx->screen->gds_oa, RADEON_USAGE_READWRITE, 0);
 }
 
 void si_allocate_gds(struct si_context *sctx)
 {
    struct radeon_winsys *ws = sctx->ws;
 
-   if (sctx->screen->gds && sctx->screen->gds_oa)
-      return;
-
    assert(sctx->screen->use_ngg_streamout);
 
-   /* We need 256B (64 dw) of GDS, otherwise streamout hangs. */
-   simple_mtx_lock(&sctx->screen->gds_mutex);
-   if (!sctx->screen->gds)
-      sctx->screen->gds = ws->buffer_create(ws, 256, 4, RADEON_DOMAIN_GDS, RADEON_FLAG_DRIVER_INTERNAL);
-   if (!sctx->screen->gds_oa)
-      sctx->screen->gds_oa = ws->buffer_create(ws, 1, 1, RADEON_DOMAIN_OA, RADEON_FLAG_DRIVER_INTERNAL);
-   simple_mtx_unlock(&sctx->screen->gds_mutex);
+   if (sctx->screen->gds_oa)
+      return;
 
-   assert(sctx->screen->gds && sctx->screen->gds_oa);
+   assert(!sctx->screen->gds && !sctx->screen->gds_oa);
+
+   /* Gfx11 only uses GDS OA, not GDS memory.
+    * Gfx10 needs 256B (64 dw) of GDS, otherwise streamout hangs.
+    */
+   simple_mtx_lock(&sctx->screen->gds_mutex);
+   if (!sctx->screen->gds_oa) {
+      sctx->screen->gds_oa = ws->buffer_create(ws, 1, 1, RADEON_DOMAIN_OA, RADEON_FLAG_DRIVER_INTERNAL);
+      assert(sctx->screen->gds_oa);
+
+      if (sctx->gfx_level < GFX11) {
+         sctx->screen->gds = ws->buffer_create(ws, 256, 4, RADEON_DOMAIN_GDS, RADEON_FLAG_DRIVER_INTERNAL);
+         assert(sctx->screen->gds);
+      }
+   }
+   simple_mtx_unlock(&sctx->screen->gds_mutex);
 
    si_add_gds_to_buffer_list(sctx);
 }
@@ -414,10 +423,16 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    }
 
    si_add_all_descriptors_to_bo_list(ctx);
+   si_shader_pointers_mark_dirty(ctx);
+   ctx->cs_shader_state.emitted_program = NULL;
 
-   if (first_cs || !ctx->shadowed_regs) {
-      si_shader_pointers_mark_dirty(ctx);
-      ctx->cs_shader_state.initialized = false;
+   /* The CS initialization should be emitted before everything else. */
+   if (ctx->cs_preamble_state) {
+      struct si_pm4_state *preamble = is_secure ? ctx->cs_preamble_state_tmz :
+                                                  ctx->cs_preamble_state;
+      ctx->ws->cs_set_preamble(&ctx->gfx_cs, preamble->pm4, preamble->ndw,
+                               preamble != ctx->last_preamble);
+      ctx->last_preamble = preamble;
    }
 
    if (!ctx->has_graphics) {
@@ -434,16 +449,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
    /* set all valid group as dirty so they get reemited on
     * next draw command
     */
-   si_pm4_reset_emitted(ctx, first_cs);
-
-   /* The CS initialization should be emitted before everything else. */
-   if (ctx->cs_preamble_state) {
-      struct si_pm4_state *preamble = is_secure ? ctx->cs_preamble_state_tmz :
-                                                  ctx->cs_preamble_state;
-      ctx->ws->cs_set_preamble(&ctx->gfx_cs, preamble->pm4, preamble->ndw,
-                               preamble != ctx->last_preamble);
-      ctx->last_preamble = preamble;
-   }
+   si_pm4_reset_emitted(ctx);
 
    if (ctx->queued.named.ls)
       ctx->prefetch_L2_mask |= SI_PREFETCH_LS;
@@ -460,7 +466,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
 
    /* CLEAR_STATE disables all colorbuffers, so only enable bound ones. */
    bool has_clear_state = ctx->screen->info.has_clear_state;
-   if (has_clear_state || ctx->shadowed_regs) {
+   if (has_clear_state) {
       ctx->framebuffer.dirty_cbufs =
             u_bit_consecutive(0, ctx->framebuffer.state.nr_cbufs);
       /* CLEAR_STATE disables the zbuffer, so only enable it if it's bound. */
@@ -508,22 +514,6 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
       si_mark_atom_dirty(ctx, &ctx->atoms.s.scissors);
       si_mark_atom_dirty(ctx, &ctx->atoms.s.viewports);
 
-      /* Invalidate various draw states so that they are emitted before
-       * the first draw call. */
-      si_invalidate_draw_constants(ctx);
-      ctx->last_index_size = -1;
-      ctx->last_primitive_restart_en = -1;
-      ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
-      ctx->last_prim = -1;
-      ctx->last_multi_vgt_param = -1;
-      ctx->last_vs_state = ~0;
-      ctx->last_gs_state = ~0;
-      ctx->last_ls = NULL;
-      ctx->last_tcs = NULL;
-      ctx->last_tes_sh_base = -1;
-      ctx->last_num_tcs_input_cp = -1;
-      ctx->last_ls_hs_config = -1; /* impossible value */
-
       if (has_clear_state) {
          si_set_tracked_regs_to_clear_state(ctx);
       } else {
@@ -535,6 +525,22 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
       /* 0xffffffff is an impossible value to register SPI_PS_INPUT_CNTL_n */
       memset(ctx->tracked_regs.spi_ps_input_cntl, 0xff, sizeof(uint32_t) * 32);
    }
+
+   /* Invalidate various draw states so that they are emitted before
+    * the first draw call. */
+   si_invalidate_draw_constants(ctx);
+   ctx->last_index_size = -1;
+   ctx->last_primitive_restart_en = -1;
+   ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
+   ctx->last_prim = -1;
+   ctx->last_multi_vgt_param = -1;
+   ctx->last_vs_state = ~0;
+   ctx->last_gs_state = ~0;
+   ctx->last_ls = NULL;
+   ctx->last_tcs = NULL;
+   ctx->last_tes_sh_base = -1;
+   ctx->last_num_tcs_input_cp = -1;
+   ctx->last_ls_hs_config = -1; /* impossible value */
 
    if (ctx->scratch_buffer) {
       si_context_add_resource_size(ctx, &ctx->scratch_buffer->b.b);

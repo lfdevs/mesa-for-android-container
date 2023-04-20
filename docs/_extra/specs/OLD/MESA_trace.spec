@@ -64,7 +64,7 @@ Issues
       that enjoys privileged access, or that they do not wish to separate
       the tracing code from their driver code base.
 
-    (2) Should the Trace API explicitely support the notion of "frames? 
+    (2) Should the Trace API explicitly support the notion of "frames?
     This would require hooking into glXSwapBuffers calls as well.
 
       RESOLVED: No. The application can use NewTraceMESA/EndTraceMESA
@@ -93,7 +93,7 @@ Issues
     be considered persistent state?
 
       RESOLVED: No. The implementation is not forced to use this information 
-      on subsequent occurences of name/pointer, and is free to consider it 
+      on subsequent occurrences of name/pointer, and is free to consider it
       transient state.
  
     (5) Should comment commands be prohibited between Begin/End?
@@ -218,7 +218,7 @@ Additions to Chapter 5 of the OpenGL 1.2.1 Specification (Special Functions)
     Bitmap and DrawPixels commands.
 
     TRACE_ERRORS_BIT_MESA controls logging of all errors. If this bit is 
-    set, GetError will be executed whereever applicable, and the result will 
+    set, GetError will be executed wherever applicable, and the result will
     be added to the trace as a comment. The error returns are cached and 
     returned to the application on its GetError calls. If the user does not 
     wish the additional GetError calls to be performed, this bit should not

@@ -3,12 +3,10 @@ descriptor=[
   [ "ALPHA_BITS", "BUFFER_INT(Visual.alphaBits), extra_new_buffers" ],
   [ "BLEND", "CONTEXT_BIT0(Color.BlendEnabled), NO_EXTRA" ],
   [ "BLEND_SRC", "CONTEXT_ENUM16(Color.Blend[0].SrcRGB), NO_EXTRA" ],
-  [ "BLUE_BITS", "BUFFER_INT(Visual.blueBits), extra_new_buffers" ],
   [ "COLOR_CLEAR_VALUE", "LOC_CUSTOM, TYPE_FLOATN_4, 0, NO_EXTRA" ],
   [ "COLOR_WRITEMASK", "LOC_CUSTOM, TYPE_INT_4, 0, NO_EXTRA" ],
   [ "CULL_FACE", "CONTEXT_BOOL(Polygon.CullFlag), NO_EXTRA" ],
   [ "CULL_FACE_MODE", "CONTEXT_ENUM16(Polygon.CullFaceMode), NO_EXTRA" ],
-  [ "DEPTH_BITS", "BUFFER_INT(Visual.depthBits), extra_new_buffers" ],
   [ "DEPTH_CLEAR_VALUE", "CONTEXT_FIELD(Depth.Clear, TYPE_DOUBLEN), NO_EXTRA" ],
   [ "DEPTH_FUNC", "CONTEXT_ENUM16(Depth.Func), NO_EXTRA" ],
   [ "DEPTH_RANGE", "LOC_CUSTOM, TYPE_DOUBLEN_2, 0, NO_EXTRA" ],
@@ -16,7 +14,6 @@ descriptor=[
   [ "DEPTH_WRITEMASK", "CONTEXT_BOOL(Depth.Mask), NO_EXTRA" ],
   [ "DITHER", "CONTEXT_BOOL(Color.DitherFlag), NO_EXTRA" ],
   [ "FRONT_FACE", "CONTEXT_ENUM16(Polygon.FrontFace), NO_EXTRA" ],
-  [ "GREEN_BITS", "BUFFER_INT(Visual.greenBits), extra_new_buffers" ],
   [ "LINE_WIDTH", "CONTEXT_FLOAT(Line.Width), NO_EXTRA" ],
   [ "ALIASED_LINE_WIDTH_RANGE", "CONTEXT_FLOAT2(Const.MinLineWidth), NO_EXTRA" ],
   [ "MAX_ELEMENTS_VERTICES", "CONTEXT_INT(Const.MaxArrayLockSize), NO_EXTRA" ],
@@ -28,10 +25,8 @@ descriptor=[
   [ "POLYGON_OFFSET_FACTOR", "CONTEXT_FLOAT(Polygon.OffsetFactor ), NO_EXTRA" ],
   [ "POLYGON_OFFSET_UNITS", "CONTEXT_FLOAT(Polygon.OffsetUnits ), NO_EXTRA" ],
   [ "POLYGON_OFFSET_FILL", "CONTEXT_BOOL(Polygon.OffsetFill), NO_EXTRA" ],
-  [ "RED_BITS", "BUFFER_INT(Visual.redBits), extra_new_buffers" ],
   [ "SCISSOR_BOX", "LOC_CUSTOM, TYPE_INT_4, 0, NO_EXTRA" ],
   [ "SCISSOR_TEST", "LOC_CUSTOM, TYPE_BOOLEAN, NO_OFFSET, NO_EXTRA" ],
-  [ "STENCIL_BITS", "BUFFER_INT(Visual.stencilBits), extra_new_buffers" ],
   [ "STENCIL_CLEAR_VALUE", "CONTEXT_INT(Stencil.Clear), NO_EXTRA" ],
   [ "STENCIL_FAIL", "LOC_CUSTOM, TYPE_ENUM16, NO_OFFSET, NO_EXTRA" ],
   [ "STENCIL_FUNC", "LOC_CUSTOM, TYPE_ENUM16, NO_OFFSET, NO_EXTRA" ],
@@ -261,6 +256,15 @@ descriptor=[
   [ "POINT_SIZE_ARRAY_TYPE_OES", "ARRAY_FIELD(VertexAttrib[VERT_ATTRIB_POINT_SIZE].Format.User.Type, TYPE_ENUM16), NO_EXTRA" ],
   [ "POINT_SIZE_ARRAY_STRIDE_OES", "ARRAY_FIELD(VertexAttrib[VERT_ATTRIB_POINT_SIZE].Stride, TYPE_SHORT), NO_EXTRA" ],
   [ "POINT_SIZE_ARRAY_BUFFER_BINDING_OES", "LOC_CUSTOM, TYPE_INT, 0, NO_EXTRA" ],
+]},
+
+# Enums in legacy OpenGL and GLES
+{ "apis": ["GL", "GLES", "GLES2", "GLES3"], "params": [
+  [ "RED_BITS", "BUFFER_INT(Visual.redBits), extra_new_buffers_compat_es" ],
+  [ "GREEN_BITS", "BUFFER_INT(Visual.greenBits), extra_new_buffers_compat_es" ],
+  [ "BLUE_BITS", "BUFFER_INT(Visual.blueBits), extra_new_buffers_compat_es" ],
+  [ "DEPTH_BITS", "BUFFER_INT(Visual.depthBits), extra_new_buffers_compat_es" ],
+  [ "STENCIL_BITS", "BUFFER_INT(Visual.stencilBits), extra_new_buffers_compat_es" ],
 ]},
 
 # Enums in GLES2, GLES3

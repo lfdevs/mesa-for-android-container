@@ -30,34 +30,43 @@ intel_uuid_compute_device_id(uint8_t *uuid,
                              const struct intel_device_info *devinfo,
                              size_t size)
 {
-   struct mesa_sha1 sha1_ctx;
-   uint8_t sha1[20];
-   const char *vendor = "INTEL";
-   assert(size <= sizeof(sha1));
-
-   /* The device UUID uniquely identifies the given device within the
-    * machine. We use the device information along with PCI information
-    * to make sure we have different UUIDs on a system with multiple
-    * identical (discrete) GPUs.
+   /* The device UUID uniquely identifies the given device within the machine.
+    * We use the device information along with PCI information to make sure we
+    * have different UUIDs on a system with multiple identical (discrete)
+    * GPUs.
     */
-   _mesa_sha1_init(&sha1_ctx);
-   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_domain,
-                     sizeof(devinfo->pci_domain));
-   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_bus,
-                     sizeof(devinfo->pci_bus));
-   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_dev,
-                     sizeof(devinfo->pci_dev));
-   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_func,
-                     sizeof(devinfo->pci_func));
-   _mesa_sha1_update(&sha1_ctx, vendor, strlen(vendor));
-   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_device_id,
-                     sizeof(devinfo->pci_device_id));
-   _mesa_sha1_update(&sha1_ctx, &devinfo->pci_revision_id,
-                     sizeof(devinfo->pci_revision_id));
-   _mesa_sha1_update(&sha1_ctx, &devinfo->revision,
-                     sizeof(devinfo->revision));
-   _mesa_sha1_final(&sha1_ctx, sha1);
-   memcpy(uuid, sha1, size);
+
+   /* We want to have UUID matching between the different drivers (outside the
+    * Mesa project). This structure has been agreed with the various drivers
+    * to be the generated UUID.
+    *
+    * Consult other drivers before changing this.
+    */
+   struct device_uuid {
+      uint16_t vendor_id;
+      uint16_t device_id;
+      uint16_t revision_id;
+      uint16_t pci_domain;
+      uint8_t  pci_bus;
+      uint8_t  pci_dev;
+      uint8_t  pci_func;
+      uint8_t  padding[4];
+      uint8_t  sub_device_id; /* Tile number */
+   } shared_uuid = {
+      .vendor_id   = 0x8086,
+      .device_id   = devinfo->pci_device_id,
+      .revision_id = devinfo->pci_revision_id,
+      .pci_domain  = devinfo->pci_domain,
+      .pci_bus     = devinfo->pci_bus,
+      .pci_dev     = devinfo->pci_dev,
+      .pci_func    = devinfo->pci_func,
+   };
+
+   /* All the users have a 16byte UUID */
+   assert(size == 16);
+   assert(sizeof(shared_uuid) == 16);
+
+   memcpy(uuid, &shared_uuid, size);
 }
 
 void

@@ -66,8 +66,6 @@ lower_alu_instr(nir_alu_instr *alu)
       /* These we expect to have booleans but the opcode doesn't change */
       break;
 
-   case nir_op_f2b1: alu->op = nir_op_f2b32; break;
-
    case nir_op_b2b32:
    case nir_op_b2b1:
       /* We're mutating instructions in a dominance-preserving order so our

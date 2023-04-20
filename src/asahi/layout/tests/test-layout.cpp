@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2022 Alyssa Rosenzweig
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright 2022 Alyssa Rosenzweig
+ * SPDX-License-Identifier: MIT
  */
 
 #include <gtest/gtest.h>
@@ -40,6 +22,30 @@ TEST(Cubemap, Nonmipmapped)
 
    EXPECT_EQ(layout.layer_stride_B, ALIGN_POT(512 * 512 * 4, 0x4000));
    EXPECT_EQ(layout.size_B, ALIGN_POT(512 * 512 * 4 * 6, 0x4000));
+}
+
+TEST(Cubemap, RoundsToOnePage)
+{
+   struct ail_layout layout = {
+      .width_px = 63,
+      .height_px = 63,
+      .depth_px = 6,
+      .sample_count_sa = 1,
+      .levels = 6,
+      .tiling = AIL_TILING_TWIDDLED,
+      .format = PIPE_FORMAT_R32_FLOAT,
+   };
+
+   ail_make_miptree(&layout);
+
+   EXPECT_EQ(layout.level_offsets_B[0], 0);
+   EXPECT_EQ(layout.level_offsets_B[1], 0x4000);
+   EXPECT_EQ(layout.level_offsets_B[2], 0x5000);
+   EXPECT_EQ(layout.level_offsets_B[3], 0x5400);
+   EXPECT_EQ(layout.level_offsets_B[4], 0x5500);
+   EXPECT_TRUE(layout.page_aligned_layers);
+   EXPECT_EQ(layout.layer_stride_B, 0x8000);
+   EXPECT_EQ(layout.size_B, 0x30000);
 }
 
 TEST(Linear, SmokeTestBuffer)
@@ -91,4 +97,41 @@ TEST(Miptree, SomeMipLevels)
    ail_make_miptree(&layout);
 
    EXPECT_EQ(layout.size_B, 0x555680);
+}
+
+TEST(Miptree, SmallPartialMiptree2DArray)
+{
+   struct ail_layout layout = {
+      .width_px = 32,
+      .height_px = 16,
+      .depth_px = 64,
+      .sample_count_sa = 1,
+      .levels = 4,
+      .tiling = AIL_TILING_TWIDDLED,
+      .format = PIPE_FORMAT_R32_FLOAT,
+   };
+
+   ail_make_miptree(&layout);
+
+   EXPECT_EQ(layout.layer_stride_B, 0xc00);
+   EXPECT_EQ(layout.size_B, 0x30000);
+}
+
+TEST(Miptree, SmallPartialMiptree3D)
+{
+   struct ail_layout layout = {
+      .width_px = 32,
+      .height_px = 16,
+      .depth_px = 64,
+      .sample_count_sa = 1,
+      .levels = 4,
+      .mipmapped_z = true,
+      .tiling = AIL_TILING_TWIDDLED,
+      .format = PIPE_FORMAT_R32_FLOAT,
+   };
+
+   ail_make_miptree(&layout);
+
+   EXPECT_EQ(layout.layer_stride_B, 0xc80);
+   EXPECT_EQ(layout.size_B, 0x32000);
 }

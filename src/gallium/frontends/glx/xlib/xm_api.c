@@ -1343,7 +1343,16 @@ void XMesaSwapBuffers( XMesaBuffer b )
    }
 
    if (xmctx && xmctx->xm_buffer == b) {
-      st_context_flush(xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
+      struct pipe_fence_handle *fence = NULL;
+      st_context_flush(xmctx->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
+      /* Wait until all rendering is complete */
+      if (fence) {
+         XMesaDisplay xmdpy = xmesa_init_display(b->xm_visual->display);
+         struct pipe_screen *screen = xmdpy->screen;
+         xmdpy->screen->fence_finish(screen, NULL, fence,
+                                     PIPE_TIMEOUT_INFINITE);
+         xmdpy->screen->fence_reference(screen, &fence, NULL);
+      }
    }
 
    xmesa_swap_st_framebuffer(b->drawable);

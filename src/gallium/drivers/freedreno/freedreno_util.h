@@ -422,13 +422,6 @@ emit_marker(struct fd_ringbuffer *ring, int scratch_idx)
    }
 }
 
-static inline uint32_t
-pack_rgba(enum pipe_format format, const float *rgba)
-{
-   union util_color uc;
-   util_pack_color(rgba, format, &uc);
-   return uc.ui[0];
-}
 
 /*
  * a3xx+ helpers:

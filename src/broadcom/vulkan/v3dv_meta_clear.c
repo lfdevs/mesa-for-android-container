@@ -67,7 +67,13 @@ clear_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
 {
    const VkOffset3D origin = { 0, 0, 0 };
    VkFormat fb_format;
-   if (!v3dv_meta_can_use_tlb(image, &origin, &fb_format))
+
+   /* From vkCmdClearColorImage spec:
+    *  "image must not use any of the formats that require a sampler YCBCR
+    *   conversion"
+    */
+   assert(image->plane_count == 1);
+   if (!v3dv_meta_can_use_tlb(image, 0, &origin, &fb_format))
       return false;
 
    uint32_t internal_type, internal_bpp;
@@ -1196,6 +1202,9 @@ v3dv_CmdClearAttachments(VkCommandBuffer commandBuffer,
     * framebuffers, we use a geometry shader to redirect clears to the
     * appropriate layers.
     */
+
+   v3dv_cmd_buffer_pause_occlusion_query(cmd_buffer);
+
    bool is_layered, all_rects_same_layers;
    gather_layering_info(rectCount, pRects, &is_layered, &all_rects_same_layers);
    for (uint32_t i = 0; i < attachmentCount; i++) {
@@ -1213,4 +1222,6 @@ v3dv_CmdClearAttachments(VkCommandBuffer commandBuffer,
                                      rectCount, pRects);
       }
    }
+
+   v3dv_cmd_buffer_resume_occlusion_query(cmd_buffer);
 }

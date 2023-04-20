@@ -3,8 +3,9 @@
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 <import file="freedreno_copyright.xml"/>
+<import file="adreno/adreno_common.xml"/>
 
-<domain name="A6XX" width="32">
+<domain name="A6XX" width="32" prefix="variant" varset="chip">
 
 	<bitset name="A6XX_GMU_GPU_IDLE_STATUS">
 		<bitfield name="BUSY_IGN_AHB" pos="23"/>

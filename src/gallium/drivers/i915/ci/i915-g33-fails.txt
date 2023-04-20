@@ -203,8 +203,8 @@ spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
 
-# "../src/compiler/nir/nir_lower_int_to_float.c:102: lower_alu_instr: Assertion `nir_alu_type_get_base_type(info->output_type) != nir_type_int && nir_alu_type_get_base_type(info->output_type) != nir_type_uint' failed."
-spec@!opengl 1.1@point-line-no-cull,Crash
+# Test no longer crashes on an assertion in NIR, but it still fails.
+spec@!opengl 1.1@point-line-no-cull,Fail
 
 spec@!opengl 1.1@polygon-mode-offset,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 3: Expected white pixel on bottom edge,Fail
@@ -215,8 +215,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on bottom ed
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on left edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on right edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on top edge,Fail
-spec@!opengl 1.1@read-front,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4985
 spec@!opengl 1.1@texwrap 1d bordercolor,Fail
@@ -404,9 +402,6 @@ spec@arb_occlusion_query@occlusion_query_meta_save,Fail
 spec@arb_pixel_buffer_object@cubemap npot pbo,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small,Fail
 spec@arb_pixel_buffer_object@pbo-getteximage,Fail
-
-# nir_lower_aapoint_impl() uses b32csel instead of fcsel.
-spec@arb_point_parameters@arb_point_parameters-point-attenuation,Crash
 
 spec@arb_point_parameters@arb_point_parameters-point-attenuation@Aliased combinations,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail

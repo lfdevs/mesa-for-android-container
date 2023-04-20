@@ -313,20 +313,33 @@ iris_emit_buffer_barrier_for(struct iris_batch *batch,
    }
 
    if (bits) {
+      /* Stall-at-scoreboard is not supported by the compute pipeline, use the
+       * documented sequence of two PIPE_CONTROLs with PIPE_CONTROL_FLUSH_ENABLE
+       * set in the second PIPE_CONTROL in order to obtain a similar effect.
+       */
+      const bool compute_stall_sequence = batch->name == IRIS_BATCH_COMPUTE &&
+         (bits & PIPE_CONTROL_STALL_AT_SCOREBOARD) &&
+         !(bits & PIPE_CONTROL_CACHE_FLUSH_BITS);
+
       /* Stall-at-scoreboard is not expected to work in combination with other
        * flush bits.
        */
       if (bits & PIPE_CONTROL_CACHE_FLUSH_BITS)
          bits &= ~PIPE_CONTROL_STALL_AT_SCOREBOARD;
 
+      if (batch->name == IRIS_BATCH_COMPUTE)
+         bits &= ~PIPE_CONTROL_GRAPHICS_BITS;
+
       /* Emit any required flushes and invalidations. */
-      if (bits & all_flush_bits)
+      if ((bits & all_flush_bits) || compute_stall_sequence)
          iris_emit_end_of_pipe_sync(batch, "cache tracker: flush",
                                     bits & all_flush_bits);
 
-      if (bits & ~all_flush_bits)
+      if ((bits & ~all_flush_bits) || compute_stall_sequence)
          iris_emit_pipe_control_flush(batch, "cache tracker: invalidate",
-                                      bits & ~all_flush_bits);
+                                      (bits & ~all_flush_bits) |
+                                      (compute_stall_sequence ?
+                                       PIPE_CONTROL_FLUSH_ENABLE : 0));
    }
 }
 
@@ -403,9 +416,14 @@ iris_memory_barrier(struct pipe_context *ctx, unsigned flags)
    }
 
    iris_foreach_batch(ice, batch) {
+      const unsigned allowed_bits =
+         batch->name == IRIS_BATCH_COMPUTE ? ~PIPE_CONTROL_GRAPHICS_BITS : ~0u;
+
       if (batch->contains_draw) {
          iris_batch_maybe_flush(batch, 24);
-         iris_emit_pipe_control_flush(batch, "API: memory barrier", bits);
+         iris_emit_pipe_control_flush(batch,
+                                      "API: memory barrier",
+                                      bits & allowed_bits);
       }
    }
 }

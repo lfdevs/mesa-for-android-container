@@ -123,21 +123,13 @@ SendMakeCurrentRequest(Display * dpy, GLXContextID gc_id,
 }
 
 static int
-indirect_bind_context(struct glx_context *gc, struct glx_context *old,
+indirect_bind_context(struct glx_context *gc,
 		      GLXDrawable draw, GLXDrawable read)
 {
-   GLXContextTag tag;
    Display *dpy = gc->psc->dpy;
    Bool sent;
 
-   if (old != &dummyContext && !old->isDirect && old->psc->dpy == dpy) {
-      tag = old->currentContextTag;
-      old->currentContextTag = 0;
-   } else {
-      tag = 0;
-   }
-
-   sent = SendMakeCurrentRequest(dpy, gc->xid, tag, draw, read,
+   sent = SendMakeCurrentRequest(dpy, gc->xid, 0, draw, read,
 				 &gc->currentContextTag);
 
    if (sent) {
@@ -166,22 +158,12 @@ indirect_bind_context(struct glx_context *gc, struct glx_context *old,
 }
 
 static void
-indirect_unbind_context(struct glx_context *gc, struct glx_context *new)
+indirect_unbind_context(struct glx_context *gc)
 {
    Display *dpy = gc->psc->dpy;
 
-   if (gc == new)
-      return;
-   
-   /* We are either switching to no context, away from an indirect
-    * context to a direct context or from one dpy to another and have
-    * to send a request to the dpy to unbind the previous context.
-    */
-   if (!new || new->isDirect || new->psc->dpy != dpy) {
-      SendMakeCurrentRequest(dpy, None, gc->currentContextTag, None, None,
-                             NULL);
-      gc->currentContextTag = 0;
-   }
+   SendMakeCurrentRequest(dpy, None, gc->currentContextTag, None, None, NULL);
+   gc->currentContextTag = 0;
 }
 
 static void
@@ -265,6 +247,7 @@ indirect_create_context_attribs(struct glx_screen *psc,
 
    opcode = __glXSetupForCommand(psc->dpy);
    if (!opcode) {
+      *error = BadImplementation;
       return NULL;
    }
 
@@ -287,6 +270,7 @@ indirect_create_context_attribs(struct glx_screen *psc,
    if (mask != GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB ||
        major != 1 ||
        minor > 4) {
+      *error = GLXBadFBConfig;
       return NULL;
    }
 
@@ -297,6 +281,7 @@ indirect_create_context_attribs(struct glx_screen *psc,
    /* Allocate our context record */
    gc = calloc(1, sizeof *gc);
    if (!gc) {
+      *error = BadAlloc;
       /* Out of memory */
       return NULL;
    }
@@ -309,6 +294,7 @@ indirect_create_context_attribs(struct glx_screen *psc,
 
    if (state == NULL) {
       /* Out of memory */
+      *error = BadAlloc;
       free(gc);
       return NULL;
    }
@@ -325,6 +311,7 @@ indirect_create_context_attribs(struct glx_screen *psc,
    bufSize = (XMaxRequestSize(psc->dpy) * 4) - sz_xGLXRenderReq;
    gc->buf = malloc(bufSize);
    if (!gc->buf) {
+      *error = BadAlloc;
       free(gc->client_state_private);
       free(gc);
       return NULL;

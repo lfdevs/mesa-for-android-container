@@ -48,17 +48,16 @@
 #include <GL/internal/dri_interface.h>
 #include <GL/internal/mesa_interface.h>
 #include "loader.h"
+#include "util/libdrm.h"
 #include "util/os_file.h"
 #include "util/os_misc.h"
 #include "git_sha1.h"
 
-#ifdef HAVE_LIBDRM
-#include <xf86drm.h>
 #define MAX_DRM_DEVICES 64
+
 #ifdef USE_DRICONF
 #include "util/xmlconfig.h"
 #include "util/driconf.h"
-#endif
 #endif
 
 #include "util/macros.h"
@@ -105,7 +104,6 @@ loader_open_device(const char *device_name)
 
 static char *loader_get_kernel_driver_name(int fd)
 {
-#if HAVE_LIBDRM
    char *driver;
    drmVersionPtr version = drmGetVersion(fd);
 
@@ -120,22 +118,19 @@ static char *loader_get_kernel_driver_name(int fd)
 
    drmFreeVersion(version);
    return driver;
-#else
-   return NULL;
-#endif
 }
 
 bool
-is_kernel_i915(int fd)
+iris_predicate(int fd)
 {
    char *kernel_driver = loader_get_kernel_driver_name(fd);
-   bool is_i915 = kernel_driver && strcmp(kernel_driver, "i915") == 0;
+   bool ret = kernel_driver && (strcmp(kernel_driver, "i915") == 0 ||
+                                strcmp(kernel_driver, "xe") == 0);
 
    free(kernel_driver);
-   return is_i915;
+   return ret;
 }
 
-#if defined(HAVE_LIBDRM)
 int
 loader_open_render_node(const char *name)
 {
@@ -325,7 +320,7 @@ static char *drm_get_id_path_tag_for_fd(int fd)
    return tag;
 }
 
-int loader_get_user_preferred_fd(int default_fd, bool *different_device)
+bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
 {
    const char *dri_prime = getenv("DRI_PRIME");
    char *default_tag, *prime = NULL;
@@ -341,14 +336,12 @@ int loader_get_user_preferred_fd(int default_fd, bool *different_device)
       prime = loader_get_dri_config_device_id();
 #endif
 
-   if (prime == NULL) {
-      *different_device = false;
-      return default_fd;
-   } else {
+   if (prime == NULL)
+      goto no_prime_gpu_offloading;
+   else
       prime_is_vid_did = sscanf(prime, "%hx:%hx", &vendor_id, &device_id) == 2;
-   }
 
-   default_tag = drm_get_id_path_tag_for_fd(default_fd);
+   default_tag = drm_get_id_path_tag_for_fd(*fd_render_gpu);
    if (default_tag == NULL)
       goto err;
 
@@ -394,42 +387,31 @@ int loader_get_user_preferred_fd(int default_fd, bool *different_device)
    if (fd < 0)
       goto err;
 
-   close(default_fd);
-
-   *different_device = !!strcmp(default_tag, prime);
+   bool is_render_and_display_gpu_diff = !!strcmp(default_tag, prime);
+   if (original_fd) {
+      if (is_render_and_display_gpu_diff) {
+         *original_fd = *fd_render_gpu;
+         *fd_render_gpu = fd;
+      } else {
+         *original_fd = *fd_render_gpu;
+         close(fd);
+      }
+   } else {
+      close(*fd_render_gpu);
+      *fd_render_gpu = fd;
+   }
 
    free(default_tag);
    free(prime);
-   return fd;
-
+   return is_render_and_display_gpu_diff;
  err:
-   *different_device = false;
-
    free(default_tag);
    free(prime);
-   return default_fd;
+ no_prime_gpu_offloading:
+   if (original_fd)
+      *original_fd = *fd_render_gpu;
+   return false;
 }
-#else
-int
-loader_open_render_node(const char *name)
-{
-   return -1;
-}
-
-char *
-loader_get_render_node(dev_t device)
-{
-   return NULL;
-}
-
-int loader_get_user_preferred_fd(int default_fd, bool *different_device)
-{
-   *different_device = false;
-   return default_fd;
-}
-#endif
-
-#if defined(HAVE_LIBDRM)
 
 static bool
 drm_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
@@ -452,7 +434,6 @@ drm_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
    drmFreeDevice(&device);
    return true;
 }
-#endif
 
 #ifdef __linux__
 static int loader_get_linux_pci_field(int maj, int min, const char *field)
@@ -500,22 +481,13 @@ loader_get_pci_id_for_fd(int fd, int *vendor_id, int *chip_id)
       return true;
 #endif
 
-#if HAVE_LIBDRM
    return drm_get_pci_id_for_fd(fd, vendor_id, chip_id);
-#endif
-   return false;
 }
 
 char *
 loader_get_device_name_for_fd(int fd)
 {
-   char *result = NULL;
-
-#if HAVE_LIBDRM
-   result = drmGetDeviceNameFromFd2(fd);
-#endif
-
-   return result;
+   return drmGetDeviceNameFromFd2(fd);
 }
 
 static char *
@@ -569,7 +541,7 @@ loader_get_driver_for_fd(int fd)
          return strdup(override);
    }
 
-#if defined(HAVE_LIBDRM) && defined(USE_DRICONF)
+#if defined(USE_DRICONF)
    driver = loader_get_dri_config_driver(fd);
    if (driver)
       return driver;

@@ -26,13 +26,12 @@
 
 using namespace aco;
 
-static void create_mubuf(Temp desc=Temp(0, s8), unsigned vtx_binding=0)
+static void create_mubuf(Temp desc=Temp(0, s8))
 {
    Operand desc_op(desc);
    desc_op.setFixed(PhysReg(0));
    bld.mubuf(aco_opcode::buffer_load_dword, Definition(PhysReg(256), v1), desc_op,
-             Operand(PhysReg(256), v1), Operand::zero(), 0, false)
-      ->mubuf().vtx_binding = vtx_binding;
+             Operand(PhysReg(256), v1), Operand::zero(), 0, false);
 }
 
 static void create_mubuf_store()
@@ -41,14 +40,13 @@ static void create_mubuf_store()
              Operand(PhysReg(256), v1), Operand::zero(), 0, false);
 }
 
-static void create_mtbuf(Temp desc=Temp(0, s8), unsigned vtx_binding=0)
+static void create_mtbuf(Temp desc=Temp(0, s8))
 {
    Operand desc_op(desc);
    desc_op.setFixed(PhysReg(0));
    bld.mtbuf(aco_opcode::tbuffer_load_format_x, Definition(PhysReg(256), v1), desc_op,
              Operand(PhysReg(256), v1), Operand::zero(), V_008F0C_BUF_DATA_FORMAT_32,
-             V_008F0C_BUF_NUM_FORMAT_FLOAT, 0, false)
-      ->mtbuf().vtx_binding = vtx_binding;
+             V_008F0C_BUF_NUM_FORMAT_FLOAT, 0, false);
 }
 
 static void create_flat()
@@ -304,22 +302,6 @@ BEGIN_TEST(form_hard_clauses.heuristic)
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7u));
    create_mubuf(buf_desc0);
    create_mtbuf(buf_desc0);
-
-   //>> p_unit_test 8
-   //! s_clause imm:1
-   //; search_re('buffer_load_dword')
-   //; search_re('tbuffer_load_format_x')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(8u));
-   create_mubuf(buf_desc0, 1);
-   create_mtbuf(buf_desc0, 1);
-
-   //>> p_unit_test 9
-   //! s_clause imm:1
-   //; search_re('buffer_load_dword')
-   //; search_re('tbuffer_load_format_x')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(9u));
-   create_mubuf(buf_desc0, 1);
-   create_mtbuf(buf_desc1, 1);
 
    finish_form_hard_clause_test();
 END_TEST

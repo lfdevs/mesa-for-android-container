@@ -784,6 +784,31 @@ nvc0_cp_state_bind(struct pipe_context *pipe, void *hwcso)
 }
 
 static void
+nvc0_get_compute_state_info(struct pipe_context *pipe, void *hwcso,
+                            struct pipe_compute_state_object_info *info)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nvc0_program *prog = (struct nvc0_program *)hwcso;
+   uint16_t obj_class = nvc0->screen->compute->oclass;
+   uint32_t chipset = nvc0->screen->base.device->chipset;
+   uint32_t smregs;
+
+   // fermi and a handful of tegra devices have less gprs per SM
+   if (obj_class < NVE4_COMPUTE_CLASS || chipset == 0xea || chipset == 0x12b || chipset == 0x13b)
+      smregs = 32768;
+   else
+      smregs = 65536;
+
+   // TODO: not 100% sure about 8 for volta, but earlier reverse engineering indicates it
+   uint32_t gpr_alloc_size = obj_class >= GV100_COMPUTE_CLASS ? 8 : 4;
+   uint32_t threads = smregs / align(prog->num_gprs, gpr_alloc_size);
+
+   info->max_threads = MIN2(ROUND_DOWN_TO(threads, 32), 1024);
+   info->private_memory = prog->hdr[1] & 0xfffff0;
+   info->preferred_simd_size = 32;
+}
+
+static void
 nvc0_set_constant_buffer(struct pipe_context *pipe,
                          enum pipe_shader_type shader, uint index,
                          bool take_ownership,
@@ -1494,6 +1519,7 @@ nvc0_init_state_functions(struct nvc0_context *nvc0)
 
    pipe->create_compute_state = nvc0_cp_state_create;
    pipe->bind_compute_state = nvc0_cp_state_bind;
+   pipe->get_compute_state_info = nvc0_get_compute_state_info;
    pipe->delete_compute_state = nvc0_sp_state_delete;
 
    pipe->set_blend_color = nvc0_set_blend_color;

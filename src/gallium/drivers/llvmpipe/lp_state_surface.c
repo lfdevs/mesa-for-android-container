@@ -61,7 +61,7 @@ llvmpipe_set_framebuffer_state(struct pipe_context *pipe,
        * If no depth buffer is bound, send the utility function the default
        * format for no bound depth (PIPE_FORMAT_NONE).
        */
-      enum pipe_format depth_format = fb->zsbuf ?
+      enum pipe_format depth_format = fb->zsbuf && !(LP_PERF & PERF_NO_DEPTH) ?
          fb->zsbuf->format : PIPE_FORMAT_NONE;
       const struct util_format_description *depth_desc =
          util_format_description(depth_format);

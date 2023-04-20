@@ -324,6 +324,26 @@ v3d_get_sample_position(struct pipe_context *pctx,
         }
 }
 
+bool
+v3d_render_condition_check(struct v3d_context *v3d)
+{
+        if (!v3d->cond_query)
+                return true;
+
+        perf_debug("Implementing conditional rendering on the CPU\n");
+
+        union pipe_query_result res = { 0 };
+        bool wait =
+                v3d->cond_mode != PIPE_RENDER_COND_NO_WAIT &&
+                v3d->cond_mode != PIPE_RENDER_COND_BY_REGION_NO_WAIT;
+
+        struct pipe_context *pctx = (struct pipe_context *)v3d;
+        if (pctx->get_query_result(pctx, v3d->cond_query, wait, &res))
+                return ((bool)res.u64) != v3d->cond_cond;
+
+        return true;
+}
+
 struct pipe_context *
 v3d_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {

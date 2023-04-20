@@ -57,8 +57,6 @@ typedef struct {
    bool logicop_enable;
    unsigned logicop_func;
 
-   nir_ssa_def *src1;
-
    /* If set, will use load_blend_const_color_{r,g,b,a}_float instead of
     * load_blend_const_color_rgba */
    bool scalar_blend_const;

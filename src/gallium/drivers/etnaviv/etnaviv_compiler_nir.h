@@ -31,6 +31,7 @@
 #include "etnaviv_asm.h"
 #include "etnaviv_compiler.h"
 #include "util/compiler.h"
+#include "util/log.h"
 
 struct etna_compile {
    nir_shader *nir;
@@ -60,9 +61,9 @@ struct etna_compile {
 };
 
 #define compile_error(ctx, args...) ({ \
-   printf(args); \
+   mesa_loge(args); \
    ctx->error = true; \
-   assert(0); \
+   abort(); \
 })
 
 enum {
@@ -126,7 +127,7 @@ real_dest(nir_dest *dest, unsigned *swiz, unsigned *mask)
    if (!dest || !dest->is_ssa)
       return dest;
 
-   bool can_bypass_src = !list_length(&dest->ssa.if_uses);
+   bool can_bypass_src = !nir_ssa_def_used_by_if(&dest->ssa);
    nir_instr *p_instr = dest->ssa.parent_instr;
 
    /* if used by a vecN, the "real" destination becomes the vecN destination
@@ -160,7 +161,7 @@ real_dest(nir_dest *dest, unsigned *swiz, unsigned *mask)
       case nir_op_vec2:
       case nir_op_vec3:
       case nir_op_vec4:
-         assert(list_length(&dest->ssa.if_uses) == 0);
+         assert(!nir_ssa_def_used_by_if(&dest->ssa));
          nir_foreach_use(use_src, &dest->ssa)
             assert(use_src->parent_instr == instr);
 
@@ -174,7 +175,8 @@ real_dest(nir_dest *dest, unsigned *swiz, unsigned *mask)
          default:
             continue;
          }
-         if (list_length(&dest->ssa.if_uses) || list_length(&dest->ssa.uses) > 1)
+         if (nir_ssa_def_used_by_if(&dest->ssa) ||
+             list_length(&dest->ssa.uses) > 1)
             continue;
 
          update_swiz_mask(alu, NULL, swiz, mask);

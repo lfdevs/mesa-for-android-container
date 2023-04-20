@@ -67,28 +67,25 @@ struct dri3_display
    __GLXDRIdisplay base;
 
    const __DRIextension **loader_extensions;
-
-   /* DRI3 bits */
-   int dri3Major;
-   int dri3Minor;
-
-   /* Present bits */
-   int hasPresent;
-   int presentMajor;
-   int presentMinor;
+   int has_multibuffer;
 };
 
 struct dri3_screen {
    struct glx_screen base;
 
-   __DRIscreen *driScreen;
    __GLXDRIscreen vtable;
 
-   /* DRI screen is created for display GPU in case of prime.
+   /* DRI screen is created for display GPU in case of prime gpu offloading.
     * This screen is used to allocate linear_buffer from
     * display GPU space in dri3_alloc_render_buffer() function.
+    * In case of not gpu offloading driScreenDisplayGPU will be assigned with
+    * driScreenRenderGPU.
+    * In case of prime gpu offloading if display and render driver names are different
+    * (potentially not compatible), driScreenDisplayGPU will be NULL but
+    * fd_display_gpu will still hold fd for display driver.
     */
    __DRIscreen *driScreenDisplayGPU;
+   __DRIscreen *driScreenRenderGPU;
 
    const __DRIimageExtension *image;
    const __DRIimageDriverExtension *image_driver;
@@ -102,12 +99,14 @@ struct dri3_screen {
    const __DRIconfig **driver_configs;
 
    void *driver;
-   int fd;
-   bool is_different_gpu;
-   bool prefer_back_buffer_reuse;
-
-   /* fd for display GPU in case of prime */
+   /* fd of the GPU used for rendering. */
+   int fd_render_gpu;
+   /* fd of the GPU used for display. If the same GPU is used for display
+    * and rendering, then fd_render_gpu == fd_display_gpu (no need to use
+    * os_same_file_description).
+    */
    int fd_display_gpu;
+   bool prefer_back_buffer_reuse;
 
    struct loader_dri3_extensions loader_dri3_ext;
 };

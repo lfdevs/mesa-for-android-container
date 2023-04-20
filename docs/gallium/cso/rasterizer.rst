@@ -251,7 +251,7 @@ half_pixel_center
         1  +-----+
 
     When false, the rasterizer should use (0, 0) pixel centers for determining
-    pixel ownership (e.g., D3D9 or ealier)::
+    pixel ownership (e.g., D3D9 or earlier)::
 
          -0.5 0 0.5
       -0.5 +-----+

@@ -800,9 +800,10 @@ vn_update_descriptor_sets_alloc(uint32_t write_count,
 }
 
 bool
-vn_should_sanitize_descriptor_set_writes(uint32_t write_count,
-                                         const VkWriteDescriptorSet *writes,
-                                         VkPipelineLayout pipeline_layout_handle)
+vn_should_sanitize_descriptor_set_writes(
+   uint32_t write_count,
+   const VkWriteDescriptorSet *writes,
+   VkPipelineLayout pipeline_layout_handle)
 {
    /* the encoder does not ignore
     * VkWriteDescriptorSet::{pImageInfo,pBufferInfo,pTexelBufferView} when it

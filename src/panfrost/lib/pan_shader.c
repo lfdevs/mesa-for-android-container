@@ -35,8 +35,10 @@
 const nir_shader_compiler_options *
 GENX(pan_shader_get_compiler_options)(void)
 {
-#if PAN_ARCH >= 6
-   return &bifrost_nir_options;
+#if PAN_ARCH >= 9
+   return &bifrost_nir_options_v9;
+#elif PAN_ARCH >= 6
+   return &bifrost_nir_options_v6;
 #else
    return &midgard_nir_options;
 #endif
@@ -81,6 +83,27 @@ GENX(pan_fixup_blend_type)(nir_alu_type T_size, enum pipe_format format)
 #endif
 #endif
 
+/* This is only needed on Midgard. It's the same on both v4 and v5, so only
+ * compile once to avoid the GenXML dependency for calls.
+ */
+#if PAN_ARCH == 5
+uint8_t
+pan_raw_format_mask_midgard(enum pipe_format *formats)
+{
+   uint8_t out = 0;
+
+   for (unsigned i = 0; i < 8; i++) {
+      enum pipe_format fmt = formats[i];
+      unsigned wb_fmt = panfrost_blendable_formats_v6[fmt].writeback;
+
+      if (wb_fmt < MALI_COLOR_FORMAT_R8)
+         out |= BITFIELD_BIT(i);
+   }
+
+   return out;
+}
+#endif
+
 void
 GENX(pan_shader_compile)(nir_shader *s, struct panfrost_compile_inputs *inputs,
                          struct util_dynarray *binary,
@@ -91,14 +114,6 @@ GENX(pan_shader_compile)(nir_shader *s, struct panfrost_compile_inputs *inputs,
 #if PAN_ARCH >= 6
    bifrost_compile_shader_nir(s, inputs, binary, info);
 #else
-   for (unsigned i = 0; i < ARRAY_SIZE(inputs->rt_formats); i++) {
-      enum pipe_format fmt = inputs->rt_formats[i];
-      unsigned wb_fmt = panfrost_blendable_formats_v6[fmt].writeback;
-
-      if (wb_fmt < MALI_COLOR_FORMAT_R8)
-         inputs->raw_fmt_mask |= BITFIELD_BIT(i);
-   }
-
    midgard_compile_shader_nir(s, inputs, binary, info);
 #endif
 
@@ -191,14 +206,9 @@ GENX(pan_shader_compile)(nir_shader *s, struct panfrost_compile_inputs *inputs,
    }
 
    info->outputs_written = s->info.outputs_written;
-
-   /* Sysvals have dedicated UBO */
-   info->ubo_count = s->info.num_ubos;
-   if (info->sysvals.sysval_count && inputs->fixed_sysval_ubo < 0)
-      info->ubo_count++;
-
    info->attribute_count += BITSET_LAST_BIT(s->info.images_used);
    info->writes_global = s->info.writes_memory;
+   info->ubo_count = s->info.num_ubos;
 
    info->sampler_count = info->texture_count =
       BITSET_LAST_BIT(s->info.textures_used);

@@ -627,15 +627,13 @@ GENX(pan_blend_create_shader)(const struct panfrost_device *dev,
    if (PAN_ARCH >= 6 && nir_alu_type_get_type_size(nir_type) == 8)
       nir_type = nir_alu_type_get_base_type(nir_type) | 16;
 
-   enum glsl_base_type glsl_type =
-      nir_get_glsl_base_type_for_nir_type(nir_type);
-
    nir_lower_blend_options options = {
       .logicop_enable = state->logicop_enable,
       .logicop_func = state->logicop_func,
-      .rt[0].colormask = rt_state->equation.color_mask,
-      .format[0] = rt_state->format,
    };
+
+   options.rt[rt].colormask = rt_state->equation.color_mask;
+   options.format[rt] = rt_state->format;
 
    if (!rt_state->equation.blend_enable) {
       static const nir_lower_blend_channel replace = {
@@ -646,69 +644,59 @@ GENX(pan_blend_create_shader)(const struct panfrost_device *dev,
          .invert_dst_factor = false,
       };
 
-      options.rt[0].rgb = replace;
-      options.rt[0].alpha = replace;
+      options.rt[rt].rgb = replace;
+      options.rt[rt].alpha = replace;
    } else {
-      options.rt[0].rgb.func = rt_state->equation.rgb_func;
-      options.rt[0].rgb.src_factor = rt_state->equation.rgb_src_factor;
-      options.rt[0].rgb.invert_src_factor =
+      options.rt[rt].rgb.func = rt_state->equation.rgb_func;
+      options.rt[rt].rgb.src_factor = rt_state->equation.rgb_src_factor;
+      options.rt[rt].rgb.invert_src_factor =
          rt_state->equation.rgb_invert_src_factor;
-      options.rt[0].rgb.dst_factor = rt_state->equation.rgb_dst_factor;
-      options.rt[0].rgb.invert_dst_factor =
+      options.rt[rt].rgb.dst_factor = rt_state->equation.rgb_dst_factor;
+      options.rt[rt].rgb.invert_dst_factor =
          rt_state->equation.rgb_invert_dst_factor;
-      options.rt[0].alpha.func = rt_state->equation.alpha_func;
-      options.rt[0].alpha.src_factor = rt_state->equation.alpha_src_factor;
-      options.rt[0].alpha.invert_src_factor =
+      options.rt[rt].alpha.func = rt_state->equation.alpha_func;
+      options.rt[rt].alpha.src_factor = rt_state->equation.alpha_src_factor;
+      options.rt[rt].alpha.invert_src_factor =
          rt_state->equation.alpha_invert_src_factor;
-      options.rt[0].alpha.dst_factor = rt_state->equation.alpha_dst_factor;
-      options.rt[0].alpha.invert_dst_factor =
+      options.rt[rt].alpha.dst_factor = rt_state->equation.alpha_dst_factor;
+      options.rt[rt].alpha.invert_dst_factor =
          rt_state->equation.alpha_invert_dst_factor;
    }
 
-   nir_alu_type src_types[] = {src0_type ?: nir_type_float32,
-                               src1_type ?: nir_type_float32};
+   nir_ssa_def *pixel = nir_load_barycentric_pixel(&b, 32, .interp_mode = 1);
+   nir_ssa_def *zero = nir_imm_int(&b, 0);
 
-   /* HACK: workaround buggy TGSI shaders (u_blitter) */
-   for (unsigned i = 0; i < ARRAY_SIZE(src_types); ++i) {
-      src_types[i] = nir_alu_type_get_base_type(nir_type) |
-                     nir_alu_type_get_type_size(src_types[i]);
-   }
+   for (unsigned i = 0; i < 2; ++i) {
+      nir_alu_type src_type =
+         (i == 1 ? src1_type : src0_type) ?: nir_type_float32;
 
-   nir_variable *c_src = nir_variable_create(
-      b.shader, nir_var_shader_in,
-      glsl_vector_type(nir_get_glsl_base_type_for_nir_type(src_types[0]), 4),
-      "gl_Color");
-   c_src->data.location = VARYING_SLOT_COL0;
-   nir_variable *c_src1 = nir_variable_create(
-      b.shader, nir_var_shader_in,
-      glsl_vector_type(nir_get_glsl_base_type_for_nir_type(src_types[1]), 4),
-      "gl_Color1");
-   c_src1->data.location = VARYING_SLOT_VAR0;
-   c_src1->data.driver_location = 1;
-   nir_variable *c_out =
-      nir_variable_create(b.shader, nir_var_shader_out,
-                          glsl_vector_type(glsl_type, 4), "gl_FragColor");
-   c_out->data.location = FRAG_RESULT_DATA0;
+      /* HACK: workaround buggy TGSI shaders (u_blitter) */
+      src_type = nir_alu_type_get_base_type(nir_type) |
+                 nir_alu_type_get_type_size(src_type);
 
-   nir_ssa_def *s_src[] = {nir_load_var(&b, c_src), nir_load_var(&b, c_src1)};
+      nir_ssa_def *src = nir_load_interpolated_input(
+         &b, 4, nir_alu_type_get_type_size(src_type), pixel, zero,
+         .io_semantics.location = i ? VARYING_SLOT_VAR0 : VARYING_SLOT_COL0,
+         .io_semantics.num_slots = 1, .base = i, .dest_type = src_type);
 
-   /* On Midgard, the blend shader is responsible for format conversion.
-    * As the OpenGL spec requires integer conversions to saturate, we must
-    * saturate ourselves here. On Bifrost and later, the conversion
-    * hardware handles this automatically.
-    */
-   for (int i = 0; i < ARRAY_SIZE(s_src); ++i) {
+      /* On Midgard, the blend shader is responsible for format conversion.
+       * As the OpenGL spec requires integer conversions to saturate, we must
+       * saturate ourselves here. On Bifrost and later, the conversion
+       * hardware handles this automatically.
+       */
       nir_alu_type T = nir_alu_type_get_base_type(nir_type);
       bool should_saturate = (PAN_ARCH <= 5) && (T != nir_type_float);
-      s_src[i] =
-         nir_convert_with_rounding(&b, s_src[i], src_types[i], nir_type,
-                                   nir_rounding_mode_undef, should_saturate);
+      src = nir_convert_with_rounding(&b, src, T, nir_type,
+                                      nir_rounding_mode_undef, should_saturate);
+
+      nir_store_output(&b, src, zero, .write_mask = BITFIELD_MASK(4),
+                       .src_type = nir_type,
+                       .io_semantics.location = FRAG_RESULT_DATA0 + rt,
+                       .io_semantics.num_slots = 1,
+                       .io_semantics.dual_source_blend_index = i);
    }
 
-   /* Build a trivial blend shader */
-   nir_store_var(&b, c_out, s_src[0], 0xFF);
-
-   options.src1 = s_src[1];
+   b.shader->info.io_lowered = true;
 
    NIR_PASS_V(b.shader, nir_lower_blend, &options);
    nir_shader_instructions_pass(
@@ -774,6 +762,42 @@ GENX(pan_blend_get_internal_desc)(const struct panfrost_device *dev,
    }
 
    return res;
+}
+
+struct rt_conversion_inputs {
+   const struct panfrost_device *dev;
+   enum pipe_format *formats;
+};
+
+static bool
+inline_rt_conversion(nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_load_rt_conversion_pan)
+      return false;
+
+   struct rt_conversion_inputs *inputs = data;
+   unsigned rt = nir_intrinsic_base(intr);
+   unsigned size = nir_alu_type_get_type_size(nir_intrinsic_src_type(intr));
+   uint64_t conversion = GENX(pan_blend_get_internal_desc)(
+      inputs->dev, inputs->formats[rt], rt, size, false);
+
+   b->cursor = nir_after_instr(instr);
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_imm_int(b, conversion >> 32));
+   return true;
+}
+
+bool
+GENX(pan_inline_rt_conversion)(nir_shader *s, const struct panfrost_device *dev,
+                               enum pipe_format *formats)
+{
+   return nir_shader_instructions_pass(
+      s, inline_rt_conversion,
+      nir_metadata_block_index | nir_metadata_dominance,
+      &(struct rt_conversion_inputs){.dev = dev, .formats = formats});
 }
 #endif
 
@@ -843,11 +867,11 @@ GENX(pan_blend_get_shader_locked)(const struct panfrost_device *dev,
    struct panfrost_compile_inputs inputs = {
       .gpu_id = dev->gpu_id,
       .is_blend = true,
-      .blend.rt = shader->key.rt,
       .blend.nr_samples = key.nr_samples,
-      .fixed_sysval_ubo = -1,
-      .rt_formats = {key.format},
    };
+
+   enum pipe_format rt_formats[8] = {0};
+   rt_formats[rt] = key.format;
 
 #if PAN_ARCH >= 6
    inputs.blend.bifrost_blend_desc =
@@ -855,11 +879,17 @@ GENX(pan_blend_get_shader_locked)(const struct panfrost_device *dev,
 #endif
 
    struct pan_shader_info info;
+   pan_shader_preprocess(nir, inputs.gpu_id);
+
+#if PAN_ARCH >= 6
+   NIR_PASS_V(nir, GENX(pan_inline_rt_conversion), dev, rt_formats);
+#else
+   NIR_PASS_V(nir, pan_lower_framebuffer, rt_formats,
+              pan_raw_format_mask_midgard(rt_formats), MAX2(key.nr_samples, 1),
+              dev->gpu_id < 0x700);
+#endif
 
    GENX(pan_shader_compile)(nir, &inputs, &variant->binary, &info);
-
-   /* Blend shaders can't have sysvals */
-   assert(info.sysvals.sysval_count == 0);
 
    variant->work_reg_count = info.work_reg_count;
 

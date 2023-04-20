@@ -1,2 +1,2 @@
 schema.graphql
-gitlab_gql.py.cache.db
+gitlab_gql.py.cache*

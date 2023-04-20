@@ -65,7 +65,7 @@ class AnsiFormatter(Formatter):
 
     _normal = '0m'
     _bold = '1m'
-    _italic = '3m'
+    _italic = '3m' # Not widely supported
     _red = '31m'
     _green = '32m'
     _blue = '34m'
@@ -79,9 +79,7 @@ class AnsiFormatter(Formatter):
         self._escape(self._normal)
 
     def variable(self, name):
-        self._escape(self._italic)
         Formatter.variable(self, name)
-        self._escape(self._normal)
 
     def literal(self, value):
         self._escape(self._blue)

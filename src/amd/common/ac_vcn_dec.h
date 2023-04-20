@@ -160,6 +160,11 @@
 
 #define RDECODE_VP9_PROBS_DATA_SIZE                         2304
 
+/* *** decode flags *** */
+#define RDECODE_FLAGS_USE_DYNAMIC_DPB_MASK                  0x00000001
+#define RDECODE_FLAGS_USE_PAL_MASK                          0x00000008
+#define RDECODE_FLAGS_DPB_RESIZE_MASK                       0x00000100
+
 #define mmUVD_JPEG_CNTL                                     0x0200
 #define mmUVD_JPEG_CNTL_BASE_IDX                            1
 #define mmUVD_JPEG_RB_BASE                                  0x0201
@@ -229,6 +234,41 @@
 #define vcnipUVD_JPEG_CNTL                                  0x4000
 #define vcnipUVD_JPEG_RB_RPTR                               0x4003
 #define vcnipUVD_JPEG_OUTBUF_WPTR                           0x401d
+#define vcnipUVD_JPEG_DEC_SOFT_RST_1                        0x4051
+#define vcnipUVD_JPEG_PITCH_1                               0x4043
+#define vcnipUVD_JPEG_UV_PITCH_1                            0x4044
+#define vcnipJPEG_DEC_ADDR_MODE_1                           0x404B
+#define vcnipUVD_JPEG_TIER_CNTL2_1                          0x400E
+#define vcnipUVD_JPEG_OUTBUF_CNTL_1                         0x4040
+#define vcnipUVD_JPEG_OUTBUF_WPTR_1                         0x4041
+#define vcnipUVD_JPEG_OUTBUF_RPTR_1                         0x4042
+#define vcnipUVD_JPEG_LUMA_BASE0_0                          0x41C0
+#define vcnipUVD_JPEG_CHROMA_BASE0_0                        0x41C1
+#define vcnipUVD_JPEG_CHROMAV_BASE0_0                       0x41C2
+#define vcnipJPEG_DEC_Y_GFX10_TILING_SURFACE_1              0x4048
+#define vcnipJPEG_DEC_UV_GFX10_TILING_SURFACE_1             0x4049
+#define vcnipUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH_1            0x40B5
+#define vcnipUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW_1             0x40B4
+#define vcnipUVD_LMI_JPEG_READ_64BIT_BAR_HIGH_1             0x40B3
+#define vcnipUVD_LMI_JPEG_READ_64BIT_BAR_LOW_1              0x40B2
+#define vcnipUVD_JPEG_ROI_CROP_POS_START                    0x401B
+#define vcnipUVD_JPEG_ROI_CROP_POS_STRIDE                   0x401C
+#define vcnipUVD_JPEG_INT_STAT                              0x400B
+#define vcnipUVD_JPEG_FC_SPS_INFO                           0x4052
+#define vcnipUVD_JPEG_SPS_INFO                              0x4006
+#define vcnipUVD_JPEG_FC_R_COEF                             0x4018
+#define vcnipUVD_JPEG_FC_G_COEF                             0x4019
+#define vcnipUVD_JPEG_FC_B_COEF                             0x401A
+#define vcnipUVD_JPEG_FC_VUP_COEF_CNTL0                     0x4010
+#define vcnipUVD_JPEG_FC_VUP_COEF_CNTL1                     0x4011
+#define vcnipUVD_JPEG_FC_VUP_COEF_CNTL2                     0x4012
+#define vcnipUVD_JPEG_FC_VUP_COEF_CNTL3                     0x4013
+#define vcnipUVD_JPEG_FC_HUP_COEF_CNTL0                     0x4014
+#define vcnipUVD_JPEG_FC_HUP_COEF_CNTL1                     0x4015
+#define vcnipUVD_JPEG_FC_HUP_COEF_CNTL2                     0x4016
+#define vcnipUVD_JPEG_FC_HUP_COEF_CNTL3                     0x4017
+#define vcnipUVD_JPEG_FC_TMEOUT_CNT                         0x4183
+#define vcnipUVD_JPEG_SPS1_INFO                             0x4007
 
 #define UVD_BASE_INST0_SEG0                                 0x00007800
 #define UVD_BASE_INST0_SEG1                                 0x00007E00
@@ -1155,7 +1195,10 @@ struct jpeg_params {
    unsigned dt_luma_top_offset;
    unsigned dt_chroma_top_offset;
    unsigned dt_chromav_top_offset;
-   bool direct_reg;
+   uint16_t crop_x;
+   uint16_t crop_y;
+   uint16_t crop_width;
+   uint16_t crop_height;
 };
 
 #define RDECODE_VCN1_GPCOM_VCPU_CMD   0x2070c

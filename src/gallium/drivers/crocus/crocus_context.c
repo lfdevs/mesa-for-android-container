@@ -258,7 +258,7 @@ crocus_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    ctx->stream_uploader = u_upload_create_default(ctx);
    if (!ctx->stream_uploader) {
-      free(ctx);
+      ralloc_free(ice);
       return NULL;
    }
    ctx->const_uploader = ctx->stream_uploader;

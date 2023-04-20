@@ -2499,7 +2499,7 @@ Jan Zielinski (1):
 
 - gallium/swr: Fix crashes in sampling code
 
-Jason Ekstrand (167):
+Faith Ekstrand (167):
 
 - intel/eu: Use non-coherent mode (BTI=253) for stateless A64 messages
 - Revert "anv/gen12: Temporarily disable VK_KHR_buffer_device_address (and EXT)"

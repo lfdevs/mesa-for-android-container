@@ -34,7 +34,6 @@
 #include "iris_resource.h"
 #include "iris_screen.h"
 #include "iris_utrace.h"
-#include "common/intel_defines.h"
 #include "common/intel_sample_positions.h"
 
 /**
@@ -301,7 +300,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    ctx->stream_uploader = u_upload_create_default(ctx);
    if (!ctx->stream_uploader) {
-      free(ctx);
+      ralloc_free(ice);
       return NULL;
    }
    ctx->const_uploader = u_upload_create(ctx, 1024 * 1024,
@@ -310,7 +309,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
                                          IRIS_RESOURCE_FLAG_DEVICE_MEM);
    if (!ctx->const_uploader) {
       u_upload_destroy(ctx->stream_uploader);
-      free(ctx);
+      ralloc_free(ice);
       return NULL;
    }
 
@@ -360,11 +359,10 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    genX_call(devinfo, init_blorp, ice);
    genX_call(devinfo, init_query, ice);
 
-   int priority = 0;
    if (flags & PIPE_CONTEXT_HIGH_PRIORITY)
-      priority = INTEL_CONTEXT_HIGH_PRIORITY;
+      ice->priority = IRIS_CONTEXT_HIGH_PRIORITY;
    if (flags & PIPE_CONTEXT_LOW_PRIORITY)
-      priority = INTEL_CONTEXT_LOW_PRIORITY;
+      ice->priority = IRIS_CONTEXT_LOW_PRIORITY;
    if (flags & PIPE_CONTEXT_PROTECTED)
       ice->protected = true;
 
@@ -374,7 +372,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    /* Do this before initializing the batches */
    iris_utrace_init(ice);
 
-   iris_init_batches(ice, priority);
+   iris_init_batches(ice);
 
    screen->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);
    screen->vtbl.init_compute_context(&ice->batches[IRIS_BATCH_COMPUTE]);

@@ -263,6 +263,10 @@ st_update_blend( struct st_context *st )
       blend->rt[i].colormask = colormask;
    }
 
+   if (ctx->Color._AdvancedBlendMode != BLEND_NONE) {
+      blend->blend_coherent = ctx->Color.BlendCoherent;
+   }
+
    if (ctx->Color.ColorLogicOpEnabled) {
       /* logicop enabled */
       blend->logicop_enable = 1;

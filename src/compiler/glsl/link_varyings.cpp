@@ -148,7 +148,7 @@ cross_validate_types_and_qualifiers(const struct gl_constants *consts,
     * OpenGLES 3.0 drivers, so we relax the checking in all cases.
     */
    if (false /* always skip the centroid check */ &&
-       prog->data->Version < (prog->IsES ? 310 : 430) &&
+       prog->GLSL_Version < (prog->IsES ? 310 : 430) &&
        input->data.centroid != output->data.centroid) {
       linker_error(prog,
                    "%s shader output `%s' %s centroid qualifier, "
@@ -203,7 +203,7 @@ cross_validate_types_and_qualifiers(const struct gl_constants *consts,
     *     and fragment shaders must match."
     */
    if (input->data.explicit_invariant != output->data.explicit_invariant &&
-       prog->data->Version < (prog->IsES ? 300 : 420)) {
+       prog->GLSL_Version < (prog->IsES ? 300 : 420)) {
       linker_error(prog,
                    "%s shader output `%s' %s invariant qualifier, "
                    "but %s shader input %s invariant qualifier\n",
@@ -240,7 +240,7 @@ cross_validate_types_and_qualifiers(const struct gl_constants *consts,
          output_interpolation = INTERP_MODE_SMOOTH;
    }
    if (input_interpolation != output_interpolation &&
-       prog->data->Version < 440) {
+       prog->GLSL_Version < 440) {
       if (!consts->AllowGLSLCrossStageInterpolationMismatch) {
          linker_error(prog,
                       "%s shader output `%s' specifies %s "
@@ -642,7 +642,7 @@ validate_first_and_last_interface_explicit_locations(const struct gl_constants *
 static bool
 static_input_output_matching(struct gl_shader_program *prog)
 {
-   return prog->data->Version >= (prog->IsES ? 0 : 420);
+   return prog->GLSL_Version >= (prog->IsES ? 0 : 420);
 }
 
 /**

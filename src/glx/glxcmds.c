@@ -33,9 +33,6 @@
 #include <xcb/glx.h>
 #include "GL/mesa_glinterop.h"
 
-static const char __glXGLXClientVendorName[] = "Mesa Project and SGI";
-static const char __glXGLXClientVersion[] = "1.4";
-
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
 
 /**
@@ -239,7 +236,6 @@ glx_context_init(struct glx_context *gc,
    if (!gc->majorOpcode)
       return False;
 
-   gc->screen = psc->scr;
    gc->psc = psc;
    gc->config = config;
    gc->isDirect = GL_TRUE;
@@ -643,146 +639,6 @@ glXIsDirect(Display * dpy, GLXContext gc_user)
 
    /* This is set for us at context creation */
    return gc ? gc->isDirect : False;
-}
-
-_GLX_PUBLIC GLXPixmap
-glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
-{
-#ifdef GLX_USE_APPLEGL
-   int screen = vis->screen;
-   struct glx_screen *const psc = GetGLXScreenConfigs(dpy, screen);
-   const struct glx_config *config;
-
-   config = glx_config_find_visual(psc->visuals, vis->visualid);
-   
-   if(apple_glx_pixmap_create(dpy, vis->screen, pixmap, config))
-      return None;
-   
-   return pixmap;
-#else
-   xGLXCreateGLXPixmapReq *req;
-   struct glx_drawable *glxDraw;
-   GLXPixmap xid;
-   CARD8 opcode;
-
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
-   struct glx_display *const priv = __glXInitialize(dpy);
-
-   if (priv == NULL)
-      return None;
-#endif
-
-   opcode = __glXSetupForCommand(dpy);
-   if (!opcode) {
-      return None;
-   }
-
-   glxDraw = malloc(sizeof(*glxDraw));
-   if (!glxDraw)
-      return None;
-
-   /* Send the glXCreateGLXPixmap request */
-   LockDisplay(dpy);
-   GetReq(GLXCreateGLXPixmap, req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXCreateGLXPixmap;
-   req->screen = vis->screen;
-   req->visual = vis->visualid;
-   req->pixmap = pixmap;
-   req->glxpixmap = xid = XAllocID(dpy);
-   UnlockDisplay(dpy);
-   SyncHandle();
-
-   if (InitGLXDrawable(dpy, glxDraw, pixmap, req->glxpixmap)) {
-      free(glxDraw);
-      return None;
-   }
-
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
-   do {
-      /* FIXME: Maybe delay __DRIdrawable creation until the drawable
-       * is actually bound to a context... */
-
-      __GLXDRIdrawable *pdraw;
-      struct glx_screen *psc;
-      struct glx_config *config;
-
-      psc = priv->screens[vis->screen];
-      if (psc->driScreen == NULL)
-         return xid;
-
-      config = glx_config_find_visual(psc->visuals, vis->visualid);
-      pdraw = psc->driScreen->createDrawable(psc, pixmap, xid, GLX_PIXMAP_BIT, config);
-      if (pdraw == NULL) {
-         fprintf(stderr, "failed to create pixmap\n");
-         xid = None;
-         break;
-      }
-
-      if (__glxHashInsert(priv->drawHash, xid, pdraw)) {
-         pdraw->destroyDrawable(pdraw);
-         xid = None;
-         break;
-      }
-   } while (0);
-
-   if (xid == None) {
-      xGLXDestroyGLXPixmapReq *dreq;
-      LockDisplay(dpy);
-      GetReq(GLXDestroyGLXPixmap, dreq);
-      dreq->reqType = opcode;
-      dreq->glxCode = X_GLXDestroyGLXPixmap;
-      dreq->glxpixmap = xid;
-      UnlockDisplay(dpy);
-      SyncHandle();
-   }
-#endif
-
-   return xid;
-#endif
-}
-
-/*
-** Destroy the named pixmap
-*/
-_GLX_PUBLIC void
-glXDestroyGLXPixmap(Display * dpy, GLXPixmap glxpixmap)
-{
-#ifdef GLX_USE_APPLEGL
-   if(apple_glx_pixmap_destroy(dpy, glxpixmap))
-      __glXSendError(dpy, GLXBadPixmap, glxpixmap, X_GLXDestroyPixmap, false);
-#else
-   xGLXDestroyGLXPixmapReq *req;
-   CARD8 opcode;
-
-   opcode = __glXSetupForCommand(dpy);
-   if (!opcode) {
-      return;
-   }
-
-   /* Send the glXDestroyGLXPixmap request */
-   LockDisplay(dpy);
-   GetReq(GLXDestroyGLXPixmap, req);
-   req->reqType = opcode;
-   req->glxCode = X_GLXDestroyGLXPixmap;
-   req->glxpixmap = glxpixmap;
-   UnlockDisplay(dpy);
-   SyncHandle();
-
-   DestroyGLXDrawable(dpy, glxpixmap);
-
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
-   {
-      struct glx_display *const priv = __glXInitialize(dpy);
-      __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, glxpixmap);
-
-      if (priv != NULL && pdraw != NULL) {
-         pdraw->destroyDrawable(pdraw);
-         __glxHashDelete(priv->drawHash, glxpixmap);
-      }
-   }
-#endif
-#endif /* GLX_USE_APPLEGL */
 }
 
 _GLX_PUBLIC void
@@ -1302,11 +1158,11 @@ glXGetClientString(Display * dpy, int name)
 
    switch (name) {
    case GLX_VENDOR:
-      return (__glXGLXClientVendorName);
+      return "Mesa Project and SGI";
    case GLX_VERSION:
-      return (__glXGLXClientVersion);
+      return "1.4";
    case GLX_EXTENSIONS:
-      return (__glXGetClientExtensions(dpy));
+      return __glXGetClientExtensions(dpy);
    default:
       return NULL;
    }
@@ -1481,7 +1337,7 @@ glXQueryContext(Display * dpy, GLXContext ctx_user, int attribute, int *value)
       *value = ctx->config ? ctx->config->visualID : None;
       break;
    case GLX_SCREEN:
-      *value = ctx->screen;
+      *value = ctx->psc->scr;
       break;
    case GLX_FBCONFIG_ID:
       *value = ctx->config ? ctx->config->fbconfigID : None;
@@ -1912,18 +1768,10 @@ _GLX_PUBLIC GLX_ALIAS(XVisualInfo *, glXGetVisualFromFBConfigSGIX,
                  (Display * dpy, GLXFBConfigSGIX config),
                  (dpy, config), glXGetVisualFromFBConfig)
 
-_GLX_PUBLIC GLXPixmap
-glXCreateGLXPixmapWithConfigSGIX(Display * dpy,
-                                 GLXFBConfigSGIX fbconfig,
-                                 Pixmap pixmap)
-{
-   return glXCreatePixmap(dpy, fbconfig, pixmap, NULL);
-}
-
 _GLX_PUBLIC GLX_ALIAS(GLXContext, glXCreateContextWithConfigSGIX,
                       (Display *dpy, GLXFBConfigSGIX fbconfig,
                        int renderType, GLXContext shareList, Bool direct),
-                      (dpy, config, renderType, shareList, direct),
+                      (dpy, fbconfig, renderType, shareList, direct),
                       glXCreateNewContext)
 
 _GLX_PUBLIC GLXFBConfigSGIX
@@ -2512,25 +2360,19 @@ get_glx_proc_address(const char *funcName)
 _GLX_PUBLIC void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
 {
    typedef void (*gl_function) (void);
-   gl_function f;
+   gl_function f = NULL;
 
+   if (!strncmp((const char *) procName, "glX", 3))
+      f = (gl_function) get_glx_proc_address((const char *) procName);
 
-   /* Search the table of GLX and internal functions first.  If that
-    * fails and the supplied name could be a valid core GL name, try
-    * searching the core GL function table.  This check is done to prevent
-    * DRI based drivers from searching the core GL function table for
-    * internal API functions.
-    */
-   f = (gl_function) get_glx_proc_address((const char *) procName);
-   if ((f == NULL) && (procName[0] == 'g') && (procName[1] == 'l')
-       && (procName[2] != 'X')) {
-      if (!f)
-         f = (gl_function) _glapi_get_proc_address((const char *) procName);
+   if (f == NULL)
+      f = (gl_function) _glapi_get_proc_address((const char *) procName);
+
 #ifdef GLX_USE_APPLEGL
-      if (!f)
-         f = applegl_get_proc_address((const char *) procName);
+   if (f == NULL)
+      f = applegl_get_proc_address((const char *) procName);
 #endif
-   }
+
    return f;
 }
 

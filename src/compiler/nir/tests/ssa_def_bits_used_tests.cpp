@@ -50,8 +50,7 @@ protected:
 static bool
 is_used_once(const nir_ssa_def *def)
 {
-   return list_is_singular(&def->uses) &&
-          list_is_empty(&def->if_uses);
+   return list_is_singular(&def->uses);
 }
 
 nir_alu_instr *

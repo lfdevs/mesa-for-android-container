@@ -210,9 +210,8 @@ struct mesa_glinterop_export_out;
 
 struct glx_context_vtable {
    void (*destroy)(struct glx_context *ctx);
-   int (*bind)(struct glx_context *context, struct glx_context *old,
-	       GLXDrawable draw, GLXDrawable read);
-   void (*unbind)(struct glx_context *context, struct glx_context *new_ctx);
+   int (*bind)(struct glx_context *context, GLXDrawable draw, GLXDrawable read);
+   void (*unbind)(struct glx_context *context);
    void (*wait_gl)(struct glx_context *ctx);
    void (*wait_x)(struct glx_context *ctx);
    int (*interop_query_device_info)(struct glx_context *ctx,
@@ -270,10 +269,6 @@ struct glx_context
      */
    XID share_xid;
 
-    /**
-     * Screen number.
-     */
-   GLint screen;
    struct glx_screen *psc;
 
     /**
@@ -458,6 +453,11 @@ struct glx_screen_vtable {
 					 struct glx_context *shareList,
 					 int renderType);
 
+   /* The error outparameter abuses the fact that the only possible errors are
+    * GLXBadContext (0), GLXBadFBConfig (9), GLXBadProfileARB (13), BadValue
+    * (2), BadMatch (8), and BadAlloc (11). Since those don't collide we just
+    * use them directly rather than try to offset or use a sign convention. 
+    */
    struct glx_context *(*create_context_attribs)(struct glx_screen *psc,
 						 struct glx_config *config,
 						 struct glx_context *shareList,

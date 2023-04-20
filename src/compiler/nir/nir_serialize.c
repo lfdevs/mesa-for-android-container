@@ -464,7 +464,6 @@ read_register(read_ctx *ctx)
 
    list_inithead(&reg->uses);
    list_inithead(&reg->defs);
-   list_inithead(&reg->if_uses);
 
    return reg;
 }
@@ -1892,7 +1891,13 @@ write_loop(write_ctx *ctx, nir_loop *loop)
 {
    blob_write_uint8(ctx->blob, loop->control);
    blob_write_uint8(ctx->blob, loop->divergent);
+   bool has_continue_construct = nir_loop_has_continue_construct(loop);
+   blob_write_uint8(ctx->blob, has_continue_construct);
+
    write_cf_list(ctx, &loop->body);
+   if (has_continue_construct) {
+      write_cf_list(ctx, &loop->continue_list);
+   }
 }
 
 static void
@@ -1904,7 +1909,13 @@ read_loop(read_ctx *ctx, struct exec_list *cf_list)
 
    loop->control = blob_read_uint8(ctx->blob);
    loop->divergent = blob_read_uint8(ctx->blob);
+   bool has_continue_construct = blob_read_uint8(ctx->blob);
+
    read_cf_list(ctx, &loop->body);
+   if (has_continue_construct) {
+      nir_loop_add_continue_construct(loop);
+      read_cf_list(ctx, &loop->continue_list);
+   }
 }
 
 static void

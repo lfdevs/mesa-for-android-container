@@ -1,25 +1,7 @@
 /*
- * Copyright (C) 2021 Alyssa Rosenzweig <alyssa@rosenzweig.io>
+ * Copyright 2021 Alyssa Rosenzweig
  * Copyright 2019 Collabora, Ltd.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "agx_device.h"
@@ -27,430 +9,268 @@
 #include "agx_bo.h"
 #include "decode.h"
 
-unsigned AGX_FAKE_HANDLE = 0;
-uint64_t AGX_FAKE_LO = 0;
-uint64_t AGX_FAKE_HI = (1ull << 32);
+#include <fcntl.h>
+#include <xf86drm.h>
+#include "drm-uapi/dma-buf.h"
+#include "util/log.h"
+#include "util/os_mman.h"
+#include "util/simple_mtx.h"
 
-static void
-agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
-{
-#if __APPLE__
-   const uint64_t handle = bo->handle;
-
-   kern_return_t ret = IOConnectCallScalarMethod(dev->fd, AGX_SELECTOR_FREE_MEM,
-                                                 &handle, 1, NULL, NULL);
-
-   if (ret)
-      fprintf(stderr, "error freeing BO mem: %u\n", ret);
-#else
-   free(bo->ptr.cpu);
-#endif
-
-   /* Reset the handle */
-   memset(bo, 0, sizeof(*bo));
-}
+/* TODO: Linux UAPI. Dummy defines to get some things to compile. */
+#define ASAHI_BIND_READ  0
+#define ASAHI_BIND_WRITE 0
 
 void
-agx_shmem_free(struct agx_device *dev, unsigned handle)
+agx_bo_free(struct agx_device *dev, struct agx_bo *bo)
 {
-#if __APPLE__
-   const uint64_t input = handle;
-   kern_return_t ret = IOConnectCallScalarMethod(
-      dev->fd, AGX_SELECTOR_FREE_SHMEM, &input, 1, NULL, NULL);
+   const uint64_t handle = bo->handle;
 
-   if (ret)
-      fprintf(stderr, "error freeing shmem: %u\n", ret);
-#else
-#endif
+   if (bo->ptr.cpu)
+      munmap(bo->ptr.cpu, bo->size);
+
+   if (bo->ptr.gpu) {
+      struct util_vma_heap *heap;
+
+      if (bo->flags & AGX_BO_LOW_VA)
+         heap = &dev->usc_heap;
+      else
+         heap = &dev->main_heap;
+
+      simple_mtx_lock(&dev->vma_lock);
+      util_vma_heap_free(heap, bo->ptr.gpu, bo->size + dev->guard_size);
+      simple_mtx_unlock(&dev->vma_lock);
+
+      /* No need to unmap the BO, as the kernel will take care of that when we
+       * close it. */
+   }
+
+   if (bo->prime_fd != -1)
+      close(bo->prime_fd);
+
+   /* Reset the handle. This has to happen before the GEM close to avoid a race.
+    */
+   memset(bo, 0, sizeof(*bo));
+   __sync_synchronize();
+
+   struct drm_gem_close args = {.handle = handle};
+   drmIoctl(dev->fd, DRM_IOCTL_GEM_CLOSE, &args);
 }
 
-struct agx_bo
-agx_shmem_alloc(struct agx_device *dev, size_t size, bool cmdbuf)
+static int
+agx_bo_bind(struct agx_device *dev, struct agx_bo *bo, uint64_t addr,
+            uint32_t flags)
 {
-   struct agx_bo bo;
-
-#if __APPLE__
-   struct agx_create_shmem_resp out = {};
-   size_t out_sz = sizeof(out);
-
-   uint64_t inputs[2] = {
-      size,
-      cmdbuf ? 1 : 0 // 2 - error reporting, 1 - no error reporting
-   };
-
-   kern_return_t ret =
-      IOConnectCallMethod(dev->fd, AGX_SELECTOR_CREATE_SHMEM, inputs, 2, NULL,
-                          0, NULL, NULL, &out, &out_sz);
-
-   assert(ret == 0);
-   assert(out_sz == sizeof(out));
-   assert(out.size == size);
-   assert(out.map != 0);
-
-   bo = (struct agx_bo){
-      .type = cmdbuf ? AGX_ALLOC_CMDBUF : AGX_ALLOC_MEMMAP,
-      .handle = out.id,
-      .ptr.cpu = out.map,
-      .size = out.size,
-      .guid = 0, /* TODO? */
-   };
-#else
-   bo = (struct agx_bo){
-      .type = cmdbuf ? AGX_ALLOC_CMDBUF : AGX_ALLOC_MEMMAP,
-      .handle = AGX_FAKE_HANDLE++,
-      .ptr.cpu = calloc(1, size),
-      .size = size,
-      .guid = 0, /* TODO? */
-   };
-#endif
-
-   if (dev->debug & AGX_DBG_TRACE)
-      agxdecode_track_alloc(&bo);
-
-   return bo;
+   unreachable("Linux UAPI not yet upstream");
 }
 
-static struct agx_bo *
-agx_bo_alloc(struct agx_device *dev, size_t size, uint32_t flags)
+struct agx_bo *
+agx_bo_alloc(struct agx_device *dev, size_t size, enum agx_bo_flags flags)
 {
    struct agx_bo *bo;
    unsigned handle = 0;
 
-#if __APPLE__
-   uint32_t mode = 0x430; // shared, ?
+   size = ALIGN_POT(size, dev->params.vm_page_size);
 
-   uint32_t args_in[24] = {0};
-   args_in[4] = 0x4000101; // 0x1000101; // unk
-   args_in[5] = mode;
-   args_in[16] = size;
-   args_in[20] = flags;
+   /* executable implies low va */
+   assert(!(flags & AGX_BO_EXEC) || (flags & AGX_BO_LOW_VA));
 
-   uint64_t out[10] = {0};
-   size_t out_sz = sizeof(out);
-
-   kern_return_t ret =
-      IOConnectCallMethod(dev->fd, AGX_SELECTOR_ALLOCATE_MEM, NULL, 0, args_in,
-                          sizeof(args_in), NULL, 0, out, &out_sz);
-
-   assert(ret == 0);
-   assert(out_sz == sizeof(out));
-   handle = (out[3] >> 32ull);
-#else
-   /* Faked software path until we have a DRM driver */
-   handle = (++AGX_FAKE_HANDLE);
-#endif
+   unreachable("Linux UAPI not yet upstream");
 
    pthread_mutex_lock(&dev->bo_map_lock);
    bo = agx_lookup_bo(dev, handle);
+   dev->max_handle = MAX2(dev->max_handle, handle);
    pthread_mutex_unlock(&dev->bo_map_lock);
 
    /* Fresh handle */
    assert(!memcmp(bo, &((struct agx_bo){}), sizeof(*bo)));
 
    bo->type = AGX_ALLOC_REGULAR;
-   bo->size = size;
+   bo->size = size; /* TODO: gem_create.size */
    bo->flags = flags;
    bo->dev = dev;
    bo->handle = handle;
+   bo->prime_fd = -1;
 
-   ASSERTED bool lo = (flags & 0x08000000);
+   ASSERTED bool lo = (flags & AGX_BO_LOW_VA);
 
-#if __APPLE__
-   bo->ptr.gpu = out[0];
-   bo->ptr.cpu = (void *)out[1];
-   bo->guid = out[5];
-#else
-   if (lo) {
-      bo->ptr.gpu = AGX_FAKE_LO;
-      AGX_FAKE_LO += bo->size;
-   } else {
-      bo->ptr.gpu = AGX_FAKE_HI;
-      AGX_FAKE_HI += bo->size;
+   struct util_vma_heap *heap;
+   if (lo)
+      heap = &dev->usc_heap;
+   else
+      heap = &dev->main_heap;
+
+   simple_mtx_lock(&dev->vma_lock);
+   bo->ptr.gpu = util_vma_heap_alloc(heap, size + dev->guard_size,
+                                     dev->params.vm_page_size);
+   simple_mtx_unlock(&dev->vma_lock);
+   if (!bo->ptr.gpu) {
+      fprintf(stderr, "Failed to allocate BO VMA\n");
+      agx_bo_free(dev, bo);
+      return NULL;
    }
 
-   bo->ptr.gpu = (((uint64_t)bo->handle) << (lo ? 16 : 24));
-   bo->ptr.cpu = calloc(1, bo->size);
-#endif
+   bo->guid = bo->handle; /* TODO: We don't care about guids */
+
+   uint32_t bind = ASAHI_BIND_READ;
+   if (!(flags & AGX_BO_READONLY)) {
+      bind |= ASAHI_BIND_WRITE;
+   }
+
+   int ret = agx_bo_bind(dev, bo, bo->ptr.gpu, bind);
+   if (ret) {
+      agx_bo_free(dev, bo);
+      return NULL;
+   }
+
+   agx_bo_mmap(bo);
+
+   if (flags & AGX_BO_LOW_VA)
+      bo->ptr.gpu -= dev->shader_base;
 
    assert(bo->ptr.gpu < (1ull << (lo ? 32 : 40)));
 
    return bo;
 }
 
-/* Helper to calculate the bucket index of a BO */
-static unsigned
-agx_bucket_index(unsigned size)
-{
-   /* Round down to POT to compute a bucket index */
-   unsigned bucket_index = util_logbase2(size);
-
-   /* Clamp to supported buckets. Huge allocations use the largest bucket */
-   bucket_index = CLAMP(bucket_index, MIN_BO_CACHE_BUCKET, MAX_BO_CACHE_BUCKET);
-
-   /* Reindex from 0 */
-   return (bucket_index - MIN_BO_CACHE_BUCKET);
-}
-
-static struct list_head *
-agx_bucket(struct agx_device *dev, unsigned size)
-{
-   return &dev->bo_cache.buckets[agx_bucket_index(size)];
-}
-
-static bool
-agx_bo_wait(struct agx_bo *bo, int64_t timeout_ns)
-{
-   /* TODO: When we allow parallelism we'll need to implement this for real */
-   return true;
-}
-
-static void
-agx_bo_cache_remove_locked(struct agx_device *dev, struct agx_bo *bo)
-{
-   simple_mtx_assert_locked(&dev->bo_cache.lock);
-   list_del(&bo->bucket_link);
-   list_del(&bo->lru_link);
-   dev->bo_cache.size -= bo->size;
-}
-
-/* Tries to fetch a BO of sufficient size with the appropriate flags from the
- * BO cache. If it succeeds, it returns that BO and removes the BO from the
- * cache. If it fails, it returns NULL signaling the caller to allocate a new
- * BO. */
-
-static struct agx_bo *
-agx_bo_cache_fetch(struct agx_device *dev, size_t size, uint32_t flags,
-                   const bool dontwait)
-{
-   simple_mtx_lock(&dev->bo_cache.lock);
-   struct list_head *bucket = agx_bucket(dev, size);
-   struct agx_bo *bo = NULL;
-
-   /* Iterate the bucket looking for something suitable */
-   list_for_each_entry_safe(struct agx_bo, entry, bucket, bucket_link) {
-      if (entry->size < size || entry->flags != flags)
-         continue;
-
-      /* If the oldest BO in the cache is busy, likely so is
-       * everything newer, so bail. */
-      if (!agx_bo_wait(entry, dontwait ? 0 : INT64_MAX))
-         break;
-
-      /* This one works, use it */
-      agx_bo_cache_remove_locked(dev, entry);
-      bo = entry;
-      break;
-   }
-   simple_mtx_unlock(&dev->bo_cache.lock);
-
-   return bo;
-}
-
-static void
-agx_bo_cache_evict_stale_bos(struct agx_device *dev)
-{
-   struct timespec time;
-
-   clock_gettime(CLOCK_MONOTONIC, &time);
-   list_for_each_entry_safe(struct agx_bo, entry, &dev->bo_cache.lru,
-                            lru_link) {
-      /* We want all entries that have been used more than 1 sec ago to be
-       * dropped, others can be kept.  Note the <= 2 check and not <= 1. It's
-       * here to account for the fact that we're only testing ->tv_sec, not
-       * ->tv_nsec.  That means we might keep entries that are between 1 and 2
-       * seconds old, but we don't really care, as long as unused BOs are
-       * dropped at some point.
-       */
-      if (time.tv_sec - entry->last_used <= 2)
-         break;
-
-      agx_bo_cache_remove_locked(dev, entry);
-      agx_bo_free(dev, entry);
-   }
-}
-
-static void
-agx_bo_cache_put_locked(struct agx_bo *bo)
-{
-   struct agx_device *dev = bo->dev;
-   struct list_head *bucket = agx_bucket(dev, bo->size);
-   struct timespec time;
-
-   /* Add us to the bucket */
-   list_addtail(&bo->bucket_link, bucket);
-
-   /* Add us to the LRU list and update the last_used field. */
-   list_addtail(&bo->lru_link, &dev->bo_cache.lru);
-   clock_gettime(CLOCK_MONOTONIC, &time);
-   bo->last_used = time.tv_sec;
-
-   /* Update statistics */
-   dev->bo_cache.size += bo->size;
-
-   if (0) {
-      printf("BO cache: %zu KiB (+%zu KiB from %s, hit/miss %" PRIu64
-             "/%" PRIu64 ")\n",
-             DIV_ROUND_UP(dev->bo_cache.size, 1024),
-             DIV_ROUND_UP(bo->size, 1024), bo->label, dev->bo_cache.hits,
-             dev->bo_cache.misses);
-   }
-
-   /* Update label for debug */
-   bo->label = "Unused (BO cache)";
-
-   /* Let's do some cleanup in the BO cache while we hold the lock. */
-   agx_bo_cache_evict_stale_bos(dev);
-}
-
-/* Tries to add a BO to the cache. Returns if it was successful */
-static bool
-agx_bo_cache_put(struct agx_bo *bo)
-{
-   struct agx_device *dev = bo->dev;
-
-   if (bo->flags & AGX_BO_SHARED) {
-      return false;
-   } else {
-      simple_mtx_lock(&dev->bo_cache.lock);
-      agx_bo_cache_put_locked(bo);
-      simple_mtx_unlock(&dev->bo_cache.lock);
-
-      return true;
-   }
-}
-
-static void
-agx_bo_cache_evict_all(struct agx_device *dev)
-{
-   simple_mtx_lock(&dev->bo_cache.lock);
-   for (unsigned i = 0; i < ARRAY_SIZE(dev->bo_cache.buckets); ++i) {
-      struct list_head *bucket = &dev->bo_cache.buckets[i];
-
-      list_for_each_entry_safe(struct agx_bo, entry, bucket, bucket_link) {
-         agx_bo_cache_remove_locked(dev, entry);
-         agx_bo_free(dev, entry);
-      }
-   }
-   simple_mtx_unlock(&dev->bo_cache.lock);
-}
-
 void
-agx_bo_reference(struct agx_bo *bo)
+agx_bo_mmap(struct agx_bo *bo)
 {
-   if (bo) {
-      ASSERTED int count = p_atomic_inc_return(&bo->refcnt);
-      assert(count != 1);
-   }
-}
-
-void
-agx_bo_unreference(struct agx_bo *bo)
-{
-   if (!bo)
-      return;
-
-   /* Don't return to cache if there are still references */
-   if (p_atomic_dec_return(&bo->refcnt))
-      return;
-
-   struct agx_device *dev = bo->dev;
-
-   pthread_mutex_lock(&dev->bo_map_lock);
-
-   /* Someone might have imported this BO while we were waiting for the
-    * lock, let's make sure it's still not referenced before freeing it.
-    */
-   if (p_atomic_read(&bo->refcnt) == 0) {
-      if (dev->debug & AGX_DBG_TRACE)
-         agxdecode_track_free(bo);
-
-      if (!agx_bo_cache_put(bo))
-         agx_bo_free(dev, bo);
-   }
-
-   pthread_mutex_unlock(&dev->bo_map_lock);
+   unreachable("Linux UAPI not yet upstream");
 }
 
 struct agx_bo *
 agx_bo_import(struct agx_device *dev, int fd)
 {
-   unreachable("Linux UAPI not yet upstream");
+   struct agx_bo *bo;
+   ASSERTED int ret;
+   unsigned gem_handle;
+
+   pthread_mutex_lock(&dev->bo_map_lock);
+
+   ret = drmPrimeFDToHandle(dev->fd, fd, &gem_handle);
+   if (ret) {
+      fprintf(stderr, "import failed: Could not map fd %d to handle\n", fd);
+      pthread_mutex_unlock(&dev->bo_map_lock);
+      return NULL;
+   }
+
+   bo = agx_lookup_bo(dev, gem_handle);
+   dev->max_handle = MAX2(dev->max_handle, gem_handle);
+
+   if (!bo->dev) {
+      bo->dev = dev;
+      bo->size = lseek(fd, 0, SEEK_END);
+
+      /* Sometimes this can fail and return -1. size of -1 is not
+       * a nice thing for mmap to try mmap. Be more robust also
+       * for zero sized maps and fail nicely too
+       */
+      if ((bo->size == 0) || (bo->size == (size_t)-1)) {
+         pthread_mutex_unlock(&dev->bo_map_lock);
+         return NULL;
+      }
+      if (bo->size & (dev->params.vm_page_size - 1)) {
+         fprintf(
+            stderr,
+            "import failed: BO is not a multiple of the page size (0x%llx bytes)\n",
+            (long long)bo->size);
+         goto error;
+      }
+
+      bo->flags = AGX_BO_SHARED | AGX_BO_SHAREABLE;
+      bo->handle = gem_handle;
+      bo->prime_fd = dup(fd);
+      bo->label = "Imported BO";
+      assert(bo->prime_fd >= 0);
+
+      p_atomic_set(&bo->refcnt, 1);
+
+      simple_mtx_lock(&dev->vma_lock);
+      bo->ptr.gpu = util_vma_heap_alloc(
+         &dev->main_heap, bo->size + dev->guard_size, dev->params.vm_page_size);
+      simple_mtx_unlock(&dev->vma_lock);
+
+      if (!bo->ptr.gpu) {
+         fprintf(
+            stderr,
+            "import failed: Could not allocate from VMA heap (0x%llx bytes)\n",
+            (long long)bo->size);
+         abort();
+      }
+
+      ret =
+         agx_bo_bind(dev, bo, bo->ptr.gpu, ASAHI_BIND_READ | ASAHI_BIND_WRITE);
+      if (ret) {
+         fprintf(stderr, "import failed: Could not bind BO at 0x%llx\n",
+                 (long long)bo->ptr.gpu);
+         abort();
+      }
+   } else {
+      /* bo->refcnt == 0 can happen if the BO
+       * was being released but agx_bo_import() acquired the
+       * lock before agx_bo_unreference(). In that case, refcnt
+       * is 0 and we can't use agx_bo_reference() directly, we
+       * have to re-initialize the refcnt().
+       * Note that agx_bo_unreference() checks
+       * refcnt value just after acquiring the lock to
+       * make sure the object is not freed if agx_bo_import()
+       * acquired it in the meantime.
+       */
+      if (p_atomic_read(&bo->refcnt) == 0)
+         p_atomic_set(&bo->refcnt, 1);
+      else
+         agx_bo_reference(bo);
+   }
+   pthread_mutex_unlock(&dev->bo_map_lock);
+
+   return bo;
+
+error:
+   memset(bo, 0, sizeof(*bo));
+   pthread_mutex_unlock(&dev->bo_map_lock);
+   return NULL;
 }
 
 int
 agx_bo_export(struct agx_bo *bo)
 {
-   bo->flags |= AGX_BO_SHARED;
+   int fd;
 
-   unreachable("Linux UAPI not yet upstream");
-}
+   assert(bo->flags & AGX_BO_SHAREABLE);
 
-struct agx_bo *
-agx_bo_create(struct agx_device *dev, unsigned size, unsigned flags,
-              const char *label)
-{
-   struct agx_bo *bo;
-   assert(size > 0);
+   if (drmPrimeHandleToFD(bo->dev->fd, bo->handle, DRM_CLOEXEC, &fd))
+      return -1;
 
-   /* To maximize BO cache usage, don't allocate tiny BOs */
-   size = ALIGN_POT(size, 16384);
+   if (!(bo->flags & AGX_BO_SHARED)) {
+      bo->flags |= AGX_BO_SHARED;
+      assert(bo->prime_fd == -1);
+      bo->prime_fd = dup(fd);
 
-   /* See if we have a BO already in the cache */
-   bo = agx_bo_cache_fetch(dev, size, flags, true);
+      /* If there is a pending writer to this BO, import it into the buffer
+       * for implicit sync.
+       */
+      if (bo->writer_syncobj) {
+         int out_sync_fd = -1;
+         int ret = drmSyncobjExportSyncFile(bo->dev->fd, bo->writer_syncobj,
+                                            &out_sync_fd);
+         assert(ret >= 0);
+         assert(out_sync_fd >= 0);
 
-   /* Update stats based on the first attempt to fetch */
-   if (bo != NULL)
-      dev->bo_cache.hits++;
-   else
-      dev->bo_cache.misses++;
-
-   /* Otherwise, allocate a fresh BO. If allocation fails, we can try waiting
-    * for something in the cache. But if there's no nothing suitable, we should
-    * flush the cache to make space for the new allocation.
-    */
-   if (!bo)
-      bo = agx_bo_alloc(dev, size, flags);
-   if (!bo)
-      bo = agx_bo_cache_fetch(dev, size, flags, false);
-   if (!bo) {
-      agx_bo_cache_evict_all(dev);
-      bo = agx_bo_alloc(dev, size, flags);
+         ret = agx_import_sync_file(bo->dev, bo, out_sync_fd);
+         assert(ret >= 0);
+         close(out_sync_fd);
+      }
    }
 
-   if (!bo) {
-      fprintf(stderr, "BO creation failed\n");
-      return NULL;
-   }
-
-   bo->label = label;
-   p_atomic_set(&bo->refcnt, 1);
-
-   if (dev->debug & AGX_DBG_TRACE)
-      agxdecode_track_alloc(bo);
-
-   return bo;
+   assert(bo->prime_fd >= 0);
+   return fd;
 }
 
 static void
 agx_get_global_ids(struct agx_device *dev)
 {
-#if __APPLE__
-   uint64_t out[2] = {};
-   size_t out_sz = sizeof(out);
-
-   ASSERTED kern_return_t ret = IOConnectCallStructMethod(
-      dev->fd, AGX_SELECTOR_GET_GLOBAL_IDS, NULL, 0, &out, &out_sz);
-
-   assert(ret == 0);
-   assert(out_sz == sizeof(out));
-   assert(out[1] > out[0]);
-
-   dev->next_global_id = out[0];
-   dev->last_global_id = out[1];
-#else
    dev->next_global_id = 0;
    dev->last_global_id = 0x1000000;
-#endif
 }
 
 uint64_t
@@ -463,41 +283,33 @@ agx_get_global_id(struct agx_device *dev)
    return dev->next_global_id++;
 }
 
-/* Tries to open an AGX device, returns true if successful */
+static ssize_t
+agx_get_params(struct agx_device *dev, void *buf, size_t size)
+{
+   /* TODO: Linux UAPI */
+   unreachable("Linux UAPI not yet upstream");
+}
 
 bool
 agx_open_device(void *memctx, struct agx_device *dev)
 {
-#if __APPLE__
-   kern_return_t ret;
+   ssize_t params_size = -1;
 
-   /* TODO: Support other models */
-   CFDictionaryRef matching = IOServiceNameMatching("AGXAcceleratorG13G_B0");
-   io_service_t service = IOServiceGetMatchingService(0, matching);
+   /* TODO: Linux UAPI */
+   return false;
 
-   if (!service)
+   params_size = agx_get_params(dev, &dev->params, sizeof(dev->params));
+   if (params_size <= 0) {
+      assert(0);
       return false;
+   }
+   assert(params_size >= sizeof(dev->params));
 
-   ret = IOServiceOpen(service, mach_task_self(), AGX_SERVICE_TYPE, &dev->fd);
+   /* TODO: Linux UAPI: Params */
+   unreachable("Linux UAPI not yet upstream");
 
-   if (ret)
-      return false;
-
-   const char *api = "Equestria";
-   char in[16] = {0};
-   assert(strlen(api) < sizeof(in));
-   memcpy(in, api, strlen(api));
-
-   ret = IOConnectCallStructMethod(dev->fd, AGX_SELECTOR_SET_API, in,
-                                   sizeof(in), NULL, NULL);
-
-   /* Oddly, the return codes are flipped for SET_API */
-   if (ret != 1)
-      return false;
-#endif
-
-   dev->memctx = memctx;
    util_sparse_array_init(&dev->bo_map, sizeof(struct agx_bo), 512);
+   pthread_mutex_init(&dev->bo_map_lock, NULL);
 
    simple_mtx_init(&dev->bo_cache.lock, mtx_plain);
    list_inithead(&dev->bo_cache.lru);
@@ -505,10 +317,16 @@ agx_open_device(void *memctx, struct agx_device *dev)
    for (unsigned i = 0; i < ARRAY_SIZE(dev->bo_cache.buckets); ++i)
       list_inithead(&dev->bo_cache.buckets[i]);
 
-   dev->queue = agx_create_command_queue(dev);
-   dev->cmdbuf = agx_shmem_alloc(dev, 0x4000,
-                                 true); // length becomes kernelCommandDataSize
-   dev->memmap = agx_shmem_alloc(dev, 0x10000, false);
+   /* TODO: Linux UAPI: Create VM */
+
+   simple_mtx_init(&dev->vma_lock, mtx_plain);
+   util_vma_heap_init(&dev->main_heap, dev->params.vm_user_start,
+                      dev->params.vm_user_end - dev->params.vm_user_start + 1);
+   util_vma_heap_init(
+      &dev->usc_heap, dev->params.vm_shader_start,
+      dev->params.vm_shader_end - dev->params.vm_shader_start + 1);
+
+   dev->queue_id = agx_create_command_queue(dev, 0 /* TODO: CAPS */);
    agx_get_global_ids(dev);
 
    return true;
@@ -520,154 +338,104 @@ agx_close_device(struct agx_device *dev)
    agx_bo_cache_evict_all(dev);
    util_sparse_array_finish(&dev->bo_map);
 
-#if __APPLE__
-   kern_return_t ret = IOServiceClose(dev->fd);
+   util_vma_heap_finish(&dev->main_heap);
+   util_vma_heap_finish(&dev->usc_heap);
 
-   if (ret)
-      fprintf(stderr, "Error from IOServiceClose: %u\n", ret);
-#endif
+   close(dev->fd);
 }
 
-#if __APPLE__
-static struct agx_notification_queue
-agx_create_notification_queue(mach_port_t connection)
+uint32_t
+agx_create_command_queue(struct agx_device *dev, uint32_t caps)
 {
-   struct agx_create_notification_queue_resp resp;
-   size_t resp_size = sizeof(resp);
-   assert(resp_size == 0x10);
-
-   ASSERTED kern_return_t ret = IOConnectCallStructMethod(
-      connection, AGX_SELECTOR_CREATE_NOTIFICATION_QUEUE, NULL, 0, &resp,
-      &resp_size);
-
-   assert(resp_size == sizeof(resp));
-   assert(ret == 0);
-
-   mach_port_t notif_port = IODataQueueAllocateNotificationPort();
-   IOConnectSetNotificationPort(connection, 0, notif_port, resp.unk2);
-
-   return (struct agx_notification_queue){.port = notif_port,
-                                          .queue = resp.queue,
-                                          .id = resp.unk2};
-}
-#endif
-
-struct agx_command_queue
-agx_create_command_queue(struct agx_device *dev)
-{
-#if __APPLE__
-   struct agx_command_queue queue = {};
-
-   {
-      uint8_t buffer[1024 + 8] = {0};
-      const char *path = "/tmp/a.out";
-      assert(strlen(path) < 1022);
-      memcpy(buffer + 0, path, strlen(path));
-
-      /* Copy to the end */
-      unsigned END_LEN = MIN2(strlen(path), 1024 - strlen(path));
-      unsigned SKIP = strlen(path) - END_LEN;
-      unsigned OFFS = 1024 - END_LEN;
-      memcpy(buffer + OFFS, path + SKIP, END_LEN);
-
-      buffer[1024] = 0x2;
-
-      struct agx_create_command_queue_resp out = {};
-      size_t out_sz = sizeof(out);
-
-      ASSERTED kern_return_t ret =
-         IOConnectCallStructMethod(dev->fd, AGX_SELECTOR_CREATE_COMMAND_QUEUE,
-                                   buffer, sizeof(buffer), &out, &out_sz);
-
-      assert(ret == 0);
-      assert(out_sz == sizeof(out));
-
-      queue.id = out.id;
-      assert(queue.id);
-   }
-
-   queue.notif = agx_create_notification_queue(dev->fd);
-
-   {
-      uint64_t scalars[2] = {queue.id, queue.notif.id};
-
-      ASSERTED kern_return_t ret =
-         IOConnectCallScalarMethod(dev->fd, 0x1D, scalars, 2, NULL, NULL);
-
-      assert(ret == 0);
-   }
-
-   {
-      uint64_t scalars[2] = {queue.id, 0x1ffffffffull};
-
-      ASSERTED kern_return_t ret =
-         IOConnectCallScalarMethod(dev->fd, 0x31, scalars, 2, NULL, NULL);
-
-      assert(ret == 0);
-   }
-
-   return queue;
-#else
-   return (struct agx_command_queue){0};
-#endif
+   unreachable("Linux UAPI not yet upstream");
 }
 
-void
-agx_submit_cmdbuf(struct agx_device *dev, unsigned cmdbuf, unsigned mappings,
-                  uint64_t scalar)
+int
+agx_submit_single(struct agx_device *dev, enum drm_asahi_cmd_type cmd_type,
+                  uint32_t barriers, struct drm_asahi_sync *in_syncs,
+                  unsigned in_sync_count, struct drm_asahi_sync *out_syncs,
+                  unsigned out_sync_count, void *cmdbuf, uint32_t result_handle,
+                  uint32_t result_off, uint32_t result_size)
 {
-#if __APPLE__
-   struct agx_submit_cmdbuf_req req = {
-      .count = 1,
-      .command_buffer_shmem_id = cmdbuf,
-      .segment_list_shmem_id = mappings,
-      .notify_1 = 0xABCD,
-      .notify_2 = 0x1234,
+   unreachable("Linux UAPI not yet upstream");
+}
+
+int
+agx_import_sync_file(struct agx_device *dev, struct agx_bo *bo, int fd)
+{
+   struct dma_buf_import_sync_file import_sync_file_ioctl = {
+      .flags = DMA_BUF_SYNC_WRITE,
+      .fd = fd,
    };
 
-   ASSERTED kern_return_t ret =
-      IOConnectCallMethod(dev->fd, AGX_SELECTOR_SUBMIT_COMMAND_BUFFERS, &scalar,
-                          1, &req, sizeof(req), NULL, 0, NULL, 0);
-   assert(ret == 0);
-   return;
-#endif
+   assert(fd >= 0);
+   assert(bo->prime_fd != -1);
+
+   int ret = drmIoctl(bo->prime_fd, DMA_BUF_IOCTL_IMPORT_SYNC_FILE,
+                      &import_sync_file_ioctl);
+   assert(ret >= 0);
+
+   return ret;
 }
 
-/*
- * Wait for a frame to finish rendering.
- *
- * The macOS kernel indicates that rendering has finished using a notification
- * queue. The kernel will send two messages on the notification queue. The
- * second message indicates that rendering has completed. This simple routine
- * waits for both messages. It's important that IODataQueueDequeue is used in a
- * loop to flush the entire queue before calling
- * IODataQueueWaitForAvailableData. Otherwise, we can race and get stuck in
- * WaitForAvailabaleData.
- */
-void
-agx_wait_queue(struct agx_command_queue queue)
+int
+agx_export_sync_file(struct agx_device *dev, struct agx_bo *bo)
 {
-#if __APPLE__
-   uint64_t data[4];
-   unsigned sz = sizeof(data);
-   unsigned message_id = 0;
-   uint64_t magic_numbers[2] = {0xABCD, 0x1234};
+   struct dma_buf_export_sync_file export_sync_file_ioctl = {
+      .flags = DMA_BUF_SYNC_RW,
+      .fd = -1,
+   };
 
-   while (message_id < 2) {
-      IOReturn ret =
-         IODataQueueWaitForAvailableData(queue.notif.queue, queue.notif.port);
+   assert(bo->prime_fd != -1);
 
-      if (ret) {
-         fprintf(stderr, "Error waiting for available data\n");
-         return;
-      }
+   int ret = drmIoctl(bo->prime_fd, DMA_BUF_IOCTL_EXPORT_SYNC_FILE,
+                      &export_sync_file_ioctl);
+   assert(ret >= 0);
+   assert(export_sync_file_ioctl.fd >= 0);
 
-      while (IODataQueueDequeue(queue.notif.queue, data, &sz) ==
-             kIOReturnSuccess) {
-         assert(sz == sizeof(data));
-         assert(data[0] == magic_numbers[message_id]);
-         message_id++;
+   return ret >= 0 ? export_sync_file_ioctl.fd : ret;
+}
+
+void
+agx_debug_fault(struct agx_device *dev, uint64_t addr)
+{
+   pthread_mutex_lock(&dev->bo_map_lock);
+
+   struct agx_bo *best = NULL;
+
+   for (uint32_t handle = 0; handle < dev->max_handle; handle++) {
+      struct agx_bo *bo = agx_lookup_bo(dev, handle);
+      uint64_t bo_addr = bo->ptr.gpu;
+      if (bo->flags & AGX_BO_LOW_VA)
+         bo_addr += dev->shader_base;
+
+      if (!bo->dev || bo_addr > addr)
+         continue;
+
+      if (!best || bo_addr > best->ptr.gpu)
+         best = bo;
+   }
+
+   if (!best) {
+      mesa_logw("Address 0x%" PRIx64 " is unknown\n", addr);
+   } else {
+      uint64_t start = best->ptr.gpu;
+      uint64_t end = best->ptr.gpu + best->size;
+      if (addr > (end + 1024 * 1024 * 1024)) {
+         /* 1GiB max as a sanity check */
+         mesa_logw("Address 0x%" PRIx64 " is unknown\n", addr);
+      } else if (addr > end) {
+         mesa_logw("Address 0x%" PRIx64 " is 0x%" PRIx64
+                   " bytes beyond an object at 0x%" PRIx64 "..0x%" PRIx64
+                   " (%s)\n",
+                   addr, addr - end, start, end - 1, best->label);
+      } else {
+         mesa_logw("Address 0x%" PRIx64 " is 0x%" PRIx64
+                   " bytes into an object at 0x%" PRIx64 "..0x%" PRIx64
+                   " (%s)\n",
+                   addr, addr - start, start, end - 1, best->label);
       }
    }
-#endif
+
+   pthread_mutex_unlock(&dev->bo_map_lock);
 }

@@ -366,7 +366,10 @@ VkResult anv_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
 
       vk_outarray_append_typed(VkPerformanceCounterDescriptionKHR, &out_desc, desc) {
          desc->flags = 0; /* None so far. */
-         snprintf(desc->name, sizeof(desc->name), "%s", intel_counter->name);
+         snprintf(desc->name, sizeof(desc->name), "%s",
+                  INTEL_DEBUG(DEBUG_PERF_SYMBOL_NAMES) ?
+                  intel_counter->symbol_name :
+                  intel_counter->name);
          snprintf(desc->category, sizeof(desc->category), "%s", intel_counter->category);
          snprintf(desc->description, sizeof(desc->description), "%s", intel_counter->desc);
       }

@@ -77,13 +77,10 @@ nir_fuse_io_16(nir_shader *shader)
             if (!intr->dest.is_ssa)
                continue;
 
-            if (!list_is_empty(&intr->dest.ssa.if_uses))
-               return false;
-
             bool valid = true;
 
-            nir_foreach_use(src, &intr->dest.ssa)
-               valid &= nir_src_is_f2fmp(src);
+            nir_foreach_use_including_if(src, &intr->dest.ssa)
+               valid &= !src->is_if && nir_src_is_f2fmp(src);
 
             if (!valid)
                continue;

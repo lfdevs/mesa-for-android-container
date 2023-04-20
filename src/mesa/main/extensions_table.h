@@ -260,6 +260,7 @@ EXT(EXT_gpu_program_parameters              , EXT_gpu_program_parameters        
  * Additionally, EXT_gpu_shader4 would reintroduce functions that were removed in GLSL 1.40. */
 EXT(EXT_gpu_shader4                         , EXT_gpu_shader4                        , GLL,  x ,  x ,  x , 2006)
 EXT(EXT_gpu_shader5                         , ARB_gpu_shader5                        ,  x ,  x ,  x ,  31, 2014)
+EXT(EXT_instanced_arrays                    , ARB_instanced_arrays                   ,  x ,  x ,  x , ES2, 2012)
 EXT(EXT_map_buffer_range                    , ARB_map_buffer_range                   ,  x ,  x , ES1, ES2, 2012)
 EXT(EXT_memory_object                       , EXT_memory_object                      , GLL, GLC,  x , ES2, 2017)
 EXT(EXT_memory_object_fd                    , EXT_memory_object_fd                   , GLL, GLC,  x , ES2, 2017)
@@ -404,7 +405,8 @@ EXT(NV_fbo_color_attachments                , dummy_true                        
 EXT(NV_fill_rectangle                       , NV_fill_rectangle                      , GLL, GLC,  x ,  x , 2015)
 EXT(NV_fog_distance                         , NV_fog_distance                        , GLL,  x ,  x ,  x , 2001)
 EXT(NV_fragment_shader_interlock            , ARB_fragment_shader_interlock          , GLL, GLC,  x ,  31, 2015)
-EXT(NV_half_float                           , ARB_half_float_vertex                  , GLL, x,  x ,  x, 2001)
+EXT(NV_generate_mipmap_sRGB                 , EXT_framebuffer_sRGB                   ,  x ,  x , ES1, ES2, 2012)
+EXT(NV_half_float                           , ARB_half_float_vertex                  , GLL,  x ,  x ,  x , 2001)
 EXT(NV_image_formats                        , dummy_true                             ,  x ,  x ,  x ,  31, 2014)
 EXT(NV_light_max_exponent                   , dummy_true                             , GLL,  x ,  x ,  x , 1999)
 EXT(NV_pack_subimage                        , dummy_true                             ,  x ,  x ,  x , ES2, 2009)

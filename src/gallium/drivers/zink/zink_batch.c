@@ -12,7 +12,6 @@
 #ifdef VK_USE_PLATFORM_METAL_EXT
 #include "QuartzCore/CAMetalLayer.h"
 #endif
-#include "wsi_common.h"
 
 #define MAX_VIEW_COUNT 500
 
@@ -29,10 +28,14 @@ reset_obj(struct zink_screen *screen, struct zink_batch_state *bs, struct zink_r
    /* if no batch usage exists after removing the usage from 'bs', this resource is considered fully idle */
    if (!zink_resource_object_usage_unset(obj, bs)) {
       /* the resource is idle, so reset all access/reordering info */
-      obj->unordered_read = false;
-      obj->unordered_write = false;
+      obj->unordered_read = true;
+      obj->unordered_write = true;
       obj->access = 0;
+      obj->unordered_access = 0;
+      obj->last_write = 0;
       obj->access_stage = 0;
+      obj->unordered_access_stage = 0;
+      obj->copies_need_reset = true;
       /* also prune dead view objects */
       simple_mtx_lock(&obj->view_lock);
       if (obj->is_buffer) {
@@ -108,6 +111,9 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
       struct zink_query *query = (void*)entry->key;
       zink_prune_query(screen, bs, query);
    }
+   util_dynarray_foreach(&bs->dead_querypools, VkQueryPool, pool)
+      VKSCR(DestroyQueryPool)(screen->dev, *pool, NULL);
+   util_dynarray_clear(&bs->dead_querypools);
 
    /* framebuffers are appended to the batch state in which they are destroyed
     * to ensure deferred deletion without destroying in-use objects
@@ -139,15 +145,19 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
    util_dynarray_clear(&bs->wait_semaphore_stages);
 
    bs->present = VK_NULL_HANDLE;
-   /* semaphores are not destroyed here;
-    * destroying semaphores triggers ioctls, so defer deletion to the submit thread to avoid blocking
-    */
-   memcpy(&bs->unref_semaphores, &bs->acquires, sizeof(struct util_dynarray));
-   util_dynarray_init(&bs->acquires, NULL);
-   while (util_dynarray_contains(&bs->wait_semaphores, VkSemaphore))
-      util_dynarray_append(&bs->unref_semaphores, VkSemaphore, util_dynarray_pop(&bs->wait_semaphores, VkSemaphore));
-   util_dynarray_init(&bs->wait_semaphores, NULL);
+   /* check the arrays first to avoid locking unnecessarily */
+   if (util_dynarray_contains(&bs->acquires, VkSemaphore) || util_dynarray_contains(&bs->wait_semaphores, VkSemaphore)) {
+      simple_mtx_lock(&screen->semaphores_lock);
+      util_dynarray_append_dynarray(&screen->semaphores, &bs->acquires);
+      util_dynarray_clear(&bs->acquires);
+      util_dynarray_append_dynarray(&screen->semaphores, &bs->wait_semaphores);
+      util_dynarray_clear(&bs->wait_semaphores);
+      simple_mtx_unlock(&screen->semaphores_lock);
+   }
    bs->swapchain = NULL;
+
+   bs->unordered_write_access = 0;
+   bs->unordered_write_stages = 0;
 
    /* only reset submitted here so that tc fence desync can pick up the 'completed' flag
     * before the state is reused
@@ -198,8 +208,6 @@ unref_resources(struct zink_screen *screen, struct zink_batch_state *bs)
       /* this is typically where resource objects get destroyed */
       zink_resource_object_reference(screen, &obj, NULL);
    }
-   while (util_dynarray_contains(&bs->unref_semaphores, VkSemaphore))
-      VKSCR(DestroySemaphore)(screen->dev, util_dynarray_pop(&bs->unref_semaphores, VkSemaphore), NULL);
 }
 
 /* utility for resetting a batch state; called on context destruction */
@@ -262,6 +270,7 @@ zink_batch_state_destroy(struct zink_screen *screen, struct zink_batch_state *bs
    free(bs->real_objs.objs);
    free(bs->slab_objs.objs);
    free(bs->sparse_objs.objs);
+   util_dynarray_fini(&bs->dead_querypools);
    util_dynarray_fini(&bs->swapchain_obj);
    util_dynarray_fini(&bs->zombie_samplers);
    util_dynarray_fini(&bs->dead_framebuffers);
@@ -269,7 +278,6 @@ zink_batch_state_destroy(struct zink_screen *screen, struct zink_batch_state *bs
    util_dynarray_fini(&bs->bindless_releases[0]);
    util_dynarray_fini(&bs->bindless_releases[1]);
    util_dynarray_fini(&bs->acquires);
-   util_dynarray_fini(&bs->unref_semaphores);
    util_dynarray_fini(&bs->acquire_flags);
    unsigned num_mfences = util_dynarray_num_elements(&bs->fence.mfences, void *);
    struct zink_tc_fence **mfence = bs->fence.mfences.data;
@@ -299,23 +307,20 @@ create_batch_state(struct zink_context *ctx)
       goto fail;
    }
 
+   VkCommandBuffer cmdbufs[2];
    VkCommandBufferAllocateInfo cbai = {0};
    cbai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
    cbai.commandPool = bs->cmdpool;
    cbai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-   cbai.commandBufferCount = 1;
+   cbai.commandBufferCount = 2;
 
-   result = VKSCR(AllocateCommandBuffers)(screen->dev, &cbai, &bs->cmdbuf);
+   result = VKSCR(AllocateCommandBuffers)(screen->dev, &cbai, cmdbufs);
    if (result != VK_SUCCESS) {
       mesa_loge("ZINK: vkAllocateCommandBuffers failed (%s)", vk_Result_to_str(result));
       goto fail;
    }
-
-   result = VKSCR(AllocateCommandBuffers)(screen->dev, &cbai, &bs->barrier_cmdbuf);
-   if (result != VK_SUCCESS) {
-      mesa_loge("ZINK: vkAllocateCommandBuffers failed (%s)", vk_Result_to_str(result));
-      goto fail;
-   }
+   bs->cmdbuf = cmdbufs[0];
+   bs->barrier_cmdbuf = cmdbufs[1];
 
 #define SET_CREATE_OR_FAIL(ptr) \
    if (!_mesa_set_init(ptr, bs, _mesa_hash_pointer, _mesa_key_pointer_equal)) \
@@ -326,13 +331,13 @@ create_batch_state(struct zink_context *ctx)
    SET_CREATE_OR_FAIL(&bs->programs);
    SET_CREATE_OR_FAIL(&bs->active_queries);
    util_dynarray_init(&bs->wait_semaphores, NULL);
+   util_dynarray_init(&bs->dead_querypools, NULL);
    util_dynarray_init(&bs->wait_semaphore_stages, NULL);
    util_dynarray_init(&bs->zombie_samplers, NULL);
    util_dynarray_init(&bs->dead_framebuffers, NULL);
    util_dynarray_init(&bs->persistent_resources, NULL);
    util_dynarray_init(&bs->unref_resources, NULL);
    util_dynarray_init(&bs->acquires, NULL);
-   util_dynarray_init(&bs->unref_semaphores, NULL);
    util_dynarray_init(&bs->acquire_flags, NULL);
    util_dynarray_init(&bs->bindless_releases[0], NULL);
    util_dynarray_init(&bs->bindless_releases[1], NULL);
@@ -417,11 +422,34 @@ zink_reset_batch(struct zink_context *ctx, struct zink_batch *batch)
    batch->has_work = false;
 }
 
+void
+zink_batch_bind_db(struct zink_context *ctx)
+{
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
+   struct zink_batch *batch = &ctx->batch;
+   unsigned count = 1;
+   VkDescriptorBufferBindingInfoEXT infos[2] = {0};
+   infos[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+   infos[0].address = batch->state->dd.db->obj->bda;
+   infos[0].usage = batch->state->dd.db->obj->vkusage;
+   assert(infos[0].usage);
+
+   if (ctx->dd.bindless_init) {
+      infos[1].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+      infos[1].address = ctx->dd.db.bindless_db->obj->bda;
+      infos[1].usage = ctx->dd.db.bindless_db->obj->vkusage;
+      assert(infos[1].usage);
+      count++;
+   }
+   VKSCR(CmdBindDescriptorBuffersEXT)(batch->state->cmdbuf, count, infos);
+   VKSCR(CmdBindDescriptorBuffersEXT)(batch->state->barrier_cmdbuf, count, infos);
+   batch->state->dd.db_bound = true;
+}
+
 /* called on context creation and after flushing an old batch */
 void
 zink_start_batch(struct zink_context *ctx, struct zink_batch *batch)
 {
-   struct zink_screen *screen = zink_screen(ctx->base.screen);
    zink_reset_batch(ctx, batch);
 
    batch->state->usage.unflushed = true;
@@ -444,20 +472,30 @@ zink_start_batch(struct zink_context *ctx, struct zink_batch *batch)
       batch->last_batch_usage = &last_state->usage;
    }
 
-   if (!ctx->queries_disabled)
-      zink_resume_queries(ctx, batch);
+#ifdef HAVE_RENDERDOC_APP_H
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
+   if (VKCTX(CmdInsertDebugUtilsLabelEXT) && screen->renderdoc_api) {
+      VkDebugUtilsLabelEXT capture_label;
+      /* Magic fallback which lets us bridge the Wine barrier over to Linux RenderDoc. */
+      capture_label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+      capture_label.pNext = NULL;
+      capture_label.pLabelName = "vr-marker,frame_end,type,application";
+      memset(capture_label.color, 0, sizeof(capture_label.color));
+      VKCTX(CmdInsertDebugUtilsLabelEXT)(batch->state->barrier_cmdbuf, &capture_label);
+      VKCTX(CmdInsertDebugUtilsLabelEXT)(batch->state->cmdbuf, &capture_label);
+   }
+
+   unsigned renderdoc_frame = p_atomic_read(&screen->renderdoc_frame);
+   if (!(ctx->flags & ZINK_CONTEXT_COPY_ONLY) && screen->renderdoc_api && !screen->renderdoc_capturing &&
+        ((screen->renderdoc_capture_all && screen->screen_id == 1) || (renderdoc_frame >= screen->renderdoc_capture_start && renderdoc_frame <= screen->renderdoc_capture_end))) {
+      screen->renderdoc_api->StartFrameCapture(RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE(screen->instance), NULL);
+      screen->renderdoc_capturing = true;
+   }
+#endif
 
    /* descriptor buffers must always be bound at the start of a batch */
-   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB && !(ctx->flags & ZINK_CONTEXT_COPY_ONLY)) {
-      unsigned count = screen->compact_descriptors ? 3 : 5;
-      VkDescriptorBufferBindingInfoEXT infos[ZINK_DESCRIPTOR_NON_BINDLESS_TYPES] = {0};
-      for (unsigned i = 0; i < count; i++) {
-         infos[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-         infos[i].address = batch->state->dd.db[i]->obj->bda;
-         infos[i].usage = batch->state->dd.db[i]->obj->vkusage;
-      }
-      VKSCR(CmdBindDescriptorBuffersEXT)(batch->state->cmdbuf, count, infos);
-   }
+   if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB && !(ctx->flags & ZINK_CONTEXT_COPY_ONLY))
+      zink_batch_bind_db(ctx);
 }
 
 /* common operations to run post submit; split out for clarity */
@@ -545,6 +583,16 @@ submit_queue(void *data, void *gdata, int thread_index)
       goto end;
    }
    if (bs->has_barriers) {
+      if (bs->unordered_write_access) {
+         VkMemoryBarrier mb;
+         mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+         mb.pNext = NULL;
+         mb.srcAccessMask = bs->unordered_write_access;
+         mb.dstAccessMask = 0;
+         VKSCR(CmdPipelineBarrier)(bs->barrier_cmdbuf,
+                                   bs->unordered_write_stages, 0,
+                                   0, 1, &mb, 0, NULL, 0, NULL);
+      }
       result = VKSCR(EndCommandBuffer)(bs->barrier_cmdbuf);
       if (result != VK_SUCCESS) {
          mesa_loge("ZINK: vkEndCommandBuffer failed (%s)", vk_Result_to_str(result));
@@ -585,9 +633,10 @@ zink_end_batch(struct zink_context *ctx, struct zink_batch *batch)
    if (!ctx->queries_disabled)
       zink_suspend_queries(ctx, batch);
 
-   tc_driver_internal_flush_notify(ctx->tc);
 
    struct zink_screen *screen = zink_screen(ctx->base.screen);
+   if (ctx->tc && !ctx->track_renderpasses)
+      tc_driver_internal_flush_notify(ctx->tc);
    struct zink_batch_state *bs;
 
    /* oom flushing is triggered to handle stupid piglit tests like streaming-texture-leak */
@@ -635,13 +684,19 @@ zink_end_batch(struct zink_context *ctx, struct zink_batch *batch)
    if (screen->device_lost)
       return;
 
-   if (screen->threaded) {
+   if (screen->threaded_submit) {
       util_queue_add_job(&screen->flush_queue, bs, &bs->flush_completed,
                          submit_queue, post_submit, 0);
    } else {
       submit_queue(bs, NULL, 0);
       post_submit(bs, NULL, 0);
    }
+#ifdef HAVE_RENDERDOC_APP_H
+   if (!(ctx->flags & ZINK_CONTEXT_COPY_ONLY) && screen->renderdoc_capturing && p_atomic_read(&screen->renderdoc_frame) > screen->renderdoc_capture_end) {
+      screen->renderdoc_api->EndFrameCapture(RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE(screen->instance), NULL);
+      screen->renderdoc_capturing = false;
+   }
+#endif
 }
 
 static int
@@ -806,6 +861,18 @@ zink_screen_usage_check_completion(struct zink_screen *screen, const struct zink
       return false;
 
    return zink_screen_timeline_wait(screen, u->usage, 0);
+}
+
+/* an even faster check that doesn't ioctl */
+bool
+zink_screen_usage_check_completion_fast(struct zink_screen *screen, const struct zink_batch_usage *u)
+{
+   if (!zink_batch_usage_exists(u))
+      return true;
+   if (zink_batch_usage_is_unflushed(u))
+      return false;
+
+   return zink_screen_check_last_finished(screen, u->usage);
 }
 
 bool

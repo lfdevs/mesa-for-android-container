@@ -41,11 +41,12 @@
 #include "iris_bufmgr.h"
 #include "iris_context.h"
 #include "iris_fence.h"
+#include "iris_kmd_backend.h"
 #include "iris_utrace.h"
-
-#include "drm-uapi/i915_drm.h"
+#include "i915/iris_batch.h"
 
 #include "common/intel_aux_map.h"
+#include "common/intel_defines.h"
 #include "intel/common/intel_gem.h"
 #include "intel/ds/intel_tracepoints.h"
 #include "util/hash_table.h"
@@ -69,27 +70,26 @@
 static void
 iris_batch_reset(struct iris_batch *batch);
 
-static unsigned
-num_fences(struct iris_batch *batch)
+unsigned
+iris_batch_num_fences(struct iris_batch *batch)
 {
    return util_dynarray_num_elements(&batch->exec_fences,
-                                     struct drm_i915_gem_exec_fence);
+                                     struct iris_batch_fence);
 }
 
 /**
  * Debugging code to dump the fence list, used by INTEL_DEBUG=submit.
  */
-static void
-dump_fence_list(struct iris_batch *batch)
+void
+iris_dump_fence_list(struct iris_batch *batch)
 {
-   fprintf(stderr, "Fence list (length %u):      ", num_fences(batch));
+   fprintf(stderr, "Fence list (length %u):      ", iris_batch_num_fences(batch));
 
-   util_dynarray_foreach(&batch->exec_fences,
-                         struct drm_i915_gem_exec_fence, f) {
+   util_dynarray_foreach(&batch->exec_fences, struct iris_batch_fence, f) {
       fprintf(stderr, "%s%u%s ",
-              (f->flags & I915_EXEC_FENCE_WAIT) ? "..." : "",
+              (f->flags & IRIS_BATCH_FENCE_WAIT) ? "..." : "",
               f->handle,
-              (f->flags & I915_EXEC_FENCE_SIGNAL) ? "!" : "");
+              (f->flags & IRIS_BATCH_FENCE_SIGNAL) ? "!" : "");
    }
 
    fprintf(stderr, "\n");
@@ -98,8 +98,8 @@ dump_fence_list(struct iris_batch *batch)
 /**
  * Debugging code to dump the validation list, used by INTEL_DEBUG=submit.
  */
-static void
-dump_bo_list(struct iris_batch *batch)
+void
+iris_dump_bo_list(struct iris_batch *batch)
 {
    fprintf(stderr, "BO list (length %d):\n", batch->exec_count);
 
@@ -170,8 +170,8 @@ decode_get_state_size(void *v_batch,
 /**
  * Decode the current batch.
  */
-static void
-decode_batch(struct iris_batch *batch)
+void
+iris_batch_decode_batch(struct iris_batch *batch)
 {
    void *map = iris_bo_map(batch->dbg, batch->exec_bos[0], MAP_READ);
    intel_print_batch(&batch->decoder, map, batch->primary_batch_size,
@@ -252,94 +252,15 @@ iris_init_batch(struct iris_context *ice,
    iris_batch_reset(batch);
 }
 
-static void
-iris_init_non_engine_contexts(struct iris_context *ice, int priority)
-{
-   struct iris_screen *screen = (void *) ice->ctx.screen;
-
-   iris_foreach_batch(ice, batch) {
-      batch->ctx_id = iris_create_hw_context(screen->bufmgr, ice->protected);
-      batch->exec_flags = I915_EXEC_RENDER;
-      assert(batch->ctx_id);
-      iris_hw_context_set_priority(screen->bufmgr, batch->ctx_id, priority);
-   }
-
-   ice->batches[IRIS_BATCH_BLITTER].exec_flags = I915_EXEC_BLT;
-   ice->has_engines_context = false;
-}
-
-static int
-iris_create_engines_context(struct iris_context *ice, int priority)
-{
-   struct iris_screen *screen = (void *) ice->ctx.screen;
-   const struct intel_device_info *devinfo = screen->devinfo;
-   int fd = iris_bufmgr_get_fd(screen->bufmgr);
-
-   struct intel_query_engine_info *engines_info = intel_engine_get_info(fd);
-
-   if (!engines_info)
-      return -1;
-
-   if (intel_engines_count(engines_info, INTEL_ENGINE_CLASS_RENDER) < 1) {
-      free(engines_info);
-      return -1;
-   }
-
-   STATIC_ASSERT(IRIS_BATCH_COUNT == 3);
-   enum intel_engine_class engine_classes[IRIS_BATCH_COUNT] = {
-      [IRIS_BATCH_RENDER] = INTEL_ENGINE_CLASS_RENDER,
-      [IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_RENDER,
-      [IRIS_BATCH_BLITTER] = INTEL_ENGINE_CLASS_COPY,
-   };
-
-   /* Blitter is only supported on Gfx12+ */
-   unsigned num_batches = IRIS_BATCH_COUNT - (devinfo->ver >= 12 ? 0 : 1);
-
-   if (debug_get_bool_option("INTEL_COMPUTE_CLASS", false) &&
-       intel_engines_count(engines_info, INTEL_ENGINE_CLASS_COMPUTE) > 0)
-      engine_classes[IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_COMPUTE;
-
-   uint32_t engines_ctx;
-   if (!intel_gem_create_context_engines(fd, engines_info, num_batches,
-                                         engine_classes, &engines_ctx)) {
-      free(engines_info);
-      return -1;
-   }
-
-   iris_hw_context_set_unrecoverable(screen->bufmgr, engines_ctx);
-   iris_hw_context_set_vm_id(screen->bufmgr, engines_ctx);
-   iris_hw_context_set_priority(screen->bufmgr, engines_ctx, priority);
-
-   free(engines_info);
-   return engines_ctx;
-}
-
-static bool
-iris_init_engines_context(struct iris_context *ice, int priority)
-{
-   int engines_ctx = iris_create_engines_context(ice, priority);
-   if (engines_ctx < 0)
-      return false;
-
-   iris_foreach_batch(ice, batch) {
-      unsigned i = batch - &ice->batches[0];
-      batch->ctx_id = engines_ctx;
-      batch->exec_flags = i;
-   }
-
-   ice->has_engines_context = true;
-   return true;
-}
-
 void
-iris_init_batches(struct iris_context *ice, int priority)
+iris_init_batches(struct iris_context *ice)
 {
    /* We have to do this early for iris_foreach_batch() to work */
    for (int i = 0; i < IRIS_BATCH_COUNT; i++)
       ice->batches[i].screen = (void *) ice->ctx.screen;
 
-   if (!iris_init_engines_context(ice, priority))
-      iris_init_non_engine_contexts(ice, priority);
+   iris_i915_init_batches(ice);
+
    iris_foreach_batch(ice, batch)
       iris_init_batch(ice, batch - &ice->batches[0]);
 }
@@ -539,7 +460,7 @@ iris_batch_reset(struct iris_batch *batch)
           sizeof(BITSET_WORD) * BITSET_WORDS(batch->exec_array_size));
 
    struct iris_syncobj *syncobj = iris_create_syncobj(bufmgr);
-   iris_batch_add_syncobj(batch, syncobj, I915_EXEC_FENCE_SIGNAL);
+   iris_batch_add_syncobj(batch, syncobj, IRIS_BATCH_FENCE_SIGNAL);
    iris_syncobj_reference(bufmgr, &syncobj, NULL);
 
    assert(!batch->sync_region_depth);
@@ -589,7 +510,7 @@ iris_batch_free(const struct iris_context *ice, struct iris_batch *batch)
     * context
     */
    if (!ice->has_engines_context || &ice->batches[0] == batch)
-      iris_destroy_kernel_context(bufmgr, batch->ctx_id);
+      iris_i915_destroy_batch(batch);
 
    iris_destroy_batch_measure(batch->measure);
    batch->measure = NULL;
@@ -607,6 +528,16 @@ iris_destroy_batches(struct iris_context *ice)
 {
    iris_foreach_batch(ice, batch)
       iris_batch_free(ice, batch);
+}
+
+void iris_batch_maybe_begin_frame(struct iris_batch *batch)
+{
+   struct iris_context *ice = batch->ice;
+
+   if (ice->tracing_begin_frame != ice->frame) {
+      trace_intel_begin_frame(&batch->trace, batch);
+      ice->tracing_begin_frame = ice->tracing_end_frame = ice->frame;
+   }
 }
 
 /**
@@ -707,6 +638,12 @@ iris_finish_batch(struct iris_batch *batch)
 
    trace_intel_end_batch(&batch->trace, batch->name);
 
+   struct iris_context *ice = batch->ice;
+   if (ice->tracing_end_frame != ice->frame) {
+      trace_intel_end_frame(&batch->trace, batch, ice->tracing_end_frame);
+      ice->tracing_end_frame = ice->frame;
+   }
+
    /* Emit MI_BATCH_BUFFER_END to finish our batch. */
    uint32_t *map = batch->map_next;
 
@@ -723,60 +660,19 @@ iris_finish_batch(struct iris_batch *batch)
 static bool
 replace_kernel_ctx(struct iris_batch *batch)
 {
-   struct iris_screen *screen = batch->screen;
-   struct iris_bufmgr *bufmgr = screen->bufmgr;
-   struct iris_context *ice = batch->ice;
-
-   if (ice->has_engines_context) {
-      int priority = iris_kernel_context_get_priority(bufmgr, batch->ctx_id);
-      uint32_t old_ctx = batch->ctx_id;
-      int new_ctx = iris_create_engines_context(ice, priority);
-      if (new_ctx < 0)
-         return false;
-      iris_foreach_batch(ice, bat) {
-         bat->ctx_id = new_ctx;
-         /* Notify the context that state must be re-initialized. */
-         iris_lost_context_state(bat);
-      }
-      iris_destroy_kernel_context(bufmgr, old_ctx);
-   } else {
-      uint32_t new_ctx = iris_clone_hw_context(bufmgr, batch->ctx_id);
-      if (!new_ctx)
-         return false;
-
-      iris_destroy_kernel_context(bufmgr, batch->ctx_id);
-      batch->ctx_id = new_ctx;
-
-      /* Notify the context that state must be re-initialized. */
-      iris_lost_context_state(batch);
-   }
-
-   return true;
+   return iris_i915_replace_batch(batch);
 }
 
 enum pipe_reset_status
 iris_batch_check_for_reset(struct iris_batch *batch)
 {
    struct iris_screen *screen = batch->screen;
-   enum pipe_reset_status status = PIPE_NO_RESET;
-   struct drm_i915_reset_stats stats = { .ctx_id = batch->ctx_id };
+   struct iris_bufmgr *bufmgr = screen->bufmgr;
+   const struct iris_kmd_backend *backend;
+   enum pipe_reset_status status;
 
-   if (intel_ioctl(screen->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats))
-      DBG("DRM_IOCTL_I915_GET_RESET_STATS failed: %s\n", strerror(errno));
-
-   if (stats.batch_active != 0) {
-      /* A reset was observed while a batch from this hardware context was
-       * executing.  Assume that this context was at fault.
-       */
-      status = PIPE_GUILTY_CONTEXT_RESET;
-   } else if (stats.batch_pending != 0) {
-      /* A reset was observed while a batch from this context was in progress,
-       * but the batch was not executing.  In this case, assume that the
-       * context was not at fault.
-       */
-      status = PIPE_INNOCENT_CONTEXT_RESET;
-   }
-
+   backend = iris_bufmgr_get_kernel_driver_backend(bufmgr);
+   status = backend->batch_check_for_reset(batch);
    if (status != PIPE_NO_RESET) {
       /* Our context is likely banned, or at least in an unknown state.
        * Throw it away and start with a fresh context.  Ideally this may
@@ -791,7 +687,7 @@ iris_batch_check_for_reset(struct iris_batch *batch)
 static void
 move_syncobj_to_batch(struct iris_batch *batch,
                       struct iris_syncobj **p_syncobj,
-                      unsigned flags)
+                      uint32_t flags)
 {
    struct iris_bufmgr *bufmgr = batch->screen->bufmgr;
 
@@ -852,12 +748,12 @@ update_bo_syncobjs(struct iris_batch *batch, struct iris_bo *bo, bool write)
       /* If the bo is being written to by others, wait for them. */
       if (bo_deps->write_syncobjs[i])
          move_syncobj_to_batch(batch, &bo_deps->write_syncobjs[i],
-                               I915_EXEC_FENCE_WAIT);
+                               IRIS_BATCH_FENCE_WAIT);
 
       /* If we're writing to the bo, wait on the reads from other batches. */
       if (write)
          move_syncobj_to_batch(batch, &bo_deps->read_syncobjs[i],
-                               I915_EXEC_FENCE_WAIT);
+                               IRIS_BATCH_FENCE_WAIT);
    }
 
    struct iris_syncobj *batch_syncobj =
@@ -876,8 +772,8 @@ update_bo_syncobjs(struct iris_batch *batch, struct iris_bo *bo, bool write)
    }
 }
 
-static void
-update_batch_syncobjs(struct iris_batch *batch)
+void
+iris_batch_update_syncobjs(struct iris_batch *batch)
 {
    for (int i = 0; i < batch->exec_count; i++) {
       struct iris_bo *bo = batch->exec_bos[i];
@@ -888,124 +784,6 @@ update_batch_syncobjs(struct iris_batch *batch)
 
       update_bo_syncobjs(batch, bo, write);
    }
-}
-
-/**
- * Submit the batch to the GPU via execbuffer2.
- */
-static int
-submit_batch(struct iris_batch *batch)
-{
-   struct iris_bufmgr *bufmgr = batch->screen->bufmgr;
-   simple_mtx_t *bo_deps_lock = iris_bufmgr_get_bo_deps_lock(bufmgr);
-
-   iris_bo_unmap(batch->bo);
-
-   struct drm_i915_gem_exec_object2 *validation_list =
-      malloc(batch->exec_count * sizeof(*validation_list));
-
-   unsigned *index_for_handle =
-      calloc(batch->max_gem_handle + 1, sizeof(unsigned));
-
-   unsigned validation_count = 0;
-   for (int i = 0; i < batch->exec_count; i++) {
-      struct iris_bo *bo = iris_get_backing_bo(batch->exec_bos[i]);
-      assert(bo->gem_handle != 0);
-
-      bool written = BITSET_TEST(batch->bos_written, i);
-      unsigned prev_index = index_for_handle[bo->gem_handle];
-      if (prev_index > 0) {
-         if (written)
-            validation_list[prev_index].flags |= EXEC_OBJECT_WRITE;
-      } else {
-         index_for_handle[bo->gem_handle] = validation_count;
-         validation_list[validation_count] =
-            (struct drm_i915_gem_exec_object2) {
-               .handle = bo->gem_handle,
-               .offset = bo->address,
-               .flags  = bo->real.kflags | (written ? EXEC_OBJECT_WRITE : 0) |
-                         (iris_bo_is_external(bo) ? 0 : EXEC_OBJECT_ASYNC),
-            };
-         ++validation_count;
-      }
-   }
-
-   free(index_for_handle);
-
-   /* The decode operation may map and wait on the batch buffer, which could
-    * in theory try to grab bo_deps_lock. Let's keep it safe and decode
-    * outside the lock.
-    */
-   if (INTEL_DEBUG(DEBUG_BATCH))
-      decode_batch(batch);
-
-   simple_mtx_lock(bo_deps_lock);
-
-   update_batch_syncobjs(batch);
-
-   if (INTEL_DEBUG(DEBUG_BATCH | DEBUG_SUBMIT)) {
-      dump_fence_list(batch);
-      dump_bo_list(batch);
-   }
-
-   /* The requirement for using I915_EXEC_NO_RELOC are:
-    *
-    *   The addresses written in the objects must match the corresponding
-    *   reloc.address which in turn must match the corresponding
-    *   execobject.offset.
-    *
-    *   Any render targets written to in the batch must be flagged with
-    *   EXEC_OBJECT_WRITE.
-    *
-    *   To avoid stalling, execobject.offset should match the current
-    *   address of that object within the active context.
-    */
-   struct drm_i915_gem_execbuffer2 execbuf = {
-      .buffers_ptr = (uintptr_t) validation_list,
-      .buffer_count = validation_count,
-      .batch_start_offset = 0,
-      /* This must be QWord aligned. */
-      .batch_len = ALIGN(batch->primary_batch_size, 8),
-      .flags = batch->exec_flags |
-               I915_EXEC_NO_RELOC |
-               I915_EXEC_BATCH_FIRST |
-               I915_EXEC_HANDLE_LUT,
-      .rsvd1 = batch->ctx_id, /* rsvd1 is actually the context ID */
-   };
-
-   if (num_fences(batch)) {
-      execbuf.flags |= I915_EXEC_FENCE_ARRAY;
-      execbuf.num_cliprects = num_fences(batch);
-      execbuf.cliprects_ptr =
-         (uintptr_t)util_dynarray_begin(&batch->exec_fences);
-   }
-
-   int ret = 0;
-   if (!batch->screen->devinfo->no_hw) {
-      do {
-         ret = intel_ioctl(batch->screen->fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf);
-      } while (ret && errno == ENOMEM);
-
-      if (ret)
-	 ret = -errno;
-   }
-
-   simple_mtx_unlock(bo_deps_lock);
-
-   for (int i = 0; i < batch->exec_count; i++) {
-      struct iris_bo *bo = batch->exec_bos[i];
-
-      bo->idle = false;
-      bo->index = -1;
-
-      iris_get_backing_bo(bo)->idle = false;
-
-      iris_bo_unreference(bo);
-   }
-
-   free(validation_list);
-
-   return ret;
 }
 
 const char *
@@ -1028,6 +806,7 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 {
    struct iris_screen *screen = batch->screen;
    struct iris_context *ice = batch->ice;
+   struct iris_bufmgr *bufmgr = screen->bufmgr;
 
    /* If a fence signals we need to flush it. */
    if (iris_batch_bytes_used(batch) == 0 && !batch->contains_fence_signal)
@@ -1054,7 +833,7 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 
    uint64_t start_ts = intel_ds_begin_submit(&batch->ds);
    uint64_t submission_id = batch->ds.submission_id;
-   int ret = submit_batch(batch);
+   int ret = iris_bufmgr_get_kernel_driver_backend(bufmgr)->batch_submit(batch);
    intel_ds_end_submit(&batch->ds, start_ts);
 
    /* When batch submission fails, our end-of-batch syncobj remains
@@ -1098,10 +877,11 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
     * has been lost and needs to be re-initialized.  If this succeeds,
     * dubiously claim success...
     */
-   if (ret == -EIO && replace_kernel_ctx(batch)) {
+   if (ret == -EIO) {
+      enum pipe_reset_status status = iris_batch_check_for_reset(batch);
       if (batch->reset->reset) {
          /* Tell gallium frontends the device is lost and it was our fault. */
-         batch->reset->reset(batch->reset->data, PIPE_GUILTY_CONTEXT_RESET);
+         batch->reset->reset(batch->reset->data, status);
       }
 
       ret = 0;

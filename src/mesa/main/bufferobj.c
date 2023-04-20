@@ -1296,7 +1296,7 @@ handle_bind_buffer_gen(struct gl_context *ctx,
 {
    struct gl_buffer_object *buf = *buf_handle;
 
-   if (unlikely(!no_error && !buf && (ctx->API == API_OPENGL_CORE))) {
+   if (unlikely(!no_error && !buf && _mesa_is_desktop_gl_core(ctx))) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "%s(non-gen name)", caller);
       return false;
    }
@@ -1560,19 +1560,6 @@ _mesa_BindBuffer(GLenum target, GLuint buffer)
    }
 
    bind_buffer_object(ctx, bindTarget, buffer, false);
-}
-
-void
-_mesa_InternalBindElementBuffer(struct gl_context *ctx,
-                                struct gl_buffer_object *buf)
-{
-   struct gl_buffer_object **bindTarget =
-      get_buffer_target(ctx, GL_ELEMENT_ARRAY_BUFFER, false);
-
-   /* Move the buffer reference from the parameter to the bind point. */
-   _mesa_reference_buffer_object(ctx, bindTarget, NULL);
-   if (buf)
-      *bindTarget = buf;
 }
 
 /**

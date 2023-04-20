@@ -40,6 +40,12 @@ zink_clear_texture(struct pipe_context *ctx,
                    const struct pipe_box *box,
                    const void *data);
 void
+zink_clear_texture_dynamic(struct pipe_context *ctx,
+                           struct pipe_resource *p_res,
+                           unsigned level,
+                           const struct pipe_box *box,
+                           const void *data);
+void
 zink_clear_buffer(struct pipe_context *pctx,
                   struct pipe_resource *pres,
                   unsigned offset,

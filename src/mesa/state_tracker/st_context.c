@@ -56,6 +56,7 @@
 #include "st_program.h"
 #include "st_sampler_view.h"
 #include "st_shader_cache.h"
+#include "st_texcompress_compute.h"
 #include "st_texture.h"
 #include "st_util.h"
 #include "pipe/p_context.h"
@@ -153,7 +154,7 @@ st_invalidate_state(struct gl_context *ctx)
    /* Update the vertex shader if ctx->Light._ClampVertexColor was changed. */
    if (st->clamp_vert_color_in_shader && (new_state & _NEW_LIGHT_STATE)) {
       ctx->NewDriverState |= ST_NEW_VS_STATE;
-      if (st->ctx->API == API_OPENGL_COMPAT && ctx->Version >= 32) {
+      if (_mesa_is_desktop_gl_compat(st->ctx) && ctx->Version >= 32) {
          ctx->NewDriverState |= ST_NEW_GS_STATE | ST_NEW_TES_STATE;
       }
    }
@@ -354,6 +355,10 @@ st_destroy_context_priv(struct st_context *st, bool destroy_pipe)
    st_destroy_drawpix(st);
    st_destroy_drawtex(st);
    st_destroy_pbo_helpers(st);
+
+   if (_mesa_has_compute_shaders(st->ctx) && st->transcode_astc)
+      st_destroy_texcompress_compute(st);
+
    st_destroy_bound_texture_handles(st);
    st_destroy_bound_image_handles(st);
 
@@ -561,6 +566,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->has_astc_5x5_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_5x5_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);
+   st->astc_void_extents_need_denorm_flush =
+      screen->get_param(screen, PIPE_CAP_ASTC_VOID_EXTENTS_NEED_DENORM_FLUSH);
+
    st->has_s3tc = screen->is_format_supported(screen, PIPE_FORMAT_DXT5_RGBA,
                                               PIPE_TEXTURE_2D, 0, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
@@ -592,8 +600,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
          PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_ALPHA_NOT_W);
    st->emulate_gl_clamp =
       !screen->get_param(screen, PIPE_CAP_GL_CLAMP);
-   st->texture_buffer_sampler =
-      screen->get_param(screen, PIPE_CAP_TEXTURE_BUFFER_SAMPLER);
    st->has_time_elapsed =
       screen->get_param(screen, PIPE_CAP_QUERY_TIME_ELAPSED);
    st->has_half_float_packing =
@@ -642,6 +648,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->validate_all_dirty_states =
       screen->get_param(screen, PIPE_CAP_VALIDATE_ALL_DIRTY_STATES)
       ? true : false;
+   st->can_null_texture =
+      screen->get_param(screen, PIPE_CAP_NULL_TEXTURES)
+      ? true : false;
 
    util_throttle_init(&st->throttle,
                       screen->get_param(screen,
@@ -673,7 +682,7 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       /* For drivers which cannot do color clamping, it's better to just
        * disable ARB_color_buffer_float in the core profile, because
        * the clamping is deprecated there anyway. */
-      if (ctx->API == API_OPENGL_CORE &&
+      if (_mesa_is_desktop_gl_core(ctx) &&
           (st->clamp_frag_color_in_shader || st->clamp_vert_color_in_shader)) {
          st->clamp_vert_color_in_shader = GL_FALSE;
          st->clamp_frag_color_in_shader = GL_FALSE;
@@ -761,9 +770,21 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    _mesa_override_extensions(ctx);
    _mesa_compute_version(ctx);
 
-   if (ctx->Version == 0) {
+   if (ctx->Version == 0 ||
+       !_mesa_initialize_dispatch_tables(ctx)) {
       /* This can happen when a core profile was requested, but the driver
        * does not support some features of GL 3.1 or later.
+       */
+      st_destroy_context_priv(st, false);
+      return NULL;
+   }
+
+   if (_mesa_has_compute_shaders(ctx) &&
+       st->transcode_astc && !st_init_texcompress_compute(st)) {
+      /* Transcoding ASTC to DXT5 using compute shaders can provide a
+       * significant performance benefit over the CPU path. It isn't strictly
+       * necessary to fail if we can't use the compute shader path, but it's
+       * very convenient to do so. This should be rare.
        */
       st_destroy_context_priv(st, false);
       return NULL;
@@ -774,7 +795,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
     */
    _vbo_CreateContext(ctx);
 
-   _mesa_initialize_dispatch_tables(ctx);
    st_init_driver_flags(st);
 
    /* Initialize context's winsys buffers list */
@@ -936,7 +956,7 @@ st_destroy_context(struct st_context *st)
    _mesa_make_current(ctx, NULL, NULL);
 
    /* This must be called first so that glthread has a chance to finish */
-   _mesa_glthread_destroy(ctx, NULL);
+   _mesa_glthread_destroy(ctx);
 
    _mesa_HashWalk(ctx->Shared->TexObjects, destroy_tex_sampler_cb, st);
 
@@ -944,10 +964,12 @@ st_destroy_context(struct st_context *st)
     * context.
     */
    for (unsigned i = 0; i < NUM_TEXTURE_TARGETS; i++) {
-      struct gl_texture_object *stObj =
-         ctx->Shared->FallbackTex[i];
-      if (stObj) {
-         st_texture_release_context_sampler_view(st, stObj);
+      for (unsigned j = 0; j < ARRAY_SIZE(ctx->Shared->FallbackTex[0]); j++) {
+         struct gl_texture_object *stObj =
+            ctx->Shared->FallbackTex[i][j];
+         if (stObj) {
+            st_texture_release_context_sampler_view(st, stObj);
+         }
       }
    }
 

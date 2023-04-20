@@ -124,7 +124,7 @@ Ian Romanick (1):
 
 - intel/fs: Fix constant propagation into 32x16 integer multiplication
 
-Jason Ekstrand (2):
+Faith Ekstrand (2):
 
 - vulkan: Handle VK_SUBPASS_EXTERNAL at the end of a subpass
 - vulkan: Unconditionally add barriers for missing external subpass deps

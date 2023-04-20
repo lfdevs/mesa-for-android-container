@@ -1,5 +1,6 @@
-glx@glx-make-current,Crash
+glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
+glx@glx-swap-event_async,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
@@ -80,7 +81,6 @@ spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,F
 spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@arb_sparse_buffer@buffer-data,Fail
 spec@arb_sparse_buffer@commit,Fail
-spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
@@ -91,11 +91,9 @@ spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index1-drawpixels,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index16-drawpixels,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index4-drawpixels,Fail
 spec@ext_framebuffer_object@fbo-stencil-gl_stencil_index8-drawpixels,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Fail
 spec@ext_packed_depth_stencil@fbo-depthstencil-gl_depth24_stencil8-drawpixels-float-and-ushort,Fail
 spec@ext_packed_depth_stencil@fbo-stencil-gl_depth24_stencil8-drawpixels,Fail
 spec@glsl-1.30@execution@glsl-fs-continue-in-switch-in-do-while,Fail
@@ -171,7 +169,6 @@ CreateContext/VAAPICreateContext.CreateContext/3075,Crash
 CreateContext/VAAPICreateContext.CreateContext/3245,Crash
 CreateContext/VAAPICreateContext.CreateContext/355,Crash
 CreateContext/VAAPICreateContext.CreateContext/3585,Crash
-CreateSurfaces/VAAPICreateSurfaces.CreateSurfacesWithConfigAttribs/1121,Timeout
 GetCreateConfig/VAAPIGetCreateConfig.CreateConfigNoAttributes/190,Fail
 GetCreateConfig/VAAPIGetCreateConfig.CreateConfigNoAttributes/210,Fail
 GetCreateConfig/VAAPIGetCreateConfig.CreateConfigWithAttributes/190,Fail
@@ -188,5 +185,4 @@ CreateContext/VAAPICreateContext.CreateContext/3160,Crash
 
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
 
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7152
-spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail
+spec@!opengl 1.1@line-smooth-stipple,Fail

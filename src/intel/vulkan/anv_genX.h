@@ -38,8 +38,6 @@
 
 struct intel_sample_positions;
 
-typedef struct VkRenderingSelfDependencyInfoMESA VkRenderingSelfDependencyInfoMESA;
-
 extern const uint32_t genX(vk_to_intel_cullmode)[];
 
 extern const uint32_t genX(vk_to_intel_front_face)[];
@@ -85,6 +83,11 @@ void genX(emit_pipeline_select)(struct anv_batch *batch, uint32_t pipeline);
 
 void genX(apply_task_urb_workaround)(struct anv_cmd_buffer *cmd_buffer);
 
+void genX(emit_vertex_input)(struct anv_batch *batch,
+                             uint32_t *vertex_element_dws,
+                             const struct anv_graphics_pipeline *pipeline,
+                             const struct vk_vertex_input_state *vi);
+
 enum anv_pipe_bits
 genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
                               struct anv_device *device,
@@ -96,6 +99,8 @@ void genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
                                struct anv_batch *batch);
 
 void genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state);
+
+void genX(emit_so_memcpy_end)(struct anv_memcpy_state *state);
 
 void genX(emit_so_memcpy)(struct anv_memcpy_state *state,
                           struct anv_address dst, struct anv_address src,
@@ -124,6 +129,9 @@ void genX(cmd_buffer_mark_image_written)(struct anv_cmd_buffer *cmd_buffer,
 void genX(cmd_emit_conditional_render_predicate)(struct anv_cmd_buffer *cmd_buffer);
 
 struct anv_state genX(cmd_buffer_ray_query_globals)(struct anv_cmd_buffer *cmd_buffer);
+
+void genX(cmd_buffer_ensure_cfe_state)(struct anv_cmd_buffer *cmd_buffer,
+                                       uint32_t total_scratch);
 
 void
 genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,

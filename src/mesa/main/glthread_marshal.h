@@ -48,7 +48,8 @@ struct marshal_cmd_base
    uint16_t cmd_size;
 };
 
-typedef uint32_t (*_mesa_unmarshal_func)(struct gl_context *ctx, const void *cmd);
+typedef uint32_t (*_mesa_unmarshal_func)(struct gl_context *ctx,
+                                         const void *restrict cmd);
 extern const _mesa_unmarshal_func _mesa_unmarshal_dispatch[NUM_DISPATCH_CMD];
 
 static inline void *
@@ -92,54 +93,6 @@ static inline bool
 _mesa_glthread_has_no_unpack_buffer(const struct gl_context *ctx)
 {
    return ctx->GLThread.CurrentPixelUnpackBufferName == 0;
-}
-
-/**
- * Instead of conditionally handling marshaling immediate index data in draw
- * calls (deprecated and removed in GL core), we just disable threading.
- */
-static inline bool
-_mesa_glthread_has_non_vbo_vertices_or_indices(const struct gl_context *ctx)
-{
-   const struct glthread_state *glthread = &ctx->GLThread;
-   struct glthread_vao *vao = glthread->CurrentVAO;
-
-   return ctx->API != API_OPENGL_CORE &&
-          (vao->CurrentElementBufferName == 0 ||
-           (vao->UserPointerMask & vao->BufferEnabled));
-}
-
-static inline bool
-_mesa_glthread_has_non_vbo_vertices(const struct gl_context *ctx)
-{
-   const struct glthread_state *glthread = &ctx->GLThread;
-   const struct glthread_vao *vao = glthread->CurrentVAO;
-
-   return ctx->API != API_OPENGL_CORE &&
-          (vao->UserPointerMask & vao->BufferEnabled);
-}
-
-static inline bool
-_mesa_glthread_has_non_vbo_vertices_or_indirect(const struct gl_context *ctx)
-{
-   const struct glthread_state *glthread = &ctx->GLThread;
-   const struct glthread_vao *vao = glthread->CurrentVAO;
-
-   return ctx->API != API_OPENGL_CORE &&
-          (glthread->CurrentDrawIndirectBufferName == 0 ||
-           (vao->UserPointerMask & vao->BufferEnabled));
-}
-
-static inline bool
-_mesa_glthread_has_non_vbo_vertices_or_indices_or_indirect(const struct gl_context *ctx)
-{
-   const struct glthread_state *glthread = &ctx->GLThread;
-   struct glthread_vao *vao = glthread->CurrentVAO;
-
-   return ctx->API != API_OPENGL_CORE &&
-          (glthread->CurrentDrawIndirectBufferName == 0 ||
-           vao->CurrentElementBufferName == 0 ||
-           (vao->UserPointerMask & vao->BufferEnabled));
 }
 
 static inline unsigned
@@ -470,11 +423,12 @@ _mesa_glthread_Enable(struct gl_context *ctx, GLenum cap)
    case GL_PRIMITIVE_RESTART_FIXED_INDEX:
       _mesa_glthread_set_prim_restart(ctx, cap, true);
       break;
-   case GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB:
-      _mesa_glthread_destroy(ctx, "Enable(DEBUG_OUTPUT_SYNCHRONOUS)");
-      break;
    case GL_BLEND:
       ctx->GLThread.Blend = true;
+      break;
+   case GL_DEBUG_OUTPUT_SYNCHRONOUS:
+      _mesa_glthread_disable(ctx);
+      ctx->GLThread.DebugOutputSynchronous = true;
       break;
    case GL_DEPTH_TEST:
       ctx->GLThread.DepthTest = true;
@@ -520,6 +474,10 @@ _mesa_glthread_Disable(struct gl_context *ctx, GLenum cap)
    case GL_CULL_FACE:
       ctx->GLThread.CullFace = false;
       break;
+   case GL_DEBUG_OUTPUT_SYNCHRONOUS:
+      ctx->GLThread.DebugOutputSynchronous = false;
+      _mesa_glthread_enable(ctx);
+      break;
    case GL_DEPTH_TEST:
       ctx->GLThread.DepthTest = false;
       break;
@@ -556,6 +514,8 @@ _mesa_glthread_IsEnabled(struct gl_context *ctx, GLenum cap)
       return ctx->GLThread.Blend;
    case GL_CULL_FACE:
       return ctx->GLThread.CullFace;
+   case GL_DEBUG_OUTPUT_SYNCHRONOUS:
+      return ctx->GLThread.DebugOutputSynchronous;
    case GL_DEPTH_TEST:
       return ctx->GLThread.DepthTest;
    case GL_LIGHTING:

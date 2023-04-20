@@ -38,15 +38,17 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
                          struct blob *blob);
 
 struct vk_pipeline_cache_object *
-anv_shader_bin_deserialize(struct vk_device *device,
+anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
                            const void *key_data, size_t key_size,
                            struct blob_reader *blob);
 
 static void
-anv_shader_bin_destroy(struct vk_pipeline_cache_object *object)
+anv_shader_bin_destroy(struct vk_device *_device,
+                       struct vk_pipeline_cache_object *object)
 {
    struct anv_device *device =
-      container_of(object->device, struct anv_device, vk);
+      container_of(_device, struct anv_device, vk);
+
    struct anv_shader_bin *shader =
       container_of(object, struct anv_shader_bin, base);
 
@@ -123,10 +125,7 @@ anv_shader_bin_create(struct anv_device *device,
       .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW,
       .value = shader_data_addr,
    };
-   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
-      .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
-      .value = shader_data_addr >> 32,
-   };
+   assert(shader_data_addr >> 32 == INSTRUCTION_STATE_POOL_MIN_ADDRESS >> 32);
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_SHADER_START_OFFSET,
       .value = shader->kernel.offset,
@@ -254,12 +253,12 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
 }
 
 struct vk_pipeline_cache_object *
-anv_shader_bin_deserialize(struct vk_device *vk_device,
+anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
                            const void *key_data, size_t key_size,
                            struct blob_reader *blob)
 {
    struct anv_device *device =
-      container_of(vk_device, struct anv_device, vk);
+      container_of(cache->base.device, struct anv_device, vk);
 
    gl_shader_stage stage = blob_read_uint32(blob);
 

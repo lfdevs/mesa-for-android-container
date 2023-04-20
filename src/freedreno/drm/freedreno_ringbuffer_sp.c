@@ -292,11 +292,16 @@ flush_deferred_submits(struct fd_device *dev)
 
    DEBUG_MSG("enqueue: %u", submit->fence);
 
-   util_queue_add_job(&submit->pipe->dev->submit_queue,
-                      submit, fence,
-                      fd_submit_sp_flush_execute,
-                      fd_submit_sp_flush_cleanup,
-                      0);
+   if (fd_device_threaded_submit(submit->pipe->dev)) {
+      util_queue_add_job(&submit->pipe->dev->submit_queue,
+                         submit, fence,
+                         fd_submit_sp_flush_execute,
+                         fd_submit_sp_flush_cleanup,
+                         0);
+   } else {
+      fd_submit_sp_flush_execute(submit, NULL, 0);
+      fd_submit_sp_flush_cleanup(submit, NULL, 0);
+   }
 }
 
 static bool
@@ -393,6 +398,9 @@ fd_pipe_sp_flush(struct fd_pipe *pipe, uint32_t fence)
 {
    struct fd_device *dev = pipe->dev;
 
+   if (!fd_fence_before(pipe->last_submit_fence, fence))
+      return;
+
    MESA_TRACE_FUNC();
 
    simple_mtx_lock(&dev->submit_lock);
@@ -402,6 +410,9 @@ fd_pipe_sp_flush(struct fd_pipe *pipe, uint32_t fence)
    flush_deferred_submits(dev);
 
    simple_mtx_unlock(&dev->submit_lock);
+
+   if (!fd_device_threaded_submit(pipe->dev))
+      return;
 
    /* Once we are sure that we've enqueued at least up to the requested
     * submit, we need to be sure that submitq has caught up and flushed
@@ -460,6 +471,7 @@ fd_submit_sp_new(struct fd_pipe *pipe, flush_submit_list_fn flush_submit_list)
    slab_create_child(&fd_submit->ring_pool, &pipe->ring_pool);
 
    fd_submit->flush_submit_list = flush_submit_list;
+   fd_submit->seqno = seqno_next(&pipe->submit_seqno);
 
    submit = &fd_submit->base;
    submit->funcs = &submit_funcs;
@@ -715,6 +727,7 @@ fd_ringbuffer_sp_new_object(struct fd_pipe *pipe, uint32_t size)
    fd_ring->u.pipe = pipe;
    fd_ring->ring_bo = fd_bo_ref(dev->suballoc_bo);
    fd_ring->base.refcnt = 1;
+   fd_ring->u.last_submit_seqno = 0;
 
    dev->suballoc_offset = fd_ring->offset + size;
 

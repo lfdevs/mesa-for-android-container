@@ -59,6 +59,8 @@ enum pvr_pbe_accum_format {
 
 const uint8_t *pvr_get_format_swizzle(VkFormat vk_format);
 uint32_t pvr_get_tex_format(VkFormat vk_format);
+uint32_t pvr_get_tex_format_aspect(VkFormat vk_format,
+                                   VkImageAspectFlags aspect_mask);
 uint32_t pvr_get_pbe_packmode(VkFormat vk_format);
 uint32_t pvr_get_pbe_accum_format(VkFormat vk_format);
 uint32_t pvr_get_pbe_accum_format_size_in_bytes(VkFormat vk_format);

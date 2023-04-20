@@ -186,7 +186,7 @@ extern void
 _mesa_dirty_texobj(struct gl_context *ctx, struct gl_texture_object *texObj);
 
 extern struct gl_texture_object *
-_mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex);
+_mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex, bool is_depth);
 
 extern GLuint
 _mesa_total_texture_memory(struct gl_context *ctx);

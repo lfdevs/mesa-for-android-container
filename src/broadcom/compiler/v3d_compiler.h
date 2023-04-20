@@ -173,6 +173,11 @@ struct qinst {
         /* If this is a a TLB Z write */
         bool is_tlb_z_write;
 
+        /* If this is a retiring TMU instruction (the last in a lookup sequence),
+         * how many ldtmu instructions are required to read the results.
+         */
+        uint32_t ldtmu_count;
+
         /* Position of this instruction in the program. Filled in during
          * register allocation.
          */
@@ -1079,7 +1084,7 @@ vir_has_uniform(struct qinst *inst)
 const struct v3d_compiler *v3d_compiler_init(const struct v3d_device_info *devinfo,
                                              uint32_t max_inline_uniform_buffers);
 void v3d_compiler_free(const struct v3d_compiler *compiler);
-void v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s, bool allow_copies);
+void v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s);
 
 uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                       struct v3d_key *key,
@@ -1173,7 +1178,7 @@ bool v3d_nir_lower_logic_ops(nir_shader *s, struct v3d_compile *c);
 bool v3d_nir_lower_robust_buffer_access(nir_shader *s, struct v3d_compile *c);
 bool v3d_nir_lower_robust_image_access(nir_shader *s, struct v3d_compile *c);
 bool v3d_nir_lower_scratch(nir_shader *s);
-bool v3d_nir_lower_txf_ms(nir_shader *s, struct v3d_compile *c);
+bool v3d_nir_lower_txf_ms(nir_shader *s);
 bool v3d_nir_lower_image_load_store(nir_shader *s);
 bool v3d_nir_lower_load_store_bitsize(nir_shader *s);
 

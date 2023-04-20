@@ -273,12 +273,12 @@ struct v3d_stream_output_target {
         struct pipe_stream_output_target base;
         /* Number of transform feedback vertices written to this target */
         uint32_t recorded_vertex_count;
+        /* Number of vertices we've written into the buffer so far */
+        uint32_t offset;
 };
 
 struct v3d_streamout_stateobj {
         struct pipe_stream_output_target *targets[PIPE_MAX_SO_BUFFERS];
-        /* Number of vertices we've written into the buffer so far. */
-        uint32_t offsets[PIPE_MAX_SO_BUFFERS];
         unsigned num_targets;
 };
 
@@ -617,6 +617,10 @@ struct v3d_context {
         uint32_t prim_counts_offset;
         struct v3d_perfmon_state *active_perfmon;
         struct v3d_perfmon_state *last_perfmon;
+
+        struct pipe_query *cond_query;
+        bool cond_cond;
+        enum pipe_render_cond_flag cond_mode;
         /** @} */
 };
 
@@ -750,8 +754,7 @@ bool v3d_tex_format_supported(const struct v3d_device_info *devinfo,
 uint8_t v3d_get_rt_format(const struct v3d_device_info *devinfo, enum pipe_format f);
 uint8_t v3d_get_tex_format(const struct v3d_device_info *devinfo, enum pipe_format f);
 uint8_t v3d_get_tex_return_size(const struct v3d_device_info *devinfo,
-                                enum pipe_format f,
-                                enum pipe_tex_compare compare);
+                                enum pipe_format f);
 uint8_t v3d_get_tex_return_channels(const struct v3d_device_info *devinfo,
                                     enum pipe_format f);
 const uint8_t *v3d_get_format_swizzle(const struct v3d_device_info *devinfo,
@@ -768,7 +771,7 @@ bool v3d_format_supports_tlb_msaa_resolve(const struct v3d_device_info *devinfo,
 
 void v3d_init_query_functions(struct v3d_context *v3d);
 void v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
-void v3d_blitter_save(struct v3d_context *v3d, bool op_blit);
+void v3d_blitter_save(struct v3d_context *v3d, bool op_blit,  bool render_cond);
 bool v3d_generate_mipmap(struct pipe_context *pctx,
                          struct pipe_resource *prsc,
                          enum pipe_format format,
@@ -808,6 +811,8 @@ void v3d_get_tile_buffer_size(bool is_msaa,
                               uint32_t *tile_width,
                               uint32_t *tile_height,
                               uint32_t *max_bpp);
+
+bool v3d_render_condition_check(struct v3d_context *v3d);
 
 #ifdef ENABLE_SHADER_CACHE
 struct v3d_compiled_shader *v3d_disk_cache_retrieve(struct v3d_context *v3d,

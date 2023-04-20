@@ -483,6 +483,8 @@ ComputeTest::run_shader_with_raw_args(Shader shader,
    // Older WARP and some hardware doesn't support int64, so for these tests, unconditionally lower away int64
    // A more complex runtime can be smarter about detecting when this needs to be done
    conf.lower_bit_size = 64;
+   conf.max_shader_model = SHADER_MODEL_6_2;
+   conf.validator_version = DXIL_VALIDATOR_1_4;
 
    if (!shader.dxil->metadata.local_size[0])
       conf.local_size[0] = compile_args.x;

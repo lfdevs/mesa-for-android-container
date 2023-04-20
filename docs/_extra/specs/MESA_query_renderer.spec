@@ -360,7 +360,7 @@ Revision History
     Version 4, 2013/02/01 - Add issue #12 regarding texture / renderbuffer
                             format queries.
 
-    Version 5, 2013/02/14 - Add issues #13 and #14 regarding simpler queires
+    Version 5, 2013/02/14 - Add issues #13 and #14 regarding simpler queries
                             after the context is created and made current.
                             Add issue #15 regarding the string query.
                             Add issue #16 regarding the value type returned

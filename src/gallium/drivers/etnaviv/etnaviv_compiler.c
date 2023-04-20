@@ -37,12 +37,14 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
 
    compiler->options = (nir_shader_compiler_options) {
       .lower_fpow = true,
+      .lower_fround_even = true,
       .lower_ftrunc = true,
       .fuse_ffma16 = true,
       .fuse_ffma32 = true,
       .fuse_ffma64 = true,
       .lower_uadd_carry = true,
       .lower_usub_borrow = true,
+      .lower_ldexp = true,
       .lower_mul_high = true,
       .lower_bitops = true,
       .lower_all_io_to_temps = true,
@@ -51,6 +53,8 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
       .lower_fmod = true,
       .lower_vector_cmp = true,
       .lower_fdph = true,
+      .lower_extract_byte = true,
+      .lower_extract_word = true,
       .lower_insert_byte = true,
       .lower_insert_word = true,
       .lower_fdiv = true, /* !specs->has_new_transcendentals */
@@ -65,6 +69,13 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
       .force_indirect_unrolling = nir_var_all,
       .max_unroll_iterations = 32,
       .vectorize_io = true,
+      .lower_pack_32_2x16_split = true,
+      .lower_pack_64_2x32_split = true,
+      .lower_unpack_32_2x16_split = true,
+      .lower_unpack_64_2x32_split = true,
+      .lower_find_lsb = true,
+      .lower_ifind_msb_to_uclz = true,
+      .lower_ufind_msb_to_uclz = true,
    };
 
    compiler->regs = etna_ra_setup(compiler);

@@ -2,7 +2,7 @@
 
 set -ex
 
-MOLD_VERSION="1.9.0"
+MOLD_VERSION="1.10.0"
 
 git clone -b v"$MOLD_VERSION" --single-branch --depth 1 https://github.com/rui314/mold.git
 pushd mold

@@ -65,6 +65,7 @@
 #include "util/hash_table.h"
 #include "util/set.h"
 #include "util/u_memory.h"
+#include "util/perf/cpu_trace.h"
 
 #include "syncobj.h"
 
@@ -121,6 +122,8 @@ __client_wait_sync(struct gl_context *ctx,
    struct pipe_context *pipe = ctx->pipe;
    struct pipe_screen *screen = pipe->screen;
    struct pipe_fence_handle *fence = NULL;
+
+   MESA_TRACE_FUNC();
 
    /* If the fence doesn't exist, assume it's signalled. */
    simple_mtx_lock(&obj->mutex);

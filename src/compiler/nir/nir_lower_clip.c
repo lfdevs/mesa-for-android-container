@@ -454,15 +454,20 @@ lower_clip_fs(nir_function_impl *impl, unsigned ucp_enables,
          load_clipdist_input(&b, in[0], 1, &clipdist[4]);
    }
 
+   nir_ssa_def *cond = NULL;
+
    for (int plane = 0; plane < MAX_CLIP_PLANES; plane++) {
       if (ucp_enables & (1 << plane)) {
-         nir_ssa_def *cond;
+         nir_ssa_def *this_cond =
+            nir_flt(&b, clipdist[plane], nir_imm_float(&b, 0.0));
 
-         cond = nir_flt(&b, clipdist[plane], nir_imm_float(&b, 0.0));
-         nir_discard_if(&b, cond);
-
-         b.shader->info.fs.uses_discard = true;
+         cond = cond ? nir_ior(&b, cond, this_cond) : this_cond;
       }
+   }
+
+   if (cond != NULL) {
+      nir_discard_if(&b, cond);
+      b.shader->info.fs.uses_discard = true;
    }
 
    nir_metadata_preserve(impl, nir_metadata_dominance);

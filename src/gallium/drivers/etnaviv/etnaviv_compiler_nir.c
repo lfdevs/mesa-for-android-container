@@ -680,6 +680,7 @@ emit_cf_list(struct etna_compile *c, struct exec_list *list)
          emit_if(c, nir_cf_node_as_if(node));
          break;
       case nir_cf_node_loop:
+         assert(!nir_loop_has_continue_construct(nir_cf_node_as_loop(node)));
          emit_cf_list(c, &nir_cf_node_as_loop(node)->body);
          break;
       default:
@@ -857,9 +858,9 @@ lower_alu(struct etna_compile *c, nir_alu_instr *alu)
       nir_ssa_def *ssa = alu->src[i].src.ssa;
 
       /* check that vecN instruction is only user of this */
-      bool need_mov = list_length(&ssa->if_uses) != 0;
-      nir_foreach_use(use_src, ssa) {
-         if (use_src->parent_instr != &alu->instr)
+      bool need_mov = false;
+      nir_foreach_use_including_if(use_src, ssa) {
+         if (use_src->is_if || use_src->parent_instr != &alu->instr)
             need_mov = true;
       }
 
@@ -1147,6 +1148,8 @@ etna_compile_shader(struct etna_shader_variant *v)
       etna_optimize_loop(s);
 
    NIR_PASS_V(s, etna_lower_io, v);
+   NIR_PASS_V(s, nir_lower_pack);
+   etna_optimize_loop(s);
 
    if (v->shader->specs->vs_need_z_div)
       NIR_PASS_V(s, nir_lower_clip_halfz);
@@ -1158,7 +1161,7 @@ etna_compile_shader(struct etna_shader_variant *v)
        */
       NIR_PASS_V(s, nir_lower_int_to_float);
       NIR_PASS_V(s, nir_opt_algebraic);
-      NIR_PASS_V(s, nir_lower_bool_to_float);
+      NIR_PASS_V(s, nir_lower_bool_to_float, true);
    } else {
       NIR_PASS_V(s, nir_lower_bool_to_int32);
    }

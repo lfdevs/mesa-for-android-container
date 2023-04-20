@@ -34,9 +34,15 @@ zink-lvp:
     - .zink-lvp-test
   variables:
     DEQP_SUITE: zink-lvp
+    DEQP_FRACTION: 4
     PIGLIT_NO_WINDOW: 1
-  script:
-    - xvfb-run --server-args='-noreset' sh -c "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/deqp-runner.sh"
+    # Enable validation (except for on piglit, see deqp-zink-lvp.toml), logging
+    # to stdout and aborting on unknown failures.
+    ZINK_DEBUG: validation
+    VK_LAYER_SETTINGS_PATH: ${CI_PROJECT_DIR}/install/zink-lvp-validation-settings.txt
+    XVFB_SCRIPT: "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/deqp-runner.sh"
+  script: |
+    xvfb-run --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && ${XVFB_SCRIPT}"
 
 .zink-anv-test:
   extends:
@@ -54,12 +60,16 @@ zink-anv-tgl:
     DEQP_SUITE: zink-anv-tgl
     PIGLIT_NO_WINDOW: 1
     HWCI_START_XORG: 1
+    # We use gbm because X can die:
+    # MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
+    # Xorg: ../src/gallium/drivers/zink/zink_batch.c:599: zink_end_batch: Assertion `!ctx->batch_states' failed.
+    PIGLIT_PLATFORM: gbm
 
 # Manual full run when you want to double-check the full status.
 zink-anv-tgl-full:
   extends:
     - zink-anv-tgl
-    - .test-manual-mr
+    - .zink-anv-manual-rules
   variables:
     DEQP_SUITE: zink-anv-tgl-full
     JOB_TIMEOUT: 90
@@ -91,6 +101,7 @@ zink-anv-tgl-traces-restricted:
 
 zink-tu-a618:
   extends:
+    - .lava-test-deqp:arm64
     - .a618-test
     - .zink-turnip-rules
     - .zink-test
@@ -105,6 +116,28 @@ zink-tu-a618:
     DTB: sc7180-trogdor-lazor-limozeen-nots-r5
     RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
 
+zink-tu-a618-traces:
+  extends:
+    - a618-traces
+    - .zink-turnip-rules
+    - .zink-trace-test
+  parallel: null
+  variables:
+    PIGLIT_REPLAY_DEVICE_NAME: "zink-a618"
+
+zink-tu-a618-traces-performance:
+  extends:
+    - zink-tu-a618-traces
+    - .zink-turnip-manual-rules
+    - .piglit-performance:arm64
+  rules:
+    - !reference [.piglit-performance:arm64, rules]
+    - !reference [.zink-turnip-manual-rules, rules]
+  variables:
+    # Always use the same device
+    # a618 tag starts with cbg-1 (not cbg-0) for some reason
+    LAVA_TAGS: "cbg-1"
+
 zink-freedreno-a630-traces:
   extends:
     - a630-traces
@@ -112,4 +145,36 @@ zink-freedreno-a630-traces:
     - .zink-trace-test
   variables:
     PIGLIT_REPLAY_DEVICE_NAME: "zink-a630"
-    ZINK_DEBUG: rp
+
+############### Combined testing (GL, GLES, Piglit) on RADV
+.radv-zink-test-valve:
+  extends:
+    - .zink-test
+    - .test-radv
+    - .b2c-test-gl
+  variables:
+    PIGLIT_PROFILES: all
+    PIGLIT_PLATFORM: gbm
+    RADV_PERFTEST: gpl
+    HWCI_TEST_SCRIPT: ./install/valve/gl_combined_testing.sh
+    B2C_JOB_SUCCESS_REGEX: 'Execution is over, pipeline status: 0'
+
+    # Disable reporting, since DUTs don't have internet access
+    FLAKES_CHANNEL: ""
+
+zink-radv-navi10-valve:
+  extends:
+    - .radv-zink-test-valve
+    - .navi10-test-valve
+    - .zink-radv-manual-rules
+  variables:
+    GPU_VERSION: zink-radv-navi10
+
+zink-radv-vangogh-valve:
+  parallel: 3
+  extends:
+    - .radv-zink-test-valve
+    - .vangogh-test-valve
+    - .zink-radv-manual-rules
+  variables:
+    GPU_VERSION: zink-radv-vangogh

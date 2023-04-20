@@ -27,10 +27,6 @@ dEQP-VK.api.command_buffers.record_many_draws_secondary_2
 spill-dEQP-VK.graphicsfuzz.cov-function-two-loops-limit-using-arguments-array-element-copies
 spill-dEQP-VK.graphicsfuzz.cov-nested-loop-large-array-index-using-vector-components
 
-# timeout, spending all its time in nir_compare_deref_paths()
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/5152
-dEQP-VK.ubo.random.all_shared_buffer.48
-
 # Still running after 3 hours, time is spent in batch_draw_tracking().
 KHR-GLES31.core.shader_image_load_store.basic-allFormats-store-fs
 
@@ -71,3 +67,7 @@ spec@arb_buffer_storage@bufferstorage-persistent_gles3 read coherent client-stor
 # These are redundant with arb_copy_image, so skip them to cut down
 # on CI runtime:
 spec@nv_copy_image@nv_copy_image.*
+
+# CTS bug, these will just be extremely noisy flakes until it's fixed.
+# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4304
+dEQP-VK.image.queue_transfer.*

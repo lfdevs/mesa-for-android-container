@@ -1,6 +1,6 @@
 .intel-common-test:
   extends:
-    - .lava-test:amd64
+    - .lava-test-deqp:amd64
   variables:
     DTB: ""
     BOOT_METHOD: depthcharge
@@ -28,7 +28,7 @@
     - .intel-rules
 
 ## ANV only
-# 13 boards
+# 15; 10 i5 boards + 5 i7 boards (2023-01-17)
 .anv-tgl-test:
   extends:
     - .anv-test
@@ -44,8 +44,27 @@ anv-tgl-vk:
   variables:
     DEQP_SUITE: anv-tgl-vk
     DEQP_VER: vk
+    DEQP_FRACTION: 2 # temporarily drop network load
     VK_DRIVER: intel
-  parallel: 10
+  parallel: 6 # 15 - 3 zink - 3 post-merge perf + headroom
+
+hasvk-hsw-full:
+  extends:
+    - .anholt-hsw-test
+    - .deqp-test
+    - .hasvk-manual-rules
+  variables:
+    GPU_VERSION: hasvk-hsw
+    DEQP_SUITE: hasvk-hsw
+    VK_DRIVER: intel_hasvk
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
+  timeout: 2h
+
+hasvk-hsw:
+  extends:
+    - hasvk-hsw-full
+  variables:
+    DEQP_FRACTION: 10
 
 ## Iris only
 # 5 boards
@@ -72,7 +91,7 @@ anv-tgl-vk:
 .iris-amly-test:
   extends:
     - .iris-test
-    - .test-manual-mr
+    - .iris-manual-rules
   variables:
     DEVICE_TYPE: asus-C433TA-AJ0005-rammus
     GPU_VERSION: iris-amly
@@ -103,7 +122,7 @@ anv-tgl-vk:
 .iris-cml-test:
   extends:
     - .iris-test
-    - .test-manual-mr    # Devices have too often network problems and fail to boot.
+    - .iris-manual-rules    # Devices have too often network problems and fail to boot.
   variables:
     DEVICE_TYPE: asus-C436FA-Flip-hatch
     GPU_VERSION: iris-cml
@@ -123,7 +142,7 @@ anv-tgl-vk:
 iris-apl-deqp:
   extends:
     - .iris-apl-test
-    - .test-manual-mr
+    - .iris-manual-rules
   variables:
     DEQP_SUITE: iris-apl
   parallel: 3
@@ -278,7 +297,8 @@ iris-cml-traces:
     GIT_STRATEGY: none
     HWCI_FREQ_MAX: "true"
     LAVA_TAGS: "cbg-0"
-  allow_failure: true
+    # Ensure that we are using the release build artifact
+    MINIO_ARTIFACT_NAME: mesa-amd64-release
 
 iris-apl-traces-performance:
   extends:

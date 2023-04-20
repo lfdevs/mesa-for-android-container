@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2021 Alyssa Rosenzweig <alyssa@rosenzweig.io>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright 2021 Alyssa Rosenzweig
+ * SPDX-License-Identifier: MIT
  */
 
 #include "agx_compiler.h"
@@ -66,18 +48,28 @@ agx_pack_sample_coords(agx_index index, bool *flag)
 static unsigned
 agx_pack_texture(agx_index index, unsigned *flag)
 {
-   /* TODO: indirection */
-   assert(index.type == AGX_INDEX_IMMEDIATE);
-   *flag = 0;
+   if (index.type == AGX_INDEX_REGISTER) {
+      assert(index.size == AGX_SIZE_16);
+      *flag = 1;
+   } else {
+      assert(index.type == AGX_INDEX_IMMEDIATE);
+      *flag = 0;
+   }
+
    return index.value;
 }
 
 static unsigned
 agx_pack_sampler(agx_index index, bool *flag)
 {
-   /* TODO: indirection */
-   assert(index.type == AGX_INDEX_IMMEDIATE);
-   *flag = 0;
+   if (index.type == AGX_INDEX_REGISTER) {
+      assert(index.size == AGX_SIZE_16);
+      *flag = 1;
+   } else {
+      assert(index.type == AGX_INDEX_IMMEDIATE);
+      *flag = 0;
+   }
+
    return index.value;
 }
 
@@ -94,15 +86,25 @@ agx_pack_sample_compare_offset(agx_index index)
 }
 
 static unsigned
-agx_pack_lod(agx_index index)
+agx_pack_lod(agx_index index, unsigned *lod_mode)
 {
-   /* Immediate zero */
-   if (index.type == AGX_INDEX_IMMEDIATE && index.value == 0)
+   /* For automatic LOD, the LOD field is unused. Assert as much. */
+   if ((*lod_mode) == AGX_LOD_MODE_AUTO_LOD) {
+      assert(index.type == AGX_INDEX_IMMEDIATE);
+      assert(index.value == 0);
       return 0;
+   }
 
-   /* Otherwise must be registers. Type implicitly specified by LOD mode. */
-   assert(index.type == AGX_INDEX_REGISTER);
-   assert(index.value < 0x100);
+   if (index.type == AGX_INDEX_UNIFORM) {
+      /* Translate LOD mode from register mode to uniform mode */
+      assert(((*lod_mode) & BITFIELD_BIT(2)) && "must start as reg mode");
+      *lod_mode = (*lod_mode) & ~BITFIELD_BIT(2);
+      assert(index.value < 0x200);
+   } else {
+      /* Otherwise must be registers */
+      assert(index.type == AGX_INDEX_REGISTER);
+      assert(index.value < 0x100);
+   }
 
    return index.value;
 }
@@ -148,12 +150,73 @@ agx_pack_memory_index(agx_index index, bool *flag)
       return index.value;
    } else {
       assert(index.type == AGX_INDEX_REGISTER);
+      assert(index.size == AGX_SIZE_32);
       assert((index.value & 1) == 0);
       assert(index.value < 0x100);
 
       *flag = 0;
       return index.value;
    }
+}
+
+static uint16_t
+agx_pack_local_base(agx_index index, unsigned *flags)
+{
+   assert(index.size == AGX_SIZE_16);
+
+   if (index.type == AGX_INDEX_IMMEDIATE) {
+      assert(index.value == 0);
+      *flags = 2;
+      return 0;
+   } else if (index.type == AGX_INDEX_UNIFORM) {
+      *flags = 1 | ((index.value >> 8) << 1);
+      return index.value & BITFIELD_MASK(7);
+   } else {
+      assert_register_is_aligned(index);
+      *flags = 0;
+      return index.value;
+   }
+}
+
+static uint16_t
+agx_pack_local_index(agx_index index, bool *flag)
+{
+   assert(index.size == AGX_SIZE_16);
+
+   if (index.type == AGX_INDEX_IMMEDIATE) {
+      assert(index.value < 0x10000);
+      *flag = 1;
+      return index.value;
+   } else {
+      assert_register_is_aligned(index);
+      *flag = 0;
+      return index.value;
+   }
+}
+
+static unsigned
+agx_pack_atomic_source(agx_index index)
+{
+   assert(index.size == AGX_SIZE_32 && "no 64-bit atomics yet");
+   assert_register_is_aligned(index);
+   return index.value;
+}
+
+static unsigned
+agx_pack_atomic_dest(agx_index index, bool *flag)
+{
+   assert(index.size == AGX_SIZE_32 && "no 64-bit atomics yet");
+
+   /* Atomic destinstions are optional (e.g. for update with no return) */
+   if (index.type == AGX_INDEX_NULL) {
+      *flag = 0;
+      return 0;
+   }
+
+   /* But are otherwise registers */
+   assert_register_is_aligned(index);
+   *flag = 1;
+   return index.value;
 }
 
 /* ALU goes through a common path */
@@ -437,10 +500,13 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
 
    case AGX_OPCODE_SAMPLE_MASK: {
       unsigned S = agx_pack_sample_mask_src(I->src[0]);
-      uint64_t raw = 0x7fc1 | ((S & 0xff) << 16) | (0x3 << 24) |
-                     ((S >> 8) << 26) | (0x158ull << 32);
+      unsigned T = 0xFF;
+      bool Tt = true /* immediate */;
+      uint32_t raw = 0xc1 | (Tt ? BITFIELD_BIT(8) : 0) |
+                     ((T & BITFIELD_MASK(6)) << 9) | ((S & 0xff) << 16) |
+                     ((T >> 6) << 24) | ((S >> 8) << 26);
 
-      unsigned size = 8;
+      unsigned size = 4;
       memcpy(util_dynarray_grow_bytes(emission, 1, size), &raw, size);
       break;
    }
@@ -570,6 +636,80 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
       break;
    }
 
+   case AGX_OPCODE_LOCAL_LOAD:
+   case AGX_OPCODE_LOCAL_STORE: {
+      bool is_load = I->op == AGX_OPCODE_LOCAL_LOAD;
+      bool L = true; /* TODO: when would you want short? */
+      unsigned At;
+      bool Rt, Ot;
+
+      unsigned R = agx_pack_memory_reg(is_load ? I->dest[0] : I->src[0], &Rt);
+      unsigned A = agx_pack_local_base(is_load ? I->src[0] : I->src[1], &At);
+      unsigned O = agx_pack_local_index(is_load ? I->src[1] : I->src[2], &Ot);
+
+      uint64_t raw =
+         agx_opcodes_info[I->op].encoding.exact | (Rt ? BITFIELD64_BIT(8) : 0) |
+         ((R & BITFIELD_MASK(6)) << 9) | (L ? BITFIELD64_BIT(15) : 0) |
+         ((A & BITFIELD_MASK(6)) << 16) | (At << 22) | (I->format << 24) |
+         ((O & BITFIELD64_MASK(6)) << 28) | (Ot ? BITFIELD64_BIT(34) : 0) |
+         (((uint64_t)I->mask) << 36) | (((uint64_t)(O >> 6)) << 48) |
+         (((uint64_t)(A >> 6)) << 58) | (((uint64_t)(R >> 6)) << 60);
+
+      unsigned size = L ? 8 : 6;
+      memcpy(util_dynarray_grow_bytes(emission, 1, size), &raw, size);
+      break;
+   }
+
+   case AGX_OPCODE_ATOMIC: {
+      bool At, Ot, Rt;
+      unsigned A = agx_pack_memory_base(I->src[1], &At);
+      unsigned O = agx_pack_memory_index(I->src[2], &Ot);
+      unsigned R = agx_pack_atomic_dest(I->dest[0], &Rt);
+      unsigned S = agx_pack_atomic_source(I->src[0]);
+
+      uint64_t raw =
+         agx_opcodes_info[I->op].encoding.exact |
+         (((uint64_t)I->atomic_opc) << 6) | ((R & BITFIELD_MASK(6)) << 10) |
+         ((A & BITFIELD_MASK(4)) << 16) | ((O & BITFIELD_MASK(4)) << 20) |
+         (Ot ? (1 << 24) : 0) | (I->src[2].abs ? (1 << 25) : 0) | (At << 27) |
+         (I->scoreboard << 30) |
+         (((uint64_t)((O >> 4) & BITFIELD_MASK(4))) << 32) |
+         (((uint64_t)((A >> 4) & BITFIELD_MASK(4))) << 36) |
+         (((uint64_t)(R >> 6)) << 40) | (Rt ? BITFIELD64_BIT(47) : 0) |
+         (((uint64_t)S) << 48) | (((uint64_t)(O >> 8)) << 56);
+
+      memcpy(util_dynarray_grow_bytes(emission, 1, 8), &raw, 8);
+      break;
+   }
+
+   case AGX_OPCODE_LOCAL_ATOMIC: {
+      bool L = true; /* TODO: Don't force */
+
+      unsigned At;
+      bool Rt = false, Ot;
+
+      bool Ra = I->dest[0].type != AGX_INDEX_NULL;
+      unsigned R = Ra ? agx_pack_memory_reg(I->dest[0], &Rt) : 0;
+      unsigned S = agx_pack_atomic_source(I->src[0]);
+      unsigned A = agx_pack_local_base(I->src[1], &At);
+      unsigned O = agx_pack_local_index(I->src[2], &Ot);
+
+      uint64_t raw =
+         agx_opcodes_info[I->op].encoding.exact | (Rt ? BITFIELD64_BIT(8) : 0) |
+         ((R & BITFIELD_MASK(6)) << 9) | (L ? BITFIELD64_BIT(15) : 0) |
+         ((A & BITFIELD_MASK(6)) << 16) | (At << 22) |
+         (((uint64_t)I->atomic_opc) << 24) | ((O & BITFIELD64_MASK(6)) << 28) |
+         (Ot ? BITFIELD64_BIT(34) : 0) | (Ra ? BITFIELD64_BIT(38) : 0) |
+         (((uint64_t)(O >> 6)) << 48) | (((uint64_t)(A >> 6)) << 58) |
+         (((uint64_t)(R >> 6)) << 60);
+
+      uint64_t raw2 = S;
+
+      memcpy(util_dynarray_grow_bytes(emission, 1, 8), &raw, 8);
+      memcpy(util_dynarray_grow_bytes(emission, 1, 2), &raw2, 2);
+      break;
+   }
+
    case AGX_OPCODE_TEXTURE_LOAD:
    case AGX_OPCODE_TEXTURE_SAMPLE: {
       assert(I->mask != 0);
@@ -577,25 +717,25 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
 
       bool Rt, Ct, St;
       unsigned Tt;
+      enum agx_lod_mode lod_mode = I->lod_mode;
 
       unsigned R = agx_pack_memory_reg(I->dest[0], &Rt);
       unsigned C = agx_pack_sample_coords(I->src[0], &Ct);
       unsigned T = agx_pack_texture(I->src[2], &Tt);
       unsigned S = agx_pack_sampler(I->src[3], &St);
       unsigned O = agx_pack_sample_compare_offset(I->src[4]);
-      unsigned D = agx_pack_lod(I->src[1]);
+      unsigned D = agx_pack_lod(I->src[1], &lod_mode);
 
       unsigned U = 0; // TODO: what is sampler ureg?
       unsigned q1 = I->shadow;
       unsigned q2 = 0;   // XXX
       unsigned q3 = 12;  // XXX
       unsigned kill = 0; // helper invocation kill bit
-      unsigned q6 = 0;   // XXX
 
       uint32_t extend = ((U & BITFIELD_MASK(5)) << 0) | (kill << 5) |
                         ((I->dim >> 3) << 7) | ((R >> 6) << 8) |
                         ((C >> 6) << 10) | ((D >> 6) << 12) | ((T >> 6) << 14) |
-                        ((O & BITFIELD_MASK(6)) << 16) | (q6 << 22) |
+                        ((O & BITFIELD_MASK(6)) << 16) | (I->gather << 23) |
                         (I->offset << 27) | ((S >> 6) << 28) | ((O >> 6) << 30);
 
       bool L = (extend != 0);
@@ -609,7 +749,7 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
          (((uint64_t)Tt) << 38) |
          (((uint64_t)(I->dim & BITFIELD_MASK(3))) << 40) |
          (((uint64_t)q3) << 43) | (((uint64_t)I->mask) << 48) |
-         (((uint64_t)I->lod_mode) << 52) |
+         (((uint64_t)lod_mode) << 52) |
          (((uint64_t)(S & BITFIELD_MASK(6))) << 56) | (((uint64_t)St) << 62) |
          (((uint64_t)I->scoreboard) << 63);
 

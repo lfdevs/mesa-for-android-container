@@ -908,7 +908,6 @@ struct gl_constants
    GLuint MaxTessGenLevel;
    GLuint MaxTessPatchComponents;
    GLuint MaxTessControlTotalOutputComponents;
-   bool LowerTessLevel; /**< Lower gl_TessLevel* from float[n] to vecn? */
    bool PrimitiveRestartForPatches;
 
    /** GL_OES_primitive_bounding_box */
@@ -922,12 +921,6 @@ struct gl_constants
 
    /** When drivers are OK with mapped buffers during draw and other calls. */
    bool AllowMappedBuffersDuringExecution;
-
-   /**
-    * Whether buffer creation, unsynchronized mapping, unmapping, and
-    * deletion is thread-safe.
-    */
-   bool BufferCreateMapUnsynchronizedThreadSafe;
 
    /** Override GL_MAP_UNSYNCHRONIZED_BIT */
    bool ForceMapBufferSynchronized;

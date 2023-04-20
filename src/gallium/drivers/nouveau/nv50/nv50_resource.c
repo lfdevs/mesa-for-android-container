@@ -100,6 +100,73 @@ nv50_invalidate_resource(struct pipe_context *pipe, struct pipe_resource *res)
       nouveau_buffer_invalidate(pipe, res);
 }
 
+struct pipe_memory_object *
+nv50_memobj_create_from_handle(struct pipe_screen *screen,
+                               struct winsys_handle *handle,
+                               bool dedicated)
+{
+   struct nv50_memobj *memobj = CALLOC_STRUCT(nv50_memobj);
+
+   memobj->bo = nouveau_screen_bo_from_handle(screen, handle, &memobj->stride);
+   if (memobj->bo == NULL) {
+      FREE(memobj->bo);
+      return NULL;
+   }
+   memobj->handle = handle;
+   memobj->b.dedicated = dedicated;
+
+   return &memobj->b;
+}
+
+void
+nv50_memobj_destroy(struct pipe_screen *screen,
+                    struct pipe_memory_object *pmemobj)
+{
+   struct nv50_memobj *memobj = (struct nv50_memobj *)pmemobj;
+
+   free(memobj->handle);
+   free(memobj->bo);
+   free(memobj);
+}
+
+struct pipe_resource *
+nv50_resource_from_memobj(struct pipe_screen *screen,
+                          const struct pipe_resource *templ,
+                          struct pipe_memory_object *pmemobj,
+                          uint64_t offset)
+{
+   struct nv50_miptree *mt;
+   struct nv50_memobj *memobj = (struct nv50_memobj *)pmemobj;
+
+   /* only supports 2D, non-mipmapped textures for the moment */
+   if ((templ->target != PIPE_TEXTURE_2D &&
+        templ->target != PIPE_TEXTURE_RECT) ||
+       templ->last_level != 0 ||
+       templ->depth0 != 1 ||
+       templ->array_size > 1)
+      return NULL;
+
+   mt = CALLOC_STRUCT(nv50_miptree);
+   if (!mt)
+      return NULL;
+
+   mt->base.bo = memobj->bo;
+
+   mt->base.domain = mt->base.bo->flags & NOUVEAU_BO_APER;
+   mt->base.address = mt->base.bo->offset;
+
+   mt->base.base = *templ;
+   pipe_reference_init(&mt->base.base.reference, 1);
+   mt->base.base.screen = screen;
+   mt->level[0].offset = 0;
+   mt->level[0].tile_mode = mt->base.bo->config.nv50.tile_mode;
+
+   NOUVEAU_DRV_STAT(nouveau_screen(screen), tex_obj_current_count, 1);
+
+   /* no need to adjust bo reference count */
+   return &mt->base.base;
+}
+
 void
 nv50_init_resource_functions(struct pipe_context *pcontext)
 {
@@ -122,4 +189,8 @@ nv50_screen_init_resource_functions(struct pipe_screen *pscreen)
    pscreen->resource_from_handle = nv50_resource_from_handle;
    pscreen->resource_get_handle = nv50_miptree_get_handle;
    pscreen->resource_destroy = nv50_resource_destroy;
+
+   pscreen->memobj_create_from_handle = nv50_memobj_create_from_handle;
+   pscreen->resource_from_memobj = nv50_resource_from_memobj;
+   pscreen->memobj_destroy = nv50_memobj_destroy;
 }

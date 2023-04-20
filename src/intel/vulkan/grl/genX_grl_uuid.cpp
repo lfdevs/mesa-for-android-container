@@ -24,15 +24,16 @@
 #include <assert.h>
 #include <string.h>
 
+#include "genX_grl.h"
 #include "include/GRLGen12.h"
 
 #include "vulkan/vulkan_core.h"
 
 extern "C" void
-gfx125_grl_load_rt_uuid(uint8_t *out_uuid);
+genX(grl_load_rt_uuid)(uint8_t *out_uuid);
 
 extern "C" void
-gfx125_grl_load_rt_uuid(uint8_t *out_uuid)
+genX(grl_load_rt_uuid)(uint8_t *out_uuid)
 {
    assert(sizeof(GRL::RTAS::GEN12::BVH_MAGIC) == VK_UUID_SIZE);
    memcpy(out_uuid, GRL::RTAS::GEN12::BVH_MAGIC, VK_UUID_SIZE);

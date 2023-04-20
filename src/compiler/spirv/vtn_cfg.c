@@ -1230,32 +1230,10 @@ vtn_emit_cf_list_structured(struct vtn_builder *b, struct list_head *cf_list,
 
          nir_loop *loop = nir_push_loop(&b->nb);
          loop->control = vtn_loop_control(b, vtn_loop);
-
          vtn_emit_cf_list_structured(b, &vtn_loop->body, NULL, NULL, handler);
 
-         if (!list_is_empty(&vtn_loop->cont_body)) {
-            /* If we have a non-trivial continue body then we need to put
-             * it at the beginning of the loop with a flag to ensure that
-             * it doesn't get executed in the first iteration.
-             */
-            nir_variable *do_cont =
-               nir_local_variable_create(b->nb.impl, glsl_bool_type(), "cont");
-
-            b->nb.cursor = nir_before_cf_node(&loop->cf_node);
-            nir_store_var(&b->nb, do_cont, nir_imm_false(&b->nb), 1);
-
-            b->nb.cursor = nir_before_cf_list(&loop->body);
-
-            nir_if *cont_if =
-               nir_push_if(&b->nb, nir_load_var(&b->nb, do_cont));
-
-            vtn_emit_cf_list_structured(b, &vtn_loop->cont_body, NULL, NULL,
-                                        handler);
-
-            nir_pop_if(&b->nb, cont_if);
-
-            nir_store_var(&b->nb, do_cont, nir_imm_true(&b->nb), 1);
-         }
+         nir_push_continue(&b->nb, loop);
+         vtn_emit_cf_list_structured(b, &vtn_loop->cont_body, NULL, NULL, handler);
 
          nir_pop_loop(&b->nb, loop);
          break;
@@ -1480,9 +1458,6 @@ vtn_function_emit(struct vtn_builder *b, struct vtn_function *func,
    /*
     * There are some cases where we need to repair SSA to insert
     * the needed phi nodes:
-    *
-    * - Continue blocks for loops get inserted before the body of the loop
-    *   but instructions in the continue may use SSA defs in the loop body.
     *
     * - Early termination instructions `OpKill` and `OpTerminateInvocation`,
     *   in NIR. They're represented by regular intrinsics with no control-flow

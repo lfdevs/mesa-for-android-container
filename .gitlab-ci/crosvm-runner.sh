@@ -66,9 +66,11 @@ set_vsock_context || { echo "Could not generate crosvm vsock CID" >&2; exit 1; }
 echo "Variables passed through:"
 SCRIPT_DIR=$(readlink -en "${0%/*}")
 ${SCRIPT_DIR}/common/generate-env.sh | tee ${VM_TEMP_DIR}/crosvm-env.sh
+cp ${SCRIPTS_DIR}/setup-test-env.sh ${VM_TEMP_DIR}/setup-test-env.sh
 
 # Set the crosvm-script as the arguments of the current script
-echo "$@" > ${VM_TEMP_DIR}/crosvm-script.sh
+echo ". ${VM_TEMP_DIR}/setup-test-env.sh" > ${VM_TEMP_DIR}/crosvm-script.sh
+echo "$@" >> ${VM_TEMP_DIR}/crosvm-script.sh
 
 # Setup networking
 /usr/sbin/iptables-legacy -w -t nat -A POSTROUTING -o eth0 -j MASQUERADE
@@ -97,7 +99,7 @@ GALLIUM_DRIVER=${CROSVM_GALLIUM_DRIVER} \
 VK_ICD_FILENAMES=$CI_PROJECT_DIR/install/share/vulkan/icd.d/${CROSVM_VK_DRIVER}_icd.x86_64.json \
 crosvm --no-syslog run \
     --gpu "${CROSVM_GPU_ARGS}" --gpu-render-server "path=/usr/local/libexec/virgl_render_server" \
-    -m "${CROSVM_MEMORY:-4096}" -c 2 --disable-sandbox \
+    -m "${CROSVM_MEMORY:-4096}" -c "${CROSVM_CPU:-2}" --disable-sandbox \
     --shared-dir /:my_root:type=fs:writeback=true:timeout=60:cache=always \
     --host-ip "192.168.30.1" --netmask "255.255.255.0" --mac "AA:BB:CC:00:00:12" \
     -s $VM_SOCKET \

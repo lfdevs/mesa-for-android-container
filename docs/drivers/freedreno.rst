@@ -9,7 +9,7 @@ See the `Freedreno Wiki
 details.
 
 Turnip
-======
+------
 
 Turnip is a Vulkan 1.3 driver for Adreno 6xx GPUs.
 
@@ -79,7 +79,7 @@ Hardware acronyms
     Visibility Stream Compressor
 
   PVS
-    Primitive Visibiliy Stream
+    Primitive Visibility Stream
 
   FE
     Front End?  Index buffer and vertex attribute fetch cluster.  Includes PC,
@@ -264,7 +264,7 @@ SSBOs are just untyped buffers, but otherwise use the same descriptors and
 instructions as images.  Samplers use a 16byte descriptor, and UBOs use an
 8byte descriptor which packs the size in the upper 15 bits of the UBO address.
 
-In the bindless model, descriptors are split into 5 desciptor sets, which are
+In the bindless model, descriptors are split into 5 descriptor sets, which are
 global across shader stages (but as with bindful IBO descriptors, separate for
 3d stages vs compute stage).  Each hw descriptor is an array of descriptors
 of configurable size (each descriptor set can be configured for a descriptor
@@ -572,3 +572,45 @@ A typical work flow would be:
   the last packet which did't hang.
 
 - Find the packet in the decoded cmdstream.
+
+Debugging random failures
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In most cases random GPU faults and rendering artifacts are caused by some kind
+of undifined behaviour that falls under the following categories:
+
+- Usage of a stale reg value;
+- Usage of stale memory (e.g. expecting it to be zeroed when it is not);
+- Lack of the proper synchronization.
+
+Finding instances of stale reg reads
+++++++++++++++++++++++++++++++++++++
+
+Turnip has a debug option to stomp the registers with invalid values to catch
+the cases where stale data is read.
+
+.. code-block:: console
+
+  MESA_VK_ABORT_ON_DEVICE_LOSS=1 \
+  TU_DEBUG_STALE_REGS_RANGE=0x00000c00,0x0000be01 \
+  TU_DEBUG_STALE_REGS_FLAGS=cmdbuf,renderpass \
+  ./app
+
+.. envvar:: TU_DEBUG_STALE_REGS_RANGE
+
+  the reg range in which registers would be stomped. Add ``inverse`` to the
+  flags in order for this range to specify which registers NOT to stomp.
+
+.. envvar:: TU_DEBUG_STALE_REGS_FLAGS
+
+  ``cmdbuf``
+    stomp registers at the start of each command buffer.
+  ``renderpass``
+    stomp registers before each renderpass.
+  ``inverse``
+    changes `TU_DEBUG_STALE_REGS_RANGE` meaning to
+    "regs that should NOT be stomped".
+
+The best way to pinpoint the reg which causes a failure is to bisect the regs
+range. In case when a fail is caused by combination of several registers
+the `inverse` flag may be set to find the reg which prevents the failure.

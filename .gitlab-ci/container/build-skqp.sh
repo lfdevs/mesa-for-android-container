@@ -49,7 +49,7 @@ download_skia_source() {
 set -ex
 
 SCRIPT_DIR=$(realpath "$(dirname "$0")")
-SKQP_PATCH_DIR="${SCRIPT_DIR}"
+SKQP_PATCH_DIR="${SCRIPT_DIR}/patches"
 BASE_ARGS_GN_FILE="${SCRIPT_DIR}/build-skqp_base.gn"
 
 SKQP_ARCH=${SKQP_ARCH:-x64}

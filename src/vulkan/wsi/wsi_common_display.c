@@ -960,11 +960,53 @@ wsi_display_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
 
    struct wsi_surface_supported_counters *counters =
       vk_find_struct( caps->pNext, WSI_SURFACE_SUPPORTED_COUNTERS_MESA);
+   const VkSurfacePresentModeEXT *present_mode =
+      vk_find_struct_const(info_next, SURFACE_PRESENT_MODE_EXT);
 
    if (counters) {
       result = wsi_display_surface_get_surface_counters(
          icd_surface,
          &counters->supported_surface_counters);
+   }
+
+   vk_foreach_struct(ext, caps->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_SURFACE_PROTECTED_CAPABILITIES_KHR: {
+         VkSurfaceProtectedCapabilitiesKHR *protected = (void *)ext;
+         protected->supportsProtected = VK_FALSE;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT: {
+         /* Unsupported. */
+         VkSurfacePresentScalingCapabilitiesEXT *scaling = (void *)ext;
+         scaling->supportedPresentScaling = 0;
+         scaling->supportedPresentGravityX = 0;
+         scaling->supportedPresentGravityY = 0;
+         scaling->minScaledImageExtent = caps->surfaceCapabilities.minImageExtent;
+         scaling->maxScaledImageExtent = caps->surfaceCapabilities.maxImageExtent;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT: {
+         /* We only support FIFO. */
+         VkSurfacePresentModeCompatibilityEXT *compat = (void *)ext;
+         if (compat->pPresentModes) {
+            if (compat->presentModeCount) {
+               assert(present_mode);
+               compat->pPresentModes[0] = present_mode->presentMode;
+               compat->presentModeCount = 1;
+            }
+         } else {
+            compat->presentModeCount = 1;
+         }
+         break;
+      }
+
+      default:
+         /* Ignored */
+         break;
+      }
    }
 
    return result;
@@ -1057,6 +1099,7 @@ wsi_display_surface_get_formats2(VkIcdSurfaceBase *surface,
 
 static VkResult
 wsi_display_surface_get_present_modes(VkIcdSurfaceBase *surface,
+                                      struct wsi_device *wsi_device,
                                       uint32_t *present_mode_count,
                                       VkPresentModeKHR *present_modes)
 {
@@ -1400,6 +1443,24 @@ wsi_device_wait_for_event(struct wsi_display *wsi,
                           uint64_t timeout_ns)
 {
    return cond_timedwait_ns(&wsi->hotplug_cond, &wsi->wait_mutex, timeout_ns);
+}
+
+static VkResult
+wsi_display_release_images(struct wsi_swapchain *drv_chain,
+                           uint32_t count, const uint32_t *indices)
+{
+   struct wsi_display_swapchain *chain = (struct wsi_display_swapchain *)drv_chain;
+   if (chain->status == VK_ERROR_SURFACE_LOST_KHR)
+      return chain->status;
+
+   for (uint32_t i = 0; i < count; i++) {
+      uint32_t index = indices[i];
+      assert(index < chain->base.image_count);
+      assert(chain->images[index].state == WSI_IMAGE_DRAWING);
+      chain->images[index].state = WSI_IMAGE_IDLE;
+   }
+
+   return VK_SUCCESS;
 }
 
 static VkResult
@@ -2092,6 +2153,7 @@ wsi_display_surface_create_swapchain(
    chain->base.destroy = wsi_display_swapchain_destroy;
    chain->base.get_wsi_image = wsi_display_get_wsi_image;
    chain->base.acquire_next_image = wsi_display_acquire_next_image;
+   chain->base.release_images = wsi_display_release_images;
    chain->base.queue_present = wsi_display_queue_present;
    chain->base.wait_for_present = wsi_display_wait_for_present;
    chain->base.present_mode = wsi_swapchain_get_present_mode(wsi_device, create_info);

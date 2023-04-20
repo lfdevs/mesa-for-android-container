@@ -452,7 +452,10 @@ fn validate_image_desc(
         let p = p.get_arc()?;
         if !match desc.image_type {
             CL_MEM_OBJECT_IMAGE1D_BUFFER => p.is_buffer(),
-            CL_MEM_OBJECT_IMAGE2D => !p.is_buffer(),
+            CL_MEM_OBJECT_IMAGE2D => {
+                (p.is_buffer() && devs.iter().any(|d| d.image2d_from_buffer_supported()))
+                    || p.mem_type == CL_MEM_OBJECT_IMAGE2D
+            }
             _ => false,
         } {
             return Err(CL_INVALID_OPERATION);
@@ -478,12 +481,29 @@ fn validate_image_desc(
     // host_ptr is not NULL and image_slice_pitch = 0, image_slice_pitch is calculated as
     // image_row_pitch × image_height for a 2D image array or 3D image and image_row_pitch for a 1D
     // image array. If image_slice_pitch is not 0, it must be a multiple of the image_row_pitch.
+    let has_buf_parent = parent.as_ref().map_or(false, |p| p.is_buffer());
     if host_ptr.is_null() {
-        if desc.image_row_pitch != 0 || desc.image_slice_pitch != 0 {
+        if (desc.image_row_pitch != 0 || desc.image_slice_pitch != 0) && !has_buf_parent {
             return Err(err);
         }
-        desc.image_row_pitch = desc.image_width * elem_size;
-        desc.image_slice_pitch = desc.image_row_pitch * desc.image_height;
+
+        if desc.image_row_pitch == 0 {
+            desc.image_row_pitch = desc.image_width * elem_size;
+        }
+        if desc.image_slice_pitch == 0 {
+            desc.image_slice_pitch = desc.image_row_pitch * desc.image_height;
+        }
+
+        if has_buf_parent {
+            let pitch_alignment = devs
+                .iter()
+                .map(|d| d.image_pitch_alignment())
+                .max()
+                .unwrap() as usize;
+            if desc.image_row_pitch % (pitch_alignment * elem_size) != 0 {
+                return Err(err);
+            }
+        }
     } else {
         if desc.image_row_pitch == 0 {
             desc.image_row_pitch = desc.image_width * elem_size;

@@ -21,10 +21,12 @@
  * SOFTWARE.
  */
 
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 
@@ -38,7 +40,6 @@
 #include "pvr_srv_job_compute.h"
 #include "pvr_srv_sync.h"
 #include "pvr_winsys.h"
-#include "util/libsync.h"
 #include "util/macros.h"
 #include "vk_alloc.h"
 #include "vk_log.h"
@@ -242,34 +243,16 @@ VkResult pvr_srv_winsys_compute_submit(
 
    pvr_srv_compute_cmd_init(submit_info, &compute_cmd, dev_info);
 
-   for (uint32_t i = 0U; i < submit_info->wait_count; i++) {
-      struct pvr_srv_sync *srv_wait_sync = to_srv_sync(submit_info->waits[i]);
-      int ret;
-
-      if (!submit_info->waits[i] || srv_wait_sync->fd < 0)
-         continue;
-
-      if (submit_info->stage_flags[i] & PVR_PIPELINE_STAGE_COMPUTE_BIT) {
-         ret = sync_accumulate("", &in_fd, srv_wait_sync->fd);
-         if (ret) {
-            result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-            goto end_close_in_fd;
-         }
-
-         submit_info->stage_flags[i] &= ~PVR_PIPELINE_STAGE_COMPUTE_BIT;
-      }
-   }
-
-   if (submit_info->barrier) {
-      struct pvr_srv_sync *srv_wait_sync = to_srv_sync(submit_info->barrier);
+   if (submit_info->wait) {
+      struct pvr_srv_sync *srv_wait_sync = to_srv_sync(submit_info->wait);
 
       if (srv_wait_sync->fd >= 0) {
-         int ret;
-
-         ret = sync_accumulate("", &in_fd, srv_wait_sync->fd);
-         if (ret) {
-            result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-            goto end_close_in_fd;
+         in_fd = dup(srv_wait_sync->fd);
+         if (in_fd == -1) {
+            return vk_errorf(NULL,
+                             VK_ERROR_OUT_OF_HOST_MEMORY,
+                             "dup called on wait sync failed, Errno: %s",
+                             strerror(errno));
          }
       }
    }

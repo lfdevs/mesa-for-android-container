@@ -565,6 +565,8 @@ void *si_create_fmask_expand_cs(struct pipe_context *ctx, unsigned num_samples, 
 
    void *cs = ctx->create_compute_state(ctx, &state);
    ureg_destroy(ureg);
+   ureg_free_tokens(state.prog);
+
    return cs;
 }
 

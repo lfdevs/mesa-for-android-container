@@ -128,12 +128,12 @@ objects. They all follow simple, one-method binding calls, e.g.
 Samplers
 ^^^^^^^^
 
-pipe_sampler_state objects control how textures are sampled
-(coordinate wrap modes, interpolation modes, etc).  Note that unless
-``PIPE_CAP_TEXTURE_BUFFER_SAMPLER`` is enabled, samplers are not used for
-texture buffer objects.  That is, pipe_context::bind_sampler_views()
-will not bind a sampler if the corresponding sampler view refers to a
-PIPE_BUFFER resource.
+pipe_sampler_state objects control how textures are sampled (coordinate wrap
+modes, interpolation modes, etc). Samplers are only required for texture
+instructions for which nir_tex_instr_need_sampler returns true. Drivers must
+ignore samplers for other texture instructions. Frontends may or may not bind
+samplers when no texture instruction use them. Notably, frontends may not bind
+samplers for texture buffer objects, which are never accessed with samplers.
 
 Sampler Views
 ^^^^^^^^^^^^^
@@ -357,7 +357,7 @@ buffer.
 In indexed draw, ``min_index`` and ``max_index`` respectively provide a lower
 and upper bound of the indices contained in the index buffer inside the range
 between ``start`` to ``start``+``count``-1.  This allows the driver to
-determine which subset of vertices will be referenced during te draw call
+determine which subset of vertices will be referenced during the draw call
 without having to scan the index buffer.  Providing a over-estimation of the
 the true bounds, for example, a ``min_index`` and ``max_index`` of 0 and
 0xffffffff respectively, must give exactly the same rendering, albeit with less
@@ -561,7 +561,7 @@ has completed, drawing will be predicated on the outcome of the query.
 If ``mode`` is PIPE_RENDER_COND_BY_REGION_WAIT or
 PIPE_RENDER_COND_BY_REGION_NO_WAIT rendering will be predicated as above
 for the non-REGION modes but in the case that an occlusion query returns
-a non-zero result, regions which were occluded may be ommitted by subsequent
+a non-zero result, regions which were occluded may be omitted by subsequent
 drawing commands.  This can result in better performance with some GPUs.
 Normally, if the occlusion query returned a non-zero result subsequent
 drawing happens normally so fragments may be generated, shaded and
@@ -665,8 +665,10 @@ Blitting
 These methods emulate classic blitter controls.
 
 These methods operate directly on ``pipe_resource`` objects, and stand
-apart from any 3D state in the context.  Blitting functionality may be
-moved to a separate abstraction at some point in the future.
+apart from any 3D state in the context. Each method is assumed to have an
+implicit memory barrier around itself. They do not need any explicit
+``memory_barrier``. Blitting functionality may be moved to a separate
+abstraction at some point in the future.
 
 ``resource_copy_region`` blits a region of a resource to a region of another
 resource, provided that both resources have the same format, or compatible

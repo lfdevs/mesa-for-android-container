@@ -78,11 +78,8 @@ implementation mostly ignores input attachments.  It is expected that the
 driver call :cpp:func:`nir_lower_input_attachments` to turn them into
 texturing operations.  The driver **must** support texturing from an input
 attachment at the same time as rendering to it in order to support Vulkan
-subpass self-dependencies.  To assist drivers, we provide self-dependency
-information through another Mesa-specific pseudo-extension:
-
-.. doxygenstruct:: VkRenderingSelfDependencyInfoMESA
-   :members:
+subpass self-dependencies. ``VK_EXT_attachment_feedback_loop_layout`` provides
+information on when these self dependencies are present.
 
 vk_render_pass reference
 ------------------------

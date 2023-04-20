@@ -54,6 +54,9 @@ struct radv_descriptor_set_binding_layout {
 struct radv_descriptor_set_layout {
    struct vk_descriptor_set_layout vk;
 
+   /* Hash of all fields below */
+   uint8_t hash[SHA1_DIGEST_LENGTH];
+
    /* Everything below is hashed and shouldn't contain any pointers. Be careful when modifying this
     * structure.
     */
@@ -66,9 +69,6 @@ struct radv_descriptor_set_layout {
 
    /* Total size of the descriptor set with room for all array entries */
    uint32_t size;
-
-   /* CPU size of this struct + all associated data, for hashing. */
-   uint32_t layout_size;
 
    /* Shader stages affected by this descriptor set */
    uint16_t shader_stages;
@@ -120,7 +120,7 @@ radv_combined_image_descriptor_sampler_offset(
    return binding->size - ((!binding->immutable_samplers_equal) ? 16 : 0);
 }
 
-static inline const struct radv_sampler_ycbcr_conversion_state *
+static inline const struct vk_ycbcr_conversion_state *
 radv_immutable_ycbcr_samplers(const struct radv_descriptor_set_layout *set, unsigned binding_index)
 {
    if (!set->ycbcr_sampler_offsets_offset)
@@ -131,8 +131,7 @@ radv_immutable_ycbcr_samplers(const struct radv_descriptor_set_layout *set, unsi
 
    if (offsets[binding_index] == 0)
       return NULL;
-   return (const struct radv_sampler_ycbcr_conversion_state *)((const char *)set +
-                                                         offsets[binding_index]);
+   return (const struct vk_ycbcr_conversion_state *)((const char *)set + offsets[binding_index]);
 }
 
 struct radv_device;

@@ -1,4 +1,0 @@
-# New fails in CTS 1.3.3.0
-dEQP-VK.ray_tracing_pipeline.acceleration_structures.copy_within_pipeline.gpu.access_sbt_read,Crash
-dEQP-VK.ray_tracing_pipeline.acceleration_structures.copy_within_pipeline.gpu.stage_all_transfer,Crash
-dEQP-VK.ray_tracing_pipeline.acceleration_structures.copy_within_pipeline.gpu.stage_as_copy_bit,Crash

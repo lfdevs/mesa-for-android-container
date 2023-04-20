@@ -42,6 +42,18 @@ v3dv_wsi_can_present_on_device(VkPhysicalDevice _pdevice, int fd)
 {
    V3DV_FROM_HANDLE(v3dv_physical_device, pdevice, _pdevice);
 
+   /* There are some instances with direct display extensions where this may be
+    * called before we have ever tried to create a swapchain, and therefore,
+    * before we have ever tried to acquire the display device, in which case we
+    * have to do it now.
+    */
+   if (unlikely(pdevice->display_fd < 0 && pdevice->master_fd >= 0)) {
+      VkResult result =
+         v3dv_physical_device_acquire_display(pdevice, NULL);
+      if (result != VK_SUCCESS)
+         return false;
+   }
+
    return wsi_common_drm_devices_equal(fd, pdevice->display_fd);
 }
 
@@ -54,7 +66,8 @@ v3dv_wsi_init(struct v3dv_physical_device *physical_device)
                             v3dv_physical_device_to_handle(physical_device),
                             v3dv_wsi_proc_addr,
                             &physical_device->vk.instance->alloc,
-                            physical_device->master_fd, NULL, false);
+                            physical_device->master_fd, NULL,
+                            &(struct wsi_device_options){.sw_device = false});
 
    if (result != VK_SUCCESS)
       return result;
@@ -126,12 +139,11 @@ v3dv_CreateSwapchainKHR(
     VkSwapchainKHR*                              pSwapchain)
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
-   struct v3dv_instance *instance = device->instance;
    struct v3dv_physical_device *pdevice = device->pdevice;
 
    ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pCreateInfo->surface);
    VkResult result =
-      v3dv_physical_device_acquire_display(instance, pdevice, surface);
+      v3dv_physical_device_acquire_display(pdevice, surface);
    if (result != VK_SUCCESS)
       return result;
 

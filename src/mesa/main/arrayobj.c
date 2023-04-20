@@ -206,7 +206,7 @@ _mesa_lookup_vao(struct gl_context *ctx, GLuint id)
     *     the name of the vertex array object."
     */
    if (id == 0) {
-      if (ctx->API == API_OPENGL_COMPAT)
+      if (_mesa_is_desktop_gl_compat(ctx))
          return ctx->Array.DefaultVAO;
 
       return NULL;
@@ -250,7 +250,7 @@ _mesa_lookup_vao_err(struct gl_context *ctx, GLuint id,
     *     the name of the vertex array object."
     */
    if (id == 0) {
-      if (is_ext_dsa || ctx->API == API_OPENGL_CORE) {
+      if (is_ext_dsa || _mesa_is_desktop_gl_core(ctx)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "%s(zero is not valid vaobj name%s)",
                      caller,
@@ -936,7 +936,7 @@ bind_vertex_array(struct gl_context *ctx, GLuint id, bool no_error)
    /* Update the valid-to-render state if binding on unbinding default VAO
     * if drawing with the default VAO is invalid.
     */
-   if (ctx->API == API_OPENGL_CORE &&
+   if (_mesa_is_desktop_gl_core(ctx) &&
        (oldObj == ctx->Array.DefaultVAO) != (newObj == ctx->Array.DefaultVAO))
       _mesa_update_valid_to_render_state(ctx);
 }

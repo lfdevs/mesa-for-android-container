@@ -30,8 +30,8 @@ panfrost_analyze_sysvals(struct panfrost_compiled_shader *ss)
    unsigned dirty = 0;
    unsigned dirty_shader = PAN_DIRTY_STAGE_SHADER | PAN_DIRTY_STAGE_CONST;
 
-   for (unsigned i = 0; i < ss->info.sysvals.sysval_count; ++i) {
-      switch (PAN_SYSVAL_TYPE(ss->info.sysvals.sysvals[i])) {
+   for (unsigned i = 0; i < ss->sysvals.sysval_count; ++i) {
+      switch (PAN_SYSVAL_TYPE(ss->sysvals.sysvals[i])) {
       case PAN_SYSVAL_VIEWPORT_SCALE:
       case PAN_SYSVAL_VIEWPORT_OFFSET:
          dirty |= PAN_DIRTY_VIEWPORT;
@@ -127,6 +127,12 @@ panfrost_get_index_buffer_bounded(struct panfrost_batch *batch,
    struct panfrost_context *ctx = batch->ctx;
    bool needs_indices = true;
 
+   /* Note: if index_bounds_valid is set but the bounds are wrong, page faults
+    * (at least on Mali-G52) can be triggered an underflow reading varyings.
+    * Providing invalid index bounds in GLES is implementation-defined
+    * behaviour. This should be fine for now but this needs to be revisited when
+    * wiring up robustness later.
+    */
    if (info->index_bounds_valid) {
       *min_index = info->min_index;
       *max_index = info->max_index;

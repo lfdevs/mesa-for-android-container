@@ -20,191 +20,39 @@
 
 /* buffer commands */
 
-/* mandatory buffer create infos to cache */
-static const VkBufferCreateInfo cache_infos[] = {
-   {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = 1,
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   },
-   {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = 1,
-      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   },
-   {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = 1,
-      .usage =
-         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   },
-   {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = 1,
-      .usage =
-         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   },
-   {
-      /* mainly for layering clients like angle and zink */
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = 1,
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
-               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-               VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
-               VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
-               VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-               VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-               VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-               VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
-               VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT |
-               VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   },
-};
-
 static inline bool
-vn_buffer_create_info_can_be_cached(const VkBufferCreateInfo *create_info)
+vn_buffer_create_info_can_be_cached(const VkBufferCreateInfo *create_info,
+                                    struct vn_buffer_cache *cache)
 {
    /* cache only VK_SHARING_MODE_EXCLUSIVE and without pNext for simplicity */
-   return (create_info->pNext == NULL) &&
+   return (create_info->size <= cache->max_buffer_size) &&
+          (create_info->pNext == NULL) &&
           (create_info->sharingMode == VK_SHARING_MODE_EXCLUSIVE);
 }
 
-static VkResult
-vn_buffer_cache_entries_create(struct vn_device *dev,
-                               struct vn_buffer_cache_entry **out_entries,
-                               uint32_t *out_entry_count)
+static inline uint64_t
+vn_buffer_get_max_buffer_size(struct vn_physical_device *physical_dev)
 {
-   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
-   const struct vk_device_extension_table *app_exts =
-      &dev->base.base.enabled_extensions;
-   VkDevice dev_handle = vn_device_to_handle(dev);
-   struct vn_buffer_cache_entry *entries;
-   const uint32_t entry_count = ARRAY_SIZE(cache_infos);
-   VkResult result;
-
-   entries = vk_zalloc(alloc, sizeof(*entries) * entry_count,
-                       VN_DEFAULT_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!entries)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-   for (uint32_t i = 0; i < entry_count; i++) {
-      VkBuffer buf_handle = VK_NULL_HANDLE;
-      struct vn_buffer *buf = NULL;
-      VkBufferCreateInfo local_info = cache_infos[i];
-
-      assert(vn_buffer_create_info_can_be_cached(&cache_infos[i]));
-
-      /* We mask out usage bits from exts not enabled by the app to create the
-       * buffer. To be noted, we'll still set cache entry create_info to the
-       * unmasked one for code simplicity, and it's fine to use a superset.
-       */
-      if (!app_exts->EXT_transform_feedback) {
-         local_info.usage &=
-            ~(VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT |
-              VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT);
-      }
-      if (!app_exts->EXT_conditional_rendering)
-         local_info.usage &= ~VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT;
-
-      result = vn_CreateBuffer(dev_handle, &local_info, alloc, &buf_handle);
-      if (result != VK_SUCCESS) {
-         vk_free(alloc, entries);
-         return result;
-      }
-
-      buf = vn_buffer_from_handle(buf_handle);
-
-      /* TODO remove below after VK_KHR_maintenance4 becomes a requirement */
-      if (buf->requirements.memory.memoryRequirements.alignment <
-          buf->requirements.memory.memoryRequirements.size) {
-         vk_free(alloc, entries);
-         *out_entries = NULL;
-         *out_entry_count = 0;
-         return VK_SUCCESS;
-      }
-
-      entries[i].create_info = &cache_infos[i];
-      entries[i].requirements.memory = buf->requirements.memory;
-      entries[i].requirements.dedicated = buf->requirements.dedicated;
-
-      vn_DestroyBuffer(dev_handle, buf_handle, alloc);
-   }
-
-   *out_entries = entries;
-   *out_entry_count = entry_count;
-   return VK_SUCCESS;
-}
-
-static void
-vn_buffer_cache_entries_destroy(struct vn_device *dev,
-                                struct vn_buffer_cache_entry *entries)
-{
-   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
-
-   if (entries)
-      vk_free(alloc, entries);
-}
-
-static VkResult
-vn_buffer_get_max_buffer_size(struct vn_device *dev,
-                              uint64_t *out_max_buffer_size)
-{
-   const VkAllocationCallbacks *alloc = &dev->base.base.alloc;
-   struct vn_physical_device *pdev = dev->physical_device;
-   VkDevice dev_handle = vn_device_to_handle(dev);
-   VkBuffer buf_handle;
-   VkBufferCreateInfo create_info = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-   };
-   uint64_t max_buffer_size = 0;
-   uint8_t begin = 0;
-   uint8_t end = 64;
-
-   if (pdev->features.vulkan_1_3.maintenance4) {
-      *out_max_buffer_size = pdev->properties.vulkan_1_3.maxBufferSize;
-      return VK_SUCCESS;
-   }
-
-   /* For drivers that don't support VK_KHR_maintenance4, we try to estimate
-    * the maxBufferSize using binary search.
-    * TODO remove all the search code after VK_KHR_maintenance4 becomes
-    * a requirement.
+   /* Without maintenance4, hardcode the min of supported drivers:
+    * - anv:  1ull << 30
+    * - radv: UINT32_MAX - 4
+    * - tu:   UINT32_MAX + 1
+    * - lvp:  UINT32_MAX
+    * - mali: UINT32_MAX
     */
-   while (begin < end) {
-      uint8_t mid = (begin + end) >> 1;
-      create_info.size = 1ull << mid;
-      if (vn_CreateBuffer(dev_handle, &create_info, alloc, &buf_handle) ==
-          VK_SUCCESS) {
-         vn_DestroyBuffer(dev_handle, buf_handle, alloc);
-         max_buffer_size = create_info.size;
-         begin = mid + 1;
-      } else {
-         end = mid;
-      }
-   }
-
-   *out_max_buffer_size = max_buffer_size;
-   return VK_SUCCESS;
+   static const uint64_t safe_max_buffer_size = 1ULL << 30;
+   return physical_dev->features.vulkan_1_3.maintenance4
+             ? physical_dev->properties.vulkan_1_3.maxBufferSize
+             : safe_max_buffer_size;
 }
 
 VkResult
 vn_buffer_cache_init(struct vn_device *dev)
 {
    uint32_t ahb_mem_type_bits = 0;
-   uint64_t max_buffer_size = 0;
-   struct vn_buffer_cache_entry *entries = NULL;
-   uint32_t entry_count = 0;
    VkResult result;
 
+   /* TODO lazily initialize ahb buffer cache */
    if (dev->base.base.enabled_extensions
           .ANDROID_external_memory_android_hardware_buffer) {
       result =
@@ -213,43 +61,56 @@ vn_buffer_cache_init(struct vn_device *dev)
          return result;
    }
 
-   if (!VN_PERF(NO_ASYNC_BUFFER_CREATE)) {
-      result = vn_buffer_get_max_buffer_size(dev, &max_buffer_size);
-      if (result != VK_SUCCESS)
-         return result;
-
-      result = vn_buffer_cache_entries_create(dev, &entries, &entry_count);
-      if (result != VK_SUCCESS)
-         return result;
-   }
-
    dev->buffer_cache.ahb_mem_type_bits = ahb_mem_type_bits;
-   dev->buffer_cache.max_buffer_size = max_buffer_size;
-   dev->buffer_cache.entries = entries;
-   dev->buffer_cache.entry_count = entry_count;
+   dev->buffer_cache.max_buffer_size =
+      vn_buffer_get_max_buffer_size(dev->physical_device);
+
+   simple_mtx_init(&dev->buffer_cache.mutex, mtx_plain);
+   util_sparse_array_init(&dev->buffer_cache.entries,
+                          sizeof(struct vn_buffer_cache_entry), 64);
+
    return VK_SUCCESS;
+}
+
+static void
+vn_buffer_cache_debug_dump(struct vn_buffer_cache *cache)
+{
+   vn_log(NULL, "dumping buffer cache statistics");
+   vn_log(NULL, "  cache hit: %d", cache->debug.cache_hit_count);
+   vn_log(NULL, "  cache miss: %d", cache->debug.cache_miss_count);
+   vn_log(NULL, "  cache skip: %d", cache->debug.cache_skip_count);
 }
 
 void
 vn_buffer_cache_fini(struct vn_device *dev)
 {
-   vn_buffer_cache_entries_destroy(dev, dev->buffer_cache.entries);
+   util_sparse_array_finish(&dev->buffer_cache.entries);
+   simple_mtx_destroy(&dev->buffer_cache.mutex);
+
+   if (VN_DEBUG(CACHE))
+      vn_buffer_cache_debug_dump(&dev->buffer_cache);
 }
 
-static bool
-vn_buffer_cache_get_memory_requirements(
+static inline VkDeviceSize
+vn_buffer_get_aligned_memory_requirement_size(VkDeviceSize size,
+                                              const VkMemoryRequirements *req)
+{
+   /* TODO remove comment after mandating VK_KHR_maintenance4
+    *
+    * This is based on below implementation defined behavior:
+    *    req.size <= align64(info.size, req.alignment)
+    */
+   return align64(size, req->alignment);
+}
+
+static struct vn_buffer_cache_entry *
+vn_buffer_get_cached_memory_requirements(
    struct vn_buffer_cache *cache,
    const VkBufferCreateInfo *create_info,
    struct vn_buffer_memory_requirements *out)
 {
    if (VN_PERF(NO_ASYNC_BUFFER_CREATE))
-      return false;
-
-   if (create_info->size > cache->max_buffer_size)
-      return false;
-
-   if (!vn_buffer_create_info_can_be_cached(create_info))
-      return false;
+      return NULL;
 
    /* 12.7. Resource Memory Association
     *
@@ -257,35 +118,65 @@ vn_buffer_cache_get_memory_requirements(
     * with the same value for the flags and usage members in the
     * VkBufferCreateInfo structure and the handleTypes member of the
     * VkExternalMemoryBufferCreateInfo structure passed to vkCreateBuffer.
-    * Further, if usage1 and usage2 of type VkBufferUsageFlags are such that
-    * the bits set in usage2 are a subset of the bits set in usage1, and they
-    * have the same flags and VkExternalMemoryBufferCreateInfo::handleTypes,
-    * then the bits set in memoryTypeBits returned for usage1 must be a subset
-    * of the bits set in memoryTypeBits returned for usage2, for all values of
-    * flags.
     */
-   for (uint32_t i = 0; i < cache->entry_count; i++) {
-      const struct vn_buffer_cache_entry *entry = &cache->entries[i];
-      // TODO: Fix the spec regarding the usage and alignment behavior
-      if ((entry->create_info->flags == create_info->flags) &&
-          ((entry->create_info->usage & create_info->usage) ==
-           create_info->usage)) {
+   if (vn_buffer_create_info_can_be_cached(create_info, cache)) {
+      /* Combine flags and usage bits to form a unique index. */
+      const uint64_t idx =
+         (uint64_t)create_info->flags << 32 | create_info->usage;
+
+      struct vn_buffer_cache_entry *entry =
+         util_sparse_array_get(&cache->entries, idx);
+
+      if (entry->valid) {
          *out = entry->requirements;
 
-         /* TODO remove the comment after VK_KHR_maintenance4 becomes a
-          * requirement
-          *
-          * This is based on below implementation defined behavior:
-          *
-          *    req.size <= align64(info.size, req.alignment)
-          */
-         out->memory.memoryRequirements.size = align64(
-            create_info->size, out->memory.memoryRequirements.alignment);
-         return true;
+         out->memory.memoryRequirements.size =
+            vn_buffer_get_aligned_memory_requirement_size(
+               create_info->size, &out->memory.memoryRequirements);
+
+         p_atomic_inc(&cache->debug.cache_hit_count);
+      } else {
+         p_atomic_inc(&cache->debug.cache_miss_count);
       }
+
+      return entry;
    }
 
-   return false;
+   p_atomic_inc(&cache->debug.cache_skip_count);
+
+   return NULL;
+}
+
+static void
+vn_buffer_cache_entry_init(struct vn_buffer_cache *cache,
+                           struct vn_buffer_cache_entry *entry,
+                           VkMemoryRequirements2 *req)
+{
+   simple_mtx_lock(&cache->mutex);
+
+   /* Entry might have already been initialized by another thread
+    * before the lock
+    */
+   if (entry->valid)
+      goto unlock;
+
+   entry->requirements.memory = *req;
+
+   const VkMemoryDedicatedRequirements *dedicated_req =
+      vk_find_struct_const(req->pNext, MEMORY_DEDICATED_REQUIREMENTS);
+   if (dedicated_req)
+      entry->requirements.dedicated = *dedicated_req;
+
+   entry->valid = true;
+
+unlock:
+   simple_mtx_unlock(&cache->mutex);
+
+   /* ensure invariance of the memory requirement size */
+   req->memoryRequirements.size =
+      vn_buffer_get_aligned_memory_requirement_size(
+         req->memoryRequirements.size,
+         &entry->requirements.memory.memoryRequirements);
 }
 
 static void
@@ -324,15 +215,22 @@ vn_buffer_init(struct vn_device *dev,
 {
    VkDevice dev_handle = vn_device_to_handle(dev);
    VkBuffer buf_handle = vn_buffer_to_handle(buf);
+   struct vn_buffer_cache *cache = &dev->buffer_cache;
    VkResult result;
 
-   if (vn_buffer_cache_get_memory_requirements(
-          &dev->buffer_cache, create_info, &buf->requirements)) {
+   /* If cacheable and mem requirements found in cache, make async call */
+   struct vn_buffer_cache_entry *entry =
+      vn_buffer_get_cached_memory_requirements(cache, create_info,
+                                               &buf->requirements);
+
+   /* Check size instead of entry->valid to be lock free */
+   if (buf->requirements.memory.memoryRequirements.size) {
       vn_async_vkCreateBuffer(dev->instance, dev_handle, create_info, NULL,
                               &buf_handle);
       return VK_SUCCESS;
    }
 
+   /* If cache miss or not cacheable, make synchronous call */
    result = vn_call_vkCreateBuffer(dev->instance, dev_handle, create_info,
                                    NULL, &buf_handle);
    if (result != VK_SUCCESS)
@@ -351,6 +249,10 @@ vn_buffer_init(struct vn_device *dev,
          .buffer = buf_handle,
       },
       &buf->requirements.memory);
+
+   /* If cacheable, store mem requirements from the synchronous call */
+   if (entry)
+      vn_buffer_cache_entry_init(cache, entry, &buf->requirements.memory);
 
    return VK_SUCCESS;
 }
@@ -383,6 +285,48 @@ vn_buffer_create(struct vn_device *dev,
    return VK_SUCCESS;
 }
 
+struct vn_buffer_create_info {
+   VkBufferCreateInfo create;
+   VkExternalMemoryBufferCreateInfo external;
+   VkBufferOpaqueCaptureAddressCreateInfo capture;
+};
+
+static const VkBufferCreateInfo *
+vn_buffer_fix_create_info(
+   const VkBufferCreateInfo *create_info,
+   const VkExternalMemoryHandleTypeFlagBits renderer_handle_type,
+   struct vn_buffer_create_info *local_info)
+{
+   local_info->create = *create_info;
+   VkBaseOutStructure *cur = (void *)&local_info->create;
+
+   vk_foreach_struct_const(src, create_info->pNext) {
+      void *next = NULL;
+      switch (src->sType) {
+      case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO:
+         memcpy(&local_info->external, src, sizeof(local_info->external));
+         local_info->external.handleTypes = renderer_handle_type;
+         next = &local_info->external;
+         break;
+      case VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO:
+         memcpy(&local_info->capture, src, sizeof(local_info->capture));
+         next = &local_info->capture;
+         break;
+      default:
+         break;
+      }
+
+      if (next) {
+         cur->pNext = next;
+         cur = next;
+      }
+   }
+
+   cur->pNext = NULL;
+
+   return &local_info->create;
+}
+
 VkResult
 vn_CreateBuffer(VkDevice device,
                 const VkBufferCreateInfo *pCreateInfo,
@@ -393,24 +337,36 @@ vn_CreateBuffer(VkDevice device,
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
-   struct vn_buffer *buf = NULL;
-   VkResult result;
+   const VkExternalMemoryHandleTypeFlagBits renderer_handle_type =
+      dev->physical_device->external_memory.renderer_handle_type;
 
+   struct vn_buffer_create_info local_info;
    const VkExternalMemoryBufferCreateInfo *external_info =
       vk_find_struct_const(pCreateInfo->pNext,
                            EXTERNAL_MEMORY_BUFFER_CREATE_INFO);
-   const bool ahb_info =
-      external_info &&
-      external_info->handleTypes ==
-         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+   if (external_info && external_info->handleTypes &&
+       external_info->handleTypes != renderer_handle_type) {
+      pCreateInfo = vn_buffer_fix_create_info(
+         pCreateInfo, renderer_handle_type, &local_info);
+   }
 
-   if (ahb_info)
-      result = vn_android_buffer_from_ahb(dev, pCreateInfo, alloc, &buf);
-   else
-      result = vn_buffer_create(dev, pCreateInfo, alloc, &buf);
-
+   struct vn_buffer *buf;
+   VkResult result = vn_buffer_create(dev, pCreateInfo, alloc, &buf);
    if (result != VK_SUCCESS)
       return vn_error(dev->instance, result);
+
+   if (external_info &&
+       external_info->handleTypes ==
+          VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) {
+      /* AHB backed buffer layers on top of renderer external memory, so here
+       * we combine the queried type bits from both buffer memory requirement
+       * and renderer external memory properties.
+       */
+      buf->requirements.memory.memoryRequirements.memoryTypeBits &=
+         dev->buffer_cache.ahb_mem_type_bits;
+
+      assert(buf->requirements.memory.memoryRequirements.memoryTypeBits);
+   }
 
    *pBuffer = vn_buffer_to_handle(buf);
 
@@ -562,15 +518,25 @@ vn_GetDeviceBufferMemoryRequirements(
    VkMemoryRequirements2 *pMemoryRequirements)
 {
    struct vn_device *dev = vn_device_from_handle(device);
-   struct vn_buffer_memory_requirements cached;
+   struct vn_buffer_cache *cache = &dev->buffer_cache;
+   struct vn_buffer_memory_requirements reqs = { 0 };
 
-   if (vn_buffer_cache_get_memory_requirements(&dev->buffer_cache,
-                                               pInfo->pCreateInfo, &cached)) {
-      vn_copy_cached_memory_requirements(&cached, pMemoryRequirements);
+   /* If cacheable and mem requirements found in cache, skip host call */
+   struct vn_buffer_cache_entry *entry =
+      vn_buffer_get_cached_memory_requirements(cache, pInfo->pCreateInfo,
+                                               &reqs);
+
+   /* Check size instead of entry->valid to be lock free */
+   if (reqs.memory.memoryRequirements.size) {
+      vn_copy_cached_memory_requirements(&reqs, pMemoryRequirements);
       return;
    }
 
-   /* make the host call if not found in cache */
+   /* Make the host call if not found in cache or not cacheable */
    vn_call_vkGetDeviceBufferMemoryRequirements(dev->instance, device, pInfo,
                                                pMemoryRequirements);
+
+   /* If cacheable, store mem requirements from the host call */
+   if (entry)
+      vn_buffer_cache_entry_init(cache, entry, pMemoryRequirements);
 }

@@ -50,7 +50,7 @@ clang_test_code = '''
     return found_pos == ::std::string::npos ? 1 : 0;
   }
 '''
-can_check_clang = (not meson.is_cross_build() or meson.has_exe_wrapper()) and cpp.has_link_argument(linker_rpath_arg)
+can_check_clang = (not meson.is_cross_build() or meson.can_run_host_binaries()) and cpp.has_link_argument(linker_rpath_arg)
 if can_check_clang
   test_run = cpp.run(clang_test_code, name : 'dep-clang-usable',
                      dependencies : [dep_llvm, dep_clang], args : linker_rpath_arg)
@@ -109,7 +109,7 @@ libopencl = shared_library(
     idep_mesautil,
     dep_clock, dep_dl, dep_unwind, dep_elf, dep_clang, dep_version
   ],
-  name_prefix : host_machine.system() == 'windows' ? '' : 'lib',  # otherwise mingw will create libOpenCL-1.dll or libMesaOpenCL-1.dll
+  name_prefix : host_machine.system() == 'windows' ? '' : [],  # otherwise mingw will create libOpenCL-1.dll or libMesaOpenCL-1.dll
   version : '@0@.0.0'.format(opencl_version),
   soversion : host_machine.system() == 'windows' ? '' : opencl_version,
   install : true,
@@ -127,11 +127,9 @@ if with_opencl_icd
     install_dir : join_paths(get_option('sysconfdir'), 'OpenCL', 'vendors'),
   )
 
-  if meson.version().version_compare('>= 0.58')
-    # .so is hardcoded in the icd as well
-    devenv.prepend(
-      'OCL_ICD_FILENAMES',
-      meson.current_build_dir() / 'libMesaOpenCL.so.@0@'.format(opencl_version)
-    )
-  endif
+  # .so is hardcoded in the icd as well
+  devenv.prepend(
+    'OCL_ICD_FILENAMES',
+    meson.current_build_dir() / 'libMesaOpenCL.so.@0@'.format(opencl_version)
+  )
 endif

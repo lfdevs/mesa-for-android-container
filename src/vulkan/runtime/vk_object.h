@@ -23,7 +23,7 @@
 #ifndef VK_OBJECT_H
 #define VK_OBJECT_H
 
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 #include <vulkan/vk_icd.h>
 
 #include "c11/threads.h"

@@ -133,4 +133,7 @@ _mesa_bind_framebuffers(struct gl_context *ctx,
                         struct gl_framebuffer *newDrawFb,
                         struct gl_framebuffer *newReadFb);
 
+void GLAPIENTRY
+_mesa_InternalInvalidateFramebufferAncillaryMESA(void);
+
 #endif /* FBOBJECT_H */

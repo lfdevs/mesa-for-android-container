@@ -127,7 +127,7 @@ int futex_wake(uint32_t *addr, int count)
    /* All current callers fall into one of these buckets, and we'll get the semantics
     * wrong if someone tries to be more clever.
     */
-   assert(count == 1 || count == INT_MAX);
+   assert(count == 1 || count == INT32_MAX);
    if (count == 1)
       WakeByAddressSingle(addr);
    else

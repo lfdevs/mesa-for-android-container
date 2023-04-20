@@ -111,6 +111,7 @@ _mesa_update_shader_textures_used(struct gl_shader_program *shProg,
    assert(shProg->_LinkedShaders[prog_stage]);
 
    memset(prog->TexturesUsed, 0, sizeof(prog->TexturesUsed));
+   prog->ShadowSamplers = prog->shader_program->_LinkedShaders[prog_stage]->shadow_samplers;
 
    while (mask) {
       s = u_bit_scan(&mask);

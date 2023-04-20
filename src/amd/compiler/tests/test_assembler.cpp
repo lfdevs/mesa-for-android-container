@@ -269,7 +269,8 @@ BEGIN_TEST(assembler.v_add3)
 
       //~gfx9>> v_add3_u32 v0, 0, 0, 0 ; d1ff0000 02010080
       //~gfx10>> v_add3_u32 v0, 0, 0, 0 ; d76d0000 02010080
-      aco_ptr<VOP3_instruction> add3{create_instruction<VOP3_instruction>(aco_opcode::v_add3_u32, Format::VOP3, 3, 1)};
+      aco_ptr<VALU_instruction> add3{
+         create_instruction<VALU_instruction>(aco_opcode::v_add3_u32, Format::VOP3, 3, 1)};
       add3->operands[0] = Operand::zero();
       add3->operands[1] = Operand::zero();
       add3->operands[2] = Operand::zero();
@@ -287,7 +288,8 @@ BEGIN_TEST(assembler.v_add3_clamp)
 
       //~gfx9>> integer addition + clamp ; d1ff8000 02010080
       //~gfx10>> integer addition + clamp ; d76d8000 02010080
-      aco_ptr<VOP3_instruction> add3{create_instruction<VOP3_instruction>(aco_opcode::v_add3_u32, Format::VOP3, 3, 1)};
+      aco_ptr<VALU_instruction> add3{
+         create_instruction<VALU_instruction>(aco_opcode::v_add3_u32, Format::VOP3, 3, 1)};
       add3->operands[0] = Operand::zero();
       add3->operands[1] = Operand::zero();
       add3->operands[2] = Operand::zero();
@@ -437,6 +439,9 @@ BEGIN_TEST(assembler.gfx11.mubuf)
    Operand op_m0(bld.tmp(s1));
    op_m0.setFixed(m0);
 
+   //! llvm_version: #llvm_ver
+   fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
+
    /* Addressing */
    //>> buffer_load_b32 v42, off, s[32:35], s30                     ; e0500000 1e082a80
    bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), op_s1, 0, false);
@@ -466,7 +471,10 @@ BEGIN_TEST(assembler.gfx11.mubuf)
    //! buffer_load_b32 v42, off, s[32:35], 0 slc                   ; e0501000 80082a80
    bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::zero(), 0, false)->mubuf().slc = true;
 
-   //! buffer_load_b32 v42, off, s[32:35], 0 tfe                   ; e0500000 80282a80
+   //; if llvm_ver >= 16:
+   //;    insert_pattern('buffer_load_b32 v[42:43], off, s[32:35], 0 tfe              ; e0500000 80282a80')
+   //; else:
+   //;    insert_pattern('buffer_load_b32 v42, off, s[32:35], 0 tfe                   ; e0500000 80282a80')
    bld.mubuf(aco_opcode::buffer_load_dword, dst, op_s4, Operand(v1), Operand::zero(), 0, false)->mubuf().tfe = true;
 
    /* LDS */
@@ -520,6 +528,9 @@ BEGIN_TEST(assembler.gfx11.mtbuf)
    unsigned dfmt = V_008F0C_BUF_DATA_FORMAT_32_32;
    unsigned nfmt = V_008F0C_BUF_NUM_FORMAT_FLOAT;
 
+   //! llvm_version: #llvm_ver
+   fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
+
    /* Addressing */
    //>> tbuffer_load_format_x v42, off, s[32:35], s30 format:[BUF_FMT_32_32_FLOAT] ; e9900000 1e082a80
    bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), op_s1, dfmt, nfmt, 0, false);
@@ -549,7 +560,10 @@ BEGIN_TEST(assembler.gfx11.mtbuf)
    //! tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] slc ; e9901000 80082a80
    bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt, nfmt, 0, false)->mtbuf().slc = true;
 
-   //! tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] tfe ; e9900000 80282a80
+   //; if llvm_ver >= 16:
+   //;    insert_pattern('tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] ; e9900000 80282a80')
+   //; else:
+   //;    insert_pattern('tbuffer_load_format_x v42, off, s[32:35], 0 format:[BUF_FMT_32_32_FLOAT] tfe ; e9900000 80282a80')
    bld.mtbuf(aco_opcode::tbuffer_load_format_x, dst, op_s4, Operand(v1), Operand::zero(), dfmt, nfmt, 0, false)->mtbuf().tfe = true;
 
    /* Stores */
@@ -830,8 +844,14 @@ BEGIN_TEST(assembler.gfx11.vop12c_v128)
    Operand op_v130(bld.tmp(v1));
    op_v130.setFixed(PhysReg(256 + 130));
 
+   //! llvm_version: #llvm_ver
+   fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
+
    //>> BB0:
-   //! v_mul_f16_e32 v0, v1, v2 ; Error: VGPR_32_Lo128: unknown register 128 ; 6a000501
+   //; if llvm_ver >= 16:
+   //;    insert_pattern('v_mul_f16_e32 v0, v1, v2 ; Error: VGPR_32_Lo128: unknown register 128 ; 6a000501')
+   //; else:
+   //;    insert_pattern('v_mul_f16_e32 v0, v1, v2                                    ; 6a000501')
    bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v2);
 
    //! v_mul_f16_e64 v128, v1, v2                                  ; d5350080 00020501

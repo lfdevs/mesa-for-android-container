@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. "$SCRIPTS_DIR"/setup-test-env.sh
+
 BM=$CI_PROJECT_DIR/install/bare-metal
 CI_COMMON=$CI_PROJECT_DIR/install/common
 
@@ -100,10 +102,12 @@ fi
 # moving that container to the runner.  So, if BM_KERNEL+BM_DTB are URLs,
 # fetch them instead of looking in the container.
 if echo "$BM_KERNEL $BM_DTB" | grep -q http; then
-  apt install -y wget
+  apt-get install -y curl
 
-  wget $BM_KERNEL -O kernel
-  wget $BM_DTB -O dtb
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "$BM_KERNEL" -o kernel
+  curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+      "$BM_DTB" -o dtb
 
   cat kernel dtb > Image.gz-dtb
   rm kernel

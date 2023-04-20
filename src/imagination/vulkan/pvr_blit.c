@@ -234,10 +234,13 @@ static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
    const struct pvr_shader_factory_info *shader_info,
    const uint32_t clear_color[static const PVR_CLEAR_COLOR_ARRAY_SIZE],
    ASSERTED bool uses_tile_buffer,
+   uint32_t tile_buffer_idx,
    struct pvr_bo **const const_shareds_buffer_out)
 {
    struct pvr_device *device = cmd_buffer->device;
    struct pvr_bo *const_shareds_buffer;
+   struct pvr_bo *tile_buffer;
+   uint64_t tile_dev_addr;
    uint32_t *buffer;
    VkResult result;
 
@@ -271,10 +274,17 @@ static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
          break;
 
       case PVR_CLEAR_ATTACHMENT_CONST_TILE_BUFFER_UPPER:
+         assert(uses_tile_buffer);
+         tile_buffer = device->tile_buffer_state.buffers[tile_buffer_idx];
+         tile_dev_addr = tile_buffer->vma->dev_addr.addr;
+         buffer[dest_idx] = (uint32_t)(tile_dev_addr >> 32);
+         break;
+
       case PVR_CLEAR_ATTACHMENT_CONST_TILE_BUFFER_LOWER:
          assert(uses_tile_buffer);
-         buffer[dest_idx] = ~0;
-         pvr_finishme("Add support for tile buffer output clear.");
+         tile_buffer = device->tile_buffer_state.buffers[tile_buffer_idx];
+         tile_dev_addr = tile_buffer->vma->dev_addr.addr;
+         buffer[dest_idx] = (uint32_t)tile_dev_addr;
          break;
 
       default:
@@ -314,7 +324,7 @@ static VkResult pvr_clear_color_attachment_static(
    const struct pvr_device_static_clear_state *dev_clear_state =
       &device->static_clear_state;
    const bool uses_tile_buffer = mrt_resource->type ==
-                                 USC_MRT_RESOURCE_TYPE_OUTPUT_REG;
+                                 USC_MRT_RESOURCE_TYPE_MEMORY;
    const struct pvr_pds_clear_attachment_program_info *clear_attachment_program;
    struct pvr_pds_pixel_shader_sa_program texture_program;
    uint32_t pds_state[PVR_STATIC_CLEAR_PDS_STATE_COUNT];
@@ -323,6 +333,7 @@ static VkResult pvr_clear_color_attachment_static(
    struct pvr_bo *pds_texture_program_bo;
    struct pvr_bo *const_shareds_buffer;
    uint64_t pds_texture_program_addr;
+   uint32_t tile_buffer_idx = 0;
    uint32_t out_reg_count;
    uint32_t output_offset;
    struct pvr_bo *pvr_bo;
@@ -333,10 +344,12 @@ static VkResult pvr_clear_color_attachment_static(
    out_reg_count =
       DIV_ROUND_UP(pvr_get_pbe_accum_format_size_in_bytes(format), 4U);
 
-   if (uses_tile_buffer)
-      output_offset = mrt_resource->reg.offset;
-   else
+   if (uses_tile_buffer) {
+      tile_buffer_idx = mrt_resource->mem.tile_buffer;
       output_offset = mrt_resource->mem.offset_dw;
+   } else {
+      output_offset = mrt_resource->reg.offset;
+   }
 
    assert(has_eight_output_registers || out_reg_count + output_offset <= 4);
 
@@ -351,6 +364,7 @@ static VkResult pvr_clear_color_attachment_static(
       shader_info,
       clear_color,
       uses_tile_buffer,
+      tile_buffer_idx,
       &const_shareds_buffer);
    if (result != VK_SUCCESS)
       return result;

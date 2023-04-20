@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <thread>
 #include <variant>
+#include <inttypes.h>
 
 // Minimum supported sampling period in nanoseconds
 #define MIN_SAMPLING_PERIOD_NS 50000
@@ -100,6 +101,7 @@ void GpuDataSource::OnStart(const StartArgs &args)
    driver->enable_perfcnt(time_to_sleep.count());
 
    state = State::Start;
+   got_first_counters = false;
 
    {
       std::lock_guard<std::mutex> lock(started_m);
@@ -312,6 +314,11 @@ void GpuDataSource::trace(TraceContext &ctx)
             // Do not send counter values before counter descriptors
             PPS_LOG_ERROR("Skipping counter values coming before descriptors");
             continue;
+         }
+
+         if (!got_first_counters) {
+            PPS_LOG("Got first counters at gpu_ts=0x%016" PRIx64, gpu_timestamp);
+            got_first_counters = true;
          }
 
          auto packet = ctx.NewTracePacket();

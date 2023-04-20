@@ -55,6 +55,10 @@ if with_platform_windows
   static_glapi_args += ['-D_GDI32_', '-DKHRONOS_DLL_EXPORTS', '-D_GLAPI_DLL_EXPORTS']
 endif
 static_glapi_files += files(
+  '../u_current.c',
+  '../u_current.h',
+  '../u_execmem.c',
+  '../u_execmem.h',
   'glapi_dispatch.c',
   'glapi_entrypoint.c',
   'glapi_getproc.c',
@@ -63,7 +67,6 @@ static_glapi_files += files(
   'glapi.h',
   'glapi_priv.h',
 )
-static_glapi_files += files_mapi_util
 static_glapi_files += [
   glapitable_h, glapi_mapi_tmp_h, glprocs_h, glapitemp_h,
 ]
@@ -111,6 +114,6 @@ if with_any_opengl and not with_shared_glapi and with_tests and not with_platfor
       dependencies : [idep_gtest, dep_thread],
     ),
     suite : ['mapi'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif

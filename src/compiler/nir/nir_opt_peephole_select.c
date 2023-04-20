@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 #include "nir.h"
@@ -121,6 +117,7 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
          }
 
          case nir_intrinsic_load_uniform:
+         case nir_intrinsic_load_preamble:
          case nir_intrinsic_load_helper_invocation:
          case nir_intrinsic_is_helper_invocation:
          case nir_intrinsic_load_front_face:
@@ -224,13 +221,10 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
             if (mov->dest.saturate)
                return false;
 
-            /* It cannot have any if-uses */
-            if (!list_is_empty(&mov->dest.dest.ssa.if_uses))
-               return false;
-
             /* The only uses of this definition must be phis in the successor */
-            nir_foreach_use(use, &mov->dest.dest.ssa) {
-               if (use->parent_instr->type != nir_instr_type_phi ||
+            nir_foreach_use_including_if(use, &mov->dest.dest.ssa) {
+               if (use->is_if ||
+                   use->parent_instr->type != nir_instr_type_phi ||
                    use->parent_instr->block != block->successors[0])
                   return false;
             }

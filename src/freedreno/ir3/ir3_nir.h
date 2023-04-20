@@ -33,6 +33,8 @@
 
 #include "ir3_shader.h"
 
+BEGINC;
+
 bool ir3_nir_apply_trig_workarounds(nir_shader *shader);
 bool ir3_nir_lower_imul(nir_shader *shader);
 bool ir3_nir_lower_io_offsets(nir_shader *shader);
@@ -42,6 +44,7 @@ bool ir3_nir_move_varying_inputs(nir_shader *shader);
 int ir3_nir_coord_offset(nir_ssa_def *ssa);
 bool ir3_nir_lower_tex_prefetch(nir_shader *shader);
 bool ir3_nir_lower_wide_load_store(nir_shader *shader);
+bool ir3_nir_lower_layer_id(nir_shader *shader);
 
 void ir3_nir_lower_to_explicit_output(nir_shader *shader,
                                       struct ir3_shader_variant *v,
@@ -129,5 +132,7 @@ is_intrinsic_load(nir_intrinsic_op op)
       return false;
    }
 }
+
+ENDC;
 
 #endif /* IR3_NIR_H_ */

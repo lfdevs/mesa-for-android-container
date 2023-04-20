@@ -64,7 +64,8 @@ struct ac_shader_args {
       enum ac_arg_regfile file;
       uint8_t offset;
       uint8_t size;
-      bool skip;
+      bool skip : 1;
+      bool pending_vmem : 1; /* Loaded from VMEM and needs waitcnt before use. */
    } args[AC_MAX_ARGS];
 
    uint16_t arg_count;
@@ -74,6 +75,11 @@ struct ac_shader_args {
    uint16_t return_count;
    uint16_t num_sgprs_returned;
    uint16_t num_vgprs_returned;
+
+   /* User data 0/1. GFX: descriptor list, Compute: scratch BO. These are the SGPRs used by RADV for
+    * scratch and have to be accessed using llvm.amdgcn.implicit.buffer.ptr for LLVM in that case.
+    */
+   struct ac_arg ring_offsets;
 
    /* VS */
    struct ac_arg base_vertex;
@@ -150,10 +156,16 @@ struct ac_shader_args {
    struct ac_arg inline_push_consts[AC_MAX_INLINE_PUSH_CONSTS];
    uint64_t inline_push_const_mask;
    struct ac_arg view_index;
-   struct ac_arg sbt_descriptors;
-   struct ac_arg ray_launch_size_addr;
    struct ac_arg force_vrs_rates;
+
+   /* RT */
+   struct ac_arg rt_shader_pc;
+   struct ac_arg sbt_descriptors;
+   struct ac_arg ray_launch_size;
+   struct ac_arg ray_launch_size_addr;
+   struct ac_arg ray_launch_id;
    struct ac_arg rt_dynamic_callable_stack_base;
+   struct ac_arg rt_traversal_shader_addr;
 };
 
 void ac_add_arg(struct ac_shader_args *info, enum ac_arg_regfile regfile, unsigned registers,

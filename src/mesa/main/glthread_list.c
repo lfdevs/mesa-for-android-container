@@ -34,14 +34,15 @@ struct marshal_cmd_CallList
 };
 
 uint32_t
-_mesa_unmarshal_CallList(struct gl_context *ctx, const struct marshal_cmd_CallList *cmd)
+_mesa_unmarshal_CallList(struct gl_context *ctx,
+                         const struct marshal_cmd_CallList *restrict cmd)
 {
    const GLuint num = cmd->num;
 
    if (cmd->cmd_base.cmd_size == sizeof(*cmd) / 8) {
-      CALL_CallList(ctx->CurrentServerDispatch, (num));
+      CALL_CallList(ctx->Dispatch.Current, (num));
    } else {
-      CALL_CallLists(ctx->CurrentServerDispatch, (num, GL_UNSIGNED_INT, cmd->list));
+      CALL_CallLists(ctx->Dispatch.Current, (num, GL_UNSIGNED_INT, cmd->list));
    }
 
    return cmd->cmd_base.cmd_size;

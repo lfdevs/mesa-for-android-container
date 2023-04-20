@@ -352,35 +352,19 @@ is_not_const_and_not_fsign(struct hash_table *ht, const nir_alu_instr *instr,
 static inline bool
 is_used_once(const nir_alu_instr *instr)
 {
-   bool zero_if_use = list_is_empty(&instr->dest.dest.ssa.if_uses);
-   bool zero_use = list_is_empty(&instr->dest.dest.ssa.uses);
-
-   if (zero_if_use && zero_use)
-      return false;
-
-   if (!zero_if_use && list_is_singular(&instr->dest.dest.ssa.uses))
-     return false;
-
-   if (!zero_use && list_is_singular(&instr->dest.dest.ssa.if_uses))
-     return false;
-
-   if (!list_is_singular(&instr->dest.dest.ssa.if_uses) &&
-       !list_is_singular(&instr->dest.dest.ssa.uses))
-      return false;
-
-   return true;
+   return list_is_singular(&instr->dest.dest.ssa.uses);
 }
 
 static inline bool
 is_used_by_if(const nir_alu_instr *instr)
 {
-   return !list_is_empty(&instr->dest.dest.ssa.if_uses);
+   return nir_ssa_def_used_by_if(&instr->dest.dest.ssa);
 }
 
 static inline bool
 is_not_used_by_if(const nir_alu_instr *instr)
 {
-   return list_is_empty(&instr->dest.dest.ssa.if_uses);
+   return !is_used_by_if(instr);
 }
 
 static inline bool

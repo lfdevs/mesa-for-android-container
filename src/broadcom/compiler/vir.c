@@ -643,21 +643,6 @@ v3d_lower_nir(struct v3d_compile *c)
                 }
         }
 
-        /* CS textures may not have return_size reflecting the shadow state. */
-        nir_foreach_uniform_variable(var, c->s) {
-                const struct glsl_type *type = glsl_without_array(var->type);
-                unsigned array_len = MAX2(glsl_get_length(var->type), 1);
-
-                if (!glsl_type_is_sampler(type) ||
-                    !glsl_sampler_type_is_shadow(type))
-                        continue;
-
-                for (int i = 0; i < array_len; i++) {
-                        tex_options.lower_tex_packing[var->data.binding + i] =
-                                nir_lower_tex_packing_16;
-                }
-        }
-
         NIR_PASS(_, c->s, nir_lower_tex, &tex_options);
         NIR_PASS(_, c->s, nir_lower_system_values);
 
@@ -938,7 +923,7 @@ v3d_nir_lower_vs_early(struct v3d_compile *c)
         NIR_PASS(_, c->s, nir_remove_unused_io_vars,
                  nir_var_shader_out, used_outputs, NULL); /* demotes to globals */
         NIR_PASS(_, c->s, nir_lower_global_vars_to_local);
-        v3d_optimize_nir(c, c->s, false);
+        v3d_optimize_nir(c, c->s);
         NIR_PASS(_, c->s, nir_remove_dead_variables, nir_var_shader_in, NULL);
 
         /* This must go before nir_lower_io */
@@ -972,7 +957,7 @@ v3d_nir_lower_gs_early(struct v3d_compile *c)
         NIR_PASS(_, c->s, nir_remove_unused_io_vars,
                  nir_var_shader_out, used_outputs, NULL); /* demotes to globals */
         NIR_PASS(_, c->s, nir_lower_global_vars_to_local);
-        v3d_optimize_nir(c, c->s, false);
+        v3d_optimize_nir(c, c->s);
         NIR_PASS(_, c->s, nir_remove_dead_variables, nir_var_shader_in, NULL);
 
         /* This must go before nir_lower_io */
@@ -1584,7 +1569,7 @@ v3d_attempt_compile(struct v3d_compile *c)
         }
 
         NIR_PASS(_, c->s, v3d_nir_lower_io, c);
-        NIR_PASS(_, c->s, v3d_nir_lower_txf_ms, c);
+        NIR_PASS(_, c->s, v3d_nir_lower_txf_ms);
         NIR_PASS(_, c->s, v3d_nir_lower_image_load_store);
 
         NIR_PASS(_, c->s, nir_opt_idiv_const, 8);
@@ -1615,7 +1600,7 @@ v3d_attempt_compile(struct v3d_compile *c)
 
         NIR_PASS(_, c->s, v3d_nir_lower_subgroup_intrinsics, c);
 
-        v3d_optimize_nir(c, c->s, false);
+        v3d_optimize_nir(c, c->s);
 
         /* Do late algebraic optimization to turn add(a, neg(b)) back into
          * subs, then the mandatory cleanup after algebraic.  Note that it may

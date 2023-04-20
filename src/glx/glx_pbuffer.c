@@ -915,3 +915,99 @@ GLX_ALIAS_VOID(glXGetSelectedEventSGIX,
                (Display * dpy, GLXDrawable drawable,
                 unsigned long *mask), (dpy, drawable, mask),
                glXGetSelectedEvent)
+
+_GLX_PUBLIC GLXPixmap
+glXCreateGLXPixmap(Display * dpy, XVisualInfo * vis, Pixmap pixmap)
+{
+#ifdef GLX_USE_APPLEGL
+   int screen = vis->screen;
+   struct glx_screen *const psc = GetGLXScreenConfigs(dpy, screen);
+   const struct glx_config *config;
+
+   config = glx_config_find_visual(psc->visuals, vis->visualid);
+
+   if(apple_glx_pixmap_create(dpy, vis->screen, pixmap, config))
+      return None;
+
+   return pixmap;
+#else
+   xGLXCreateGLXPixmapReq *req;
+   struct glx_drawable *glxDraw;
+   GLXPixmap xid;
+   CARD8 opcode;
+
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+   struct glx_display *const priv = __glXInitialize(dpy);
+
+   if (priv == NULL)
+      return None;
+#endif
+
+   opcode = __glXSetupForCommand(dpy);
+   if (!opcode) {
+      return None;
+   }
+
+   glxDraw = malloc(sizeof(*glxDraw));
+   if (!glxDraw)
+      return None;
+
+   /* Send the glXCreateGLXPixmap request */
+   LockDisplay(dpy);
+   GetReq(GLXCreateGLXPixmap, req);
+   req->reqType = opcode;
+   req->glxCode = X_GLXCreateGLXPixmap;
+   req->screen = vis->screen;
+   req->visual = vis->visualid;
+   req->pixmap = pixmap;
+   req->glxpixmap = xid = XAllocID(dpy);
+   UnlockDisplay(dpy);
+   SyncHandle();
+
+   if (InitGLXDrawable(dpy, glxDraw, pixmap, req->glxpixmap)) {
+      free(glxDraw);
+      return None;
+   }
+
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+   do {
+      /* FIXME: Maybe delay __DRIdrawable creation until the drawable
+       * is actually bound to a context... */
+
+      struct glx_screen *psc = GetGLXScreenConfigs(dpy, vis->screen);
+      struct glx_config *config = glx_config_find_visual(psc->visuals,
+                                                         vis->visualid);
+
+      if (!CreateDRIDrawable(dpy, config, pixmap, xid, GLX_PIXMAP_BIT,
+                             NULL, 0)) {
+         protocolDestroyDrawable(dpy, xid, X_GLXDestroyGLXPixmap);
+         xid = None;
+      }
+   } while (0);
+#endif
+
+   return xid;
+#endif
+}
+
+/*
+** Destroy the named pixmap
+*/
+_GLX_PUBLIC void
+glXDestroyGLXPixmap(Display * dpy, GLXPixmap glxpixmap)
+{
+#ifdef GLX_USE_APPLEGL
+   if(apple_glx_pixmap_destroy(dpy, glxpixmap))
+      __glXSendError(dpy, GLXBadPixmap, glxpixmap, X_GLXDestroyPixmap, false);
+#else
+   DestroyDrawable(dpy, glxpixmap, X_GLXDestroyGLXPixmap);
+#endif /* GLX_USE_APPLEGL */
+}
+
+_GLX_PUBLIC GLXPixmap
+glXCreateGLXPixmapWithConfigSGIX(Display * dpy,
+                                 GLXFBConfigSGIX fbconfig,
+                                 Pixmap pixmap)
+{
+   return glXCreatePixmap(dpy, fbconfig, pixmap, NULL);
+}

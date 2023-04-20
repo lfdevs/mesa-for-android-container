@@ -319,7 +319,7 @@ vbo_get_minmax_index_mapped(unsigned count, unsigned index_size,
  * If primitive restart is enabled, we need to ignore restart
  * indexes when computing min/max.
  */
-static void
+void
 vbo_get_minmax_index(struct gl_context *ctx, struct gl_buffer_object *obj,
                      const void *ptr, GLintptr offset, unsigned count,
                      unsigned index_size, bool primitive_restart,

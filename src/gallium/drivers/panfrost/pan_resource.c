@@ -437,6 +437,10 @@ static bool
 panfrost_should_checksum(const struct panfrost_device *dev,
                          const struct panfrost_resource *pres)
 {
+   /* Checksumming is disabled by default due to fundamental unsoundness */
+   if (!(dev->debug & PAN_DBG_CRC))
+      return false;
+
    /* When checksumming is enabled, the tile data must fit in the
     * size of the writeback buffer, so don't checksum formats
     * that use too much space. */
@@ -447,8 +451,7 @@ panfrost_should_checksum(const struct panfrost_device *dev,
                               util_format_get_blocksize(pres->base.format);
 
    return pres->base.bind & PIPE_BIND_RENDER_TARGET && panfrost_is_2d(pres) &&
-          bytes_per_pixel <= bytes_per_pixel_max &&
-          pres->base.last_level == 0 && !(dev->debug & PAN_DBG_NO_CRC);
+          bytes_per_pixel <= bytes_per_pixel_max && pres->base.last_level == 0;
 }
 
 static void

@@ -62,10 +62,12 @@ def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
                args=args,
                tp_struct=tp_struct,
                tp_perfetto='fd_start_{0}'.format(name),
-               tp_print=tp_print)
+               tp_print=tp_print,
+               tp_markers='fd_cs_trace_start')
     Tracepoint('end_{0}'.format(name),
                toggle_name=name,
-               tp_perfetto='fd_end_{0}'.format(name))
+               tp_perfetto='fd_end_{0}'.format(name),
+               tp_markers='fd_cs_trace_end')
 
 
 def singular_tp(name, args=[], tp_struct=None, tp_print=None,
@@ -77,12 +79,13 @@ def singular_tp(name, args=[], tp_struct=None, tp_print=None,
                toggle_name=name,
                args=args,
                tp_struct=tp_struct,
-               tp_print=tp_print)
+               tp_print=tp_print,
+               tp_markers='fd_cs_trace_msg')
 
 begin_end_tp('state_restore')
 
 singular_tp('flush_batch',
-    args=[TracepointArg(type='struct fd_batch *', var='batch',       c_format='%x'),
+    args=[TracepointArg(type='struct fd_batch *', var='batch',       c_format='%p'),
           TracepointArg(type='uint16_t',          var='cleared',     c_format='%x'),
           TracepointArg(type='uint16_t',          var='gmem_reason', c_format='%x'),
           TracepointArg(type='uint16_t',          var='num_draws',   c_format='%u')],

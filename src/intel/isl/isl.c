@@ -2132,8 +2132,8 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
    if (surf->msaa_layout != ISL_MSAA_LAYOUT_ARRAY)
       return false;
 
-   /* We are seeing failures with mcs on dg2, so disable it for now. */
-   if (intel_device_info_is_dg2(dev->info))
+   /* We are seeing failures with mcs on dg2/mtl, so disable it for now. */
+   if (ISL_GFX_VERX10(dev) == 125)
       return false;
 
    /* The following are true of all multisampled surfaces */
@@ -2450,7 +2450,9 @@ static void
 get_image_offset_sa_gfx4_2d(const struct isl_surf *surf,
                             uint32_t level, uint32_t logical_array_layer,
                             uint32_t *x_offset_sa,
-                            uint32_t *y_offset_sa)
+                            uint32_t *y_offset_sa,
+                            uint32_t *z_offset_sa,
+                            uint32_t *array_offset)
 {
    assert(level < surf->levels);
    if (surf->dim == ISL_SURF_DIM_3D)
@@ -2467,8 +2469,21 @@ get_image_offset_sa_gfx4_2d(const struct isl_surf *surf,
    const uint32_t phys_layer = logical_array_layer *
       (surf->msaa_layout == ISL_MSAA_LAYOUT_ARRAY ? surf->samples : 1);
 
-   uint32_t x = 0;
-   uint32_t y = phys_layer * isl_surf_get_array_pitch_sa_rows(surf);
+   uint32_t x = 0, y;
+   if (isl_tiling_is_std_y(surf->tiling) || surf->tiling == ISL_TILING_64) {
+      y = 0;
+      if (surf->dim == ISL_SURF_DIM_3D) {
+         *z_offset_sa = logical_array_layer;
+         *array_offset = 0;
+      } else {
+         *z_offset_sa = 0;
+         *array_offset = phys_layer;
+      }
+   } else {
+      y = phys_layer * isl_surf_get_array_pitch_sa_rows(surf);
+      *z_offset_sa = 0;
+      *array_offset = 0;
+   }
 
    for (uint32_t l = 0; l < level; ++l) {
       if (l == 1) {
@@ -2666,9 +2681,8 @@ isl_surf_get_image_offset_sa(const struct isl_surf *surf,
    case ISL_DIM_LAYOUT_GFX4_2D:
       get_image_offset_sa_gfx4_2d(surf, level, logical_array_layer
                                   + logical_z_offset_px,
-                                  x_offset_sa, y_offset_sa);
-      *z_offset_sa = 0;
-      *array_offset = 0;
+                                  x_offset_sa, y_offset_sa,
+                                  z_offset_sa, array_offset);
       break;
    case ISL_DIM_LAYOUT_GFX4_3D:
       get_image_offset_sa_gfx4_3d(surf, level, logical_array_layer +

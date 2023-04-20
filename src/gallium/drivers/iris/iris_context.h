@@ -379,6 +379,18 @@ enum pipe_control_flags
    (PIPE_CONTROL_L3_READ_ONLY_CACHE_INVALIDATE | \
     PIPE_CONTROL_CONST_CACHE_INVALIDATE)
 
+#define PIPE_CONTROL_GRAPHICS_BITS \
+   (PIPE_CONTROL_RENDER_TARGET_FLUSH |          \
+    PIPE_CONTROL_DEPTH_CACHE_FLUSH |            \
+    PIPE_CONTROL_TILE_CACHE_FLUSH |             \
+    PIPE_CONTROL_DEPTH_STALL |                  \
+    PIPE_CONTROL_STALL_AT_SCOREBOARD |          \
+    PIPE_CONTROL_PSS_STALL_SYNC |               \
+    PIPE_CONTROL_VF_CACHE_INVALIDATE |          \
+    PIPE_CONTROL_GLOBAL_SNAPSHOT_COUNT_RESET |  \
+    PIPE_CONTROL_L3_READ_ONLY_CACHE_INVALIDATE |\
+    PIPE_CONTROL_WRITE_DEPTH_COUNT)
+
 enum iris_predicate_state {
    /* The first two states are used if we can determine whether to draw
     * without having to look at the values in the query object buffer. This
@@ -600,6 +612,12 @@ struct iris_stream_output_target {
    bool zero_offset;
 };
 
+enum iris_context_priority {
+   IRIS_CONTEXT_MEDIUM_PRIORITY = 0,
+   IRIS_CONTEXT_LOW_PRIORITY,
+   IRIS_CONTEXT_HIGH_PRIORITY
+};
+
 /**
  * The API context (derived from pipe_context).
  *
@@ -630,6 +648,7 @@ struct iris_context {
    struct blorp_context blorp;
 
    struct iris_batch batches[IRIS_BATCH_COUNT];
+   enum iris_context_priority priority;
    bool has_engines_context;
 
    struct u_upload_mgr *query_buffer_uploader;
@@ -717,6 +736,10 @@ struct iris_context {
    } shaders;
 
    struct intel_perf_context *perf_ctx;
+
+   /** Frame number for u_trace */
+   uint32_t tracing_begin_frame;
+   uint32_t tracing_end_frame;
 
    /** Frame number for debug prints */
    uint32_t frame;
@@ -900,6 +923,8 @@ void iris_fill_cs_push_const_buffer(struct brw_cs_prog_data *cs_prog_data,
 
 
 /* iris_blit.c */
+#define IRIS_BLORP_RELOC_FLAGS_EXEC_OBJECT_WRITE      (1 << 2)
+
 void iris_blorp_surf_for_resource(struct isl_device *isl_dev,
                                   struct blorp_surf *surf,
                                   struct pipe_resource *p_res,

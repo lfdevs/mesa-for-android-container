@@ -1375,10 +1375,6 @@ virtgpu_init_renderer_info(struct virtgpu *gpu)
    }
 
    info->has_dma_buf_import = true;
-   /* Kernel makes every mapping coherent.  We are better off filtering
-    * incoherent memory types out than silently making them coherent.
-    */
-   info->has_cache_management = false;
    /* TODO drm_syncobj */
    info->has_external_sync = false;
 
@@ -1427,8 +1423,8 @@ virtgpu_destroy(struct vn_renderer *renderer,
    vk_free(alloc, gpu);
 }
 
-static void
-virtgpu_init_shmem_blob_mem(struct virtgpu *gpu)
+static inline void
+virtgpu_init_shmem_blob_mem(ASSERTED struct virtgpu *gpu)
 {
    /* VIRTGPU_BLOB_MEM_GUEST allocates from the guest system memory.  They are
     * logically contiguous in the guest but are sglists (iovecs) in the host.
@@ -1447,11 +1443,10 @@ virtgpu_init_shmem_blob_mem(struct virtgpu *gpu)
     *
     * it allocates a host shmem.
     *
-    * TODO cache shmems as they are costly to set up and usually require syncs
+    * supports_blob_id_0 has been enforced by mandated render server config.
     */
-   gpu->shmem_blob_mem = gpu->capset.data.supports_blob_id_0
-                            ? VIRTGPU_BLOB_MEM_HOST3D
-                            : VIRTGPU_BLOB_MEM_GUEST;
+   assert(gpu->capset.data.supports_blob_id_0);
+   gpu->shmem_blob_mem = VIRTGPU_BLOB_MEM_HOST3D;
 }
 
 static VkResult

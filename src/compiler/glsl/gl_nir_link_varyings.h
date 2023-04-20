@@ -101,8 +101,6 @@ enum lowered_builtin_array_var {
    none,
    clip_distance,
    cull_distance,
-   tess_level_outer,
-   tess_level_inner,
 };
 
 /**
@@ -133,8 +131,8 @@ struct xfb_decl
    unsigned array_subscript;
 
    /**
-    * Non-zero if the variable is gl_ClipDistance, glTessLevelOuter or
-    * gl_TessLevelInner and the driver lowers it to gl_*MESA.
+    * Non-zero if the variable is gl_ClipDistance and the driver lowers it to
+    * gl_*MESA.
     */
    enum lowered_builtin_array_var lowered_builtin_array_variable;
 

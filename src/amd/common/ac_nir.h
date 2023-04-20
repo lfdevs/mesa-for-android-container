@@ -50,6 +50,12 @@ enum
    AC_EXP_PARAM_UNDEFINED = 255, /* deprecated, use AC_EXP_PARAM_DEFAULT_VAL_0000 instead */
 };
 
+enum {
+   AC_EXP_FLAG_COMPRESSED = (1 << 0),
+   AC_EXP_FLAG_DONE       = (1 << 1),
+   AC_EXP_FLAG_VALID_MASK = (1 << 2),
+};
+
 /* Maps I/O semantics to the actual location used by the lowering pass. */
 typedef unsigned (*ac_nir_map_io_driver_location)(unsigned semantic);
 
@@ -61,11 +67,45 @@ typedef struct nir_builder nir_builder;
 typedef void (*ac_nir_cull_accepted)(nir_builder *b, void *state);
 
 nir_ssa_def *
-ac_nir_load_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg);
+ac_nir_load_arg_at_offset(nir_builder *b, const struct ac_shader_args *ac_args,
+                          struct ac_arg arg, unsigned relative_index);
+
+static inline nir_ssa_def *
+ac_nir_load_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg)
+{
+   return ac_nir_load_arg_at_offset(b, ac_args, arg, 0);
+}
 
 nir_ssa_def *
 ac_nir_unpack_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg,
                   unsigned rshift, unsigned bitwidth);
+
+bool ac_nir_lower_sin_cos(nir_shader *shader);
+
+void
+ac_nir_store_var_components(nir_builder *b, nir_variable *var, nir_ssa_def *value,
+                            unsigned component, unsigned writemask);
+
+void
+ac_nir_export_primitive(nir_builder *b, nir_ssa_def *prim);
+
+void
+ac_nir_export_position(nir_builder *b,
+                       enum amd_gfx_level gfx_level,
+                       uint32_t clip_cull_mask,
+                       bool no_param_export,
+                       bool force_vrs,
+                       uint64_t outputs_written,
+                       nir_ssa_def *(*outputs)[4]);
+
+void
+ac_nir_export_parameters(nir_builder *b,
+                         const uint8_t *param_offsets,
+                         uint64_t outputs_written,
+                         uint16_t outputs_written_16bit,
+                         nir_ssa_def *(*outputs)[4],
+                         nir_ssa_def *(*outputs_16bit_lo)[4],
+                         nir_ssa_def *(*outputs_16bit_hi)[4]);
 
 nir_ssa_def *
 ac_nir_calc_io_offset(nir_builder *b,
@@ -129,20 +169,23 @@ typedef struct {
 
    unsigned max_workgroup_size;
    unsigned wave_size;
+   uint32_t clipdist_enable_mask;
    const uint8_t *vs_output_param_offset; /* GFX11+ */
+   bool has_param_exports;
    bool can_cull;
    bool disable_streamout;
    bool has_gen_prim_query;
    bool has_xfb_prim_query;
+   bool kill_pointsize;
+   bool force_vrs;
 
    /* VS */
    unsigned num_vertices_per_primitive;
    bool early_prim_export;
    bool passthrough;
    bool use_edgeflags;
-   int primitive_id_location;
+   bool export_primitive_id;
    uint32_t instance_rate_inputs;
-   uint32_t clipdist_enable_mask;
    uint32_t user_clip_plane_enable_mask;
 
    /* GS */
@@ -157,12 +200,13 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options)
 
 void
 ac_nir_lower_ngg_ms(nir_shader *shader,
+                    enum amd_gfx_level gfx_level,
+                    uint32_t clipdist_enable_mask,
+                    const uint8_t *vs_output_param_offset,
+                    bool has_param_exports,
                     bool *out_needs_scratch_ring,
                     unsigned wave_size,
                     bool multiview);
-
-void
-ac_nir_apply_first_task_to_task_shader(nir_shader *shader);
 
 void
 ac_nir_lower_task_outputs_to_mem(nir_shader *shader,
@@ -186,6 +230,7 @@ bool
 ac_nir_lower_global_access(nir_shader *shader);
 
 bool ac_nir_lower_resinfo(nir_shader *nir, enum amd_gfx_level gfx_level);
+bool ac_nir_lower_image_opcodes(nir_shader *nir);
 
 typedef struct ac_nir_gs_output_info {
    const uint8_t *streams;
@@ -199,19 +244,29 @@ typedef struct ac_nir_gs_output_info {
    /* type for each 16bit slot component */
    nir_alu_type (*types_16bit_lo)[4];
    nir_alu_type (*types_16bit_hi)[4];
-
-   /* map varying slot to driver location */
-   const uint8_t *slot_to_location;
-   const uint8_t *slot_to_location_16bit;
 } ac_nir_gs_output_info;
 
 nir_shader *
 ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
+                             enum amd_gfx_level gfx_level,
+                             uint32_t clip_cull_mask,
+                             const uint8_t *param_offsets,
+                             bool has_param_exports,
                              bool disable_streamout,
+                             bool kill_pointsize,
+                             bool force_vrs,
                              ac_nir_gs_output_info *output_info);
 
 void
-ac_nir_lower_legacy_vs(nir_shader *nir, int primitive_id_location, bool disable_streamout);
+ac_nir_lower_legacy_vs(nir_shader *nir,
+                       enum amd_gfx_level gfx_level,
+                       uint32_t clip_cull_mask,
+                       const uint8_t *param_offsets,
+                       bool has_param_exports,
+                       bool export_primitive_id,
+                       bool disable_streamout,
+                       bool kill_pointsize,
+                       bool force_vrs);
 
 bool
 ac_nir_gs_shader_query(nir_builder *b,
@@ -227,6 +282,40 @@ ac_nir_lower_legacy_gs(nir_shader *nir,
                        bool has_gen_prim_query,
                        bool has_pipeline_stats_query,
                        ac_nir_gs_output_info *output_info);
+
+typedef struct {
+   /* Which load instructions to lower depending on whether the number of
+    * components being loaded is 1 or more than 1.
+    */
+   nir_variable_mode modes_1_comp;  /* lower 1-component loads for these */
+   nir_variable_mode modes_N_comps; /* lower multi-component loads for these */
+} ac_nir_lower_subdword_options;
+
+bool ac_nir_lower_subdword_loads(nir_shader *nir, ac_nir_lower_subdword_options options);
+
+typedef struct {
+   enum radeon_family family;
+   enum amd_gfx_level gfx_level;
+
+   bool uses_discard;
+   bool alpha_to_coverage_via_mrtz;
+   bool dual_src_blend_swizzle;
+   unsigned spi_shader_col_format;
+   unsigned color_is_int8;
+   unsigned color_is_int10;
+
+   /* OpenGL only */
+   bool clamp_color;
+   bool alpha_to_one;
+   enum pipe_compare_func alpha_func;
+   unsigned broadcast_last_cbuf;
+
+   /* Vulkan only */
+   unsigned enable_mrt_output_nan_fixup;
+} ac_nir_lower_ps_options;
+
+void
+ac_nir_lower_ps(nir_shader *nir, const ac_nir_lower_ps_options *options);
 
 #ifdef __cplusplus
 }

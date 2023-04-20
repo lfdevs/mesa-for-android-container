@@ -52,7 +52,7 @@ VkResult pvr_wsi_init(struct pvr_physical_device *pdevice)
                             &pdevice->vk.instance->alloc,
                             pdevice->master_fd,
                             NULL,
-                            false);
+                            &(struct wsi_device_options){ .sw_device = false });
    if (result != VK_SUCCESS)
       return result;
 

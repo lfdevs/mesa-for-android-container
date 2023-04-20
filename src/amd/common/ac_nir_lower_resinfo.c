@@ -167,6 +167,17 @@ lower_query_size(nir_builder *b, nir_ssa_def *desc, nir_src *lod,
       }
    }
 
+   /* Special case for sliced storage 3D views which shouldn't be minified. */
+   if (gfx_level >= GFX10 && has_depth) {
+      nir_ssa_def *uav3d =
+         nir_ieq_imm(b, get_field(b, desc, 5, ~C_00A014_ARRAY_PITCH), 1);
+      nir_ssa_def *layers_3d =
+         nir_isub(b, get_field(b, desc, 4, ~C_00A010_DEPTH),
+                     get_field(b, desc, 4, ~C_00A010_BASE_ARRAY));
+      layers_3d = nir_iadd_imm(b, layers_3d, 1);
+      depth = nir_bcsel(b, uav3d, layers_3d, depth);
+   }
+
    nir_ssa_def *result = NULL;
 
    /* Construct the result. */

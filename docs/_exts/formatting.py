@@ -33,7 +33,17 @@ def ext_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
     pnode = nodes.reference(title, title, internal=False, refuri=full_url)
     return [pnode], []
 
+def vkfeat_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
+    text = utils.unescape(text)
+    has_explicit_title, title, ext = split_explicit_title(text)
+
+    full_url = f'https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#features-{ext}'
+
+    pnode = nodes.reference(title, title, internal=False, refuri=full_url)
+    return [pnode], []
+
 def setup(app):
     app.add_object_type("opcode", "opcode", "%s (TGSI opcode)",
         parse_opcode)
     app.add_role('ext', ext_role)
+    app.add_role('vk-feat', vkfeat_role)

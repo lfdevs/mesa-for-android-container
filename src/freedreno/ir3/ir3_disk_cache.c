@@ -63,7 +63,7 @@ ir3_disk_cache_init(struct ir3_compiler *compiler)
    _mesa_sha1_format(timestamp, id_sha1);
 
    uint64_t driver_flags = ir3_shader_debug;
-   if (compiler->robust_buffer_access2)
+   if (compiler->options.robust_buffer_access2)
       driver_flags |= IR3_DBG_ROBUST_UBO_ACCESS;
    compiler->disk_cache = disk_cache_create(renderer, timestamp, driver_flags);
 }

@@ -7,7 +7,8 @@ KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_com
 #  Creating OpenGL ES 3 context
 # Fail, context: 0x00000000, error: EGL_BAD_MATCH
 # https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/3816
-dEQP-EGL.functional.create_context.no_config,Fail
+x11-dEQP-EGL.functional.create_context.no_config,Fail
+wayland-dEQP-EGL.functional.create_context.no_config,Fail
 
 # wide line outside the viewport incorrectly clipped out when ES wants it
 # rendered as a quad and clipped appropriately.  I think by expanding
@@ -102,13 +103,14 @@ spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 3d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Fail
 spec@khr_texture_compression_astc@basic-gl,Fail
 
-glx@glx-make-current,Crash
+glx@glx-make-current,Fail
 glx@glx-multithread-buffer,Fail
 glx@glx-swap-pixmap-bad,Fail
-glx@glx-visuals-depth -pixmap,Fail
-glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_create_context_es2_profile@invalid opengl es version,Fail
 glx@glx_arb_create_context_no_error@no error,Fail
+
+# piglit: error: Test timed out.
+glx@glx_arb_sync_control@waitformsc,Fail
 
 glx@glx_ext_import_context@free context,Fail
 glx@glx_ext_import_context@get context id,Fail
@@ -781,6 +783,9 @@ spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)-
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right middle PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: FIRST,Fail
 
+# fails on arm64, passes on armhf
+spec@arb_depth_buffer_float@depthstencil-render-miplevels 1024 s=z24_s8_d=z32f,Fail
+
 # Crashes in this group are CMA allocation fails
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=2,Crash
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=4,Crash
@@ -950,7 +955,6 @@ spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_DEPTH,
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_HEIGHT,Fail
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_WIDTH,Fail
 spec@arb_occlusion_query2@render,Fail
-spec@arb_occlusion_query@occlusion_query,Fail
 spec@arb_occlusion_query@occlusion_query_conform,Fail
 spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi2,Fail
 spec@arb_occlusion_query@occlusion_query_meta_fragments,Fail
@@ -1205,20 +1209,5 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
-# Creating OpenGL ES 2 context
-# Pass
-# Creating OpenGL ES 3 context
-# Fail, context: 0x00000000, error: EGL_BAD_MATCH
-# eglBindAPI(EGL_OPENVG_API) failed, skipping
-wayland-dEQP-EGL.functional.create_context.no_config,Fail
-
-# EGL_BAD_DISPLAY is generated if display is not an EGL display connection
-# eglCreatePixmapSurface(0, 0x00000000, 0x00000000, { EGL_NONE });
-# // 0x00000000 returned
-# eglCreatePixmapSurface(0xffffffff, 0x00000000, 0x00000000, { EGL_NONE });
-# // 0x00000000 returned
-# EGL_BAD_CONFIG or EGL_BAD_PARAMETER is generated if config is not an EGL frame buffer configuration or if the PixmapSurface call is not supported
-# eglCreatePixmapSurface(0x245b4d8, 0xffffffff, 0x00000000, { EGL_NONE });
-# // 0x00000000 returned
-# // ERROR expected: EGL_BAD_CONFIG or EGL_BAD_PARAMETER, Got: EGL_BAD_NATIVE_PIXMAP
-wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail
+spec@!opengl 1.1@line-smooth-stipple,Fail
+spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail

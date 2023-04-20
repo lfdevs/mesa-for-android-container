@@ -189,8 +189,9 @@ brw_blorp_surface_info_init(struct blorp_batch *batch,
       .swizzle = ISL_SWIZZLE_IDENTITY,
    };
 
-   info->view.array_len = MAX2(info->surf.logical_level0_px.depth,
-                               info->surf.logical_level0_px.array_len);
+   info->view.array_len =
+      MAX2(u_minify(info->surf.logical_level0_px.depth, level),
+           info->surf.logical_level0_px.array_len);
 
    if (!is_dest &&
        (info->surf.dim == ISL_SURF_DIM_3D ||

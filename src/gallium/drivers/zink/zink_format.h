@@ -28,7 +28,7 @@
 #include "util/format/u_format.h"
 
 #include <stdbool.h>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 union pipe_color_union;
 

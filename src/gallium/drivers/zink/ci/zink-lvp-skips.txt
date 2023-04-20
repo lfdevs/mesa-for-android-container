@@ -10,7 +10,6 @@ KHR-GL46.shader_ballot_tests.ShaderBallotFunctionRead
 
 # ignores copied from the old runner script
 spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range
-glx@glx-make-current
 spec@arb_timer_query.*
 spec@arb_sample_shading@builtin-gl-sample-mask
 spec@glsl-1.30@execution@tex-miplevel-selection.*
@@ -46,9 +45,3 @@ spec@arb_texture_rg@fbo-blending-formats
 
 #these need format conversions that gallium doesn't implement yet
 spec@arb_texture_buffer_object@formats.*arb.*
-
-# After piglit uprev, got this crash:
-# ../src/gallium/frontends/lavapipe/lvp_device.c:1720: lvp_AllocateMemory:
-# Assertion `!export_info->handleTypes || export_info->handleTypes == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT' failed.
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7609
-spec@egl 1.4@egl-ext_egl_image_storage

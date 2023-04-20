@@ -378,6 +378,35 @@ pan_blitter_get_blend_shaders(struct panfrost_device *dev, unsigned rt_count,
 #endif
 }
 
+/*
+ * Early Mali GPUs did not respect sampler LOD clamps or bias, so the Midgard
+ * compiler inserts lowering code with a load_sampler_lod_parameters_pan sysval
+ * that we need to lower. Our samplers do not use LOD clamps or bias, so we
+ * lower to the identity settings and let constant folding get rid of the
+ * unnecessary lowering.
+ */
+static bool
+lower_sampler_parameters(nir_builder *b, nir_instr *instr, UNUSED void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_load_sampler_lod_parameters_pan)
+      return false;
+
+   const nir_const_value constants[4] = {
+      nir_const_value_for_float(0.0f, 32),     /* min_lod */
+      nir_const_value_for_float(INFINITY, 32), /* max_lod */
+      nir_const_value_for_float(0.0f, 32),     /* lod_bias */
+   };
+
+   b->cursor = nir_after_instr(instr);
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa,
+                            nir_build_imm(b, 3, 32, constants));
+   return true;
+}
+
 static const struct pan_blit_shader_data *
 pan_blitter_get_blit_shader(struct panfrost_device *dev,
                             const struct pan_blit_shader_key *key)
@@ -589,7 +618,6 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
       .gpu_id = dev->gpu_id,
       .is_blit = true,
       .no_idvs = true,
-      .fixed_sysval_ubo = -1,
    };
    struct util_dynarray binary;
 
@@ -602,10 +630,15 @@ pan_blitter_get_blit_shader(struct panfrost_device *dev,
    for (unsigned i = 0; i < active_count; ++i)
       BITSET_SET(b.shader->info.textures_used, i);
 
-   GENX(pan_shader_compile)(b.shader, &inputs, &binary, &shader->info);
+   pan_shader_preprocess(b.shader, inputs.gpu_id);
 
-   /* Blit shaders shouldn't have sysvals */
-   assert(shader->info.sysvals.sysval_count == 0);
+   if (PAN_ARCH == 4) {
+      NIR_PASS_V(b.shader, nir_shader_instructions_pass,
+                 lower_sampler_parameters,
+                 nir_metadata_block_index | nir_metadata_dominance, NULL);
+   }
+
+   GENX(pan_shader_compile)(b.shader, &inputs, &binary, &shader->info);
 
    shader->key = *key;
    shader->address =

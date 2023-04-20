@@ -125,33 +125,30 @@ build_res_index(nir_builder *b, uint32_t set, uint32_t binding,
          panvk_pipeline_layout_ubo_start(ctx->layout, set, false) +
          set_layout->desc_ubo_index;
 
-      const uint32_t packed = (bind_layout->desc_ubo_stride << 16 ) |
-                              set_ubo_idx;
+      const uint32_t packed =
+         (bind_layout->desc_ubo_stride << 16) | set_ubo_idx;
 
       return nir_vec4(b, nir_imm_int(b, packed),
-                         nir_imm_int(b, bind_layout->desc_ubo_offset),
-                         nir_imm_int(b, array_size - 1),
-                         array_index);
+                      nir_imm_int(b, bind_layout->desc_ubo_offset),
+                      nir_imm_int(b, array_size - 1), array_index);
    }
 
    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
       assert(addr_format == nir_address_format_64bit_bounded_global ||
              addr_format == nir_address_format_64bit_global_32bit_offset);
 
-      const unsigned dyn_ssbo_idx = ctx->layout->sets[set].dyn_ssbo_offset +
-                                    bind_layout->dyn_ssbo_idx;
+      const unsigned dyn_ssbo_idx =
+         ctx->layout->sets[set].dyn_ssbo_offset + bind_layout->dyn_ssbo_idx;
 
       const unsigned ubo_idx = PANVK_SYSVAL_UBO_INDEX;
       const unsigned desc_stride = sizeof(struct panvk_ssbo_addr);
-      const uint32_t ubo_offset = offsetof(struct panvk_sysvals, dyn_ssbos) +
-                                  dyn_ssbo_idx * desc_stride;
+      const uint32_t ubo_offset =
+         offsetof(struct panvk_sysvals, dyn_ssbos) + dyn_ssbo_idx * desc_stride;
 
       const uint32_t packed = (desc_stride << 16) | ubo_idx;
 
-      return nir_vec4(b, nir_imm_int(b, packed),
-                         nir_imm_int(b, ubo_offset),
-                         nir_imm_int(b, array_size - 1),
-                         array_index);
+      return nir_vec4(b, nir_imm_int(b, packed), nir_imm_int(b, ubo_offset),
+                      nir_imm_int(b, array_size - 1), array_index);
    }
 
    default:
@@ -174,14 +171,13 @@ build_res_reindex(nir_builder *b, nir_ssa_def *orig, nir_ssa_def *delta,
    switch (addr_format) {
    case nir_address_format_32bit_index_offset:
       return nir_vec2(b, nir_channel(b, orig, 0),
-                         nir_iadd(b, nir_channel(b, orig, 1), delta));
+                      nir_iadd(b, nir_channel(b, orig, 1), delta));
 
    case nir_address_format_64bit_bounded_global:
    case nir_address_format_64bit_global_32bit_offset:
-      return nir_vec4(b, nir_channel(b, orig, 0),
-                         nir_channel(b, orig, 1),
-                         nir_channel(b, orig, 2),
-                         nir_iadd(b, nir_channel(b, orig, 3), delta));
+      return nir_vec4(b, nir_channel(b, orig, 0), nir_channel(b, orig, 1),
+                      nir_channel(b, orig, 2),
+                      nir_iadd(b, nir_channel(b, orig, 3), delta));
 
    default:
       unreachable("Unhandled address format");
@@ -196,8 +192,7 @@ build_res_reindex(nir_builder *b, nir_ssa_def *orig, nir_ssa_def *delta,
  * See build_res_index for details about each resource index format.
  */
 static nir_ssa_def *
-build_buffer_addr_for_res_index(nir_builder *b,
-                                nir_ssa_def *res_index,
+build_buffer_addr_for_res_index(nir_builder *b, nir_ssa_def *res_index,
                                 nir_address_format addr_format,
                                 const struct apply_descriptors_ctx *ctx)
 {
@@ -205,14 +200,15 @@ build_buffer_addr_for_res_index(nir_builder *b,
    case nir_address_format_32bit_index_offset: {
       nir_ssa_def *packed = nir_channel(b, res_index, 0);
       nir_ssa_def *array_index = nir_channel(b, res_index, 1);
-      nir_ssa_def *surface_index = nir_extract_u16(b, packed, nir_imm_int(b, 0));
+      nir_ssa_def *surface_index =
+         nir_extract_u16(b, packed, nir_imm_int(b, 0));
       nir_ssa_def *array_max = nir_extract_u16(b, packed, nir_imm_int(b, 1));
 
       if (ctx->add_bounds_checks)
          array_index = nir_umin(b, array_index, array_max);
 
       return nir_vec2(b, nir_iadd(b, surface_index, array_index),
-                         nir_imm_int(b, 0));
+                      nir_imm_int(b, 0));
    }
 
    case nir_address_format_64bit_bounded_global:
@@ -223,33 +219,30 @@ build_buffer_addr_for_res_index(nir_builder *b,
       nir_ssa_def *array_index = nir_channel(b, res_index, 3);
 
       nir_ssa_def *desc_ubo_idx = nir_extract_u16(b, packed, nir_imm_int(b, 0));
-      nir_ssa_def *desc_ubo_stride = nir_extract_u16(b, packed, nir_imm_int(b, 1));
+      nir_ssa_def *desc_ubo_stride =
+         nir_extract_u16(b, packed, nir_imm_int(b, 1));
 
       if (ctx->add_bounds_checks)
          array_index = nir_umin(b, array_index, array_max);
 
       desc_ubo_offset = nir_iadd(b, desc_ubo_offset,
-                                    nir_imul(b, array_index, desc_ubo_stride));
+                                 nir_imul(b, array_index, desc_ubo_stride));
 
-      nir_ssa_def *desc = nir_load_ubo(b, 4, 32, desc_ubo_idx,
-                                       desc_ubo_offset,
-                                       .align_mul=16, .range=~0);
+      nir_ssa_def *desc = nir_load_ubo(b, 4, 32, desc_ubo_idx, desc_ubo_offset,
+                                       .align_mul = 16, .range = ~0);
 
       /* The offset in the descriptor is guaranteed to be zero when it's
        * written into the descriptor set.  This lets us avoid some unnecessary
        * adds.
        */
-      return nir_vec4(b, nir_channel(b, desc, 0),
-                         nir_channel(b, desc, 1),
-                         nir_channel(b, desc, 2),
-                         nir_imm_int(b, 0));
+      return nir_vec4(b, nir_channel(b, desc, 0), nir_channel(b, desc, 1),
+                      nir_channel(b, desc, 2), nir_imm_int(b, 0));
    }
 
    default:
       unreachable("Unhandled address format");
    }
 }
-
 
 static bool
 lower_res_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
@@ -265,22 +258,20 @@ lower_res_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_intrinsic_vulkan_resource_index:
       assert(intrin->src[0].is_ssa);
       res = build_res_index(b, nir_intrinsic_desc_set(intrin),
-                               nir_intrinsic_binding(intrin),
-                               intrin->src[0].ssa,
-                               addr_format, ctx);
+                            nir_intrinsic_binding(intrin), intrin->src[0].ssa,
+                            addr_format, ctx);
       break;
 
    case nir_intrinsic_vulkan_resource_reindex:
       assert(intrin->src[0].is_ssa && intrin->src[1].is_ssa);
-      res = build_res_reindex(b, intrin->src[0].ssa,
-                                 intrin->src[1].ssa,
-                                 addr_format);
+      res = build_res_reindex(b, intrin->src[0].ssa, intrin->src[1].ssa,
+                              addr_format);
       break;
 
    case nir_intrinsic_load_vulkan_descriptor:
       assert(intrin->src[0].is_ssa);
-      res = build_buffer_addr_for_res_index(b, intrin->src[0].ssa,
-                                               addr_format, ctx);
+      res = build_buffer_addr_for_res_index(b, intrin->src[0].ssa, addr_format,
+                                            ctx);
       break;
 
    default:
@@ -296,39 +287,10 @@ lower_res_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    return true;
 }
 
-static bool
-lower_get_ssbo_size(nir_builder *b, nir_intrinsic_instr *intrin,
-                    const struct apply_descriptors_ctx *ctx)
-{
-   b->cursor = nir_before_instr(&intrin->instr);
-
-   nir_address_format addr_format =
-      addr_format_for_desc_type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, ctx);
-
-   assert(intrin->src[0].is_ssa);
-   nir_ssa_def *desc = build_buffer_addr_for_res_index(b, intrin->src[0].ssa,
-                                                          addr_format, ctx);
-
-   switch (addr_format) {
-   case nir_address_format_64bit_bounded_global:
-   case nir_address_format_64bit_global_32bit_offset: {
-      nir_ssa_def *size = nir_channel(b, desc, 2);
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, size);
-      nir_instr_remove(&intrin->instr);
-      break;
-   }
-
-   default:
-      unreachable("Unsupported address format");
-   }
-
-   return true;
-}
-
 static void
-get_resource_deref_binding(nir_deref_instr *deref,
-                           uint32_t *set, uint32_t *binding,
-                           uint32_t *index_imm, nir_ssa_def **index_ssa)
+get_resource_deref_binding(nir_deref_instr *deref, uint32_t *set,
+                           uint32_t *binding, uint32_t *index_imm,
+                           nir_ssa_def **index_ssa)
 {
    *index_imm = 0;
    *index_ssa = NULL;
@@ -352,14 +314,13 @@ get_resource_deref_binding(nir_deref_instr *deref,
 
 static nir_ssa_def *
 load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
-                         unsigned desc_offset,
-                         unsigned num_components, unsigned bit_size,
+                         unsigned desc_offset, unsigned num_components,
+                         unsigned bit_size,
                          const struct apply_descriptors_ctx *ctx)
 {
    uint32_t set, binding, index_imm;
    nir_ssa_def *index_ssa;
-   get_resource_deref_binding(deref, &set, &binding,
-                              &index_imm, &index_ssa);
+   get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa);
 
    const struct panvk_descriptor_set_layout *set_layout =
       get_set_layout(set, ctx);
@@ -375,20 +336,16 @@ load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
       set_layout->desc_ubo_index;
 
    nir_ssa_def *desc_ubo_offset =
-      nir_iadd_imm(b, nir_imul_imm(b, index_ssa,
-                                      bind_layout->desc_ubo_stride),
-                      bind_layout->desc_ubo_offset + desc_offset);
+      nir_iadd_imm(b, nir_imul_imm(b, index_ssa, bind_layout->desc_ubo_stride),
+                   bind_layout->desc_ubo_offset + desc_offset);
 
    assert(bind_layout->desc_ubo_stride > 0);
    unsigned desc_align = (1 << (ffs(bind_layout->desc_ubo_stride) - 1));
    desc_align = MIN2(desc_align, 16);
 
-   return nir_load_ubo(b, num_components, bit_size,
-                       nir_imm_int(b, set_ubo_idx),
-                       desc_ubo_offset,
-                       .align_mul=desc_align,
-                       .align_offset=(desc_offset % desc_align),
-                       .range=~0);
+   return nir_load_ubo(b, num_components, bit_size, nir_imm_int(b, set_ubo_idx),
+                       desc_ubo_offset, .align_mul = desc_align,
+                       .align_offset = (desc_offset % desc_align), .range = ~0);
 }
 
 static nir_ssa_def *
@@ -436,8 +393,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
 
    b->cursor = nir_before_instr(&tex->instr);
 
-   if (tex->op == nir_texop_txs ||
-       tex->op == nir_texop_query_levels ||
+   if (tex->op == nir_texop_txs || tex->op == nir_texop_query_levels ||
        tex->op == nir_texop_texture_samples) {
       int tex_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
       assert(tex_src_idx >= 0);
@@ -468,15 +424,15 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
       return true;
    }
 
-   int sampler_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+   int sampler_src_idx =
+      nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
    if (sampler_src_idx >= 0) {
       nir_deref_instr *deref = nir_src_as_deref(tex->src[sampler_src_idx].src);
       nir_tex_instr_remove_src(tex, sampler_src_idx);
 
       uint32_t set, binding, index_imm;
       nir_ssa_def *index_ssa;
-      get_resource_deref_binding(deref, &set, &binding,
-                                 &index_imm, &index_ssa);
+      get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa);
 
       const struct panvk_descriptor_set_binding_layout *bind_layout =
          get_binding_layout(set, binding, ctx);
@@ -498,14 +454,13 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
 
       uint32_t set, binding, index_imm;
       nir_ssa_def *index_ssa;
-      get_resource_deref_binding(deref, &set, &binding,
-                                 &index_imm, &index_ssa);
+      get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa);
 
       const struct panvk_descriptor_set_binding_layout *bind_layout =
          get_binding_layout(set, binding, ctx);
 
-      tex->texture_index = ctx->layout->sets[set].tex_offset +
-                           bind_layout->tex_idx + index_imm;
+      tex->texture_index =
+         ctx->layout->sets[set].tex_offset + bind_layout->tex_idx + index_imm;
 
       if (index_ssa != NULL) {
          nir_tex_instr_add_src(tex, nir_tex_src_texture_offset,
@@ -531,8 +486,8 @@ get_img_index(nir_builder *b, nir_deref_instr *deref,
           bind_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
           bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
 
-   unsigned img_offset = ctx->layout->sets[set].img_offset +
-                         bind_layout->img_idx;
+   unsigned img_offset =
+      ctx->layout->sets[set].img_offset + bind_layout->img_idx;
 
    if (index_ssa == NULL) {
       return nir_imm_int(b, img_offset + index_imm);
@@ -587,8 +542,6 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    case nir_intrinsic_vulkan_resource_reindex:
    case nir_intrinsic_load_vulkan_descriptor:
       return lower_res_intrinsic(b, intr, ctx);
-   case nir_intrinsic_get_ssbo_size:
-      return lower_get_ssbo_size(b, intr, ctx);
    case nir_intrinsic_image_deref_store:
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_atomic_add:
@@ -608,13 +561,10 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    default:
       return false;
    }
-
 }
 
 static bool
-lower_descriptors_instr(nir_builder *b,
-                        nir_instr *instr,
-                        void *data)
+lower_descriptors_instr(nir_builder *b, nir_instr *instr, void *data)
 {
    struct apply_descriptors_ctx *ctx = data;
 
@@ -629,8 +579,7 @@ lower_descriptors_instr(nir_builder *b,
 }
 
 bool
-panvk_per_arch(nir_lower_descriptors)(nir_shader *nir,
-                                      struct panvk_device *dev,
+panvk_per_arch(nir_lower_descriptors)(nir_shader *nir, struct panvk_device *dev,
                                       const struct panvk_pipeline_layout *layout,
                                       bool *has_img_access_out)
 {
@@ -638,15 +587,14 @@ panvk_per_arch(nir_lower_descriptors)(nir_shader *nir,
       .layout = layout,
       .desc_addr_format = nir_address_format_32bit_index_offset,
       .ubo_addr_format = nir_address_format_32bit_index_offset,
-      .ssbo_addr_format = dev->vk.enabled_features.robustBufferAccess ?
-                          nir_address_format_64bit_bounded_global :
-                          nir_address_format_64bit_global_32bit_offset,
+      .ssbo_addr_format = dev->vk.enabled_features.robustBufferAccess
+                             ? nir_address_format_64bit_bounded_global
+                             : nir_address_format_64bit_global_32bit_offset,
    };
 
-   bool progress = nir_shader_instructions_pass(nir, lower_descriptors_instr,
-                                                nir_metadata_block_index |
-                                                nir_metadata_dominance,
-                                                (void *)&ctx);
+   bool progress = nir_shader_instructions_pass(
+      nir, lower_descriptors_instr,
+      nir_metadata_block_index | nir_metadata_dominance, (void *)&ctx);
    if (has_img_access_out)
       *has_img_access_out = ctx.has_img_access;
 

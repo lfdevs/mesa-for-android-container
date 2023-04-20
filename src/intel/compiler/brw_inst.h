@@ -1069,11 +1069,16 @@ brw_inst_imm_ud(const struct intel_device_info *devinfo, const brw_inst *insn)
 }
 
 static inline uint64_t
-brw_inst_imm_uq(ASSERTED const struct intel_device_info *devinfo,
+brw_inst_imm_uq(const struct intel_device_info *devinfo,
                 const brw_inst *insn)
 {
-   assert(devinfo->ver >= 8);
-   return brw_inst_bits(insn, 127, 64);
+   if (devinfo->ver >= 12) {
+      return brw_inst_bits(insn, 95, 64) << 32 |
+             brw_inst_bits(insn, 127, 96);
+   } else {
+      assert(devinfo->ver >= 8);
+      return brw_inst_bits(insn, 127, 64);
+   }
 }
 
 static inline float
@@ -1095,8 +1100,7 @@ brw_inst_imm_df(const struct intel_device_info *devinfo, const brw_inst *insn)
       double d;
       uint64_t u;
    } dt;
-   (void) devinfo;
-   dt.u = brw_inst_bits(insn, 127, 64);
+   dt.u = brw_inst_imm_uq(devinfo, insn);
    return dt.d;
 }
 

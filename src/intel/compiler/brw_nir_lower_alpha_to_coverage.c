@@ -78,9 +78,13 @@ build_dither_mask(nir_builder *b, nir_ssa_def *color)
 }
 
 bool
-brw_nir_lower_alpha_to_coverage(nir_shader *shader)
+brw_nir_lower_alpha_to_coverage(nir_shader *shader,
+                                const struct brw_wm_prog_key *key,
+                                const struct brw_wm_prog_data *prog_data)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
+   assert(key->alpha_to_coverage != BRW_NEVER);
+
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
    const uint64_t outputs_written = shader->info.outputs_written;
@@ -168,8 +172,21 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader)
 
    /* Combine dither_mask and the gl_SampleMask value */
    b.cursor = nir_before_instr(&sample_mask_write->instr);
+
    nir_ssa_def *dither_mask = build_dither_mask(&b, color0);
    dither_mask = nir_iand(&b, sample_mask, dither_mask);
+
+   if (key->alpha_to_coverage == BRW_SOMETIMES) {
+      nir_ssa_def *push_flags =
+         nir_load_uniform(&b, 1, 32, nir_imm_int(&b, prog_data->msaa_flags_param * 4));
+      nir_ssa_def *alpha_to_coverage =
+         nir_i2b(&b,
+                 nir_iadd_imm(&b, push_flags,
+                              BRW_WM_MSAA_FLAG_ALPHA_TO_COVERAGE));
+      dither_mask = nir_bcsel(&b, alpha_to_coverage,
+                              dither_mask, sample_mask_write->src[0].ssa);
+   }
+
    nir_instr_rewrite_src(&sample_mask_write->instr,
                          &sample_mask_write->src[0],
                          nir_src_for_ssa(dither_mask));

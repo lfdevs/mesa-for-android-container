@@ -319,18 +319,6 @@ struct gl_colorbuffer_attrib
    GLboolean sRGBEnabled;  /**< Framebuffer sRGB blending/updating requested */
 };
 
-union gl_vertex_format_user {
-   struct {
-      GLenum16 Type;        /**< datatype: GL_FLOAT, GL_INT, etc */
-      bool Bgra;            /**< true if GL_BGRA, else GL_RGBA */
-      GLubyte Size:5;       /**< components per element (1,2,3,4) */
-      GLubyte Normalized:1; /**< GL_ARB_vertex_program */
-      GLubyte Integer:1;    /**< Integer-valued? */
-      GLubyte Doubles:1;    /**< double values are not converted to floats */
-   };
-   uint32_t All;
-};
-
 /**
  * Vertex format to describe a vertex element.
  */
@@ -958,6 +946,8 @@ struct gl_texture_object
    GLboolean External;
    GLubyte RequiredTextureImageUnits;
 
+   GLboolean NullTexture; /**< this texture is incomplete and should be passed to the driver as NULL */
+
    /** GL_EXT_memory_object */
    GLenum16 TextureTiling;
 
@@ -1475,6 +1465,7 @@ struct gl_buffer_object
    bool DeletePending:1;  /**< true if buffer object is removed from the hash */
    bool Immutable:1;    /**< GL_ARB_buffer_storage */
    bool HandleAllocated:1; /**< GL_ARB_bindless_texture */
+   bool GLThreadInternal:1; /**< Created by glthread. */
    GLenum16 Usage;      /**< GL_STREAM_DRAW_ARB, GL_STREAM_READ_ARB, etc. */
    GLchar *Label;       /**< GL_KHR_debug */
    GLsizeiptrARB Size;  /**< Size of buffer storage in bytes */
@@ -2425,7 +2416,7 @@ struct gl_shared_state
    struct gl_texture_object *DefaultTex[NUM_TEXTURE_TARGETS];
 
    /** Fallback texture used when a bound texture is incomplete */
-   struct gl_texture_object *FallbackTex[NUM_TEXTURE_TARGETS];
+   struct gl_texture_object *FallbackTex[NUM_TEXTURE_TARGETS][2]; /**< [color, depth] */
 
    /**
     * \name Thread safety and statechange notification for texture
@@ -2531,6 +2522,22 @@ struct gl_shared_state
       struct util_idalloc free_idx;
       unsigned size;
    } small_dlist_store;
+
+   /* Global GLThread state. */
+   struct {
+      /* The last context that locked global mutexes. */
+      struct gl_context *LastExecutingCtx;
+
+      /* The last time LastExecutingCtx started executing after a different
+       * context (the time of multiple active contexts).
+       */
+      int64_t LastContextSwitchTime;
+
+      /* The time for which no context can lock global mutexes since
+       * LastContextSwitchTime.
+       */
+      int64_t NoLockDuration;
+   } GLThread;
 };
 
 
@@ -2732,6 +2739,7 @@ struct gl_framebuffer
 
    /** Array of all renderbuffer attachments, indexed by BUFFER_* tokens. */
    struct gl_renderbuffer_attachment Attachment[BUFFER_COUNT];
+   struct pipe_resource *resolve; /**< color resolve attachment */
 
    /* In unextended OpenGL these vars are part of the GL_COLOR_BUFFER
     * attribute group and GL_PIXEL attribute group, respectively.
@@ -3204,6 +3212,57 @@ struct gl_attrib_node
 };
 
 /**
+ * Dispatch tables.
+ */
+struct gl_dispatch
+{
+   /**
+    * For non-displaylist-saving, non-begin/end.
+    */
+   struct _glapi_table *OutsideBeginEnd;
+
+   /**
+    * The dispatch table used between glBegin() and glEnd() (outside of a
+    * display list).  Only valid functions between those two are set.
+    */
+   struct _glapi_table *BeginEnd;
+
+   /**
+    * Same as BeginEnd except glVertex{Attrib} functions. Used when
+    * HW GL_SELECT mode instead of BeginEnd to insert extra code
+    * for GL_SELECT.
+    */
+   struct _glapi_table *HWSelectModeBeginEnd;
+
+   /**
+    * The dispatch table used between glNewList() and glEndList().
+    */
+   struct _glapi_table *Save;
+
+   /**
+    * Dispatch table for when a graphics reset has happened.
+    */
+   struct _glapi_table *ContextLost;
+
+   /**
+    * The current dispatch table for non-displaylist-saving execution.
+    * It can be equal to one of these:
+    * - OutsideBeginEnd
+    * - BeginEnd
+    * - HWSelectModeBeginEnd
+    */
+   struct _glapi_table *Exec;
+
+   /**
+    * The current dispatch table overall. It can be equal to one of these:
+    * - Exec
+    * - Save
+    * - ContextLost
+    */
+   struct _glapi_table *Current;
+};
+
+/**
  * Mesa rendering context.
  *
  * This is the central context data structure for Mesa.  Almost all
@@ -3226,47 +3285,23 @@ struct gl_context
    gl_api API;
 
    /**
-    * The current dispatch table for non-displaylist-saving execution, either
-    * BeginEnd or OutsideBeginEnd
+    * Dispatch tables implementing OpenGL functions. GLThread has no effect
+    * on this.
     */
-   struct _glapi_table *Exec;
+   struct gl_dispatch Dispatch;
+
    /**
-    * The normal dispatch table for non-displaylist-saving, non-begin/end
-    */
-   struct _glapi_table *OutsideBeginEnd;
-   /** The dispatch table used between glNewList() and glEndList() */
-   struct _glapi_table *Save;
-   /**
-    * The dispatch table used between glBegin() and glEnd() (outside of a
-    * display list).  Only valid functions between those two are set.
-    */
-   struct _glapi_table *BeginEnd;
-   /**
-    * Same as BeginEnd except vertex postion set functions. Used when
-    * HW GL_SELECT mode instead of BeginEnd.
-    */
-   struct _glapi_table *HWSelectModeBeginEnd;
-   /**
-    * Dispatch table for when a graphics reset has happened.
-    */
-   struct _glapi_table *ContextLost;
-   /**
-    * Dispatch table used to marshal API calls from the client program to a
-    * separate server thread.
+    * Dispatch table used by GLThread, a component used to marshal API
+    * calls from an application to a separate thread.
     */
    struct _glapi_table *MarshalExec;
+
    /**
     * Dispatch table currently in use for fielding API calls from the client
     * program.  If API calls are being marshalled to another thread, this ==
-    * MarshalExec.  Otherwise it == CurrentServerDispatch.
+    * MarshalExec.  Otherwise it == Dispatch.Current.
     */
-   struct _glapi_table *CurrentClientDispatch;
-
-   /**
-    * Dispatch table currently in use for performing API calls.  == Save or
-    * Exec.
-    */
-   struct _glapi_table *CurrentServerDispatch;
+   struct _glapi_table *GLApi;
 
    /*@}*/
 
@@ -3306,6 +3341,9 @@ struct gl_context
     * Same as ValidPrimMask, but should be applied to glDrawElements*.
     */
    GLbitfield ValidPrimMaskIndexed;
+
+   /** DrawID for the next non-multi non-indirect draw. Only set by glthread. */
+   GLuint DrawID;
 
    /**
     * Whether DrawPixels/CopyPixels/Bitmap are valid to render.

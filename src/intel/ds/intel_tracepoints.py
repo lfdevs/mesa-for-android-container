@@ -24,6 +24,12 @@
 import argparse
 import sys
 
+# List of the default tracepoints enabled. By default most tracepoints are
+# enabled, set tp_default=False to disable them by default.
+#
+# Currently only stall is disabled by default
+intel_default_tps = []
+
 #
 # Tracepoint definitions:
 #
@@ -38,42 +44,70 @@ def define_tracepoints(args):
     Header('blorp/blorp_priv.h', scope=HeaderScope.HEADER)
     Header('ds/intel_driver_ds.h', scope=HeaderScope.HEADER)
 
-    def begin_end_tp(name, tp_args=[], tp_struct=None, tp_print=None, end_pipelined=True):
+    def begin_end_tp(name, tp_args=[], tp_struct=None, tp_print=None,
+                     tp_default_enabled=True, end_pipelined=True,
+                     need_cs_param=False):
+        global intel_default_tps
+        if tp_default_enabled:
+            intel_default_tps.append(name)
         Tracepoint('intel_begin_{0}'.format(name),
-                   tp_perfetto='intel_ds_begin_{0}'.format(name))
+                   toggle_name=name,
+                   tp_perfetto='intel_ds_begin_{0}'.format(name),
+                   need_cs_param=need_cs_param)
         Tracepoint('intel_end_{0}'.format(name),
+                   toggle_name=name,
                    args=tp_args,
                    tp_struct=tp_struct,
                    tp_perfetto='intel_ds_end_{0}'.format(name),
                    tp_print=tp_print,
-                   end_of_pipe=end_pipelined)
+                   end_of_pipe=end_pipelined,
+                   need_cs_param=need_cs_param)
 
+    # Frame tracepoints
+    begin_end_tp('frame',
+                 tp_args=[Arg(type='uint32_t', var='frame', c_format='%u'),],
+                 end_pipelined=False,
+                 need_cs_param=True)
 
+    # Annotations for Queue(Begin|End)DebugUtilsLabelEXT
+    begin_end_tp('queue_annotation',
+                 tp_args=[ArgStruct(type='unsigned', var='len'),
+                          ArgStruct(type='const char *', var='str'),],
+                 tp_struct=[Arg(type='uint8_t', name='dummy', var='0', c_format='%hhu'),
+                            Arg(type='char', name='str', var='str', c_format='%s', length_arg='len + 1', copy_func='strncpy'),],
+                 end_pipelined=False,
+                 need_cs_param=True)
+
+    # Batch buffer tracepoints, only for Iris
     begin_end_tp('batch',
                  tp_args=[Arg(type='uint8_t', var='name', c_format='%hhu'),],
                  end_pipelined=False)
 
+    # Command buffer tracepoints, only for Anv
     begin_end_tp('cmd_buffer',
                  tp_args=[Arg(type='uint8_t', var='level', c_format='%hhu'),],
                  end_pipelined=False)
 
+    # Annotations for Cmd(Begin|End)DebugUtilsLabelEXT
+    begin_end_tp('cmd_buffer_annotation',
+                 tp_args=[ArgStruct(type='unsigned', var='len'),
+                          ArgStruct(type='const char *', var='str'),],
+                 tp_struct=[Arg(type='uint8_t', name='dummy', var='0', c_format='%hhu'),
+                            Arg(type='char', name='str', var='str', c_format='%s', length_arg='len + 1', copy_func='strncpy'),],
+                 end_pipelined=True)
+
+    # Transform feedback, only for Anv
     begin_end_tp('xfb',
                  end_pipelined=False)
 
+    # Dynamic rendering tracepoints, only for Anv
     begin_end_tp('render_pass',
                  tp_args=[Arg(type='uint16_t', var='width', c_format='%hu'),
                           Arg(type='uint16_t', var='height', c_format='%hu'),
                           Arg(type='uint8_t', var='att_count', c_format='%hhu'),
                           Arg(type='uint8_t', var='msaa', c_format='%hhu'),])
 
-    begin_end_tp('dyn_render_pass',
-                 tp_args=[Arg(type='uint16_t', var='width', c_format='%hu'),
-                          Arg(type='uint16_t', var='height', c_format='%hu'),
-                          Arg(type='uint8_t', var='att_count', c_format='%hhu'),
-                          Arg(type='uint8_t', var='msaa', c_format='%hhu'),
-                          Arg(type='uint8_t', var='suspend', c_format='%hhu'),
-                          Arg(type='uint8_t', var='resume', c_format='%hhu'),])
-
+    # Blorp operations, Anv & Iris
     begin_end_tp('blorp',
                  tp_args=[Arg(type='enum blorp_op', name='op', var='op', c_format='%s', to_prim_type='blorp_op_to_name({})'),
                           Arg(type='uint32_t', name='width', var='width', c_format='%u'),
@@ -84,8 +118,10 @@ def define_tracepoints(args):
                           Arg(type='enum isl_format', name='src_fmt', var='src_fmt', c_format='%s', to_prim_type='isl_format_get_short_name({})'),
                           ])
 
+    # Indirect draw generation, only for Anv
     begin_end_tp('generate_draws')
 
+    # Various draws/dispatch, Anv & Iris
     begin_end_tp('draw',
                  tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
     begin_end_tp('draw_multi',
@@ -120,6 +156,9 @@ def define_tracepoints(args):
                           Arg(type='uint32_t', var='group_y', c_format='%u'),
                           Arg(type='uint32_t', var='group_z', c_format='%u'),],
                  tp_print=['group=%ux%ux%u', '__entry->group_x', '__entry->group_y', '__entry->group_z'])
+
+    # Used to identify copies generated by utrace
+    begin_end_tp('trace_copy', end_pipelined=True)
 
     def flag_bits(args):
         bits = [Arg(type='enum intel_ds_stall_flag', name='flags', var='decode_cb(flags)', c_format='0x%x')]
@@ -156,7 +195,8 @@ def define_tracepoints(args):
                    ['DEPTH_STALL',                   'depth_stall'],
                    ['CS_STALL',                      'cs_stall'],
                    ['UNTYPED_DATAPORT_CACHE_FLUSH',  'udp_flush'],
-                   ['PSS_STALL_SYNC',                'pss_stall']]
+                   ['PSS_STALL_SYNC',                'pss_stall'],
+                   ['END_OF_PIPE',               'eop']]
 
     begin_end_tp('stall',
                  tp_args=[ArgStruct(type='uint32_t', var='flags'),
@@ -165,6 +205,7 @@ def define_tracepoints(args):
                  tp_struct=[Arg(type='uint32_t', name='flags', var='decode_cb(flags)', c_format='0x%x'),
                             Arg(type='const char *', name='reason', var='reason', c_format='%s'),],
                  tp_print=stall_args(stall_flags),
+                 tp_default_enabled=False,
                  end_pipelined=False)
 
 
@@ -174,7 +215,8 @@ def generate_code(args):
 
     utrace_generate(cpath=args.utrace_src, hpath=args.utrace_hdr,
                     ctx_param='struct intel_ds_device *dev',
-                    need_cs_param=False)
+                    trace_toggle_name='intel_gpu_tracepoint',
+                    trace_toggle_defaults=intel_default_tps)
     utrace_generate_perfetto_utils(hpath=args.perfetto_hdr)
 
 

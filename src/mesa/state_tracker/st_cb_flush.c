@@ -44,6 +44,7 @@
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "util/u_gen_mipmap.h"
+#include "util/perf/cpu_trace.h"
 
 
 void
@@ -51,6 +52,8 @@ st_flush(struct st_context *st,
          struct pipe_fence_handle **fence,
          unsigned flags)
 {
+   MESA_TRACE_FUNC();
+
    /* We want to call this function periodically.
     * Typically, it has nothing to do so it shouldn't be expensive.
     */
@@ -68,6 +71,8 @@ void
 st_finish(struct st_context *st)
 {
    struct pipe_fence_handle *fence = NULL;
+
+   MESA_TRACE_FUNC();
 
    st_flush(st, &fence, PIPE_FLUSH_ASYNC | PIPE_FLUSH_HINT_FINISH);
 

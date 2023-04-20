@@ -208,7 +208,7 @@ v3d_create_depth_stencil_alpha_state(struct pipe_context *pctx,
                     (cso->stencil[0].zfail_op != PIPE_STENCIL_OP_KEEP ||
                      cso->stencil[0].func != PIPE_FUNC_ALWAYS ||
                      (cso->stencil[1].enabled &&
-                      (cso->stencil[1].zfail_op != PIPE_STENCIL_OP_KEEP &&
+                      (cso->stencil[1].zfail_op != PIPE_STENCIL_OP_KEEP ||
                        cso->stencil[1].func != PIPE_FUNC_ALWAYS)))) {
                         so->ez_state = V3D_EZ_DISABLED;
                 }
@@ -548,8 +548,9 @@ v3d_upload_sampler_state_variant(void *map,
                 sampler.wrap_r = translate_wrap(cso->wrap_r);
 
                 sampler.fixed_bias = cso->lod_bias;
-                sampler.depth_compare_function = cso->compare_func;
-
+                sampler.depth_compare_function = cso->compare_mode ?
+                                                 cso->compare_func :
+                                                 V3D_COMPARE_FUNC_NEVER;
                 sampler.min_filter_nearest =
                         cso->min_img_filter == PIPE_TEX_FILTER_NEAREST;
                 sampler.mag_filter_nearest =
@@ -792,7 +793,9 @@ v3d_create_sampler_state(struct pipe_context *pctx,
         }
 
         v3dx_pack(&so->texture_shader_state, TEXTURE_SHADER_STATE, tex) {
-                tex.depth_compare_function = cso->compare_func;
+                tex.depth_compare_function = cso->compare_mode ?
+                                             cso->compare_func :
+                                             V3D_COMPARE_FUNC_NEVER;
                 tex.fixed_bias = cso->lod_bias;
         }
 #endif /* V3D_VERSION < 40 */
@@ -1114,8 +1117,7 @@ v3d_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                         }
                 }
         } else {
-                if (v3d_get_tex_return_size(&screen->devinfo, sample_format,
-                                           PIPE_TEX_COMPARE_NONE) == 32) {
+                if (v3d_get_tex_return_size(&screen->devinfo, sample_format) == 32) {
                         if (util_format_is_alpha(sample_format))
                                 so->sampler_variant = V3D_SAMPLER_STATE_32_A;
                         else
@@ -1296,9 +1298,12 @@ v3d_set_stream_output_targets(struct pipe_context *pctx,
         if (num_targets == 0 && so->num_targets > 0)
                 v3d_update_primitive_counters(ctx);
 
+        /* If offset is (unsigned) -1, it means continue appending to the
+         * buffer at the existing offset.
+         */
         for (i = 0; i < num_targets; i++) {
-                if (offsets[i] != -1)
-                        so->offsets[i] = offsets[i];
+                if (offsets[i] != (unsigned)-1)
+                        v3d_stream_output_target(targets[i])->offset = offsets[i];
 
                 pipe_so_target_reference(&so->targets[i], targets[i]);
         }

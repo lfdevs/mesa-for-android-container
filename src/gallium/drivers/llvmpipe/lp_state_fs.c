@@ -1347,7 +1347,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
    }
 
    if (key->occlusion_count) {
-      LLVMValueRef counter = lp_jit_thread_data_counter(gallivm, thread_data_type, thread_data_ptr);
+      LLVMValueRef counter = lp_jit_thread_data_vis_counter(gallivm, thread_data_type, thread_data_ptr);
       lp_build_name(counter, "counter");
 
       lp_build_occlusion_count(gallivm, type,
@@ -2425,7 +2425,7 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
 
    const boolean is_1d = variant->key.resource_1d;
    const unsigned num_fullblock_fs = is_1d ? 2 * num_fs : num_fs;
-   LLVMValueRef fpstate = 0;
+   LLVMValueRef fpstate = NULL;
 
    LLVMTypeRef fs_vec_type = lp_build_vec_type(gallivm, fs_type);
 
@@ -3070,12 +3070,12 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
                              dst, dst_type, dst_count, dst_alignment);
    }
 
-   if (have_smallfloat_format(dst_type, out_format)) {
-      lp_build_fpstate_set(gallivm, fpstate);
-   }
-
    if (do_branch) {
       lp_build_mask_end(&mask_ctx);
+   }
+
+   if (fpstate) {
+      lp_build_fpstate_set(gallivm, fpstate);
    }
 }
 
@@ -3268,7 +3268,7 @@ generate_fragment(struct llvmpipe_context *lp,
    if (shader->info.base.num_instructions > 1) {
       LLVMValueRef invocs, val;
       LLVMTypeRef invocs_type = LLVMInt64TypeInContext(gallivm->context);
-      invocs = lp_jit_thread_data_invocations(gallivm, variant->jit_thread_data_type, thread_data_ptr);
+      invocs = lp_jit_thread_data_ps_invocations(gallivm, variant->jit_thread_data_type, thread_data_ptr);
       val = LLVMBuildLoad2(builder, invocs_type, invocs, "");
       val = LLVMBuildAdd(builder, val,
                          LLVMConstInt(LLVMInt64TypeInContext(gallivm->context),

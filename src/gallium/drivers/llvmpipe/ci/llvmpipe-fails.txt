@@ -26,17 +26,9 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_x,Fail
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
-glx@glx-copy-sub-buffer,Fail
-glx@glx-copy-sub-buffer samples=2,Fail
-glx@glx-copy-sub-buffer samples=4,Fail
-
-# X Error of failed request:  BadMatch (invalid parameter attributes)
-#   Major opcode of failed request:  150 (GLX)
-#   Minor opcode of failed request:  11 (X_GLXSwapBuffers)
-glx@glx-make-current,Crash
+glx@glx-make-current,Fail
 
 glx@glx-multi-window-single-context,Fail
-glx@glx-swap-copy,Fail
 glx@glx-swap-pixmap-bad,Fail
 
 # X Error of failed request:  BadDrawable (invalid Pixmap or Window parameter)
@@ -75,12 +67,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on bottom ed
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on left edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on right edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on top edge,Fail
-spec@!opengl 1.1@read-front,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=2,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=4,Fail
-spec@!opengl 1.1@read-front samples=2,Fail
-spec@!opengl 1.1@read-front samples=4,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 spec@!opengl 3.2@layered-rendering@clear-color-mismatched-layer-count,Fail
 spec@arb_enhanced_layouts@execution@component-layout@vs-fs-array-dvec3,Fail
@@ -100,8 +86,6 @@ spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash
 
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
-
-spec@arb_tessellation_shader@execution@tcs-tes-levels-out-of-bounds-write,Crash
 
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 
@@ -226,22 +210,13 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_si
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_image,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_sampler,Fail
 
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7152
-spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail
-
-# EGL_BAD_DISPLAY is generated if display is not an EGL display connection
-# eglCreatePixmapSurface(0, 0x0000000000000000, 0x0000000000000000, { EGL_NONE });
-# // 0x0000000000000000 returned
-# eglCreatePixmapSurface(0xffffffffffffffff, 0x0000000000000000, 0x0000000000000000, { EGL_NONE });
-# // 0x0000000000000000 returned
-# EGL_BAD_CONFIG or EGL_BAD_PARAMETER is generated if config is not an EGL frame buffer configuration or if the PixmapSurface call is not supported
-# eglCreatePixmapSurface(0x5592c982cf90, 0xffffffffffffffff, 0x0000000000000000, { EGL_NONE });
-# // 0x0000000000000000 returned
-# // ERROR expected: EGL_BAD_CONFIG or EGL_BAD_PARAMETER, Got: EGL_BAD_NATIVE_PIXMAP
-wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail
 # [...]
 # Image comparison failed: reference = -0.000488281, expected = 0:0:0:0, result = 0:0:0:3
 # Image comparison failed: reference = 0, expected = 0:0:0:0, result = 0:0:0:3
 # Image comparison failed: reference = 0.000488281, expected = 0:1:0:0, result = 0:1:0:3
 # [...]
 wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail
+
+# New CTS failures in 1.3.5.0
+KHR-GL45.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
+KHR-GL45.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail

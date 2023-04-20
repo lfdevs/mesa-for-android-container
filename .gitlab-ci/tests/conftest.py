@@ -3,9 +3,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 from freezegun import freeze_time
+from hypothesis import settings
 
 from .lava.helpers import generate_testsuite_result, jobs_logs_response
 
+settings.register_profile("ci", max_examples=1000, derandomize=True)
+settings.load_profile("ci")
 
 def pytest_configure(config):
     config.addinivalue_line(

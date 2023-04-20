@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 #ifndef _NIR_SPIRV_H_
@@ -65,11 +61,6 @@ struct spirv_to_nir_options {
    /* Create a nir library. */
    bool create_library;
 
-   /* Whether to use nir_intrinsic_deref_buffer_array_length intrinsic instead
-    * of nir_intrinsic_get_ssbo_size to lower OpArrayLength.
-    */
-   bool use_deref_buffer_array_length;
-
    /* Initial value for shader_info::float_controls_execution_mode,
     * indicates hardware requirements rather than shader author intent
     */
@@ -101,6 +92,18 @@ struct spirv_to_nir_options {
    nir_address_format temp_addr_format;
    nir_address_format constant_addr_format;
 
+   /** Minimum UBO alignment.
+    *
+    * This should match VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment
+    */
+   uint32_t min_ubo_alignment;
+
+   /** Minimum SSBO alignment.
+    *
+    * This should match VkPhysicalDeviceLimits::minStorageBufferOffsetAlignment
+    */
+   uint32_t min_ssbo_alignment;
+
    const nir_shader *clc_shader;
 
    struct {
@@ -113,6 +116,12 @@ struct spirv_to_nir_options {
 
    /* Force texture sampling to be non-uniform. */
    bool force_tex_non_uniform;
+
+   /* In Debug Builds, instead of emitting an OS break on failure, just return NULL from
+    * spirv_to_nir().  This is useful for the unit tests that want to report a test failed
+    * but continue executing other tests.
+    */
+   bool skip_os_break_in_debug_build;
 };
 
 bool gl_spirv_validation(const uint32_t *words, size_t word_count,

@@ -165,11 +165,11 @@ foreach t : [['125', 'gfx125', 'dg2']]
       inc_intel,
     ],
     c_args : [
-      no_override_init_args, c_sse2_args,
+      no_override_init_args, sse2_args,
       '-DGFX_VERx10=@0@'.format(verX10),
     ],
     cpp_args : [
-      no_override_init_args, c_sse2_args,
+      sse2_args,
       '-DGFX_VERx10=@0@'.format(verX10),
     ],
     dependencies : [

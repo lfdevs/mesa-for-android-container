@@ -47,6 +47,8 @@
    [VK_FORMAT_##vk] = {                                        \
       .vk_format = VK_FORMAT_##vk,                             \
       .tex_format = ROGUE_TEXSTATE_FORMAT_##tex_fmt,           \
+      .depth_tex_format = ROGUE_TEXSTATE_FORMAT_INVALID,       \
+      .stencil_tex_format = ROGUE_TEXSTATE_FORMAT_INVALID,     \
       .pbe_packmode = ROGUE_PBESTATE_PACKMODE_##pack_mode,     \
       .pbe_accum_format = PVR_PBE_ACCUM_FORMAT_##accum_format, \
       .supported = true,                                       \
@@ -56,14 +58,29 @@
    [VK_FORMAT_##vk] = {                                         \
       .vk_format = VK_FORMAT_##vk,                              \
       .tex_format = ROGUE_TEXSTATE_FORMAT_COMPRESSED_##tex_fmt, \
+      .depth_tex_format = ROGUE_TEXSTATE_FORMAT_INVALID,        \
+      .stencil_tex_format = ROGUE_TEXSTATE_FORMAT_INVALID,      \
       .pbe_packmode = ROGUE_PBESTATE_PACKMODE_INVALID,          \
       .pbe_accum_format = PVR_PBE_ACCUM_FORMAT_INVALID,         \
       .supported = true,                                        \
    }
 
+#define FORMAT_DEPTH_STENCIL(vk, combined_fmt, d_fmt, s_fmt) \
+   [VK_FORMAT_##vk] = {                                      \
+      .vk_format = VK_FORMAT_##vk,                           \
+      .tex_format = ROGUE_TEXSTATE_FORMAT_##combined_fmt,    \
+      .depth_tex_format = ROGUE_TEXSTATE_FORMAT_##d_fmt,     \
+      .stencil_tex_format = ROGUE_TEXSTATE_FORMAT_##s_fmt,   \
+      .pbe_packmode = ROGUE_PBESTATE_PACKMODE_INVALID,       \
+      .pbe_accum_format = PVR_PBE_ACCUM_FORMAT_INVALID,      \
+      .supported = true,                                     \
+   }
+
 struct pvr_format {
    VkFormat vk_format;
    uint32_t tex_format;
+   uint32_t depth_tex_format;
+   uint32_t stencil_tex_format;
    uint32_t pbe_packmode;
    enum pvr_pbe_accum_format pbe_accum_format;
    bool supported;
@@ -179,11 +196,13 @@ static const struct pvr_format pvr_format_table[] = {
    /* VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 = 123. */
    FORMAT(E5B9G9R9_UFLOAT_PACK32, SE9995, SE9995, INVALID),
    /* VK_FORMAT_D16_UNORM = 124. */
-   FORMAT(D16_UNORM, U16, U16, F16),
+   FORMAT_DEPTH_STENCIL(D16_UNORM, U16, U16, INVALID),
    /* VK_FORMAT_D32_SFLOAT = 126. */
-   FORMAT(D32_SFLOAT, F32, F32, F16),
+   FORMAT_DEPTH_STENCIL(D32_SFLOAT, F32, F32, INVALID),
+   /* VK_FORMAT_S8_UINT = 127. */
+   FORMAT_DEPTH_STENCIL(S8_UINT, U8, INVALID, U8),
    /* VK_FORMAT_D24_UNORM_S8_UINT = 129. */
-   FORMAT(D24_UNORM_S8_UINT, ST8U24, ST8U24, F16),
+   FORMAT_DEPTH_STENCIL(D24_UNORM_S8_UINT, ST8U24, X8U24, U8X24),
    /* VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK = 147. */
    FORMAT_COMPRESSED(ETC2_R8G8B8_UNORM_BLOCK, ETC2_RGB),
    /* VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK = 148. */
@@ -230,6 +249,22 @@ uint32_t pvr_get_tex_format(VkFormat vk_format)
    }
 
    return ROGUE_TEXSTATE_FORMAT_INVALID;
+}
+
+uint32_t pvr_get_tex_format_aspect(VkFormat vk_format,
+                                   VkImageAspectFlags aspect_mask)
+{
+   const struct pvr_format *pvr_format = pvr_get_format(vk_format);
+   if (pvr_format) {
+      if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT)
+         return pvr_format->depth_tex_format;
+      else if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT)
+         return pvr_format->stencil_tex_format;
+
+      return pvr_format->tex_format;
+   }
+
+   return PVRX(TEXSTATE_FORMAT_INVALID);
 }
 
 uint32_t pvr_get_pbe_packmode(VkFormat vk_format)
@@ -524,6 +559,7 @@ pvr_get_image_format_features2(const struct pvr_format *pvr_format,
       case VK_FORMAT_R32G32B32A32_UINT:
       case VK_FORMAT_R32G32B32A32_SINT:
       case VK_FORMAT_R32G32B32A32_SFLOAT:
+      case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
          flags |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
          break;
       default:
@@ -613,12 +649,6 @@ pvr_get_buffer_format_features2(const struct pvr_format *pvr_format)
    return flags;
 }
 
-static VkFormatFeatureFlags
-pvr_features2_to_features(VkFormatFeatureFlags2 features2)
-{
-   return features2 & VK_ALL_FORMAT_FEATURE_FLAG_BITS;
-}
-
 void pvr_GetPhysicalDeviceFormatProperties2(
    VkPhysicalDevice physicalDevice,
    VkFormat format,
@@ -633,9 +663,9 @@ void pvr_GetPhysicalDeviceFormatProperties2(
    buffer2 = pvr_get_buffer_format_features2(pvr_format);
 
    pFormatProperties->formatProperties = (VkFormatProperties){
-      .linearTilingFeatures = pvr_features2_to_features(linear2),
-      .optimalTilingFeatures = pvr_features2_to_features(optimal2),
-      .bufferFeatures = pvr_features2_to_features(buffer2),
+      .linearTilingFeatures = vk_format_features2_to_features(linear2),
+      .optimalTilingFeatures = vk_format_features2_to_features(optimal2),
+      .bufferFeatures = vk_format_features2_to_features(buffer2),
    };
 
    vk_foreach_struct (ext, pFormatProperties->pNext) {

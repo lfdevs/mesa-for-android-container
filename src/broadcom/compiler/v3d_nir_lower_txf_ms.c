@@ -76,7 +76,7 @@ v3d_nir_lower_txf_ms_filter(const nir_instr *instr, const void *data)
 }
 
 bool
-v3d_nir_lower_txf_ms(nir_shader *s, struct v3d_compile *c)
+v3d_nir_lower_txf_ms(nir_shader *s)
 {
         return nir_shader_lower_instructions(s,
                                              v3d_nir_lower_txf_ms_filter,

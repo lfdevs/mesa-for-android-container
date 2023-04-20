@@ -75,6 +75,7 @@ pub trait HelperContextWrapper {
 
     fn create_compute_state(&self, nir: &NirShader, static_local_mem: u32) -> *mut c_void;
     fn delete_compute_state(&self, cso: *mut c_void);
+    fn compute_state_info(&self, state: *mut c_void) -> pipe_compute_state_object_info;
 
     fn unmap(&self, tx: PipeTransfer);
 }
@@ -157,6 +158,10 @@ impl<'a> HelperContextWrapper for HelperContext<'a> {
 
     fn delete_compute_state(&self, cso: *mut c_void) {
         self.lock.delete_compute_state(cso)
+    }
+
+    fn compute_state_info(&self, state: *mut c_void) -> pipe_compute_state_object_info {
+        self.lock.compute_state_info(state)
     }
 
     fn unmap(&self, tx: PipeTransfer) {
@@ -257,9 +262,9 @@ impl Device {
 
         // CL_DEVICE_MAX_PARAMETER_SIZE
         // For this minimum value, only a maximum of 128 arguments can be passed to a kernel
-        if ComputeParam::<u64>::compute_param(
-            screen,
-            pipe_compute_cap::PIPE_COMPUTE_CAP_MAX_INPUT_SIZE,
+        if screen.shader_param(
+            pipe_shader_type::PIPE_SHADER_COMPUTE,
+            pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE,
         ) < 128
         {
             return false;
@@ -483,8 +488,7 @@ impl Device {
         add_ext(1, 0, 0, "cl_khr_byte_addressable_store", "");
         add_ext(1, 0, 0, "cl_khr_global_int32_base_atomics", "");
         add_ext(1, 0, 0, "cl_khr_global_int32_extended_atomics", "");
-        // TODO spirv
-        // add_ext(1, 0, 0, "cl_khr_il_program", "");
+        add_ext(1, 0, 0, "cl_khr_il_program", "");
         add_ext(1, 0, 0, "cl_khr_local_int32_base_atomics", "");
         add_ext(1, 0, 0, "cl_khr_local_int32_extended_atomics", "");
 
@@ -500,6 +504,10 @@ impl Device {
 
         if self.image_supported() {
             add_ext(1, 0, 0, "", "__opencl_c_images");
+
+            if self.image2d_from_buffer_supported() {
+                add_ext(1, 0, 0, "cl_khr_image2d_from_buffer", "");
+            }
 
             if self.image_read_write_supported() {
                 add_ext(1, 0, 0, "", "__opencl_c_read_write_images");
@@ -536,8 +544,15 @@ impl Device {
     }
 
     pub fn const_max_size(&self) -> cl_ulong {
-        self.screen
-            .param(pipe_cap::PIPE_CAP_MAX_SHADER_BUFFER_SIZE_UINT) as u64
+        min(
+            self.max_mem_alloc(),
+            self.screen
+                .param(pipe_cap::PIPE_CAP_MAX_SHADER_BUFFER_SIZE_UINT) as u64,
+        )
+    }
+
+    pub fn const_max_count(&self) -> cl_uint {
+        self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFERS) as cl_uint
     }
 
     pub fn device_type(&self, internal: bool) -> cl_device_type {
@@ -604,8 +619,14 @@ impl Device {
             .param(pipe_cap::PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS) as usize
     }
 
+    pub fn image_pitch_alignment(&self) -> cl_uint {
+        self.screen
+            .param(pipe_cap::PIPE_CAP_LINEAR_IMAGE_PITCH_ALIGNMENT) as u32
+    }
+
     pub fn image_base_address_alignment(&self) -> cl_uint {
-        0
+        self.screen
+            .param(pipe_cap::PIPE_CAP_LINEAR_IMAGE_BASE_ADDRESS_ALIGNMENT) as u32
     }
 
     pub fn image_buffer_size(&self) -> usize {
@@ -615,6 +636,10 @@ impl Device {
 
     pub fn image_read_count(&self) -> cl_uint {
         self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS) as cl_uint
+    }
+
+    pub fn image2d_from_buffer_supported(&self) -> bool {
+        self.image_pitch_alignment() != 0 && self.image_base_address_alignment() != 0
     }
 
     pub fn image_supported(&self) -> bool {
@@ -705,10 +730,7 @@ impl Device {
     }
 
     pub fn param_max_size(&self) -> usize {
-        ComputeParam::<u64>::compute_param(
-            self.screen.as_ref(),
-            pipe_compute_cap::PIPE_COMPUTE_CAP_MAX_INPUT_SIZE,
-        ) as usize
+        self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) as usize
     }
 
     pub fn printf_buffer_size(&self) -> usize {

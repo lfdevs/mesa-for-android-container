@@ -89,8 +89,8 @@ python ./bin/gen_vs_module_defs.py --in_file src/gallium/targets/lavapipe/vulkan
 '''
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=gen_help)
-    parser.add_argument('--in_file', help='input template moudle definition file')
-    parser.add_argument('--out_file', help='output moudle definition file')
+    parser.add_argument('--in_file', help='input template module definition file')
+    parser.add_argument('--out_file', help='output module definition file')
     parser.add_argument('--compiler_abi', help='compiler abi')
     parser.add_argument('--compiler_id', help='compiler id')
     parser.add_argument('--cpu_family', help='cpu family')

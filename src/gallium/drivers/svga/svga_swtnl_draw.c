@@ -182,6 +182,11 @@ svga_init_swtnl(struct svga_context *svga)
    /* must be done before installing Draw stages */
    util_blitter_cache_all_shaders(svga->blitter);
 
+   const nir_alu_type bool_type =
+      screen->screen.get_shader_param(&screen->screen, PIPE_SHADER_FRAGMENT,
+                                      PIPE_SHADER_CAP_INTEGERS) ?
+      nir_type_bool32 : nir_type_float32;
+
    if (!screen->haveLineSmooth)
       draw_install_aaline_stage(svga->swtnl.draw, &svga->pipe);
 
@@ -189,7 +194,7 @@ svga_init_swtnl(struct svga_context *svga)
    draw_enable_line_stipple(svga->swtnl.draw, !screen->haveLineStipple);
 
    /* always install AA point stage */
-   draw_install_aapoint_stage(svga->swtnl.draw, &svga->pipe);
+   draw_install_aapoint_stage(svga->swtnl.draw, &svga->pipe, bool_type);
 
    /* Set wide line threshold above device limit (so we'll never really use it)
     */

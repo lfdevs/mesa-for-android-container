@@ -603,10 +603,10 @@ _mesa_Materialfv(GLenum face, GLenum pname, const GLfloat *params)
       updateMats = ALL_MATERIAL_BITS;
    }
 
-   if (ctx->API == API_OPENGL_COMPAT && face == GL_FRONT) {
+   if (_mesa_is_desktop_gl_compat(ctx) && face == GL_FRONT) {
       updateMats &= FRONT_MATERIAL_BITS;
    }
-   else if (ctx->API == API_OPENGL_COMPAT && face == GL_BACK) {
+   else if (_mesa_is_desktop_gl_compat(ctx) && face == GL_BACK) {
       updateMats &= BACK_MATERIAL_BITS;
    }
    else if (face != GL_FRONT_AND_BACK) {
@@ -856,20 +856,20 @@ _mesa_Begin(GLenum mode)
 
    ctx->Driver.CurrentExecPrimitive = mode;
 
-   ctx->Exec = _mesa_hw_select_enabled(ctx) ?
-      ctx->HWSelectModeBeginEnd : ctx->BeginEnd;
+   ctx->Dispatch.Exec = _mesa_hw_select_enabled(ctx) ?
+      ctx->Dispatch.HWSelectModeBeginEnd : ctx->Dispatch.BeginEnd;
 
    /* We may have been called from a display list, in which case we should
     * leave dlist.c's dispatch table in place.
     */
    if (ctx->GLThread.enabled) {
-      if (ctx->CurrentServerDispatch == ctx->OutsideBeginEnd)
-         ctx->CurrentServerDispatch = ctx->Exec;
-   } else if (ctx->CurrentClientDispatch == ctx->OutsideBeginEnd) {
-      ctx->CurrentClientDispatch = ctx->CurrentServerDispatch = ctx->Exec;
-      _glapi_set_dispatch(ctx->CurrentClientDispatch);
+      if (ctx->Dispatch.Current == ctx->Dispatch.OutsideBeginEnd)
+         ctx->Dispatch.Current = ctx->Dispatch.Exec;
+   } else if (ctx->GLApi == ctx->Dispatch.OutsideBeginEnd) {
+      ctx->GLApi = ctx->Dispatch.Current = ctx->Dispatch.Exec;
+      _glapi_set_dispatch(ctx->GLApi);
    } else {
-      assert(ctx->CurrentClientDispatch == ctx->Save);
+      assert(ctx->GLApi == ctx->Dispatch.Save);
    }
 }
 
@@ -920,17 +920,17 @@ _mesa_End(void)
       return;
    }
 
-   ctx->Exec = ctx->OutsideBeginEnd;
+   ctx->Dispatch.Exec = ctx->Dispatch.OutsideBeginEnd;
 
    if (ctx->GLThread.enabled) {
-      if (ctx->CurrentServerDispatch == ctx->BeginEnd ||
-          ctx->CurrentServerDispatch == ctx->HWSelectModeBeginEnd) {
-         ctx->CurrentServerDispatch = ctx->Exec;
+      if (ctx->Dispatch.Current == ctx->Dispatch.BeginEnd ||
+          ctx->Dispatch.Current == ctx->Dispatch.HWSelectModeBeginEnd) {
+         ctx->Dispatch.Current = ctx->Dispatch.Exec;
       }
-   } else if (ctx->CurrentClientDispatch == ctx->BeginEnd ||
-              ctx->CurrentClientDispatch == ctx->HWSelectModeBeginEnd) {
-      ctx->CurrentClientDispatch = ctx->CurrentServerDispatch = ctx->Exec;
-      _glapi_set_dispatch(ctx->CurrentClientDispatch);
+   } else if (ctx->GLApi == ctx->Dispatch.BeginEnd ||
+              ctx->GLApi == ctx->Dispatch.HWSelectModeBeginEnd) {
+      ctx->GLApi = ctx->Dispatch.Current = ctx->Dispatch.Exec;
+      _glapi_set_dispatch(ctx->GLApi);
    }
 
    if (exec->vtx.prim_count > 0) {
@@ -1088,11 +1088,11 @@ vbo_init_dispatch_begin_end(struct gl_context *ctx)
 #define NAME(x) _mesa_##x
 #define NAME_ES(x) _es_##x
 
-   struct _glapi_table *tab = ctx->OutsideBeginEnd;
+   struct _glapi_table *tab = ctx->Dispatch.OutsideBeginEnd;
    #include "api_beginend_init.h"
 
-   if (ctx->BeginEnd) {
-      tab = ctx->BeginEnd;
+   if (ctx->Dispatch.BeginEnd) {
+      tab = ctx->Dispatch.BeginEnd;
       #include "api_beginend_init.h"
    }
 }
@@ -1258,10 +1258,10 @@ void
 vbo_init_dispatch_hw_select_begin_end(struct gl_context *ctx)
 {
    int numEntries = MAX2(_gloffset_COUNT, _glapi_get_dispatch_table_size());
-   memcpy(ctx->HWSelectModeBeginEnd, ctx->BeginEnd, numEntries * sizeof(_glapi_proc));
+   memcpy(ctx->Dispatch.HWSelectModeBeginEnd, ctx->Dispatch.BeginEnd, numEntries * sizeof(_glapi_proc));
 
 #undef NAME
 #define NAME(x) _hw_select_##x
-   struct _glapi_table *tab = ctx->HWSelectModeBeginEnd;
+   struct _glapi_table *tab = ctx->Dispatch.HWSelectModeBeginEnd;
    #include "api_hw_select_init.h"
 }

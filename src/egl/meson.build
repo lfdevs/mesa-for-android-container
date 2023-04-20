@@ -28,6 +28,10 @@ link_for_egl = []
 deps_for_egl = []
 incs_for_egl = [inc_include, inc_src, inc_egl]
 
+if with_gallium_softpipe
+  c_args_for_egl += '-DGALLIUM_SOFTPIPE'
+endif
+
 files_egl = files(
   'main/eglapi.c',
   'main/eglarray.c',
@@ -106,6 +110,7 @@ if with_dri2
     'drivers/dri2/platform_device.c',
     'drivers/dri2/platform_surfaceless.c',
   )
+
   if with_platform_x11
     files_egl += files('drivers/dri2/platform_x11.c')
     if with_dri3
@@ -142,13 +147,13 @@ if with_dri2
     endif
   endif
 elif with_platform_haiku
-  incs_for_egl += inc_haikugl
   c_args_for_egl += [
     '-D_EGL_BUILT_IN_DRIVER_HAIKU',
   ]
   files_egl += files('drivers/haiku/egl_haiku.cpp')
-  link_for_egl += libgl
-  deps_for_egl += cpp.find_library('be')
+  incs_for_egl += [include_directories('../mapi', '../mesa', '../gallium/auxiliary', '../gallium/drivers', '../gallium/winsys', '../gallium/frontends/hgl', '../gallium/winsys/sw/hgl')]
+  link_for_egl += [libmesa, libgallium, libswhgl, libsthgl]
+  deps_for_egl += [cpp.find_library('be'), driver_swrast]
 elif with_platform_windows
   c_args_for_egl += [
     '-DEGLAPI=', '-DPUBLIC='
@@ -208,7 +213,7 @@ libegl = shared_library(
   install : true,
   version : egl_lib_version,
   soversion : egl_lib_soversion,
-  name_prefix : 'lib', # even on windows
+  name_prefix : host_machine.system() == 'windows' ? 'lib' : [],  # always use lib, but avoid warnings on !windows
   vs_module_defs : egl_def
 )
 

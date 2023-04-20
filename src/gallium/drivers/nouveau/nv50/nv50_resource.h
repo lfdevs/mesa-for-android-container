@@ -43,6 +43,13 @@ struct nv50_miptree_level {
    uint32_t tile_mode;
 };
 
+struct nv50_memobj {
+   struct winsys_handle *handle;
+   struct pipe_memory_object b;
+   struct nouveau_bo *bo;
+   unsigned stride;
+};
+
 #define NV50_MAX_TEXTURE_LEVELS 16
 
 struct nv50_miptree {
@@ -163,5 +170,20 @@ nv50_clear_texture(struct pipe_context *pipe,
                    unsigned level,
                    const struct pipe_box *box,
                    const void *data);
+
+struct pipe_memory_object *
+nv50_memobj_create_from_handle(struct pipe_screen *screen,
+                               struct winsys_handle *handle,
+                               bool dedicated);
+
+struct pipe_resource *
+nv50_resource_from_memobj(struct pipe_screen *screen,
+                          const struct pipe_resource *t,
+                          struct pipe_memory_object *pmemobj,
+                          uint64_t offset);
+
+void
+nv50_memobj_destroy(struct pipe_screen *screen,
+                    struct pipe_memory_object *pmemobj);
 
 #endif /* __NV50_RESOURCE_H__ */

@@ -439,7 +439,6 @@ brw_kernel_from_spirv(struct brw_compiler *compiler,
               nir_var_mem_shared | nir_var_mem_global,
               nir_address_format_62bit_generic);
 
-   NIR_PASS_V(nir, nir_lower_frexp);
    NIR_PASS_V(nir, nir_lower_convert_alu_types, NULL);
 
    NIR_PASS_V(nir, brw_nir_lower_cs_intrinsics);

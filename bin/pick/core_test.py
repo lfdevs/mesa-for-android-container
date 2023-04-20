@@ -242,7 +242,7 @@ class TestResolveNomination:
     @attr.s(slots=True)
     class FakeSubprocess:
 
-        """A fake asyncio.subprocess like classe for use with mock."""
+        """A fake asyncio.subprocess like class for use with mock."""
 
         out: typing.Optional[bytes] = attr.ib(None)
         returncode: int = attr.ib(0)

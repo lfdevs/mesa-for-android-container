@@ -66,11 +66,17 @@ emit_rcl_prologue(struct v3dv_job *job,
       uint32_t clear_pad = 0;
       if (clear_info->image) {
          const struct v3dv_image *image = clear_info->image;
+
+         /* From vkCmdClearColorImage:
+          *   "image must not use any of the formats that require a sampler
+          *    YCBCR conversion"
+          */
+         assert(image->plane_count == 1);
          const struct v3d_resource_slice *slice =
-            &image->slices[clear_info->level];
+            &image->planes[0].slices[clear_info->level];
          if (slice->tiling == V3D_TILING_UIF_NO_XOR ||
              slice->tiling == V3D_TILING_UIF_XOR) {
-            int uif_block_height = v3d_utile_height(image->cpp) * 2;
+            int uif_block_height = v3d_utile_height(image->planes[0].cpp) * 2;
 
             uint32_t implicit_padded_height =
                align(tiling->height, uif_block_height) / uif_block_height;
@@ -259,6 +265,9 @@ choose_tlb_format(struct v3dv_meta_framebuffer *framebuffer,
                   bool is_copy_to_buffer,
                   bool is_copy_from_buffer)
 {
+   /* At this point the framebuffer was already lowered to single-plane */
+   assert(framebuffer->format->plane_count == 1);
+
    if (is_copy_to_buffer || is_copy_from_buffer) {
       switch (framebuffer->vk_format) {
       case VK_FORMAT_D16_UNORM:
@@ -300,11 +309,11 @@ choose_tlb_format(struct v3dv_meta_framebuffer *framebuffer,
             }
          }
       default: /* Color formats */
-         return framebuffer->format->rt_type;
+         return framebuffer->format->planes[0].rt_type;
          break;
       }
    } else {
-      return framebuffer->format->rt_type;
+      return framebuffer->format->planes[0].rt_type;
    }
 }
 
@@ -312,7 +321,11 @@ static inline bool
 format_needs_rb_swap(struct v3dv_device *device,
                      VkFormat format)
 {
-   const uint8_t *swizzle = v3dv_get_format_swizzle(device, format);
+   /* We are calling these methods for framebuffer formats, that at this point
+    * should be single-plane
+    */
+   assert(vk_format_get_plane_count(format) == 1);
+   const uint8_t *swizzle = v3dv_get_format_swizzle(device, format, 0);
    return v3dv_format_swizzle_needs_rb_swap(swizzle);
 }
 
@@ -320,7 +333,11 @@ static inline bool
 format_needs_reverse(struct v3dv_device *device,
                      VkFormat format)
 {
-   const uint8_t *swizzle = v3dv_get_format_swizzle(device, format);
+   /* We are calling these methods for framebuffer formats, that at this point
+    * should be single-plane
+    */
+   assert(vk_format_get_plane_count(format) == 1);
+   const uint8_t *swizzle = v3dv_get_format_swizzle(device, format, 0);
    return v3dv_format_swizzle_needs_reverse(swizzle);
 }
 
@@ -335,22 +352,29 @@ emit_image_load(struct v3dv_device *device,
                 bool is_copy_to_buffer,
                 bool is_copy_from_buffer)
 {
-   uint32_t layer_offset = v3dv_layer_offset(image, mip_level, layer);
+   uint8_t plane = v3dv_plane_from_aspect(aspect);
+   uint32_t layer_offset = v3dv_layer_offset(image, mip_level, layer, plane);
 
+   /* For multi-plane formats we are copying plane by plane to the color
+    * tlb. Framebuffer format was already selected to be a tlb single-plane
+    * compatible format. We still need to use the real plane to get the
+    * address etc from the source image.
+    */
+   assert(framebuffer->format->plane_count == 1);
    /* For image to/from buffer copies we always load to and store from RT0,
     * even for depth/stencil aspects, because the hardware can't do raster
     * stores or loads from/to the depth/stencil tile buffers.
     */
    bool load_to_color_tlb = is_copy_to_buffer || is_copy_from_buffer ||
+                            image->format->plane_count > 1 ||
                             aspect == VK_IMAGE_ASPECT_COLOR_BIT;
 
-   const struct v3d_resource_slice *slice = &image->slices[mip_level];
+   const struct v3d_resource_slice *slice = &image->planes[plane].slices[mip_level];
    cl_emit(cl, LOAD_TILE_BUFFER_GENERAL, load) {
       load.buffer_to_load = load_to_color_tlb ?
          RENDER_TARGET_0 : v3dX(zs_buffer_from_aspect_bits)(aspect);
 
-      load.address = v3dv_cl_address(image->mem->bo, layer_offset);
-
+      load.address = v3dv_cl_address(image->planes[plane].mem->bo, layer_offset);
       load.input_image_format = choose_tlb_format(framebuffer, aspect, false,
                                                   is_copy_to_buffer,
                                                   is_copy_from_buffer);
@@ -420,17 +444,28 @@ emit_image_store(struct v3dv_device *device,
                  bool is_copy_from_buffer,
                  bool is_multisample_resolve)
 {
-   uint32_t layer_offset = v3dv_layer_offset(image, mip_level, layer);
+   uint8_t plane = v3dv_plane_from_aspect(aspect);
+   uint32_t layer_offset = v3dv_layer_offset(image, mip_level, layer, plane);
+
+   /*
+    * For multi-plane formats we are copying plane by plane to the color
+    * tlb. Framebuffer format was already selected to be a tlb single-plane
+    * compatible format. We still need to use the real plane to get the
+    * address etc.
+    */
+   assert(framebuffer->format->plane_count == 1);
 
    bool store_from_color_tlb = is_copy_to_buffer || is_copy_from_buffer ||
+                               image->format->plane_count > 1 ||
                                aspect == VK_IMAGE_ASPECT_COLOR_BIT;
 
-   const struct v3d_resource_slice *slice = &image->slices[mip_level];
+   const struct v3d_resource_slice *slice = &image->planes[plane].slices[mip_level];
    cl_emit(cl, STORE_TILE_BUFFER_GENERAL, store) {
       store.buffer_to_store = store_from_color_tlb ?
          RENDER_TARGET_0 : v3dX(zs_buffer_from_aspect_bits)(aspect);
 
-      store.address = v3dv_cl_address(image->mem->bo, layer_offset);
+      store.address = v3dv_cl_address(image->planes[plane].mem->bo, layer_offset);
+
       store.clear_buffer_being_stored = false;
 
       /* See rationale in emit_image_load() */
@@ -527,9 +562,10 @@ emit_copy_layer_to_buffer_per_tile_list(struct v3dv_job *job,
     * Vulkan spec states that the output buffer must have packed stencil
     * values, where each stencil value is 1 byte.
     */
+   uint8_t plane = v3dv_plane_from_aspect(region->imageSubresource.aspectMask);
    uint32_t cpp =
       region->imageSubresource.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT ?
-         1 : image->cpp;
+      1 : image->planes[plane].cpp;
    uint32_t buffer_stride = width * cpp;
    uint32_t buffer_offset = buffer->mem_offset + region->bufferOffset +
                             height * buffer_stride * layer_offset;
@@ -845,7 +881,7 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
                         uint32_t src_cpp,
                         uint32_t width,
                         uint32_t height,
-                        const struct v3dv_format *format)
+                        const struct v3dv_format_plane *format_plane)
 {
    struct drm_v3d_submit_tfu tfu = {
       .ios = (height << 16) | width,
@@ -864,7 +900,7 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
                   (src_tiling - V3D_TILING_LINEARTILE)) <<
                    V3D33_TFU_ICFG_FORMAT_SHIFT;
    }
-   tfu.icfg |= format->tex_type << V3D33_TFU_ICFG_TTYPE_SHIFT;
+   tfu.icfg |= format_plane->tex_type << V3D33_TFU_ICFG_TTYPE_SHIFT;
 
    tfu.ioa = dst_offset;
 
@@ -1082,8 +1118,9 @@ emit_copy_buffer_to_layer_per_tile_list(struct v3dv_job *job,
    width = DIV_ROUND_UP(width, vk_format_get_blockwidth(image->vk.format));
    height = DIV_ROUND_UP(height, vk_format_get_blockheight(image->vk.format));
 
+   uint8_t plane = v3dv_plane_from_aspect(imgrsc->aspectMask);
    uint32_t cpp = imgrsc->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT ?
-                  1 : image->cpp;
+                  1 : image->planes[plane].cpp;
    uint32_t buffer_stride = width * cpp;
    uint32_t buffer_offset =
       buffer->mem_offset + region->bufferOffset + height * buffer_stride * layer;

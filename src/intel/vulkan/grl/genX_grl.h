@@ -24,13 +24,15 @@
 #ifndef ANV_GRL_H
 #define ANV_GRL_H
 
+#include "grl/grl_cl_kernel.h"
+#include "genxml/gen_macros.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "anv_private.h"
-#include "grl/grl_cl_kernel.h"
-#include "genxml/gen_macros.h"
+struct anv_cmd_buffer;
+struct anv_kernel_arg;
 
 void
 genX(grl_dispatch)(struct anv_cmd_buffer *cmd_buffer,
@@ -41,6 +43,9 @@ genX(grl_dispatch)(struct anv_cmd_buffer *cmd_buffer,
 
 void
 genX(grl_load_rt_uuid)(uint8_t *out_uuid);
+
+uint32_t
+genX(grl_max_scratch_size)(void);
 
 #ifdef __cplusplus
 } /* extern "C" */

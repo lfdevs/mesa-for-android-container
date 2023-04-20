@@ -197,15 +197,18 @@ lower_image_cast_instr(nir_builder *b, nir_instr *instr, void *_data)
        intr->intrinsic != nir_intrinsic_image_deref_store)
       return false;
 
-   const struct d3d12_image_format_conversion_info *info = _data;
+   const struct d3d12_image_format_conversion_info_arr* info = _data;
    nir_variable *image = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
    assert(image);
 
-   enum pipe_format emulation_format = info[image->data.driver_location].emulated_format;
+   if (image->data.driver_location >= info->n_images)
+      return false;
+
+   enum pipe_format emulation_format = info->image_format_conversion[image->data.driver_location].emulated_format;
    if (emulation_format == PIPE_FORMAT_NONE)
       return false;
 
-   enum pipe_format real_format = info[image->data.driver_location].view_format;
+   enum pipe_format real_format = info->image_format_conversion[image->data.driver_location].view_format;
    assert(real_format != emulation_format);
 
    nir_ssa_def *value;
@@ -244,15 +247,15 @@ lower_image_cast_instr(nir_builder *b, nir_instr *instr, void *_data)
  * the data being loaded/stored to/from the app's expected format.
  */
 bool
-d3d12_lower_image_casts(nir_shader *s, struct d3d12_image_format_conversion_info *info)
+d3d12_lower_image_casts(nir_shader *s, struct d3d12_image_format_conversion_info_arr *info)
 {
    bool progress = nir_shader_instructions_pass(s, lower_image_cast_instr,
       nir_metadata_block_index | nir_metadata_dominance, info);
 
    if (progress) {
       nir_foreach_image_variable(var, s) {
-         if (info[var->data.driver_location].emulated_format != PIPE_FORMAT_NONE) {
-            var->data.image.format = info[var->data.driver_location].emulated_format;
+         if (var->data.driver_location < info->n_images && info->image_format_conversion[var->data.driver_location].emulated_format != PIPE_FORMAT_NONE) {
+            var->data.image.format = info->image_format_conversion[var->data.driver_location].emulated_format;
          }
       }
    }

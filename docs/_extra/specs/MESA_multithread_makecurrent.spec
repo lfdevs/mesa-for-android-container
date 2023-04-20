@@ -70,7 +70,7 @@ Changes to Chapter 2 of the GLX 1.3 Specification (Functions and Errors)
 	In addition, an indirect rendering context can be current for
 	only one thread at a time.  A direct rendering context may be
 	current to multiple threads, with synchronization of access to
-	the context thruogh the GL managed by the application through
+	the context through the GL managed by the application through
 	mutexes.
 
 Changes to Chapter 3 of the GLX 1.3 Specification (Functions and Errors)

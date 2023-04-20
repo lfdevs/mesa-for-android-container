@@ -107,13 +107,11 @@ struct perf_info {
 static bool
 is_dual_issue_capable(const Program& program, const Instruction& instruction)
 {
-   if (program.gfx_level < GFX11 || !instruction.isVALU())
+   if (program.gfx_level < GFX11 || !instruction.isVALU() || instruction.isDPP())
       return false;
 
-   /* Currently assumed to be just the instructions that are allowed as both
-    * VOPD X and VOPD Y operation.
-    */
    switch (instruction.opcode) {
+   case aco_opcode::v_fma_f32:
    case aco_opcode::v_fmac_f32:
    case aco_opcode::v_fmaak_f32:
    case aco_opcode::v_fmamk_f32:
@@ -122,10 +120,54 @@ is_dual_issue_capable(const Program& program, const Instruction& instruction)
    case aco_opcode::v_sub_f32:
    case aco_opcode::v_subrev_f32:
    case aco_opcode::v_mul_legacy_f32:
+   case aco_opcode::v_fma_legacy_f32:
+   case aco_opcode::v_fmac_legacy_f32:
+   case aco_opcode::v_fma_mix_f32:
+   case aco_opcode::v_fma_mixlo_f16:
+   case aco_opcode::v_fma_mixhi_f16:
+   case aco_opcode::v_fma_f16:
+   case aco_opcode::v_fmac_f16:
+   case aco_opcode::v_fmaak_f16:
+   case aco_opcode::v_fmamk_f16:
+   case aco_opcode::v_mul_f16:
+   case aco_opcode::v_add_f16:
+   case aco_opcode::v_sub_f16:
+   case aco_opcode::v_subrev_f16:
    case aco_opcode::v_mov_b32:
+   case aco_opcode::v_movreld_b32:
+   case aco_opcode::v_movrels_b32:
+   case aco_opcode::v_movrelsd_b32:
+   case aco_opcode::v_movrelsd_2_b32:
    case aco_opcode::v_cndmask_b32:
+   case aco_opcode::v_writelane_b32_e64:
+   case aco_opcode::v_mov_b16:
+   case aco_opcode::v_cndmask_b16:
    case aco_opcode::v_max_f32:
    case aco_opcode::v_min_f32:
+   case aco_opcode::v_max_f16:
+   case aco_opcode::v_min_f16:
+   case aco_opcode::v_max_i16_e64:
+   case aco_opcode::v_min_i16_e64:
+   case aco_opcode::v_max_u16_e64:
+   case aco_opcode::v_min_u16_e64:
+   case aco_opcode::v_add_i16:
+   case aco_opcode::v_sub_i16:
+   case aco_opcode::v_mad_i16:
+   case aco_opcode::v_add_u16_e64:
+   case aco_opcode::v_sub_u16_e64:
+   case aco_opcode::v_mad_u16:
+   case aco_opcode::v_mul_lo_u16_e64:
+   case aco_opcode::v_not_b16:
+   case aco_opcode::v_and_b16:
+   case aco_opcode::v_or_b16:
+   case aco_opcode::v_xor_b16:
+   case aco_opcode::v_lshrrev_b16_e64:
+   case aco_opcode::v_ashrrev_i16_e64:
+   case aco_opcode::v_lshlrev_b16_e64:
+   case aco_opcode::v_dot2_bf16_bf16:
+   case aco_opcode::v_dot2_f32_bf16:
+   case aco_opcode::v_dot2_f16_f16:
+   case aco_opcode::v_dot2_f32_f16:
    case aco_opcode::v_dot2c_f32_f16: return true;
    default: return false;
    }
@@ -502,13 +544,11 @@ collect_preasm_stats(Program* program)
    double usage[(int)BlockCycleEstimator::resource_count] = {0};
    std::vector<BlockCycleEstimator> blocks(program->blocks.size(), program);
 
-   if (program->stage.has(SWStage::VS) && program->info.vs.has_prolog) {
-      unsigned vs_input_latency = 320;
-      for (Definition def : program->vs_inputs) {
-         blocks[0].vm.push_back(vs_input_latency);
-         for (unsigned i = 0; i < def.size(); i++)
-            blocks[0].reg_available[def.physReg().reg() + i] = vs_input_latency;
-      }
+   constexpr const unsigned vmem_latency = 320;
+   for (const Definition def : program->args_pending_vmem) {
+      blocks[0].vm.push_back(vmem_latency);
+      for (unsigned i = 0; i < def.size(); i++)
+         blocks[0].reg_available[def.physReg().reg() + i] = vmem_latency;
    }
 
    for (Block& block : program->blocks) {

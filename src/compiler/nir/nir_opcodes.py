@@ -233,7 +233,7 @@ for src_t in [tint, tuint, tfloat, tbool]:
    elif src_t == tuint:
       dst_types = [tfloat, tuint]
    elif src_t == tfloat:
-      dst_types = [tint, tuint, tfloat, tbool]
+      dst_types = [tint, tuint, tfloat]
 
    for dst_t in dst_types:
       for dst_bit_size in type_sizes(dst_t):
@@ -328,8 +328,8 @@ unop("fddy_coarse", tfloat, "0.0")
 
 # Floating point pack and unpack operations.
 
-def pack_2x16(fmt):
-   unop_horiz("pack_" + fmt + "_2x16", 1, tuint32, 2, tfloat32, """
+def pack_2x16(fmt, in_type):
+   unop_horiz("pack_" + fmt + "_2x16", 1, tuint32, 2, in_type, """
 dst.x = (uint32_t) pack_fmt_1x16(src0.x);
 dst.x |= ((uint32_t) pack_fmt_1x16(src0.y)) << 16;
 """.replace("fmt", fmt))
@@ -357,11 +357,11 @@ dst.w = unpack_fmt_1x8((uint8_t)(src0.x >> 24));
 """.replace("fmt", fmt))
 
 
-pack_2x16("snorm")
+pack_2x16("snorm", tfloat)
 pack_4x8("snorm")
-pack_2x16("unorm")
+pack_2x16("unorm", tfloat)
 pack_4x8("unorm")
-pack_2x16("half")
+pack_2x16("half", tfloat32)
 unpack_2x16("snorm")
 unpack_4x8("snorm")
 unpack_2x16("unorm")
@@ -498,7 +498,7 @@ for (int bit = bit_size - 1; bit >= 0; bit--) {
 }
 """)
 
-unop_convert("ifind_msb_rev", tint32, tint, """
+unop("ifind_msb_rev", tint32, """
 dst = -1;
 /* We are looking for the highest bit that's not the same as the sign bit. */
 uint32_t sign = src0 & 0x80000000u;
@@ -912,6 +912,9 @@ binop("fpow", tfloat, "", "bit_size == 64 ? powf(src0, src1) : pow(src0, src1)")
 binop_horiz("pack_half_2x16_split", 1, tuint32, 1, tfloat32, 1, tfloat32,
             "pack_half_1x16(src0.x) | (pack_half_1x16(src1.x) << 16)")
 
+binop_horiz("pack_half_2x16_rtz_split", 1, tuint32, 1, tfloat32, 1, tfloat32,
+            "pack_half_1x16_rtz(src0.x) | (pack_half_1x16_rtz(src1.x) << 16)")
+
 binop_convert("pack_64_2x32_split", tuint64, tuint32, "",
               "src0 | ((uint64_t)src1 << 32)")
 
@@ -1263,12 +1266,37 @@ unop_horiz("cube_r600", 4, tfloat32, 3, tfloat32, """
 unop("fsin_amd", tfloat, "sinf(6.2831853 * src0)")
 unop("fcos_amd", tfloat, "cosf(6.2831853 * src0)")
 
+# Midgard specific sin and cos
+# These expect their inputs to be divided by pi.
+unop("fsin_mdg", tfloat, "sinf(3.141592653589793 * src0)")
+unop("fcos_mdg", tfloat, "cosf(3.141592653589793 * src0)")
+
 # AGX specific sin with input expressed in quadrants. Used in the lowering for
 # fsin/fcos. This corresponds to a sequence of 3 ALU ops in the backend (where
 # the angle is further decomposed by quadrant, sinc is computed, and the angle
 # is multiplied back for sin). Lowering fsin/fcos to fsin_agx requires some
 # additional ALU that NIR may be able to optimize.
 unop("fsin_agx", tfloat, "sinf(src0 * (6.2831853/4.0))")
+
+# AGX specific bitfield extraction from a pair of 32bit registers.
+# src0,src1: the two registers
+# src2: bit position of the LSB of the bitfield
+# src3: number of bits in the bitfield if src3 > 0
+#       src3 = 0 is equivalent to src3 = 32
+# NOTE: src3 is a nir constant by contract
+opcode("extr_agx", 0, tuint32,
+       [0, 0, 0, 0], [tuint32, tuint32, tuint32, tuint32], False, "", """
+    uint32_t mask = 0xFFFFFFFF;
+    uint8_t shift = src2 & 0x7F;
+    if (src3 != 0) {
+       mask = (1 << src3) - 1;
+    }
+    if (shift >= 64) {
+        dst = 0;
+    } else {
+        dst = (((((uint64_t) src1) << 32) | (uint64_t) src0) >> shift) & mask;
+    }
+""");
 
 # 24b multiply into 32b result (with sign extension)
 binop("imul24", tint32, _2src_commutative + associative,

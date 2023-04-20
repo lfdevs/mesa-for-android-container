@@ -186,6 +186,17 @@ impl NirShader {
         }
     }
 
+    pub fn set_has_variable_shared_mem(&mut self, val: bool) {
+        unsafe {
+            self.nir
+                .as_mut()
+                .info
+                .anon_1
+                .cs
+                .set_has_variable_shared_mem(val)
+        }
+    }
+
     pub fn variables_with_mode(
         &mut self,
         mode: nir_variable_mode,

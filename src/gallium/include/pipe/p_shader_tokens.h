@@ -568,7 +568,6 @@ enum tgsi_opcode {
    TGSI_OPCODE_DMAD               = 209,
    TGSI_OPCODE_DFRAC              = 210 /* eg, cayman */,
    TGSI_OPCODE_DLDEXP             = 211 /* eg, cayman */,
-   TGSI_OPCODE_DFRACEXP           = 212 /* eg, cayman */,
    TGSI_OPCODE_D2I                = 213,
    TGSI_OPCODE_I2D                = 214,
    TGSI_OPCODE_D2U                = 215,

@@ -46,28 +46,28 @@ typedef void (*attr_func)(struct gl_context *ctx, GLint index, const GLfloat *);
 static void
 VertexAttrib1fvNV(struct gl_context *ctx, GLint index, const GLfloat *v)
 {
-   CALL_VertexAttrib1fvNV(ctx->Exec, (index, v));
+   CALL_VertexAttrib1fvNV(ctx->Dispatch.Exec, (index, v));
 }
 
 
 static void
 VertexAttrib2fvNV(struct gl_context *ctx, GLint index, const GLfloat *v)
 {
-   CALL_VertexAttrib2fvNV(ctx->Exec, (index, v));
+   CALL_VertexAttrib2fvNV(ctx->Dispatch.Exec, (index, v));
 }
 
 
 static void
 VertexAttrib3fvNV(struct gl_context *ctx, GLint index, const GLfloat *v)
 {
-   CALL_VertexAttrib3fvNV(ctx->Exec, (index, v));
+   CALL_VertexAttrib3fvNV(ctx->Dispatch.Exec, (index, v));
 }
 
 
 static void
 VertexAttrib4fvNV(struct gl_context *ctx, GLint index, const GLfloat *v)
 {
-   CALL_VertexAttrib4fvNV(ctx->Exec, (index, v));
+   CALL_VertexAttrib4fvNV(ctx->Dispatch.Exec, (index, v));
 }
 
 
@@ -112,7 +112,7 @@ loopback_prim(struct gl_context *ctx,
              stride);
 
    if (prim->begin) {
-      CALL_Begin(ctx->Exec, (prim->mode));
+      CALL_Begin(ctx->Dispatch.Exec, (prim->mode));
    }
    else {
       start += wrap_count;
@@ -128,7 +128,7 @@ loopback_prim(struct gl_context *ctx,
    }
 
    if (prim->end) {
-      CALL_End(ctx->Exec, ());
+      CALL_End(ctx->Dispatch.Exec, ());
    }
 }
 

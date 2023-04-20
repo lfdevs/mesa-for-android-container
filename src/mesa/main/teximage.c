@@ -499,7 +499,7 @@ _mesa_max_texture_levels(const struct gl_context *ctx, GLenum target)
       return ffs(util_next_power_of_two(ctx->Const.MaxTextureSize));
    case GL_TEXTURE_3D:
    case GL_PROXY_TEXTURE_3D:
-      return !(ctx->API == API_OPENGLES2 && !ctx->Extensions.OES_texture_3D)
+      return !(_mesa_is_gles2(ctx) && !ctx->Extensions.OES_texture_3D)
          ? ctx->Const.Max3DTextureLevels : 0;
    case GL_TEXTURE_CUBE_MAP:
    case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
@@ -941,7 +941,7 @@ _mesa_init_teximage_fields_ms(struct gl_context *ctx,
    img->Height = height;
    img->Depth = depth;
 
-   GLenum depth_mode = ctx->API == API_OPENGL_CORE ? GL_RED : GL_LUMINANCE;
+   GLenum depth_mode = _mesa_is_desktop_gl_core(ctx) ? GL_RED : GL_LUMINANCE;
 
    /* In ES 3.0, DEPTH_TEXTURE_MODE is expected to be GL_RED for textures
     * with depth component data specified with a sized internal format.
@@ -1826,7 +1826,7 @@ _mesa_legal_texture_base_format_for_target(struct gl_context *ctx,
             target == GL_TEXTURE_CUBE_MAP ||
             target == GL_PROXY_TEXTURE_CUBE_MAP) &&
            (ctx->Version >= 30 || ctx->Extensions.EXT_gpu_shader4
-            || (ctx->API == API_OPENGLES2 && ctx->Extensions.OES_depth_texture_cube_map))) &&
+            || (_mesa_is_gles2(ctx) && ctx->Extensions.OES_depth_texture_cube_map))) &&
           !((target == GL_TEXTURE_CUBE_MAP_ARRAY ||
              target == GL_PROXY_TEXTURE_CUBE_MAP_ARRAY) &&
             _mesa_has_texture_cube_map_array(ctx))) {
@@ -3042,7 +3042,7 @@ lookup_texture_ext_dsa(struct gl_context *ctx, GLenum target, GLuint texture,
       bool isGenName;
       texObj = _mesa_lookup_texture(ctx, texture);
       isGenName = texObj != NULL;
-      if (!texObj && ctx->API == API_OPENGL_CORE) {
+      if (!texObj && _mesa_is_desktop_gl_core(ctx)) {
          _mesa_error(ctx, GL_INVALID_OPERATION, "%s(non-gen name)", caller);
          return NULL;
       }
@@ -3146,7 +3146,7 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
     * call by decompressing the texture.  If we really want to support cpal
     * textures in any driver this would have to be changed.
     */
-   if (ctx->API == API_OPENGLES && compressed && dims == 2) {
+   if (_mesa_is_gles1(ctx) && compressed && dims == 2) {
       switch (internalFormat) {
       case GL_PALETTE4_RGB8_OES:
       case GL_PALETTE4_RGBA8_OES:
@@ -3285,7 +3285,7 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
 
             _mesa_dirty_texobj(ctx, texObj);
             /* only apply depthMode swizzle if it was explicitly changed */
-            GLenum depth_mode = ctx->API == API_OPENGL_CORE ? GL_RED : GL_LUMINANCE;
+            GLenum depth_mode = _mesa_is_desktop_gl_core(ctx) ? GL_RED : GL_LUMINANCE;
             if (texObj->Attrib.DepthMode != depth_mode)
                _mesa_update_teximage_format_swizzle(ctx, texObj->Image[0][texObj->Attrib.BaseLevel], texObj->Attrib.DepthMode);
             _mesa_update_texture_object_swizzle(ctx, texObj);
@@ -6263,7 +6263,7 @@ _mesa_CompressedMultiTexSubImage3DEXT(GLenum texunit, GLenum target,
 mesa_format
 _mesa_get_texbuffer_format(const struct gl_context *ctx, GLenum internalFormat)
 {
-   if (ctx->API == API_OPENGL_COMPAT) {
+   if (_mesa_is_desktop_gl_compat(ctx)) {
       switch (internalFormat) {
       case GL_ALPHA8:
          return MESA_FORMAT_A_UNORM8;

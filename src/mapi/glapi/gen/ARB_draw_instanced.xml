@@ -28,14 +28,14 @@
 
 <category name="GL_EXT_draw_instanced" number="327">
 
-  <function name="DrawArraysInstancedEXT"  alias="DrawArraysInstanced">
+  <function name="DrawArraysInstancedEXT"  alias="DrawArraysInstanced" es2="2.0">
     <param name="mode" type="GLenum"/>
     <param name="first" type="GLint"/>
     <param name="count" type="GLsizei"/>
     <param name="primcount" type="GLsizei"/>
   </function>
 
-  <function name="DrawElementsInstancedEXT" alias="DrawElementsInstanced">
+  <function name="DrawElementsInstancedEXT" alias="DrawElementsInstanced" es2="2.0">
     <param name="mode" type="GLenum"/>
     <param name="count" type="GLsizei"/>
     <param name="type" type="GLenum"/>

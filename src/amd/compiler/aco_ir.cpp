@@ -101,7 +101,10 @@ init_program(Program* program, Stage stage, const struct aco_shader_info* info,
    program->dev.lds_encoding_granule = gfx_level >= GFX11 && stage == fragment_fs ? 1024 :
                                        gfx_level >= GFX7 ? 512 : 256;
    program->dev.lds_alloc_granule = gfx_level >= GFX10_3 ? 1024 : program->dev.lds_encoding_granule;
+
+   /* GFX6: There is 64KB LDS per CU, but a single workgroup can only use 32KB. */
    program->dev.lds_limit = gfx_level >= GFX7 ? 65536 : 32768;
+
    /* apparently gfx702 also has 16-bank LDS but I can't find a family for that */
    program->dev.has_16bank_lds = family == CHIP_KABINI || family == CHIP_STONEY;
 
@@ -231,7 +234,7 @@ can_use_SDWA(amd_gfx_level gfx_level, const aco_ptr<Instruction>& instr, bool pr
       return true;
 
    if (instr->isVOP3()) {
-      VOP3_instruction& vop3 = instr->vop3();
+      VALU_instruction& vop3 = instr->valu();
       if (instr->format == Format::VOP3)
          return false;
       if (vop3.clamp && instr->isVOPC() && gfx_level != GFX8)
@@ -303,9 +306,9 @@ convert_to_SDWA(amd_gfx_level gfx_level, aco_ptr<Instruction>& instr)
    SDWA_instruction& sdwa = instr->sdwa();
 
    if (tmp->isVOP3()) {
-      VOP3_instruction& vop3 = tmp->vop3();
-      memcpy(sdwa.neg, vop3.neg, sizeof(sdwa.neg));
-      memcpy(sdwa.abs, vop3.abs, sizeof(sdwa.abs));
+      VALU_instruction& vop3 = tmp->valu();
+      sdwa.neg = vop3.neg;
+      sdwa.abs = vop3.abs;
       sdwa.omod = vop3.omod;
       sdwa.clamp = vop3.clamp;
    }
@@ -343,7 +346,7 @@ can_use_DPP(const aco_ptr<Instruction>& instr, bool pre_ra, bool dpp8)
    if (instr->operands.size() && instr->operands[0].isLiteral())
       return false;
 
-   if (instr->isSDWA() || instr->isVOP3P())
+   if (instr->isSDWA() || instr->isVINTERP_INREG() || instr->isVOP3P())
       return false;
 
    if (!pre_ra && (instr->isVOPC() || instr->definitions.size() > 1) &&
@@ -354,7 +357,7 @@ can_use_DPP(const aco_ptr<Instruction>& instr, bool pre_ra, bool dpp8)
       return false;
 
    if (instr->isVOP3()) {
-      const VOP3_instruction* vop3 = &instr->vop3();
+      const VALU_instruction* vop3 = &instr->valu();
       if (vop3->clamp || vop3->omod || vop3->opsel)
          return false;
       if (dpp8)
@@ -403,13 +406,11 @@ convert_to_DPP(aco_ptr<Instruction>& instr, bool dpp8)
       dpp->dpp_ctrl = dpp_quad_perm(0, 1, 2, 3);
       dpp->row_mask = 0xf;
       dpp->bank_mask = 0xf;
-
-      if (tmp->isVOP3()) {
-         const VOP3_instruction* vop3 = &tmp->vop3();
-         memcpy(dpp->neg, vop3->neg, sizeof(dpp->neg));
-         memcpy(dpp->abs, vop3->abs, sizeof(dpp->abs));
-      }
    }
+
+   instr->valu().neg = tmp->valu().neg;
+   instr->valu().abs = tmp->valu().abs;
+   instr->valu().opsel = tmp->valu().opsel;
 
    if (instr->isVOPC() || instr->definitions.size() > 1)
       instr->definitions.back().setFixed(vcc);
@@ -444,6 +445,8 @@ can_use_opsel(amd_gfx_level gfx_level, aco_opcode op, int idx)
    case aco_opcode::v_max3_f16:
    case aco_opcode::v_max3_i16:
    case aco_opcode::v_max3_u16:
+   case aco_opcode::v_minmax_f16:
+   case aco_opcode::v_maxmin_f16:
    case aco_opcode::v_max_u16_e64:
    case aco_opcode::v_max_i16_e64:
    case aco_opcode::v_min_u16_e64:
@@ -455,6 +458,9 @@ can_use_opsel(amd_gfx_level gfx_level, aco_opcode op, int idx)
    case aco_opcode::v_lshlrev_b16_e64:
    case aco_opcode::v_lshrrev_b16_e64:
    case aco_opcode::v_ashrrev_i16_e64:
+   case aco_opcode::v_and_b16:
+   case aco_opcode::v_or_b16:
+   case aco_opcode::v_xor_b16:
    case aco_opcode::v_mul_lo_u16_e64: return true;
    case aco_opcode::v_pack_b32_f16:
    case aco_opcode::v_cvt_pknorm_i16_f16:
@@ -463,20 +469,19 @@ can_use_opsel(amd_gfx_level gfx_level, aco_opcode op, int idx)
    case aco_opcode::v_mad_i32_i16: return idx >= 0 && idx < 2;
    case aco_opcode::v_dot2_f16_f16:
    case aco_opcode::v_dot2_bf16_bf16: return idx == -1 || idx == 2;
-   // TODO: This matches what LLVM allows. We should see if this matches what the hardware allows.
+   case aco_opcode::v_cndmask_b16: return idx != 2;
    case aco_opcode::v_interp_p10_f16_f32_inreg:
    case aco_opcode::v_interp_p10_rtz_f16_f32_inreg: return idx == 0 || idx == 2;
    case aco_opcode::v_interp_p2_f16_f32_inreg:
    case aco_opcode::v_interp_p2_rtz_f16_f32_inreg: return idx == -1 || idx == 0;
-   default: return false;
+   default:
+      return gfx_level >= GFX11 && (get_gfx11_true16_mask(op) & BITFIELD_BIT(idx == -1 ? 3 : idx));
    }
 }
 
 bool
 instr_is_16bit(amd_gfx_level gfx_level, aco_opcode op)
 {
-   // TODO: VINTERP (v_interp_p2_f16_f32, v_interp_p2_rtz_f16_f32)
-
    /* partial register writes are GFX9+, only */
    if (gfx_level < GFX9)
       return false;
@@ -536,7 +541,6 @@ instr_is_16bit(amd_gfx_level gfx_level, aco_opcode op)
 /* On GFX11, for some instructions, bit 7 of the destination/operand vgpr is opsel and the field
  * only supports v0-v127.
  */
-// TODO: take advantage of this functionality in the RA and assembler
 uint8_t
 get_gfx11_true16_mask(aco_opcode op)
 {
@@ -862,6 +866,13 @@ get_inverse(aco_opcode op)
 }
 
 aco_opcode
+get_swapped(aco_opcode op)
+{
+   CmpInfo info;
+   return get_cmp_info(op, &info) ? info.swapped : aco_opcode::num_opcodes;
+}
+
+aco_opcode
 get_f32_cmp(aco_opcode op)
 {
    CmpInfo info;
@@ -1040,14 +1051,6 @@ wait_imm::empty() const
 bool
 should_form_clause(const Instruction* a, const Instruction* b)
 {
-   /* Vertex attribute loads from the same binding likely load from similar addresses */
-   unsigned a_vtx_binding =
-      a->isMUBUF() ? a->mubuf().vtx_binding : (a->isMTBUF() ? a->mtbuf().vtx_binding : 0);
-   unsigned b_vtx_binding =
-      b->isMUBUF() ? b->mubuf().vtx_binding : (b->isMTBUF() ? b->mtbuf().vtx_binding : 0);
-   if (a_vtx_binding && a_vtx_binding == b_vtx_binding)
-      return true;
-
    if (a->format != b->format)
       return false;
 

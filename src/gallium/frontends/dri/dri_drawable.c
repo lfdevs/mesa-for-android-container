@@ -47,7 +47,8 @@ dri_st_framebuffer_validate(struct st_context *st,
                             struct pipe_frontend_drawable *pdrawable,
                             const enum st_attachment_type *statts,
                             unsigned count,
-                            struct pipe_resource **out)
+                            struct pipe_resource **out,
+                            struct pipe_resource **resolve)
 {
    struct dri_context *ctx = (struct dri_context *)st->frontend_context;
    struct dri_drawable *drawable = (struct dri_drawable *)pdrawable;
@@ -106,6 +107,12 @@ dri_st_framebuffer_validate(struct st_context *st,
    /* Set the window-system buffers for the gallium frontend. */
    for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], textures[statts[i]]);
+   if (resolve && drawable->stvis.samples > 1) {
+      if (statt_mask & BITFIELD_BIT(ST_ATTACHMENT_FRONT_LEFT))
+         pipe_resource_reference(resolve, drawable->textures[ST_ATTACHMENT_FRONT_LEFT]);
+      else if (statt_mask & BITFIELD_BIT(ST_ATTACHMENT_BACK_LEFT))
+         pipe_resource_reference(resolve, drawable->textures[ST_ATTACHMENT_BACK_LEFT]);
+   }
 
    return true;
 }
@@ -239,7 +246,7 @@ dri_drawable_validate_att(struct dri_context *ctx,
 
    drawable->texture_stamp = drawable->lastStamp - 1;
 
-   drawable->base.validate(ctx->st, &drawable->base, statts, count, NULL);
+   drawable->base.validate(ctx->st, &drawable->base, statts, count, NULL, NULL);
 }
 
 /**

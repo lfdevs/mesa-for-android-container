@@ -86,6 +86,16 @@ typedef void (*pipe_driver_thread_func)(void *job, void *gdata, int thread_index
  * context.
  */
 struct pipe_screen {
+   int refcnt;
+   void *winsys_priv;
+
+   /**
+    * Get the fd associated with the screen
+    * The fd returned is considered read-only, and in particular will not
+    * be close()d. It must remain valid for as long as the screen exists.
+    */
+   int (*get_screen_fd)(struct pipe_screen *);
+
    /**
     * Atomically incremented by drivers to track the number of contexts.
     * If it's 0, it can be assumed that contexts are not tracked.

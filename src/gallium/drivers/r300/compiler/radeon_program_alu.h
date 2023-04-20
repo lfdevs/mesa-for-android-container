@@ -65,9 +65,6 @@ int radeonTransformDeriv(
 	struct rc_instruction * inst,
 	void*);
 
-void rc_transform_KILL(struct radeon_compiler * c,
-		       void *user);
-
 int rc_force_output_alpha_to_one(struct radeon_compiler *c,
 				 struct rc_instruction *inst, void *data);
 

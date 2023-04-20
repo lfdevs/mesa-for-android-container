@@ -1,28 +1,11 @@
 /*
- * Copyright (C) 2022 Alyssa Rosenzweig
- * Copyright (C) 2021 Collabora, Ltd.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright 2022 Alyssa Rosenzweig
+ * Copyright 2021 Collabora, Ltd.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "agx_compiler.h"
+#include "agx_debug.h"
 
 /* Validatation doesn't make sense in release builds */
 #ifndef NDEBUG
@@ -103,8 +86,7 @@ agx_validate_sources(agx_instr *I)
          agx_validate_assert(!src.cache);
          agx_validate_assert(!src.discard);
 
-         bool ldst = (I->op == AGX_OPCODE_DEVICE_LOAD) ||
-                     (I->op == AGX_OPCODE_UNIFORM_STORE);
+         bool ldst = agx_allows_16bit_immediate(I);
 
          /* Immediates are encoded as 8-bit (16-bit for memory load/store). For
           * integers, they extend to 16-bit. For floating point, they are 8-bit
@@ -191,7 +173,7 @@ agx_validate(agx_context *ctx, const char *after)
 {
    bool fail = false;
 
-   if (agx_debug & AGX_DBG_NOVALIDATE)
+   if (agx_compiler_debug & AGX_DBG_NOVALIDATE)
       return;
 
    agx_foreach_block(ctx, block) {

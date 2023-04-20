@@ -2591,7 +2591,7 @@ Jan Ziak (1):
 
 - Add driver override to envvars.rst
 
-Jason Ekstrand (296):
+Faith Ekstrand (296):
 
 - iris: no-op implement set_compute_resources
 - iris: Implement set_global_binding

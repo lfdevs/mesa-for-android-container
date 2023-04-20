@@ -145,6 +145,7 @@ files_libnir = files(
   'nir_lower_clip_disable.c',
   'nir_lower_clip_halfz.c',
   'nir_lower_const_arrays_to_uniforms.c',
+  'nir_lower_continue_constructs.c',
   'nir_lower_convert_alu_types.c',
   'nir_lower_variable_initializers.c',
   'nir_lower_discard_if.c',
@@ -161,6 +162,7 @@ files_libnir = files(
   'nir_lower_global_vars_to_local.c',
   'nir_lower_goto_ifs.c',
   'nir_lower_gs_intrinsics.c',
+  'nir_lower_helper_writes.c',
   'nir_lower_load_const_to_scalar.c',
   'nir_lower_locals_to_regs.c',
   'nir_lower_idiv.c',
@@ -178,6 +180,7 @@ files_libnir = files(
   'nir_lower_is_helper_invocation.c',
   'nir_lower_multiview.c',
   'nir_lower_mediump.c',
+  'nir_lower_mem_access_bit_sizes.c',
   'nir_lower_memcpy.c',
   'nir_lower_memory_model.c',
   'nir_lower_non_uniform_access.c',
@@ -205,6 +208,7 @@ files_libnir = files(
   'nir_lower_tex_shadow.c',
   'nir_lower_tex.c',
   'nir_lower_texcoord_replace.c',
+  'nir_lower_texcoord_replace_late.c',
   'nir_lower_to_source_mods.c',
   'nir_lower_two_sided_color.c',
   'nir_lower_undef_to_zero.c',
@@ -221,6 +225,7 @@ files_libnir = files(
   'nir_lower_uniforms_to_ubo.c',
   'nir_lower_sysvals_to_varyings.c',
   'nir_metadata.c',
+  'nir_mod_analysis.c',
   'nir_move_vec_src_uses_to_dest.c',
   'nir_normalize_cubemap_coords.c',
   'nir_opt_access.c',
@@ -389,6 +394,12 @@ idep_nir = declare_dependency(
 )
 
 if with_tests
+  if cc.get_id() == 'msvc' and cc.version().version_compare('< 19.29')
+    msvc_designated_initializer = 'cpp_std=c++latest'
+  else
+    msvc_designated_initializer = 'cpp_std=c++20'
+  endif
+
   test(
     'nir_tests',
     executable(
@@ -400,7 +411,10 @@ if with_tests
         'tests/control_flow_tests.cpp',
         'tests/core_tests.cpp',
         'tests/loop_analyze_tests.cpp',
+        'tests/loop_unroll_tests.cpp',
+        'tests/lower_alu_width_tests.cpp',
         'tests/lower_returns_tests.cpp',
+        'tests/mod_analysis_tests.cpp',
         'tests/negative_equal_tests.cpp',
         'tests/opt_if_tests.cpp',
         'tests/opt_shrink_vectors_tests.cpp',
@@ -409,19 +423,20 @@ if with_tests
         'tests/vars_tests.cpp',
       ),
       cpp_args : [cpp_msvc_compat_args],
+      override_options: [msvc_designated_initializer],
       gnu_symbol_visibility : 'hidden',
       include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
       dependencies : [dep_thread, idep_gtest, idep_nir, idep_mesautil],
     ),
     suite : ['compiler', 'nir'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 
   test(
     'nir_algebraic_parser',
     prog_python,
     args : [
-      join_paths(meson.current_source_dir(), 'tests/algebraic_parser_test.py')
+      files('tests/algebraic_parser_test.py')
     ],
     suite : ['compiler', 'nir'],
   )
@@ -439,7 +454,7 @@ if with_tests
     suite : ['compiler', 'nir'],
     # TODO: Use a negative filter for gtest instead of the expect failure here.
     should_fail : meson.get_external_property('xfail', '').contains('load_store_vectorizer'),
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 
   test(

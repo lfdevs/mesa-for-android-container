@@ -65,7 +65,13 @@ enum fd6_state_id {
    FD6_GROUP_SCISSOR,
    FD6_GROUP_BLEND_COLOR,
    FD6_GROUP_SO,
-   FD6_GROUP_IBO,
+   FD6_GROUP_VS_BINDLESS,
+   FD6_GROUP_HS_BINDLESS,
+   FD6_GROUP_DS_BINDLESS,
+   FD6_GROUP_GS_BINDLESS,
+   FD6_GROUP_FS_BINDLESS,
+   FD6_GROUP_PRIM_MODE_SYSMEM,
+   FD6_GROUP_PRIM_MODE_GMEM,
 
    /*
     * Virtual state-groups, which don't turn into a CP_SET_DRAW_STATE group
@@ -73,6 +79,13 @@ enum fd6_state_id {
 
    FD6_GROUP_PROG_KEY,  /* Set for any state which could change shader key */
    FD6_GROUP_NON_GROUP, /* placeholder group for state emit in IB2, keep last */
+
+   /*
+    * Note that since we don't interleave draws and grids in the same batch,
+    * the compute vs draw state groups can overlap:
+    */
+   FD6_GROUP_CS_TEX = FD6_GROUP_VS_TEX,
+   FD6_GROUP_CS_BINDLESS = FD6_GROUP_VS_BINDLESS,
 };
 
 #define ENABLE_ALL                                                             \
@@ -124,21 +137,30 @@ fd6_state_emit(struct fd6_state *state, struct fd_ringbuffer *ring)
    }
 }
 
+static inline unsigned
+enable_mask(enum fd6_state_id group_id)
+{
+   switch (group_id) {
+   case FD6_GROUP_PROG: return ENABLE_DRAW;
+   case FD6_GROUP_PROG_BINNING: return CP_SET_DRAW_STATE__0_BINNING;
+   case FD6_GROUP_PROG_INTERP: return ENABLE_DRAW;
+   case FD6_GROUP_FS_TEX: return ENABLE_DRAW;
+   case FD6_GROUP_FS_BINDLESS: return ENABLE_DRAW;
+   case FD6_GROUP_PRIM_MODE_SYSMEM: return CP_SET_DRAW_STATE__0_SYSMEM | CP_SET_DRAW_STATE__0_BINNING;
+   case FD6_GROUP_PRIM_MODE_GMEM: return CP_SET_DRAW_STATE__0_GMEM;
+   default: return ENABLE_ALL;
+   }
+}
+
 static inline void
 fd6_state_take_group(struct fd6_state *state, struct fd_ringbuffer *stateobj,
                      enum fd6_state_id group_id)
 {
-   static const unsigned enable_mask[32] = {
-         [FD6_GROUP_PROG] = ENABLE_DRAW,
-         [FD6_GROUP_PROG_BINNING] = CP_SET_DRAW_STATE__0_BINNING,
-         [FD6_GROUP_PROG_INTERP] = ENABLE_DRAW,
-         [FD6_GROUP_FS_TEX] = ENABLE_DRAW,
-   };
    assert(state->num_groups < ARRAY_SIZE(state->groups));
    struct fd6_state_group *g = &state->groups[state->num_groups++];
    g->stateobj = stateobj;
    g->group_id = group_id;
-   g->enable_mask = enable_mask[group_id] ? enable_mask[group_id] : ENABLE_ALL;
+   g->enable_mask = enable_mask(group_id);
 }
 
 static inline void
@@ -290,7 +312,7 @@ fd6_stage2shadersb(gl_shader_stage type)
       return SB6_CS_SHADER;
    default:
       unreachable("bad shader type");
-      return ~0;
+      return (enum a6xx_state_block)~0;
    }
 }
 
@@ -310,21 +332,21 @@ fd6_gl2spacing(enum gl_tess_spacing spacing)
    }
 }
 
-void fd6_emit_textures(struct fd_context *ctx, struct fd_ringbuffer *ring,
-                       enum pipe_shader_type type,
-                       struct fd_texture_stateobj *tex,
-                       const struct ir3_shader_variant *v) assert_dt;
+BEGINC;
 
 void fd6_emit_3d_state(struct fd_ringbuffer *ring,
                        struct fd6_emit *emit) assert_dt;
 
+struct fd6_compute_state;
 void fd6_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
-                       struct ir3_shader_variant *cp) assert_dt;
+                       struct fd6_compute_state *cs) assert_dt;
 
+void fd6_emit_ccu_cntl(struct fd_ringbuffer *ring, struct fd_screen *screen, bool gmem);
 void fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring);
 
 void fd6_emit_init_screen(struct pipe_screen *pscreen);
-void fd6_emit_init(struct pipe_context *pctx);
+
+ENDC;
 
 static inline void
 fd6_emit_ib(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)

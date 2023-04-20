@@ -96,6 +96,7 @@ static int parse_reg(const char *str)
 [0-9]+"."[0-9]+                   ir3_yylval.flt = strtod(yytext, NULL);       return T_FLOAT;
 [0-9]*                            ir3_yylval.num = strtoul(yytext, NULL, 0);    return T_INT;
 "0x"[0-9a-fA-F]*                  ir3_yylval.num = strtoul(yytext, NULL, 0);    return T_HEX;
+"raw 0x"[0-9a-fA-F]*              ir3_yylval.u64 = strtoull(yytext + 4, NULL, 0); return T_RAW;
 "@localsize"                      return TOKEN(T_A_LOCALSIZE);
 "@const"                          return TOKEN(T_A_CONST);
 "@buf"                            return TOKEN(T_A_BUF);
@@ -301,6 +302,7 @@ static int parse_reg(const char *str)
 "quad_shuffle.horiz"              return TOKEN(T_OP_QSHUFFLE_H);
 "quad_shuffle.vert"               return TOKEN(T_OP_QSHUFFLE_V);
 "quad_shuffle.diag"               return TOKEN(T_OP_QSHUFFLE_DIAG);
+"tcinv"                           return TOKEN(T_OP_TCINV);
 
                                   /* category 6: */
 "ldg"                             return TOKEN(T_OP_LDG);
@@ -380,6 +382,11 @@ static int parse_reg(const char *str)
                                   /* category 7: */
 "bar"                             return TOKEN(T_OP_BAR);
 "fence"                           return TOKEN(T_OP_FENCE);
+"sleep.l"                         return TOKEN(T_OP_SLEEP);
+"icinv"                           return TOKEN(T_OP_ICINV);
+"dccln.all"                       return TOKEN(T_OP_DCCLN);
+"dcinv.all"                       return TOKEN(T_OP_DCINV);
+"dcflu.all"                       return TOKEN(T_OP_DCFLU);
 
 "f16"                             return TOKEN(T_TYPE_F16);
 "f32"                             return TOKEN(T_TYPE_F32);

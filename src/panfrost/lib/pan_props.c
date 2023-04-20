@@ -170,40 +170,13 @@ panfrost_query_core_count(int fd, unsigned *core_id_range)
    return util_bitcount(mask);
 }
 
-/* Architectural maximums, since this register may be not implemented
- * by a given chip. G31 is actually 512 instead of 768 but it doesn't
- * really matter. */
-
-static unsigned
-panfrost_max_thread_count(unsigned arch)
-{
-   switch (arch) {
-   /* Midgard */
-   case 4:
-   case 5:
-      return 256;
-
-   /* Bifrost, first generation */
-   case 6:
-      return 384;
-
-   /* Bifrost, second generation (G31 is 512 but it doesn't matter) */
-   case 7:
-      return 768;
-
-   /* Valhall (for completeness) */
-   default:
-      return 1024;
-   }
-}
-
 static unsigned
 panfrost_query_thread_tls_alloc(int fd, unsigned major)
 {
    unsigned tls =
       panfrost_query_raw(fd, DRM_PANFROST_PARAM_THREAD_TLS_ALLOC, false, 0);
 
-   return (tls > 0) ? tls : panfrost_max_thread_count(major);
+   return (tls > 0) ? tls : panfrost_max_thread_count(major, 0);
 }
 
 static uint32_t
@@ -281,6 +254,9 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
    dev->kernel_version = drmGetVersion(fd);
    dev->revision = panfrost_query_gpu_revision(fd);
    dev->model = panfrost_get_model(dev->gpu_id);
+
+   if (!dev->kernel_version)
+      return;
 
    /* If we don't recognize the model, bail early */
    if (!dev->model)

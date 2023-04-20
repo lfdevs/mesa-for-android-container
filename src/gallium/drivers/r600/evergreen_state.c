@@ -254,6 +254,9 @@ bool evergreen_is_format_supported(struct pipe_screen *screen,
 		return false;
 	}
 
+	if (util_format_get_num_planes(format) > 1)
+		return false;
+
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
 		return false;
 
@@ -324,6 +327,7 @@ static void *evergreen_create_blend_state_mode(struct pipe_context *ctx,
 					       const struct pipe_blend_state *state, int mode)
 {
 	uint32_t color_control = 0, target_mask = 0;
+	uint32_t alpha_to_mask = 0;
 	struct r600_blend_state *blend = CALLOC_STRUCT(r600_blend_state);
 
 	if (!blend) {
@@ -359,14 +363,27 @@ static void *evergreen_create_blend_state_mode(struct pipe_context *ctx,
 	else
 		color_control |= S_028808_MODE(V_028808_CB_DISABLE);
 
-
 	r600_store_context_reg(&blend->buffer, R_028808_CB_COLOR_CONTROL, color_control);
-	r600_store_context_reg(&blend->buffer, R_028B70_DB_ALPHA_TO_MASK,
-			       S_028B70_ALPHA_TO_MASK_ENABLE(state->alpha_to_coverage) |
-			       S_028B70_ALPHA_TO_MASK_OFFSET0(2) |
-			       S_028B70_ALPHA_TO_MASK_OFFSET1(2) |
-			       S_028B70_ALPHA_TO_MASK_OFFSET2(2) |
-			       S_028B70_ALPHA_TO_MASK_OFFSET3(2));
+
+	if (state->alpha_to_coverage) {
+		if (state->alpha_to_coverage_dither) {
+			alpha_to_mask = S_028B70_ALPHA_TO_MASK_ENABLE(1) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET0(3) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET1(1) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET2(0) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET3(2) |
+			                S_028B70_OFFSET_ROUND(1);
+		} else {
+			alpha_to_mask = S_028B70_ALPHA_TO_MASK_ENABLE(1) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET0(2) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET1(2) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET2(2) |
+			                S_028B70_ALPHA_TO_MASK_OFFSET3(2) |
+			                S_028B70_OFFSET_ROUND(0);
+		}
+	}
+	r600_store_context_reg(&blend->buffer, R_028B70_DB_ALPHA_TO_MASK, alpha_to_mask);
+
 	r600_store_context_reg_seq(&blend->buffer, R_028780_CB_BLEND0_CONTROL, 8);
 
 	/* Copy over the dwords set so far into buffer_no_blend.
@@ -4266,8 +4283,9 @@ static void evergreen_set_shader_images(struct pipe_context *ctx,
 
 		r600_context_add_resource_size(ctx, image);
 
+		struct pipe_resource *const pipe_saved = rview->base.resource;
 		rview->base = *iview;
-		rview->base.resource = NULL;
+		rview->base.resource = pipe_saved;
 		pipe_resource_reference((struct pipe_resource **)&rview->base.resource, image);
 
 		evergreen_setup_immed_buffer(rctx, rview, iview->format);

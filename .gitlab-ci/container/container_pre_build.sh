@@ -1,23 +1,27 @@
 #!/bin/sh
 
-if test -f /etc/debian_version; then
-    CCACHE_PATH=/usr/lib/ccache
-elif test -f /etc/alpine-release; then
-    CCACHE_PATH=/usr/lib/ccache/bin
-else
-    CCACHE_PATH=/usr/lib64/ccache
+if test -x /usr/bin/ccache; then
+    if test -f /etc/debian_version; then
+        CCACHE_PATH=/usr/lib/ccache
+    elif test -f /etc/alpine-release; then
+        CCACHE_PATH=/usr/lib/ccache/bin
+    else
+        CCACHE_PATH=/usr/lib64/ccache
+    fi
+
+    # Common setup among container builds before we get to building code.
+
+    export CCACHE_COMPILERCHECK=content
+    export CCACHE_COMPRESS=true
+    export CCACHE_DIR=/cache/$CI_PROJECT_NAME/ccache
+    export PATH=$CCACHE_PATH:$PATH
+
+    # CMake ignores $PATH, so we have to force CC/GCC to the ccache versions.
+    export CC="${CCACHE_PATH}/gcc"
+    export CXX="${CCACHE_PATH}/g++"
+
+    ccache --show-stats
 fi
-
-# Common setup among container builds before we get to building code.
-
-export CCACHE_COMPILERCHECK=content
-export CCACHE_COMPRESS=true
-export CCACHE_DIR=/cache/$CI_PROJECT_NAME/ccache
-export PATH=$CCACHE_PATH:$PATH
-
-# CMake ignores $PATH, so we have to force CC/GCC to the ccache versions.
-export CC="${CCACHE_PATH}/gcc"
-export CXX="${CCACHE_PATH}/g++"
 
 # When not using the mold linker (e.g. unsupported architecture), force
 # linkers to gold, since it's so much faster for building.  We can't use
@@ -26,8 +30,6 @@ export CXX="${CCACHE_PATH}/g++"
 find /usr/bin -name \*-ld -o -name ld | \
     grep -v mingw | \
     xargs -n 1 -I '{}' ln -sf '{}.gold' '{}'
-
-ccache --show-stats
 
 # Make a wrapper script for ninja to always include the -j flags
 {

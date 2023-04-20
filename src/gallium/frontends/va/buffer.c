@@ -149,7 +149,9 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
       else
          map_func = drv->pipe->texture_map;
 
-      *pbuff = map_func(drv->pipe, resource, 0, PIPE_MAP_WRITE,
+      *pbuff = map_func(drv->pipe, resource, 0,
+                        buf->type == VAEncCodedBufferType ?
+                        PIPE_MAP_READ : PIPE_MAP_WRITE,
                         &box, &buf->derived_surface.transfer);
       mtx_unlock(&drv->mutex);
 

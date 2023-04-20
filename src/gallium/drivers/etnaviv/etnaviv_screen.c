@@ -417,8 +417,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
                 ? screen->specs.max_ps_uniforms * sizeof(float[4])
                 : screen->specs.max_vs_uniforms * sizeof(float[4]);
    case PIPE_SHADER_CAP_DROUND_SUPPORTED:
-   case PIPE_SHADER_CAP_DFRACEXP_DLDEXP_SUPPORTED:
-   case PIPE_SHADER_CAP_LDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
       return false;
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
@@ -1022,10 +1020,12 @@ etna_get_specs(struct etna_screen *screen)
 
    screen->specs.use_blt = VIV_FEATURE(screen, chipMinorFeatures5, BLT_ENGINE);
 
-   /* Only allow fast clear with MC2.0, as the TS unit bypasses the memory
-    * offset on MC1.0 and we have no way to fixup the address.
+   /* Only allow fast clear with MC2.0 or MMUv2, as the TS unit bypasses the
+    * memory offset for the MMUv1 linear window on MC1.0 and we have no way to
+    * fixup the address.
     */
-   if (!VIV_FEATURE(screen, chipMinorFeatures0, MC20))
+   if (!VIV_FEATURE(screen, chipMinorFeatures0, MC20) &&
+       !VIV_FEATURE(screen, chipMinorFeatures1, MMU_VERSION))
       screen->features[viv_chipFeatures] &= ~chipFeatures_FAST_CLEAR;
 
    return true;
@@ -1074,6 +1074,13 @@ etna_get_disk_shader_cache(struct pipe_screen *pscreen)
    return compiler->disk_cache;
 }
 
+static int
+etna_screen_get_fd(struct pipe_screen *pscreen)
+{
+   struct etna_screen *screen = etna_screen(pscreen);
+   return etna_device_fd(screen->dev);
+}
+
 struct pipe_screen *
 etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
                    struct renderonly *ro)
@@ -1089,7 +1096,6 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    screen->dev = dev;
    screen->gpu = gpu;
    screen->ro = ro;
-   screen->refcnt = 1;
 
    screen->drm_version = etnaviv_device_version(screen->dev);
    etna_mesa_debug = debug_get_option_etna_mesa_debug();
@@ -1216,6 +1222,7 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
       screen->features[viv_chipMinorFeatures2] &= ~chipMinorFeatures2_LINEAR_PE;
 
    pscreen->destroy = etna_screen_destroy;
+   pscreen->get_screen_fd = etna_screen_get_fd;
    pscreen->get_param = etna_screen_get_param;
    pscreen->get_paramf = etna_screen_get_paramf;
    pscreen->get_shader_param = etna_screen_get_shader_param;

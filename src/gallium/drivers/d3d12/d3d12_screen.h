@@ -80,6 +80,11 @@ struct d3d12_screen {
    uint64_t residency_fence_value;
 
    struct list_head context_list;
+   unsigned context_id_list[16];
+   unsigned context_id_count;
+
+   struct set* varying_info_set;
+   mtx_t varying_info_mutex;
 
    struct slab_parent_pool transfer_pool;
    struct pb_manager *bufmgr;
@@ -110,6 +115,9 @@ struct d3d12_screen {
    D3D12_FEATURE_DATA_D3D12_OPTIONS2 opts2;
    D3D12_FEATURE_DATA_D3D12_OPTIONS3 opts3;
    D3D12_FEATURE_DATA_D3D12_OPTIONS4 opts4;
+#if D3D12_SDK_VERSION >= 610
+   D3D12_FEATURE_DATA_D3D12_OPTIONS19 opts19;
+#endif
 
    nir_shader_compiler_options nir_options;
 
@@ -124,6 +132,10 @@ struct d3d12_screen {
    bool have_load_at_vertex;
    bool support_shader_images;
    bool support_create_not_resident;
+
+#ifdef _GAMING_XBOX
+   UINT64 frame_token;
+#endif
 };
 
 static inline struct d3d12_screen *
@@ -135,8 +147,12 @@ d3d12_screen(struct pipe_screen *pipe)
 struct d3d12_dxgi_screen {
    struct d3d12_screen base;
 
+#ifndef _GAMING_XBOX
    struct IDXGIFactory4 *factory;
    struct IDXGIAdapter3 *adapter;
+#else
+   struct IDXGIAdapter *adapter;
+#endif
    wchar_t description[128];
 };
 

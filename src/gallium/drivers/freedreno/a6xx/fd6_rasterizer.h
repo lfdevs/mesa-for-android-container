@@ -33,6 +33,8 @@
 
 #include "freedreno_context.h"
 
+BEGINC;
+
 struct fd6_rasterizer_stateobj {
    struct pipe_rasterizer_state base;
 
@@ -68,5 +70,7 @@ fd6_rasterizer_state(struct fd_context *ctx, bool primitive_restart) assert_dt
 
    return rasterizer->stateobjs[variant];
 }
+
+ENDC;
 
 #endif /* FD6_RASTERIZER_H_ */

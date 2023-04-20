@@ -188,6 +188,11 @@ struct wsi_swapchain {
    VkResult (*wait_for_present)(struct wsi_swapchain *swap_chain,
                                 uint64_t present_id,
                                 uint64_t timeout);
+   VkResult (*release_images)(struct wsi_swapchain *swap_chain,
+                              uint32_t count,
+                              const uint32_t *indices);
+   void (*set_present_mode)(struct wsi_swapchain *swap_chain,
+                            VkPresentModeKHR mode);
 };
 
 bool
@@ -333,6 +338,7 @@ struct wsi_interface {
                             uint32_t* pSurfaceFormatCount,
                             VkSurfaceFormat2KHR* pSurfaceFormats);
    VkResult (*get_present_modes)(VkIcdSurfaceBase *surface,
+                                 struct wsi_device *wsi_device,
                                  uint32_t* pPresentModeCount,
                                  VkPresentModeKHR* pPresentModes);
    VkResult (*get_present_rectangles)(VkIcdSurfaceBase *surface,
@@ -376,6 +382,13 @@ wsi_display_finish_wsi(struct wsi_device *wsi_device,
 void
 wsi_display_setup_syncobj_fd(struct wsi_device *wsi_device,
                              int fd);
+
+VkResult wsi_headless_init_wsi(struct wsi_device *wsi_device,
+                               const VkAllocationCallbacks *alloc,
+                               VkPhysicalDevice physical_device);
+
+void wsi_headless_finish_wsi(struct wsi_device *wsi_device,
+                             const VkAllocationCallbacks *alloc);
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(wsi_swapchain, base, VkSwapchainKHR,
                                VK_OBJECT_TYPE_SWAPCHAIN_KHR)

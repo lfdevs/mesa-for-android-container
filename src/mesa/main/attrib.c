@@ -944,8 +944,8 @@ _mesa_PopAttrib(void)
       TEST_AND_UPDATE(ctx->Point.PointSprite, attr->Point.PointSprite,
                       GL_POINT_SPRITE);
 
-      if ((ctx->API == API_OPENGL_COMPAT && ctx->Version >= 20)
-          || ctx->API == API_OPENGL_CORE)
+      if ((_mesa_is_desktop_gl_compat(ctx) && ctx->Version >= 20)
+          || _mesa_is_desktop_gl_core(ctx))
          TEST_AND_CALL1_SEL(Point.SpriteOrigin, PointParameterf, GL_POINT_SPRITE_COORD_ORIGIN);
    }
 

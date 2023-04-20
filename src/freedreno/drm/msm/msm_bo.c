@@ -136,21 +136,13 @@ msm_bo_set_name(struct fd_bo *bo, const char *fmt, va_list ap)
    drmCommandWrite(bo->dev->fd, DRM_MSM_GEM_INFO, &req, sizeof(req));
 }
 
-static void
-msm_bo_destroy(struct fd_bo *bo)
-{
-   struct msm_bo *msm_bo = to_msm_bo(bo);
-   fd_bo_fini_common(bo);
-   free(msm_bo);
-}
-
 static const struct fd_bo_funcs funcs = {
    .offset = msm_bo_offset,
    .cpu_prep = msm_bo_cpu_prep,
    .madvise = msm_bo_madvise,
    .iova = msm_bo_iova,
    .set_name = msm_bo_set_name,
-   .destroy = msm_bo_destroy,
+   .destroy = fd_bo_fini_common,
 };
 
 /* allocate a buffer handle: */

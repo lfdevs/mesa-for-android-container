@@ -192,6 +192,8 @@ enum value_extra {
    EXTRA_VERSION_43,
    EXTRA_API_GL,
    EXTRA_API_GL_CORE,
+   EXTRA_API_GL_COMPAT,
+   EXTRA_API_ES,
    EXTRA_API_ES2,
    EXTRA_API_ES3,
    EXTRA_API_ES31,
@@ -317,6 +319,13 @@ union value {
  * only if none of them are available.  If you need to check for "AND"
  * behavior, you would need to make a custom EXTRA_ enum.
  */
+
+static const int extra_new_buffers_compat_es[] = {
+   EXTRA_API_GL_COMPAT,
+   EXTRA_API_ES,
+   EXTRA_NEW_BUFFERS,
+   EXTRA_END
+};
 
 static const int extra_new_buffers[] = {
    EXTRA_NEW_BUFFERS,
@@ -1434,9 +1443,14 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
          if (_mesa_is_desktop_gl(ctx) && version >= 43)
             api_found = GL_TRUE;
          break;
+      case EXTRA_API_ES:
+         api_check = GL_TRUE;
+         if (_mesa_is_gles(ctx))
+            api_found = GL_TRUE;
+         break;
       case EXTRA_API_ES2:
          api_check = GL_TRUE;
-         if (ctx->API == API_OPENGLES2)
+         if (_mesa_is_gles2(ctx))
             api_found = GL_TRUE;
          break;
       case EXTRA_API_ES3:
@@ -1461,7 +1475,12 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
          break;
       case EXTRA_API_GL_CORE:
          api_check = GL_TRUE;
-         if (ctx->API == API_OPENGL_CORE)
+         if (_mesa_is_desktop_gl_core(ctx))
+            api_found = GL_TRUE;
+         break;
+      case EXTRA_API_GL_COMPAT:
+         api_check = GL_TRUE;
+         if (_mesa_is_desktop_gl_compat(ctx))
             api_found = GL_TRUE;
          break;
       case EXTRA_NEW_BUFFERS:
@@ -1546,7 +1565,7 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
          break;
       case EXTRA_EXT_PROVOKING_VERTEX_32:
          api_check = GL_TRUE;
-         if (ctx->API == API_OPENGL_COMPAT || version == 32)
+         if (_mesa_is_desktop_gl_compat(ctx) || version == 32)
             api_found = ctx->Extensions.EXT_provoking_vertex;
          break;
       case EXTRA_END:
@@ -1610,7 +1629,7 @@ find_value(const char *func, GLenum pname, void **p, union value *v)
     * end.
     */
    STATIC_ASSERT(ARRAY_SIZE(table_set) == API_OPENGL_LAST + 4);
-   if (ctx->API == API_OPENGLES2) {
+   if (_mesa_is_gles2(ctx)) {
       if (ctx->Version >= 32)
          api = API_OPENGL_LAST + 3;
       else if (ctx->Version >= 31)
@@ -2478,7 +2497,7 @@ tex_binding_to_index(const struct gl_context *ctx, GLenum binding)
       return TEXTURE_2D_INDEX;
    case GL_TEXTURE_BINDING_3D:
       return (ctx->API != API_OPENGLES &&
-              !(ctx->API == API_OPENGLES2 && !ctx->Extensions.OES_texture_3D))
+              !(_mesa_is_gles2(ctx) && !ctx->Extensions.OES_texture_3D))
          ? TEXTURE_3D_INDEX : -1;
    case GL_TEXTURE_BINDING_CUBE_MAP:
       return TEXTURE_CUBE_INDEX;
@@ -2762,7 +2781,7 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
       return TYPE_INT;
 
    case GL_VERTEX_BINDING_BUFFER:
-      if (ctx->API == API_OPENGLES2 && ctx->Version < 31)
+      if (_mesa_is_gles2(ctx) && ctx->Version < 31)
          goto invalid_enum;
       if (index >= ctx->Const.Program[MESA_SHADER_VERTEX].MaxAttribs)
          goto invalid_value;

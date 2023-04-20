@@ -144,6 +144,6 @@ if with_tests
       dependencies : [idep_gtest, idep_nir],
     ),
     suite : ['compiler', 'etnaviv'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif

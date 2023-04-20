@@ -407,8 +407,10 @@ zink_bind_blend_state(struct pipe_context *pctx, void *cso)
 
    if (state->blend_state != cso) {
       state->blend_state = cso;
-      state->blend_id = blend ? blend->hash : 0;
-      state->dirty |= !zink_screen(pctx->screen)->have_full_ds3;
+      if (!zink_screen(pctx->screen)->have_full_ds3) {
+         state->blend_id = blend ? blend->hash : 0;
+         state->dirty = true;
+      }
       bool force_dual_color_blend = zink_screen(pctx->screen)->driconf.dual_color_blend_by_location &&
                                     blend && blend->dual_src_blend && state->blend_state->attachments[0].blendEnable;
       if (force_dual_color_blend != zink_get_fs_base_key(ctx)->force_dual_color_blend)
@@ -520,11 +522,15 @@ zink_bind_depth_stencil_alpha_state(struct pipe_context *pctx, void *cso)
          state->dirty |= !zink_screen(pctx->screen)->info.have_EXT_extended_dynamic_state;
          ctx->dsa_state_changed = true;
       }
+      if (!zink_screen(ctx->base.screen)->driver_workarounds.track_renderpasses && !ctx->blitting)
+         zink_parse_tc_info(ctx);
    }
-   bool zs_write = ctx->dsa_state ? ctx->dsa_state->hw_state.depth_write || ctx->dsa_state->hw_state.stencil_test : false;
-   if (prev_zswrite != zs_write) {
-      /* flag renderpass for re-check on next draw */
-      ctx->rp_layout_changed = true;
+   if (!zink_screen(ctx->base.screen)->driver_workarounds.track_renderpasses && !ctx->blitting) {
+      bool zs_write = ctx->dsa_state ? ctx->dsa_state->hw_state.depth_write || ctx->dsa_state->hw_state.stencil_test : false;
+      if (prev_zswrite != zs_write) {
+         /* flag renderpass for re-check on next draw */
+         ctx->rp_layout_changed = true;
+      }
    }
 }
 
@@ -603,6 +609,22 @@ zink_create_rasterizer_state(struct pipe_context *pctx,
    } else {
       state->hw_state.line_mode = VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT;
    }
+   state->dynamic_line_mode = state->hw_state.line_mode;
+   switch (state->hw_state.line_mode) {
+   case VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT:
+      if (!screen->info.line_rast_feats.rectangularLines)
+         state->dynamic_line_mode = VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+      break;
+   case VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT:
+      if (!screen->info.line_rast_feats.smoothLines)
+         state->dynamic_line_mode = VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+      break;
+   case VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT:
+      if (!screen->info.line_rast_feats.bresenhamLines)
+         state->dynamic_line_mode = VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
+      break;
+   default: break;
+   }
 
    if (!rs_state->line_stipple_enable) {
       state->base.line_stipple_factor = 1;
@@ -650,7 +672,7 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
       ctx->rast_state_changed = true;
 
       if (clip_halfz != ctx->rast_state->base.clip_halfz) {
-         if (!screen->driver_workarounds.depth_clip_control_missing)
+         if (screen->info.have_EXT_depth_clip_control)
             ctx->gfx_pipeline_state.dirty = true;
          else
             zink_set_last_vertex_key(ctx)->clip_halfz = ctx->rast_state->base.clip_halfz;
@@ -678,7 +700,8 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
       else if (rasterizer_discard != ctx->rast_state->base.rasterizer_discard)
          zink_set_color_write_enables(ctx);
 
-      if (ctx->rast_state->base.point_quad_rasterization != point_quad_rasterization)
+      if (ctx->rast_state->base.point_quad_rasterization ||
+          ctx->rast_state->base.point_quad_rasterization != point_quad_rasterization)
          zink_set_fs_point_coord_key(ctx);
       if (ctx->rast_state->base.scissor != scissor)
          ctx->scissor_changed = true;
@@ -691,6 +714,9 @@ zink_bind_rasterizer_state(struct pipe_context *pctx, void *cso)
 
       if (ctx->rast_state->base.half_pixel_center != half_pixel_center)
          ctx->vp_state_changed = true;
+
+      if (!screen->optimal_keys)
+         zink_update_gs_key_rectangular_line(ctx);
    }
 }
 
@@ -709,7 +735,6 @@ zink_create_vertex_state(struct pipe_screen *pscreen,
                           uint32_t full_velem_mask)
 {
    struct zink_vertex_state *zstate = CALLOC_STRUCT(zink_vertex_state);
-   _mesa_set_init(&zstate->masks, NULL, NULL, _mesa_key_pointer_equal);
 
    util_init_pipe_vertex_state(pscreen, buffer, elements, num_elements, indexbuf, full_velem_mask,
                                &zstate->b);
@@ -733,41 +758,9 @@ zink_create_vertex_state(struct pipe_screen *pscreen,
 void
 zink_vertex_state_destroy(struct pipe_screen *pscreen, struct pipe_vertex_state *vstate)
 {
-   struct zink_vertex_state *zstate = (struct zink_vertex_state *)vstate;
-   ralloc_free(zstate->masks.table);
    pipe_vertex_buffer_unreference(&vstate->input.vbuffer);
    pipe_resource_reference(&vstate->input.indexbuf, NULL);
    FREE(vstate);
-}
-
-const struct zink_vertex_elements_hw_state *
-zink_vertex_state_mask(struct pipe_vertex_state *vstate, uint32_t partial_velem_mask, bool have_EXT_vertex_input_dynamic_state)
-{
-   struct zink_vertex_state *zstate = (struct zink_vertex_state *)vstate;
-
-   if (partial_velem_mask == vstate->input.full_velem_mask)
-      return &zstate->velems.hw_state;
-   struct set_entry *he = _mesa_set_search_pre_hashed(&zstate->masks, partial_velem_mask, (void*)(uintptr_t)partial_velem_mask);
-   if (he)
-      return he->key;
-
-   struct zink_vertex_elements_hw_state *hw_state = rzalloc(zstate->masks.table, struct zink_vertex_elements_hw_state);
-   unsigned i = 0;
-   if (have_EXT_vertex_input_dynamic_state) {
-      u_foreach_bit(elem, vstate->input.full_velem_mask & partial_velem_mask) {
-         unsigned idx = util_bitcount(vstate->input.full_velem_mask & BITFIELD_MASK(elem));
-         hw_state->dynattribs[i] = zstate->velems.hw_state.dynattribs[idx];
-         hw_state->dynattribs[i].location = i;
-         i++;
-      }
-      memcpy(hw_state->dynbindings, zstate->velems.hw_state.dynbindings,
-             zstate->velems.hw_state.num_bindings * sizeof(VkVertexInputBindingDescription2EXT));
-   } else {
-   }
-   hw_state->num_attribs = i;
-   hw_state->num_bindings = zstate->velems.hw_state.num_bindings;
-   _mesa_set_add_pre_hashed(&zstate->masks, partial_velem_mask, hw_state);
-   return hw_state;
 }
 
 struct pipe_vertex_state *

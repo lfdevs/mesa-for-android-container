@@ -31,6 +31,10 @@
 #include "util/u_debug.h"
 #include "util/u_math.h"
 
+#include "common/freedreno_common.h"
+
+BEGINC;
+
 /* Shared freedreno mipmap layout helper
  *
  * It does *not* attempt to track surface transitions, in particular
@@ -271,8 +275,10 @@ enum fdl_chroma_location {
 
 struct fdl_view_args {
    uint64_t iova;
-   uint32_t base_array_layer, base_miplevel;
-   uint32_t layer_count, level_count;
+   uint32_t base_miplevel;
+   uint32_t level_count;
+   uint32_t base_array_layer;
+   uint32_t layer_count;
    float min_lod_clamp;
    unsigned char swiz[4];
    enum pipe_format format;
@@ -329,5 +335,7 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
 void
 fdl6_format_swiz(enum pipe_format format, bool has_z24uint_s8uint,
                  unsigned char *format_swiz);
+
+ENDC;
 
 #endif /* FREEDRENO_LAYOUT_H_ */

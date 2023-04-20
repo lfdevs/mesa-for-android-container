@@ -2078,7 +2078,8 @@ void isl_color_value_unpack(union isl_color_value *value,
                             enum isl_format format,
                             const uint32_t *data_in);
 
-bool isl_is_storage_image_format(enum isl_format fmt);
+bool isl_is_storage_image_format(const struct intel_device_info *devinfo,
+                                 enum isl_format fmt);
 
 enum isl_format
 isl_lower_storage_image_format(const struct intel_device_info *devinfo,

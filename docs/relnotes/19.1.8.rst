@@ -142,7 +142,7 @@ Hal Gentz (1):
 
 -  gallium/osmesa: Fix the inability to set no context as current.
 
-Jason Ekstrand (2):
+Faith Ekstrand (2):
 
 -  nir/repair_ssa: Replace the unreachable check with the phi builder
 -  intel/fs: Fix fs_inst::flags_read for ANY/ALL predicates

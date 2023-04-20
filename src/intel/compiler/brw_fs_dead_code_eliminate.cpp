@@ -57,7 +57,6 @@ can_omit_write(const fs_inst *inst)
 {
    switch (inst->opcode) {
    case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
-   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL:
    case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:
       return true;
    default:

@@ -313,7 +313,7 @@ split_phi(nir_builder *b, nir_phi_instr *phi)
    nir_foreach_phi_src(src, phi) {
       assert(num_components == src->src.ssa->num_components);
 
-      b->cursor = nir_before_src(&src->src, false);
+      b->cursor = nir_before_src(&src->src);
 
       nir_ssa_def *x = nir_unpack_64_2x32_split_x(b, src->src.ssa);
       nir_ssa_def *y = nir_unpack_64_2x32_split_y(b, src->src.ssa);

@@ -324,16 +324,27 @@ dump_attr_set_list(struct dxil_dumper *d, struct list_head *list)
          if (i > 0)
             _mesa_string_buffer_append_char(d->buf, ' ');
 
-         assert(attr->attrs[i].type == DXIL_ATTR_ENUM);
-         const char *value = "";
-         switch (attr->attrs[i].kind) {
-         case DXIL_ATTR_KIND_NONE: value = "none"; break;
-         case DXIL_ATTR_KIND_NO_UNWIND: value = "nounwind"; break;
-         case DXIL_ATTR_KIND_READ_NONE: value = "readnone"; break;
-         case DXIL_ATTR_KIND_READ_ONLY: value = "readonly"; break;
-         case DXIL_ATTR_KIND_NO_DUPLICATE: value = "noduplicate"; break;
+         if (attr->attrs[i].type == DXIL_ATTR_ENUM) {
+            const char *value = "";
+            switch (attr->attrs[i].key.kind) {
+            case DXIL_ATTR_KIND_NONE: value = "none"; break;
+            case DXIL_ATTR_KIND_NO_UNWIND: value = "nounwind"; break;
+            case DXIL_ATTR_KIND_READ_NONE: value = "readnone"; break;
+            case DXIL_ATTR_KIND_READ_ONLY: value = "readonly"; break;
+            case DXIL_ATTR_KIND_NO_DUPLICATE: value = "noduplicate"; break;
+            }
+            _mesa_string_buffer_append(d->buf, value);
+         } else if (attr->attrs[i].type == DXIL_ATTR_STRING) {
+            _mesa_string_buffer_append_char(d->buf, '"');
+            _mesa_string_buffer_append(d->buf, attr->attrs[i].key.str);
+            _mesa_string_buffer_append_char(d->buf, '"');
+         } else if (attr->attrs[i].type == DXIL_ATTR_STRING_VALUE) {
+            _mesa_string_buffer_append_char(d->buf, '"');
+            _mesa_string_buffer_append(d->buf, attr->attrs[i].key.str);
+            _mesa_string_buffer_append(d->buf, "\"=\"");
+            _mesa_string_buffer_append(d->buf, attr->attrs[i].value.str);
+            _mesa_string_buffer_append_char(d->buf, '"');
          }
-         _mesa_string_buffer_append(d->buf, value);
       }
       _mesa_string_buffer_append(d->buf, "}\n");
    }
@@ -369,6 +380,19 @@ dump_constants(struct dxil_dumper *d, struct list_head *list)
                                           cnst->array_values[i]->id);
                dump_type_name(d, cnst->value.type);
                if (i != cnst->value.type->array_or_vector_def.num_elems - 1)
+                  _mesa_string_buffer_append(d->buf, ",");
+               _mesa_string_buffer_append(d->buf, " ");
+            }
+            _mesa_string_buffer_append(d->buf, "}\n");
+            break;
+         case TYPE_STRUCT:
+            _mesa_string_buffer_append(d->buf, "{");
+            for (unsigned i = 0;
+                 i < cnst->value.type->struct_def.elem.num_types; i++) {
+               _mesa_string_buffer_printf(d->buf, " %%%d",
+                                          cnst->struct_values[i]->id);
+               dump_type_name(d, cnst->struct_values[i]->type);
+               if (i != cnst->value.type->struct_def.elem.num_types - 1)
                   _mesa_string_buffer_append(d->buf, ",");
                _mesa_string_buffer_append(d->buf, " ");
             }

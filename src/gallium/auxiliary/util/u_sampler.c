@@ -46,6 +46,7 @@ default_template(struct pipe_sampler_view *view,
     */
 
    view->target = texture->target;
+   view->is_tex2d_from_buf = false;
    view->format = format;
    view->u.tex.first_level = 0;
    view->u.tex.last_level = texture->last_level;

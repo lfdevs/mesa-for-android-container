@@ -32,7 +32,6 @@ spec@ext_external_objects@vk-pix-buf-update-errors
 spec@ext_external_objects_fd@semaphore-api-errors
 spec@ext_external_objects_fd@memory-object-api-errors
 spec@ext_external_objects@vk-vert-buf-reuse
-glx@glx-swap-copy
 # From https://github.com/marekolsak/marek-build/blob/master/run-piglit.sh#L36
 spec@!opengl 1.0@gl-1.0-blend-func
 spec@!opengl 1.2@tex3d-maxsize
@@ -67,4 +66,3 @@ spec@ext_external_objects@vk-pix-buf-update-errors
 spec@ext_external_objects_fd@semaphore-api-errors
 spec@ext_external_objects_fd@memory-object-api-errors
 spec@ext_external_objects@vk-vert-buf-reuse
-glx@glx-swap-copy

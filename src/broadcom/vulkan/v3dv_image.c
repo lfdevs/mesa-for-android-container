@@ -71,12 +71,15 @@ v3d_get_ub_pad(uint32_t cpp, uint32_t height)
 }
 
 static void
-v3d_setup_slices(struct v3dv_image *image)
+v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
+                       uint32_t plane_offset)
 {
-   assert(image->cpp > 0);
+   assert(image->planes[plane].cpp > 0);
+   /* Texture Base Adress needs to be 64-byte aligned */
+   assert(plane_offset % 64 == 0);
 
-   uint32_t width = image->vk.extent.width;
-   uint32_t height = image->vk.extent.height;
+   uint32_t width = image->planes[plane].width;
+   uint32_t height = image->planes[plane].height;
    uint32_t depth = image->vk.extent.depth;
 
    /* Note that power-of-two padding is based on level 1.  These are not
@@ -88,8 +91,8 @@ v3d_setup_slices(struct v3dv_image *image)
    uint32_t pot_height = 2 * util_next_power_of_two(u_minify(height, 1));
    uint32_t pot_depth = 2 * util_next_power_of_two(u_minify(depth, 1));
 
-   uint32_t utile_w = v3d_utile_width(image->cpp);
-   uint32_t utile_h = v3d_utile_height(image->cpp);
+   uint32_t utile_w = v3d_utile_width(image->planes[plane].cpp);
+   uint32_t utile_h = v3d_utile_height(image->planes[plane].cpp);
    uint32_t uif_block_w = utile_w * 2;
    uint32_t uif_block_h = utile_h * 2;
 
@@ -106,9 +109,9 @@ v3d_setup_slices(struct v3dv_image *image)
    assert(depth > 0);
    assert(image->vk.mip_levels >= 1);
 
-   uint32_t offset = 0;
+   uint32_t offset = plane_offset;
    for (int32_t i = image->vk.mip_levels - 1; i >= 0; i--) {
-      struct v3d_resource_slice *slice = &image->slices[i];
+      struct v3d_resource_slice *slice = &image->planes[plane].slices[i];
 
       uint32_t level_width, level_height, level_depth;
       if (i < 2) {
@@ -135,7 +138,7 @@ v3d_setup_slices(struct v3dv_image *image)
       if (!image->tiled) {
          slice->tiling = V3D_TILING_RASTER;
          if (image->vk.image_type == VK_IMAGE_TYPE_1D)
-            level_width = align(level_width, 64 / image->cpp);
+            level_width = align(level_width, 64 / image->planes[plane].cpp);
       } else {
          if ((i != 0 || !uif_top) &&
              (level_width <= utile_w || level_height <= utile_h)) {
@@ -157,7 +160,8 @@ v3d_setup_slices(struct v3dv_image *image)
             level_width = align(level_width, 4 * uif_block_w);
             level_height = align(level_height, uif_block_h);
 
-            slice->ub_pad = v3d_get_ub_pad(image->cpp, level_height);
+            slice->ub_pad = v3d_get_ub_pad(image->planes[plane].cpp,
+                                           level_height);
             level_height += slice->ub_pad * uif_block_h;
 
             /* If the padding set us to to be aligned to the page cache size,
@@ -174,12 +178,13 @@ v3d_setup_slices(struct v3dv_image *image)
       }
 
       slice->offset = offset;
-      slice->stride = level_width * image->cpp;
+      slice->stride = level_width * image->planes[plane].cpp;
       slice->padded_height = level_height;
       if (slice->tiling == V3D_TILING_UIF_NO_XOR ||
           slice->tiling == V3D_TILING_UIF_XOR) {
          slice->padded_height_of_output_image_in_uif_blocks =
-            slice->padded_height / (2 * v3d_utile_height(image->cpp));
+            slice->padded_height /
+               (2 * v3d_utile_height(image->planes[plane].cpp));
       }
 
       slice->size = level_height * slice->stride;
@@ -199,7 +204,7 @@ v3d_setup_slices(struct v3dv_image *image)
       offset += slice_total_size;
    }
 
-   image->size = offset;
+   image->planes[plane].size = offset - plane_offset;
 
    /* UIF/UBLINEAR levels need to be aligned to UIF-blocks, and LT only
     * needs to be aligned to utile boundaries.  Since tiles are laid out
@@ -208,14 +213,26 @@ v3d_setup_slices(struct v3dv_image *image)
     * slices.
     *
     * We additionally align to 4k, which improves UIF XOR performance.
+    *
+    * Finally, because the Texture Base Address field must be 64-byte aligned,
+    * we also need to align linear images to 64 if the image is going to be
+    * used for transfer.
     */
-   image->alignment = image->tiled ? 4096 : image->cpp;
+   if (image->tiled) {
+      image->planes[plane].alignment = 4096;
+   } else {
+      image->planes[plane].alignment =
+         (image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? 64 : image->planes[plane].cpp;
+   }
+
    uint32_t align_offset =
-      align(image->slices[0].offset, image->alignment) - image->slices[0].offset;
+      align(image->planes[plane].slices[0].offset,
+            image->planes[plane].alignment) -
+            image->planes[plane].slices[0].offset;
    if (align_offset) {
-      image->size += align_offset;
+      image->planes[plane].size += align_offset;
       for (int i = 0; i < image->vk.mip_levels; i++)
-         image->slices[i].offset += align_offset;
+         image->planes[plane].slices[i].offset += align_offset;
    }
 
    /* Arrays and cube textures have a stride which is the distance from
@@ -223,23 +240,43 @@ v3d_setup_slices(struct v3dv_image *image)
     * we need to program the stride between slices of miplevel 0.
     */
    if (image->vk.image_type != VK_IMAGE_TYPE_3D) {
-      image->cube_map_stride =
-         align(image->slices[0].offset + image->slices[0].size, 64);
-      image->size += image->cube_map_stride * (image->vk.array_layers - 1);
+      image->planes[plane].cube_map_stride =
+         align(image->planes[plane].slices[0].offset +
+               image->planes[plane].slices[0].size, 64);
+      image->planes[plane].size += image->planes[plane].cube_map_stride *
+                                   (image->vk.array_layers - 1);
    } else {
-      image->cube_map_stride = image->slices[0].size;
+      image->planes[plane].cube_map_stride = image->planes[plane].slices[0].size;
    }
 }
 
-uint32_t
-v3dv_layer_offset(const struct v3dv_image *image, uint32_t level, uint32_t layer)
+static void
+v3d_setup_slices(struct v3dv_image *image, bool disjoint)
 {
-   const struct v3d_resource_slice *slice = &image->slices[level];
+   if (disjoint && image->plane_count == 1)
+      disjoint = false;
+
+   uint32_t offset = 0;
+   for (uint8_t plane = 0; plane < image->plane_count; plane++) {
+      offset = disjoint ? 0 : offset;
+      v3d_setup_plane_slices(image, plane, offset);
+      offset += align(image->planes[plane].size, 64);
+   }
+
+   image->non_disjoint_size = disjoint ? 0 : offset;
+}
+
+uint32_t
+v3dv_layer_offset(const struct v3dv_image *image, uint32_t level, uint32_t layer,
+                  uint8_t plane)
+{
+   const struct v3d_resource_slice *slice = &image->planes[plane].slices[level];
 
    if (image->vk.image_type == VK_IMAGE_TYPE_3D)
-      return image->mem_offset + slice->offset + layer * slice->size;
+      return image->planes[plane].mem_offset + slice->offset + layer * slice->size;
    else
-      return image->mem_offset + slice->offset + layer * image->cube_map_stride;
+      return image->planes[plane].mem_offset + slice->offset +
+         layer * image->planes[plane].cube_map_stride;
 }
 
 VkResult
@@ -312,13 +349,35 @@ v3dv_image_init(struct v3dv_device *device,
 
    const struct v3dv_format *format =
       v3dv_X(device, get_format)(pCreateInfo->format);
-   v3dv_assert(format != NULL && format->supported);
+   v3dv_assert(format != NULL && format->plane_count);
 
    assert(pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT ||
           pCreateInfo->samples == VK_SAMPLE_COUNT_4_BIT);
 
    image->format = format;
-   image->cpp = vk_format_get_blocksize(image->vk.format);
+   image->plane_count = vk_format_get_plane_count(pCreateInfo->format);
+
+   const struct vk_format_ycbcr_info *ycbcr_info =
+      vk_format_get_ycbcr_info(image->vk.format);
+
+   for (uint8_t plane = 0; plane < image->plane_count; plane++) {
+      VkFormat plane_format =
+         vk_format_get_plane_format(image->vk.format, plane);
+      image->planes[plane].cpp =
+         vk_format_get_blocksize(plane_format);
+      image->planes[plane].vk_format = plane_format;
+
+      image->planes[plane].width = image->vk.extent.width;
+      image->planes[plane].height = image->vk.extent.height;
+
+      if (ycbcr_info) {
+         image->planes[plane].width /=
+            ycbcr_info->planes[plane].denominator_scales[0];
+
+         image->planes[plane].height /=
+            ycbcr_info->planes[plane].denominator_scales[1];
+      }
+   }
    image->tiled = tiling == VK_IMAGE_TILING_OPTIMAL ||
                   (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
                    modifier != DRM_FORMAT_MOD_LINEAR);
@@ -332,12 +391,16 @@ v3dv_image_init(struct v3dv_device *device,
     */
    image->vk.create_flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
-   v3d_setup_slices(image);
+   bool disjoint = image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
+   v3d_setup_slices(image, disjoint);
 
 #ifdef ANDROID
    if (native_buffer != NULL) {
-      image->slices[0].stride = native_buf_stride;
-      image->slices[0].size = image->size = native_buf_size;
+      assert(image->plane_count == 1);
+      image->planes[0].slices[0].stride = native_buf_stride;
+      image->non_disjoint_size =
+         image->planes[0].slices[0].size =
+         image->planes[0].size = native_buf_size;
 
       VkResult result = v3dv_import_native_buffer_fd(v3dv_device_to_handle(device),
                                                      native_buf_fd, pAllocator,
@@ -451,14 +514,28 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
 {
    V3DV_FROM_HANDLE(v3dv_image, image, _image);
 
+   uint8_t plane = v3dv_plane_from_aspect(subresource->aspectMask);
    const struct v3d_resource_slice *slice =
-      &image->slices[subresource->mipLevel];
+      &image->planes[plane].slices[subresource->mipLevel];
+
+   /* About why the offset below works for both disjoint and non-disjoint
+    * cases, from the Vulkan spec:
+    *
+    *   "If the image is disjoint, then the offset is relative to the base
+    *    address of the plane."
+    *
+    *   "If the image is non-disjoint, then the offset is relative to the base
+    *    address of the image."
+    *
+    * In our case, the per-plane mem_offset for non-disjoint images is the
+    * same for all planes and matches the base address of the image.
+    */
    layout->offset =
-      v3dv_layer_offset(image, subresource->mipLevel, subresource->arrayLayer) -
-      image->mem_offset;
+      v3dv_layer_offset(image, subresource->mipLevel, subresource->arrayLayer,
+                        plane) - image->planes[plane].mem_offset;
    layout->rowPitch = slice->stride;
-   layout->depthPitch = image->cube_map_stride;
-   layout->arrayPitch = image->cube_map_stride;
+   layout->depthPitch = image->planes[plane].cube_map_stride;
+   layout->arrayPitch = image->planes[plane].cube_map_stride;
 
    if (image->vk.image_type != VK_IMAGE_TYPE_3D) {
       layout->size = slice->size;
@@ -473,7 +550,7 @@ v3dv_GetImageSubresourceLayout(VkDevice device,
          layout->size = slice->size * image->vk.extent.depth;
       } else {
             const struct v3d_resource_slice *prev_slice =
-               &image->slices[subresource->mipLevel - 1];
+               &image->planes[plane].slices[subresource->mipLevel - 1];
             layout->size = prev_slice->offset - slice->offset;
       }
    }
@@ -491,8 +568,11 @@ v3dv_DestroyImage(VkDevice _device,
       return;
 
 #ifdef ANDROID
+   assert(image->plane_count == 1);
    if (image->is_native_buffer_memory)
-      v3dv_FreeMemory(_device,  v3dv_device_memory_to_handle(image->mem), pAllocator);
+      v3dv_FreeMemory(_device,
+                      v3dv_device_memory_to_handle(image->planes[0].mem),
+                      pAllocator);
 #endif
 
    vk_image_destroy(&device->vk, pAllocator, &image->vk);
@@ -525,54 +605,88 @@ create_image_view(struct v3dv_device *device,
    if (iview == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   const VkImageSubresourceRange *range = &pCreateInfo->subresourceRange;
+   const VkImageAspectFlagBits any_plane_aspect =
+      VK_IMAGE_ASPECT_PLANE_0_BIT |
+      VK_IMAGE_ASPECT_PLANE_1_BIT |
+      VK_IMAGE_ASPECT_PLANE_2_BIT;
 
-   iview->offset = v3dv_layer_offset(image, iview->vk.base_mip_level,
-                                     iview->vk.base_array_layer);
+   if (image->vk.aspects & any_plane_aspect) {
+      assert((image->vk.aspects & ~any_plane_aspect) == 0);
+      iview->plane_count = 0;
+      static const VkImageAspectFlagBits plane_aspects[]= {
+         VK_IMAGE_ASPECT_PLANE_0_BIT,
+         VK_IMAGE_ASPECT_PLANE_1_BIT,
+         VK_IMAGE_ASPECT_PLANE_2_BIT
+      };
+      for (uint8_t plane = 0; plane < V3DV_MAX_PLANE_COUNT; plane++) {
+         if (iview->vk.aspects & plane_aspects[plane])
+            iview->planes[iview->plane_count++].image_plane = plane;
+      }
+   } else {
+      iview->plane_count = 1;
+      iview->planes[0].image_plane = 0;
+   }
+   /* At this point we should have at least one plane */
+   assert(iview->plane_count > 0);
+
+   const VkImageSubresourceRange *range = &pCreateInfo->subresourceRange;
 
    /* If we have D24S8 format but the view only selects the stencil aspect
     * we want to re-interpret the format as RGBA8_UINT, then map our stencil
     * data reads to the R component and ignore the GBA channels that contain
     * the depth aspect data.
+    *
+    * FIXME: thwe code belows calls vk_component_mapping_to_pipe_swizzle
+    * only so it can then call util_format_compose_swizzles later. Maybe it
+    * makes sense to implement swizzle composition using VkSwizzle directly.
     */
    VkFormat format;
    uint8_t image_view_swizzle[4];
    if (pCreateInfo->format == VK_FORMAT_D24_UNORM_S8_UINT &&
        range->aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
       format = VK_FORMAT_R8G8B8A8_UINT;
-      image_view_swizzle[0] = PIPE_SWIZZLE_X;
-      image_view_swizzle[1] = PIPE_SWIZZLE_0;
-      image_view_swizzle[2] = PIPE_SWIZZLE_0;
-      image_view_swizzle[3] = PIPE_SWIZZLE_1;
+      uint8_t stencil_aspect_swizzle[4] = {
+         PIPE_SWIZZLE_X, PIPE_SWIZZLE_0, PIPE_SWIZZLE_0, PIPE_SWIZZLE_1,
+      };
+      uint8_t view_swizzle[4];
+      vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle, view_swizzle);
+
+      util_format_compose_swizzles(stencil_aspect_swizzle, view_swizzle,
+                                   image_view_swizzle);
    } else {
       format = pCreateInfo->format;
-
-      /* FIXME: we are doing this vk to pipe swizzle mapping just to call
-       * util_format_compose_swizzles. Would be good to check if it would be
-       * better to reimplement the latter using vk component
-       */
       vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle,
                                            image_view_swizzle);
    }
 
    iview->vk.view_format = format;
    iview->format = v3dv_X(device, get_format)(format);
-   assert(iview->format && iview->format->supported);
+   assert(iview->format && iview->format->plane_count);
 
-   if (vk_format_is_depth_or_stencil(iview->vk.view_format)) {
-      iview->internal_type =
-         v3dv_X(device, get_internal_depth_type)(iview->vk.view_format);
-   } else {
-      v3dv_X(device, get_internal_type_bpp_for_output_format)
-         (iview->format->rt_type, &iview->internal_type, &iview->internal_bpp);
+   for (uint8_t plane = 0; plane < iview->plane_count; plane++) {
+      iview->planes[plane].offset = v3dv_layer_offset(image,
+                                                      iview->vk.base_mip_level,
+                                                      iview->vk.base_array_layer,
+                                                      plane);
+
+      if (vk_format_is_depth_or_stencil(iview->vk.view_format)) {
+         iview->planes[plane].internal_type =
+            v3dv_X(device, get_internal_depth_type)(iview->vk.view_format);
+      } else {
+         v3dv_X(device, get_internal_type_bpp_for_output_format)
+            (iview->format->planes[plane].rt_type,
+             &iview->planes[plane].internal_type,
+             &iview->planes[plane].internal_bpp);
+      }
+
+      const uint8_t *format_swizzle =
+         v3dv_get_format_swizzle(device, format, plane);
+      util_format_compose_swizzles(format_swizzle, image_view_swizzle,
+                                   iview->planes[plane].swizzle);
+
+      iview->planes[plane].swap_rb = v3dv_format_swizzle_needs_rb_swap(format_swizzle);
+      iview->planes[plane].channel_reverse = v3dv_format_swizzle_needs_reverse(format_swizzle);
    }
-
-   const uint8_t *format_swizzle = v3dv_get_format_swizzle(device, format);
-   util_format_compose_swizzles(format_swizzle, image_view_swizzle,
-                                iview->swizzle);
-
-   iview->swap_rb = v3dv_format_swizzle_needs_rb_swap(format_swizzle);
-   iview->channel_reverse = v3dv_format_swizzle_needs_reverse(format_swizzle);
 
    v3dv_X(device, pack_texture_shader_state)(device, iview);
 
@@ -647,8 +761,10 @@ v3dv_CreateBufferView(VkDevice _device,
    view->vk_format = pCreateInfo->format;
    view->format = v3dv_X(device, get_format)(view->vk_format);
 
+   /* We don't support multi-plane formats for buffer views */
+   assert(view->format->plane_count == 1);
    v3dv_X(device, get_internal_type_bpp_for_output_format)
-      (view->format->rt_type, &view->internal_type, &view->internal_bpp);
+      (view->format->planes[0].rt_type, &view->internal_type, &view->internal_bpp);
 
    if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT ||
        buffer->usage & VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT)

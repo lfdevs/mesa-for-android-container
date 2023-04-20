@@ -25,6 +25,8 @@
 
 #include <stdint.h>
 
+#include "intel/dev/intel_kmd.h"
+
 enum intel_engine_class {
    INTEL_ENGINE_CLASS_RENDER = 0,
    INTEL_ENGINE_CLASS_COPY,
@@ -44,7 +46,8 @@ struct intel_query_engine_info {
    struct intel_engine_class_instance engines[];
 };
 
-struct intel_query_engine_info *intel_engine_get_info(int fd);
+struct intel_query_engine_info *
+intel_engine_get_info(int fd, enum intel_kmd_type type);
 int intel_engines_count(const struct intel_query_engine_info *info,
                         enum intel_engine_class engine_class);
 const char *intel_engines_class_to_string(enum intel_engine_class engine_class);

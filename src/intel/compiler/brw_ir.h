@@ -110,7 +110,6 @@ struct backend_instruction : public exec_node {
    void remove(bblock_t *block, bool defer_later_block_ip_updates = false);
    void insert_after(bblock_t *block, backend_instruction *inst);
    void insert_before(bblock_t *block, backend_instruction *inst);
-   void insert_before(bblock_t *block, exec_list *list);
 
    /**
     * True if the instruction has side effects other than writing to

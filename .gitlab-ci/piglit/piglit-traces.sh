@@ -12,8 +12,8 @@ if [ "$PIGLIT_REPLAY_SUBCOMMAND" = "profile" ]; then
     # workaround for older Debian Bullseye libyaml 0.2.2
     sed -i "/^%YAML 1\.2$/d" "$PIGLIT_REPLAY_DESCRIPTION_FILE"
 
-    yq -i -Y '. | del(.traces[][] | select(.label[0,1,2,3,4,5,6,7,8,9] == "no-perf"))' \
-      "$PIGLIT_REPLAY_DESCRIPTION_FILE"  # label positions are a bit hack
+    yq -iY 'del(.traces[][] | select(.label[]? == "no-perf"))' \
+      "$PIGLIT_REPLAY_DESCRIPTION_FILE"
 fi
 
 # WINE
@@ -129,7 +129,7 @@ replay_minio_upload_images() {
             fi
             __MINIO_PATH="$PIGLIT_REPLAY_REFERENCE_IMAGES_BASE"
             __DESTINATION_FILE_PATH="${line##*-}"
-            if wget -q --method=HEAD "https://${__MINIO_PATH}/${__DESTINATION_FILE_PATH}" 2>/dev/null; then
+            if curl -L -s -X HEAD "https://${__MINIO_PATH}/${__DESTINATION_FILE_PATH}" 2>/dev/null; then
                 continue
             fi
         else

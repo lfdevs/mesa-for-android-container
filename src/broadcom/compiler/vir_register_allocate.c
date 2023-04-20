@@ -443,6 +443,7 @@ v3d_emit_spill_tmua(struct v3d_compile *c,
         struct qreg tmua = vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_TMUAU);
         struct qinst *inst = vir_ADD_dest(c, tmua, c->spill_base, offset);
         inst->qpu.flags.ac = cond;
+        inst->ldtmu_count = 1;
         inst->uniform = vir_get_uniform_index(c, QUNIFORM_CONSTANT,
                                               0xffffff7f); /* per-quad */
 

@@ -37,6 +37,7 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_context.h"
 #include "stw_device.h"

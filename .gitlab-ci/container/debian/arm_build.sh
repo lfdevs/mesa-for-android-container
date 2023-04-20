@@ -24,6 +24,7 @@ apt-get -y install \
 	bison \
 	ccache \
 	cmake \
+	curl \
 	debootstrap \
 	fastboot \
 	flex \
@@ -60,7 +61,6 @@ apt-get -y install \
 	python3-requests \
 	python3-setuptools \
 	u-boot-tools \
-	wget \
 	xz-utils \
 	zlib1g-dev \
 	zstd

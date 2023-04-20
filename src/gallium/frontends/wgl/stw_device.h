@@ -35,6 +35,7 @@
 #include "util/u_dynarray.h"
 #include "util/xmlconfig.h"
 #include <GL/gl.h>
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_pixelformat.h"
 

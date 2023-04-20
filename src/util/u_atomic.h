@@ -340,4 +340,16 @@ static inline uint64_t p_atomic_xchg_64(uint64_t *v, uint64_t i)
                                       (assert(!"should not get here"), 0))
 #endif
 
+/* On x86 we can have sizeof(uint64_t) = 8 and _Alignof(uint64_t) = 4. causing split locks. The
+ * implementation does handle that correctly, but with an internal mutex. Extend the alignment to
+ * avoid this.
+ */
+#if  __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ATOMICS__) && defined(USE_GCC_ATOMIC_BUILTINS)
+typedef int64_t __attribute__((aligned(_Alignof(_Atomic(int64_t))))) p_atomic_int64_t;
+typedef uint64_t __attribute__((aligned(_Alignof(_Atomic(uint64_t))))) p_atomic_uint64_t;
+#else
+typedef int64_t p_atomic_int64_t;
+typedef uint64_t p_atomic_uint64_t;
+#endif
+
 #endif /* U_ATOMIC_H */

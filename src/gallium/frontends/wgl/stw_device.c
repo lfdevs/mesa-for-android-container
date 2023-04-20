@@ -40,6 +40,7 @@
 #include "stw_device.h"
 #include "stw_winsys.h"
 #include "stw_pixelformat.h"
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_tls.h"
 #include "stw_framebuffer.h"
@@ -72,6 +73,7 @@ stw_get_param(struct pipe_frontend_screen *fscreen,
 static int
 get_refresh_rate(void)
 {
+#ifndef _GAMING_XBOX
    DEVMODE devModes;
 
    if (EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &devModes)) {
@@ -82,6 +84,9 @@ get_refresh_rate(void)
       /* reasonable default */
       return 60;
    }
+#else
+   return 60;
+#endif /* _GAMING_XBOX */
 }
 
 static bool

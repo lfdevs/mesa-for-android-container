@@ -668,6 +668,12 @@ vec4_visitor::opt_algebraic()
 	 break;
 
       case BRW_OPCODE_MUL:
+	 if (inst->src[1].file != IMM)
+	    continue;
+
+	 if (brw_reg_type_is_floating_point(inst->src[1].type))
+	    break;
+
 	 if (inst->src[1].is_zero()) {
 	    inst->opcode = BRW_OPCODE_MOV;
 	    switch (inst->src[0].type) {
@@ -2636,7 +2642,7 @@ brw_compile_vs(const struct brw_compiler *compiler,
 
       fs_visitor v(compiler, params->log_data, mem_ctx, &key->base,
                    &prog_data->base.base, nir, 8,
-                   debug_enabled);
+                   params->stats != NULL, debug_enabled);
       if (!v.run_vs()) {
          params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
          return NULL;

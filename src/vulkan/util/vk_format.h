@@ -210,6 +210,30 @@ vk_format_get_plane_format(VkFormat format, unsigned plane_id);
 VkFormat
 vk_format_get_aspect_format(VkFormat format, const VkImageAspectFlags aspect);
 
+struct vk_format_ycbcr_plane {
+   /* RGBA format for this plane */
+   VkFormat format;
+
+   /* Whether this plane contains chroma channels */
+   bool has_chroma;
+
+   /* For downscaling of YUV planes */
+   uint8_t denominator_scales[2];
+
+   /* How to map sampled ycbcr planes to a single 4 component element.
+    *
+    * We use uint8_t for compactness but it's actually VkComponentSwizzle.
+    */
+   uint8_t ycbcr_swizzle[4];
+};
+
+struct vk_format_ycbcr_info {
+   uint8_t n_planes;
+   struct vk_format_ycbcr_plane planes[3];
+};
+
+const struct vk_format_ycbcr_info *vk_format_get_ycbcr_info(VkFormat format);
+
 #ifdef __cplusplus
 }
 #endif

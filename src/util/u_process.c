@@ -43,7 +43,7 @@
 #include <mach-o/dyld.h>
 #endif
 
-#if DETECT_OS_FREEBSD
+#if DETECT_OS_BSD
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
@@ -206,10 +206,11 @@ free_program_name(void)
 static void
 util_get_process_name_callback(void)
 {
-   program_name = __getProgramName();
-   if (program_name) {
+   const char *override_name = os_get_option("MESA_PROCESS_NAME");
+   program_name = override_name ? strdup(override_name) : __getProgramName();
+
+   if (program_name)
       atexit(free_program_name);
-   }
 }
 
 const char *
@@ -260,34 +261,6 @@ success:
 }
 
 bool
-util_get_process_name_may_override(const char *env_name, char *procname, size_t size)
-{
-   const char *name;
-
-   /* First, check if the env var with env_name is set to
-    * override the normal process name query.
-    */
-   name = os_get_option(env_name);
-
-   if (!name) {
-      /* do normal query */
-      name = util_get_process_name();
-   }
-
-   assert(size > 0);
-   assert(procname);
-
-   if (name && procname && size > 0) {
-      strncpy(procname, name, size);
-      procname[size - 1] = '\0';
-      return true;
-   }
-   else {
-      return false;
-   }
-}
-
-bool
 util_get_command_line(char *cmdline, size_t size)
 {
 #if DETECT_OS_WINDOWS
@@ -315,6 +288,32 @@ util_get_command_line(char *cmdline, size_t size)
       close(f);
       return true;
    }
+#elif DETECT_OS_BSD
+   int mib[] = {
+      CTL_KERN,
+#if DETECT_OS_NETBSD || DETECT_OS_OPENBSD
+      KERN_PROC_ARGS,
+      getpid(),
+      KERN_PROC_ARGV,
+#else
+      KERN_PROC,
+      KERN_PROC_ARGS,
+      getpid(),
+#endif
+   };
+
+   /* Like /proc/pid/cmdline each argument is separated by NUL byte */
+   if (sysctl(mib, ARRAY_SIZE(mib), cmdline, &size, NULL, 0) == -1) {
+      return false;
+   }
+
+   /* Replace NUL with space except terminating NUL */
+   for (size_t i = 0; i < (size - 1); i++) {
+      if (cmdline[i] == '\0')
+         cmdline[i] = ' ';
+   }
+
+   return true;
 #endif
 
    /* XXX to-do: implement this function for other operating systems */

@@ -359,8 +359,10 @@ dump_cmdstream(void)
     * by name rather than hard-coding this.
     */
    if (is_a6xx()) {
-      options.ibs[1].rem += regval("CP_CSQ_IB1_STAT") >> 16;
-      options.ibs[2].rem += regval("CP_CSQ_IB2_STAT") >> 16;
+      uint32_t ib1_rem = regval("CP_ROQ_AVAIL_IB1") >> 16;
+      uint32_t ib2_rem = regval("CP_ROQ_AVAIL_IB2") >> 16;
+      options.ibs[1].rem += ib1_rem ? ib1_rem - 1 : 0;
+      options.ibs[2].rem += ib2_rem ? ib2_rem - 1 : 0;
    }
 
    printf("IB1: %" PRIx64 ", %u\n", options.ibs[1].base, options.ibs[1].rem);
@@ -386,6 +388,7 @@ dump_cmdstream(void)
       unsigned ringszdw = ringbuffers[id].size >> 2; /* in dwords */
 
       if (verbose) {
+         handle_prefetch(ringbuffers[id].buf, ringszdw);
          dump_commands(ringbuffers[id].buf, ringszdw, 0);
          return;
       }
@@ -418,6 +421,7 @@ dump_cmdstream(void)
          buf[idx] = ringbuffers[id].buf[p];
       }
 
+      handle_prefetch(buf, cmdszdw);
       dump_commands(buf, cmdszdw, 0);
       free(buf);
    }

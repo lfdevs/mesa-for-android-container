@@ -75,7 +75,6 @@ struct shader {
 
 bool validate = false, debug = false;
 enum dxil_validator_version val_ver = DXIL_VALIDATOR_1_4;
-enum dxil_shader_model shader_model = SHADER_MODEL_6_2;
 
 struct nir_shader_compiler_options nir_options;
 
@@ -99,25 +98,12 @@ compile_shader(const char *filename, gl_shader_stage shader_stage, struct shader
 
    size_t word_count = file_size / WORD_SIZE;
 
-   struct spirv_to_nir_options spirv_opts = {
-      .caps = {
-         .draw_parameters = true,
-      },
-      .ubo_addr_format = nir_address_format_32bit_index_offset,
-      .ssbo_addr_format = nir_address_format_32bit_index_offset,
-      .shared_addr_format = nir_address_format_32bit_offset_as_64bit,
-
-      // use_deref_buffer_array_length + nir_lower_explicit_io force
-      //  get_ssbo_size to take in the return from load_vulkan_descriptor
-      //  instead of vulkan_resource_index. This makes it much easier to
-      //  get the DXIL handle for the SSBO.
-      .use_deref_buffer_array_length = true
-   };
+   const struct spirv_to_nir_options *spirv_opts = dxil_spirv_nir_get_spirv_options();
 
    shader->nir = spirv_to_nir(
       (const uint32_t *)file_contents, word_count, NULL,
       0, (gl_shader_stage)shader_stage, shader->entry_point,
-      &spirv_opts, &nir_options);
+      spirv_opts, &nir_options);
    free(file_contents);
    if (!shader->nir) {
       fprintf(stderr, "SPIR-V to NIR failed\n");
@@ -200,6 +186,8 @@ main(int argc, char **argv)
    conf.runtime_data_cbv.base_shader_register = 0;
    conf.runtime_data_cbv.register_space = 31;
    conf.zero_based_vertex_instance_id = true;
+   conf.declared_read_only_images_as_srvs = true;
+   conf.shader_model_max = SHADER_MODEL_6_2;
 
    bool any_shaders = false;
    while ((ch = getopt_long(argc, argv, "-s:e:o:m:x:vd", long_options, NULL)) !=
@@ -226,8 +214,8 @@ main(int argc, char **argv)
          debug = true;
          break;
       case 'm':
-         shader_model = SHADER_MODEL_6_0 + atoi(optarg);
-         nir_options.lower_helper_invocation = shader_model < SHADER_MODEL_6_6;
+         conf.shader_model_max = SHADER_MODEL_6_0 + atoi(optarg);
+         nir_options.lower_helper_invocation = conf.shader_model_max < SHADER_MODEL_6_6;
          break;
       case 'x':
          val_ver = DXIL_VALIDATOR_1_0 + atoi(optarg);
@@ -263,7 +251,7 @@ main(int argc, char **argv)
 
    struct nir_to_dxil_options opts = {
       .environment = DXIL_ENVIRONMENT_VULKAN,
-      .shader_model_max = shader_model,
+      .shader_model_max = conf.shader_model_max,
       .validator_version_max = val_ver,
    };
 

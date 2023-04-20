@@ -83,7 +83,7 @@ static struct _glapi_table *
 get_dispatch(void)
 {
    GET_CURRENT_CONTEXT(ctx);
-   return ctx->CurrentServerDispatch;
+   return ctx->Dispatch.Current;
 }
 
 
@@ -1487,7 +1487,7 @@ _mesa_ArrayElement(GLint elt)
     * then we call PrimitiveRestartNV and return.
     */
    if (ctx->Array.PrimitiveRestart && (elt == ctx->Array.RestartIndex)) {
-      CALL_PrimitiveRestartNV(ctx->CurrentServerDispatch, ());
+      CALL_PrimitiveRestartNV(ctx->Dispatch.Current, ());
       return;
    }
 

@@ -294,8 +294,6 @@ files_libgallium = files(
   'nir/nir_to_tgsi.h',
   'nir/nir_draw_helpers.c',
   'nir/nir_draw_helpers.h',
-  'nir/nir_helpers.c',
-  'nir/nir_helpers.h',
 )
 
 if dep_libdrm.found()
@@ -536,7 +534,7 @@ if with_tests
       dependencies : [idep_gtest],
     ),
     suite: 'gallium',
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif
 

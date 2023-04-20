@@ -49,7 +49,7 @@ TexInstr::TexInstr(Opcode op,
     m_inst_mode(0),
     m_resource_id(rid)
 {
-   memset(m_offset, 0, sizeof(m_offset));
+   memset(m_coord_offset, 0, sizeof(m_coord_offset));
    m_src.add_use(this);
 }
 
@@ -69,14 +69,14 @@ void
 TexInstr::set_offset(unsigned index, int32_t val)
 {
    assert(index < 3);
-   m_offset[index] = val;
+   m_coord_offset[index] = val;
 }
 
 int
 TexInstr::get_offset(unsigned index) const
 {
    assert(index < 3);
-   return m_offset[index] << 1;
+   return m_coord_offset[index] << 1;
 }
 
 void
@@ -108,7 +108,7 @@ TexInstr::is_equal_to(const TexInstr& lhs) const
       return false;
 
    for (int i = 0; i < 3; ++i) {
-      if (m_offset[i] != lhs.m_offset[i])
+      if (m_coord_offset[i] != lhs.m_coord_offset[i])
          return false;
    }
    return m_inst_mode == lhs.m_inst_mode && resource_base() == lhs.resource_base() &&
@@ -120,6 +120,12 @@ TexInstr::propagate_death()
 {
    m_src.del_use(this);
    return true;
+}
+
+void TexInstr::forward_set_blockid(int id, int index)
+{
+   for (auto p : m_prepare_instr)
+      p->set_blockid(id, index);
 }
 
 bool
@@ -158,12 +164,12 @@ TexInstr::do_print(std::ostream& os) const
    if (resource_offset())
       os << " SO:" << *resource_offset();
 
-   if (m_offset[0])
-      os << " OX:" << m_offset[0];
-   if (m_offset[1])
-      os << " OY:" << m_offset[1];
-   if (m_offset[2])
-      os << " OZ:" << m_offset[2];
+   if (m_coord_offset[0])
+      os << " OX:" << m_coord_offset[0];
+   if (m_coord_offset[1])
+      os << " OY:" << m_coord_offset[1];
+   if (m_coord_offset[2])
+      os << " OZ:" << m_coord_offset[2];
 
    if (m_inst_mode || is_gather(m_opcode))
       os << " MODE:" << m_inst_mode;

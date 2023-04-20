@@ -25,13 +25,17 @@
  * of the Software.
  */
 
+#include <sys/ioctl.h>
+
 #include "amdgpu_cs.h"
 
 #include "util/hash_table.h"
 #include "util/os_time.h"
 #include "util/u_hash_table.h"
+#include "util/u_process.h"
 #include "frontend/drm_driver.h"
 #include "drm-uapi/amdgpu_drm.h"
+#include "drm-uapi/dma-buf.h"
 #include <xf86drm.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -1308,8 +1312,8 @@ static void amdgpu_buffer_get_metadata(struct radeon_winsys *rws,
    if (r)
       return;
 
-   ac_surface_set_bo_metadata(&ws->info, surf, info.metadata.tiling_info,
-                              &md->mode);
+   ac_surface_apply_bo_metadata(&ws->info, surf, info.metadata.tiling_info,
+                                &md->mode);
 
    md->size_metadata = info.metadata.size_metadata;
    memcpy(md->metadata, info.metadata.umd_metadata, sizeof(md->metadata));
@@ -1326,7 +1330,7 @@ static void amdgpu_buffer_set_metadata(struct radeon_winsys *rws,
 
    assert(bo->bo && "must not be called for slab entries");
 
-   ac_surface_get_bo_metadata(&ws->info, surf, &metadata.tiling_info);
+   ac_surface_compute_bo_metadata(&ws->info, surf, &metadata.tiling_info);
 
    metadata.size_metadata = md->size_metadata;
    memcpy(metadata.umd_metadata, md->metadata, sizeof(md->metadata));
@@ -1635,6 +1639,15 @@ static bool amdgpu_bo_get_handle(struct radeon_winsys *rws,
    r = amdgpu_bo_export(bo->bo, type, &whandle->handle);
    if (r)
       return false;
+
+#if defined(DMA_BUF_SET_NAME_B)
+   if (whandle->type == WINSYS_HANDLE_TYPE_FD &&
+       !bo->u.real.is_shared) {
+      char dmabufname[32];
+      snprintf(dmabufname, 32, "%d-%s", getpid(), util_get_process_name());
+      r = ioctl(whandle->handle, DMA_BUF_SET_NAME_B, (uint64_t)(uintptr_t)dmabufname);
+   }
+#endif
 
    if (whandle->type == WINSYS_HANDLE_TYPE_KMS) {
       int dma_fd = whandle->handle;

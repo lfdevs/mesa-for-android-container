@@ -57,6 +57,8 @@
 #include "util/u_prim.h"
 #include "util/u_upload_mgr.h"
 #include "util/u_debug_cb.h"
+#include "util/u_surface.h"
+#include "util/u_transfer.h"
 
 #include "hw/common.xml.h"
 
@@ -621,6 +623,8 @@ etna_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    pctx->fence_server_sync = etna_fence_server_sync;
    pctx->emit_string_marker = etna_emit_string_marker;
    pctx->set_frontend_noop = etna_set_frontend_noop;
+   pctx->clear_buffer = u_default_clear_buffer;
+   pctx->clear_texture = util_clear_texture;
 
    /* creation of compile states */
    pctx->create_blend_state = etna_blend_state_create;

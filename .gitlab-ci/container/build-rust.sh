@@ -20,10 +20,11 @@ RUST_VERSION=1.59.0-2022-02-24
 # For rust in Mesa, we use rustup to install.  This lets us pick an arbitrary
 # version of the compiler, rather than whatever the container's Debian comes
 # with.
-wget https://sh.rustup.rs -O - | sh -s -- \
-   --default-toolchain $RUST_VERSION \
-   --profile minimal \
-   -y
+curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+    --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
+      --default-toolchain $RUST_VERSION \
+      --profile minimal \
+      -y
 
 rustup component add rustfmt
 

@@ -70,6 +70,13 @@ struct vk_image {
 #endif
 
 #ifdef ANDROID
+   /* AHARDWAREBUFFER_FORMAT for this image or 0
+    *
+    * A default is provided by the Vulkan runtime code based on the VkFormat
+    * but it may be overridden by the driver as needed.
+    */
+   unsigned ahardware_buffer_format;
+
    /* VK_ANDROID_external_memory_android_hardware_buffer */
    uint64_t android_external_format;
 #endif
@@ -278,6 +285,25 @@ struct vk_image_view {
    uint32_t level_count;
    uint32_t base_array_layer;
    uint32_t layer_count;
+
+   /* VK_EXT_sliced_view_of_3d */
+   struct {
+      /* VkImageViewSlicedCreateInfoEXT::sliceOffset
+       *
+       * This field will be 0 for 1D and 2D images, 2D views of 3D images, or
+       * when no VkImageViewSlicedCreateInfoEXT is provided.
+       */
+      uint32_t z_slice_offset;
+
+      /* VkImageViewSlicedCreateInfoEXT::sliceCount
+       *
+       * This field will be 1 for 1D and 2D images or 2D views of 3D images.
+       * For 3D views, it will be VkImageViewSlicedCreateInfoEXT::sliceCount
+       * or image view depth (see vk_image_view::extent) when no
+       * VkImageViewSlicedCreateInfoEXT is provided.
+       */
+      uint32_t z_slice_count;
+   } storage;
 
    /* VK_EXT_image_view_min_lod */
    float min_lod;

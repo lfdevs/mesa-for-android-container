@@ -2275,8 +2275,8 @@
       <value name="IMPLICIT" value="2" />
     </field>
     <field name="Weighted Prediction Enable" start="108" end="108" type="bool" />
-    <field name="First Chroma QP Offset" start="112" end="116" type="uint" />
-    <field name="Second Chroma QP Offset" start="120" end="124" type="uint" />
+    <field name="First Chroma QP Offset" start="112" end="116" type="int" />
+    <field name="Second Chroma QP Offset" start="120" end="124" type="int" />
     <field name="Field Picture" start="128" end="128" type="bool" />
     <field name="MBAFF Mode" start="129" end="129" type="bool" />
     <field name="Frame MB Only" start="130" end="130" type="bool" />

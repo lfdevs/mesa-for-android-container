@@ -22,3 +22,7 @@ KHR-GL46.texture_view.view_classes,Fail
 
 # https://gerrit.khronos.org/c/vk-gl-cts/+/9891/
 KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
+
+# Piglit xfb tests
+spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
+spec@ext_transform_feedback@tessellation quads wireframe,Fail

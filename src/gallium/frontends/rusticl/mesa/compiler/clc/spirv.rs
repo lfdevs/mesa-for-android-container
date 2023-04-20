@@ -37,9 +37,30 @@ pub struct CLCHeader<'a> {
     pub source: &'a CString,
 }
 
-unsafe extern "C" fn msg_callback(data: *mut std::ffi::c_void, msg: *const c_char) {
+unsafe fn callback_impl(data: *mut c_void, msg: *const c_char) {
     let msgs = (data as *mut Vec<String>).as_mut().expect("");
     msgs.push(c_string_to_string(msg));
+}
+
+unsafe extern "C" fn spirv_msg_callback(data: *mut c_void, msg: *const c_char) {
+    callback_impl(data, msg);
+}
+
+unsafe extern "C" fn spirv_to_nir_msg_callback(
+    data: *mut c_void,
+    _dbg_level: mesa_rust_gen::nir_spirv_debug_level,
+    _offset: usize,
+    msg: *const c_char,
+) {
+    callback_impl(data, msg);
+}
+
+fn create_clc_logger(msgs: &mut Vec<String>) -> clc_logger {
+    clc_logger {
+        priv_: msgs as *mut Vec<String> as *mut c_void,
+        error: Some(spirv_msg_callback),
+        warning: Some(spirv_msg_callback),
+    }
 }
 
 impl SPIRVBin {
@@ -100,11 +121,7 @@ impl SPIRVBin {
             address_bits: address_bits,
         };
         let mut msgs: Vec<String> = Vec::new();
-        let logger = clc_logger {
-            priv_: &mut msgs as *mut Vec<String> as *mut c_void,
-            error: Some(msg_callback),
-            warning: Some(msg_callback),
-        };
+        let logger = create_clc_logger(&mut msgs);
         let mut out = clc_binary::default();
 
         let res = unsafe { clc_compile_c_to_spirv(&args, &logger, &mut out) };
@@ -141,11 +158,7 @@ impl SPIRVBin {
         };
 
         let mut msgs: Vec<String> = Vec::new();
-        let logger = clc_logger {
-            priv_: &mut msgs as *mut Vec<String> as *mut c_void,
-            error: Some(msg_callback),
-            warning: Some(msg_callback),
-        };
+        let logger = create_clc_logger(&mut msgs);
 
         let mut out = clc_binary::default();
         let res = unsafe { clc_link_spirv(&linker_args, &logger, &mut out) };
@@ -173,6 +186,14 @@ impl SPIRVBin {
             None
         };
         (res, msgs.join("\n"))
+    }
+
+    pub fn clone_on_validate(&self) -> (Option<Self>, String) {
+        let mut msgs: Vec<String> = Vec::new();
+        let logger = create_clc_logger(&mut msgs);
+        let res = unsafe { clc_validate_spirv(&self.spirv, &logger) };
+
+        (res.then(|| self.clone()), msgs.join("\n"))
     }
 
     fn kernel_infos(&self) -> &[clc_kernel_info] {
@@ -256,6 +277,7 @@ impl SPIRVBin {
         library: bool,
         clc_shader: *const nir_shader,
         address_bits: u32,
+        log: Option<&mut Vec<String>>,
     ) -> spirv_to_nir_options {
         let global_addr_format;
         let offset_addr_format;
@@ -267,6 +289,11 @@ impl SPIRVBin {
             global_addr_format = nir_address_format::nir_address_format_64bit_global;
             offset_addr_format = nir_address_format::nir_address_format_32bit_offset_as_64bit;
         }
+
+        let debug = log.map(|log| spirv_to_nir_options__bindgen_ty_1 {
+            func: Some(spirv_to_nir_msg_callback),
+            private_data: (log as *mut Vec<String>).cast(),
+        });
 
         spirv_to_nir_options {
             create_library: library,
@@ -295,9 +322,8 @@ impl SPIRVBin {
             global_addr_format: global_addr_format,
             shared_addr_format: offset_addr_format,
             temp_addr_format: offset_addr_format,
+            debug: debug.unwrap_or_default(),
 
-            // default
-            debug: spirv_to_nir_options__bindgen_ty_1::default(),
             ..Default::default()
         }
     }
@@ -309,9 +335,10 @@ impl SPIRVBin {
         libclc: &NirShader,
         spec_constants: &mut [nir_spirv_specialization],
         address_bits: u32,
+        log: Option<&mut Vec<String>>,
     ) -> Option<NirShader> {
         let c_entry = CString::new(entry_point.as_bytes()).unwrap();
-        let spirv_options = Self::get_spirv_options(false, libclc.get_nir(), address_bits);
+        let spirv_options = Self::get_spirv_options(false, libclc.get_nir(), address_bits, log);
 
         let nir = unsafe {
             spirv_to_nir(
@@ -332,7 +359,7 @@ impl SPIRVBin {
     pub fn get_lib_clc(screen: &PipeScreen) -> Option<NirShader> {
         let nir_options = screen.nir_shader_compiler_options(pipe_shader_type::PIPE_SHADER_COMPUTE);
         let address_bits = screen.compute_param(pipe_compute_cap::PIPE_COMPUTE_CAP_ADDRESS_BITS);
-        let spirv_options = Self::get_spirv_options(true, ptr::null(), address_bits);
+        let spirv_options = Self::get_spirv_options(true, ptr::null(), address_bits, None);
         let shader_cache = DiskCacheBorrowed::as_ptr(&screen.shader_cache());
 
         NirShader::new(unsafe {
@@ -368,10 +395,27 @@ impl SPIRVBin {
         }
     }
 
+    pub fn spec_constant(&self, spec_id: u32) -> Option<clc_spec_constant_type> {
+        let info = self.info?;
+        let spec_constants =
+            unsafe { slice::from_raw_parts(info.spec_constants, info.num_spec_constants as usize) };
+
+        spec_constants
+            .iter()
+            .find(|sc| sc.id == spec_id)
+            .map(|sc| sc.type_)
+    }
+
     pub fn print(&self) {
         unsafe {
             clc_dump_spirv(&self.spirv, stderr_ptr());
         }
+    }
+}
+
+impl Clone for SPIRVBin {
+    fn clone(&self) -> Self {
+        Self::from_bin(self.to_bin())
     }
 }
 
@@ -427,5 +471,27 @@ impl SPIRVKernelArg {
             address_qualifier: address_qualifier,
             type_qualifier: clc_kernel_arg_type_qualifier(type_qualifier),
         })
+    }
+}
+
+pub trait CLCSpecConstantType {
+    fn size(self) -> u8;
+}
+
+impl CLCSpecConstantType for clc_spec_constant_type {
+    fn size(self) -> u8 {
+        match self {
+            Self::CLC_SPEC_CONSTANT_INT64
+            | Self::CLC_SPEC_CONSTANT_UINT64
+            | Self::CLC_SPEC_CONSTANT_DOUBLE => 8,
+            Self::CLC_SPEC_CONSTANT_INT32
+            | Self::CLC_SPEC_CONSTANT_UINT32
+            | Self::CLC_SPEC_CONSTANT_FLOAT => 4,
+            Self::CLC_SPEC_CONSTANT_INT16 | Self::CLC_SPEC_CONSTANT_UINT16 => 2,
+            Self::CLC_SPEC_CONSTANT_INT8
+            | Self::CLC_SPEC_CONSTANT_UINT8
+            | Self::CLC_SPEC_CONSTANT_BOOL => 1,
+            Self::CLC_SPEC_CONSTANT_UNKNOWN => 0,
+        }
     }
 }

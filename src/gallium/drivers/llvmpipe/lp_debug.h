@@ -69,12 +69,7 @@
 
 extern int LP_PERF;
 
-#ifdef DEBUG
 extern int LP_DEBUG;
-#else
-#define LP_DEBUG 0
-#endif
-
 
 void
 st_debug_init(void);

@@ -1,26 +1,8 @@
 /*
- * Copyright (C) 2017-2019 Alyssa Rosenzweig
- * Copyright (C) 2017-2019 Connor Abbott
- * Copyright (C) 2019 Collabora, Ltd.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright 2017-2019 Alyssa Rosenzweig
+ * Copyright 2017-2019 Connor Abbott
+ * Copyright 2019 Collabora, Ltd.
+ * SPDX-License-Identifier: MIT
  */
 
 #include <ctype.h>
@@ -34,9 +16,12 @@
 
 #include "decode.h"
 #include "hexdump.h"
-#include "io.h"
+#ifdef __APPLE__
+#include "agx_iokit.h"
+#endif
 
-static const char *agx_alloc_types[AGX_NUM_ALLOC] = {"mem", "map", "cmd"};
+UNUSED static const char *agx_alloc_types[AGX_NUM_ALLOC] = {"mem", "map",
+                                                            "cmd"};
 
 static void
 agx_disassemble(void *_code, size_t maxlen, FILE *fp)
@@ -118,6 +103,8 @@ agxdecode_mark_mapped(unsigned handle)
    /* Mark mapped for future consumption */
    bo->mapped = true;
 }
+
+#ifdef __APPLE__
 
 static void
 agxdecode_decode_segment_list(void *segment_list)
@@ -211,6 +198,8 @@ agxdecode_decode_segment_list(void *segment_list)
    }
 }
 
+#endif
+
 static inline void *
 __agxdecode_fetch_gpu_mem(const struct agx_bo *mem, uint64_t gpu_va,
                           size_t size, int line, const char *filename)
@@ -265,27 +254,19 @@ agxdecode_map_read_write(void)
 
 unsigned agxdecode_indent = 0;
 
-static void
-agxdecode_dump_bo(struct agx_bo *bo, const char *name)
-{
-   fprintf(agxdecode_dump_stream, "%s %s (%u)\n", name, bo->name ?: "",
-           bo->handle);
-   hexdump(agxdecode_dump_stream, bo->ptr.cpu, bo->size, false);
-}
-
 /* Abstraction for command stream parsing */
-typedef unsigned (*decode_cmd)(const uint8_t *map, uint64_t *link,
-                               bool verbose);
+typedef unsigned (*decode_cmd)(const uint8_t *map, uint64_t *link, bool verbose,
+                               void *data);
 
 #define STATE_DONE (0xFFFFFFFFu)
 #define STATE_LINK (0xFFFFFFFEu)
 
 static void
 agxdecode_stateful(uint64_t va, const char *label, decode_cmd decoder,
-                   bool verbose)
+                   bool verbose, void *data)
 {
    struct agx_bo *alloc = agxdecode_find_mapped_gpu_mem_containing(va);
-   assert(alloc != NULL && "nonexistant object");
+   assert(alloc != NULL && "nonexistent object");
    fprintf(agxdecode_dump_stream, "%s (%" PRIx64 ", handle %u)\n", label, va,
            alloc->handle);
    fflush(agxdecode_dump_stream);
@@ -294,12 +275,10 @@ agxdecode_stateful(uint64_t va, const char *label, decode_cmd decoder,
    uint8_t *end = (uint8_t *)alloc->ptr.cpu + alloc->size;
    uint64_t link = 0;
 
-   if (verbose)
-      agxdecode_dump_bo(alloc, label);
    fflush(agxdecode_dump_stream);
 
    while (map < end) {
-      unsigned count = decoder(map, &link, verbose);
+      unsigned count = decoder(map, &link, verbose, data);
 
       /* If we fail to decode, default to a hexdump (don't hang) */
       if (count == 0) {
@@ -321,9 +300,16 @@ agxdecode_stateful(uint64_t va, const char *label, decode_cmd decoder,
 }
 
 static unsigned
-agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose)
+agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
+              UNUSED void *data)
 {
+   enum agx_sampler_states *sampler_states = data;
    enum agx_usc_control type = map[0];
+
+   bool extended_samplers =
+      (sampler_states != NULL) &&
+      (((*sampler_states) == AGX_SAMPLER_STATES_8_EXTENDED) ||
+       ((*sampler_states) == AGX_SAMPLER_STATES_16_EXTENDED));
 
 #define USC_CASE(name, human)                                                  \
    case AGX_USC_CONTROL_##name: {                                              \
@@ -369,6 +355,11 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose)
       for (unsigned i = 0; i < temp.count; ++i) {
          DUMP_CL(SAMPLER, samp, "Sampler");
          samp += AGX_SAMPLER_LENGTH;
+
+         if (extended_samplers) {
+            DUMP_CL(BORDER, samp, "Border");
+            samp += AGX_BORDER_LENGTH;
+         }
       }
 
       return AGX_USC_SAMPLER_LENGTH;
@@ -435,7 +426,7 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
    map += AGX_PPP_HEADER_LENGTH;
 
    PPP_PRINT(map, fragment_control, FRAGMENT_CONTROL, "Fragment control");
-   PPP_PRINT(map, fragment_control_2, FRAGMENT_CONTROL_2, "Fragment control 2");
+   PPP_PRINT(map, fragment_control_2, FRAGMENT_CONTROL, "Fragment control 2");
    PPP_PRINT(map, fragment_front_face, FRAGMENT_FACE, "Front face");
    PPP_PRINT(map, fragment_front_face_2, FRAGMENT_FACE_2, "Front face 2");
    PPP_PRINT(map, fragment_front_stencil, FRAGMENT_STENCIL, "Front stencil");
@@ -455,7 +446,7 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
    if (hdr.fragment_shader) {
       agx_unpack(agxdecode_dump_stream, map, FRAGMENT_SHADER, frag);
       agxdecode_stateful(frag.pipeline, "Fragment pipeline", agxdecode_usc,
-                         verbose);
+                         verbose, &frag.sampler_state_register_count);
 
       if (frag.cf_bindings) {
          uint8_t *cf = agxdecode_fetch_gpu_mem(frag.cf_bindings, 128);
@@ -486,17 +477,45 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
 }
 
 static unsigned
-agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose)
+agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
+              UNUSED void *data)
 {
    /* Bits 29-31 contain the block type */
    enum agx_cdm_block_type block_type = (map[3] >> 5);
 
    switch (block_type) {
-   case AGX_CDM_BLOCK_TYPE_COMPUTE_KERNEL: {
-      agx_unpack(agxdecode_dump_stream, map, LAUNCH, cmd);
-      agxdecode_stateful(cmd.pipeline, "Pipeline", agxdecode_usc, verbose);
-      DUMP_UNPACKED(LAUNCH, cmd, "Launch\n");
-      return AGX_LAUNCH_LENGTH;
+   case AGX_CDM_BLOCK_TYPE_HEADER: {
+      size_t length = AGX_CDM_HEADER_LENGTH;
+
+#define CDM_PRINT(STRUCT_NAME, human)                                          \
+   DUMP_CL(CDM_##STRUCT_NAME, map, human);                                     \
+   map += AGX_CDM_##STRUCT_NAME##_LENGTH;                                      \
+   length += AGX_CDM_##STRUCT_NAME##_LENGTH;
+
+      agx_unpack(agxdecode_dump_stream, map, CDM_HEADER, hdr);
+      agxdecode_stateful(hdr.pipeline, "Pipeline", agxdecode_usc, verbose,
+                         &hdr.sampler_state_register_count);
+      DUMP_UNPACKED(CDM_HEADER, hdr, "Compute\n");
+      map += AGX_CDM_HEADER_LENGTH;
+
+      switch (hdr.mode) {
+      case AGX_CDM_MODE_DIRECT:
+         CDM_PRINT(GLOBAL_SIZE, "Global size");
+         CDM_PRINT(LOCAL_SIZE, "Local size");
+         break;
+      case AGX_CDM_MODE_INDIRECT_GLOBAL:
+         CDM_PRINT(INDIRECT, "Indirect buffer");
+         CDM_PRINT(LOCAL_SIZE, "Local size");
+         break;
+      case AGX_CDM_MODE_INDIRECT_LOCAL:
+         CDM_PRINT(INDIRECT, "Indirect buffer");
+         break;
+      default:
+         fprintf(agxdecode_dump_stream, "Unknown CDM mode: %u\n", hdr.mode);
+         break;
+      }
+
+      return length;
    }
 
    case AGX_CDM_BLOCK_TYPE_STREAM_LINK: {
@@ -511,6 +530,11 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose)
       return STATE_DONE;
    }
 
+   case AGX_CDM_BLOCK_TYPE_LAUNCH: {
+      DUMP_CL(CDM_LAUNCH, map, "Launch");
+      return AGX_CDM_LAUNCH_LENGTH;
+   }
+
    default:
       fprintf(agxdecode_dump_stream, "Unknown CDM block type: %u\n",
               block_type);
@@ -520,12 +544,18 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose)
 }
 
 static unsigned
-agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose)
+agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
+              UNUSED void *data)
 {
    /* Bits 29-31 contain the block type */
    enum agx_vdm_block_type block_type = (map[3] >> 5);
 
    switch (block_type) {
+   case AGX_VDM_BLOCK_TYPE_BARRIER: {
+      DUMP_CL(VDM_BARRIER, map, "Barrier");
+      return AGX_VDM_BARRIER_LENGTH;
+   }
+
    case AGX_VDM_BLOCK_TYPE_PPP_STATE_UPDATE: {
       agx_unpack(agxdecode_dump_stream, map, PPP_STATE, cmd);
 
@@ -535,7 +565,7 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose)
       if (mem)
          agxdecode_record(address, cmd.size_words * 4, verbose);
       else
-         DUMP_UNPACKED(PPP_STATE, cmd, "Non-existant record (XXX)\n");
+         DUMP_UNPACKED(PPP_STATE, cmd, "Non-existent record (XXX)\n");
 
       return AGX_PPP_STATE_LENGTH;
    }
@@ -553,6 +583,16 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose)
    }
 
       VDM_PRINT(restart_index, RESTART_INDEX, "Restart index");
+
+      /* If word 1 is present but word 0 is not, fallback to compact samplers */
+      enum agx_sampler_states sampler_states = 0;
+
+      if (hdr.vertex_shader_word_0_present) {
+         agx_unpack(agxdecode_dump_stream, map, VDM_STATE_VERTEX_SHADER_WORD_0,
+                    word_0);
+         sampler_states = word_0.sampler_state_register_count;
+      }
+
       VDM_PRINT(vertex_shader_word_0, VERTEX_SHADER_WORD_0,
                 "Vertex shader word 0");
 
@@ -561,8 +601,8 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose)
                     word_1);
          fprintf(agxdecode_dump_stream, "Pipeline %X\n",
                  (uint32_t)word_1.pipeline);
-         agxdecode_stateful(word_1.pipeline, "Pipeline", agxdecode_usc,
-                            verbose);
+         agxdecode_stateful(word_1.pipeline, "Pipeline", agxdecode_usc, verbose,
+                            &sampler_states);
       }
 
       VDM_PRINT(vertex_shader_word_1, VERTEX_SHADER_WORD_1,
@@ -591,10 +631,11 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose)
       IDX_PRINT(index_count, COUNT, "Index count");
       IDX_PRINT(instance_count, INSTANCES, "Instance count");
       IDX_PRINT(start, START, "Start");
+      IDX_PRINT(indirect_buffer, INDIRECT_BUFFER, "Indirect buffer");
       IDX_PRINT(index_buffer_size, BUFFER_SIZE, "Index buffer size");
 
 #undef IDX_PRINT
-      return ALIGN_POT(length, 8);
+      return length;
    }
 
    case AGX_VDM_BLOCK_TYPE_STREAM_LINK: {
@@ -623,7 +664,11 @@ agxdecode_cs(uint32_t *cmdbuf, uint64_t encoder, bool verbose)
    agx_unpack(agxdecode_dump_stream, cmdbuf + 16, IOGPU_COMPUTE, cs);
    DUMP_UNPACKED(IOGPU_COMPUTE, cs, "Compute\n");
 
-   agxdecode_stateful(encoder, "Encoder", agxdecode_cdm, verbose);
+   agxdecode_stateful(encoder, "Encoder", agxdecode_cdm, verbose, NULL);
+
+   fprintf(agxdecode_dump_stream, "Context switch program:\n");
+   agx_disassemble(agxdecode_fetch_gpu_mem(cs.context_switch_program, 1024),
+                   1024, agxdecode_dump_stream);
 }
 
 static void
@@ -632,31 +677,33 @@ agxdecode_gfx(uint32_t *cmdbuf, uint64_t encoder, bool verbose)
    agx_unpack(agxdecode_dump_stream, cmdbuf + 16, IOGPU_GRAPHICS, gfx);
    DUMP_UNPACKED(IOGPU_GRAPHICS, gfx, "Graphics\n");
 
-   agxdecode_stateful(encoder, "Encoder", agxdecode_vdm, verbose);
+   agxdecode_stateful(encoder, "Encoder", agxdecode_vdm, verbose, NULL);
 
    if (gfx.clear_pipeline_unk) {
       fprintf(agxdecode_dump_stream, "Unk: %X\n", gfx.clear_pipeline_unk);
       agxdecode_stateful(gfx.clear_pipeline, "Clear pipeline", agxdecode_usc,
-                         verbose);
+                         verbose, NULL);
    }
 
    if (gfx.store_pipeline_unk) {
       assert(gfx.store_pipeline_unk == 0x4);
       agxdecode_stateful(gfx.store_pipeline, "Store pipeline", agxdecode_usc,
-                         verbose);
+                         verbose, NULL);
    }
 
    assert((gfx.partial_reload_pipeline_unk & 0xF) == 0x4);
    if (gfx.partial_reload_pipeline) {
       agxdecode_stateful(gfx.partial_reload_pipeline, "Partial reload pipeline",
-                         agxdecode_usc, verbose);
+                         agxdecode_usc, verbose, NULL);
    }
 
    if (gfx.partial_store_pipeline) {
       agxdecode_stateful(gfx.partial_store_pipeline, "Partial store pipeline",
-                         agxdecode_usc, verbose);
+                         agxdecode_usc, verbose, NULL);
    }
 }
+
+#ifdef __APPLE__
 
 void
 agxdecode_cmdstream(unsigned cmdbuf_handle, unsigned map_handle, bool verbose)
@@ -666,8 +713,8 @@ agxdecode_cmdstream(unsigned cmdbuf_handle, unsigned map_handle, bool verbose)
    struct agx_bo *cmdbuf =
       agxdecode_find_handle(cmdbuf_handle, AGX_ALLOC_CMDBUF);
    struct agx_bo *map = agxdecode_find_handle(map_handle, AGX_ALLOC_MEMMAP);
-   assert(cmdbuf != NULL && "nonexistant command buffer");
-   assert(map != NULL && "nonexistant mapping");
+   assert(cmdbuf != NULL && "nonexistent command buffer");
+   assert(map != NULL && "nonexistent mapping");
 
    /* Before decoding anything, validate the map. Set bo->mapped fields */
    agxdecode_decode_segment_list(map->ptr.cpu);
@@ -702,7 +749,7 @@ agxdecode_dump_mappings(unsigned map_handle)
    agxdecode_dump_file_open();
 
    struct agx_bo *map = agxdecode_find_handle(map_handle, AGX_ALLOC_MEMMAP);
-   assert(map != NULL && "nonexistant mapping");
+   assert(map != NULL && "nonexistent mapping");
    agxdecode_decode_segment_list(map->ptr.cpu);
 
    for (unsigned i = 0; i < mmap_count; ++i) {
@@ -722,6 +769,8 @@ agxdecode_dump_mappings(unsigned map_handle)
       fprintf(agxdecode_dump_stream, "\n");
    }
 }
+
+#endif
 
 void
 agxdecode_track_alloc(struct agx_bo *alloc)
@@ -776,10 +825,11 @@ agxdecode_dump_file_open(void)
                agxdecode_dump_frame_count);
       printf("agxdecode: dump command stream to file %s\n", buffer);
       agxdecode_dump_stream = fopen(buffer, "w");
-      if (!agxdecode_dump_stream)
+      if (!agxdecode_dump_stream) {
          fprintf(stderr,
                  "agxdecode: failed to open command stream log file %s\n",
                  buffer);
+      }
    }
 }
 

@@ -167,6 +167,7 @@ dce_cf_list(struct exec_list *cf_list, BITSET_WORD *defs_live,
       }
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(cf_node);
+         assert(!nir_loop_has_continue_construct(loop));
 
          struct loop_state inner_state;
          inner_state.preheader = nir_cf_node_as_block(nir_cf_node_prev(cf_node));

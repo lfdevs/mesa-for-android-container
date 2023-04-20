@@ -147,8 +147,9 @@ get_var_pair(nir_builder *b, nir_variable *old_var,
       new_var->xy->type = glsl_dvec_type(2);
       new_var->zw->type = glsl_dvec_type(old_components - 2);
 
-      if (glsl_type_is_array(old_var->type)) {
-         unsigned array_size = glsl_get_aoa_size(old_var->type);
+      if (glsl_type_is_array_or_matrix(old_var->type)) {
+         const struct glsl_type *element_type = glsl_without_array(old_var->type);
+         unsigned array_size = glsl_get_aoa_size(old_var->type) * glsl_get_matrix_columns(element_type);
          new_var->xy->type = glsl_array_type(new_var->xy->type,
                                              array_size, 0);
          new_var->zw->type = glsl_array_type(new_var->zw->type,

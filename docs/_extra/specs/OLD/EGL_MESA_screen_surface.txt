@@ -51,7 +51,7 @@ Overview
     monitor.  The screen surface can be scrolled by changing this origin.
 
     This extension also defines functions for controlling the monitor's
-    display mode (width, height, refresh rate, etc), and specifing which
+    display mode (width, height, refresh rate, etc), and specifying which
     screen surface is to be displayed on a monitor.
 
     The new EGLModeMESA type and related functions are very similar to the

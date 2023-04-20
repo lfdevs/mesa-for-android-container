@@ -157,8 +157,6 @@
 #define VK_GEOMETRY_TYPE_TRIANGLES_KHR 0
 #define VK_GEOMETRY_TYPE_AABBS_KHR     1
 
-#define VK_GEOMETRY_OPAQUE_BIT_KHR 1
-
 #define VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR 1
 #define VK_GEOMETRY_INSTANCE_TRIANGLE_FLIP_FACING_BIT_KHR         2
 #define VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR                 4
@@ -331,49 +329,6 @@ calculate_instance_node_bounds(uint64_t base_ptr, mat3x4 otw_matrix)
                                otw_matrix[comp][col] * header.aabb.max[col]);
       }
    }
-   return aabb;
-}
-
-radv_aabb
-calculate_node_bounds(VOID_REF bvh, uint32_t id)
-{
-   radv_aabb aabb;
-
-   VOID_REF node = OFFSET(bvh, id_to_offset(id));
-   switch (id_to_type(id)) {
-   case radv_bvh_node_triangle: {
-      radv_bvh_triangle_node triangle = DEREF(REF(radv_bvh_triangle_node)(node));
-
-      vec3 v0 = vec3(triangle.coords[0][0], triangle.coords[0][1], triangle.coords[0][2]);
-      vec3 v1 = vec3(triangle.coords[1][0], triangle.coords[1][1], triangle.coords[1][2]);
-      vec3 v2 = vec3(triangle.coords[2][0], triangle.coords[2][1], triangle.coords[2][2]);
-
-      aabb.min = min(min(v0, v1), v2);
-      aabb.max = max(max(v0, v1), v2);
-      break;
-   }
-   case radv_bvh_node_box32: {
-      radv_bvh_box32_node internal = DEREF(REF(radv_bvh_box32_node)(node));
-      aabb.min = vec3(INFINITY);
-      aabb.max = vec3(-INFINITY);
-      for (uint32_t i = 0; i < 4; i++) {
-         aabb.min = min(aabb.min, internal.coords[i].min);
-         aabb.max = max(aabb.max, internal.coords[i].max);
-      }
-      break;
-   }
-   case radv_bvh_node_instance: {
-      radv_bvh_instance_node instance = DEREF(REF(radv_bvh_instance_node)(node));
-      aabb = calculate_instance_node_bounds(node_to_addr(instance.bvh_ptr) - instance.bvh_offset,
-                                            instance.otw_matrix);
-      break;
-   }
-   case radv_bvh_node_aabb: {
-      aabb = DEREF(REF(radv_bvh_aabb_node)(node)).aabb;
-      break;
-   }
-   }
-
    return aabb;
 }
 

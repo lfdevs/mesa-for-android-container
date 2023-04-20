@@ -1,7 +1,7 @@
-# Failures likely due to lavapipe (i.e. the intersection of observed failures and lvp-fails.txt)
-dEQP-VK.glsl.crash_test.divbyzero_comp,Crash
-
 # Full Venus list
+dEQP-VK.multiview.dynamic_rendering.queries.15_15_15_15,Fail
+dEQP-VK.multiview.dynamic_rendering.queries.15,Fail
+dEQP-VK.multiview.dynamic_rendering.queries.5_10_5_10,Fail
 dEQP-VK.multiview.queries.15_15_15_15,Fail
 dEQP-VK.multiview.queries.15,Fail
 dEQP-VK.multiview.queries.5_10_5_10,Fail
@@ -13,3 +13,4 @@ dEQP-VK.pipeline.extended_dynamic_state.before_draw.enable_raster,Fail
 dEQP-VK.pipeline.extended_dynamic_state.between_pipelines.enable_raster,Fail
 dEQP-VK.pipeline.extended_dynamic_state.cmd_buffer_start.enable_raster,Fail
 dEQP-VK.pipeline.extended_dynamic_state.two_draws_dynamic.enable_raster,Fail
+dEQP-VK.memory_model.message_passing.ext.u64.noncoherent.atomic_atomic.atomicwrite.device.payload_local.physbuffer.guard_local.image.comp,Fail

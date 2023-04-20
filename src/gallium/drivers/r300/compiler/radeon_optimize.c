@@ -298,6 +298,7 @@ static void constant_folding_mul(struct rc_instruction * inst)
 		} else if (swz == RC_SWIZZLE_ZERO) {
 			inst->U.I.Opcode = RC_OPCODE_MOV;
 			inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_0000;
+			inst->U.I.SrcReg[0].File = RC_FILE_NONE;
 			return;
 		}
 	}
@@ -311,6 +312,7 @@ static void constant_folding_mul(struct rc_instruction * inst)
 		} else if (swz == RC_SWIZZLE_ZERO) {
 			inst->U.I.Opcode = RC_OPCODE_MOV;
 			inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_0000;
+			inst->U.I.SrcReg[0].File = RC_FILE_NONE;
 			return;
 		}
 	}

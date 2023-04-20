@@ -50,6 +50,9 @@ lst_enum_include = [
     "pipe_compute_cap",
     "pipe_resource_param",
     "pipe_fd_type",
+    "pipe_blendfactor",
+    "pipe_blend_func",
+    "pipe_logicop",
 ]
 
 

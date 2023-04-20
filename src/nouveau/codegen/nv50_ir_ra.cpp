@@ -1128,9 +1128,9 @@ GCRA::makeCompound(Instruction *insn, bool split)
 bool
 GCRA::doCoalesce(ArrayList& insns, unsigned int mask)
 {
-   int c, n;
+   int c;
 
-   for (n = 0; n < insns.getSize(); ++n) {
+   for (unsigned int n = 0; n < insns.getSize(); ++n) {
       Instruction *i;
       Instruction *insn = reinterpret_cast<Instruction *>(insns.get(n));
 
@@ -1273,7 +1273,7 @@ GCRA::buildRIG(ArrayList& insns)
         it != func->ins.end(); ++it)
       insertOrderedTail(values, getNode(it->get()->asLValue()));
 
-   for (int i = 0; i < insns.getSize(); ++i) {
+   for (unsigned int i = 0; i < insns.getSize(); ++i) {
       Instruction *insn = reinterpret_cast<Instruction *>(insns.get(i));
       for (int d = 0; insn->defExists(d); ++d)
          if (insn->getDef(d)->reg.file <= LAST_REGISTER_FILE &&

@@ -73,7 +73,7 @@ struct tu_subpass
 struct tu_render_pass_attachment
 {
    VkFormat format;
-   uint32_t samples;
+   VkSampleCountFlagBits samples;
    uint32_t cpp;
    VkImageAspectFlags clear_mask;
    uint32_t clear_views;
@@ -108,7 +108,10 @@ struct tu_render_pass
    uint32_t sysmem_bandwidth_per_pixel;
 
    struct tu_subpass_attachment *subpass_attachments;
+
    struct tu_render_pass_attachment *attachments;
+   bool has_cond_load_store;
+
    struct tu_subpass_barrier end_barrier;
    struct tu_subpass subpasses[0];
 };

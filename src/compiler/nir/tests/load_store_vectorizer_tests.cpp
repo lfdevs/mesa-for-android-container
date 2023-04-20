@@ -230,8 +230,8 @@ nir_load_store_vectorize_test::create_indirect_load(
    }
    int byte_size = (bit_size == 1 ? 32 : bit_size) / 8;
 
+   nir_intrinsic_set_align(load, byte_size, 0);
    if (mode != nir_var_mem_push_const) {
-      nir_intrinsic_set_align(load, byte_size, 0);
       nir_intrinsic_set_access(load, (gl_access_qualifier)access);
    }
 
@@ -1552,7 +1552,7 @@ TEST_F(nir_load_store_vectorize_test, push_const_load_separate_base)
    nir_validate_shader(b->shader, NULL);
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 
-   EXPECT_FALSE(run_vectorizer(nir_var_mem_push_const));
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_push_const));
 
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 }
@@ -1565,7 +1565,7 @@ TEST_F(nir_load_store_vectorize_test, push_const_load_separate_direct_direct)
    nir_validate_shader(b->shader, NULL);
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 
-   EXPECT_FALSE(run_vectorizer(nir_var_mem_push_const));
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_push_const));
 
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 }
@@ -1579,7 +1579,7 @@ TEST_F(nir_load_store_vectorize_test, push_const_load_separate_direct_indirect)
    nir_validate_shader(b->shader, NULL);
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 
-   EXPECT_FALSE(run_vectorizer(nir_var_mem_push_const));
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_push_const));
 
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 }
@@ -1595,7 +1595,7 @@ TEST_F(nir_load_store_vectorize_test, push_const_load_separate_indirect_indirect
    nir_validate_shader(b->shader, NULL);
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 
-   EXPECT_FALSE(run_vectorizer(nir_var_mem_push_const));
+   EXPECT_TRUE(run_vectorizer(nir_var_mem_push_const));
 
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_push_constant), 2);
 }

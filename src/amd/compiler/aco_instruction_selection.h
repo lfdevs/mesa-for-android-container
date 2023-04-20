@@ -27,7 +27,7 @@
 
 #include "aco_ir.h"
 
-#include "vulkan/radv_shader_args.h"
+#include "nir.h"
 
 #include <array>
 #include <unordered_map>
@@ -55,7 +55,7 @@ struct shader_io_state {
 
 struct isel_context {
    const struct aco_compiler_options* options;
-   const struct radv_shader_args* args;
+   const struct ac_shader_args* args;
    Program* program;
    nir_shader* shader;
    uint32_t constant_data_offset;
@@ -128,7 +128,7 @@ isel_context setup_isel_context(Program* program, unsigned shader_count,
                                 struct nir_shader* const* shaders, ac_shader_config* config,
                                 const struct aco_compiler_options* options,
                                 const struct aco_shader_info* info,
-                                const struct radv_shader_args* args, bool is_ps_epilog);
+                                const struct ac_shader_args* args, bool is_ps_epilog);
 
 } // namespace aco
 

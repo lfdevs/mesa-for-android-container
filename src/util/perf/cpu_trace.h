@@ -77,7 +77,7 @@ static inline void
 _mesa_trace_scope_end(int *scope)
 {
    /* we save the category in the scope variable */
-   _MESA_TRACE_END(*scope);
+   _MESA_TRACE_END((enum util_perfetto_category) * scope);
 }
 
 #else

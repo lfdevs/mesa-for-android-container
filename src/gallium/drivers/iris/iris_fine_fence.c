@@ -69,6 +69,9 @@ iris_fine_fence_new(struct iris_batch *batch, unsigned flags)
            PIPE_CONTROL_TILE_CACHE_FLUSH |
            PIPE_CONTROL_DEPTH_CACHE_FLUSH |
            PIPE_CONTROL_DATA_CACHE_FLUSH;
+
+      if (batch->name == IRIS_BATCH_COMPUTE)
+         pc &= ~PIPE_CONTROL_GRAPHICS_BITS;
    }
    iris_emit_pipe_control_write(batch, "fence: fine", pc,
                                 iris_resource_bo(fine->ref.res),

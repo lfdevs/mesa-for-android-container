@@ -19,13 +19,17 @@
 # SOFTWARE.
 
 computerator_files = [
-  'a4xx.c',
-  'a6xx.c',
-  'ir3_asm.c',
-  'main.c',
+  'a4xx.cc',
+  'a6xx.cc',
+  'ir3_asm.cc',
+  'main.cc',
   freedreno_xml_header_files,
   ir3_parser[1],
 ]
+
+computerator_cpp_args = cpp.get_supported_arguments([
+  '-Wno-sign-compare',
+])
 
 computerator = executable(
   'computerator',
@@ -51,6 +55,7 @@ computerator = executable(
     # We don't actually use nir, but ir3 wants some nir headers:
     idep_nir,
   ],
+  cpp_args : [computerator_cpp_args],
   build_by_default : with_tools.contains('freedreno'),
   install : with_tools.contains('freedreno'),
 )

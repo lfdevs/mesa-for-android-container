@@ -258,6 +258,7 @@ struct KernelDevStateInner {
     nir: NirShader,
     constant_buffer: Option<Arc<PipeResource>>,
     cso: *mut c_void,
+    info: pipe_compute_state_object_info,
 }
 
 struct KernelDevState {
@@ -279,14 +280,17 @@ impl KernelDevState {
         let states = nirs
             .into_iter()
             .map(|(dev, nir)| {
-                let cso = if dev.shareable_shaders() {
-                    dev.helper_ctx()
-                        .create_compute_state(&nir, nir.shared_size())
-                } else {
-                    ptr::null_mut()
-                };
-
+                let mut cso = dev
+                    .helper_ctx()
+                    .create_compute_state(&nir, nir.shared_size());
+                let info = dev.helper_ctx().compute_state_info(cso);
                 let cb = Self::create_nir_constant_buffer(&dev, &nir);
+
+                // if we can't share the cso between threads, destroy it now.
+                if !dev.shareable_shaders() {
+                    dev.helper_ctx().delete_compute_state(cso);
+                    cso = ptr::null_mut();
+                };
 
                 (
                     dev,
@@ -294,6 +298,7 @@ impl KernelDevState {
                         nir: nir,
                         constant_buffer: cb,
                         cso: cso,
+                        info: info,
                     },
                 )
             })
@@ -688,6 +693,12 @@ fn lower_and_optimize_nir_late(
      * other things we depend on
      */
     KernelArg::assign_locations(args, &mut res, nir);
+
+    /* update the has_variable_shared_mem info as we might have DCEed all of them */
+    nir.set_has_variable_shared_mem(
+        args.iter()
+            .any(|arg| arg.kind == KernelArgType::MemLocal && !arg.dead),
+    );
     dev.screen.finalize_nir(nir);
 
     nir.pass0(nir_opt_dce);
@@ -803,7 +814,14 @@ fn convert_spirv_to_nir(
     assert!(attributes_string_set.len() == 1);
     let args = args_set.into_iter().next().unwrap();
     let internal_args = internal_args_set.into_iter().next().unwrap();
-    let attributes_string = attributes_string_set.into_iter().next().unwrap();
+
+    // spec: For kernels not created from OpenCL C source and the clCreateProgramWithSource API call
+    // the string returned from this query [CL_KERNEL_ATTRIBUTES] will be empty.
+    let attributes_string = if p.is_src() {
+        attributes_string_set.into_iter().next().unwrap()
+    } else {
+        String::new()
+    };
 
     (nirs, args, internal_args, attributes_string)
 }
@@ -814,44 +832,6 @@ fn extract<'a, const S: usize>(buf: &'a mut &[u8]) -> &'a [u8; S] {
     // we split of 4 bytes and convert to [u8; 4], so this should be safe
     // use split_array_ref once it's stable
     val.try_into().unwrap()
-}
-
-fn optimize_local_size(d: &Device, grid: &mut [u32; 3], block: &mut [u32; 3]) {
-    let mut threads = d.max_threads_per_block() as u32;
-    let dim_threads = d.max_block_sizes();
-    let subgroups = d.subgroups();
-
-    if !block.contains(&0) {
-        for i in 0..3 {
-            // we already made sure everything is fine
-            grid[i] /= block[i];
-        }
-        return;
-    }
-
-    for i in 0..3 {
-        let t = cmp::min(threads, dim_threads[i] as u32);
-        let gcd = gcd(t, grid[i]);
-
-        block[i] = gcd;
-        grid[i] /= gcd;
-
-        // update limits
-        threads /= block[i];
-    }
-
-    // if we didn't fill the subgroup we can do a bit better if we have threads remaining
-    let total_threads = block[0] * block[1] * block[2];
-    if threads != 1 && total_threads < subgroups {
-        for i in 0..3 {
-            if grid[i] * total_threads < threads {
-                block[i] *= grid[i];
-                grid[i] = 1;
-                // can only do it once as nothing is cleanly divisible
-                break;
-            }
-        }
-    }
 }
 
 impl Kernel {
@@ -880,6 +860,44 @@ impl Kernel {
             internal_args: internal_args,
             dev_state: KernelDevState::new(nirs),
         })
+    }
+
+    fn optimize_local_size(&self, d: &Device, grid: &mut [u32; 3], block: &mut [u32; 3]) {
+        let mut threads = self.max_threads_per_block(d) as u32;
+        let dim_threads = d.max_block_sizes();
+        let subgroups = self.preferred_simd_size(d) as u32;
+
+        if !block.contains(&0) {
+            for i in 0..3 {
+                // we already made sure everything is fine
+                grid[i] /= block[i];
+            }
+            return;
+        }
+
+        for i in 0..3 {
+            let t = cmp::min(threads, dim_threads[i] as u32);
+            let gcd = gcd(t, grid[i]);
+
+            block[i] = gcd;
+            grid[i] /= gcd;
+
+            // update limits
+            threads /= block[i];
+        }
+
+        // if we didn't fill the subgroup we can do a bit better if we have threads remaining
+        let total_threads = block[0] * block[1] * block[2];
+        if threads != 1 && total_threads < subgroups {
+            for i in 0..3 {
+                if grid[i] * total_threads < threads {
+                    block[i] *= grid[i];
+                    grid[i] = 1;
+                    // can only do it once as nothing is cleanly divisible
+                    break;
+                }
+            }
+        }
     }
 
     // the painful part is, that host threads are allowed to modify the kernel object once it was
@@ -915,7 +933,7 @@ impl Kernel {
             &[0; 4]
         };
 
-        optimize_local_size(&q.device, &mut grid, &mut block);
+        self.optimize_local_size(&q.device, &mut grid, &mut block);
 
         for (arg, val) in self.args.iter().zip(&self.values) {
             if arg.dead {
@@ -933,6 +951,18 @@ impl Kernel {
                 KernelArgValue::Constant(c) => input.extend_from_slice(c),
                 KernelArgValue::MemObject(mem) => {
                     let res = mem.get_res_of_dev(&q.device)?;
+                    // If resource is a buffer and mem a 2D image, the 2d image was created from a
+                    // buffer. Use strides and dimensions of 2d image
+                    let app_img_info =
+                        if res.as_ref().is_buffer() && mem.mem_type == CL_MEM_OBJECT_IMAGE2D {
+                            Some(AppImgInfo::new(
+                                mem.image_desc.row_pitch()? / mem.image_elem_size as u32,
+                                mem.image_desc.width()?,
+                                mem.image_desc.height()?,
+                            ))
+                        } else {
+                            None
+                        };
                     if mem.is_buffer() {
                         if q.device.address_bits() == 64 {
                             input.extend_from_slice(&mem.offset.to_ne_bytes());
@@ -943,13 +973,13 @@ impl Kernel {
                     } else {
                         let format = mem.image_format.to_pipe_format().unwrap();
                         let (formats, orders) = if arg.kind == KernelArgType::Image {
-                            iviews.push(res.pipe_image_view(format, false));
+                            iviews.push(res.pipe_image_view(format, false, app_img_info.as_ref()));
                             (&mut img_formats, &mut img_orders)
                         } else if arg.kind == KernelArgType::RWImage {
-                            iviews.push(res.pipe_image_view(format, true));
+                            iviews.push(res.pipe_image_view(format, true, app_img_info.as_ref()));
                             (&mut img_formats, &mut img_orders)
                         } else {
-                            sviews.push((res.clone(), format));
+                            sviews.push((res.clone(), format, app_img_info));
                             (&mut tex_formats, &mut tex_orders)
                         };
 
@@ -1017,7 +1047,7 @@ impl Kernel {
                     let buf = Arc::new(
                         q.device
                             .screen
-                            .resource_create_buffer(printf_size, ResourceType::Normal)
+                            .resource_create_buffer(printf_size, ResourceType::Staging)
                             .unwrap(),
                     );
 
@@ -1053,7 +1083,7 @@ impl Kernel {
 
             let mut sviews: Vec<_> = sviews
                 .iter()
-                .map(|(s, f)| ctx.create_sampler_view(s, *f))
+                .map(|(s, f, aii)| ctx.create_sampler_view(s, *f, aii.as_ref()))
                 .collect();
             let samplers: Vec<_> = samplers
                 .iter()
@@ -1200,7 +1230,15 @@ impl Kernel {
     }
 
     pub fn priv_mem_size(&self, dev: &Arc<Device>) -> cl_ulong {
-        self.dev_state.get(dev).nir.scratch_size() as cl_ulong
+        self.dev_state.get(dev).info.private_memory.into()
+    }
+
+    pub fn max_threads_per_block(&self, dev: &Device) -> usize {
+        self.dev_state.get(dev).info.max_threads as usize
+    }
+
+    pub fn preferred_simd_size(&self, dev: &Device) -> usize {
+        self.dev_state.get(dev).info.preferred_simd_size as usize
     }
 
     pub fn local_mem_size(&self, dev: &Arc<Device>) -> cl_ulong {

@@ -1087,7 +1087,7 @@ read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
        * combination is, and Mesa can handle anything valid.  Just work instead.
        */
       if (_mesa_is_gles(ctx)) {
-         if (ctx->API == API_OPENGLES2 &&
+         if (_mesa_is_gles2(ctx) &&
              _mesa_is_color_format(format) &&
              _mesa_get_color_read_format(ctx, NULL, "glReadPixels") == format &&
              _mesa_get_color_read_type(ctx, NULL, "glReadPixels") == type) {

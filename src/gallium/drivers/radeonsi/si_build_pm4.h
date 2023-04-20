@@ -125,11 +125,11 @@
    radeon_emit(((reg) - SI_SH_REG_OFFSET) >> 2); \
 } while (0)
 
-#define radeon_set_sh_reg_idx3_seq(reg, num) do { \
+#define radeon_set_sh_reg_idx3_seq(sctx, reg, num) do { \
    SI_CHECK_SHADOWED_REGS(reg, num); \
    assert((reg) >= SI_SH_REG_OFFSET && (reg) < SI_SH_REG_END); \
    radeon_emit(PKT3(PKT3_SET_SH_REG_INDEX, num, 0)); \
-   radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | (3 << 28)); \
+   radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | ((sctx)->gfx_level >= GFX10 ? 3 << 28 : 0)); \
 } while (0)
 
 #define radeon_set_sh_reg(reg, value) do { \
@@ -137,8 +137,8 @@
    radeon_emit(value); \
 } while (0)
 
-#define radeon_set_sh_reg_idx3(reg, value) do { \
-   radeon_set_sh_reg_idx3_seq(reg, 1); \
+#define radeon_set_sh_reg_idx3(sctx, reg, value) do { \
+   radeon_set_sh_reg_idx3_seq(sctx, reg, 1); \
    radeon_emit(value); \
 } while (0)
 
@@ -247,6 +247,32 @@
 } while (0)
 
 /**
+ * Set 5 consecutive registers if any register value is different.
+ */
+#define radeon_opt_set_context_reg5(sctx, offset, reg, val0, val1, val2, val3, val4) do { \
+   unsigned __value0 = (val0), __value1 = (val1), __value2 = (val2), __value3 = (val3), __value4 = (val4); \
+   if (((sctx->tracked_regs.reg_saved >> (reg)) & 0x1f) != 0x1f || \
+       sctx->tracked_regs.reg_value[(reg) + 0] != __value0 || \
+       sctx->tracked_regs.reg_value[(reg) + 1] != __value1 || \
+       sctx->tracked_regs.reg_value[(reg) + 2] != __value2 || \
+       sctx->tracked_regs.reg_value[(reg) + 3] != __value3 || \
+       sctx->tracked_regs.reg_value[(reg) + 4] != __value4) { \
+      radeon_set_context_reg_seq(offset, 5); \
+      radeon_emit(__value0); \
+      radeon_emit(__value1); \
+      radeon_emit(__value2); \
+      radeon_emit(__value3); \
+      radeon_emit(__value4); \
+      sctx->tracked_regs.reg_value[(reg) + 0] = __value0; \
+      sctx->tracked_regs.reg_value[(reg) + 1] = __value1; \
+      sctx->tracked_regs.reg_value[(reg) + 2] = __value2; \
+      sctx->tracked_regs.reg_value[(reg) + 3] = __value3; \
+      sctx->tracked_regs.reg_value[(reg) + 4] = __value4; \
+      sctx->tracked_regs.reg_saved |= 0x1full << (reg); \
+   } \
+} while (0)
+
+/**
  * Set consecutive registers if any registers value is different.
  */
 #define radeon_opt_set_context_regn(sctx, offset, value, saved_val, num) do { \
@@ -271,10 +297,7 @@
    unsigned __value = val; \
    if (((sctx->tracked_regs.reg_saved >> (reg)) & 0x1) != 0x1 || \
        sctx->tracked_regs.reg_value[reg] != __value) { \
-      if (sctx->gfx_level >= GFX10) \
-         radeon_set_sh_reg_idx3(offset, __value); \
-      else \
-         radeon_set_sh_reg(offset, __value); \
+      radeon_set_sh_reg_idx3(sctx, offset, __value); \
       sctx->tracked_regs.reg_saved |= BITFIELD64_BIT(reg); \
       sctx->tracked_regs.reg_value[reg] = __value; \
    } \
@@ -311,23 +334,6 @@
    radeon_set_sh_reg_seq(sh_offset, 1); \
    radeon_emit_32bit_pointer(sctx->screen, (desc)->gpu_address); \
 } while (0)
-
-/* Wrappers that are only used when they are passed as function pointers. */
-static inline void radeon_set_sh_reg_func(struct radeon_cmdbuf *cs, unsigned reg_offset,
-                                          uint32_t value)
-{
-   radeon_begin(cs);
-   radeon_set_sh_reg(reg_offset, value);
-   radeon_end();
-}
-
-static inline void radeon_set_sh_reg_idx3_func(struct radeon_cmdbuf *cs, unsigned reg_offset,
-                                               uint32_t value)
-{
-   radeon_begin(cs);
-   radeon_set_sh_reg_idx3(reg_offset, value);
-   radeon_end();
-}
 
 /* This should be evaluated at compile time if all parameters are constants. */
 static ALWAYS_INLINE unsigned

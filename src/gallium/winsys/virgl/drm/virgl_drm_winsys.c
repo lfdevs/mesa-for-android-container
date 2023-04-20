@@ -1203,6 +1203,14 @@ static int virgl_init_context(int drmFD)
    return 0;
 }
 
+static int
+virgl_drm_winsys_get_fd(struct virgl_winsys *vws)
+{
+   struct virgl_drm_winsys *vdws = virgl_drm_winsys(vws);
+
+   return vdws->fd;
+}
+
 static struct virgl_winsys *
 virgl_drm_winsys_create(int drmFD)
 {
@@ -1273,6 +1281,7 @@ virgl_drm_winsys_create(int drmFD)
    qdws->base.fence_server_sync = virgl_fence_server_sync;
    qdws->base.fence_get_fd = virgl_fence_get_fd;
    qdws->base.get_caps = virgl_drm_get_caps;
+   qdws->base.get_fd = virgl_drm_winsys_get_fd;
    qdws->base.supports_fences =  drm_version >= VIRGL_DRM_VERSION_FENCE_FD;
    qdws->base.supports_encoded_transfers = 1;
 

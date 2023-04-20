@@ -108,10 +108,4 @@ vn_image_init_deferred(struct vn_device *dev,
                        const VkImageCreateInfo *create_info,
                        struct vn_image *img);
 
-VkResult
-vn_image_create_deferred(struct vn_device *dev,
-                         const VkImageCreateInfo *create_info,
-                         const VkAllocationCallbacks *alloc,
-                         struct vn_image **out_img);
-
 #endif /* VN_IMAGE_H */

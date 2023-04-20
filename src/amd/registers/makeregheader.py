@@ -46,6 +46,7 @@ CHIPS = [
     Object(name='gfx8', disambiguation='GFX8'),
     Object(name='gfx81', disambiguation='GFX81'),
     Object(name='gfx9', disambiguation='GFX9'),
+    Object(name='gfx940', disambiguation='GFX940'),
     Object(name='gfx10', disambiguation='GFX10'),
     Object(name='gfx103', disambiguation='GFX103'),
     Object(name='gfx11', disambiguation='GFX11'),

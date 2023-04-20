@@ -42,7 +42,7 @@ surfaceless_alloc_image(struct dri2_egl_display *dri2_dpy,
                      struct dri2_egl_surface *dri2_surf)
 {
    return dri2_dpy->image->createImage(
-            dri2_dpy->dri_screen,
+            dri2_dpy->dri_screen_render_gpu,
             dri2_surf->base.Width,
             dri2_surf->base.Height,
             dri2_surf->visual,
@@ -250,18 +250,18 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
       if (!(device->available_nodes & (1 << node_type)))
          continue;
 
-      dri2_dpy->fd = loader_open_device(device->nodes[node_type]);
-      if (dri2_dpy->fd < 0)
+      dri2_dpy->fd_render_gpu = loader_open_device(device->nodes[node_type]);
+      if (dri2_dpy->fd_render_gpu < 0)
          continue;
 
-      disp->Device = _eglAddDevice(dri2_dpy->fd, swrast);
+      disp->Device = _eglAddDevice(dri2_dpy->fd_render_gpu, swrast);
       if (!disp->Device) {
-         close(dri2_dpy->fd);
-         dri2_dpy->fd = -1;
+         close(dri2_dpy->fd_render_gpu);
+         dri2_dpy->fd_render_gpu = -1;
          continue;
       }
 
-      char *driver_name = loader_get_driver_for_fd(dri2_dpy->fd);
+      char *driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
       if (swrast) {
          /* Use kms swrast only with vgem / virtio_gpu.
           * virtio-gpu fallbacks to software rendering when 3D features
@@ -283,8 +283,8 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
 
       free(dri2_dpy->driver_name);
       dri2_dpy->driver_name = NULL;
-      close(dri2_dpy->fd);
-      dri2_dpy->fd = -1;
+      close(dri2_dpy->fd_render_gpu);
+      dri2_dpy->fd_render_gpu = -1;
    }
    drmFreeDevices(devices, num_devices);
 
@@ -304,8 +304,8 @@ surfaceless_probe_device_sw(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   dri2_dpy->fd = -1;
-   disp->Device = _eglAddDevice(dri2_dpy->fd, true);
+   dri2_dpy->fd_render_gpu = -1;
+   disp->Device = _eglAddDevice(dri2_dpy->fd_render_gpu, true);
    assert(disp->Device);
 
    dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
@@ -333,7 +333,8 @@ dri2_initialize_surfaceless(_EGLDisplay *disp)
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
-   dri2_dpy->fd = -1;
+   dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    disp->DriverData = (void *) dri2_dpy;
 
    /* When ForceSoftware is false, we try the HW driver.  When ForceSoftware
@@ -350,6 +351,8 @@ dri2_initialize_surfaceless(_EGLDisplay *disp)
       goto cleanup;
    }
 
+   dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
+
    if (!dri2_create_screen(disp)) {
       err = "DRI2: failed to create screen";
       goto cleanup;
@@ -362,7 +365,7 @@ dri2_initialize_surfaceless(_EGLDisplay *disp)
 
    dri2_setup_screen(disp);
 #ifdef HAVE_WAYLAND_PLATFORM
-   dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd);
+   dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
 #endif
    dri2_set_WL_bind_wayland_display(disp);
 

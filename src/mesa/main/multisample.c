@@ -242,7 +242,7 @@ _mesa_check_sample_count(struct gl_context *ctx, GLenum target,
     *
     * This restriction is relaxed for OpenGL ES 3.1.
     */
-   if ((ctx->API == API_OPENGLES2 && ctx->Version == 30) &&
+   if ((_mesa_is_gles2(ctx) && ctx->Version == 30) &&
        _mesa_is_enum_format_integer(internalFormat)
        && samples > 0) {
       return GL_INVALID_OPERATION;

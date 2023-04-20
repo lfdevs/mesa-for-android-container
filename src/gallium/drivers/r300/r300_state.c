@@ -1951,17 +1951,28 @@ static void* r300_create_vs_state(struct pipe_context* pipe,
        static const struct nir_to_tgsi_options hwtcl_r300_options = {
            .lower_cmp = true,
            .lower_fabs = true,
+           .ubo_vec4_max = 0x00ff,
        };
        static const struct nir_to_tgsi_options hwtcl_r500_options = {
            .lower_cmp = true,
+           .ubo_vec4_max = 0x00ff,
        };
        const struct nir_to_tgsi_options *ntt_options;
        if (r300->screen->caps.has_tcl) {
            if (r300->screen->caps.is_r500) {
                ntt_options = &hwtcl_r500_options;
-               NIR_PASS_V(shader->ir.nir, r300_transform_vs_trig_input);
+
+               /* Only nine should set both NTT shader name and
+                * use_legacy_math_rules and D3D9 already mandates
+                * the proper range for the trigonometric inputs.
+                */
+               struct shader_info *info = &(((struct nir_shader *)(shader->ir.nir))->info);
+               if (!info->use_legacy_math_rules ||
+                   !(info->name && !strcmp("TTN", info->name))) {
+                   NIR_PASS_V(shader->ir.nir, r300_transform_vs_trig_input);
+               }
            }
-            else
+           else
                ntt_options = &hwtcl_r300_options;
        } else {
            ntt_options = &swtcl_options;

@@ -949,6 +949,12 @@ lima_resource_screen_init(struct lima_screen *screen)
 }
 
 void
+lima_resource_screen_destroy(struct lima_screen *screen)
+{
+   u_transfer_helper_destroy(screen->base.transfer_helper);
+}
+
+void
 lima_resource_context_init(struct lima_context *ctx)
 {
    ctx->base.create_surface = lima_surface_create;

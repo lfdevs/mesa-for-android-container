@@ -980,7 +980,7 @@ mi_ushr_imm(struct mi_builder *b, struct mi_value src, uint32_t shift)
    while (shift) {
       int bit = u_bit_scan(&shift);
       assert(bit <= 5);
-      res = mi_ushr(b, res, mi_imm(1 << bit));
+      res = mi_ushr(b, res, mi_imm(1ULL << bit));
    }
 
    return res;

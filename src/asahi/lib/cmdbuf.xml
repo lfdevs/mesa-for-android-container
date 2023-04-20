@@ -100,6 +100,12 @@
     <value name="R8G8B8A8" value="0x28"/>
     <value name="R32G32" value="0x31"/>
     <value name="R16G16B16A16" value="0x32"/>
+
+    <!-- Software-defined value selected not to clash with the hardware values.
+         Texture buffer reads from this format are lowered. It is invalid to
+         use this format for anything else. -->
+    <value name="R32G32B32 (Emulated)" value="0x36"/>
+
     <value name="R32G32B32A32" value="0x38"/>
     <value name="GBGR 422" value="0x40"/> <!-- Subsampled, swizzle BRG1 -->
     <value name="BGRG 422" value="0x41"/> <!-- Subsampled, swizzle BRG1 -->
@@ -289,6 +295,7 @@
     <value name="Transparent black" value="0"/>
     <value name="Opaque black" value="1"/>
     <value name="Opaque white" value="2"/>
+    <value name="Custom" value="3"/>
   </enum>
 
   <struct name="Sampler" size="8">
@@ -303,9 +310,16 @@
     <field name="Wrap R" size="3" start="35" type="Wrap"/>
     <field name="Pixel coordinates" size="1" start="38" type="bool"/>
     <field name="Compare func" size="3" start="39" type="Compare func"/>
-    <field name="Unk 3" size="1" start="42" type="hex" default="1"/>
+    <field name="Compare enable" size="1" start="42" type="bool"/>
     <field name="Border colour" size="2" start="55" type="Border colour"/>
     <field name="Seamful cube maps" size="1" start="57" type="bool"/>
+  </struct>
+
+  <struct name="Border" size="16">
+    <field name="Channel 0" size="32" start="0:0" type="hex"/>
+    <field name="Channel 1" size="32" start="1:0" type="hex"/>
+    <field name="Channel 2" size="32" start="2:0" type="hex"/>
+    <field name="Channel 3" size="32" start="3:0" type="hex"/>
   </struct>
 
   <!--- Pointed to from the command buffer -->
@@ -407,16 +421,6 @@
     <field name="Compare" size="3" start="25" type="ZS Func"/>
   </struct>
 
-  <struct name="Fragment control" size="4">
-    <field name="Unk 1" size="1" start="9" type="hex" default="0x1"/>
-    <field name="Visibility mode" size="2" start="14" type="Visibility Mode"/>
-    <field name="Scissor enable" size="1" start="16" type="bool"/>
-    <field name="Depth bias enable" size="1" start="17" type="bool"/>
-    <field name="Stencil test enable" size="1" start="18" type="bool"/>
-    <field name="Two-sided stencil" size="1" start="19" type="bool"/>
-    <field name="Unk fill lines" size="1" start="26" type="hex" default="0x0"/> <!-- set when drawing LINES -->
-  </struct>
-
   <enum name="Pass type">
     <value name="Opaque" value="0"/>
     <value name="Translucent" value="1"/>
@@ -426,9 +430,13 @@
          Translucent punch through seems notably different though? -->
   </enum>
 
-  <struct name="Fragment control 2" size="4">
+  <struct name="Fragment control" size="4">
     <field name="Unk 1" size="1" start="9" type="bool" default="true"/>
-    <!-- Or discards? -->
+    <field name="Visibility mode" size="2" start="14" type="Visibility Mode"/>
+    <field name="Scissor enable" size="1" start="16" type="bool"/>
+    <field name="Depth bias enable" size="1" start="17" type="bool"/>
+    <field name="Stencil test enable" size="1" start="18" type="bool"/>
+    <field name="Two-sided stencil" size="1" start="19" type="bool"/>
     <field name="No colour output" size="1" start="21" type="bool"/>
     <field name="Sample mask after depth/stencil" size="1" start="25" type="bool"/>
     <field name="Disable tri merging" size="1" start="26" type="bool"/>
@@ -525,11 +533,21 @@
     <field name="Depth bias" size="16" start="16" type="uint"/>
   </struct>
 
+  <enum name="Sampler states">
+    <value name="0" value="0"/>
+    <value name="4 compact" value="1"/>
+    <value name="8 compact" value="2"/>
+    <value name="12 compact" value="3"/>
+    <value name="16 compact" value="4"/>
+    <value name="8 extended" value="6"/>
+    <value name="16 extended" value="7"/>
+  </enum>
+
   <struct name="Fragment shader" size="16">
     <field name="Unknown 0" size="1" start="0" type="hex" default="0"/>
     <field name="Uniform register count" size="3" start="1" type="uint" modifier="groups(64)"/>
     <field name="Texture state register count" size="5" start="4" type="uint" modifier="groups(8)"/>
-    <field name="Sampler state register count" size="3" start="9" type="uint" modifier="groups(4)"/>
+    <field name="Sampler state register count" size="3" start="9" type="Sampler states"/>
     <field name="Preshader register count" size="4" start="12" type="uint" modifier="groups(16)"/>
     <field name="CF binding count" size="7" start="16" type="uint"/>
     <field name="Unknown 1:0" size="2" start="1:0" type="hex"/>
@@ -560,17 +578,15 @@
   <struct name="USC Uniform" size="8">
     <field name="Tag" size="8" start="0:0" type="USC Control" default="Uniform"/>
     <field name="Start (halfs)" size="8" start="0:8" type="uint"/>
-    <!-- Exact split is unknown. -->
-    <field name="Size (halfs)" size="7" start="0:20" type="uint"/>
-    <field name="Buffer" size="36" start="0:27" type="address" modifier="shr(3)"/>
+    <field name="Size (halfs)" size="6" start="0:20" type="uint" modifier="groups(1)"/>
+    <field name="Buffer" size="38" start="0:26" type="address" modifier="shr(2)"/>
   </struct>
 
   <struct name="USC Uniform High" size="8">
     <field name="Tag" size="8" start="0:0" type="USC Control" default="Uniform High"/>
     <field name="Start (halfs)" size="8" start="0:8" type="uint"/>
-    <!-- Exact split is unknown. -->
-    <field name="Size (halfs)" size="7" start="0:20" type="uint"/>
-    <field name="Buffer" size="36" start="0:27" type="address" modifier="shr(3)"/>
+    <field name="Size (halfs)" size="6" start="0:20" type="uint" modifier="groups(1)"/>
+    <field name="Buffer" size="38" start="0:26" type="address" modifier="shr(2)"/>
   </struct>
 
   <struct name="USC Texture" size="8">
@@ -649,6 +665,7 @@
   <!-- VDM commands start. VDM commands are padded out to 8b alignment. -->
   <enum name="VDM Block Type">
     <value name="PPP State Update" value="0"/>
+    <value name="Barrier" value="1"/>
     <value name="VDM State Update" value="2"/>
     <value name="Index List" value="3"/>
     <value name="Stream Link" value="4"/>
@@ -660,6 +677,16 @@
     <field name="Size (words)" size="8" start="8" type="uint"/>
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="PPP State Update"/>
     <field name="Pointer (lo)" size="32" start="32" type="address"/>
+  </struct>
+
+  <struct name="VDM Barrier">
+    <field name="USC cache inval" size="1" start="3" type="bool" default="false"/>
+    <field name="Unk 5" size="1" start="5" type="bool" default="false"/>
+    <field name="Unk 6" size="1" start="6" type="bool" default="false"/>
+    <field name="Unk 8" size="1" start="8" type="bool" default="false"/>
+    <field name="Unk 11" size="1" start="11" type="bool" default="false"/>
+    <field name="Unk 20" size="1" start="20" type="bool" default="false"/>
+    <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Barrier"/>
   </struct>
 
   <enum name="Index size">
@@ -685,7 +712,7 @@
     <field name="Unknown 0" size="1" start="0" type="hex" default="0"/>
     <field name="Uniform register count" size="3" start="1" type="uint" modifier="groups(64)"/>
     <field name="Texture state register count" size="5" start="4" type="uint" modifier="groups(8)"/>
-    <field name="Sampler state register count" size="3" start="9" type="uint" modifier="groups(4)"/>
+    <field name="Sampler state register count" size="3" start="9" type="Sampler states"/>
     <field name="Preshader register count" size="4" start="12" type="uint" modifier="groups(16)"/>
   </struct>
 
@@ -722,9 +749,10 @@
     <field name="Index buffer size present" size="1" start="21" type="bool"/>
 
     <!-- XXX: Might be mixed up, not sure how to check that -->
-    <field name="Index count present" size="1" start="22" type="bool" default="true"/>
-    <field name="Instance count present" size="1" start="23" type="bool" default="true"/>
-    <field name="Start present" size="1" start="24" type="bool" default="true"/>
+    <field name="Index count present" size="1" start="22" type="bool"/>
+    <field name="Instance count present" size="1" start="23" type="bool"/>
+    <field name="Start present" size="1" start="24" type="bool"/>
+    <field name="Indirect buffer present" size="1" start="26" type="bool"/>
 
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Index List"/>
   </struct>
@@ -752,9 +780,14 @@
     <field name="Size" size="32" start="0" type="uint" modifier="shr(2)"/>
   </struct>
 
+  <struct name="Index List: Indirect buffer" size="8">
+    <field name="Address hi" size="8" start="0" type="hex"/>
+    <field name="Address lo" size="32" start="32" type="hex"/>
+  </struct>
+
   <!-- Conditional branching and function calls may be supported, see the
        STREAM_LINK0 struct in mesa/src/imagination/csbgen/rogue_vdm.xml for a
-       probable dfinition -->
+       probable definition -->
   <struct name="VDM Stream Link" size="8">
     <field name="Target hi" size="8" start="0" type="hex"/>
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Stream Link"/>
@@ -769,26 +802,57 @@
 
   <!-- CDM commands start -->
   <enum name="CDM Block Type">
-    <value name="Compute Kernel" value="0"/>
+    <value name="Header" value="0"/>
     <value name="Stream Link" value="1"/>
     <value name="Stream Terminate" value="2"/>
+    <value name="Launch" value="3"/>
   </enum>
 
-  <!--- Command to launch a direct compute kernel -->
-  <struct name="Launch" size="36">
+  <enum name="CDM Mode">
+    <!-- Global size + Local size -->
+    <value name="Direct" value="0"/>
+
+    <!-- Indirect buffer + Local size. Indirect buffer contains 3x 32-bit global
+         size. Used for indirect dispatch when the local size must be
+         fixed (e.g. due to local memory being used) -->
+    <value name="Indirect global" value="1"/>
+
+    <!-- Indirect buffer, containing 6x 32-bit size. Used for indirect dispatch
+         when the driver wants to optimize the local size with an auxiliary
+         compute kernel (requiring e.g. no local memory use) -->
+    <value name="Indirect local" value="2"/>
+  </enum>
+
+  <struct name="CDM Header" size="8">
     <field name="Uniform register count" size="3" start="1" type="uint" modifier="groups(64)"/>
     <field name="Texture state register count" size="5" start="4" type="uint" modifier="groups(8)"/>
-    <field name="Sampler state register count" size="3" start="9" type="uint" modifier="groups(4)"/>
+    <field name="Sampler state register count" size="3" start="9" type="Sampler states"/>
     <field name="Preshader register count" size="4" start="12" type="uint" modifier="groups(16)"/>
-    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Compute Kernel"/>
-    <field name="Pipeline" size="32" start="1:0" type="address"/>
-    <field name="Group count X" size="32" start="2:0" type="uint"/>
-    <field name="Group count Y" size="32" start="3:0" type="uint"/>
-    <field name="Group count Z" size="32" start="4:0" type="uint"/>
-    <field name="Local size X" size="32" start="5:0" type="uint"/>
-    <field name="Local size Y" size="32" start="6:0" type="uint"/>
-    <field name="Local size Z" size="32" start="7:0" type="uint"/>
-    <field name="Unk 2" size="32" start="8:0" type="hex" default="0x60000160"/>
+    <field name="Mode" size="2" start="27" type="CDM Mode"/>
+    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Header"/>
+    <field name="Pipeline" size="26" start="1:6" type="address" modifier="shr(6)"/>
+  </struct>
+
+  <struct name="CDM Indirect" size="8">
+    <field name="Address hi" size="8" start="0" type="hex"/>
+    <field name="Address lo" size="30" start="34" type="hex" modifier="shr(2)"/>
+  </struct>
+
+  <struct name="CDM Global size" size="12">
+    <field name="X" size="32" start="0:0" type="uint"/>
+    <field name="Y" size="32" start="1:0" type="uint"/>
+    <field name="Z" size="32" start="2:0" type="uint"/>
+  </struct>
+
+  <struct name="CDM Local size" size="12">
+    <field name="X" size="32" start="0:0" type="uint"/>
+    <field name="Y" size="32" start="1:0" type="uint"/>
+    <field name="Z" size="32" start="2:0" type="uint"/>
+  </struct>
+
+  <struct name="CDM Launch" size="4">
+    <field name="Unknown" size="12" start="0" type="hex" default="0x160"/>
+    <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Launch"/>
   </struct>
 
   <struct name="CDM Stream Link" size="8">
@@ -800,7 +864,6 @@
   <struct name="CDM Stream Terminate" size="8">
     <field name="Block Type" size="3" start="29" type="CDM Block Type" default="Stream Terminate"/>
   </struct>
-
   <!-- CDM commands end -->
 
   <!--- The rest of this file is likely software defined by macOS kernel -->
@@ -887,12 +950,17 @@
     <field name="Unk 40" start="40:0" size="32" default="0x1c" type="hex"/>
     <field name="Encoder ID" start="41:0" size="32" type="hex"/>
     <field name="Unk 44" start="44:0" size="32" default="0xffffffff" type="hex"/>
-    <field name="Unk 48" start="48:0" size="32" default="0x40" type="hex"/>
-    <field name="Unk 56" start="56:0" size="32" default="6" type="hex"/>
+    <field name="Context switch program" start="48:0" size="32" type="address"/>
+
+    <!-- An enum that's purely macOS defined UAPI. Doesn't matter for us.
+    More info at https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21062#note_1754715 -->
+    <field name="Context switch block size" start="56:0" size="4" default="2" type="hex"/>
     <field name="Spilling unk 1" start="57:3" size="1" type="bool"/>
-    <field name="Unk 58" start="58:0" size="32" default="0x62" type="hex"/>
+    <!-- Depends on grid size, as well as other factors. TODO: Decode. -->
+    <field name="Number of context switch buffers" start="58:0" size="32" default="1" type="uint"/>
     <field name="Spill Buffer Histogram" start="60:0" size="480" type="Spill Buffer Histogram"/>
-    <field name="Unk 75" start="75:0" size="32" default="0x10000" type="hex"/>
+    <!-- Lina's guess at the meaning -->
+    <field name="Enable context switching" start="75:16" size="1" default="true" type="bool"/>
     <field name="Unk 94" start="94:0" size="32" default="0xffffffff" type="hex"/>
     <field name="Unk 95" start="95:0" size="32" default="0xffffffff" type="hex"/>
   </struct>

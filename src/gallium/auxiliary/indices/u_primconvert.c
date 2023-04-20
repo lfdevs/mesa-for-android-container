@@ -130,9 +130,15 @@ primconvert_init_draw(struct primconvert_context *pc,
       return false;
 
    util_draw_init_info(new_info);
-   new_info->index_bounds_valid = info->index_bounds_valid;
-   new_info->min_index = info->min_index;
-   new_info->max_index = info->max_index;
+
+   /* Because we've changed the index buffer, the original min_index/max_index
+    * for the draw are no longer valid. That's ok, but we need to tell drivers
+    * so they don't optimize incorrectly.
+    */
+   new_info->index_bounds_valid = false;
+   new_info->min_index = 0;
+   new_info->max_index = ~0;
+
    new_info->start_instance = info->start_instance;
    new_info->instance_count = info->instance_count;
    new_info->primitive_restart = info->primitive_restart;

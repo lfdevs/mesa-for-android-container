@@ -26,8 +26,6 @@ dEQP-GLES2.functional.polygon_offset.fixed16_factor_1_slope,Fail
 dEQP-GLES2.functional.rasterization.primitives.line_strip_wide,Fail,Fail
 dEQP-GLES2.functional.rasterization.primitives.line_loop_wide,Fail
 
-dEQP-GLES2.functional.shaders.random.texture.fragment.141,Fail
-
 dEQP-GLES2.functional.texture.format.a8_cube_npot,Fail
 dEQP-GLES2.functional.texture.format.l8_cube_npot,Fail
 dEQP-GLES2.functional.texture.format.la88_cube_npot,Fail

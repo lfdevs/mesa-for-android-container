@@ -51,6 +51,8 @@ enum ac_reg_range_type
 extern "C" {
 #endif
 
+typedef void (*pm4_cmd_add_fn)(void *pm4_cmdbuf, uint32_t value);
+
 typedef void (*set_context_reg_seq_array_fn)(struct radeon_cmdbuf *cs, unsigned reg, unsigned num,
                                              const uint32_t *values);
 
@@ -63,6 +65,10 @@ void ac_check_shadowed_regs(enum amd_gfx_level gfx_level, enum radeon_family fam
                             unsigned reg_offset, unsigned count);
 void ac_print_shadowed_regs(const struct radeon_info *info);
 
+void ac_create_shadowing_ib_preamble(const struct radeon_info *info,
+                                     pm4_cmd_add_fn pm4_cmd_add, void *pm4_cmdbuf,
+                                     uint64_t gpu_address,
+                                     bool dpbb_allowed);
 #ifdef __cplusplus
 }
 #endif

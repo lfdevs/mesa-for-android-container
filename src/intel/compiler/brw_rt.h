@@ -230,6 +230,18 @@ brw_rt_compute_scratch_layout(struct brw_rt_scratch_layout *layout,
    assert(size % 64 == 0);
    layout->sw_stack_start = size;
    layout->sw_stack_size = ALIGN(sw_stack_size, 64);
+
+   /* Currently it's always the case that sw_stack_size is a power of
+    * two, but power-of-two SW stack sizes are prone to causing
+    * collisions in the hashing function used by the L3 to map memory
+    * addresses to banks, which can cause stack accesses from most
+    * DSSes to bottleneck on a single L3 bank.  Fix it by padding the
+    * SW stack by a single cacheline if it was a power of two.
+    */
+   if (layout->sw_stack_size > 64 &&
+       util_is_power_of_two_nonzero(layout->sw_stack_size))
+      layout->sw_stack_size += 64;
+
    size += num_stack_ids * layout->sw_stack_size;
 
    layout->total_size = size;

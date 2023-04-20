@@ -1706,6 +1706,12 @@ util_format_snorm_to_unorm(enum pipe_format format);
 enum pipe_format
 util_format_rgbx_to_rgba(enum pipe_format format);
 
+/* Returns the pipe format for the given array type, bitsize and component count. */
+enum pipe_format
+util_format_get_array(const enum util_format_type type, const unsigned bits,
+                      const unsigned nr_components, const bool normalized,
+                      const bool pure_integer);
+
 #ifdef __cplusplus
 } // extern "C" {
 #endif

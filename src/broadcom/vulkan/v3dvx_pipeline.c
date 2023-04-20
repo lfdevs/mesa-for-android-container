@@ -84,7 +84,6 @@ pack_blend(struct v3dv_pipeline *pipeline,
       return;
 
    assert(pipeline->subpass->color_count == cb_info->attachmentCount);
-
    pipeline->blend.needs_color_constants = false;
    uint32_t color_write_masks = 0;
    for (uint32_t i = 0; i < pipeline->subpass->color_count; i++) {
@@ -104,7 +103,12 @@ pack_blend(struct v3dv_pipeline *pipeline,
       VkAttachmentDescription2 *desc =
          &pipeline->pass->attachments[attachment_idx].desc;
       const struct v3dv_format *format = v3dX(get_format)(desc->format);
-      bool dst_alpha_one = (format->swizzle[3] == PIPE_SWIZZLE_1);
+
+      /* We only do blending with render pass attachments, so we should not have
+       * multiplanar images here
+       */
+      assert(format->plane_count == 1);
+      bool dst_alpha_one = (format->planes[0].swizzle[3] == PIPE_SWIZZLE_1);
 
       uint8_t rt_mask = 1 << i;
       pipeline->blend.enables |= rt_mask;
@@ -160,7 +164,11 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
       config.clockwise_primitives =
          rs_info ? rs_info->frontFace == VK_FRONT_FACE_COUNTER_CLOCKWISE : false;
 
-      config.enable_depth_offset = rs_info ? rs_info->depthBiasEnable: false;
+      /* Even if rs_info->depthBiasEnabled is true, we can decide to not
+       * enable it, like if there isn't a depth/stencil attachment with the
+       * pipeline.
+       */
+      config.enable_depth_offset = pipeline->depth_bias.enabled;
 
       /* This is required to pass line rasterization tests in CTS while
        * exposing, at least, a minimum of 4-bits of subpixel precision

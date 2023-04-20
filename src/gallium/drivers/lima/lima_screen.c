@@ -63,6 +63,7 @@ lima_screen_destroy(struct pipe_screen *pscreen)
    lima_bo_cache_fini(screen);
    lima_bo_table_fini(screen);
    disk_cache_destroy(screen->disk_cache);
+   lima_resource_screen_destroy(screen);
    ralloc_free(screen);
 }
 
@@ -646,8 +647,16 @@ lima_get_disk_shader_cache (struct pipe_screen *pscreen)
    return screen->disk_cache;
 }
 
+static int
+lima_screen_get_fd(struct pipe_screen *pscreen)
+{
+   struct lima_screen *screen = lima_screen(pscreen);
+   return screen->fd;
+}
+
 struct pipe_screen *
-lima_screen_create(int fd, struct renderonly *ro)
+lima_screen_create(int fd, const struct pipe_screen_config *config,
+                   struct renderonly *ro)
 {
    uint64_t system_memory;
    struct lima_screen *screen;
@@ -730,6 +739,7 @@ lima_screen_create(int fd, struct renderonly *ro)
    pp_frame_rsw[13] = 0x00000100;
 
    screen->base.destroy = lima_screen_destroy;
+   screen->base.get_screen_fd = lima_screen_get_fd;
    screen->base.get_name = lima_screen_get_name;
    screen->base.get_vendor = lima_screen_get_vendor;
    screen->base.get_device_vendor = lima_screen_get_device_vendor;
@@ -748,8 +758,6 @@ lima_screen_create(int fd, struct renderonly *ro)
    lima_disk_cache_init(screen);
 
    slab_create_parent(&screen->transfer_pool, sizeof(struct lima_transfer), 16);
-
-   screen->refcnt = 1;
 
    return &screen->base;
 

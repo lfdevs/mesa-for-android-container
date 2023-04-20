@@ -13,6 +13,12 @@ class Enum(object):
 		self.name = name
 		self.values = []
 
+	def has_name(self, name):
+		for (n, value) in self.values:
+			if n == name:
+				return True
+		return False
+
 	def dump(self):
 		prev = 0
 		use_hex = False
@@ -102,6 +108,19 @@ def tab_to(name, value):
 def mask(low, high):
 	return ((0xffffffffffffffff >> (64 - (high + 1 - low))) << low)
 
+def field_name(reg, f):
+	if f.name:
+		name = f.name.lower()
+	else:
+		# We hit this path when a reg is defined with no bitset fields, ie.
+		# 	<reg32 offset="0x88db" name="RB_BLIT_DST_ARRAY_PITCH" low="0" high="28" shr="6" type="uint"/>
+		name = reg.name.lower()
+
+	if (name in [ "double", "float", "int" ]) or not (name[0].isalpha()):
+			name = "_" + name
+
+	return name
+
 class Bitset(object):
 	def __init__(self, name, template):
 		self.name = name
@@ -111,38 +130,73 @@ class Bitset(object):
 		else:
 			self.fields = []
 
-	def dump_pack_struct(self, prefix=None, array=None, bit_size=32):
-		def field_name(prefix, name):
-			if f.name:
-				name = f.name.lower()
+	# Get address field if there is one in the bitset, else return None:
+	def get_address_field(self):
+		for f in self.fields:
+			if f.type in [ "address", "waddress" ]:
+				return f
+		return None
+
+	def dump_regpair_builder(self, reg):
+		print("#ifndef NDEBUG")
+		known_mask = 0
+		for f in self.fields:
+			known_mask |= mask(f.low, f.high)
+			if f.type in [ "boolean", "address", "waddress" ]:
+				continue
+			type, val = f.ctype("fields.%s" % field_name(reg, f))
+			print("    assert((%-40s & 0x%08x) == 0);" % (val, 0xffffffff ^ mask(0 , f.high - f.low)))
+		print("    assert((%-40s & 0x%08x) == 0);" % ("fields.unknown", known_mask))
+		print("#endif\n")
+
+		print("    return (struct fd_reg_pair) {")
+		if reg.array:
+			print("        .reg = REG_%s(__i)," % reg.full_name)
+		else:
+			print("        .reg = REG_%s," % reg.full_name)
+
+		print("        .value =")
+		for f in self.fields:
+			if f.type in [ "address", "waddress" ]:
+				continue
 			else:
-				name = prefix.lower()
-
-			if (name in [ "double", "float", "int" ]) or not (name[0].isalpha()):
-					name = "_" + name
-
-			return name
-
-		if not prefix:
-			return
-		if prefix == None:
-			prefix = self.name
-
+				type, val = f.ctype("fields.%s" % field_name(reg, f))
+				print("            (%-40s << %2d) |" % (val, f.low))
 		value_name = "dword"
+		if reg.bit_size == 64:
+			value_name = "qword"
+		print("            fields.unknown | fields.%s," % (value_name,))
+
+		address = self.get_address_field()
+		if address:
+			print("        .bo = fields.bo,")
+			print("        .is_address = true,")
+			if f.type == "waddress":
+				print("        .bo_write = true,")
+			print("        .bo_offset = fields.bo_offset,")
+			print("        .bo_shift = %d," % address.shr)
+			print("        .bo_low = %d," % address.low)
+
+		print("    };")
+
+	def dump_pack_struct(self, reg=None):
+		if not reg:
+			return
+
+		prefix = reg.full_name
+
 		print("struct %s {" % prefix)
 		for f in self.fields:
 			if f.type in [ "address", "waddress" ]:
 				tab_to("    __bo_type", "bo;")
 				tab_to("    uint32_t", "bo_offset;")
-				if bit_size == 64:
-					value_name = "qword"
 				continue
-			name = field_name(prefix, f.name)
+			name = field_name(reg, f)
 
 			type, val = f.ctype("var")
 
 			tab_to("    %s" % type, "%s;" % name)
-		if value_name == "qword":
+		if reg.bit_size == 64:
 			tab_to("    uint64_t", "unknown;")
 			tab_to("    uint64_t", "qword;")
 		else:
@@ -150,61 +204,24 @@ class Bitset(object):
 			tab_to("    uint32_t", "dword;")
 		print("};\n")
 
-		address = None;
-		for f in self.fields:
-			if f.type in [ "address", "waddress" ]:
-				address = f
-		if array:
-			print("static inline struct fd_reg_pair\npack_%s(uint32_t i, struct %s fields)\n{" %
+		if reg.array:
+			print("static inline struct fd_reg_pair\npack_%s(uint32_t __i, struct %s fields)\n{" %
 				  (prefix, prefix));
 		else:
 			print("static inline struct fd_reg_pair\npack_%s(struct %s fields)\n{" %
 				  (prefix, prefix));
 
-		print("#ifndef NDEBUG")
-		known_mask = 0
-		for f in self.fields:
-			known_mask |= mask(f.low, f.high)
-			if f.type in [ "boolean", "address", "waddress" ]:
-				continue
-			type, val = f.ctype("fields.%s" % field_name(prefix, f.name))
-			print("    assert((%-40s & 0x%08x) == 0);" % (val, 0xffffffff ^ mask(0 , f.high - f.low)))
-		print("    assert((%-40s & 0x%08x) == 0);" % ("fields.unknown", known_mask))
-		print("#endif\n")
+		self.dump_regpair_builder(reg)
 
-		print("    return (struct fd_reg_pair) {")
-		if array:
-			print("        .reg = REG_%s(i)," % prefix)
-		else:
-			print("        .reg = REG_%s," % prefix)
+		print("\n}\n")
 
-		print("        .value =")
-		for f in self.fields:
-			if f.type in [ "address", "waddress" ]:
-				continue
-			else:
-				type, val = f.ctype("fields.%s" % field_name(prefix, f.name))
-				print("            (%-40s << %2d) |" % (val, f.low))
-		print("            fields.unknown | fields.%s," % (value_name,))
-
-		if address:
-			print("        .is_address = true,")
-			print("        .bo = fields.bo,")
-			if f.type == "waddress":
-				print("        .bo_write = true,")
-			print("        .bo_offset = fields.bo_offset,")
-			print("        .bo_shift = %d," % address.shr)
-			print("        .bo_low = %d," % address.low)
-
-		print("    };\n}\n")
-
-		if address:
+		if self.get_address_field():
 			skip = ", { .reg = 0 }"
 		else:
 			skip = ""
 
-		if array:
-			print("#define %s(i, ...) pack_%s(i, (struct %s) { __VA_ARGS__ })%s\n" %
+		if reg.array:
+			print("#define %s(__i, ...) pack_%s(__i, (struct %s) { __VA_ARGS__ })%s\n" %
 				  (prefix, prefix, prefix, skip))
 		else:
 			print("#define %s(...) pack_%s((struct %s) { __VA_ARGS__ })%s\n" %
@@ -252,6 +269,9 @@ class Array(object):
 	def dump_pack_struct(self):
 		pass
 
+	def dump_regpair_builder(self):
+		pass
+
 class Reg(object):
 	def __init__(self, attrs, domain, array, bit_size):
 		self.name = attrs["name"]
@@ -260,11 +280,9 @@ class Reg(object):
 		self.offset = int(attrs["offset"], 0)
 		self.type = None
 		self.bit_size = bit_size
-
-		if self.array:
-			self.full_name = self.domain + "_" + self.array.name + "_" + self.name
-		else:
-			self.full_name = self.domain + "_" + self.name
+		if array:
+			self.name = array.name + "_" + self.name
+		self.full_name = self.domain + "_" + self.name
 
 	def dump(self):
 		if self.array:
@@ -279,26 +297,27 @@ class Reg(object):
 
 	def dump_pack_struct(self):
 		if self.bitset.inline:
-			self.bitset.dump_pack_struct(self.full_name, not self.array == None, self.bit_size)
+			self.bitset.dump_pack_struct(self)
 
-
-def parse_variants(attrs):
-		if not "variants" in attrs:
-				return None
-		variant = attrs["variants"].split(",")[0]
-		if "-" in variant:
-			variant = variant[:variant.index("-")]
-
-		return variant
+	def dump_regpair_builder(self):
+		if self.bitset.inline:
+			self.bitset.dump_regpair_builder(self)
 
 class Parser(object):
 	def __init__(self):
 		self.current_array = None
 		self.current_domain = None
 		self.current_prefix = None
+		self.current_prefix_type = None
 		self.current_stripe = None
 		self.current_bitset = None
 		self.current_bitsize = 32
+		# The varset attribute on the domain specifies the enum which
+		# specifies all possible hw variants:
+		self.current_varset = None
+		# Regs that have multiple variants.. we only generated the C++
+		# template based struct-packers for these
+		self.variant_regs = {}
 		self.bitsets = {}
 		self.enums = {}
 		self.file = []
@@ -307,8 +326,10 @@ class Parser(object):
 		parser, filename = self.stack[-1]
 		return Error("%s:%d:%d: %s" % (filename, parser.CurrentLineNumber, parser.CurrentColumnNumber, message))
 
-	def prefix(self):
-		if self.current_stripe:
+	def prefix(self, variant=None):
+		if self.current_prefix_type == "variant" and variant:
+			return variant
+		elif self.current_stripe:
 			return self.current_stripe + "_" + self.current_domain
 		elif self.current_prefix:
 			return self.current_prefix + "_" + self.current_domain
@@ -330,7 +351,7 @@ class Parser(object):
 				type = attrs["type"]
 			else:
 				type = None
-	
+
 			if "shr" in attrs:
 				shr = int(attrs["shr"], 0)
 			else:
@@ -344,6 +365,73 @@ class Parser(object):
 			self.current_bitset.fields.append(b)
 		except ValueError as e:
 			raise self.error(e);
+
+	def parse_varset(self, attrs):
+		# Inherit the varset from the enclosing domain if not overriden:
+		varset = self.current_varset
+		if "varset" in attrs:
+			varset = self.enums[attrs["varset"]]
+		return varset
+
+	def parse_variants(self, attrs):
+		if not "variants" in attrs:
+				return None
+		variant = attrs["variants"].split(",")[0]
+		if "-" in variant:
+			variant = variant[:variant.index("-")]
+
+		varset = self.parse_varset(attrs)
+
+		assert varset.has_name(variant)
+
+		return variant
+
+	def add_all_variants(self, reg, attrs):
+		# TODO this should really handle *all* variants, including dealing
+		# with open ended ranges (ie. "A2XX,A4XX-") (we have the varset
+		# enum now to make that possible)
+		variant = self.parse_variants(attrs)
+
+		if reg.name not in self.variant_regs:
+			self.variant_regs[reg.name] = {}
+		else:
+			# All variants must be same size:
+			v = next(iter(self.variant_regs[reg.name]))
+			assert self.variant_regs[reg.name][v].bit_size == reg.bit_size
+
+		self.variant_regs[reg.name][variant] = reg;
+
+	def do_validate(self, schemafile):
+		try:
+			from lxml import etree
+
+			parser, filename = self.stack[-1]
+			dirname = os.path.dirname(filename)
+
+			# we expect this to look like <namespace url> schema.xsd.. I think
+			# technically it is supposed to be just a URL, but that doesn't
+			# quite match up to what we do.. Just skip over everything up to
+			# and including the first whitespace character:
+			schemafile = schemafile[schemafile.rindex(" ")+1:]
+
+			# this is a bit cheezy, but the xml file to validate could be
+			# in a child director, ie. we don't really know where the schema
+			# file is, the way the rnn C code does.  So if it doesn't exist
+			# just look one level up
+			if not os.path.exists(dirname + "/" + schemafile):
+				schemafile = "../" + schemafile
+
+			if not os.path.exists(dirname + "/" + schemafile):
+				raise self.error("Cannot find schema for: " + filename)
+
+			xmlschema_doc = etree.parse(dirname + "/" + schemafile)
+			xmlschema = etree.XMLSchema(xmlschema_doc)
+
+			xml_doc = etree.parse(filename)
+			if not xmlschema.validate(xml_doc):
+				raise self.error("Schema validation failed for: " + filename)
+		except ImportError:
+			print("lxml not found, skipping validation", file=sys.stderr)
 
 	def do_parse(self, filename):
 		file = open(filename, "rb")
@@ -375,11 +463,15 @@ class Parser(object):
 			if "type" in attrs:
 				self.parse_field(None, attrs)
 
-		self.current_reg = Reg(attrs, self.prefix(), self.current_array, bit_size)
+		variant = self.parse_variants(attrs)
+		self.current_reg = Reg(attrs, self.prefix(variant), self.current_array, bit_size)
 		self.current_reg.bitset = self.current_bitset
 
 		if len(self.stack) == 1:
 			self.file.append(self.current_reg)
+
+		if variant is not None:
+			self.add_all_variants(self.current_reg, attrs)
 
 	def start_element(self, name, attrs):
 		if name == "import":
@@ -387,10 +479,16 @@ class Parser(object):
 			self.do_parse(os.path.join(self.path, filename))
 		elif name == "domain":
 			self.current_domain = attrs["name"]
-			if "prefix" in attrs and attrs["prefix"] == "chip":
-				self.current_prefix = parse_variants(attrs)
+			if "prefix" in attrs:
+				self.current_prefix = self.parse_variants(attrs)
+				self.current_prefix_type = attrs["prefix"]
+			else:
+				self.current_prefix = None
+				self.current_prefix_type = None
+			if "varset" in attrs:
+				self.current_varset = self.enums[attrs["varset"]]
 		elif name == "stripe":
-			self.current_stripe = parse_variants(attrs)
+			self.current_stripe = self.parse_variants(attrs)
 		elif name == "enum":
 			self.current_enum_value = 0
 			self.current_enum = Enum(attrs["name"])
@@ -410,7 +508,8 @@ class Parser(object):
 			self.parse_reg(attrs, 64)
 		elif name == "array":
 			self.current_bitsize = 32
-			self.current_array = Array(attrs, self.prefix())
+			variant = self.parse_variants(attrs)
+			self.current_array = Array(attrs, self.prefix(variant))
 			if len(self.stack) == 1:
 				self.file.append(self.current_array)
 		elif name == "bitset":
@@ -422,11 +521,15 @@ class Parser(object):
 				self.file.append(self.current_bitset)
 		elif name == "bitfield" and self.current_bitset:
 			self.parse_field(attrs["name"], attrs)
+		elif name == "database":
+			self.do_validate(attrs["xsi:schemaLocation"])
 
 	def end_element(self, name):
 		if name == "domain":
 			self.current_domain = None
 			self.current_prefix = None
+			self.current_prefix_type = None
+			self.current_domain = None
 		elif name == "stripe":
 			self.current_stripe = None
 		elif name == "bitset":
@@ -453,9 +556,80 @@ class Parser(object):
 		for e in enums + bitsets + regs:
 			e.dump()
 
+	def dump_reg_variants(self, regname, variants):
+		# Don't bother for things that only have a single variant:
+		if len(variants) == 1:
+			return
+		print("#ifdef __cplusplus");
+		print("struct __%s {" % regname)
+		# TODO be more clever.. we should probably figure out which
+		# fields have the same type in all variants (in which they
+		# appear) and stuff everything else in a variant specific
+		# sub-structure.
+		seen_fields = []
+		bit_size = 32
+		array = False
+		address = None
+		for variant in variants.keys():
+			print("    /* %s fields: */" % variant)
+			reg = variants[variant]
+			bit_size = reg.bit_size
+			array = reg.array
+			for f in reg.bitset.fields:
+				fld_name = field_name(reg, f)
+				if fld_name in seen_fields:
+					continue
+				seen_fields.append(fld_name)
+				name = fld_name.lower()
+				if f.type in [ "address", "waddress" ]:
+					if address:
+						continue
+					address = f
+					tab_to("    __bo_type", "bo;")
+					tab_to("    uint32_t", "bo_offset;")
+					continue
+				type, val = f.ctype("var")
+				tab_to("    %s" %type, "%s;" %name)
+		print("    /* fallback fields: */")
+		if bit_size == 64:
+			tab_to("    uint64_t", "unknown;")
+			tab_to("    uint64_t", "qword;")
+		else:
+			tab_to("    uint32_t", "unknown;")
+			tab_to("    uint32_t", "dword;")
+		print("};")
+		# TODO don't hardcode the varset enum name
+		varenum = "chip"
+		print("template <%s %s>" % (varenum, varenum.upper()))
+		print("static inline struct fd_reg_pair")
+		xtra = ""
+		xtravar = ""
+		if array:
+			xtra = "int __i, "
+			xtravar = "__i, "
+		print("__%s(%sstruct __%s fields) {" % (regname, xtra, regname))
+		for variant in variants.keys():
+			print("  if (%s == %s) {" % (varenum.upper(), variant))
+			reg = variants[variant]
+			reg.dump_regpair_builder()
+			print("  } else")
+		print("    assert(!\"invalid variant\");")
+		print("}")
+
+		if bit_size == 64:
+			skip = ", { .reg = 0 }"
+		else:
+			skip = ""
+
+		print("#define %s(VARIANT, %s...) __%s<VARIANT>(%s{__VA_ARGS__})%s" % (regname, xtravar, regname, xtravar, skip))
+		print("#endif /* __cplusplus */")
+
 	def dump_structs(self):
 		for e in self.file:
 			e.dump_pack_struct()
+
+		for regname in self.variant_regs:
+			self.dump_reg_variants(regname, self.variant_regs[regname])
 
 
 def main():
@@ -471,10 +645,14 @@ def main():
 
 	print("#ifndef %s\n#define %s\n" % (guard, guard))
 
+	print()
+	print("#include <assert.h>")
+	print()
+
 	try:
 		p.parse(rnn_path, xml_file)
 	except Error as e:
-		print(e)
+		print(e, file=sys.stderr)
 		exit(1)
 
 	if do_structs:

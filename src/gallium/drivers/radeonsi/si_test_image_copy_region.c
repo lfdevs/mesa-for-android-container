@@ -770,13 +770,9 @@ void si_test_blit(struct si_screen *sscreen, unsigned test_flags)
 
       printf("%4u: dst = (", i);
       print_image_attrs(sscreen, (struct si_texture *)gfx_dst);
-      printf(", %20s as %20s), src = (",
-             util_format_description(tdst.format)->short_name,
-             util_format_short_name(info.dst.format));
+      printf(", %20s), src = (", util_format_short_name(info.dst.format));
       print_image_attrs(sscreen, (struct si_texture *)gfx_src);
-      printf(", %20s as %20s)",
-             util_format_description(tsrc.format)->short_name,
-             util_format_short_name(info.src.format));
+      printf(", %20s)", util_format_short_name(info.src.format));
       fflush(stdout);
 
       int src_width, src_height, src_depth, dst_width, dst_height, dst_depth;
@@ -952,7 +948,7 @@ void si_test_blit(struct si_screen *sscreen, unsigned test_flags)
       if (only_cb_resolve)
          success = si_msaa_resolve_blit_via_CB(ctx, &info);
       else
-         success = si_compute_blit(sctx, &info);
+         success = si_compute_blit(sctx, &info, true);
 
       if (success) {
          printf(" %-7s", only_cb_resolve ? "resolve" : "comp");

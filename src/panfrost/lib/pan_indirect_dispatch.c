@@ -123,20 +123,19 @@ pan_indirect_dispatch_init(struct panfrost_device *dev)
 
    struct panfrost_compile_inputs inputs = {
       .gpu_id = dev->gpu_id,
-      .fixed_sysval_ubo = -1,
       .no_ubo_to_push = true,
    };
    struct pan_shader_info shader_info;
    struct util_dynarray binary;
 
    util_dynarray_init(&binary, NULL);
+   pan_shader_preprocess(b.shader, inputs.gpu_id);
    GENX(pan_shader_compile)(b.shader, &inputs, &binary, &shader_info);
 
    ralloc_free(b.shader);
 
    assert(!shader_info.tls_size);
    assert(!shader_info.wls_size);
-   assert(!shader_info.sysvals.sysval_count);
 
    shader_info.push.count =
       DIV_ROUND_UP(sizeof(struct pan_indirect_dispatch_info), 4);

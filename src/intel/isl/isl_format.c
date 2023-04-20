@@ -147,12 +147,12 @@ static const struct surface_format_info format_info[] = {
    SF(  x,   x,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R32G32_USCALED)
    SF(  x,   x,   x,   x,   x,   x,  75,   x,   x,   x,   x,   x,    x,  R32G32_SFIXED)
    SF(  x,   x,   x,   x,   x,   x,  80,   x,   x,   x,   x,   x,   90,  R64_PASSTHRU)
-   SF(  Y,   Y,   x,   Y,   Y,   Y,   Y,   x,  60,  70,   x,  90,    x,  B8G8R8A8_UNORM)
+   SF(  Y,   Y,   x,   Y,   Y,   Y,   Y,   x,  60,  70, 125,  90,    x,  B8G8R8A8_UNORM)
    SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,   x,   x,   x, 110,    x,  B8G8R8A8_UNORM_SRGB)
 /*    smpl filt  shad  CK   RT   AB   VB   SO color TW   TR  ccs_e  TA */
-   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,  60,  70,   x, 110,    x,  R10G10B10A2_UNORM)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,  60,  70, 125, 110,    x,  R10G10B10A2_UNORM)
    SF(  Y,   Y,   x,   x,   x,   x,   x,   x,  60,   x,   x, 120,    x,  R10G10B10A2_UNORM_SRGB)
-   SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,   x, 110,    x,  R10G10B10A2_UINT)
+   SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70, 125, 110,    x,  R10G10B10A2_UINT)
    SF(  Y,   Y,   x,   x,   x,   x,   Y,   x,   x,   x,   x,   x,    x,  R10G10B10_SNORM_A2_UNORM)
    SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,  60,  70, 110,  90,    x,  R8G8B8A8_UNORM)
    SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,  60,   x,   x, 110,    x,  R8G8B8A8_UNORM_SRGB)
@@ -164,10 +164,10 @@ static const struct surface_format_info format_info[] = {
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,  90,  90,    x,  R16G16_SINT)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   x,   x,  70,  75,  90,    x,  R16G16_UINT)
    SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,   x,  70,  90,  90,    x,  R16G16_FLOAT)
-   SF(  Y,   Y,   x,   x,   Y,   Y,  75,   x,  60,  70,   x, 110,    x,  B10G10R10A2_UNORM)
+   SF(  Y,   Y,   x,   x,   Y,   Y,  75,   x,  60,  70, 125, 110,    x,  B10G10R10A2_UNORM)
    SF(  Y,   Y,   x,   x,   Y,   Y,   x,   x,  60,   x,   x, 110,    x,  B10G10R10A2_UNORM_SRGB)
-   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,   x,  70,   x, 110,    x,  R11G11B10_FLOAT)
-   SF(120, 120,   x,   x, 120, 120,   x,   x,   x,   x,   x, 120,    x,  R10G10B10_FLOAT_A2_UNORM)
+   SF(  Y,   Y,   x,   x,   Y,   Y,   Y,   x,   x,  70, 125, 110,    x,  R11G11B10_FLOAT)
+   SF(120, 120,   x,   x, 120, 120,   x,   x,   x, 125, 125, 120,    x,  R10G10B10_FLOAT_A2_UNORM)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   Y,   x,  70,  70,  90,   70,  R32_SINT)
    SF(  Y,   x,   x,   x,   Y,   x,   Y,   Y,   x,  70,  70,  90,   70,  R32_UINT)
    SF(  Y,  50,   Y,   x,   Y,   Y,   Y,   Y,   x,  70,  70,  90,  110,  R32_FLOAT)
@@ -1356,7 +1356,7 @@ unpack_channel(union isl_color_value *value,
 }
 
 /**
- * Take unpack an isl_color_value from the actual bits as specified by
+ * Unpack an isl_color_value from the actual bits as specified by
  * the isl_format.  This function is very slow for a format conversion
  * function but should be fine for a single pixel worth of data.
  */

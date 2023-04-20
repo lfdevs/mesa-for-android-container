@@ -2,6 +2,7 @@
 <database xmlns="http://nouveau.freedesktop.org/"
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
+<import file="adreno/adreno_common.xml"/>
 
 <enum name="vgt_event_type" varset="chip">
 	<value name="VS_DEALLOC" value="0"/>
@@ -271,7 +272,11 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<doc>wait until a read completes</doc>
 	<value name="CP_WAIT_UNTIL_READ" value="0x5c" variants="A2XX-A4XX"/>
 	<doc>wait until all base/size writes from an IB_PFD packet have completed</doc>
-	<value name="CP_WAIT_IB_PFD_COMPLETE" value="0x5d"/>
+	<!--
+		NOTE: CP_WAIT_IB_PFD_COMPLETE unimplemented at least since a5xx fw, and
+		recycled for something new on a7xx
+	 -->
+	<value name="CP_WAIT_IB_PFD_COMPLETE" value="0x5d" varset="chip" variants="A2XX-A4XX"/>
 	<doc>register read/modify/write</doc>
 	<value name="CP_REG_RMW" value="0x21"/>
 	<doc>Set binning configuration registers</doc>
@@ -458,7 +463,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	<value name="CP_SMMU_TABLE_UPDATE" value="0x53" variants="A5XX-"/>
 	<!-- for a6xx -->
 	<doc>Tells CP the current mode of GPU operation</doc>
-	<value name="CP_SET_MARKER" value="0x65" variants="A6XX"/>
+	<value name="CP_SET_MARKER" value="0x65" variants="A6XX-"/>
 	<doc>Instruct CP to set a few internal CP registers</doc>
 	<value name="CP_SET_PSEUDO_REG" value="0x56" variants="A6XX"/>
 	<!--
@@ -508,7 +513,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	CP_SET_MODE w/ payload of 0x1 seems to cause CP_SET_DRAW_STATE
 	packets w/ ENABLE_MASK & 0x6 to execute immediately
 	 -->
-	<value name="CP_SET_MODE" value="0x63" variants="A6XX"/>
+	<value name="CP_SET_MODE" value="0x63" variants="A6XX-"/>
 
 	<!--
 	Seems like there are now separate blocks of state for VS vs FS/CS
@@ -524,15 +529,15 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE vs
 	CL_KERNEL_WORK_GROUP_SIZE)
 	 -->
-	<value name="CP_LOAD_STATE6_GEOM" value="0x32" variants="A6XX"/>
-	<value name="CP_LOAD_STATE6_FRAG" value="0x34" variants="A6XX"/>
+	<value name="CP_LOAD_STATE6_GEOM" value="0x32" variants="A6XX-"/>
+	<value name="CP_LOAD_STATE6_FRAG" value="0x34" variants="A6XX-"/>
 	<!--
 	Note: For IBO state (Image/SSBOs) which have shared state across
 	shader stages, for 3d pipeline CP_LOAD_STATE6 is used.  But for
 	compute shaders, CP_LOAD_STATE6_FRAG is used.  Possibly they are
 	interchangable.
 	 -->
-	<value name="CP_LOAD_STATE6" value="0x36" variants="A6XX"/>
+	<value name="CP_LOAD_STATE6" value="0x36" variants="A6XX-"/>
 
 	<!-- internal packets: -->
 	<value name="IN_IB_PREFETCH_END" value="0x17" variants="A2XX"/>
@@ -569,7 +574,7 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 	</doc>
 	<value name="CP_CONTEXT_SWITCH" value="0x54" variants="A6XX"/>
 	<!-- Note, kgsl calls this CP_SET_AMBLE: -->
-	<value name="CP_SET_CTXSWITCH_IB" value="0x55" variants="A6XX"/>
+	<value name="CP_SET_CTXSWITCH_IB" value="0x55" variants="A6XX-"/>
 
 	<!--
 	Seems to always have the payload:
@@ -604,14 +609,22 @@ xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
 		technique of just repeating the CP_INDIRECT_BUFFER calls and
 		"unrolling" the loop.
 	</doc>
-	<value name="CP_START_BIN" value="0x50" variants="A6XX"/>
-	<value name="CP_END_BIN" value="0x51" variants="A6XX"/>
+	<value name="CP_START_BIN" value="0x50" variants="A6XX-"/>
+	<value name="CP_END_BIN" value="0x51" variants="A6XX-"/>
 
 	<doc> Make next dword 1 to disable preemption, 0 to re-enable it. </doc>
 	<value name="CP_PREEMPT_DISABLE" value="0x6c" variants="A6XX"/>
 
 	<value name="CP_WAIT_TIMESTAMP" value="0x14" variants="A7XX-"/>
+	<value name="CP_GLOBAL_TIMESTAMP" value="0x15" variants="A7XX-"/>  <!-- payload 1 dword -->
+	<value name="CP_LOCAL_TIMESTAMP" value="0x16" variants="A7XX-"/>  <!-- payload 1 dword, follows 0x15 -->
 	<value name="CP_THREAD_CONTROL" value="0x17" variants="A7XX-"/>
+	<!-- payload 4 dwords, last two could be render target addr (one pkt per MRT), possibly used for GMEM save/restore?-->
+	<value name="CP_RESOURCE_LIST" value="0x18" variants="A7XX-"/>
+	<value name="CP_BV_BR_COUNT_OPS" value="0x1b" variants="A7XX-"/>  <!-- payload 1 or 2 dwords -->
+	<!-- similar to CP_CONTEXT_REG_BUNCH, but discards first two dwords?? -->
+	<value name="CP_CONTEXT_REG_BUNCH2" value="0x5d" variants="A7XX-"/>
+	<value name="CP_UNK49" value="0x49" variants="A7XX-"/>  <!-- payload 4 dwords, last two address of something -->
 </enum>
 
 
@@ -1097,6 +1110,11 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	<reg32 offset="6" name="6">
 		<bitfield name="BIN_PRIM_STRM_HI" low="0" high="31"/>
 	</reg32>
+	<!--
+		a7xx adds a few more addresses to the end of the pkt
+	 -->
+	<reg64 offset="7" name="7"/>
+	<reg64 offset="9" name="9"/>
 </domain>
 
 <domain name="CP_SET_BIN_DATA5_OFFSET" width="32">
@@ -1548,9 +1566,11 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	</reg32>
 </domain>
 
-<domain name="CP_EVENT_WRITE" width="32">
+<domain varset="chip" name="CP_EVENT_WRITE" width="32">
 	<reg32 offset="0" name="0">
 		<bitfield name="EVENT" low="0" high="7" type="vgt_event_type"/>
+		<!-- write seqno, not applicable to all events, leads to a hang on unsupported ones -->
+		<bitfield name="SEQNO" pos="27" type="boolean" variants="A7XX-"/>
 		<!-- when set, write back timestamp instead of value from packet: -->
 		<bitfield name="TIMESTAMP" pos="30" type="boolean"/>
 		<bitfield name="IRQ" pos="31" type="boolean"/>
@@ -1721,16 +1741,22 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<bitfield name="REG" low="0" high="17"/>
 		<!-- the bit to test -->
 		<bitfield name="BIT" low="20" high="24" type="uint"/>
-		<!-- execute CP_WAIT_FOR_ME beforehand -->
-		<bitfield name="WAIT_FOR_ME" pos="25" type="boolean"/>
-		<!--
-			Appears only in:
-				opcode: CP_REG_TEST (39) (4 dwords)
-						{ REG = 0 | BIT = 0 | WAIT_FOR_ME | UNK31 }
-			Seem to force CP_REG_TEST to write false
-		 -->
-		<bitfield name="UNK31" pos="31" type="boolean"/>
+		<!-- skip implied CP_WAIT_FOR_ME -->
+		<bitfield name="SKIP_WAIT_FOR_ME" pos="25" type="boolean"/>
+		<!-- the predicate bit to set (new in gen3+) -->
+		<bitfield name="PRED_BIT" low="26" high="30" type="uint"/>
+		<!-- update the predicate reg directly (new in gen3+) -->
+		<bitfield name="PRED_UPDATE" pos="31" type="boolean"/>
 	</reg32>
+
+        <!--
+		In PRED_UPDATE mode, the predicate reg is updated directly using two
+		more dwords, ignoring other bits:
+
+			PRED_REG = (PRED_REG & ~PRED_MASK) | (PRED_VAL & PRED_MASK);
+	-->
+	<reg32 offset="1" name="PRED_MASK" type="hex"/>
+	<reg32 offset="2" name="PRED_VAL" type="hex"/>
 </domain>
 
 <!-- I *think* this existed at least as far back as a4xx -->
@@ -1746,15 +1772,8 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	<reg32 offset="0" name="0">
 		<bitfield name="REG0" low="0" high="17" type="hex"/>
 
-		<!--
-			Blob uses them for vkCmdClearAttachments in gmem mode. Examples:
-				opcode: CP_COND_REG_EXEC (47) (3 dwords)
-						{ REG0 = 0 | MODE = PRED_TEST | 0x140000 }
-				opcode: CP_COND_REG_EXEC (47) (3 dwords)
-						{ REG0 = 0 | MODE = PRED_TEST | 0x100000 }
-		-->
-		<bitfield name="UNK18" pos="18" varset="chip" variants="A6XX-" type="boolean"/>
-		<bitfield name="UNK20" pos="20" varset="chip" variants="A6XX-" type="boolean"/>
+		<!-- the predicate bit to test (new in gen3+) -->
+		<bitfield name="PRED_BIT" low="18" high="22" varset="chip" variants="A6XX-" type="uint"/>
 
 		<!--
 			Note: these bits have the same meaning, and use the same
@@ -1900,6 +1919,8 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	<reg32 offset="0" name="0">
 		<bitfield name="TRACKER" low="0" high="3" type="reg_tracker"/>
 	</reg32>
+	<reg32 offset="1" name="1"/>
+	<reg32 offset="2" name="2"/>
 </domain>
 
 <domain name="CP_SMMU_TABLE_UPDATE" width="32">
@@ -1940,10 +1961,17 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 	</reg32>
 </domain>
 
+<domain name="CP_WAIT_TIMESTAMP" width="32">
+	<reg32 offset="0" name="0">
+	</reg32>
+	<reg64 offset="1" name="ADDR" type="address"/>
+	<reg32 offset="3" name="TIMESTAMP" type="uint"/>
+</domain>
+
 <domain name="CP_THREAD_CONTROL" width="32">
 	<enum name="cp_thread">
-		<value name="CP_SET_THREAD_BR" value="1"/>
-		<value name="CP_SET_THREAD_BV" value="2"/>
+		<value name="CP_SET_THREAD_BR" value="1"/>    <!-- Render -->
+		<value name="CP_SET_THREAD_BV" value="2"/>    <!-- Visibility -->
 		<value name="CP_SET_THREAD_BOTH" value="3"/>
 	</enum>
 	<reg32 offset="0" name="0">

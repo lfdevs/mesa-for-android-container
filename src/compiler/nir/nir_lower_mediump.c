@@ -515,7 +515,7 @@ nir_lower_mediump_vars_impl(nir_function_impl *impl, nir_variable_mode modes,
 
             case nir_intrinsic_copy_deref: {
                nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
-               nir_deref_instr *src = nir_src_as_deref(intrin->src[0]);
+               nir_deref_instr *src = nir_src_as_deref(intrin->src[1]);
                /* If we convert once side of a copy and not the other, that
                 * would be very bad.
                 */
@@ -749,7 +749,9 @@ static bool
 const_is_f16(nir_ssa_scalar scalar)
 {
    double value = nir_ssa_scalar_as_float(scalar);
-   return value == _mesa_half_to_float(_mesa_float_to_half(value));
+   uint16_t fp16_val = _mesa_float_to_half(value);
+   bool is_denorm = (fp16_val & 0x7fff) != 0 && (fp16_val & 0x7fff) <= 0x3ff;
+   return value == _mesa_half_to_float(fp16_val) && !is_denorm;
 }
 
 static bool
@@ -886,10 +888,13 @@ fold_16bit_destination(nir_ssa_def *ssa, nir_alu_type dest_type,
 }
 
 static bool
-fold_16bit_load_data(nir_builder *b, nir_intrinsic_instr *instr,
-                     unsigned exec_mode, nir_rounding_mode rdm)
+fold_16bit_image_dest(nir_intrinsic_instr *instr, unsigned exec_mode,
+                      nir_alu_type allowed_types, nir_rounding_mode rdm)
 {
    nir_alu_type dest_type = nir_intrinsic_dest_type(instr);
+
+   if (!(nir_alu_type_get_base_type(dest_type) & allowed_types))
+      return false;
 
    if (!fold_16bit_destination(&instr->dest.ssa, dest_type, exec_mode, rdm))
       return false;
@@ -1016,7 +1021,7 @@ fold_16bit_tex_image(nir_builder *b, nir_instr *instr, void *params)
       case nir_intrinsic_bindless_image_store:
       case nir_intrinsic_image_deref_store:
       case nir_intrinsic_image_store:
-         if (options->fold_image_load_store_data)
+         if (options->fold_image_store_data)
             progress |= fold_16bit_store_data(b, intrinsic);
          if (options->fold_image_srcs)
             progress |= fold_16bit_image_srcs(b, intrinsic, 4);
@@ -1024,8 +1029,10 @@ fold_16bit_tex_image(nir_builder *b, nir_instr *instr, void *params)
       case nir_intrinsic_bindless_image_load:
       case nir_intrinsic_image_deref_load:
       case nir_intrinsic_image_load:
-         if (options->fold_image_load_store_data)
-            progress |= fold_16bit_load_data(b, intrinsic, exec_mode, options->rounding_mode);
+         if (options->fold_image_dest_types)
+            progress |= fold_16bit_image_dest(intrinsic, exec_mode,
+                                              options->fold_image_dest_types,
+                                              options->rounding_mode);
          if (options->fold_image_srcs)
             progress |= fold_16bit_image_srcs(b, intrinsic, 3);
          break;

@@ -279,7 +279,7 @@ def calculate_next_version(version: str, is_point: bool) -> str:
 def calculate_previous_version(version: str, is_point: bool) -> str:
     """Calculate the previous version to compare to.
 
-    In the case of -rc to final that verison is the previous .0 release,
+    In the case of -rc to final that version is the previous .0 release,
     (19.3.0 in the case of 20.0.0, for example). for point releases that is
     the last point release. This value will be the same as the input value
     for a point release, but different for a major release.
@@ -323,9 +323,10 @@ def update_release_notes_index(version: str) -> None:
         if first_list and line.startswith('-'):
             first_list = False
             new_relnotes.append(f'-  :doc:`{version} release notes <relnotes/{version}>`\n')
-        if not first_list and second_list and line.startswith('   relnotes/'):
+        if (not first_list and second_list and
+            re.match('   \d+.\d+(.\d+)? <relnotes/\d+.\d+(.\d+)?>', line)):
             second_list = False
-            new_relnotes.append(f'   relnotes/{version}\n')
+            new_relnotes.append(f'   {version} <relnotes/{version}>\n')
         new_relnotes.append(line)
 
     with relnotes_index_path.open('w') as f:

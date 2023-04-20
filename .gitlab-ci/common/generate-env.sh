@@ -10,6 +10,7 @@ for var in \
     CI_COMMIT_TITLE \
     CI_JOB_ID \
     CI_JOB_JWT_FILE \
+    CI_JOB_STARTED_AT \
     CI_JOB_NAME \
     CI_JOB_URL \
     CI_MERGE_REQUEST_SOURCE_BRANCH_NAME \
@@ -27,6 +28,7 @@ for var in \
     CI_SERVER_URL \
     CROSVM_GALLIUM_DRIVER \
     CROSVM_GPU_ARGS \
+    CURRENT_SECTION \
     DEQP_BIN_DIR \
     DEQP_CONFIG \
     DEQP_EXPECTED_RENDERER \
@@ -115,6 +117,8 @@ for var in \
     VK_DRIVER \
     VK_ICD_FILENAMES \
     VKD3D_PROTON_RESULTS \
+    ZINK_DESCRIPTORS \
+    LVP_POISON_MEMORY \
     ; do
   if [ -n "${!var+x}" ]; then
     echo "export $var=${!var@Q}"

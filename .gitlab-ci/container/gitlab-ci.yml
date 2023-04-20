@@ -174,6 +174,8 @@ debian/android_build:
     - .use-debian/x86_build-base
   variables:
     MESA_IMAGE_TAG: &debian-android_build ${DEBIAN_BUILD_TAG}
+    ANDROID_SDK_VERSION: 33
+    ANDROID_NDK: android-ndk-r25b
 
 .use-debian/android_build:
   extends:
@@ -189,7 +191,7 @@ debian/android_build:
 debian/x86_test-base:
   extends: debian/x86_build-base
   variables:
-    KERNEL_URL: &kernel-rootfs-url "https://gitlab.freedesktop.org/gfx-ci/linux/-/archive/v6.0-for-mesa-ci-93bd820c433b/linux-v6.0-for-mesa-ci-93bd820c433b.tar.bz2"
+    KERNEL_URL: &kernel-rootfs-url "https://gitlab.freedesktop.org/gfx-ci/linux/-/archive/v6.1-for-mesa-ci-439f86d0051b/linux-v6.1-for-mesa-ci-439f86d0051b.tar.bz2"
     MESA_IMAGE_TAG: &debian-x86_test-base ${DEBIAN_BASE_TAG}
 
 .use-debian/x86_test-base:
@@ -234,6 +236,23 @@ debian/x86_test-vk:
   needs:
     - debian/x86_test-vk
 
+# Debian 11 based x86 test image for Android
+debian/x86_test-android:
+  extends: .use-debian/x86_test-base
+  variables:
+    MESA_IMAGE_TAG: &debian-x86_test-android ${DEBIAN_X86_TEST_ANDROID_TAG}
+    ANDROID_NDK: android-ndk-r25b
+
+.use-debian/x86_test-android:
+  extends:
+    - .set-image-base-tag
+  variables:
+    MESA_BASE_TAG: *debian-x86_test-base
+    MESA_IMAGE_PATH: ${DEBIAN_X86_TEST_ANDROID_IMAGE_PATH}
+    MESA_IMAGE_TAG: *debian-x86_test-android
+  needs:
+    - debian/x86_test-android
+
 # Debian 11 based ARM build image
 debian/arm_build:
   extends:
@@ -261,7 +280,7 @@ alpine/x86_build:
     - .fdo.container-build@alpine
     - .container
   variables:
-    FDO_DISTRIBUTION_VERSION: "3.16"
+    FDO_DISTRIBUTION_VERSION: "3.17"
     MESA_IMAGE_TAG: &alpine-x86_build ${ALPINE_X86_BUILD_TAG}
 
 .use-alpine/x86_build:
@@ -273,13 +292,13 @@ alpine/x86_build:
   needs:
     - alpine/x86_build
 
-# Fedora 34 based x86 build image
+# Fedora 36 based x86 build image
 fedora/x86_build:
   extends:
     - .fdo.container-build@fedora
     - .container
   variables:
-    FDO_DISTRIBUTION_VERSION: 34
+    FDO_DISTRIBUTION_VERSION: 36
     MESA_IMAGE_TAG: &fedora-x86_build ${FEDORA_X86_BUILD_TAG}
 
 .use-fedora/x86_build:
@@ -478,6 +497,7 @@ windows_test_vs2019:
     MESA_BASE_IMAGE_PATH: *windows_vs_image_path
     MESA_BASE_IMAGE_TAG: *windows_vs_image_tag
     MESA_BASE_IMAGE: "$CI_REGISTRY_IMAGE/${MESA_BASE_IMAGE_PATH}:${MESA_BASE_IMAGE_TAG}"
+  timeout: 2h 30m
   needs:
     - windows_vs2019
 

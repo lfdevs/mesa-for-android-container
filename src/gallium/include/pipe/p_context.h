@@ -46,6 +46,7 @@ struct pipe_blend_state;
 struct pipe_blit_info;
 struct pipe_box;
 struct pipe_clip_state;
+struct pipe_compute_state_object_info;
 struct pipe_constant_buffer;
 struct pipe_depth_stencil_alpha_state;
 struct pipe_device_reset_callback;
@@ -932,6 +933,9 @@ struct pipe_context {
                                  const struct pipe_compute_state *);
    void (*bind_compute_state)(struct pipe_context *, void *);
    void (*delete_compute_state)(struct pipe_context *, void *);
+
+   void (*get_compute_state_info)(struct pipe_context *, void *,
+                                  struct pipe_compute_state_object_info *);
 
    /**
     * Bind an array of shader resources that will be used by the

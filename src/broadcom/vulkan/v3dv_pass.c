@@ -332,8 +332,10 @@ subpass_get_granularity(struct v3dv_device *device,
          &pass->attachments[attachment_idx].desc;
       const struct v3dv_format *format = v3dv_X(device, get_format)(desc->format);
       uint32_t internal_type, internal_bpp;
+      /* We don't support rendering to YCbCr images */
+      assert(format->plane_count == 1);
       v3dv_X(device, get_internal_type_bpp_for_output_format)
-         (format->rt_type, &internal_type, &internal_bpp);
+         (format->planes[0].rt_type, &internal_type, &internal_bpp);
 
       max_bpp = MAX2(max_bpp, internal_bpp);
 

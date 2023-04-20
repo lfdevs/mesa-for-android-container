@@ -426,7 +426,7 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
    memset(state, 0, sizeof(*state));
 
    uint32_t upload_remaining = max_upload;
-   bool push_ubos = compiler->push_ubo_with_preamble;
+   bool push_ubos = compiler->options.push_ubo_with_preamble;
    nir_foreach_function (function, nir) {
       if (function->impl && (!push_ubos || !function->is_preamble)) {
          nir_foreach_block (block, function->impl) {
@@ -475,7 +475,7 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
    int num_ubos = 0;
    bool progress = false;
    bool has_preamble = false;
-   bool push_ubos = compiler->push_ubo_with_preamble;
+   bool push_ubos = compiler->options.push_ubo_with_preamble;
    nir_foreach_function (function, nir) {
       if (function->impl) {
          if (function->is_preamble && push_ubos) {

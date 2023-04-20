@@ -349,6 +349,10 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1 << 27;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       return 16; // XXX: u_screen says 256 is the minimum value...
+   case PIPE_CAP_LINEAR_IMAGE_PITCH_ALIGNMENT:
+      return 1;
+   case PIPE_CAP_LINEAR_IMAGE_BASE_ADDRESS_ALIGNMENT:
+      return 1;
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
       return PIPE_TEXTURE_TRANSFER_BLIT;
    case PIPE_CAP_MAX_TEXEL_BUFFER_ELEMENTS_UINT:
@@ -429,6 +433,9 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_DEVICE_PROTECTED_CONTEXT:
       return screen->kernel_features & KERNEL_HAS_PROTECTED_CONTEXT;
+
+   case PIPE_CAP_ASTC_VOID_EXTENTS_NEED_DENORM_FLUSH:
+      return devinfo->ver == 9 && !intel_device_info_is_9lp(devinfo);
 
    default:
       return u_pipe_screen_get_param_defaults(pscreen, param);
@@ -542,9 +549,7 @@ iris_get_shader_param(struct pipe_screen *pscreen,
       return irs;
    }
    case PIPE_SHADER_CAP_DROUND_SUPPORTED:
-   case PIPE_SHADER_CAP_LDEXP_SUPPORTED:
       return 1;
-   case PIPE_SHADER_CAP_DFRACEXP_DLDEXP_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return 0;
@@ -641,7 +646,7 @@ iris_get_timestamp(struct pipe_screen *pscreen)
    uint64_t result;
 
    if (!intel_gem_read_render_timestamp(iris_bufmgr_get_fd(screen->bufmgr),
-                                        &result))
+                                        screen->devinfo->kmd_type, &result))
       return 0;
 
    result = intel_device_info_timebase_scale(screen->devinfo, result);
@@ -744,10 +749,11 @@ iris_shader_perf_log(void *data, unsigned *id, const char *fmt, ...)
 static void
 iris_detect_kernel_features(struct iris_screen *screen)
 {
+   const struct intel_device_info *devinfo = screen->devinfo;
    /* Kernel 5.2+ */
    if (intel_gem_supports_syncobj_wait(screen->fd))
       screen->kernel_features |= KERNEL_HAS_WAIT_FOR_SUBMIT;
-   if (intel_gem_supports_protected_context(screen->fd))
+   if (intel_gem_supports_protected_context(screen->fd, devinfo->kmd_type))
       screen->kernel_features |= KERNEL_HAS_PROTECTED_CONTEXT;
 }
 
@@ -773,6 +779,14 @@ iris_init_identifier_bo(struct iris_screen *screen)
    iris_bo_unmap(screen->workaround_bo);
 
    return true;
+}
+
+static int
+iris_screen_get_fd(struct pipe_screen *pscreen)
+{
+   struct iris_screen *screen = (struct iris_screen *) pscreen;
+
+   return screen->winsys_fd;
 }
 
 struct pipe_screen *
@@ -877,6 +891,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->get_vendor = iris_get_vendor;
    pscreen->get_device_vendor = iris_get_device_vendor;
    pscreen->get_cl_cts_version = iris_get_cl_cts_version;
+   pscreen->get_screen_fd = iris_screen_get_fd;
    pscreen->get_param = iris_get_param;
    pscreen->get_shader_param = iris_get_shader_param;
    pscreen->get_compute_param = iris_get_compute_param;

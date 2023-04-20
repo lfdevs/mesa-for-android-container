@@ -38,6 +38,10 @@
 #include "vulkan/util/vk_format.h"
 #include "vulkan/util/vk_enum_defines.h"
 
+#ifdef ANDROID
+#include "vk_android.h"
+#endif
+
 uint32_t
 radv_translate_buffer_dataformat(const struct util_format_description *desc, int first_non_void)
 {
@@ -697,13 +701,21 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
    if (multiplanar || desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED) {
       uint64_t tiling = VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                         VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT |
-                        VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT |
-                        VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT |
-                        VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT;
+                        VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT;
 
-      /* The subsampled formats have no support for linear filters. */
-      if (desc->layout != UTIL_FORMAT_LAYOUT_SUBSAMPLED) {
-         tiling |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
+      if (vk_format_get_ycbcr_info(format)) {
+         tiling |= VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT |
+                   VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT;
+
+         /* The subsampled formats have no support for linear filters. */
+         if (desc->layout != UTIL_FORMAT_LAYOUT_SUBSAMPLED)
+            tiling |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
+      }
+
+      if (physical_device->instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) {
+          if (format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
+              format == VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16)
+              tiling |= VK_FORMAT_FEATURE_2_VIDEO_DECODE_OUTPUT_BIT_KHR | VK_FORMAT_FEATURE_2_VIDEO_DECODE_DPB_BIT_KHR;
       }
 
       if (multiplanar)
@@ -955,7 +967,7 @@ radv_translate_colorformat(VkFormat format)
 uint32_t
 radv_colorformat_endian_swap(uint32_t colorformat)
 {
-   if (0 /*SI_BIG_ENDIAN*/) {
+   if (0 /*UTIL_ARCH_BIG_ENDIAN*/) {
       switch (colorformat) {
          /* 8-bit buffers. */
       case V_028C70_COLOR_8:
@@ -1210,12 +1222,6 @@ radv_get_modifier_flags(struct radv_physical_device *dev, VkFormat format, uint6
    return features;
 }
 
-static VkFormatFeatureFlags
-features2_to_features(VkFormatFeatureFlags2 features2)
-{
-   return features2 & VK_ALL_FORMAT_FEATURE_FLAG_BITS;
-}
-
 static void
 radv_list_drm_format_modifiers(struct radv_physical_device *dev, VkFormat format,
                                const VkFormatProperties3 *format_props,
@@ -1265,7 +1271,8 @@ radv_list_drm_format_modifiers(struct radv_physical_device *dev, VkFormat format
          *out_props = (VkDrmFormatModifierPropertiesEXT) {
             .drmFormatModifier = mods[i],
             .drmFormatModifierPlaneCount = planes,
-            .drmFormatModifierTilingFeatures = features2_to_features(features),
+            .drmFormatModifierTilingFeatures =
+               vk_format_features2_to_features(features),
          };
       };
    }
@@ -1421,11 +1428,11 @@ radv_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice, VkForma
    radv_physical_device_get_format_properties(physical_device, format, &format_props);
 
    pFormatProperties->formatProperties.linearTilingFeatures =
-      features2_to_features(format_props.linearTilingFeatures);
+      vk_format_features2_to_features(format_props.linearTilingFeatures);
    pFormatProperties->formatProperties.optimalTilingFeatures =
-      features2_to_features(format_props.optimalTilingFeatures);
+      vk_format_features2_to_features(format_props.optimalTilingFeatures);
    pFormatProperties->formatProperties.bufferFeatures =
-      features2_to_features(format_props.bufferFeatures);
+      vk_format_features2_to_features(format_props.bufferFeatures);
 
    VkFormatProperties3 *format_props_extended =
       vk_find_struct(pFormatProperties, FORMAT_PROPERTIES_3);
@@ -1795,7 +1802,7 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
    if (android_usage && ahb_supported) {
 #if RADV_SUPPORT_ANDROID_HARDWARE_BUFFER
       android_usage->androidHardwareBufferUsage =
-         radv_ahb_usage_from_vk_usage(base_info->flags, base_info->usage);
+         vk_image_usage_to_ahb_usage(base_info->flags, base_info->usage);
 #endif
    }
 

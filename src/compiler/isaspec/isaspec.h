@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include <stdio.h>
+#include "util/bitset.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -81,6 +82,11 @@ struct isa_decode_options {
 	 * Callback prior to instruction decode
 	 */
 	void (*instr_cb)(void *data, unsigned n, void *instr);
+
+	/**
+	 * callback for undefined instructions
+	 */
+	void (*no_match_cb)(FILE *out, const BITSET_WORD *bitset, size_t size);
 };
 
 void isa_decode(void *bin, int sz, FILE *out, const struct isa_decode_options *options);

@@ -391,43 +391,53 @@ driIndexConfigAttrib(const __DRIconfig *config, int index,
     return GL_FALSE;
 }
 
-static bool
+static int
 validate_context_version(struct dri_screen *screen,
                          int mesa_api,
                          unsigned major_version,
-                         unsigned minor_version,
-                         unsigned *dri_ctx_error)
+                         unsigned minor_version)
 {
    unsigned req_version = 10 * major_version + minor_version;
    unsigned max_version = 0;
 
-   switch (mesa_api) {
-   case API_OPENGL_COMPAT:
+   if (major_version == 0 || major_version > 4)
+      return __DRI_CTX_ERROR_BAD_API;
+
+   if (mesa_api == API_OPENGL_COMPAT) {
+      if ((major_version == 4 && minor_version > 6) ||
+          (major_version == 3 && minor_version > 3) ||
+          (major_version == 2 && minor_version > 1) ||
+          (major_version == 1 && minor_version > 5))
+         return __DRI_CTX_ERROR_BAD_API;
       max_version = screen->max_gl_compat_version;
-      break;
-   case API_OPENGL_CORE:
-      max_version = screen->max_gl_core_version;
-      break;
-   case API_OPENGLES:
+   } else if (mesa_api == API_OPENGLES) {
+      if (major_version > 1 || minor_version > 1)
+         return __DRI_CTX_ERROR_BAD_API;
       max_version = screen->max_gl_es1_version;
-      break;
-   case API_OPENGLES2:
+   } else if (mesa_api == API_OPENGLES2) {
+      if ((major_version >  3) ||
+          (major_version == 3 && minor_version > 2) ||
+          (major_version == 2 && minor_version > 0) ||
+          (major_version <  2))
+         return __DRI_CTX_ERROR_BAD_API;
       max_version = screen->max_gl_es2_version;
-      break;
-   default:
-      max_version = 0;
-      break;
+   } else if (mesa_api == API_OPENGL_CORE) {
+      if ((major_version == 4 && minor_version > 6) ||
+          (major_version == 3 && minor_version > 3) ||
+          (major_version < 3))
+         return __DRI_CTX_ERROR_BAD_API;
+      max_version = screen->max_gl_core_version;
+   } else {
+      return __DRI_CTX_ERROR_BAD_API;
    }
 
-   if (max_version == 0) {
-      *dri_ctx_error = __DRI_CTX_ERROR_BAD_API;
-      return false;
-   } else if (req_version > max_version) {
-      *dri_ctx_error = __DRI_CTX_ERROR_BAD_VERSION;
-      return false;
-   }
+   if (max_version == 0)
+      return __DRI_CTX_ERROR_BAD_VERSION;
 
-   return true;
+   if (req_version > max_version)
+      return __DRI_CTX_ERROR_BAD_VERSION;
+
+   return __DRI_CTX_ERROR_SUCCESS;
 }
 
 /*****************************************************************/
@@ -456,11 +466,6 @@ driCreateContextAttribs(__DRIscreen *psp, int api,
     ctx_config.priority = __DRI_CTX_PRIORITY_MEDIUM;
 
     assert((num_attribs == 0) || (attribs != NULL));
-
-    if (!(screen->api_mask & (1 << api))) {
-        *error = __DRI_CTX_ERROR_BAD_API;
-        return NULL;
-    }
 
     switch (api) {
     case __DRI_API_OPENGL:
@@ -613,10 +618,10 @@ driCreateContextAttribs(__DRIscreen *psp, int api,
         return NULL;
     }
 
-    if (!validate_context_version(screen, mesa_api,
-                                  ctx_config.major_version,
-                                  ctx_config.minor_version,
-                                  error))
+    *error = validate_context_version(screen, mesa_api,
+                                      ctx_config.major_version,
+                                      ctx_config.minor_version);
+    if (*error != __DRI_CTX_ERROR_SUCCESS)
        return NULL;
 
     struct dri_context *ctx = dri_create_context(screen, mesa_api,

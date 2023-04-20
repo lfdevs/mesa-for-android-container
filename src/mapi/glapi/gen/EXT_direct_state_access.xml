@@ -676,7 +676,7 @@
    </function>
 
    <function name="MultiTexCoordPointerEXT" marshal="async"
-             marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_TEX(texunit - GL_TEXTURE0), size, type, stride,  pointer);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_TEX(texunit - GL_TEXTURE0), MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride,  pointer);">
       <param name="texunit" type="GLenum" />
       <param name="size" type="GLint" />
       <param name="type" type="GLenum" />
@@ -1088,7 +1088,7 @@
    </function>
 
    <function name="VertexArrayVertexOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_POS, size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_POS, MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="size" type="GLint" />
@@ -1098,7 +1098,7 @@
    </function>
 
    <function name="VertexArrayColorOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_COLOR0, size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_COLOR0, MESA_PACK_VFORMAT(type, size, 1, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="size" type="GLint" />
@@ -1108,7 +1108,7 @@
    </function>
 
    <function name="VertexArrayEdgeFlagOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_EDGEFLAG, 1, GL_UNSIGNED_BYTE, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_EDGEFLAG, MESA_PACK_VFORMAT(GL_UNSIGNED_BYTE, 1, 0, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="stride" type="GLsizei" />
@@ -1116,7 +1116,7 @@
    </function>
 
    <function name="VertexArrayIndexOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_COLOR_INDEX, 1, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_COLOR_INDEX, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="type" type="GLenum" />
@@ -1125,7 +1125,7 @@
    </function>
 
    <function name="VertexArrayNormalOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_NORMAL, 3, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_NORMAL, MESA_PACK_VFORMAT(type, 3, 1, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="type" type="GLenum" />
@@ -1134,7 +1134,7 @@
    </function>
 
    <function name="VertexArrayTexCoordOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture), size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture), MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="size" type="GLint" />
@@ -1144,7 +1144,7 @@
    </function>
 
    <function name="VertexArrayMultiTexCoordOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_TEX(texunit - GL_TEXTURE0), size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_TEX(texunit - GL_TEXTURE0), MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="texunit" type="GLenum" />
@@ -1155,7 +1155,7 @@
    </function>
 
    <function name="VertexArrayFogCoordOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_FOG, 1, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_FOG, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="type" type="GLenum" />
@@ -1164,7 +1164,7 @@
    </function>
 
    <function name="VertexArraySecondaryColorOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_COLOR1, size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_COLOR1, MESA_PACK_VFORMAT(type, size, 1, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="size" type="GLint" />
@@ -1174,7 +1174,7 @@
    </function>
 
    <function name="VertexArrayVertexAttribOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_GENERIC(index), size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_GENERIC(index), MESA_PACK_VFORMAT(type, size, normalized, 0, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="index" type="GLuint" />
@@ -1186,7 +1186,7 @@
    </function>
 
    <function name="VertexArrayVertexAttribIOffsetEXT"
-             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_GENERIC(index), size, type, stride, offset);">
+             marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribPointer(ctx, vaobj, buffer, VERT_ATTRIB_GENERIC(index), MESA_PACK_VFORMAT(type, size, 0, 1, 0), stride, offset);">
       <param name="vaobj" type="GLuint" />
       <param name="buffer" type="GLuint" />
       <param name="index" type="GLuint" />

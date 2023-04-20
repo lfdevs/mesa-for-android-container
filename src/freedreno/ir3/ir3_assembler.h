@@ -29,6 +29,10 @@
 
 #define MAX_BUFS 4
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ir3_kernel_info {
    uint32_t num_bufs;
    uint32_t buf_sizes[MAX_BUFS]; /* size in dwords */
@@ -45,5 +49,9 @@ struct ir3_compiler;
 
 struct ir3_shader *ir3_parse_asm(struct ir3_compiler *c,
                                  struct ir3_kernel_info *info, FILE *in);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __IR3_ASSEMBLER_H__ */

@@ -487,7 +487,7 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
 
    struct pvr_device_static_clear_state *state = &device->static_clear_state;
    const uint32_t cache_line_size = rogue_get_slc_cache_line_size(dev_info);
-   const struct rogue_shader_binary *passthrough_vert_shader;
+   struct util_dynarray passthrough_vert_shader;
    struct pvr_pds_vertex_shader_program pds_program;
    VkResult result;
 
@@ -514,14 +514,16 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
       state->usc_multi_layer_vertex_shader_bo = NULL;
    }
 
+   util_dynarray_init(&passthrough_vert_shader, NULL);
    pvr_hard_code_get_passthrough_vertex_shader(dev_info,
                                                &passthrough_vert_shader);
 
    result = pvr_gpu_upload_usc(device,
-                               passthrough_vert_shader->data,
-                               passthrough_vert_shader->size,
+                               passthrough_vert_shader.data,
+                               passthrough_vert_shader.size,
                                cache_line_size,
                                &state->usc_vertex_shader_bo);
+   util_dynarray_fini(&passthrough_vert_shader);
    if (result != VK_SUCCESS)
       goto err_free_usc_multi_layer_shader;
 

@@ -231,9 +231,9 @@ alloc_select_resource(struct gl_context *ctx)
    if (!ctx->Const.HardwareAcceleratedSelect)
       return;
 
-   if (!ctx->HWSelectModeBeginEnd) {
-      ctx->HWSelectModeBeginEnd = _mesa_alloc_dispatch_table(false);
-      if (!ctx->HWSelectModeBeginEnd) {
+   if (!ctx->Dispatch.HWSelectModeBeginEnd) {
+      ctx->Dispatch.HWSelectModeBeginEnd = _mesa_alloc_dispatch_table(false);
+      if (!ctx->Dispatch.HWSelectModeBeginEnd) {
          _mesa_error(ctx, GL_OUT_OF_MEMORY, "Cannot allocate HWSelectModeBeginEnd");
          return;
       }

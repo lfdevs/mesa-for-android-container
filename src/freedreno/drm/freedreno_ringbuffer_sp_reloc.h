@@ -98,13 +98,13 @@ static uint32_t X(fd_ringbuffer_sp_emit_reloc_ring)(
             APPEND(&fd_ring->u, reloc_bos, fd_bo_ref(target_bo));
       }
    } else {
-      // TODO it would be nice to know whether we have already
-      // seen this target before.  But hopefully we hit the
-      // append_bo() fast path enough for this to not matter:
       struct fd_submit_sp *fd_submit = to_fd_submit_sp(fd_ring->u.submit);
 
-      for (unsigned i = 0; i < fd_target->u.nr_reloc_bos; i++) {
-         fd_submit_append_bo(fd_submit, fd_target->u.reloc_bos[i]);
+      if (fd_submit->seqno != fd_target->u.last_submit_seqno) {
+         for (unsigned i = 0; i < fd_target->u.nr_reloc_bos; i++) {
+            fd_submit_append_bo(fd_submit, fd_target->u.reloc_bos[i]);
+         }
+         fd_target->u.last_submit_seqno = fd_submit->seqno;
       }
    }
 

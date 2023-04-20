@@ -54,9 +54,19 @@ nir_ssa_def *
 nir_get_texture_size(nir_builder *b, nir_tex_instr *tex);
 
 static inline nir_ssa_def *
+nir_fisnan(nir_builder *b, nir_ssa_def *x)
+{
+   bool old_exact = b->exact;
+   b->exact = true;
+   nir_ssa_def *res = nir_fneu(b, x, x);
+   b->exact = old_exact;
+   return res;
+}
+
+static inline nir_ssa_def *
 nir_nan_check2(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y, nir_ssa_def *res)
 {
-   return nir_bcsel(b, nir_fneu(b, x, x), x, nir_bcsel(b, nir_fneu(b, y, y), y, res));
+   return nir_bcsel(b, nir_fisnan(b, x), x, nir_bcsel(b, nir_fisnan(b, y), y, res));
 }
 
 static inline nir_ssa_def *
@@ -237,7 +247,8 @@ static inline nir_ssa_def *
 nir_clz_u(nir_builder *b, nir_ssa_def *a)
 {
    nir_ssa_def *val;
-   val = nir_isub(b, nir_imm_intN_t(b, a->bit_size - 1, 32), nir_ufind_msb(b, a));
+   val = nir_isub(b, nir_imm_intN_t(b, a->bit_size - 1, 32),
+                  nir_ufind_msb(b, nir_u2uN(b, a, MAX2(a->bit_size, 32))));
    return nir_u2uN(b, val, a->bit_size);
 }
 

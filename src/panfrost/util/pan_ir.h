@@ -77,57 +77,10 @@ enum pan_special_varying {
  * special varying */
 #define PAN_MAX_VARYINGS (MAX_VARYING + PAN_VARY_MAX - 1)
 
-/* Define the general compiler entry point */
-
-#define MAX_SYSVAL_COUNT 32
-
-/* Allow 2D of sysval IDs, while allowing nonparametric sysvals to equal
- * their class for equal comparison */
-
-#define PAN_SYSVAL(type, no)    (((no) << 16) | PAN_SYSVAL_##type)
-#define PAN_SYSVAL_TYPE(sysval) ((sysval)&0xffff)
-#define PAN_SYSVAL_ID(sysval)   ((sysval) >> 16)
-
-/* Define some common types. We start at one for easy indexing of hash
- * tables internal to the compiler */
-
-enum {
-   PAN_SYSVAL_VIEWPORT_SCALE = 1,
-   PAN_SYSVAL_VIEWPORT_OFFSET = 2,
-   PAN_SYSVAL_TEXTURE_SIZE = 3,
-   PAN_SYSVAL_SSBO = 4,
-   PAN_SYSVAL_NUM_WORK_GROUPS = 5,
-   PAN_SYSVAL_SAMPLER = 7,
-   PAN_SYSVAL_LOCAL_GROUP_SIZE = 8,
-   PAN_SYSVAL_WORK_DIM = 9,
-   PAN_SYSVAL_IMAGE_SIZE = 10,
-   PAN_SYSVAL_SAMPLE_POSITIONS = 11,
-   PAN_SYSVAL_MULTISAMPLED = 12,
-   PAN_SYSVAL_RT_CONVERSION = 13,
-   PAN_SYSVAL_VERTEX_INSTANCE_OFFSETS = 14,
-   PAN_SYSVAL_DRAWID = 15,
-   PAN_SYSVAL_BLEND_CONSTANTS = 16,
-   PAN_SYSVAL_XFB = 17,
-   PAN_SYSVAL_NUM_VERTICES = 18,
-};
-
-#define PAN_TXS_SYSVAL_ID(texidx, dim, is_array)                               \
-   ((texidx) | ((dim) << 7) | ((is_array) ? (1 << 9) : 0))
-
-#define PAN_SYSVAL_ID_TO_TXS_TEX_IDX(id)  ((id)&0x7f)
-#define PAN_SYSVAL_ID_TO_TXS_DIM(id)      (((id) >> 7) & 0x3)
-#define PAN_SYSVAL_ID_TO_TXS_IS_ARRAY(id) !!((id) & (1 << 9))
-
 /* Special attribute slots for vertex builtins. Sort of arbitrary but let's be
  * consistent with the blob so we can compare traces easier. */
 
 enum { PAN_VERTEX_ID = 16, PAN_INSTANCE_ID = 17, PAN_MAX_ATTRIBUTE };
-
-struct panfrost_sysvals {
-   /* The mapping of sysvals to uniforms, the count, and the off-by-one inverse */
-   unsigned sysvals[MAX_SYSVAL_COUNT];
-   unsigned sysval_count;
-};
 
 /* Architecturally, Bifrost/Valhall can address 128 FAU slots of 64-bits each.
  * In practice, the maximum number of FAU slots is limited by implementation.
@@ -160,33 +113,17 @@ struct panfrost_ubo_push {
 unsigned pan_lookup_pushed_ubo(struct panfrost_ubo_push *push, unsigned ubo,
                                unsigned offs);
 
-struct hash_table_u64 *
-panfrost_init_sysvals(struct panfrost_sysvals *sysvals,
-                      struct panfrost_sysvals *fixed_sysvals, void *memctx);
-
-unsigned pan_lookup_sysval(struct hash_table_u64 *sysval_to_id,
-                           struct panfrost_sysvals *sysvals, int sysval);
-
-int panfrost_sysval_for_instr(nir_instr *instr, nir_dest *dest);
-
 struct panfrost_compile_inputs {
    struct util_debug_callback *debug;
 
    unsigned gpu_id;
    bool is_blend, is_blit;
    struct {
-      unsigned rt;
       unsigned nr_samples;
       uint64_t bifrost_blend_desc;
    } blend;
-   int fixed_sysval_ubo;
-   struct panfrost_sysvals *fixed_sysval_layout;
    bool no_idvs;
    bool no_ubo_to_push;
-
-   enum pipe_format rt_formats[8];
-   uint8_t raw_fmt_mask;
-   unsigned nr_cbufs;
 
    /* Used on Valhall.
     *
@@ -200,7 +137,6 @@ struct panfrost_compile_inputs {
 
    union {
       struct {
-         bool static_rt_conv;
          uint32_t rt_conv[8];
       } bifrost;
    };
@@ -365,8 +301,6 @@ struct pan_shader_info {
       struct pan_shader_varying output[PAN_MAX_VARYINGS];
    } varyings;
 
-   struct panfrost_sysvals sysvals;
-
    /* UBOs to push to Register Mapped Uniforms (Midgard) or Fast Access
     * Uniforms (Bifrost) */
    struct panfrost_ubo_push push;
@@ -522,6 +456,38 @@ pan_subgroup_size(unsigned arch)
       return 4;
    else
       return 1;
+}
+
+/* Architectural maximums, since this register may be not implemented
+ * by a given chip. G31 is actually 512 instead of 768 but it doesn't
+ * really matter. */
+
+static inline unsigned
+panfrost_max_thread_count(unsigned arch, unsigned work_reg_count)
+{
+   switch (arch) {
+   /* Midgard */
+   case 4:
+   case 5:
+      if (work_reg_count > 8)
+         return 64;
+      else if (work_reg_count > 4)
+         return 128;
+      else
+         return 256;
+
+   /* Bifrost, first generation */
+   case 6:
+      return 384;
+
+   /* Bifrost, second generation (G31 is 512 but it doesn't matter) */
+   case 7:
+      return work_reg_count > 32 ? 384 : 768;
+
+   /* Valhall (for completeness) */
+   default:
+      return work_reg_count > 32 ? 512 : 1024;
+   }
 }
 
 #endif

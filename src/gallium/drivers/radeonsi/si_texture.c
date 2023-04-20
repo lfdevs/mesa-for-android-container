@@ -549,13 +549,14 @@ static void si_set_tex_bo_metadata(struct si_screen *sscreen, struct si_texture 
 
    sscreen->make_texture_descriptor(sscreen, tex, true, res->target, res->format, swizzle, 0,
                                     res->last_level, 0, is_array ? res->array_size - 1 : 0,
-                                    res->width0, res->height0, res->depth0, desc, NULL);
+                                    res->width0, res->height0, res->depth0, true, desc, NULL);
    si_set_mutable_tex_desc_fields(sscreen, tex, &tex->surface.u.legacy.level[0], 0, 0,
                                   tex->surface.blk_w, false, 0, desc);
 
-   ac_surface_get_umd_metadata(&sscreen->info, &tex->surface,
-                               tex->buffer.b.b.last_level + 1,
-                               desc, &md.size_metadata, md.metadata);
+   ac_surface_compute_umd_metadata(&sscreen->info, &tex->surface,
+                                   tex->buffer.b.b.last_level + 1,
+                                   desc, &md.size_metadata, md.metadata,
+                                   sscreen->debug_flags & DBG(EXTRA_METADATA));
    sscreen->ws->buffer_set_metadata(sscreen->ws, tex->buffer.buf, &md, &tex->surface);
 }
 
@@ -1306,6 +1307,11 @@ si_texture_create_with_modifier(struct pipe_screen *screen,
        */
       if (num_planes > 1)
          plane_templ[i].bind |= PIPE_BIND_SHARED;
+      /* Setting metadata on suballocated buffers is impossible. So use PIPE_BIND_CUSTOM to
+       * request a non-suballocated buffer.
+       */
+      if (!is_zs && sscreen->debug_flags & DBG(EXTRA_METADATA))
+         plane_templ[i].bind |= PIPE_BIND_CUSTOM;
 
       if (si_init_surface(sscreen, &surface[i], &plane_templ[i], tile_mode, modifier,
                           false, plane_templ[i].bind & PIPE_BIND_SCANOUT,
@@ -1339,6 +1345,8 @@ si_texture_create_with_modifier(struct pipe_screen *screen,
          last_plane->buffer.b.b.next = &tex->buffer.b.b;
          last_plane = tex;
       }
+      if (i == 0 && !is_zs && sscreen->debug_flags & DBG(EXTRA_METADATA))
+         si_set_tex_bo_metadata(sscreen, tex);
    }
 
    return (struct pipe_resource *)plane0;
@@ -1628,11 +1636,11 @@ static struct pipe_resource *si_texture_from_winsys_buffer(struct si_screen *ssc
       return NULL;
    }
 
-   if (!ac_surface_set_umd_metadata(&sscreen->info, &tex->surface,
-                                    tex->buffer.b.b.nr_storage_samples,
-                                    tex->buffer.b.b.last_level + 1,
-                                    metadata.size_metadata,
-                                    metadata.metadata)) {
+   if (!ac_surface_apply_umd_metadata(&sscreen->info, &tex->surface,
+                                      tex->buffer.b.b.nr_storage_samples,
+                                      tex->buffer.b.b.last_level + 1,
+                                      metadata.size_metadata,
+                                      metadata.metadata)) {
       si_texture_reference(&tex, NULL);
       return NULL;
    }
@@ -1877,8 +1885,7 @@ static void *si_texture_transfer_map(struct pipe_context *ctx, struct pipe_resou
        * is busy.
        */
       if (!tex->surface.is_linear || (tex->buffer.flags & RADEON_FLAG_ENCRYPTED) ||
-          (tex->buffer.domains & RADEON_DOMAIN_VRAM && sctx->screen->info.has_dedicated_vram &&
-           !sctx->screen->info.smart_access_memory))
+          (tex->buffer.domains & RADEON_DOMAIN_VRAM && sctx->screen->info.has_dedicated_vram))
          use_staging_texture = true;
       else if (usage & PIPE_MAP_READ)
          use_staging_texture =

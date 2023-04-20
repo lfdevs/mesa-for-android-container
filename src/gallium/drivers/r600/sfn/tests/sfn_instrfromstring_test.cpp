@@ -711,7 +711,7 @@ TestInstrFromString::TestInstrFromString() {}
 PInst
 TestInstrFromString::from_string(const std::string& s)
 {
-   return m_instr_factory->from_string(s, 0);
+   return m_instr_factory->from_string(s, 0, false);
 }
 
 void

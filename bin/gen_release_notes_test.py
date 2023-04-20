@@ -76,7 +76,7 @@ async def test_gather_commits():
     'content, bugs',
     [
         # It is important to have the title on a new line, as
-        # textwrap.dedent wont work otherwise.
+        # textwrap.dedent won't work otherwise.
 
         # Test the `Closes: #N` syntax
         (
@@ -113,7 +113,7 @@ async def test_gather_commits():
             '''\
             A commit for for something else completely
 
-            Closes: https://github.com/Organiztion/project/1234
+            Closes: https://github.com/Organization/project/1234
             ''',
             [],
         ),

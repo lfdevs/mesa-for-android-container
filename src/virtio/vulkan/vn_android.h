@@ -22,12 +22,6 @@
 
 #ifdef ANDROID
 
-static inline const VkNativeBufferANDROID *
-vn_android_find_native_buffer(const VkImageCreateInfo *create_info)
-{
-   return vk_find_struct_const(create_info->pNext, NATIVE_BUFFER_ANDROID);
-}
-
 VkResult
 vn_android_image_from_anb(struct vn_device *dev,
                           const VkImageCreateInfo *image_info,
@@ -46,12 +40,6 @@ vn_android_format_to_view_formats(VkFormat format, uint32_t *out_count);
 uint64_t
 vn_android_get_ahb_usage(const VkImageUsageFlags usage,
                          const VkImageCreateFlags flags);
-
-VkResult
-vn_android_image_from_ahb(struct vn_device *dev,
-                          const VkImageCreateInfo *create_info,
-                          const VkAllocationCallbacks *alloc,
-                          struct vn_image **out_img);
 
 VkResult
 vn_android_device_import_ahb(struct vn_device *dev,
@@ -74,12 +62,6 @@ VkFormat
 vn_android_drm_format_to_vk_format(uint32_t format);
 
 VkResult
-vn_android_buffer_from_ahb(struct vn_device *dev,
-                           const VkBufferCreateInfo *create_info,
-                           const VkAllocationCallbacks *alloc,
-                           struct vn_buffer **out_buf);
-
-VkResult
 vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev,
                                            uint32_t *out_mem_type_bits);
 
@@ -87,12 +69,6 @@ uint32_t
 vn_android_gralloc_get_shared_present_usage(void);
 
 #else
-
-static inline const VkNativeBufferANDROID *
-vn_android_find_native_buffer(UNUSED const VkImageCreateInfo *create_info)
-{
-   return NULL;
-}
 
 static inline VkResult
 vn_android_image_from_anb(UNUSED struct vn_device *dev,
@@ -127,15 +103,6 @@ vn_android_get_ahb_usage(UNUSED const VkImageUsageFlags usage,
 }
 
 static inline VkResult
-vn_android_image_from_ahb(UNUSED struct vn_device *dev,
-                          UNUSED const VkImageCreateInfo *create_info,
-                          UNUSED const VkAllocationCallbacks *alloc,
-                          UNUSED struct vn_image **out_img)
-{
-   return VK_ERROR_OUT_OF_HOST_MEMORY;
-}
-
-static inline VkResult
 vn_android_device_import_ahb(UNUSED struct vn_device *dev,
                              UNUSED struct vn_device_memory *mem,
                              UNUSED const VkMemoryAllocateInfo *alloc_info,
@@ -165,15 +132,6 @@ static inline VkFormat
 vn_android_drm_format_to_vk_format(UNUSED uint32_t format)
 {
    return VK_FORMAT_UNDEFINED;
-}
-
-static inline VkResult
-vn_android_buffer_from_ahb(UNUSED struct vn_device *dev,
-                           UNUSED const VkBufferCreateInfo *create_info,
-                           UNUSED const VkAllocationCallbacks *alloc,
-                           UNUSED struct vn_buffer **out_buf)
-{
-   return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
 static inline VkResult

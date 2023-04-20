@@ -30,6 +30,7 @@
 #include "qpu/qpu_disasm.h"
 
 #include "compiler/nir/nir_builder.h"
+#include "nir/nir_vulkan.h"
 #include "nir/nir_serialize.h"
 
 #include "util/u_atomic.h"
@@ -173,6 +174,7 @@ static const struct spirv_to_nir_options default_spirv_options =  {
       .vk_memory_model_device_scope = true,
       .physical_storage_buffer_address = true,
       .workgroup_memory_explicit_layout = true,
+      .image_read_without_format = true,
     },
    .ubo_addr_format = nir_address_format_32bit_index_offset,
    .ssbo_addr_format = nir_address_format_32bit_index_offset,
@@ -245,6 +247,31 @@ v3dv_pipeline_get_nir_options(void)
    return &v3dv_nir_options;
 }
 
+static const struct vk_ycbcr_conversion_state *
+lookup_ycbcr_conversion(const void *_pipeline_layout, uint32_t set,
+                        uint32_t binding, uint32_t array_index)
+{
+   struct v3dv_pipeline_layout *pipeline_layout =
+      (struct v3dv_pipeline_layout *) _pipeline_layout;
+
+   assert(set < pipeline_layout->num_sets);
+   struct v3dv_descriptor_set_layout *set_layout =
+      pipeline_layout->set[set].layout;
+
+   assert(binding < set_layout->binding_count);
+   struct v3dv_descriptor_set_binding_layout *bind_layout =
+      &set_layout->binding[binding];
+
+   if (bind_layout->immutable_samplers_offset) {
+      const struct v3dv_sampler *immutable_samplers =
+         v3dv_immutable_samplers(set_layout, bind_layout);
+      const struct v3dv_sampler *sampler = &immutable_samplers[array_index];
+      return sampler->conversion ? &sampler->conversion->state : NULL;
+   } else {
+      return NULL;
+   }
+}
+
 static void
 preprocess_nir(nir_shader *nir)
 {
@@ -285,7 +312,7 @@ preprocess_nir(nir_shader *nir)
    NIR_PASS(_, nir, nir_split_var_copies);
    NIR_PASS(_, nir, nir_split_struct_vars, nir_var_function_temp);
 
-   v3d_optimize_nir(NULL, nir, true);
+   v3d_optimize_nir(NULL, nir);
 
    NIR_PASS(_, nir, nir_lower_explicit_io,
             nir_var_mem_push_const,
@@ -316,7 +343,7 @@ preprocess_nir(nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_frexp);
 
    /* Get rid of split copies */
-   v3d_optimize_nir(NULL, nir, false);
+   v3d_optimize_nir(NULL, nir);
 }
 
 static nir_shader *
@@ -325,6 +352,7 @@ shader_module_compile_to_nir(struct v3dv_device *device,
 {
    nir_shader *nir;
    const nir_shader_compiler_options *nir_options = &v3dv_nir_options;
+   gl_shader_stage gl_stage = broadcom_shader_stage_to_gl(stage->stage);
 
 
    if (V3D_DBG(DUMP_SPIRV) && stage->module->nir == NULL)
@@ -335,7 +363,7 @@ shader_module_compile_to_nir(struct v3dv_device *device,
     * call it again here.
     */
    VkResult result = vk_shader_module_to_nir(&device->vk, stage->module,
-                                             broadcom_shader_stage_to_gl(stage->stage),
+                                             gl_stage,
                                              stage->entrypoint,
                                              stage->spec_info,
                                              &default_spirv_options,
@@ -343,7 +371,7 @@ shader_module_compile_to_nir(struct v3dv_device *device,
                                              NULL, &nir);
    if (result != VK_SUCCESS)
       return NULL;
-   assert(nir->info.stage == broadcom_shader_stage_to_gl(stage->stage));
+   assert(nir->info.stage == gl_stage);
 
    if (V3D_DBG(SHADERDB) && stage->module->nir == NULL) {
       char sha1buf[41];
@@ -351,8 +379,7 @@ shader_module_compile_to_nir(struct v3dv_device *device,
       nir->info.name = ralloc_strdup(nir, sha1buf);
    }
 
-   if (V3D_DBG(NIR) ||
-       v3d_debug_flag_for_shader_stage(broadcom_shader_stage_to_gl(stage->stage))) {
+   if (V3D_DBG(NIR) || v3d_debug_flag_for_shader_stage(gl_stage)) {
       fprintf(stderr, "NIR after vk_shader_module_to_nir: %s prog %d NIR:\n",
               broadcom_shader_stage_name(stage->stage),
               stage->program_id);
@@ -381,7 +408,8 @@ descriptor_map_add(struct v3dv_descriptor_map *map,
                    int array_index,
                    int array_size,
                    int start_index,
-                   uint8_t return_size)
+                   uint8_t return_size,
+                   uint8_t plane)
 {
    assert(array_index < array_size);
    assert(return_size == 16 || return_size == 32);
@@ -391,7 +419,8 @@ descriptor_map_add(struct v3dv_descriptor_map *map,
       if (map->used[index] &&
           set == map->set[index] &&
           binding == map->binding[index] &&
-          array_index == map->array_index[index]) {
+          array_index == map->array_index[index] &&
+          plane == map->plane[index]) {
          assert(array_size == map->array_size[index]);
          if (return_size != map->return_size[index]) {
             /* It the return_size is different it means that the same sampler
@@ -416,6 +445,7 @@ descriptor_map_add(struct v3dv_descriptor_map *map,
    map->array_index[index] = array_index;
    map->array_size[index] = array_size;
    map->return_size[index] = return_size;
+   map->plane[index] = plane;
    map->num_desc = MAX2(map->num_desc, index + 1);
 
    return index;
@@ -523,7 +553,8 @@ lower_vulkan_resource_index(nir_builder *b,
                                  const_val->u32,
                                  binding_layout->array_size,
                                  start_index,
-                                 32 /* return_size: doesn't really apply for this case */);
+                                 32 /* return_size: doesn't really apply for this case */,
+                                 0);
 
       /* We always reserve index 0 for push constants */
       if (binding_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
@@ -549,20 +580,34 @@ lower_vulkan_resource_index(nir_builder *b,
    nir_instr_remove(&instr->instr);
 }
 
+static uint8_t
+tex_instr_get_and_remove_plane_src(nir_tex_instr *tex)
+{
+   int plane_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_plane);
+   if (plane_src_idx < 0)
+       return 0;
+
+   uint8_t plane = nir_src_as_uint(tex->src[plane_src_idx].src);
+   nir_tex_instr_remove_src(tex, plane_src_idx);
+   return plane;
+}
+
 /* Returns return_size, so it could be used for the case of not having a
  * sampler object
  */
 static uint8_t
-lower_tex_src_to_offset(nir_builder *b,
-                        nir_tex_instr *instr,
-                        unsigned src_idx,
-                        struct lower_pipeline_layout_state *state)
+lower_tex_src(nir_builder *b,
+              nir_tex_instr *instr,
+              unsigned src_idx,
+              struct lower_pipeline_layout_state *state)
 {
    nir_ssa_def *index = NULL;
    unsigned base_index = 0;
    unsigned array_elements = 1;
    nir_tex_src *src = &instr->src[src_idx];
    bool is_sampler = src->src_type == nir_tex_src_sampler_deref;
+
+   uint8_t plane = tex_instr_get_and_remove_plane_src(instr);
 
    /* We compute first the offsets */
    nir_deref_instr *deref = nir_instr_as_deref(src->src.ssa->parent_instr);
@@ -636,7 +681,7 @@ lower_tex_src_to_offset(nir_builder *b,
    else  if (V3D_DBG(TMU_32BIT))
       return_size = 32;
    else
-      return_size = relaxed_precision || instr->is_shadow ? 16 : 32;
+      return_size = relaxed_precision ? 16 : 32;
 
    struct v3dv_descriptor_map *map =
       pipeline_get_descriptor_map(state->pipeline, binding_layout->type,
@@ -648,7 +693,8 @@ lower_tex_src_to_offset(nir_builder *b,
                          array_index,
                          binding_layout->array_size,
                          0,
-                         return_size);
+                         return_size,
+                         plane);
 
    if (is_sampler)
       instr->sampler_index = desc_index;
@@ -669,13 +715,13 @@ lower_sampler(nir_builder *b,
       nir_tex_instr_src_index(instr, nir_tex_src_texture_deref);
 
    if (texture_idx >= 0)
-      return_size = lower_tex_src_to_offset(b, instr, texture_idx, state);
+      return_size = lower_tex_src(b, instr, texture_idx, state);
 
    int sampler_idx =
       nir_tex_instr_src_index(instr, nir_tex_src_sampler_deref);
 
    if (sampler_idx >= 0)
-      lower_tex_src_to_offset(b, instr, sampler_idx, state);
+      lower_tex_src(b, instr, sampler_idx, state);
 
    if (texture_idx < 0 && sampler_idx < 0)
       return false;
@@ -692,7 +738,7 @@ lower_sampler(nir_builder *b,
    return true;
 }
 
-/* FIXME: really similar to lower_tex_src_to_offset, perhaps refactor? */
+/* FIXME: really similar to lower_tex_src, perhaps refactor? */
 static void
 lower_image_deref(nir_builder *b,
                   nir_intrinsic_instr *instr,
@@ -755,7 +801,8 @@ lower_image_deref(nir_builder *b,
                          array_index,
                          binding_layout->array_size,
                          0,
-                         32 /* return_size: doesn't apply for textures */);
+                         32 /* return_size: doesn't apply for textures */,
+                         0);
 
    /* Note: we don't need to do anything here in relation to the precision and
     * the output size because for images we can infer that info from the image
@@ -1107,11 +1154,16 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
 
       /* If logic operations are enabled then we might emit color reads and we
        * need to know the color buffer format and swizzle for that
+       *
        */
       if (key->logicop_func != PIPE_LOGICOP_COPY) {
+         /* Framebuffer formats should be single plane */
+         assert(vk_format_get_plane_count(fb_format) == 1);
          key->color_fmt[i].format = fb_pipe_format;
          memcpy(key->color_fmt[i].swizzle,
-                v3dv_get_format_swizzle(p_stage->pipeline->device, fb_format),
+                v3dv_get_format_swizzle(p_stage->pipeline->device,
+                                        fb_format,
+                                        0),
                 sizeof(key->color_fmt[i].swizzle));
       }
 
@@ -1569,9 +1621,9 @@ pipeline_compile_shader_variant(struct v3dv_pipeline_stage *p_stage,
    struct v3dv_pipeline *pipeline = p_stage->pipeline;
    struct v3dv_physical_device *physical_device = pipeline->device->pdevice;
    const struct v3d_compiler *compiler = physical_device->compiler;
+   gl_shader_stage gl_stage = broadcom_shader_stage_to_gl(p_stage->stage);
 
-   if (V3D_DBG(NIR) ||
-       v3d_debug_flag_for_shader_stage(broadcom_shader_stage_to_gl(p_stage->stage))) {
+   if (V3D_DBG(NIR) || v3d_debug_flag_for_shader_stage(gl_stage)) {
       fprintf(stderr, "Just before v3d_compile: %s prog %d NIR:\n",
               broadcom_shader_stage_name(p_stage->stage),
               p_stage->program_id);
@@ -1582,8 +1634,7 @@ pipeline_compile_shader_variant(struct v3dv_pipeline_stage *p_stage,
    uint64_t *qpu_insts;
    uint32_t qpu_insts_size;
    struct v3d_prog_data *prog_data;
-   uint32_t prog_data_size =
-      v3d_prog_data_size(broadcom_shader_stage_to_gl(p_stage->stage));
+   uint32_t prog_data_size = v3d_prog_data_size(gl_stage);
 
    qpu_insts = v3d_compile(compiler,
                            key, &prog_data,
@@ -1630,11 +1681,11 @@ link_shaders(nir_shader *producer, nir_shader *consumer)
 
    nir_lower_io_arrays_to_elements(producer, consumer);
 
-   v3d_optimize_nir(NULL, producer, false);
-   v3d_optimize_nir(NULL, consumer, false);
+   v3d_optimize_nir(NULL, producer);
+   v3d_optimize_nir(NULL, consumer);
 
    if (nir_link_opt_varyings(producer, consumer))
-      v3d_optimize_nir(NULL, consumer, false);
+      v3d_optimize_nir(NULL, consumer);
 
    NIR_PASS(_, producer, nir_remove_dead_variables, nir_var_shader_out, NULL);
    NIR_PASS(_, consumer, nir_remove_dead_variables, nir_var_shader_in, NULL);
@@ -1643,8 +1694,8 @@ link_shaders(nir_shader *producer, nir_shader *consumer)
       NIR_PASS(_, producer, nir_lower_global_vars_to_local);
       NIR_PASS(_, consumer, nir_lower_global_vars_to_local);
 
-      v3d_optimize_nir(NULL, producer, false);
-      v3d_optimize_nir(NULL, consumer, false);
+      v3d_optimize_nir(NULL, producer);
+      v3d_optimize_nir(NULL, consumer);
 
       /* Optimizations can cause varyings to become unused.
        * nir_compact_varyings() depends on all dead varyings being removed so
@@ -1665,6 +1716,9 @@ pipeline_lower_nir(struct v3dv_pipeline *pipeline,
    assert(pipeline->shared_data &&
           pipeline->shared_data->maps[p_stage->stage]);
 
+   NIR_PASS_V(p_stage->nir, nir_vk_lower_ycbcr_tex,
+              lookup_ycbcr_conversion, layout);
+
    nir_shader_gather_info(p_stage->nir, nir_shader_get_entrypoint(p_stage->nir));
 
    /* We add this because we need a valid sampler for nir_lower_tex to do
@@ -1678,10 +1732,10 @@ pipeline_lower_nir(struct v3dv_pipeline *pipeline,
       pipeline->shared_data->maps[p_stage->stage];
 
    UNUSED unsigned index;
-   index = descriptor_map_add(&maps->sampler_map, -1, -1, -1, 0, 0, 16);
+   index = descriptor_map_add(&maps->sampler_map, -1, -1, -1, 0, 0, 16, 0);
    assert(index == V3DV_NO_SAMPLER_16BIT_IDX);
 
-   index = descriptor_map_add(&maps->sampler_map, -2, -2, -2, 0, 0, 32);
+   index = descriptor_map_add(&maps->sampler_map, -2, -2, -2, 0, 0, 32, 0);
    assert(index == V3DV_NO_SAMPLER_32BIT_IDX);
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
@@ -1921,9 +1975,11 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
        * need to know the color buffer format and swizzle for that
        */
       if (key->logicop_func != PIPE_LOGICOP_COPY) {
+         /* Framebuffer formats should be single plane */
+         assert(vk_format_get_plane_count(fb_format) == 1);
          key->color_fmt[i].format = fb_pipe_format;
          memcpy(key->color_fmt[i].swizzle,
-                v3dv_get_format_swizzle(pipeline->device, fb_format),
+                v3dv_get_format_swizzle(pipeline->device, fb_format, 0),
                 sizeof(key->color_fmt[i].swizzle));
       }
 
@@ -2910,11 +2966,12 @@ pipeline_init(struct v3dv_pipeline *pipeline,
     */
    assert(!ds_info || !ds_info->depthBoundsTestEnable);
 
+   enable_depth_bias(pipeline, rs_info);
+
    v3dv_X(device, pipeline_pack_state)(pipeline, cb_info, ds_info,
                                        rs_info, pv_info, ls_info,
                                        ms_info);
 
-   enable_depth_bias(pipeline, rs_info);
    pipeline_set_sample_mask(pipeline, ms_info);
    pipeline_set_sample_rate_shading(pipeline, ms_info);
 
@@ -3142,7 +3199,7 @@ pipeline_compile_compute(struct v3dv_pipeline *pipeline,
    p_stage->nir = pipeline_stage_get_nir(p_stage, pipeline, cache);
    assert(p_stage->nir);
 
-   v3d_optimize_nir(NULL, p_stage->nir, false);
+   v3d_optimize_nir(NULL, p_stage->nir);
    pipeline_lower_nir(pipeline, p_stage, pipeline->layout);
    lower_cs_shared(p_stage->nir);
 

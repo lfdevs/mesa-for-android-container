@@ -2,25 +2,15 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
-# frontbuffer reading failures?
-spec@!opengl 1.1@read-front,Fail
-spec@!opengl 1.1@read-front clear-front-first,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=2,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=4,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=6,Fail
-spec@!opengl 1.1@read-front clear-front-first samples=8,Fail
-spec@!opengl 1.1@read-front samples=2,Fail
-spec@!opengl 1.1@read-front samples=4,Fail
-spec@!opengl 1.1@read-front samples=6,Fail
-spec@!opengl 1.1@read-front samples=8,Fail
-spec@!opengl 1.1@windowoverlap,Fail
-
 fast_color_clear@fcc-write-after-clear,Fail
 
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 
 # Compat mode failure
 spec@!opengl 1.0@rasterpos,Fail
+
+spec@!opengl 1.1@line-smooth-coverage,Fail
+spec@!opengl 1.1@line-smooth-stipple,Fail
 
 spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
@@ -35,8 +25,6 @@ spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
 
 spec@arb_direct_state_access@gettextureimage-formats init-by-rendering,Fail
-
-spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-vs-non-uniform-control-flow-ssbo,Fail
 
 spec@arb_indirect_parameters@conditional-render,Fail
 spec@arb_indirect_parameters@conditional-render@Query result: Fail. Inverted mode: No.  Points drawn: 6,Fail
@@ -194,6 +182,10 @@ KHR-GL46.direct_state_access.textures_storage_multisample_3d_rgb32i,Fail
 KHR-GL46.direct_state_access.textures_storage_multisample_3d_rgba16i,Fail
 KHR-GL46.direct_state_access.textures_storage_multisample_3d_rgba32i,Fail
 KHR-GL46.direct_state_access.textures_storage_multisample_3d_rgba8i,Fail
+
+# glcts: ../src/compiler/nir/nir.h:127: nir_component_mask: Assertion `nir_num_components_valid(num_components)' failed.
+KHR-GL46.gpu_shader_fp64.fp64.state_query,Crash
+
 KHR-GL46.sample_shading.render.rgba8i.full,Fail
 KHR-GL46.sample_shading.render.rgba8i.half,Fail
 KHR-GL46.sample_shading.render.rgba8i.none,Fail
@@ -956,5 +948,13 @@ spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8UI/Destinat
 spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8_SNORM/Destination: GL_RG16I,Fail
 spec@nv_copy_image@nv_copy_image-formats --samples=8@Source: GL_RGBA8_SNORM/Destination: GL_RGBA8I,Fail
 
-# See issue #7152
-spec@ext_transform_feedback@builtin-varyings gl_culldistance,Fail
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/8348
+KHR-GL46.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_tessLevel,Fail
+KHR-GL46.tessellation_shader.tessellation_shader_tessellation.TES,Fail
+spec@arb_tessellation_shader@execution@vs-tes-tessinner-tessouter-inputs-quads,Fail
+spec@arb_tessellation_shader@execution@vs-tes-tessinner-tessouter-inputs-quads-dlist,Fail
+spec@arb_tessellation_shader@execution@vs-tes-tessinner-tessouter-inputs-tris,Fail
+
+# New CTS failures in 1.3.5.0
+KHR-GL46.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
+KHR-GL46.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail

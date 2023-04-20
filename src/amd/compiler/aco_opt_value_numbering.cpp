@@ -84,9 +84,6 @@ struct InstrHash {
     */
    std::size_t operator()(Instruction* instr) const
    {
-      if (instr->isVOP3())
-         return hash_murmur_32<VOP3_instruction>(instr);
-
       if (instr->isDPP16())
          return hash_murmur_32<DPP16_instruction>(instr);
 
@@ -96,10 +93,15 @@ struct InstrHash {
       if (instr->isSDWA())
          return hash_murmur_32<SDWA_instruction>(instr);
 
+      if (instr->isVINTERP_INREG())
+         return hash_murmur_32<VINTERP_inreg_instruction>(instr);
+
+      if (instr->isVALU())
+         return hash_murmur_32<VALU_instruction>(instr);
+
       switch (instr->format) {
       case Format::SMEM: return hash_murmur_32<SMEM_instruction>(instr);
       case Format::VINTRP: return hash_murmur_32<VINTRP_instruction>(instr);
-      case Format::VINTERP_INREG: return hash_murmur_32<VINTERP_inreg_instruction>(instr);
       case Format::DS: return hash_murmur_32<DS_instruction>(instr);
       case Format::SOPP: return hash_murmur_32<SOPP_instruction>(instr);
       case Format::SOPK: return hash_murmur_32<SOPK_instruction>(instr);
@@ -168,8 +170,8 @@ struct InstrPred {
          return a->pass_flags == b->pass_flags;
 
       if (a->isVOP3()) {
-         VOP3_instruction& a3 = a->vop3();
-         VOP3_instruction& b3 = b->vop3();
+         VALU_instruction& a3 = a->valu();
+         VALU_instruction& b3 = b->valu();
          for (unsigned i = 0; i < 3; i++) {
             if (a3.abs[i] != b3.abs[i] || a3.neg[i] != b3.neg[i])
                return false;
@@ -233,8 +235,8 @@ struct InstrPred {
          return true;
       }
       case Format::VOP3P: {
-         VOP3P_instruction& a3P = a->vop3p();
-         VOP3P_instruction& b3P = b->vop3p();
+         VALU_instruction& a3P = a->valu();
+         VALU_instruction& b3P = b->valu();
          for (unsigned i = 0; i < 3; i++) {
             if (a3P.neg_lo[i] != b3P.neg_lo[i] || a3P.neg_hi[i] != b3P.neg_hi[i])
                return false;
@@ -488,6 +490,9 @@ value_numbering(Program* program)
          ctx.exec_id -= block.linear_preds.size();
          loop_headers.pop_back();
       }
+
+      if (block.logical_idom == (int)block.index)
+         ctx.expr_values.clear();
 
       if (block.logical_idom != -1)
          process_block(ctx, block);

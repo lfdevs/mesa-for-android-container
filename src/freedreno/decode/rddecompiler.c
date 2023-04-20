@@ -231,9 +231,9 @@ decompile_register(uint32_t regbase, uint32_t *dwords, uint16_t cnt, int level)
       if (cnt == 0) {
          printlvl(level, "pkt(cs, %u);\n", dword);
       } else {
-         char reg_name[32];
-         char field_name[32];
-         char reg_idx[32];
+         char reg_name[33];
+         char field_name[33];
+         char reg_idx[33];
 
          /* reginfo doesn't return reg name in a compilable format, for now just
           * parse it into a compilable reg name.

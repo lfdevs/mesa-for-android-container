@@ -60,7 +60,7 @@ public:
                                struct brw_wm_prog_data *prog_data,
                                nir_shader *shader)
       : fs_visitor(compiler, NULL, mem_ctx, NULL,
-                   &prog_data->base, shader, 8, false) {}
+                   &prog_data->base, shader, 8, false, false) {}
 };
 
 

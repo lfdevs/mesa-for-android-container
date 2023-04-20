@@ -353,7 +353,7 @@ _mesa_set_multisample(struct gl_context *ctx, GLboolean state)
    /* GL compatibility needs Multisample.Enable to determine program state
     * constants.
     */
-   if (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) {
+   if (_mesa_is_desktop_gl_compat(ctx) || _mesa_is_gles1(ctx)) {
       FLUSH_VERTICES(ctx, _NEW_MULTISAMPLE, GL_MULTISAMPLE_BIT | GL_ENABLE_BIT);
    } else {
       FLUSH_VERTICES(ctx, 0, GL_MULTISAMPLE_BIT | GL_ENABLE_BIT);
@@ -457,7 +457,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
             /* The compatibility profile needs _NEW_TRANSFORM to transform
              * clip planes according to the projection matrix.
              */
-            if (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) {
+            if (_mesa_is_desktop_gl_compat(ctx) || _mesa_is_gles1(ctx)) {
                FLUSH_VERTICES(ctx, _NEW_TRANSFORM,
                               GL_TRANSFORM_BIT | GL_ENABLE_BIT);
             } else {
@@ -470,7 +470,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
 
                /* The projection matrix transforms the clip plane. */
                /* TODO: glEnable might not be the best place to do it. */
-               if (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) {
+               if (_mesa_is_desktop_gl_compat(ctx) || _mesa_is_gles1(ctx)) {
                   _mesa_update_clip_plane(ctx, p);
                   ctx->NewDriverState |= ST_NEW_CLIP_STATE;
                }
@@ -1061,7 +1061,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
 
       /* GL_ARB_point_sprite */
       case GL_POINT_SPRITE:
-         if (!(ctx->API == API_OPENGL_COMPAT &&
+         if (!(_mesa_is_desktop_gl_compat(ctx) &&
                _mesa_has_ARB_point_sprite(ctx)) &&
              !_mesa_has_OES_point_sprite(ctx))
             goto invalid_enum_error;
@@ -1846,7 +1846,7 @@ _mesa_IsEnabled( GLenum cap )
 
       /* GL_ARB_point_sprite */
       case GL_POINT_SPRITE:
-         if (!(ctx->API == API_OPENGL_COMPAT &&
+         if (!(_mesa_is_desktop_gl_compat(ctx) &&
                _mesa_has_ARB_point_sprite(ctx)) &&
              !_mesa_has_OES_point_sprite(ctx))
             goto invalid_enum_error;

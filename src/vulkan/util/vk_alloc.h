@@ -27,7 +27,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #include "util/u_math.h"
 #include "util/macros.h"

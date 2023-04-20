@@ -27,6 +27,7 @@
 
 #include <stdio.h>
 #include "main/bufferobj.h"
+#include "main/context.h"
 #include "main/enums.h"
 #include "main/errors.h"
 #include "main/fbobject.h"
@@ -65,10 +66,12 @@
 #include "state_tracker/st_gen_mipmap.h"
 #include "state_tracker/st_atom.h"
 #include "state_tracker/st_sampler_view.h"
+#include "state_tracker/st_texcompress_compute.h"
 #include "state_tracker/st_util.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
+#include "util/log.h"
 #include "util/u_inlines.h"
 #include "util/u_upload_mgr.h"
 #include "pipe/p_shader_tokens.h"
@@ -426,6 +429,9 @@ st_astc_format_fallback(const struct st_context *st, mesa_format format)
    if (!_mesa_is_format_astc_2d(format))
       return false;
 
+   if (st->astc_void_extents_need_denorm_flush && !util_format_is_srgb(format))
+      return true;
+
    if (format == MESA_FORMAT_RGBA_ASTC_5x5 ||
        format == MESA_FORMAT_SRGB8_ALPHA8_ASTC_5x5)
       return !st->has_astc_5x5_ldr;
@@ -540,6 +546,76 @@ st_MapTextureImage(struct gl_context *ctx,
    }
 }
 
+static void
+log_unmap_time_delta(const struct pipe_box *box,
+                     const struct gl_texture_image *texImage,
+                     const char *pathname, int64_t start_us)
+{
+   assert(start_us >= 0);
+   mesa_logi("unmap %dx%d pixels of %s data for %s tex, %s path: "
+             "%"PRIi64" us\n", box->width, box->height,
+             util_format_short_name(texImage->TexFormat),
+             util_format_short_name(texImage->pt->format),
+             pathname, os_time_get() - start_us);
+}
+
+/**
+ * Upload ASTC data but flush denorms in any void extent blocks.
+ */
+static void
+upload_astc_slice_with_flushed_void_extents(uint8_t *dst,
+                                            unsigned dst_stride,
+                                            const uint8_t *src,
+                                            unsigned src_stride,
+                                            unsigned src_width,
+                                           unsigned src_height,
+                                           mesa_format format)
+{
+   unsigned blk_w, blk_h;
+   _mesa_get_format_block_size(format, &blk_w, &blk_h);
+
+   unsigned x_blocks = (src_width + blk_w - 1) / blk_w;
+   unsigned y_blocks = (src_height + blk_h - 1) / blk_h;
+
+   for (int y = 0; y < y_blocks; y++) {
+      /* An ASTC block is stored in little endian mode. The byte that
+       * contains bits 0..7 is stored at the lower address in memory.
+       */
+      struct astc_block {
+         uint16_t header;
+         uint16_t dontcare0;
+         uint16_t dontcare1;
+         uint16_t dontcare2;
+         uint16_t R;
+         uint16_t G;
+         uint16_t B;
+         uint16_t A;
+      } *blocks = (struct astc_block *) src;
+
+      /* Iterate over every copied block in the row */
+      for (int x = 0; x < x_blocks; x++) {
+         /* Check if the header matches that of an LDR void-extent block */
+         if ((blocks[x].header & 0xfff) == 0xDFC) {
+            struct astc_block flushed_block = {
+               .header = blocks[x].header,
+               .dontcare0 = blocks[x].dontcare0,
+               .dontcare1 = blocks[x].dontcare1,
+               .dontcare2 = blocks[x].dontcare2,
+               .R = blocks[x].R < 4 ? 0 : blocks[x].R,
+               .G = blocks[x].G < 4 ? 0 : blocks[x].G,
+               .B = blocks[x].B < 4 ? 0 : blocks[x].B,
+               .A = blocks[x].A < 4 ? 0 : blocks[x].A,
+            };
+            memcpy(&dst[x * 16], &flushed_block, 16);
+         } else {
+            memcpy(&dst[x * 16], &blocks[x], 16);
+         }
+      }
+
+      dst += dst_stride;
+      src += src_stride;
+   }
+}
 
 void
 st_UnmapTextureImage(struct gl_context *ctx,
@@ -556,6 +632,45 @@ st_UnmapTextureImage(struct gl_context *ctx,
 
       if (itransfer->box.depth != 0) {
          assert(itransfer->box.depth == 1);
+
+         /* Toggle logging for the different unmap paths. */
+         const bool log_unmap_time = false;
+         const int64_t unmap_start_us = log_unmap_time ? os_time_get() : 0;
+
+         if (_mesa_is_format_astc_2d(texImage->TexFormat) &&
+             !_mesa_is_format_astc_2d(texImage->pt->format) &&
+             util_format_is_compressed(texImage->pt->format)) {
+
+            /* DXT5 is the only supported transcode target from ASTC. */
+            assert(texImage->pt->format == PIPE_FORMAT_DXT5_RGBA ||
+                   texImage->pt->format == PIPE_FORMAT_DXT5_SRGBA);
+
+            /* Try a compute-based transcode. */
+            if (itransfer->box.x == 0 &&
+                itransfer->box.y == 0 &&
+                itransfer->box.width == texImage->Width &&
+                itransfer->box.height == texImage->Height &&
+                _mesa_has_compute_shaders(ctx) &&
+                st_compute_transcode_astc_to_dxt5(st,
+                   itransfer->temp_data,
+                   itransfer->temp_stride,
+                   texImage->TexFormat,
+                   texImage->pt,
+                   st_texture_image_resource_level(texImage),
+                   itransfer->box.z)) {
+
+               if (log_unmap_time) {
+                  log_unmap_time_delta(&itransfer->box, texImage, "GPU",
+                                       unmap_start_us);
+               }
+
+               /* Mark the unmap as complete. */
+               assert(itransfer->transfer == NULL);
+               memset(itransfer, 0, sizeof(struct st_texture_image_transfer));
+
+               return;
+            }
+         }
 
          struct pipe_transfer *transfer;
          GLubyte *map = st_texture_image_map(st, texImage,
@@ -574,7 +689,15 @@ st_UnmapTextureImage(struct gl_context *ctx,
 
          assert(z == transfer->box.z);
 
-         if (util_format_is_compressed(texImage->pt->format)) {
+         if (_mesa_is_format_astc_2d(texImage->pt->format)) {
+            assert(st->astc_void_extents_need_denorm_flush);
+            upload_astc_slice_with_flushed_void_extents(map, transfer->stride,
+                                                        itransfer->temp_data,
+                                                        itransfer->temp_stride,
+                                                        transfer->box.width,
+                                                        transfer->box.height,
+                                                        texImage->pt->format);
+         } else if (util_format_is_compressed(texImage->pt->format)) {
             /* Transcode into a different compressed format. */
             unsigned size =
                _mesa_format_image_size(PIPE_FORMAT_R8G8B8A8_UNORM,
@@ -668,6 +791,12 @@ st_UnmapTextureImage(struct gl_context *ctx,
          }
 
          st_texture_image_unmap(st, texImage, slice);
+
+         if (log_unmap_time) {
+            log_unmap_time_delta(&itransfer->box, texImage, "CPU",
+                                 unmap_start_us);
+         }
+
          memset(&itransfer->box, 0, sizeof(struct pipe_box));
       }
 
@@ -3085,7 +3214,7 @@ st_finalize_texture(struct gl_context *ctx,
 
    /* May need to create a new gallium texture:
     */
-   if (!tObj->pt) {
+   if (!tObj->pt && !tObj->NullTexture) {
       GLuint bindings = default_bindings(st, firstImageFormat);
 
       tObj->pt = st_texture_create(st,
@@ -3115,7 +3244,7 @@ st_finalize_texture(struct gl_context *ctx,
 
          /* Need to import images in main memory or held in other textures.
           */
-         if (stImage && tObj->pt != stImage->pt) {
+         if (stImage && !tObj->NullTexture && tObj->pt != stImage->pt) {
             GLuint height;
             GLuint depth;
 

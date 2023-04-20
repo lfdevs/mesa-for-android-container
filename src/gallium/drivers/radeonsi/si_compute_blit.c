@@ -711,11 +711,6 @@ bool si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, u
 
       dstx = util_format_get_nblocksx(src_format, dstx);
 
-      new_box = *src_box;
-      new_box.x = util_format_get_nblocksx(src_format, src_box->x);
-      new_box.width = util_format_get_nblocksx(src_format, src_box->width);
-      src_box = &new_box;
-
       src_format = dst_format = PIPE_FORMAT_R32_UINT;
 
       /* Interpreting 422 subsampled format (16 bpp) as 32 bpp
@@ -1083,7 +1078,7 @@ static bool si_should_blit_clamp_xy(const struct pipe_blit_info *info)
    return !in_bounds;
 }
 
-bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info)
+bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info, bool testing)
 {
    /* Compute blits require D16 right now (see the ISA).
     *
@@ -1093,7 +1088,7 @@ bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info)
     *
     * TODO: benchmark the performance on gfx11
     */
-   if (sctx->gfx_level < GFX11)
+   if (sctx->gfx_level < GFX11 && !testing)
       return false;
 
    if (!si_can_use_compute_blit(sctx, info->dst.format, info->dst.resource->nr_samples, true,
@@ -1163,10 +1158,15 @@ bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info)
    options.use_integer_one = util_format_is_pure_integer(info->dst.format) &&
                              options.last_src_channel < options.last_dst_channel &&
                              options.last_dst_channel == 3;
-   options.fp16_rtz = !util_format_is_pure_integer(info->dst.format) &&
-                      (dst_desc->channel[i].size <= 10 ||
-                       (dst_desc->channel[i].type == UTIL_FORMAT_TYPE_FLOAT &&
-                        dst_desc->channel[i].size <= 16));
+
+   /* WARNING: We only use this codepath for AMD_TEST to get results identical with the gfx blit,
+    * otherwise we wouldn't be able to fully validate whether everything else works.
+    * The test expects that the behavior is identical to u_blitter.
+    */
+   if (testing) {
+      options.fp16_rtz = !util_format_is_pure_integer(info->dst.format) &&
+                         dst_desc->channel[i].size <= 10;
+   }
 
    struct hash_entry *entry = _mesa_hash_table_search(sctx->cs_blit_shaders,
                                                       (void*)(uintptr_t)options.key);

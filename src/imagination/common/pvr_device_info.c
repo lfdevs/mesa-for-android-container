@@ -53,7 +53,6 @@ const struct pvr_device_features pvr_device_features_4_V_2_51 = {
    .has_num_clusters = true,
    .has_num_raster_pipes = true,
    .has_num_user_clip_planes = true,
-   .has_robust_buffer_access = true,
    .has_slc_cache_line_size_bits = true,
    .has_slc_mcu_cache_controls = true,
    .has_tf_bicubic_filter = true,

@@ -91,6 +91,7 @@
 #include "main/shaderobj.h"
 #include "main/enums.h"
 #include "main/mtypes.h"
+#include "main/context.h"
 
 
 namespace {
@@ -529,7 +530,7 @@ analyze_clip_cull_usage(struct gl_shader_program *prog,
    info->clip_distance_array_size = 0;
    info->cull_distance_array_size = 0;
 
-   if (prog->data->Version >= (prog->IsES ? 300 : 130)) {
+   if (prog->GLSL_Version >= (prog->IsES ? 300 : 130)) {
       /* From section 7.1 (Vertex Shader Special Variables) of the
        * GLSL 1.30 spec:
        *
@@ -649,7 +650,7 @@ validate_vertex_shader_executable(struct gl_shader_program *prog,
     * All GLSL ES Versions are similar to GLSL 1.40--failing to write to
     * gl_Position is not an error.
     */
-   if (prog->data->Version < (prog->IsES ? 300 : 140)) {
+   if (prog->GLSL_Version < (prog->IsES ? 300 : 140)) {
       find_variable gl_Position("gl_Position");
       find_assignments(shader->ir, &gl_Position);
       if (!gl_Position.found) {
@@ -1066,7 +1067,8 @@ cross_validate_globals(const struct gl_constants *consts,
          if (!consts->AllowGLSLRelaxedES &&
              prog->IsES && !var->get_interface_type() &&
              existing->data.precision != var->data.precision) {
-            if ((existing->data.used && var->data.used) || prog->data->Version >= 300) {
+            if ((existing->data.used && var->data.used) ||
+                prog->GLSL_Version >= 300) {
                linker_error(prog, "declarations for %s `%s` have "
                             "mismatching precision qualifiers\n",
                             mode_string(var), var->name);
@@ -1974,7 +1976,7 @@ link_fs_inout_layout_qualifiers(struct gl_shader_program *prog,
    bool pixel_center_integer = false;
 
    if (linked_shader->Stage != MESA_SHADER_FRAGMENT ||
-       (prog->data->Version < 150 &&
+       (prog->GLSL_Version < 150 &&
         !prog->ARB_fragment_coord_conventions_enable))
       return;
 
@@ -2052,8 +2054,7 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
    /* No in/out qualifiers defined for anything but GLSL 1.50+
     * geometry shaders so far.
     */
-   if (gl_prog->info.stage != MESA_SHADER_GEOMETRY ||
-       prog->data->Version < 150)
+   if (gl_prog->info.stage != MESA_SHADER_GEOMETRY || prog->GLSL_Version < 150)
       return;
 
    int vertices_out = -1;
@@ -2963,7 +2964,7 @@ assign_attribute_or_color_locations(void *mem_ctx,
                      }
                   }
                } else if (target_index == MESA_SHADER_FRAGMENT ||
-                          (prog->IsES && prog->data->Version >= 300)) {
+                          (prog->IsES && prog->GLSL_Version >= 300)) {
                   linker_error(prog, "overlapping location is assigned "
                                "to %s `%s' %d %d %d\n", string, var->name,
                                used_locations, use_mask, attr);
@@ -3629,7 +3630,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       goto done;
    }
 
-   prog->data->Version = max_version;
+   prog->GLSL_Version = max_version;
    prog->IsES = prog->Shaders[0]->IsES;
 
    /* Some shaders have to be linked with some other shaders present.
@@ -3817,7 +3818,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
          lower_named_interface_blocks(mem_ctx, prog->_LinkedShaders[i]);
    }
 
-   if (prog->IsES && prog->data->Version == 100)
+   if (prog->IsES && prog->GLSL_Version == 100)
       if (!validate_invariant_builtins(prog,
             prog->_LinkedShaders[MESA_SHADER_VERTEX],
             prog->_LinkedShaders[MESA_SHADER_FRAGMENT]))
@@ -3863,10 +3864,6 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
          lower_clip_cull_distance(prog, prog->_LinkedShaders[i]);
       }
 
-      if (consts->LowerTessLevel) {
-         lower_tess_level(prog->_LinkedShaders[i]);
-      }
-
       /* Section 13.46 (Vertex Attribute Aliasing) of the OpenGL ES 3.2
        * specification says:
        *
@@ -3901,41 +3898,6 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
 
    if(!link_varyings(consts, prog, mem_ctx))
       goto done;
-
-   /* OpenGL ES < 3.1 requires that a vertex shader and a fragment shader both
-    * be present in a linked program. GL_ARB_ES2_compatibility doesn't say
-    * anything about shader linking when one of the shaders (vertex or
-    * fragment shader) is absent. So, the extension shouldn't change the
-    * behavior specified in GLSL specification.
-    *
-    * From OpenGL ES 3.1 specification (7.3 Program Objects):
-    *     "Linking can fail for a variety of reasons as specified in the
-    *     OpenGL ES Shading Language Specification, as well as any of the
-    *     following reasons:
-    *
-    *     ...
-    *
-    *     * program contains objects to form either a vertex shader or
-    *       fragment shader, and program is not separable, and does not
-    *       contain objects to form both a vertex shader and fragment
-    *       shader."
-    *
-    * However, the only scenario in 3.1+ where we don't require them both is
-    * when we have a compute shader. For example:
-    *
-    * - No shaders is a link error.
-    * - Geom or Tess without a Vertex shader is a link error which means we
-    *   always require a Vertex shader and hence a Fragment shader.
-    * - Finally a Compute shader linked with any other stage is a link error.
-    */
-   if (!prog->SeparateShader && ctx->API == API_OPENGLES2 &&
-       num_shaders[MESA_SHADER_COMPUTE] == 0) {
-      if (prog->_LinkedShaders[MESA_SHADER_VERTEX] == NULL) {
-         linker_error(prog, "program lacks a vertex shader\n");
-      } else if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] == NULL) {
-         linker_error(prog, "program lacks a fragment shader\n");
-      }
-   }
 
 done:
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {

@@ -161,6 +161,12 @@ intel_i915_query_alloc(int fd, uint64_t query_id, int32_t *query_length)
 
 bool intel_gem_supports_syncobj_wait(int fd);
 
+bool
+intel_gem_read_render_timestamp(int fd, enum intel_kmd_type kmd_type,
+                                uint64_t *value);
+bool intel_gem_can_render_on_fd(int fd, enum intel_kmd_type kmd_type);
+
+/* Functions only used by i915 */
 bool intel_gem_create_context(int fd, uint32_t *context_id);
 bool intel_gem_destroy_context(int fd, uint32_t context_id);
 bool
@@ -174,10 +180,7 @@ intel_gem_set_context_param(int fd, uint32_t context, uint32_t param,
 bool
 intel_gem_get_context_param(int fd, uint32_t context, uint32_t param,
                             uint64_t *value);
-
-bool intel_gem_read_render_timestamp(int fd, uint64_t *value);
 bool intel_gem_get_param(int fd, uint32_t param, int *value);
-bool intel_gem_can_render_on_fd(int fd);
 
 #ifdef __cplusplus
 }
@@ -189,7 +192,8 @@ enum intel_gem_create_context_flags {
 };
 bool intel_gem_create_context_ext(int fd, enum intel_gem_create_context_flags flags,
                                   uint32_t *ctx_id);
-bool intel_gem_supports_protected_context(int fd);
+bool intel_gem_supports_protected_context(int fd,
+                                          enum intel_kmd_type kmd_type);
 
 static inline void
 intel_gem_add_ext(__u64 *ptr, uint32_t ext_name,

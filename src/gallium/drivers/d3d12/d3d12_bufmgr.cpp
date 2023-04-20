@@ -81,9 +81,10 @@ d3d12_bo_wrap_res(struct d3d12_screen *screen, ID3D12Resource *res, enum d3d12_r
 {
    struct d3d12_bo *bo;
 
-   bo = CALLOC_STRUCT(d3d12_bo);
+   bo = MALLOC_STRUCT(d3d12_bo);
    if (!bo)
       return NULL;
+   memset(bo, 0, offsetof(d3d12_bo, local_context_states));
 
    D3D12_RESOURCE_DESC desc = GetDesc(res);
    unsigned array_size = desc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1 : desc.DepthOrArraySize;
@@ -158,9 +159,10 @@ d3d12_bo_wrap_buffer(struct d3d12_screen *screen, struct pb_buffer *buf)
 {
    struct d3d12_bo *bo;
 
-   bo = CALLOC_STRUCT(d3d12_bo);
+   bo = MALLOC_STRUCT(d3d12_bo);
    if (!bo)
       return NULL;
+   memset(bo, 0, offsetof(d3d12_bo, local_context_states));
 
    pipe_reference_init(&bo->reference, 1);
    bo->screen = screen;
@@ -193,13 +195,21 @@ d3d12_bo_unreference(struct d3d12_bo *bo)
       /* MSVC's offsetof fails when the name is ambiguous between struct and function */
       typedef struct d3d12_context d3d12_context_type;
       list_for_each_entry(d3d12_context_type, ctx, &bo->screen->context_list, context_list_entry)
-         util_dynarray_append(&ctx->recently_destroyed_bos, uint64_t, bo->unique_id);
+         if (ctx->id == D3D12_CONTEXT_NO_ID)
+            util_dynarray_append(&ctx->recently_destroyed_bos, uint64_t, bo->unique_id);
 
       mtx_unlock(&bo->screen->submit_mutex);
 
       d3d12_resource_state_cleanup(&bo->global_state);
       if (bo->res)
          bo->res->Release();
+
+      uint64_t mask = bo->local_context_state_mask;
+      while (mask) {
+         int ctxid = u_bit_scan64(&mask);
+         d3d12_destroy_context_state_table_entry(&bo->local_context_states[ctxid]);
+      }
+
       FREE(bo);
    }
 }

@@ -250,6 +250,52 @@ struct pan_linkage {
    uint32_t stride;
 };
 
+/* System value infrastructure */
+#define MAX_SYSVAL_COUNT 32
+
+/* Allow 2D of sysval IDs, while allowing nonparametric sysvals to equal
+ * their class for equal comparison */
+
+#define PAN_SYSVAL(type, no)    (((no) << 16) | PAN_SYSVAL_##type)
+#define PAN_SYSVAL_TYPE(sysval) ((sysval)&0xffff)
+#define PAN_SYSVAL_ID(sysval)   ((sysval) >> 16)
+
+/* Define some common types. We start at one for easy indexing of hash
+ * tables internal to the compiler */
+
+enum {
+   PAN_SYSVAL_VIEWPORT_SCALE = 1,
+   PAN_SYSVAL_VIEWPORT_OFFSET = 2,
+   PAN_SYSVAL_TEXTURE_SIZE = 3,
+   PAN_SYSVAL_SSBO = 4,
+   PAN_SYSVAL_NUM_WORK_GROUPS = 5,
+   PAN_SYSVAL_SAMPLER = 7,
+   PAN_SYSVAL_LOCAL_GROUP_SIZE = 8,
+   PAN_SYSVAL_WORK_DIM = 9,
+   PAN_SYSVAL_IMAGE_SIZE = 10,
+   PAN_SYSVAL_SAMPLE_POSITIONS = 11,
+   PAN_SYSVAL_MULTISAMPLED = 12,
+   PAN_SYSVAL_RT_CONVERSION = 13,
+   PAN_SYSVAL_VERTEX_INSTANCE_OFFSETS = 14,
+   PAN_SYSVAL_DRAWID = 15,
+   PAN_SYSVAL_BLEND_CONSTANTS = 16,
+   PAN_SYSVAL_XFB = 17,
+   PAN_SYSVAL_NUM_VERTICES = 18,
+};
+
+#define PAN_TXS_SYSVAL_ID(texidx, dim, is_array)                               \
+   ((texidx) | ((dim) << 7) | ((is_array) ? (1 << 9) : 0))
+
+#define PAN_SYSVAL_ID_TO_TXS_TEX_IDX(id)  ((id)&0x7f)
+#define PAN_SYSVAL_ID_TO_TXS_DIM(id)      (((id) >> 7) & 0x3)
+#define PAN_SYSVAL_ID_TO_TXS_IS_ARRAY(id) !!((id) & (1 << 9))
+
+struct panfrost_sysvals {
+   /* The mapping of sysvals to uniforms, the count, and the off-by-one inverse */
+   unsigned sysvals[MAX_SYSVAL_COUNT];
+   unsigned sysval_count;
+};
+
 #define RSD_WORDS 16
 
 /* Variants bundle together to form the backing CSO, bundling multiple
@@ -297,6 +343,7 @@ struct panfrost_compiled_shader {
    uint32_t partial_rsd[RSD_WORDS];
 
    struct pan_shader_info info;
+   struct panfrost_sysvals sysvals;
 
    struct pan_earlyzs_lut earlyzs;
 
@@ -339,6 +386,9 @@ struct panfrost_uncompiled_shader {
     * shaders for desktop GL.
     */
    uint32_t fixed_varying_mask;
+
+   /* If gl_FragColor was lowered, we need to optimize the stores later */
+   bool fragcolor_lowered;
 };
 
 /* The binary artefacts of compiling a shader. This differs from
@@ -350,6 +400,7 @@ struct panfrost_uncompiled_shader {
 struct panfrost_shader_binary {
    /* Collected information about the compiled shader */
    struct pan_shader_info info;
+   struct panfrost_sysvals sysvals;
 
    /* The binary itself */
    struct util_dynarray binary;
@@ -368,6 +419,11 @@ bool panfrost_disk_cache_retrieve(
    struct panfrost_shader_binary *binary);
 
 void panfrost_disk_cache_init(struct panfrost_screen *screen);
+
+bool panfrost_nir_remove_fragcolor_stores(nir_shader *s, unsigned nr_cbufs);
+
+bool panfrost_nir_lower_sysvals(nir_shader *s,
+                                struct panfrost_sysvals *sysvals);
 
 /** (Vertex buffer index, divisor) tuple that will become an Attribute Buffer
  * Descriptor at draw-time on Midgard

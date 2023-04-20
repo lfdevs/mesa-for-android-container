@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 #include "nir.h"
@@ -132,7 +128,7 @@ typedef struct merge_set {
 static void
 merge_set_dump(merge_set *set, FILE *fp)
 {
-   nir_ssa_def *dom[set->size];
+   NIR_VLA(nir_ssa_def *, dom, set->size);
    int dom_idx = -1;
 
    foreach_list_typed(merge_node, node, node, &set->nodes) {
@@ -711,7 +707,7 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
    /* Now we set everything up:
     *  - All values get assigned a temporary index
     *  - Current locations are set from sources
-    *  - Predicessors are recorded from sources and destinations
+    *  - Predecessors are recorded from sources and destinations
     */
    int num_vals = 0;
    nir_foreach_parallel_copy_entry(entry, pcopy) {
@@ -779,7 +775,7 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
          /* The next bit only applies if the source and destination have the
           * same divergence.  If they differ (it must be convergent ->
           * divergent), then we can't guarantee we won't need the convergent
-          * version of again.
+          * version of it again.
           */
          if (nir_src_is_divergent(values[a]) ==
              nir_src_is_divergent(values[b])) {
@@ -824,16 +820,10 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
       assert(num_vals < num_copies * 2);
       nir_register *reg = nir_local_reg_create(state->builder.impl);
       reg->num_array_elems = 0;
-      if (values[b].is_ssa) {
-         reg->num_components = values[b].ssa->num_components;
-         reg->bit_size = values[b].ssa->bit_size;
-      } else {
-         reg->num_components = values[b].reg.reg->num_components;
-         reg->bit_size = values[b].reg.reg->bit_size;
-      }
+      reg->num_components = nir_src_num_components(values[b]);
+      reg->bit_size = nir_src_bit_size(values[b]);
       reg->divergent = nir_src_is_divergent(values[b]);
-      values[num_vals].is_ssa = false;
-      values[num_vals].reg.reg = reg;
+      values[num_vals] = nir_src_for_reg(reg);
 
       emit_copy(&state->builder, values[b], values[num_vals]);
       loc[b] = num_vals;
@@ -1090,15 +1080,13 @@ static bool
 ssa_def_is_local_to_block(nir_ssa_def *def, UNUSED void *state)
 {
    nir_block *block = def->parent_instr->block;
-   nir_foreach_use(use_src, def) {
-      if (use_src->parent_instr->block != block ||
+   nir_foreach_use_including_if(use_src, def) {
+      if (use_src->is_if ||
+          use_src->parent_instr->block != block ||
           use_src->parent_instr->type == nir_instr_type_phi) {
          return false;
       }
    }
-
-   if (!list_is_empty(&def->if_uses))
-      return false;
 
    return true;
 }

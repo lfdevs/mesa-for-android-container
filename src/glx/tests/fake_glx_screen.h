@@ -74,7 +74,6 @@ public:
 
       this->vtable = &fake_glx_context::vt;
       this->majorOpcode = 123;
-      this->screen = psc->scr;
       this->psc = psc;
       this->config = mode;
       this->isDirect = false;

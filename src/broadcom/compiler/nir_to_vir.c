@@ -449,6 +449,7 @@ emit_tmu_general_address_write(struct v3d_compile *c,
                                int offset_src,
                                struct qreg base_offset,
                                uint32_t const_offset,
+                               uint32_t dest_components,
                                uint32_t *tmu_writes)
 {
         if (mode == MODE_COUNT) {
@@ -494,6 +495,8 @@ emit_tmu_general_address_write(struct v3d_compile *c,
 
         if (vir_in_nonuniform_control_flow(c))
                 vir_set_cond(tmu, V3D_QPU_COND_IFA);
+
+        tmu->ldtmu_count = dest_components;
 }
 
 /**
@@ -684,7 +687,7 @@ ntq_emit_tmu_general(struct v3d_compile *c, nir_intrinsic_instr *instr,
                 emit_tmu_general_address_write(c, mode, instr, config,
                                                dynamic_src, offset_src,
                                                base_offset, const_offset,
-                                               &tmu_writes);
+                                               dest_components, &tmu_writes);
 
                 assert(tmu_writes > 0);
                 if (mode == MODE_COUNT) {
@@ -1210,11 +1213,6 @@ ntq_emit_comparison(struct v3d_compile *c,
                 vir_set_pf(c, vir_SUB_dest(c, nop, src0, src1), V3D_QPU_PF_PUSHC);
                 break;
 
-        case nir_op_f2b32:
-                vir_set_pf(c, vir_FMOV_dest(c, nop, src0), V3D_QPU_PF_PUSHZ);
-                cond_invert = true;
-                break;
-
         default:
                 return false;
         }
@@ -1299,88 +1297,26 @@ ntq_emit_cond_to_int(struct v3d_compile *c, enum v3d_qpu_cond cond)
 static struct qreg
 f2f16_rtz(struct v3d_compile *c, struct qreg f32)
 {
-        /* The GPU doesn't provide a mechanism to modify the f32->f16 rounding
-         * method and seems to be using RTE by default, so we need to implement
-         * RTZ rounding in software :-(
-         *
-         * The implementation identifies the cases where RTZ applies and
-         * returns the correct result and for everything else, it just uses
-         * the default RTE conversion.
-         */
-        static bool _first = true;
-        if (_first && V3D_DBG(PERF)) {
-                fprintf(stderr, "Shader uses round-toward-zero f32->f16 "
-                        "conversion which is not supported in hardware.\n");
-                _first = false;
-        }
+   /* The GPU doesn't provide a mechanism to modify the f32->f16 rounding
+    * method and seems to be using RTE by default, so we need to implement
+    * RTZ rounding in software.
+    */
+   struct qreg rf16 = vir_FMOV(c, f32);
+   vir_set_pack(c->defs[rf16.index], V3D_QPU_PACK_L);
 
-        struct qinst *inst;
-        struct qreg tmp;
+   struct qreg rf32 = vir_FMOV(c, rf16);
+   vir_set_unpack(c->defs[rf32.index], 0, V3D_QPU_UNPACK_L);
 
-        struct qreg result = vir_get_temp(c);
+   struct qreg f32_abs = vir_FMOV(c, f32);
+   vir_set_unpack(c->defs[f32_abs.index], 0, V3D_QPU_UNPACK_ABS);
 
-        struct qreg mantissa32 = vir_AND(c, f32, vir_uniform_ui(c, 0x007fffff));
+   struct qreg rf32_abs = vir_FMOV(c, rf32);
+   vir_set_unpack(c->defs[rf32_abs.index], 0, V3D_QPU_UNPACK_ABS);
 
-        /* Compute sign bit of result */
-        struct qreg sign = vir_AND(c, vir_SHR(c, f32, vir_uniform_ui(c, 16)),
-                                   vir_uniform_ui(c, 0x8000));
-
-        /* Check the cases were RTZ rounding is relevant based on exponent */
-        struct qreg exp32 = vir_AND(c, vir_SHR(c, f32, vir_uniform_ui(c, 23)),
-                                    vir_uniform_ui(c, 0xff));
-        struct qreg exp16 = vir_ADD(c, exp32, vir_uniform_ui(c, -127 + 15));
-
-        /* if (exp16 > 30) */
-        inst = vir_MIN_dest(c, vir_nop_reg(), exp16, vir_uniform_ui(c, 30));
-        vir_set_pf(c, inst, V3D_QPU_PF_PUSHC);
-        inst = vir_OR_dest(c, result, sign, vir_uniform_ui(c, 0x7bff));
-        vir_set_cond(inst, V3D_QPU_COND_IFA);
-
-        /* if (exp16 <= 30) */
-        inst = vir_OR_dest(c, result,
-                           vir_OR(c, sign,
-                                  vir_SHL(c, exp16, vir_uniform_ui(c, 10))),
-                           vir_SHR(c, mantissa32, vir_uniform_ui(c, 13)));
-        vir_set_cond(inst, V3D_QPU_COND_IFNA);
-
-        /* if (exp16 <= 0) */
-        inst = vir_MIN_dest(c, vir_nop_reg(), exp16, vir_uniform_ui(c, 0));
-        vir_set_pf(c, inst, V3D_QPU_PF_PUSHC);
-
-        tmp = vir_OR(c, mantissa32, vir_uniform_ui(c, 0x800000));
-        tmp = vir_SHR(c, tmp, vir_SUB(c, vir_uniform_ui(c, 14), exp16));
-        inst = vir_OR_dest(c, result, sign, tmp);
-        vir_set_cond(inst, V3D_QPU_COND_IFNA);
-
-        /* Cases where RTZ mode is not relevant: use default RTE conversion.
-         *
-         * The cases that are not affected by RTZ are:
-         *
-         *  exp16 < - 10 || exp32 == 0 || exp32 == 0xff
-         *
-         * In V3D we can implement this condition as:
-         *
-         * !((exp16 >= -10) && !(exp32 == 0) && !(exp32 == 0xff)))
-         */
-
-        /* exp16 >= -10 */
-        inst = vir_MIN_dest(c, vir_nop_reg(), exp16, vir_uniform_ui(c, -10));
-        vir_set_pf(c, inst, V3D_QPU_PF_PUSHC);
-
-        /* && !(exp32 == 0) */
-        inst = vir_MOV_dest(c, vir_nop_reg(), exp32);
-        vir_set_uf(c, inst, V3D_QPU_UF_ANDNZ);
-
-        /* && !(exp32 == 0xff) */
-        inst = vir_XOR_dest(c, vir_nop_reg(), exp32, vir_uniform_ui(c, 0xff));
-        vir_set_uf(c, inst, V3D_QPU_UF_ANDNZ);
-
-        /* Use regular RTE conversion if condition is False */
-        inst = vir_FMOV_dest(c, result, f32);
-        vir_set_pack(inst, V3D_QPU_PACK_L);
-        vir_set_cond(inst, V3D_QPU_COND_IFNA);
-
-        return vir_MOV(c, result);
+   vir_set_pf(c, vir_FCMP_dest(c, vir_nop_reg(), f32_abs, rf32_abs),
+              V3D_QPU_PF_PUSHN);
+   return vir_MOV(c, vir_SEL(c, V3D_QPU_COND_IFA,
+                  vir_SUB(c, rf16, vir_uniform_ui(c, 1)), rf16));
 }
 
 /**
@@ -1651,7 +1587,6 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
                 break;
         }
 
-        case nir_op_f2b32:
         case nir_op_feq32:
         case nir_op_fneu32:
         case nir_op_fge32:
@@ -2120,7 +2055,7 @@ mem_vectorize_callback(unsigned align_mul, unsigned align_offset,
 }
 
 void
-v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s, bool allow_copies)
+v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
 {
         bool progress;
         unsigned lower_flrp =
@@ -2136,7 +2071,7 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s, bool allow_copies)
                 NIR_PASS(progress, s, nir_opt_deref);
 
                 NIR_PASS(progress, s, nir_lower_vars_to_ssa);
-                if (allow_copies) {
+                if (!s->info.var_copies_lowered) {
                         /* Only run this pass if nir_lower_var_copies was not called
                          * yet. That would lower away any copy_deref instructions and we
                          * don't want to introduce any more.
@@ -4314,6 +4249,8 @@ ntq_emit_uniform_loop(struct v3d_compile *c, nir_loop *loop)
 static void
 ntq_emit_loop(struct v3d_compile *c, nir_loop *loop)
 {
+        assert(!nir_loop_has_continue_construct(loop));
+
         /* Disable flags optimization for loop conditions. The problem here is
          * that we can have code like this:
          *

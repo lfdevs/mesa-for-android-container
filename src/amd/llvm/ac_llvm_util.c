@@ -31,9 +31,6 @@
 #include "util/u_math.h"
 #include <llvm-c/Core.h>
 #include <llvm-c/Support.h>
-#include <llvm-c/Transforms/IPO.h>
-#include <llvm-c/Transforms/Scalar.h>
-#include <llvm-c/Transforms/Utils.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -64,6 +61,8 @@ static void ac_init_llvm_target(void)
 
    ac_reset_llvm_all_options_occurences();
    LLVMParseCommandLineOptions(ARRAY_SIZE(argv), argv, NULL);
+
+   ac_llvm_run_atexit_for_destructors();
 }
 
 PUBLIC void ac_init_shared_llvm_once(void)
@@ -157,6 +156,8 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
       return "gfx908";
    case CHIP_MI200:
       return "gfx90a";
+   case CHIP_GFX940:
+      return "gfx940";
    case CHIP_NAVI10:
       return "gfx1010";
    case CHIP_NAVI12:
@@ -175,8 +176,8 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
       return LLVM_VERSION_MAJOR >= 13 ? "gfx1034" : "gfx1030";
    case CHIP_REMBRANDT:
       return LLVM_VERSION_MAJOR >= 13 ? "gfx1035" : "gfx1030";
-   case CHIP_GFX1036: /* TODO: LLVM 15 doesn't support this yet */
-      return "gfx1030";
+   case CHIP_RAPHAEL_MENDOCINO:
+      return LLVM_VERSION_MAJOR >= 15 ? "gfx1036" : "gfx1030";
    case CHIP_GFX1100:
       return "gfx1100";
    case CHIP_GFX1101:
@@ -215,38 +216,6 @@ static LLVMTargetMachineRef ac_create_target_machine(enum radeon_family family,
       *out_triple = triple;
 
    return tm;
-}
-
-static LLVMPassManagerRef ac_create_passmgr(LLVMTargetLibraryInfoRef target_library_info,
-                                            bool check_ir)
-{
-   LLVMPassManagerRef passmgr = LLVMCreatePassManager();
-   if (!passmgr)
-      return NULL;
-
-   if (target_library_info)
-      LLVMAddTargetLibraryInfo(target_library_info, passmgr);
-
-   if (check_ir)
-      LLVMAddVerifierPass(passmgr);
-   LLVMAddAlwaysInlinerPass(passmgr);
-   /* Normally, the pass manager runs all passes on one function before
-    * moving onto another. Adding a barrier no-op pass forces the pass
-    * manager to run the inliner on all functions first, which makes sure
-    * that the following passes are only run on the remaining non-inline
-    * function, so it removes useless work done on dead inline functions.
-    */
-   ac_llvm_add_barrier_noop_pass(passmgr);
-   /* This pass should eliminate all the load and store instructions. */
-   LLVMAddPromoteMemoryToRegisterPass(passmgr);
-   LLVMAddScalarReplAggregatesPass(passmgr);
-   LLVMAddLICMPass(passmgr);
-   LLVMAddAggressiveDCEPass(passmgr);
-   LLVMAddCFGSimplificationPass(passmgr);
-   /* This is recommended by the instruction combining pass. */
-   LLVMAddEarlyCSEMemSSAPass(passmgr);
-   LLVMAddInstructionCombiningPass(passmgr);
-   return passmgr;
 }
 
 LLVMAttributeRef ac_get_llvm_attribute(LLVMContextRef ctx, const char *str)

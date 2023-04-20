@@ -49,6 +49,7 @@
 #include "util/bitscan.h"
 #include "util/macros.h"
 #include "util/mesa-sha1.h"
+#include "util/u_debug.h"
 #include "util/u_math.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
@@ -170,12 +171,24 @@ read_sysfs_drm_device_file_uint64(struct intel_perf_config *perf,
    return read_file_uint64(buf, value);
 }
 
+static bool
+oa_config_enabled(struct intel_perf_config *perf,
+                  const struct intel_perf_query_info *query) {
+   // Hide extended metrics unless enabled with env param
+   bool is_extended_metric = strncmp(query->name, "Ext", 3) == 0;
+
+   return perf->enable_all_metrics || !is_extended_metric;
+}
+
 static void
 register_oa_config(struct intel_perf_config *perf,
                    const struct intel_device_info *devinfo,
                    const struct intel_perf_query_info *query,
                    uint64_t config_id)
 {
+   if (!oa_config_enabled(perf, query))
+      return;
+
    struct intel_perf_query_info *registered_query =
       intel_perf_append_query_info(perf, 0);
 
@@ -705,6 +718,10 @@ oa_metrics_available(struct intel_perf_config *perf, int fd,
    bool i915_perf_oa_available = false;
    struct stat sb;
 
+   /* TODO: Xe still don't have support for performance metrics */
+   if (devinfo->kmd_type != INTEL_KMD_TYPE_I915)
+      return false;
+
    perf->devinfo = *devinfo;
 
    /* Consider an invalid as supported. */
@@ -714,6 +731,7 @@ oa_metrics_available(struct intel_perf_config *perf, int fd,
    }
 
    perf->i915_query_supported = i915_query_perf_config_supported(perf, fd);
+   perf->enable_all_metrics = debug_get_bool_option("INTEL_EXTENDED_METRICS", false);
    perf->i915_perf_version = i915_perf_version(fd);
 
    /* TODO: We should query this from i915 */

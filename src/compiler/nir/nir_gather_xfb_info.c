@@ -317,19 +317,13 @@ compare_xfb_out(const void *pa, const void *pb)
  * Optionally return slot_to_register, an optional table to translate
  * gl_varying_slot to "base" indices.
  */
-nir_xfb_info *
-nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
-                                    int slot_to_register[NUM_TOTAL_VARYING_SLOTS])
+void
+nir_gather_xfb_info_from_intrinsics(nir_shader *nir)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    uint8_t buffer_to_stream[MAX_XFB_BUFFERS] = {0};
    uint8_t buffer_mask = 0;
    uint8_t stream_mask = 0;
-
-   if (slot_to_register) {
-      memset(slot_to_register, -1,
-             sizeof(slot_to_register[0] * NUM_TOTAL_VARYING_SLOTS));
-   }
 
    /* Gather xfb outputs. */
    struct util_dynarray array = {0};
@@ -368,9 +362,6 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
                buffer_mask |= BITFIELD_BIT(out.buffer);
                stream_mask |= BITFIELD_BIT(stream);
 
-               if (slot_to_register)
-                  slot_to_register[sem.location] = nir_intrinsic_base(intr);
-
                /* No elements before component_offset are allowed to be set. */
                assert(!(out.component_mask & BITFIELD_MASK(out.component_offset)));
             }
@@ -382,7 +373,7 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
    int count = util_dynarray_num_elements(&array, nir_xfb_output_info);
 
    if (!count)
-      return NULL;
+      return;
 
    if (count > 1) {
       /* Sort outputs by buffer, location, and component. */
@@ -436,10 +427,10 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
       assert(outputs[i].component_mask);
 
    /* Create nir_xfb_info. */
-   nir_xfb_info *info = calloc(1, nir_xfb_info_size(count));
+   nir_xfb_info *info = nir_xfb_info_create(nir, count);
    if (!info) {
       util_dynarray_fini(&array);
-      return NULL;
+      return;
    }
 
    /* Fill nir_xfb_info. */
@@ -452,15 +443,18 @@ nir_gather_xfb_info_from_intrinsics(nir_shader *nir,
    /* Set strides. */
    for (unsigned i = 0; i < MAX_XFB_BUFFERS; i++) {
       if (buffer_mask & BITFIELD_BIT(i))
-         info->buffers[i].stride = nir->info.xfb_stride[i];
+         info->buffers[i].stride = nir->info.xfb_stride[i] * 4;
    }
 
    /* Set varying_count. */
    for (unsigned i = 0; i < count; i++)
       info->buffers[outputs[i].buffer].varying_count++;
 
+   /* Replace original xfb info. */
+   ralloc_free(nir->xfb_info);
+   nir->xfb_info = info;
+
    util_dynarray_fini(&array);
-   return info;
 }
 
 void

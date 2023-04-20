@@ -24,6 +24,8 @@
 
 #include "aco_ir.h"
 
+#include "util/u_debug.h"
+
 #ifdef LLVM_AVAILABLE
 #if defined(_MSC_VER) && defined(restrict)
 #undef restrict

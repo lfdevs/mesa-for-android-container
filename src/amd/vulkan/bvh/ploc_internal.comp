@@ -134,8 +134,10 @@ push_node(uint32_t children[2])
    }
 
    DEREF(dst_node).base.aabb = total_bounds;
+#if EXTENDED_SAH
    DEREF(dst_node).base.cost = cost * 0.5 + BVH_LEVEL_COST;
-   DEREF(dst_node).in_final_tree = FINAL_TREE_UNKNOWN;
+#endif
+   DEREF(dst_node).bvh_offset = RADV_UNKNOWN_BVH_OFFSET;
    return dst_id;
 }
 
@@ -160,7 +162,9 @@ decode_neighbour_offset(uint32_t encoded_offset)
 #define NUM_PLOC_LDS_ITEMS PLOC_WORKGROUP_SIZE + 4 * PLOC_NEIGHBOURHOOD
 
 shared radv_aabb shared_bounds[NUM_PLOC_LDS_ITEMS];
+#if EXTENDED_SAH
 shared float shared_costs[NUM_PLOC_LDS_ITEMS];
+#endif
 shared uint32_t nearest_neighbour_indices[NUM_PLOC_LDS_ITEMS];
 
 uint32_t
@@ -186,7 +190,9 @@ load_bounds(VOID_REF ids, uint32_t iter, uint32_t task_index, uint32_t lds_base,
       REF(radv_ir_node) node = REF(radv_ir_node)(addr);
 
       shared_bounds[i - lds_base] = DEREF(node).aabb;
+#if EXTENDED_SAH
       shared_costs[i - lds_base] = DEREF(node).cost;
+#endif
    }
 }
 
@@ -198,6 +204,7 @@ combined_node_cost(uint32_t lds_base, uint32_t i, uint32_t j)
    combined_bounds.max = max(shared_bounds[i - lds_base].max, shared_bounds[j - lds_base].max);
    float area = aabb_surface_area(combined_bounds);
 
+#if EXTENDED_SAH
    if (area == 0.0)
       return 0.0;
 
@@ -220,6 +227,9 @@ combined_node_cost(uint32_t lds_base, uint32_t i, uint32_t j)
       (1.0 + shared_costs[i - lds_base] * p_i) * (1.0 + shared_costs[j - lds_base] * p_j);
 
    return area / combined_cost;
+#else
+   return area;
+#endif
 }
 
 shared uint32_t shared_aggregate_sum;

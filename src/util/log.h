@@ -25,6 +25,7 @@
 #define MESA_LOG_H
 
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "util/macros.h"
 
@@ -42,6 +43,9 @@ enum mesa_log_level {
    MESA_LOG_INFO,
    MESA_LOG_DEBUG,
 };
+
+FILE *
+mesa_log_get_file(void);
 
 void PRINTFLIKE(3, 4)
 mesa_log(enum mesa_log_level, const char *tag, const char *format, ...);

@@ -26,6 +26,7 @@
 
 #include "hwdef/rogue_hw_defs.h"
 #include "hwdef/rogue_hw_utils.h"
+#include "pvr_csb_enum_helpers.h"
 #include "pvr_device_info.h"
 #include "pvr_job_common.h"
 #include "pvr_private.h"
@@ -201,10 +202,13 @@ void pvr_pbe_pack_state(
 
       state.source_format = surface_params->source_format;
 
-      pvr_pbe_get_src_pos(dev_info,
-                          render_params->source_start,
-                          &state.source_pos,
-                          &state.source_pos_offset_128);
+      state.source_pos = pvr_pbestate_source_pos(render_params->source_start);
+      if (PVR_HAS_FEATURE(dev_info, eight_output_registers)) {
+         state.source_pos_offset_128 = render_params->source_start >=
+                                       PVR_PBE_STARTPOS_BIT128;
+      } else {
+         assert(render_params->source_start < PVR_PBE_STARTPOS_BIT128);
+      }
 
       /* MRT index (Use 0 for a single render target)/ */
       state.mrt_index = render_params->mrt_index;

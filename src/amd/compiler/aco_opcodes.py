@@ -348,8 +348,8 @@ opcode("p_init_scratch")
 opcode("p_jump_to_epilog")
 
 # loads and interpolates a fragment shader input with a correct exec mask
-#dst0=result, dst1=exec_tmp, dst2=clobber_scc, src0=linear_vgpr, src1=attribute, src2=component, src3=coord1, src4=coord2, src5=m0
-#dst0=result, dst1=exec_tmp, dst2=clobber_scc, src0=linear_vgpr, src1=attribute, src2=component, src3=dpp_ctrl, src4=m0
+#dst0=result, src0=linear_vgpr, src1=attribute, src2=component, src3=coord1, src4=coord2, src5=m0
+#dst0=result, src0=linear_vgpr, src1=attribute, src2=component, src3=dpp_ctrl, src4=m0
 opcode("p_interp_gfx11")
 
 # performs dual source MRTs swizzling and emits exports on GFX11
@@ -754,8 +754,8 @@ VOP2 = {
    (0x29, 0x29, 0x1d, 0x1d, 0x29, 0x21, "v_subb_co_u32", False, False), # v_sub_co_ci_u32 in RDNA
    (0x2a, 0x2a, 0x1e, 0x1e, 0x2a, 0x22, "v_subbrev_co_u32", False, False), # v_subrev_co_ci_u32 in RDNA
    (  -1,   -1,   -1,   -1, 0x2b, 0x2b, "v_fmac_f32", True, True),
-   (  -1,   -1,   -1,   -1, 0x2c, 0x2c, "v_fmamk_f32", True, True),
-   (  -1,   -1,   -1,   -1, 0x2d, 0x2d, "v_fmaak_f32", True, True),
+   (  -1,   -1,   -1,   -1, 0x2c, 0x2c, "v_fmamk_f32", False, False),
+   (  -1,   -1,   -1,   -1, 0x2d, 0x2d, "v_fmaak_f32", False, False),
    (0x2f, 0x2f,   -1,   -1, 0x2f, 0x2f, "v_cvt_pkrtz_f16_f32", True, False), #v_cvt_pk_rtz_f16_f32 in GFX11
    (  -1,   -1, 0x1f, 0x1f, 0x32, 0x32, "v_add_f16", True, True),
    (  -1,   -1, 0x20, 0x20, 0x33, 0x33, "v_sub_f16", True, True),
@@ -777,11 +777,11 @@ VOP2 = {
    (  -1,   -1, 0x30, 0x30,   -1,   -1, "v_max_i16", False, False),
    (  -1,   -1, 0x31, 0x31,   -1,   -1, "v_min_u16", False, False),
    (  -1,   -1, 0x32, 0x32,   -1,   -1, "v_min_i16", False, False),
-   (  -1,   -1, 0x33, 0x33, 0x3b, 0x3b, "v_ldexp_f16", False, False),
+   (  -1,   -1, 0x33, 0x33, 0x3b, 0x3b, "v_ldexp_f16", False, True),
    (  -1,   -1,   -1, 0x34, 0x25, 0x25, "v_add_u32", False, False), # called v_add_nc_u32 in RDNA
    (  -1,   -1,   -1, 0x35, 0x26, 0x26, "v_sub_u32", False, False), # called v_sub_nc_u32 in RDNA
    (  -1,   -1,   -1, 0x36, 0x27, 0x27, "v_subrev_u32", False, False), # called v_subrev_nc_u32 in RDNA
-   (  -1,   -1,   -1,   -1, 0x36, 0x36, "v_fmac_f16", False, False),
+   (  -1,   -1,   -1,   -1, 0x36, 0x36, "v_fmac_f16", True, True),
    (  -1,   -1,   -1,   -1, 0x37, 0x37, "v_fmamk_f16", False, False),
    (  -1,   -1,   -1,   -1, 0x38, 0x38, "v_fmaak_f16", False, False),
    (  -1,   -1,   -1,   -1, 0x3c, 0x3c, "v_pk_fmac_f16", False, False),

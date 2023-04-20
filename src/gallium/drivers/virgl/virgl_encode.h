@@ -160,13 +160,6 @@ int virgl_encoder_set_vertex_buffers(struct virgl_context *ctx,
                                     unsigned num_buffers,
                                     const struct pipe_vertex_buffer *buffers);
 
-
-int virgl_encoder_inline_write(struct virgl_context *ctx,
-                              struct virgl_resource *res,
-                              unsigned level, unsigned usage,
-                              const struct pipe_box *box,
-                              const void *data, unsigned stride,
-                              unsigned layer_stride);
 int virgl_encode_sampler_state(struct virgl_context *ctx,
                               uint32_t handle,
                               const struct pipe_sampler_state *state);

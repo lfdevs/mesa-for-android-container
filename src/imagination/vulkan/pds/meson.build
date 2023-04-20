@@ -24,7 +24,7 @@ libpowervr_pds_files = files(
   'pvr_pds.c',
   'pvr_pds_disasm.c',
   'pvr_pds_printer.c',
-  'pvr_xgl_pds.c',
+  'pvr_pipeline_pds.c',
 )
 
 libpowervr_pds_includes = include_directories(

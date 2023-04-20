@@ -195,7 +195,7 @@ def cancel_job(project, job) -> None:
     """Cancel GitLab job"""
     pjob = project.jobs.get(job.id, lazy=True)
     pjob.cancel()
-    print(f"♲ {job.name}")
+    print(f"♲ {job.name}", end=" ")
 
 
 def cancel_jobs(project, to_cancel) -> None:
@@ -206,6 +206,7 @@ def cancel_jobs(project, to_cancel) -> None:
     with ThreadPoolExecutor(max_workers=6) as exe:
         part = partial(cancel_job, project)
         exe.map(part, to_cancel)
+    print()
 
 
 def print_log(project, job_id) -> None:

@@ -2179,6 +2179,18 @@ generate_code(struct brw_codegen *p,
          brw_DIM(p, dst, retype(src[0], BRW_REGISTER_TYPE_F));
          break;
 
+      case SHADER_OPCODE_RND_MODE: {
+         assert(src[0].file == BRW_IMMEDIATE_VALUE);
+         /*
+          * Changes the floating point rounding mode updating the control
+          * register field defined at cr0.0[5-6] bits.
+          */
+         enum brw_rnd_mode mode =
+            (enum brw_rnd_mode) (src[0].d << BRW_CR0_RND_MODE_SHIFT);
+         brw_float_controls_mode(p, mode, BRW_CR0_RND_MODE_MASK);
+      }
+         break;
+
       default:
          unreachable("Unsupported opcode");
       }
@@ -2257,6 +2269,7 @@ generate_code(struct brw_codegen *p,
                         fill_count, send_count, before_size, after_size);
    if (stats) {
       stats->dispatch_width = 0;
+      stats->max_dispatch_width = 0;
       stats->instructions = before_size / 16;
       stats->sends = send_count;
       stats->loops = loop_count;

@@ -466,7 +466,7 @@ complex_unroll(nir_loop *loop, nir_loop_terminator *unlimit_term,
 static void
 complex_unroll_single_terminator(nir_loop *loop)
 {
-   assert(list_length(&loop->info->loop_terminator_list) == 1);
+   assert(list_is_singular(&loop->info->loop_terminator_list));
    assert(loop->info->limiting_terminator);
    assert(nir_is_trivial_loop_if(loop->info->limiting_terminator->nif,
                                  loop->info->limiting_terminator->break_block));
@@ -717,7 +717,7 @@ remove_out_of_bounds_induction_use(nir_shader *shader, nir_loop *loop,
 static void
 partial_unroll(nir_shader *shader, nir_loop *loop, unsigned trip_count)
 {
-   assert(list_length(&loop->info->loop_terminator_list) == 1);
+   assert(list_is_singular(&loop->info->loop_terminator_list));
 
    nir_loop_terminator *terminator =
       list_first_entry(&loop->info->loop_terminator_list,
@@ -969,6 +969,7 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *has_nested_loop_out,
    }
    case nir_cf_node_loop: {
       loop = nir_cf_node_as_loop(cf_node);
+      assert(!nir_loop_has_continue_construct(loop));
       progress |= process_loops_in_block(sh, &loop->body, &has_nested_loop);
 
       break;
@@ -1042,8 +1043,8 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *has_nested_loop_out,
          /* If we were able to guess the loop iteration based on array access
           * then do a partial unroll.
           */
-         unsigned num_lt = list_length(&loop->info->loop_terminator_list);
-         if (!has_nested_loop && num_lt == 1 && !loop->partially_unrolled &&
+         bool one_lt = list_is_singular(&loop->info->loop_terminator_list);
+         if (!has_nested_loop && one_lt && !loop->partially_unrolled &&
              loop->info->guessed_trip_count &&
              check_unrolling_restrictions(sh, loop)) {
             partial_unroll(sh, loop, loop->info->guessed_trip_count);

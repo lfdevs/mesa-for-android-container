@@ -60,6 +60,12 @@ struct mali_sample_positions {
 #define SAMPLE8(x, y) SAMPLE16((x)*2, (y)*2)
 #define SAMPLE4(x, y) SAMPLE16((x)*4, (y)*4)
 
+static float
+decode_position(int16_t raw)
+{
+   return ((float)raw) / 256.0;
+}
+
 /* clang-format off */
 const struct mali_sample_positions sample_position_lut[] = {
    [MALI_SAMPLE_PATTERN_SINGLE_SAMPLED] = {
@@ -155,6 +161,6 @@ panfrost_query_sample_position(enum mali_sample_pattern pattern,
    struct mali_sample_position pos =
       sample_position_lut[pattern].positions[sample_idx];
 
-   out[0] = DECODE_FIXED_16(pos.x);
-   out[1] = DECODE_FIXED_16(pos.y);
+   out[0] = decode_position(pos.x);
+   out[1] = decode_position(pos.y);
 }

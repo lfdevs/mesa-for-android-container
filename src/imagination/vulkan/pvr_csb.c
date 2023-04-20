@@ -111,6 +111,39 @@ void pvr_csb_finish(struct pvr_csb *csb)
 }
 
 /**
+ * \brief Discard information only required while building and return the BOs.
+ *
+ * \param[in] csb Control Stream Builder object to bake.
+ * \param[out] bo_list_out A list of \c pvr_bo containing the control stream.
+ *
+ * \return The last status value of \c csb.
+ *
+ * The value of \c bo_list_out is only defined iff this function returns
+ * \c VK_SUCCESS. It is not allowed to call this function on a \c pvr_csb for
+ * a deferred control stream type.
+ *
+ * The state of \c csb after calling this function (iff it returns
+ * \c VK_SUCCESS) is identical to that after calling #pvr_csb_finish().
+ * Unlike #pvr_csb_finish(), however, the caller must free every entry in
+ * \c bo_list_out itself.
+ */
+VkResult pvr_csb_bake(struct pvr_csb *const csb,
+                      struct list_head *const bo_list_out)
+{
+   assert(csb->stream_type != PVR_CMD_STREAM_TYPE_GRAPHICS_DEFERRED);
+
+   if (csb->status != VK_SUCCESS)
+      return csb->status;
+
+   *bo_list_out = csb->pvr_bo_list;
+
+   /* Same as pvr_csb_finish(). */
+   pvr_csb_init(NULL, PVR_CMD_STREAM_TYPE_INVALID, csb);
+
+   return VK_SUCCESS;
+}
+
+/**
  * \brief Helper function to extend csb memory.
  *
  * Allocates a new buffer object and links it with the previous buffer object

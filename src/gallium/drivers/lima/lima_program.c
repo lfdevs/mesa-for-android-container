@@ -147,7 +147,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
    NIR_PASS_V(s, nir_lower_int_to_float);
    /* int_to_float pass generates ftrunc, so lower it */
    NIR_PASS(progress, s, lima_nir_lower_ftrunc);
-   NIR_PASS_V(s, nir_lower_bool_to_float);
+   NIR_PASS_V(s, nir_lower_bool_to_float, true);
 
    NIR_PASS_V(s, nir_copy_prop);
    NIR_PASS_V(s, nir_opt_dce);
@@ -255,7 +255,7 @@ lima_program_optimize_fs_nir(struct nir_shader *s,
    } while (progress);
 
    NIR_PASS_V(s, nir_lower_int_to_float);
-   NIR_PASS_V(s, nir_lower_bool_to_float);
+   NIR_PASS_V(s, nir_lower_bool_to_float, true);
 
    /* Some ops must be lowered after being converted from int ops,
     * so re-run nir_opt_algebraic after int lowering. */

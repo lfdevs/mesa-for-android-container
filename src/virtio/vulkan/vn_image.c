@@ -18,7 +18,10 @@
 #include "vn_android.h"
 #include "vn_device.h"
 #include "vn_device_memory.h"
+#include "vn_physical_device.h"
 #include "vn_wsi.h"
+
+/* image commands */
 
 static void
 vn_image_init_memory_requirements(struct vn_image *img,
@@ -157,12 +160,15 @@ vn_image_deferred_info_init(struct vn_image *img,
          memcpy(&info->stencil, src, sizeof(info->stencil));
          pnext = &info->stencil;
          break;
-      case VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_ANDROID:
-         /* we should have translated the external format */
-         assert(create_info->format != VK_FORMAT_UNDEFINED);
-         info->from_external_format =
-            ((const VkExternalFormatANDROID *)src)->externalFormat;
-         break;
+      case VK_STRUCTURE_TYPE_EXTERNAL_FORMAT_ANDROID: {
+         const uint32_t drm_format =
+            (uint32_t)((const VkExternalFormatANDROID *)src)->externalFormat;
+         if (drm_format) {
+            info->create.format =
+               vn_android_drm_format_to_vk_format(drm_format);
+            info->from_external_format = true;
+         }
+      } break;
       default:
          break;
       }
@@ -252,7 +258,7 @@ vn_image_init_deferred(struct vn_device *dev,
    return result;
 }
 
-VkResult
+static VkResult
 vn_image_create_deferred(struct vn_device *dev,
                          const VkImageCreateInfo *create_info,
                          const VkAllocationCallbacks *alloc,
@@ -280,7 +286,65 @@ vn_image_create_deferred(struct vn_device *dev,
    return VK_SUCCESS;
 }
 
-/* image commands */
+struct vn_image_create_info {
+   VkImageCreateInfo create;
+   VkExternalMemoryImageCreateInfo external;
+   VkImageFormatListCreateInfo format_list;
+   VkImageStencilUsageCreateInfo stencil;
+   VkImageDrmFormatModifierListCreateInfoEXT modifier_list;
+   VkImageDrmFormatModifierExplicitCreateInfoEXT modifier_explicit;
+};
+
+static const VkImageCreateInfo *
+vn_image_fix_create_info(
+   const VkImageCreateInfo *create_info,
+   const VkExternalMemoryHandleTypeFlagBits renderer_handle_type,
+   struct vn_image_create_info *local_info)
+{
+   local_info->create = *create_info;
+   VkBaseOutStructure *cur = (void *)&local_info->create;
+
+   vk_foreach_struct_const(src, create_info->pNext) {
+      void *next = NULL;
+      switch (src->sType) {
+      case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
+         memcpy(&local_info->external, src, sizeof(local_info->external));
+         local_info->external.handleTypes = renderer_handle_type;
+         next = &local_info->external;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
+         memcpy(&local_info->format_list, src,
+                sizeof(local_info->format_list));
+         next = &local_info->format_list;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
+         memcpy(&local_info->stencil, src, sizeof(local_info->stencil));
+         next = &local_info->stencil;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT:
+         memcpy(&local_info->modifier_list, src,
+                sizeof(local_info->modifier_list));
+         next = &local_info->modifier_list;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT:
+         memcpy(&local_info->modifier_explicit, src,
+                sizeof(local_info->modifier_explicit));
+         next = &local_info->modifier_explicit;
+         break;
+      default:
+         break;
+      }
+
+      if (next) {
+         cur->pNext = next;
+         cur = next;
+      }
+   }
+
+   cur->pNext = NULL;
+
+   return &local_info->create;
+}
 
 VkResult
 vn_CreateImage(VkDevice device,
@@ -292,42 +356,74 @@ vn_CreateImage(VkDevice device,
    struct vn_device *dev = vn_device_from_handle(device);
    const VkAllocationCallbacks *alloc =
       pAllocator ? pAllocator : &dev->base.base.alloc;
+   const VkExternalMemoryHandleTypeFlagBits renderer_handle_type =
+      dev->physical_device->external_memory.renderer_handle_type;
    struct vn_image *img;
    VkResult result;
 
-   const struct wsi_image_create_info *wsi_info =
-      vn_wsi_find_wsi_image_create_info(pCreateInfo);
-   const VkNativeBufferANDROID *anb_info =
-      vn_android_find_native_buffer(pCreateInfo);
-   const VkExternalMemoryImageCreateInfo *external_info =
-      vk_find_struct_const(pCreateInfo->pNext,
-                           EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
-   const bool ahb_info =
-      external_info &&
-      external_info->handleTypes ==
-         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
-
-#ifdef ANDROID
-   /* VkImageSwapchainCreateInfoKHR is not useful at all */
+   const struct wsi_image_create_info *wsi_info = NULL;
+   const VkNativeBufferANDROID *anb_info = NULL;
    const VkImageSwapchainCreateInfoKHR *swapchain_info = NULL;
-#else
-   const VkImageSwapchainCreateInfoKHR *swapchain_info = vk_find_struct_const(
-      pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
-   if (swapchain_info && !swapchain_info->swapchain)
-      swapchain_info = NULL;
-#endif
+   const VkExternalMemoryImageCreateInfo *external_info = NULL;
+   bool ahb_info = false;
 
+   vk_foreach_struct_const(pnext, pCreateInfo->pNext) {
+      switch ((uint32_t)pnext->sType) {
+      case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
+         wsi_info = (void *)pnext;
+         break;
+      case VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID:
+         anb_info = (void *)pnext;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
+         swapchain_info = (void *)pnext;
+         if (!swapchain_info->swapchain)
+            swapchain_info = NULL;
+         break;
+      case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
+         external_info = (void *)pnext;
+         if (!external_info->handleTypes)
+            external_info = NULL;
+         else if (
+            external_info->handleTypes ==
+            VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+            ahb_info = true;
+         break;
+      default:
+         break;
+      }
+   }
+
+   /* No need to fix external handle type for:
+    * - common wsi image: dma_buf is hard-coded in wsi_configure_native_image
+    * - common wsi image alias: it aligns with wsi_info on external handle
+    * - Android wsi image: VK_ANDROID_native_buffer involves no external info
+    * - AHB external image: deferred creation reconstructs external info
+    *
+    * Must fix the external handle type for:
+    * - non-AHB external image requesting handle types different from renderer
+    *
+    * Will have to fix more when renderer handle type is no longer dma_buf.
+    */
    if (wsi_info) {
+      assert(external_info->handleTypes == renderer_handle_type);
       result = vn_wsi_create_image(dev, pCreateInfo, wsi_info, alloc, &img);
    } else if (anb_info) {
       result =
          vn_android_image_from_anb(dev, pCreateInfo, anb_info, alloc, &img);
    } else if (ahb_info) {
-      result = vn_android_image_from_ahb(dev, pCreateInfo, alloc, &img);
+      result = vn_image_create_deferred(dev, pCreateInfo, alloc, &img);
    } else if (swapchain_info) {
       result = vn_wsi_create_image_from_swapchain(
          dev, pCreateInfo, swapchain_info, alloc, &img);
    } else {
+      struct vn_image_create_info local_info;
+      if (external_info &&
+          external_info->handleTypes != renderer_handle_type) {
+         pCreateInfo = vn_image_fix_create_info(
+            pCreateInfo, renderer_handle_type, &local_info);
+      }
+
       result = vn_image_create(dev, pCreateInfo, alloc, &img);
    }
 
@@ -418,17 +514,13 @@ vn_GetImageMemoryRequirements2(VkDevice device,
 
 void
 vn_GetImageSparseMemoryRequirements2(
-   VkDevice device,
-   const VkImageSparseMemoryRequirementsInfo2 *pInfo,
+   UNUSED VkDevice device,
+   UNUSED const VkImageSparseMemoryRequirementsInfo2 *pInfo,
    uint32_t *pSparseMemoryRequirementCount,
-   VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+   UNUSED VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
 {
-   struct vn_device *dev = vn_device_from_handle(device);
-
-   /* TODO per-device cache */
-   vn_call_vkGetImageSparseMemoryRequirements2(dev->instance, device, pInfo,
-                                               pSparseMemoryRequirementCount,
-                                               pSparseMemoryRequirements);
+   /* see vn_GetPhysicalDeviceSparseImageFormatProperties2 */
+   *pSparseMemoryRequirementCount = 0;
 }
 
 static void
@@ -764,15 +856,11 @@ vn_GetDeviceImageMemoryRequirements(
 
 void
 vn_GetDeviceImageSparseMemoryRequirements(
-   VkDevice device,
-   const VkDeviceImageMemoryRequirements *pInfo,
+   UNUSED VkDevice device,
+   UNUSED const VkDeviceImageMemoryRequirements *pInfo,
    uint32_t *pSparseMemoryRequirementCount,
-   VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
+   UNUSED VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
 {
-   struct vn_device *dev = vn_device_from_handle(device);
-
-   /* TODO per-device cache */
-   vn_call_vkGetDeviceImageSparseMemoryRequirements(
-      dev->instance, device, pInfo, pSparseMemoryRequirementCount,
-      pSparseMemoryRequirements);
+   /* see vn_GetPhysicalDeviceSparseImageFormatProperties2 */
+   *pSparseMemoryRequirementCount = 0;
 }

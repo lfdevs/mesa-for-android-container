@@ -105,6 +105,19 @@ v3d_set_active_query_state(struct pipe_context *pctx, bool enable)
         v3d->dirty |= V3D_DIRTY_STREAMOUT;
 }
 
+static void
+v3d_render_condition(struct pipe_context *pipe,
+                     struct pipe_query *query,
+                     bool condition,
+                     enum pipe_render_cond_flag mode)
+{
+        struct v3d_context *v3d = v3d_context(pipe);
+
+        v3d->cond_query = query;
+        v3d->cond_cond = condition;
+        v3d->cond_mode = mode;
+}
+
 void
 v3d_query_init(struct pipe_context *pctx)
 {
@@ -115,4 +128,5 @@ v3d_query_init(struct pipe_context *pctx)
         pctx->end_query = v3d_end_query;
         pctx->get_query_result = v3d_get_query_result;
         pctx->set_active_query_state = v3d_set_active_query_state;
+        pctx->render_condition = v3d_render_condition;
 }

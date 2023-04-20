@@ -231,7 +231,7 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
    int i;
 
    dpy = CC->currentDpy;
-   screen = CC->screen;
+   screen = CC->psc->scr;
 
    fs = XQueryFont(dpy, font);
    if (!fs) {

@@ -108,13 +108,13 @@ fs_live_variables::setup_def_use()
    foreach_block (block, cfg) {
       assert(ip == block->start_ip);
       if (block->num > 0)
-	 assert(cfg->blocks[block->num - 1]->end_ip == ip - 1);
+         assert(cfg->blocks[block->num - 1]->end_ip == ip - 1);
 
       struct block_data *bd = &block_data[block->num];
 
       foreach_inst_in_block(fs_inst, inst, block) {
-	 /* Set use[] for this instruction */
-	 for (unsigned int i = 0; i < inst->sources; i++) {
+         /* Set use[] for this instruction */
+         for (unsigned int i = 0; i < inst->sources; i++) {
             fs_reg reg = inst->src[i];
 
             if (reg.file != VGRF)
@@ -124,7 +124,7 @@ fs_live_variables::setup_def_use()
                setup_one_read(bd, ip, reg);
                reg.offset += REG_SIZE;
             }
-	 }
+         }
 
          bd->flag_use[0] |= inst->flags_read(devinfo) & ~bd->flag_def[0];
 
@@ -135,12 +135,12 @@ fs_live_variables::setup_def_use()
                setup_one_write(bd, inst, ip, reg);
                reg.offset += REG_SIZE;
             }
-	 }
+         }
 
          if (!inst->predicate && inst->exec_size >= 8)
             bd->flag_def[0] |= inst->flags_written(devinfo) & ~bd->flag_use[0];
 
-	 ip++;
+         ip++;
       }
    }
 }
@@ -162,25 +162,25 @@ fs_live_variables::compute_live_variables()
       foreach_block_reverse (block, cfg) {
          struct block_data *bd = &block_data[block->num];
 
-	 /* Update liveout */
-	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-       struct block_data *child_bd = &block_data[child_link->block->num];
+         /* Update liveout */
+         foreach_list_typed(bblock_link, child_link, link, &block->children) {
+            struct block_data *child_bd = &block_data[child_link->block->num];
 
-	    for (int i = 0; i < bitset_words; i++) {
+            for (int i = 0; i < bitset_words; i++) {
                BITSET_WORD new_liveout = (child_bd->livein[i] &
                                           ~bd->liveout[i]);
                if (new_liveout) {
                   bd->liveout[i] |= new_liveout;
                   cont = true;
                }
-	    }
+            }
             BITSET_WORD new_liveout = (child_bd->flag_livein[0] &
                                        ~bd->flag_liveout[0]);
             if (new_liveout) {
                bd->flag_liveout[0] |= new_liveout;
                cont = true;
             }
-	 }
+         }
 
          /* Update livein */
          for (int i = 0; i < bitset_words; i++) {
@@ -211,16 +211,16 @@ fs_live_variables::compute_live_variables()
       foreach_block (block, cfg) {
          const struct block_data *bd = &block_data[block->num];
 
-	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-       struct block_data *child_bd = &block_data[child_link->block->num];
+         foreach_list_typed(bblock_link, child_link, link, &block->children) {
+            struct block_data *child_bd = &block_data[child_link->block->num];
 
-	    for (int i = 0; i < bitset_words; i++) {
+            for (int i = 0; i < bitset_words; i++) {
                const BITSET_WORD new_def = bd->defout[i] & ~child_bd->defin[i];
                child_bd->defin[i] |= new_def;
                child_bd->defout[i] |= new_def;
                cont |= new_def;
-	    }
-	 }
+            }
+         }
       }
    } while (cont);
 }

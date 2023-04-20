@@ -208,7 +208,8 @@ xmesa_st_framebuffer_validate(struct st_context *st,
                               struct pipe_frontend_drawable *drawable,
                               const enum st_attachment_type *statts,
                               unsigned count,
-                              struct pipe_resource **out)
+                              struct pipe_resource **out,
+                              struct pipe_resource **resolve)
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(drawable);
    unsigned statt_mask, new_mask, i;
@@ -256,6 +257,12 @@ xmesa_st_framebuffer_validate(struct st_context *st,
 
    for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], xstfb->textures[statts[i]]);
+   if (resolve && drawable->visual->samples > 1) {
+      if (statt_mask & BITFIELD_BIT(ST_ATTACHMENT_FRONT_LEFT))
+         pipe_resource_reference(resolve, xstfb->display_resource);
+      else if (statt_mask & BITFIELD_BIT(ST_ATTACHMENT_BACK_LEFT))
+         pipe_resource_reference(resolve, xstfb->display_resource);
+   }
 
    return true;
 }

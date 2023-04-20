@@ -37,8 +37,6 @@
 struct pvr_reset_cmd {
 };
 
-struct pvr_compute_ctx;
-
 struct rogue_sr_programs {
    struct pvr_bo *store_load_state_bo;
 
@@ -55,6 +53,10 @@ struct rogue_sr_programs {
       struct pvr_pds_upload load_program;
    } pds;
 };
+
+/******************************************************************************
+   Render context
+ ******************************************************************************/
 
 struct pvr_render_ctx {
    struct pvr_device *device;

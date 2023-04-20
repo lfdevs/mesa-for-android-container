@@ -64,10 +64,6 @@ link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
       enum pipe_shader_type ptarget = pipe_shader_type_from_mesa(stage);
       bool have_dround = pscreen->get_shader_param(pscreen, ptarget,
                                                    PIPE_SHADER_CAP_DROUND_SUPPORTED);
-      bool have_dfrexp = pscreen->get_shader_param(pscreen, ptarget,
-                                                   PIPE_SHADER_CAP_DFRACEXP_DLDEXP_SUPPORTED);
-      bool have_ldexp = pscreen->get_shader_param(pscreen, ptarget,
-                                                  PIPE_SHADER_CAP_LDEXP_SUPPORTED);
 
       if (!pscreen->get_param(pscreen, PIPE_CAP_INT64_DIVMOD))
          lower_64bit_integer_instructions(ir, DIV64 | MOD64);
@@ -81,12 +77,10 @@ link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
          lower_blend_equation_advanced(
             shader, ctx->Extensions.KHR_blend_equation_advanced_coherent);
 
-      lower_instructions(ir, have_ldexp, have_dfrexp, have_dround,
-                         ctx->Const.ForceGLSLAbsSqrt,
+      lower_instructions(ir, have_dround,
                          ctx->Extensions.ARB_gpu_shader5);
 
       do_vec_index_to_cond_assign(ir);
-      lower_vector_insert(ir, true);
       if (options->MaxIfDepth == 0) {
          lower_discard(ir);
       }

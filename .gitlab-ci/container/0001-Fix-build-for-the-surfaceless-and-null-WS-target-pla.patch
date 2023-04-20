@@ -1,0 +1,161 @@
+From 6d99990e93869e361035b7c06c05183041dec8b4 Mon Sep 17 00:00:00 2001
+From: Ricardo Garcia <rgarcia@igalia.com>
+Date: Mon, 20 Feb 2023 13:57:53 +0100
+Subject: [PATCH] Fix build for the surfaceless and null-WS target platforms
+
+Both platforms should not be considered for building Vulkan Video, which
+is only available in the normal Linux and Win32 targets, and their
+createLibrary platform methods do not take a library type argument.
+
+No test results should be affected by these changes.
+
+Components: Framework
+VK-GL-CTS issue: 4295
+
+Change-Id: I4de5b42685899099a9cfcf7da64fe299fef61ffc
+---
+ external/vulkancts/framework/vulkan/vkPlatform.hpp          | 2 +-
+ .../vulkancts/modules/vulkan/api/vktApiVersionCheck.cpp     | 2 +-
+ external/vulkancts/modules/vulkan/video/CMakeLists.txt      | 2 +-
+ .../modules/vulkan/video/vktVideoSessionNvUtils.cpp         | 2 +-
+ external/vulkancts/modules/vulkan/vktTestPackage.cpp        | 2 +-
+ external/vulkancts/vkscpc/vkscpc.cpp                        | 2 +-
+ external/vulkancts/vkscserver/vksServices.cpp               | 2 +-
+ framework/delibs/debase/deDefs.h                            | 6 ++++++
+ framework/platform/CMakeLists.txt                           | 1 +
+ targets/nullws/nullws.cmake                                 | 1 +
+ 10 files changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/external/vulkancts/framework/vulkan/vkPlatform.hpp b/external/vulkancts/framework/vulkan/vkPlatform.hpp
+index bec39d326..7574166b9 100644
+--- a/external/vulkancts/framework/vulkan/vkPlatform.hpp
++++ b/external/vulkancts/framework/vulkan/vkPlatform.hpp
+@@ -399,7 +399,7 @@ public:
+ 
+ 							Platform			(void) {}
+ 							~Platform			(void) {}
+-#if (DE_OS == DE_OS_WIN32) || (DE_OS == DE_OS_UNIX)
++#ifdef DE_PLATFORM_USE_LIBRARY_TYPE
+ 	virtual Library*		createLibrary		(LibraryType libraryType = LIBRARY_TYPE_VULKAN, const char* libraryPath = DE_NULL) const = 0;
+ #else
+ 	virtual Library*		createLibrary		(const char* libraryPath = DE_NULL) const = 0;
+diff --git a/external/vulkancts/modules/vulkan/api/vktApiVersionCheck.cpp b/external/vulkancts/modules/vulkan/api/vktApiVersionCheck.cpp
+index 5f6d884f4..af6bf6938 100644
+--- a/external/vulkancts/modules/vulkan/api/vktApiVersionCheck.cpp
++++ b/external/vulkancts/modules/vulkan/api/vktApiVersionCheck.cpp
+@@ -133,7 +133,7 @@ public:
+ 		tcu::TestLog&						log				= m_context.getTestContext().getLog();
+ 		const deUint32						apiVersion		= m_context.getUsedApiVersion();
+ 		const vk::Platform&					platform		= m_context.getTestContext().getPlatform().getVulkanPlatform();
+-#if (DE_OS == DE_OS_WIN32) || (DE_OS == DE_OS_UNIX)
++#ifdef DE_PLATFORM_USE_LIBRARY_TYPE
+ 		de::MovePtr<vk::Library>			vkLibrary		= de::MovePtr<vk::Library>(platform.createLibrary(vk::Platform::LibraryType::LIBRARY_TYPE_VULKAN, m_context.getTestContext().getCommandLine().getVkLibraryPath()));
+ #else
+ 		de::MovePtr<vk::Library>			vkLibrary		= de::MovePtr<vk::Library>(platform.createLibrary(m_context.getTestContext().getCommandLine().getVkLibraryPath()));
+diff --git a/external/vulkancts/modules/vulkan/video/CMakeLists.txt b/external/vulkancts/modules/vulkan/video/CMakeLists.txt
+index 464adb1e2..f9a2044e7 100644
+--- a/external/vulkancts/modules/vulkan/video/CMakeLists.txt
++++ b/external/vulkancts/modules/vulkan/video/CMakeLists.txt
+@@ -1,5 +1,5 @@
+ include_directories(..)
+-if (DE_OS_IS_WIN32 OR DE_OS_IS_UNIX)
++if ((DE_OS_IS_WIN32 OR DE_OS_IS_UNIX) AND NOT DEQP_USE_SURFACELESS AND NOT DEQP_USE_NULLWS)
+ 	include_directories(${FFMPEG_INCLUDE_PATH})
+ 	add_compile_definitions(DE_BUILD_VIDEO)
+ endif()
+diff --git a/external/vulkancts/modules/vulkan/video/vktVideoSessionNvUtils.cpp b/external/vulkancts/modules/vulkan/video/vktVideoSessionNvUtils.cpp
+index 00491930c..9323278be 100644
+--- a/external/vulkancts/modules/vulkan/video/vktVideoSessionNvUtils.cpp
++++ b/external/vulkancts/modules/vulkan/video/vktVideoSessionNvUtils.cpp
+@@ -148,7 +148,7 @@ private:
+ };
+ 
+ NvFunctions::NvFunctions (const vk::Platform& platform)
+-#ifdef DE_BUILD_VIDEO
++#ifdef DE_PLATFORM_USE_LIBRARY_TYPE
+ 	: m_library	(de::MovePtr<vk::Library>(platform.createLibrary(vk::Platform::LIBRARY_TYPE_VULKAN_VIDEO_DECODE_PARSER, DE_NULL)))
+ #else
+ 	: m_library	(de::MovePtr<vk::Library>(platform.createLibrary()))
+diff --git a/external/vulkancts/modules/vulkan/vktTestPackage.cpp b/external/vulkancts/modules/vulkan/vktTestPackage.cpp
+index 959a9d368..cac454c71 100644
+--- a/external/vulkancts/modules/vulkan/vktTestPackage.cpp
++++ b/external/vulkancts/modules/vulkan/vktTestPackage.cpp
+@@ -204,7 +204,7 @@ static void		restoreStandardOutput	()												{ qpRedirectOut(openWrite, open
+ 
+ static MovePtr<vk::Library> createLibrary (tcu::TestContext& testCtx)
+ {
+-#if (DE_OS == DE_OS_WIN32) || (DE_OS == DE_OS_UNIX)
++#ifdef DE_PLATFORM_USE_LIBRARY_TYPE
+ 	return MovePtr<vk::Library>(testCtx.getPlatform().getVulkanPlatform().createLibrary(vk::Platform::LIBRARY_TYPE_VULKAN, testCtx.getCommandLine().getVkLibraryPath()));
+ #else
+ 	return MovePtr<vk::Library>(testCtx.getPlatform().getVulkanPlatform().createLibrary(testCtx.getCommandLine().getVkLibraryPath()));
+diff --git a/external/vulkancts/vkscpc/vkscpc.cpp b/external/vulkancts/vkscpc/vkscpc.cpp
+index 55b5665c8..91725633a 100644
+--- a/external/vulkancts/vkscpc/vkscpc.cpp
++++ b/external/vulkancts/vkscpc/vkscpc.cpp
+@@ -288,7 +288,7 @@ int main (int argc, char** argv)
+ 		tcu::DirArchive					archive			{""};
+ 		tcu::TestLog					log				{ cmdLine.getOption<opt::LogFile>().c_str() }; log.supressLogging(true);
+ 		de::SharedPtr<tcu::Platform>	platform		{createPlatform()};
+-#if (DE_OS == DE_OS_WIN32) || (DE_OS == DE_OS_UNIX)
++#ifdef DE_PLATFORM_USE_LIBRARY_TYPE
+ 		de::SharedPtr<vk::Library>		library			{platform->getVulkanPlatform().createLibrary(vk::Platform::LIBRARY_TYPE_VULKAN, DE_NULL)};
+ #else
+ 		de::SharedPtr<vk::Library>		library			{platform->getVulkanPlatform().createLibrary(DE_NULL)};
+diff --git a/external/vulkancts/vkscserver/vksServices.cpp b/external/vulkancts/vkscserver/vksServices.cpp
+index 461c7a349..fe1160edc 100644
+--- a/external/vulkancts/vkscserver/vksServices.cpp
++++ b/external/vulkancts/vkscserver/vksServices.cpp
+@@ -163,7 +163,7 @@ VkscServer* createServerVKSC(const std::string& logFile)
+ 	tcu::DirArchive					archive		{""};
+ 	tcu::TestLog					log			{ logFile.c_str() }; log.supressLogging(true);
+ 	tcu::Platform*					platform	{createPlatform()};
+-#if (DE_OS == DE_OS_WIN32) || (DE_OS == DE_OS_UNIX)
++#ifdef DE_PLATFORM_USE_LIBRARY_TYPE
+ 	vk::Library*					library		{platform->getVulkanPlatform().createLibrary(vk::Platform::LIBRARY_TYPE_VULKAN, DE_NULL)};
+ #else
+ 	vk::Library*					library		{platform->getVulkanPlatform().createLibrary(DE_NULL)};
+diff --git a/framework/delibs/debase/deDefs.h b/framework/delibs/debase/deDefs.h
+index 39cd65d0b..2885fe5c5 100644
+--- a/framework/delibs/debase/deDefs.h
++++ b/framework/delibs/debase/deDefs.h
+@@ -101,6 +101,12 @@
+ #	error Unknown operating system.
+ #endif
+ 
++#if ((DE_OS == DE_OS_WIN32) || (DE_OS == DE_OS_UNIX)) && !defined(DEQP_SURFACELESS) && !defined(NULLWS)
++#	define DE_PLATFORM_USE_LIBRARY_TYPE 1
++#else
++#	undef DE_PLATFORM_USE_LIBRARY_TYPE
++#endif
++
+ /* CPUs */
+ #define DE_CPU_VANILLA	0
+ #define DE_CPU_X86		1
+diff --git a/framework/platform/CMakeLists.txt b/framework/platform/CMakeLists.txt
+index 00c53e3c9..b2a1d57b6 100644
+--- a/framework/platform/CMakeLists.txt
++++ b/framework/platform/CMakeLists.txt
+@@ -113,6 +113,7 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
+ 		endif()
+ 
+ 	elseif (DE_OS_IS_UNIX AND DEQP_USE_SURFACELESS)
++		add_definitions(-DDEQP_SURFACELESS=1)
+ 		set(TCUTIL_PLATFORM_SRCS
+ 			surfaceless/tcuSurfacelessPlatform.hpp
+ 			surfaceless/tcuSurfacelessPlatform.cpp
+diff --git a/targets/nullws/nullws.cmake b/targets/nullws/nullws.cmake
+index 81a7f9ea2..5f6f9b773 100644
+--- a/targets/nullws/nullws.cmake
++++ b/targets/nullws/nullws.cmake
+@@ -1,6 +1,7 @@
+ message("*** Using nullws target")
+ set(DEQP_TARGET_NAME "nullws")
+ 
++set(DEQP_USE_NULLWS ON)
+ add_definitions(-DNULLWS)
+ 
+ find_library(GLES2_LIBRARY		NAMES libGLESv2 GLESv2)
+-- 
+2.39.1
+

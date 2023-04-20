@@ -148,7 +148,7 @@ artifacts.  Or, you can add the following to your job to only run some fraction
 
 .. code-block:: yaml
 
-    variables:
+   variables:
       DEQP_FRACTION: 10
 
 to just run 1/10th of the test list.
@@ -177,12 +177,14 @@ To do so, follow `GitLab's instructions
 register your personal GitLab runner in your Mesa fork.  Then, tell
 Mesa how many jobs it should serve (``concurrent=``) and how many
 cores those jobs should use (``FDO_CI_CONCURRENT=``) by editing these
-lines in ``/etc/gitlab-runner/config.toml``, for example::
+lines in ``/etc/gitlab-runner/config.toml``, for example:
 
-  concurrent = 2
+.. code-block:: toml
 
-  [[runners]]
-    environment = ["FDO_CI_CONCURRENT=16"]
+   concurrent = 2
+
+   [[runners]]
+     environment = ["FDO_CI_CONCURRENT=16"]
 
 
 Docker caching
@@ -225,7 +227,7 @@ don't personally have.  If you're experiencing this with the CI
 builds, you can use Docker to use their build environment locally.  Go
 to your job log, and at the top you'll see a line like::
 
-    Pulling docker image registry.freedesktop.org/anholt/mesa/debian/android_build:2020-09-11
+   Pulling docker image registry.freedesktop.org/anholt/mesa/debian/android_build:2020-09-11
 
 We'll use a volume mount to make our current Mesa tree be what the
 Docker container uses, so they'll share everything (their build will
@@ -237,17 +239,29 @@ useful for debug).  Extract your build setup variables from
 
 .. code-block:: console
 
-    IMAGE=registry.freedesktop.org/anholt/mesa/debian/android_build:2020-09-11
-    sudo docker pull $IMAGE
-    sudo docker run --rm -v `pwd`:/mesa -w /mesa $IMAGE env PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/pkgconfig/ GALLIUM_DRIVERS=freedreno UNWIND=disabled EXTRA_OPTION="-D android-stub=true -D llvm=disabled" DRI_LOADERS="-D glx=disabled -D gbm=disabled -D egl=enabled -D platforms=android" CROSS=aarch64-linux-android ./.gitlab-ci/meson-build.sh
+   IMAGE=registry.freedesktop.org/anholt/mesa/debian/android_build:2020-09-11
+   sudo docker pull $IMAGE
+   sudo docker run --rm -v `pwd`:/mesa -w /mesa $IMAGE env PKG_CONFIG_PATH=/usr/local/lib/aarch64-linux-android/pkgconfig/:/android-ndk-r21d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/pkgconfig/ GALLIUM_DRIVERS=freedreno UNWIND=disabled EXTRA_OPTION="-D android-stub=true -D llvm=disabled" DRI_LOADERS="-D glx=disabled -D gbm=disabled -D egl=enabled -D platforms=android" CROSS=aarch64-linux-android ./.gitlab-ci/meson-build.sh
 
 All you have left over from the build is its output, and a _build
 directory.  You can hack on mesa and iterate testing the build with:
 
 .. code-block:: console
 
-    sudo docker run --rm -v `pwd`:/mesa $IMAGE ninja -C /mesa/_build
+   sudo docker run --rm -v `pwd`:/mesa $IMAGE ninja -C /mesa/_build
 
+Running specific CI jobs
+------------------------
+
+You can use ``bin/ci/ci_run_n_monitor.py`` to run specific CI jobs. It
+will automatically take care of running all the jobs yours depends on,
+and cancel the rest to avoid wasting resources.
+
+See ``bin/ci/ci_run_n_monitor.py --help`` for all the options.
+
+The ``--target`` argument takes a regex that you can use to select the
+jobs names you want to run, eg. ``--target 'zink.*'`` will run all the
+zink jobs, leaving the other drivers' jobs free for others to use.
 
 Conformance Tests
 -----------------

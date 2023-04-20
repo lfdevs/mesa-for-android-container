@@ -281,6 +281,23 @@ lower_to_shuffle(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_intrinsic_quad_swap_diagonal:
       index = nir_ixor(b, index, nir_imm_int(b, 0x3));
       break;
+   case nir_intrinsic_rotate: {
+      nir_ssa_def *delta = intrin->src[1].ssa;
+      nir_ssa_def *local_id = nir_load_subgroup_invocation(b);
+      const unsigned cluster_size = nir_intrinsic_cluster_size(intrin);
+
+      nir_ssa_def *rotation_group_mask =
+         cluster_size > 0 ? nir_imm_int(b, (int)(cluster_size - 1)) :
+                            nir_iadd_imm(b, nir_load_subgroup_size(b), -1);
+
+      index = nir_iand(b, nir_iadd(b, local_id, delta),
+                          rotation_group_mask);
+      if (cluster_size > 0) {
+         index = nir_iadd(b, index,
+                          nir_iand(b, local_id, nir_inot(b, rotation_group_mask)));
+      }
+      break;
+   }
    default:
       unreachable("Invalid intrinsic");
    }
@@ -826,6 +843,17 @@ lower_subgroups_instr(nir_builder *b, nir_instr *instr, void *_options)
    case nir_intrinsic_exclusive_scan:
       if (options->lower_to_scalar && intrin->num_components > 1)
          return lower_subgroup_op_to_scalar(b, intrin, false);
+      break;
+
+   case nir_intrinsic_rotate:
+      if (nir_intrinsic_execution_scope(intrin) == NIR_SCOPE_SUBGROUP) {
+         if (options->lower_rotate_to_shuffle)
+            return lower_to_shuffle(b, intrin, options);
+         else if (options->lower_to_scalar && intrin->num_components > 1)
+            return lower_subgroup_op_to_scalar(b, intrin, options->lower_shuffle_to_32bit);
+         else if (options->lower_shuffle_to_32bit && intrin->src[0].ssa->bit_size == 64)
+            return lower_subgroup_op_to_32bit(b, intrin);
+      }
       break;
 
    default:

@@ -34,6 +34,8 @@
 #include "freedreno_context.h"
 #include "freedreno_util.h"
 
+BEGINC;
+
 /**
  * Since the sample-mask is part of the hw blend state, we need to have state
  * variants per sample-mask value.  But we don't expect the sample-mask state
@@ -89,5 +91,7 @@ fd6_blend_variant(struct pipe_blend_state *cso, unsigned nr_samples,
 void *fd6_blend_state_create(struct pipe_context *pctx,
                              const struct pipe_blend_state *cso);
 void fd6_blend_state_delete(struct pipe_context *, void *hwcso);
+
+ENDC;
 
 #endif /* FD6_BLEND_H_ */

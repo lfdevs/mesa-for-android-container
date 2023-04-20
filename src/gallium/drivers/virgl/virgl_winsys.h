@@ -52,6 +52,8 @@ struct virgl_winsys {
 
    void (*destroy)(struct virgl_winsys *vws);
 
+   int (*get_fd)(struct virgl_winsys *vws);
+
    int (*transfer_put)(struct virgl_winsys *vws,
                        struct virgl_hw_res *res,
                        const struct pipe_box *box,

@@ -654,7 +654,7 @@ emit_pipeline_select(struct iris_batch *batch, uint32_t pipeline)
    enum pipe_control_flags flags = PIPE_CONTROL_CS_STALL |
                                    PIPE_CONTROL_FLUSH_HDC;
 
-   if (pipeline == GPGPU) {
+   if (pipeline == GPGPU && batch->name == IRIS_BATCH_RENDER) {
       flags |= PIPE_CONTROL_RENDER_TARGET_FLUSH |
                PIPE_CONTROL_DEPTH_CACHE_FLUSH;
    } else {
@@ -2522,6 +2522,44 @@ update_surface_state_addrs(struct u_upload_mgr *mgr,
    return true;
 }
 
+/* We should only use this function when it's needed to fill out
+ * surf with information provided by the pipe_(image|sampler)_view.
+ * This is only necessary for CL extension cl_khr_image2d_from_buffer.
+ * This is the reason why ISL_SURF_DIM_2D is hardcoded on dim field.
+ */
+static void
+fill_surf_for_tex2d_from_buffer(struct isl_device *isl_dev,
+                                enum isl_format format,
+                                unsigned width,
+                                unsigned height,
+                                unsigned row_stride,
+                                isl_surf_usage_flags_t usage,
+                                struct isl_surf *surf)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+   const unsigned cpp = format == ISL_FORMAT_RAW ? 1 : fmtl->bpb / 8;
+
+   const struct isl_surf_init_info init_info = {
+      .dim = ISL_SURF_DIM_2D,
+      .format = format,
+      .width = width,
+      .height = height,
+      .depth = 1,
+      .levels = 1,
+      .array_len = 1,
+      .samples = 1,
+      .min_alignment_B = 4,
+      .row_pitch_B = row_stride * cpp,
+      .usage = usage,
+      .tiling_flags = ISL_TILING_LINEAR_BIT,
+   };
+
+   const bool isl_surf_created_successfully =
+      isl_surf_init_s(isl_dev, surf, &init_info);
+
+   assert(isl_surf_created_successfully);
+}
+
 static void
 fill_surface_state(struct isl_device *isl_dev,
                    void *map,
@@ -2682,6 +2720,25 @@ iris_create_sampler_view(struct pipe_context *ctx,
 
       fill_surface_states(&screen->isl_dev, &isv->surface_state, isv->res,
                           &isv->res->surf, &isv->view, 0, 0, 0);
+   } else if (isv->base.is_tex2d_from_buf) {
+      /* In case it's a 2d image created from a buffer, we should
+       * use fill_surface_states function with image parameters provided
+       * by the CL application
+       */
+      isv->view.base_array_layer = 0;
+      isv->view.array_len = 1;
+
+      /* Create temp_surf and fill with values provided by CL application */
+      struct isl_surf temp_surf;
+      fill_surf_for_tex2d_from_buffer(&screen->isl_dev, fmt.fmt,
+                                      isv->base.u.tex2d_from_buf.width,
+                                      isv->base.u.tex2d_from_buf.height,
+                                      isv->base.u.tex2d_from_buf.row_stride,
+                                      usage,
+                                      &temp_surf);
+
+      fill_surface_states(&screen->isl_dev, &isv->surface_state, isv->res,
+                          &temp_surf, &isv->view, 0, 0, 0);
    } else {
       fill_buffer_surface_state(&screen->isl_dev, isv->res,
                                 isv->surface_state.cpu,
@@ -2996,6 +3053,37 @@ iris_set_shader_images(struct pipe_context *ctx,
             isl_surf_fill_image_param(&screen->isl_dev,
                                       &image_params[start_slot + i],
                                       &res->surf, &view);
+         } else if (img->access & PIPE_IMAGE_ACCESS_TEX2D_FROM_BUFFER) {
+            /* In case it's a 2d image created from a buffer, we should
+             * use fill_surface_states function with image parameters provided
+             * by the CL application
+             */
+            isl_surf_usage_flags_t usage =  ISL_SURF_USAGE_STORAGE_BIT;
+            struct isl_view view = {
+               .format = isl_fmt,
+               .base_level = 0,
+               .levels = 1,
+               .base_array_layer = 0,
+               .array_len = 1,
+               .swizzle = ISL_SWIZZLE_IDENTITY,
+               .usage = usage,
+            };
+
+            /* Create temp_surf and fill with values provided by CL application */
+            struct isl_surf temp_surf;
+            enum isl_format fmt = iris_image_view_get_format(ice, img);
+            fill_surf_for_tex2d_from_buffer(&screen->isl_dev, fmt,
+                                            img->u.tex2d_from_buf.width,
+                                            img->u.tex2d_from_buf.height,
+                                            img->u.tex2d_from_buf.row_stride,
+                                            usage,
+                                            &temp_surf);
+
+            fill_surface_states(&screen->isl_dev, &iv->surface_state, res,
+                                &temp_surf, &view, 0, 0, 0);
+            isl_surf_fill_image_param(&screen->isl_dev,
+                                      &image_params[start_slot + i],
+                                      &temp_surf, &view);
          } else {
             util_range_add(&res->base.b, &res->valid_buffer_range, img->u.buf.offset,
                            img->u.buf.offset + img->u.buf.size);
@@ -4178,6 +4266,17 @@ iris_create_so_decl_list(const struct pipe_stream_output_info *info,
       sol.Buffer1SurfacePitch = 4 * info->stride[1];
       sol.Buffer2SurfacePitch = 4 * info->stride[2];
       sol.Buffer3SurfacePitch = 4 * info->stride[3];
+
+#if INTEL_NEEDS_WA_14017076903
+      /* Wa_14017076903 : SOL should be programmed to force the
+       * rendering to be enabled.
+       *
+       * This fixes a rare case where SOL must render to get correct
+       * occlusion query results even when no PS and depth buffers are
+       * bound.
+       */
+      sol.ForceRendering = Force_on;
+#endif
    }
 
    iris_pack_command(GENX(3DSTATE_SO_DECL_LIST), so_decl_map, list) {
@@ -4723,7 +4822,15 @@ iris_store_tes_state(const struct intel_device_info *devinfo,
       te.MaximumTessellationFactorOdd = 63.0;
       te.MaximumTessellationFactorNotOdd = 64.0;
 #if GFX_VERx10 >= 125
-      te.TessellationDistributionMode = TEDMODE_RR_FREE;
+      STATIC_ASSERT(TEDMODE_OFF == 0);
+      if (intel_needs_workaround(devinfo, 14015297576)) {
+         te.TessellationDistributionMode = TEDMODE_OFF;
+      } else if (intel_needs_workaround(devinfo, 22012785325)) {
+         te.TessellationDistributionMode = TEDMODE_RR_STRICT;
+      } else {
+         te.TessellationDistributionMode = TEDMODE_RR_FREE;
+      }
+
       te.TessellationDistributionLevel = TEDLEVEL_PATCH;
       /* 64_TRIANGLES */
       te.SmallPatchThreshold = 3;
@@ -4833,7 +4940,8 @@ iris_store_fs_state(const struct intel_device_info *devinfo,
       psx.AttributeEnable = wm_prog_data->num_varying_inputs != 0;
       psx.PixelShaderUsesSourceDepth = wm_prog_data->uses_src_depth;
       psx.PixelShaderUsesSourceW = wm_prog_data->uses_src_w;
-      psx.PixelShaderIsPerSample = wm_prog_data->persample_dispatch;
+      psx.PixelShaderIsPerSample =
+         brw_wm_prog_data_is_persample(wm_prog_data, 0);
       psx.oMaskPresenttoRenderTarget = wm_prog_data->uses_omask;
 
 #if GFX_VER >= 9
@@ -5986,6 +6094,40 @@ iris_preemption_streamout_wa(struct iris_context *ice,
 }
 
 static void
+shader_program_needs_wa_14015297576(struct iris_context *ice,
+                                    struct iris_batch *batch,
+                                    const struct brw_stage_prog_data *prog_data,
+                                    gl_shader_stage stage,
+                                    bool *program_needs_wa_14015297576)
+{
+   if (!intel_needs_workaround(batch->screen->devinfo, 14015297576))
+      return;
+
+   switch (stage) {
+   case MESA_SHADER_TESS_CTRL: {
+      struct brw_tcs_prog_data *tcs_prog_data = (void *) prog_data;
+      *program_needs_wa_14015297576 |= tcs_prog_data->include_primitive_id;
+      break;
+   }
+   case MESA_SHADER_TESS_EVAL: {
+      struct brw_tes_prog_data *tes_prog_data = (void *) prog_data;
+      *program_needs_wa_14015297576 |= tes_prog_data->include_primitive_id;
+      break;
+   }
+   default:
+      break;
+   }
+
+   struct iris_compiled_shader *gs_shader =
+      ice->shaders.prog[MESA_SHADER_GEOMETRY];
+   const struct brw_gs_prog_data *gs_prog_data =
+      gs_shader ? (void *) gs_shader->prog_data : NULL;
+
+   *program_needs_wa_14015297576 |=
+      gs_prog_data && gs_prog_data->include_primitive_id;
+}
+
+static void
 iris_upload_dirty_render_state(struct iris_context *ice,
                                struct iris_batch *batch,
                                const struct pipe_draw_info *draw)
@@ -6225,8 +6367,15 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       /* The Constant Buffer Read Length field from 3DSTATE_CONSTANT_ALL
        * contains only 5 bits, so we can only use it for buffers smaller than
        * 32.
+       *
+       * According to Wa_16011448509, Gfx12.0 misinterprets some address bits
+       * in 3DSTATE_CONSTANT_ALL.  It should still be safe to use the command
+       * for disabling stages, where all address bits are zero.  However, we
+       * can't safely use it for general buffers with arbitrary addresses.
+       * Just fall back to the individual 3DSTATE_CONSTANT_XS commands in that
+       * case.
        */
-      if (push_bos.max_length < 32) {
+      if (push_bos.max_length < 32 && GFX_VERx10 > 120) {
          emit_push_constant_packet_all(ice, batch, 1 << stage, &push_bos);
          continue;
       }
@@ -6236,6 +6385,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
 #if GFX_VER >= 12
    if (nobuffer_stages)
+      /* Wa_16011448509: all address bits are zero */
       emit_push_constant_packet_all(ice, batch, nobuffer_stages, NULL);
 #endif
 
@@ -6319,6 +6469,16 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       }
    }
 
+   bool program_needs_wa_14015297576 = false;
+
+   /* Check if FS stage will use primitive ID overrides for Wa_14015297576. */
+   const struct brw_vue_map *last_vue_map =
+      &brw_vue_prog_data(ice->shaders.last_vue_shader->prog_data)->vue_map;
+   if ((wm_prog_data->inputs & VARYING_BIT_PRIMITIVE_ID) &&
+       last_vue_map->varying_to_slot[VARYING_SLOT_PRIMITIVE_ID] == -1) {
+      program_needs_wa_14015297576 = true;
+   }
+
    for (int stage = 0; stage <= MESA_SHADER_FRAGMENT; stage++) {
       if (!(stage_dirty & (IRIS_STAGE_DIRTY_VS << stage)))
          continue;
@@ -6333,6 +6493,9 @@ iris_upload_dirty_render_state(struct iris_context *ice,
          uint32_t scratch_addr =
             pin_scratch_space(ice, batch, prog_data, stage);
 
+         shader_program_needs_wa_14015297576(ice, batch, prog_data, stage,
+                                             &program_needs_wa_14015297576);
+
          if (stage == MESA_SHADER_FRAGMENT) {
             UNUSED struct iris_rasterizer_state *cso = ice->state.cso_rast;
             struct pipe_framebuffer_state *cso_fb = &ice->state.framebuffer;
@@ -6340,7 +6503,8 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             uint32_t ps_state[GENX(3DSTATE_PS_length)] = {0};
             _iris_pack_command(batch, GENX(3DSTATE_PS), ps_state, ps) {
                intel_set_ps_dispatch_state(&ps, batch->screen->devinfo,
-                                           wm_prog_data, cso_fb->samples);
+                                           wm_prog_data, util_framebuffer_get_num_samples(cso_fb),
+                                           0 /* msaa_flags */);
 
                ps.DispatchGRFStartRegisterForConstantSetupData0 =
                   brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 0);
@@ -6388,6 +6552,35 @@ iris_upload_dirty_render_state(struct iris_context *ice,
                             GENX(3DSTATE_PS_length));
             iris_emit_merge(batch, shader_psx, psx_state,
                             GENX(3DSTATE_PS_EXTRA_length));
+         } else if (stage == MESA_SHADER_TESS_EVAL &&
+                    intel_needs_workaround(batch->screen->devinfo, 14015297576) &&
+                    !program_needs_wa_14015297576) {
+            /* This program doesn't require Wa_14015297576, so we can enable
+             * a Tessellation Distribution Mode.
+             */
+#if GFX_VERx10 >= 125
+            uint32_t te_state[GENX(3DSTATE_TE_length)] = { 0 };
+            iris_pack_command(GENX(3DSTATE_TE), te_state, te) {
+               if (intel_needs_workaround(batch->screen->devinfo, 22012785325))
+                  te.TessellationDistributionMode = TEDMODE_RR_STRICT;
+               else
+                  te.TessellationDistributionMode = TEDMODE_RR_FREE;
+            }
+
+            uint32_t ds_state[GENX(3DSTATE_DS_length)] = { 0 };
+            iris_pack_command(GENX(3DSTATE_DS), ds_state, ds) {
+               if (scratch_addr)
+                  ds.ScratchSpaceBuffer = scratch_addr >> 4;
+            }
+
+            uint32_t *shader_ds = (uint32_t *) shader->derived_data;
+            uint32_t *shader_te = shader_ds + GENX(3DSTATE_DS_length);
+
+            iris_emit_merge(batch, shader_ds, ds_state,
+                            GENX(3DSTATE_DS_length));
+            iris_emit_merge(batch, shader_te, te_state,
+                            GENX(3DSTATE_TE_length));
+#endif
          } else if (scratch_addr) {
             uint32_t *pkt = (uint32_t *) shader->derived_data;
             switch (stage) {
@@ -6602,7 +6795,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
          wm.StatisticsEnable = ice->state.statistics_counters_enabled;
 
          wm.BarycentricInterpolationMode =
-            wm_prog_data->barycentric_interp_modes;
+            wm_prog_data_barycentric_modes(wm_prog_data, 0);
 
          if (wm_prog_data->early_fragment_tests)
             wm.EarlyDepthStencilControl = EDSC_PREPS;
@@ -6734,7 +6927,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
       if (zres)
          genX(emit_depth_state_workarounds)(ice, batch, &zres->surf);
 
-      if (GFX_VER >= 12) {
+      if (GFX_VER >= 11) {
          /* Wa_1408224581
           *
           * Workaround: Gfx12LP Astep only An additional pipe control with
@@ -6742,7 +6935,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
           * have an additional pipe control after the stencil state whenever
           * the surface state bits of this state is changing).
           *
-          * This also seems sufficient to handle Wa_14014148106.
+          * This also seems sufficient to handle Wa_14014097488.
           */
          iris_emit_pipe_control_write(batch, "WA for stencil state",
                                       PIPE_CONTROL_WRITE_IMMEDIATE,
@@ -7148,6 +7341,15 @@ iris_upload_render_state(struct iris_context *ice,
       batch->contains_draw_with_next_seqno = true;
    }
 
+   /* Wa_1409433168 - Send HS state for every primitive on gfx11.
+    * Wa_16011107343 (same for gfx12)
+    * We implement this by setting TCS dirty on each draw.
+    */
+   if ((INTEL_NEEDS_WA_1409433168 || INTEL_NEEDS_WA_16011107343) &&
+       ice->shaders.prog[MESA_SHADER_TESS_CTRL]) {
+      ice->state.stage_dirty |= IRIS_STAGE_DIRTY_TCS;
+   }
+
    iris_upload_dirty_render_state(ice, batch, draw);
 
    if (draw->index_size > 0) {
@@ -7337,7 +7539,9 @@ iris_upload_render_state(struct iris_context *ice,
 
    iris_batch_sync_region_end(batch);
 
-   trace_intel_end_draw(&batch->trace, 0);
+   uint32_t count = (sc) ? sc->count : 0;
+   count *= (draw && draw->instance_count) ? draw->instance_count : 1;
+   trace_intel_end_draw(&batch->trace, count);
 }
 
 static void
@@ -7416,6 +7620,7 @@ iris_upload_compute_walker(struct iris_context *ice,
          .NumberofThreadsinGPGPUThreadGroup = dispatch.threads,
          .SharedLocalMemorySize =
             encode_slm_size(GFX_VER, prog_data->total_shared),
+         .PreferredSLMAllocationSize = preferred_slm_allocation_size(devinfo),
          .NumberOfBarriers = cs_prog_data->uses_barrier,
          .SamplerStatePointer = shs->sampler_table.offset,
          .SamplerCount = encode_sampler_count(shader),
@@ -8349,7 +8554,7 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
          flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
    }
 
-   if (GFX_VER >= 12 && (flags & PIPE_CONTROL_DEPTH_CACHE_FLUSH)) {
+   if (INTEL_NEEDS_WA_1409600907 && (flags & PIPE_CONTROL_DEPTH_CACHE_FLUSH)) {
       /* Wa_1409600907:
        *
        * "PIPE_CONTROL with Depth Stall Enable bit must be set

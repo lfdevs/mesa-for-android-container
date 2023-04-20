@@ -88,6 +88,7 @@ get_innermost_loop(nir_cf_node *node)
 static bool
 loop_contains_block(nir_loop *loop, nir_block *block)
 {
+   assert(!nir_loop_has_continue_construct(loop));
    nir_block *before = nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
    nir_block *after = nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
 
@@ -140,33 +141,33 @@ get_preferred_block(nir_ssa_def *def, bool sink_out_of_loops)
 {
    nir_block *lca = NULL;
 
-   nir_foreach_use(use, def) {
-      nir_instr *instr = use->parent_instr;
-      nir_block *use_block = instr->block;
+   nir_foreach_use_including_if(use, def) {
+      nir_block *use_block;
 
-      /*
-       * Kind of an ugly special-case, but phi instructions
-       * need to appear first in the block, so by definition
-       * we can't move an instruction into a block where it is
-       * consumed by a phi instruction.  We could conceivably
-       * move it into a dominator block.
-       */
-      if (instr->type == nir_instr_type_phi) {
-         nir_phi_instr *phi = nir_instr_as_phi(instr);
-         nir_block *phi_lca = NULL;
-         nir_foreach_phi_src(src, phi) {
-            if (&src->src == use)
-               phi_lca = nir_dominance_lca(phi_lca, src->pred);
+      if (use->is_if) {
+         use_block =
+            nir_cf_node_as_block(nir_cf_node_prev(&use->parent_if->cf_node));
+      } else {
+         nir_instr *instr = use->parent_instr;
+         use_block = instr->block;
+
+         /*
+          * Kind of an ugly special-case, but phi instructions
+          * need to appear first in the block, so by definition
+          * we can't move an instruction into a block where it is
+          * consumed by a phi instruction.  We could conceivably
+          * move it into a dominator block.
+          */
+         if (instr->type == nir_instr_type_phi) {
+            nir_phi_instr *phi = nir_instr_as_phi(instr);
+            nir_block *phi_lca = NULL;
+            nir_foreach_phi_src(src, phi) {
+               if (&src->src == use)
+                  phi_lca = nir_dominance_lca(phi_lca, src->pred);
+            }
+            use_block = phi_lca;
          }
-         use_block = phi_lca;
       }
-
-      lca = nir_dominance_lca(lca, use_block);
-   }
-
-   nir_foreach_if_use(use, def) {
-      nir_block *use_block =
-         nir_cf_node_as_block(nir_cf_node_prev(&use->parent_if->cf_node));
 
       lca = nir_dominance_lca(lca, use_block);
    }

@@ -34,6 +34,10 @@ c = 'c'
 algebraic = [
    # Allows us to schedule as a multiply by 2
    (('~fadd', ('fadd', a, b), a), ('fadd', ('fadd', a, a), b)),
+
+   # Midgard scales fsin/fcos arguments by pi.
+   (('fsin', a), ('fsin_mdg', ('fdiv', a, math.pi))),
+   (('fcos', a), ('fcos_mdg', ('fdiv', a, math.pi))),
 ]
 
 algebraic_late = [
@@ -135,14 +139,6 @@ cancel_inot = [
         (('inot', ('inot', a)), a)
 ]
 
-# Midgard scales fsin/fcos arguments by pi.
-# Pass must be run only once, after the main loop
-
-scale_trig = [
-        (('fsin', a), ('fsin', ('fdiv', a, math.pi))),
-        (('fcos', a), ('fcos', ('fdiv', a, math.pi))),
-]
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--import-path', required=True)
@@ -161,9 +157,6 @@ def run():
 
     print(nir_algebraic.AlgebraicPass("midgard_nir_lower_algebraic_late",
                                       algebraic_late + converts + constant_switch).render())
-
-    print(nir_algebraic.AlgebraicPass("midgard_nir_scale_trig",
-                                      scale_trig).render())
 
     print(nir_algebraic.AlgebraicPass("midgard_nir_cancel_inot",
                                       cancel_inot).render())

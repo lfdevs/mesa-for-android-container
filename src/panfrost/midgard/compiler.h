@@ -245,9 +245,6 @@ typedef struct compiler_context {
    struct pan_shader_info *info;
    gl_shader_stage stage;
 
-   /* Number of samples for a keyed blend shader. Depends on is_blend */
-   unsigned blend_sample_iterations;
-
    /* Index to precolour to r0 for an input blend colour */
    unsigned blend_input;
 
@@ -308,8 +305,6 @@ typedef struct compiler_context {
    /* Writeout instructions for each render target */
    midgard_instruction
       *writeout_branch[MIDGARD_NUM_RTS][MIDGARD_MAX_SAMPLE_ITER];
-
-   struct hash_table_u64 *sysval_to_id;
 
    /* Mask of UBOs that need to be uploaded */
    uint32_t ubo_mask;

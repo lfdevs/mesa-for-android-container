@@ -77,6 +77,9 @@ struct dri_ctx_attribs {
    int no_error;
 };
 
+extern unsigned
+dri_context_error_to_glx_error(unsigned error);
+
 extern int
 dri_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
                         struct dri_ctx_attribs *dca);

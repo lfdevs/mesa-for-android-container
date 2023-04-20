@@ -175,6 +175,9 @@ struct panfrost_batch {
    mali_ptr depth_stencil;
    mali_ptr blend;
 
+   unsigned nr_push_uniforms[PIPE_SHADER_TYPES];
+   unsigned nr_uniform_buffers[PIPE_SHADER_TYPES];
+
    /* Valhall: struct mali_scissor_packed */
    unsigned scissor[2];
    float minimum_z, maximum_z;

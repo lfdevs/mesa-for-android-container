@@ -504,12 +504,6 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
       mangled_name = "__fp64_to_uint(u641;";
       return_type = glsl_uint_type();
       break;
-   case nir_op_f2b1:
-   case nir_op_f2b32:
-      name = "__fp64_to_bool";
-      mangled_name = "__fp64_to_bool(u641;";
-      return_type = glsl_bool_type();
-      break;
    case nir_op_b2f64:
       name = "__bool_to_fp64";
       mangled_name = "__bool_to_fp64(b1;";
@@ -605,6 +599,11 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
    case nir_op_fsat:
       name = "__fsat64";
       mangled_name = "__fsat64(u641;";
+      break;
+   case nir_op_fisfinite:
+      name = "__fisfinite64";
+      mangled_name = "__fisfinite64(u641;";
+      return_type = glsl_bool_type();
       break;
    default:
       return false;

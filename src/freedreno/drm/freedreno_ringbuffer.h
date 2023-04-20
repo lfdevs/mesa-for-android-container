@@ -139,10 +139,33 @@ struct fd_ringbuffer {
 struct fd_ringbuffer *fd_ringbuffer_new_object(struct fd_pipe *pipe,
                                                uint32_t size);
 
+/*
+ * Helpers for ref/unref with some extra debugging.. unref() returns true if
+ * the object is still live
+ */
+
+static inline void
+ref(int32_t *ref)
+{
+   ASSERTED int32_t count = p_atomic_inc_return(ref);
+   /* We should never see a refcnt transition 0->1, this is a sign of a
+    * zombie coming back from the dead!
+    */
+   assert(count != 1);
+}
+
+static inline bool
+unref(int32_t *ref)
+{
+   int32_t count = p_atomic_dec_return(ref);
+   assert(count != -1);
+   return count == 0;
+}
+
 static inline void
 fd_ringbuffer_del(struct fd_ringbuffer *ring)
 {
-   if (!p_atomic_dec_zero(&ring->refcnt))
+   if (--ring->refcnt > 0)
       return;
 
    ring->funcs->destroy(ring);
@@ -151,7 +174,7 @@ fd_ringbuffer_del(struct fd_ringbuffer *ring)
 static inline struct fd_ringbuffer *
 fd_ringbuffer_ref(struct fd_ringbuffer *ring)
 {
-   p_atomic_inc(&ring->refcnt);
+   ring->refcnt++;
    return ring;
 }
 

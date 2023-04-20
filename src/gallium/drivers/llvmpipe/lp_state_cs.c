@@ -548,6 +548,19 @@ llvmpipe_bind_compute_state(struct pipe_context *pipe,
    llvmpipe->cs_dirty |= LP_CSNEW_CS;
 }
 
+static void
+llvmpipe_get_compute_state_info(struct pipe_context *pipe, void *cs,
+                                struct pipe_compute_state_object_info *info)
+{
+   struct lp_compute_shader* shader = cs;
+   struct nir_shader* nir = shader->base.ir.nir;
+
+   info->max_threads = 1024;
+   info->preferred_simd_size = 32;
+   // TODO: this is a bad estimate, but not much we can do without actually compiling the shaders
+   info->private_memory = nir->scratch_size;
+}
+
 
 /**
  * Remove shader variant from two lists: the shader's variant list
@@ -1052,20 +1065,34 @@ lp_csctx_set_sampler_views(struct lp_cs_context *csctx,
                   }
                } else {
                   /*
-                   * For buffers, we don't have "offset", instead adjust
-                   * the size (stored as width) plus the base pointer.
+                   * For tex2d_from_buf, adjust width and height with application
+                   * values. If is_tex2d_from_buf is false (1D images),
+                   * adjust using size value (stored as width).
                    */
                   unsigned view_blocksize = util_format_get_blocksize(view->format);
-                  /* probably don't really need to fill that out */
+
                   jit_tex->mip_offsets[0] = 0;
-                  jit_tex->row_stride[0] = 0;
                   jit_tex->img_stride[0] = 0;
 
-                  /* everything specified in number of elements here. */
-                  jit_tex->width = view->u.buf.size / view_blocksize;
-                  jit_tex->base = (uint8_t *)jit_tex->base + view->u.buf.offset;
-                  /* XXX Unsure if we need to sanitize parameters? */
-                  assert(view->u.buf.offset + view->u.buf.size <= res->width0);
+                  /* If it's not a 2D texture view of a buffer, adjust using size. */
+                  if (!view->is_tex2d_from_buf) {
+                     /* everything specified in number of elements here. */
+                     jit_tex->width = view->u.buf.size / view_blocksize;
+                     jit_tex->row_stride[0] = 0;
+
+                     /* Adjust base pointer with offset. */
+                     jit_tex->base = (uint8_t *)jit_tex->base + view->u.buf.offset;
+
+                     /* XXX Unsure if we need to sanitize parameters? */
+                     assert(view->u.buf.offset + view->u.buf.size <= res->width0);
+                  } else {
+                     jit_tex->width = view->u.tex2d_from_buf.width;
+                     jit_tex->height = view->u.tex2d_from_buf.height;
+                     jit_tex->row_stride[0] = view->u.tex2d_from_buf.row_stride * view_blocksize;
+
+                     jit_tex->base = (uint8_t *)jit_tex->base + 
+                        view->u.tex2d_from_buf.offset * view_blocksize;
+                  }
                }
             }
          } else {
@@ -1219,9 +1246,29 @@ lp_csctx_set_cs_images(struct lp_cs_context *csctx,
             jit_image->sample_stride = lp_res->sample_stride;
             jit_image->base = (uint8_t *)jit_image->base + mip_offset;
          } else {
-            unsigned view_blocksize = util_format_get_blocksize(image->format);
-            jit_image->width = image->u.buf.size / view_blocksize;
-            jit_image->base = (uint8_t *)jit_image->base + image->u.buf.offset;
+            unsigned image_blocksize = util_format_get_blocksize(image->format);
+
+            jit_image->img_stride = 0;
+
+            /* If it's not a 2D image view of a buffer, adjust using size. */
+            if (!(image->access & PIPE_IMAGE_ACCESS_TEX2D_FROM_BUFFER)) {
+               /* everything specified in number of elements here. */
+               jit_image->width = image->u.buf.size / image_blocksize;
+               jit_image->row_stride = 0;
+
+               /* Adjust base pointer with offset. */
+               jit_image->base = (uint8_t *)jit_image->base + image->u.buf.offset;
+
+               /* XXX Unsure if we need to sanitize parameters? */
+               assert(image->u.buf.offset + image->u.buf.size <= res->width0);
+            } else {
+               jit_image->width = image->u.tex2d_from_buf.width;
+               jit_image->height = image->u.tex2d_from_buf.height;
+               jit_image->row_stride = image->u.tex2d_from_buf.row_stride * image_blocksize;
+
+               jit_image->base = (uint8_t *)jit_image->base +
+                  image->u.tex2d_from_buf.offset * image_blocksize;
+            }
          }
       }
    }
@@ -1494,6 +1541,7 @@ llvmpipe_init_compute_funcs(struct llvmpipe_context *llvmpipe)
 {
    llvmpipe->pipe.create_compute_state = llvmpipe_create_compute_state;
    llvmpipe->pipe.bind_compute_state = llvmpipe_bind_compute_state;
+   llvmpipe->pipe.get_compute_state_info = llvmpipe_get_compute_state_info;
    llvmpipe->pipe.delete_compute_state = llvmpipe_delete_compute_state;
    llvmpipe->pipe.set_compute_resources = llvmpipe_set_compute_resources;
    llvmpipe->pipe.set_global_binding = llvmpipe_set_global_binding;

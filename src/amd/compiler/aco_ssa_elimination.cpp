@@ -270,8 +270,12 @@ try_remove_simple_block(ssa_elimination_ctx& ctx, Block* block)
       assert(false);
    }
 
-   if (branch.target[0] == branch.target[1])
+   if (branch.target[0] == branch.target[1]) {
+      while (branch.operands.size())
+         branch.operands.pop_back();
+
       branch.opcode = aco_opcode::p_branch;
+   }
 
    for (unsigned i = 0; i < pred.linear_succs.size(); i++)
       if (pred.linear_succs[i] == block->index)
@@ -459,28 +463,21 @@ try_optimize_branching_sequence(ssa_elimination_ctx& ctx, Block& block, const in
          if (exec_val->isSDWA()) {
             /* This might work but it needs testing and more code to copy the instruction. */
             return;
-         } else if (!exec_val->isVOP3()) {
-            aco_ptr<Instruction> tmp = std::move(exec_val);
-            exec_val.reset(create_instruction<VOPC_instruction>(
-               tmp->opcode, tmp->format, tmp->operands.size(), tmp->definitions.size() + 1));
-            std::copy(tmp->operands.cbegin(), tmp->operands.cend(), exec_val->operands.begin());
-            std::copy(tmp->definitions.cbegin(), tmp->definitions.cend(),
-                      exec_val->definitions.begin());
          } else {
             aco_ptr<Instruction> tmp = std::move(exec_val);
-            exec_val.reset(create_instruction<VOP3_instruction>(
+            exec_val.reset(create_instruction<VALU_instruction>(
                tmp->opcode, tmp->format, tmp->operands.size(), tmp->definitions.size() + 1));
             std::copy(tmp->operands.cbegin(), tmp->operands.cend(), exec_val->operands.begin());
             std::copy(tmp->definitions.cbegin(), tmp->definitions.cend(),
                       exec_val->definitions.begin());
 
-            VOP3_instruction& src = tmp->vop3();
-            VOP3_instruction& dst = exec_val->vop3();
+            VALU_instruction& src = tmp->valu();
+            VALU_instruction& dst = exec_val->valu();
             dst.opsel = src.opsel;
             dst.omod = src.omod;
             dst.clamp = src.clamp;
-            std::copy(std::cbegin(src.abs), std::cend(src.abs), std::begin(dst.abs));
-            std::copy(std::cbegin(src.neg), std::cend(src.neg), std::begin(dst.neg));
+            dst.neg = src.neg;
+            dst.abs = src.abs;
          }
       }
 
@@ -577,7 +574,6 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
    /* Collect information about the branching sequence. */
 
    bool logical_end_found = false;
-   bool branch_reads_exec = false;
    bool branch_exec_val_found = false;
    int branch_exec_val_idx = -1;
    int branch_exec_copy_idx = -1;
@@ -598,8 +594,6 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
       bool writes_exec = instr_writes_exec(instr.get());
 
       logical_end_found |= instr->opcode == aco_opcode::p_logical_end;
-      branch_reads_exec |= i == (int)(block.instructions.size() - 1) && instr->isBranch() &&
-                           instr->operands.size() && instr->operands[0].physReg() == exec;
 
       /* See if we found an unused exec write. */
       if (writes_exec && !exec_write_used) {
@@ -617,8 +611,7 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
 
       /* For a newly encountered exec write, clear the used flag. */
       if (writes_exec) {
-         if (!logical_end_found && branch_reads_exec && instr->operands.size() &&
-             !branch_exec_val_found) {
+         if (!logical_end_found && instr->operands.size() && !branch_exec_val_found) {
             /* We are in a branch that jumps according to exec.
              * We just found the instruction that copies to exec before the branch.
              */
@@ -656,8 +649,7 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
 
    /* See if we can optimize the instruction that produces the exec mask. */
    if (branch_exec_val_idx != -1) {
-      assert(logical_end_found && branch_reads_exec && branch_exec_tempid &&
-             branch_exec_copy_idx != -1);
+      assert(logical_end_found && branch_exec_tempid && branch_exec_copy_idx != -1);
       try_optimize_branching_sequence(ctx, block, branch_exec_val_idx, branch_exec_copy_idx);
    }
 

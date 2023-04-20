@@ -77,7 +77,7 @@ struct vk_pipeline_cache_object_ops {
     *
     * This function is optional.
     */
-   struct vk_pipeline_cache_object *(*deserialize)(struct vk_device *device,
+   struct vk_pipeline_cache_object *(*deserialize)(struct vk_pipeline_cache *cache,
                                                    const void *key_data,
                                                    size_t key_size,
                                                    struct blob_reader *blob);
@@ -86,7 +86,8 @@ struct vk_pipeline_cache_object_ops {
     *
     * Called when vk_pipeline_cache_object.ref_cnt hits 0.
     */
-   void (*destroy)(struct vk_pipeline_cache_object *object);
+   void (*destroy)(struct vk_device *device,
+                   struct vk_pipeline_cache_object *object);
 };
 
 /** Base struct for cached objects
@@ -105,7 +106,6 @@ struct vk_pipeline_cache_object_ops {
  * it never has two objects of different types with the same key.
  */
 struct vk_pipeline_cache_object {
-   struct vk_device *device;
    const struct vk_pipeline_cache_object_ops *ops;
    uint32_t ref_cnt;
 
@@ -121,7 +121,6 @@ vk_pipeline_cache_object_init(struct vk_device *device,
                               const void *key_data, uint32_t key_size)
 {
    memset(object, 0, sizeof(*object));
-   object->device = device;
    object->ops = ops;
    p_atomic_set(&object->ref_cnt, 1);
    object->data_size = 0; /* Unknown */
@@ -144,11 +143,12 @@ vk_pipeline_cache_object_ref(struct vk_pipeline_cache_object *object)
 }
 
 static inline void
-vk_pipeline_cache_object_unref(struct vk_pipeline_cache_object *object)
+vk_pipeline_cache_object_unref(struct vk_device *device,
+                               struct vk_pipeline_cache_object *object)
 {
    assert(object && p_atomic_read(&object->ref_cnt) >= 1);
    if (p_atomic_dec_zero(&object->ref_cnt))
-      object->ops->destroy(object);
+      object->ops->destroy(device, object);
 }
 
 /** A generic implementation of VkPipelineCache */
@@ -240,6 +240,23 @@ vk_pipeline_cache_lookup_object(struct vk_pipeline_cache *cache,
 struct vk_pipeline_cache_object * MUST_CHECK
 vk_pipeline_cache_add_object(struct vk_pipeline_cache *cache,
                              struct vk_pipeline_cache_object *object);
+
+/** Creates and inserts an object into the pipeline cache
+ *
+ * This function takes serialized data and emplaces the deserialized object
+ * into the pipeline cache.  It is the responsibility of the caller to
+ * specify a deserialize() function that properly initializes the object.
+ *
+ * This function can be used to avoid an extra serialize() step for
+ * disk-cache insertion.  For the intended usage pattern, see
+ * vk_pipeline_cache_add_object().
+ *
+ */
+struct vk_pipeline_cache_object *
+vk_pipeline_cache_create_and_insert_object(struct vk_pipeline_cache *cache,
+                                           const void *key_data, uint32_t key_size,
+                                           const void *data, size_t data_size,
+                                           const struct vk_pipeline_cache_object_ops *ops);
 
 struct nir_shader *
 vk_pipeline_cache_lookup_nir(struct vk_pipeline_cache *cache,

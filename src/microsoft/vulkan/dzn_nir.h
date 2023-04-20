@@ -158,4 +158,7 @@ dzn_nir_blit_vs(void);
 nir_shader *
 dzn_nir_blit_fs(const struct dzn_nir_blit_info *info);
 
+nir_shader *
+dzn_nir_polygon_point_mode_gs(const nir_shader *vs, unsigned cull_mode, bool front_ccw);
+
 #endif

@@ -501,7 +501,7 @@ validate_texture_wrap_mode(struct gl_context *ctx, GLenum wrap)
        *   texture parameters TEXTURE_WRAP_S, TEXTURE_WRAP_T, or
        *   TEXTURE_WRAP_R.
        */
-      return ctx->API == API_OPENGL_COMPAT;
+      return _mesa_is_desktop_gl_compat(ctx);
    case GL_CLAMP_TO_EDGE:
    case GL_REPEAT:
    case GL_MIRRORED_REPEAT:

@@ -42,12 +42,11 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
 {
    VkResult result;
 
-   result = wsi_device_init(&physical_device->wsi_device,
-                            panvk_physical_device_to_handle(physical_device),
-                            panvk_wsi_proc_addr,
-                            &physical_device->instance->vk.alloc,
-                            physical_device->master_fd, NULL,
-                            false);
+   result = wsi_device_init(
+      &physical_device->wsi_device,
+      panvk_physical_device_to_handle(physical_device), panvk_wsi_proc_addr,
+      &physical_device->instance->vk.alloc, physical_device->master_fd, NULL,
+      &(struct wsi_device_options){.sw_device = false});
    if (result != VK_SUCCESS)
       return result;
 

@@ -107,3 +107,9 @@ TEST_F(LowerSwizzle, ShiftWithNot)
    CASE(bi_lshift_and_v4i8_to(b, reg, y, bi_neg(x3210), z),
         bi_lshift_and_v4i8_to(b, reg, y, bi_neg(bi_swz_v4i8(b, x3210)), z));
 }
+
+TEST_F(LowerSwizzle, FClampSwap)
+{
+   CASE(bi_fclamp_v2f16_to(b, reg, bi_swz_16(x, 1, 0)),
+        bi_swz_v2i16_to(b, reg, bi_swz_16(bi_fclamp_v2f16(b, x), 1, 0)));
+}

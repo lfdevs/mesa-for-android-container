@@ -96,6 +96,12 @@ enum pvr_pds_vertex_attrib_program_type {
    PVR_PDS_VERTEX_ATTRIB_PROGRAM_COUNT
 };
 
+enum pvr_pds_addr_literal_type {
+   PVR_PDS_ADDR_LITERAL_DESC_SET_ADDRS_TABLE,
+   PVR_PDS_ADDR_LITERAL_PUSH_CONSTS,
+   PVR_PDS_ADDR_LITERAL_BLEND_CONSTANTS,
+};
+
 /*****************************************************************************
  Structure definitions
 *****************************************************************************/
@@ -881,6 +887,11 @@ struct pvr_pds_descriptor_set {
                                    */
 };
 
+struct pvr_pds_addr_literal {
+   enum pvr_pds_addr_literal_type type;
+   unsigned int destination;
+};
+
 #define PVR_BUFFER_TYPE_UBO (0)
 #define PVR_BUFFER_TYPE_COMPILE_TIME (1)
 #define PVR_BUFFER_TYPE_BLEND_CONSTS (2)
@@ -913,6 +924,9 @@ struct pvr_pds_descriptor_program_input {
    /* User-specified descriptor sets. */
    unsigned int descriptor_set_count;
    struct pvr_pds_descriptor_set descriptor_sets[8];
+
+   unsigned int addr_literal_count;
+   struct pvr_pds_addr_literal addr_literals[8];
 
    /* "State" buffers, including:
     * compile-time constants
@@ -1001,6 +1015,9 @@ struct pvr_pds_vertex_primary_program_input {
 #define PVR_PDS_CONST_MAP_ENTRY_TYPE_BASE_VERTEX (12)
 #define PVR_PDS_CONST_MAP_ENTRY_TYPE_BASE_WORKGROUP (13)
 #define PVR_PDS_CONST_MAP_ENTRY_TYPE_COND_RENDER (14)
+
+#define PVR_PDS_CONST_MAP_ENTRY_TYPE_ADDR_LITERAL_BUFFER (15)
+#define PVR_PDS_CONST_MAP_ENTRY_TYPE_ADDR_LITERAL (16)
 
 /* We pack all the following structs tightly into a buffer using += sizeof(x)
  * offsets, this can lead to data that is not native aligned. Supplying the
@@ -1133,6 +1150,18 @@ struct pvr_pds_const_map_entry_cond_render {
    uint8_t const_offset;
 
    uint32_t cond_render_pred_temp;
+} PVR_ALIGNED;
+
+struct pvr_pds_const_map_entry_addr_literal_buffer {
+   uint8_t type;
+   uint8_t const_offset;
+
+   uint32_t size;
+} PVR_ALIGNED;
+
+struct pvr_pds_const_map_entry_addr_literal {
+   uint8_t type;
+   enum pvr_pds_addr_literal_type addr_type;
 } PVR_ALIGNED;
 
 struct pvr_pds_info {

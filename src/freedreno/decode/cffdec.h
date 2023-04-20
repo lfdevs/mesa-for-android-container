@@ -78,6 +78,7 @@ struct cffdec_options {
    struct {
       uint64_t base;
       uint32_t rem;
+      bool crash_found : 1;
    } ibs[4];
 };
 
@@ -116,6 +117,8 @@ bool reg_written(uint32_t regbase);
 uint32_t reg_lastval(uint32_t regbase);
 uint32_t reg_val(uint32_t regbase);
 void reg_set(uint32_t regbase, uint32_t val);
+uint32_t * parse_cp_indirect(uint32_t *dwords, uint32_t sizedwords,
+                             uint64_t *ibaddr, uint32_t *ibsize);
 void reset_regs(void);
 void cffdec_init(const struct cffdec_options *options);
 void dump_register_val(struct regacc *r, int level);
@@ -157,5 +160,21 @@ pkt_is_opcode(uint32_t dword, uint32_t *opcode, uint32_t *size)
    }
    return false;
 }
+
+/**
+ * For a5xx+ we can detect valid packet headers vs random other noise, and
+ * can use this to "re-sync" to the start of the next valid packet.  So that
+ * the same cmdstream corruption that confused the GPU doesn't confuse us!
+ */
+static inline uint32_t
+find_next_packet(uint32_t *dwords, uint32_t sizedwords)
+{
+   for (uint32_t c = 0; c < sizedwords; c++) {
+      if (pkt_is_type7(dwords[c]) || pkt_is_type4(dwords[c]))
+         return c;
+   }
+   return sizedwords;
+}
+
 
 #endif /* __CFFDEC_H__ */

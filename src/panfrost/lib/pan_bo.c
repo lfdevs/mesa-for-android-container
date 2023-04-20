@@ -465,7 +465,7 @@ panfrost_bo_import(struct panfrost_device *dev, int fd)
    unsigned gem_handle;
 
    pthread_mutex_lock(&dev->bo_map_lock);
- 
+
    ret = drmPrimeFDToHandle(dev->fd, fd, &gem_handle);
    assert(!ret);
 

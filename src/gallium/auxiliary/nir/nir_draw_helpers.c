@@ -44,6 +44,7 @@ typedef struct {
    bool fs_pos_is_sysval;
    nir_variable *stip_tex;
    nir_ssa_def *fragcoord;
+   nir_alu_type bool_type;
 } lower_pstipple;
 
 static nir_ssa_def *
@@ -89,7 +90,21 @@ nir_lower_pstipple_block(nir_block *block,
 
    nir_builder_instr_insert(b, &tex->instr);
 
-   nir_ssa_def *condition = nir_f2b32(b, nir_channel(b, &tex->dest.ssa, 3));
+   nir_ssa_def *condition;
+
+   switch (state->bool_type) {
+   case nir_type_bool1:
+      condition = nir_fneu(b, nir_channel(b, &tex->dest.ssa, 3),
+                           nir_imm_floatN_t(b, 0.0, tex->dest.ssa.bit_size));
+      break;
+   case nir_type_bool32:
+      condition = nir_fneu32(b, nir_channel(b, &tex->dest.ssa, 3),
+                             nir_imm_floatN_t(b, 0.0, tex->dest.ssa.bit_size));
+      break;
+   default:
+      unreachable("Invalid Boolean type.");
+   }
+
    nir_discard_if(b, condition);
    b->shader->info.fs.uses_discard = true;
 }
@@ -110,12 +125,18 @@ void
 nir_lower_pstipple_fs(struct nir_shader *shader,
                       unsigned *samplerUnitOut,
                       unsigned fixedUnit,
-                      bool fs_pos_is_sysval)
+                      bool fs_pos_is_sysval,
+                      nir_alu_type bool_type)
 {
    lower_pstipple state = {
       .shader = shader,
       .fs_pos_is_sysval = fs_pos_is_sysval,
+      .bool_type = bool_type,
    };
+
+   assert(bool_type == nir_type_bool1 ||
+          bool_type == nir_type_bool32);
+
    if (shader->info.stage != MESA_SHADER_FRAGMENT)
       return;
 
@@ -300,8 +321,8 @@ nir_lower_aapoint_block(nir_block *block,
 }
 
 static void
-nir_lower_aapoint_impl(nir_function_impl *impl,
-                      lower_aapoint *state)
+nir_lower_aapoint_impl(nir_function_impl *impl, lower_aapoint *state,
+                       nir_alu_type bool_type)
 {
    nir_builder *b = &state->b;
 
@@ -317,7 +338,21 @@ nir_lower_aapoint_impl(nir_function_impl *impl,
 
    nir_ssa_def *k = nir_channel(b, aainput, 2);
    nir_ssa_def *chan_val_one = nir_channel(b, aainput, 3);
-   nir_ssa_def *comp = nir_flt32(b, chan_val_one, dist);
+   nir_ssa_def *comp;
+
+   switch (bool_type) {
+   case nir_type_bool1:
+      comp = nir_flt(b, chan_val_one, dist);
+      break;
+   case nir_type_bool32:
+      comp = nir_flt32(b, chan_val_one, dist);
+      break;
+   case nir_type_float32:
+      comp = nir_slt(b, chan_val_one, dist);
+      break;
+   default:
+      unreachable("Invalid Boolean type.");
+   }
 
    nir_discard_if(b, comp);
    b->shader->info.fs.uses_discard = true;
@@ -339,7 +374,41 @@ nir_lower_aapoint_impl(nir_function_impl *impl,
     * else
     *    sel = 1.0;
     */
-   nir_ssa_def *sel = nir_b32csel(b, nir_fge32(b, k, dist), coverage, chan_val_one);
+   nir_ssa_def *sel;
+
+   switch (bool_type) {
+   case nir_type_bool1:
+      sel = nir_b32csel(b, nir_fge(b, k, dist), coverage, chan_val_one);
+      break;
+   case nir_type_bool32:
+      sel = nir_b32csel(b, nir_fge32(b, k, dist), coverage, chan_val_one);
+      break;
+   case nir_type_float32: {
+      /* On this path, don't assume that any "fancy" instructions are
+       * supported, but also try to emit something decent.
+       *
+       *    sel = (k >= distance) ? coverage : 1.0;
+       *    sel = (k >= distance) * coverage : (1 - (k >= distance)) * 1.0
+       *    sel = (k >= distance) * coverage : (1 - (k >= distance))
+       *
+       * Since (k >= distance) * coverage is zero when (1 - (k >= distance))
+       * is not zero,
+       *
+       *    sel = (k >= distance) * coverage + (1 - (k >= distance))
+       *
+       * If we assume that coverage == fsat(coverage), this could be further
+       * optimized to fsat(coverage + (1 - (k >= distance))), but I don't feel
+       * like verifying that right now.
+       */
+      nir_ssa_def *cmp_result = nir_sge(b, k, dist);
+      sel = nir_fadd(b,
+                     nir_fmul(b, coverage, cmp_result),
+                     nir_fadd(b, chan_val_one, nir_fneg(b, cmp_result)));
+      break;
+   }
+   default:
+      unreachable("Invalid Boolean type.");
+   }
 
    nir_foreach_block(block, impl) {
      nir_lower_aapoint_block(block, state, sel);
@@ -347,8 +416,12 @@ nir_lower_aapoint_impl(nir_function_impl *impl,
 }
 
 void
-nir_lower_aapoint_fs(struct nir_shader *shader, int *varying)
+nir_lower_aapoint_fs(struct nir_shader *shader, int *varying, const nir_alu_type bool_type)
 {
+   assert(bool_type == nir_type_bool1 ||
+          bool_type == nir_type_bool32 ||
+          bool_type == nir_type_float32);
+
    lower_aapoint state = {
       .shader = shader,
    };
@@ -378,7 +451,7 @@ nir_lower_aapoint_fs(struct nir_shader *shader, int *varying)
 
    nir_foreach_function(function, shader) {
       if (function->impl) {
-         nir_lower_aapoint_impl(function->impl, &state);
+         nir_lower_aapoint_impl(function->impl, &state, bool_type);
       }
    }
 }

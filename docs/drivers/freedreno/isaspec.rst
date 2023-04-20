@@ -201,7 +201,7 @@ Overrides
 In many cases, a bitset is not convenient for describing the expected
 disasm syntax, and/or interpretation of some range of bits differs based
 on some other field or combination of fields.  These *could* be modeled
-as different derived bitsets, at the expense of a combinatorical explosion
+as different derived bitsets, at the expense of a combinatorial explosion
 of the size of the bitset inheritance tree.  For example, *every* cat2
 (and cat3) instruction has both a ``(nopN)`` interpretation in addition to
 the ``(rptN`)`` interpretation.

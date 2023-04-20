@@ -40,6 +40,8 @@ endif
 if with_platform_windows
   files_vulkan_wsi += files('wsi_common_win32.cpp')
   platform_deps += dep_dxheaders
+else
+  files_vulkan_wsi += files('wsi_common_headless.c')
 endif
 
 if system_has_kms_drm and not with_platform_android
@@ -70,6 +72,7 @@ libvulkan_wsi = static_library(
 )
 
 idep_vulkan_wsi_headers = declare_dependency(
+  dependencies : idep_vulkan_wsi_defines,
   include_directories : include_directories('.')
 )
 

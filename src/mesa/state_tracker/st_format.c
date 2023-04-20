@@ -110,6 +110,15 @@ st_mesa_format_to_pipe_format(const struct st_context *st,
    }
 
    if (st_astc_format_fallback(st, mesaFormat)) {
+      const bool is_5x5 = mesaFormat == PIPE_FORMAT_ASTC_5x5 ||
+                          mesaFormat == PIPE_FORMAT_ASTC_5x5_SRGB;
+
+      /* If we're only emulating ASTC void extents, use the original format */
+      if (st->astc_void_extents_need_denorm_flush &&
+          (is_5x5 ? st->has_astc_5x5_ldr : st->has_astc_2d_ldr))
+         return mesaFormat;
+
+      /* We're emulating all of ASTC via transcoding or decompression */
       if (_mesa_is_format_srgb(mesaFormat)) {
          return st->transcode_astc ? PIPE_FORMAT_DXT5_SRGBA :
                                      PIPE_FORMAT_R8G8B8A8_SRGB;
@@ -1206,11 +1215,13 @@ st_choose_format(struct st_context *st, GLenum internalFormat,
 
    /* For an unsized GL_RGB but a 2_10_10_10 type, try to pick one of the
     * 2_10_10_10 formats.  This is important for
-    * GL_EXT_texture_type_2_10_10_10_EXT support, which says that these
+    * GL_EXT_texture_type_2_10_10_10_REV support, which says that these
     * formats are not color-renderable.  Mesa's check for making those
     * non-color-renderable is based on our chosen format being 2101010.
     */
-   if (type == GL_UNSIGNED_INT_2_10_10_10_REV) {
+   if (type == GL_UNSIGNED_INT_2_10_10_10_REV ||
+       type == GL_UNSIGNED_INT_10_10_10_2 ||
+       type == GL_UNSIGNED_INT_10_10_10_2_OES) {
       if (internalFormat == GL_RGB)
          internalFormat = GL_RGB10;
       else if (internalFormat == GL_RGBA)

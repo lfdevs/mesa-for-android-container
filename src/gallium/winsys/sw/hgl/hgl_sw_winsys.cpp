@@ -132,6 +132,7 @@ hgl_winsys_displaytarget_create(struct sw_winsys* winsys,
 		haikuDisplayTarget->data = NULL;
 		haikuDisplayTarget->bitmap = new BBitmap(
 			BRect(0, 0, width - 1, height - 1),
+			0,
 			haikuDisplayTarget->colorSpace,
 			haikuDisplayTarget->stride);
 	} else {
@@ -217,8 +218,8 @@ hgl_winsys_displaytarget_display(struct sw_winsys* winsys,
 	struct haiku_displaytarget* haikuDisplayTarget
 		= hgl_sw_displaytarget(displayTarget);
 
-	HGLWinsysContext *context = (HGLWinsysContext*)contextPrivate;
-	context->Display(haikuDisplayTarget->bitmap, NULL);
+	BitmapHook *context = (BitmapHook*)contextPrivate;
+	context->SetBitmap(haikuDisplayTarget->bitmap);
 }
 
 

@@ -24,15 +24,15 @@ test(
     'general_ir_test',
     ['array_refcount_test.cpp', 'builtin_variable_test.cpp',
      'general_ir_test.cpp', 'lower_int64_test.cpp',
-     'opt_add_neg_to_sub_test.cpp', ir_expression_operation_h],
+     'opt_add_neg_to_sub_test.cpp', 'test_gl_lower_mediump.cpp', ir_expression_operation_h],
     cpp_args : [cpp_msvc_compat_args],
     gnu_symbol_visibility : 'hidden',
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
     link_with : [libglsl, libglsl_standalone, libglsl_util],
-    dependencies : [dep_clock, dep_thread, idep_gtest, idep_mesautil],
+    dependencies : [dep_clock, dep_thread, idep_gtest, idep_mesautil, idep_nir],
   ),
   suite : ['compiler', 'glsl'],
-  protocol : gtest_test_protocol,
+  protocol : 'gtest',
 )
 
 test(
@@ -47,7 +47,7 @@ test(
     dependencies : [dep_thread, idep_gtest, idep_mesautil],
   ),
   suite : ['compiler', 'glsl'],
-  protocol : gtest_test_protocol,
+  protocol : 'gtest',
 )
 
 test(
@@ -62,19 +62,16 @@ test(
     dependencies : [dep_thread, idep_gtest],
   ),
   suite : ['compiler', 'glsl'],
-  protocol : gtest_test_protocol,
+  protocol : 'gtest',
 )
 
 # Meson can't auto-skip these on cross builds because of the python wrapper
-#
-# TODO: has_exe_wrapper() is deprecated and renamed to can_run_host_binaries()
-# starting with Meson 0.55.0
-if meson.has_exe_wrapper()
+if meson.can_run_host_binaries()
   test(
     'glsl compiler warnings',
     prog_python,
     args : [
-      join_paths(meson.current_source_dir(), 'warnings_test.py'),
+      files('warnings_test.py'),
       '--glsl-compiler', glsl_compiler,
       '--test-directory', join_paths(
         dir_source_root, 'src', 'compiler', 'glsl', 'tests', 'warnings'
@@ -88,7 +85,7 @@ if meson.has_exe_wrapper()
     'glsl optimization',
     prog_python,
     args : [
-      join_paths(meson.current_source_dir(), 'optimization_test.py'),
+      files('optimization_test.py'),
       '--test-runner', glsl_test
     ],
     suite : ['compiler', 'glsl'],
@@ -100,14 +97,14 @@ if with_tools.contains('glsl')
     'glsl dump-builder test',
     glsl_compiler,
     args : ['--version', '110', '--dump-builder',
-            join_paths(meson.current_source_dir(), 'standalone_dump-builder.frag'),
+            files('standalone_dump-builder.frag'),
            ],
     suite : ['compiler', 'glsl'],
   )
   test(
     'glsl lower-precision test',
     prog_python,
-    args : [join_paths(meson.current_source_dir(), 'lower_precision_test.py'),
+    args : [files('lower_precision_test.py'),
             glsl_compiler
            ],
     suite : ['compiler', 'glsl'],

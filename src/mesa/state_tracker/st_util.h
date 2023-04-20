@@ -36,6 +36,7 @@
 
 
 #include "state_tracker/st_context.h"
+#include "main/context.h"
 
 
 #ifdef __cplusplus
@@ -67,8 +68,8 @@ st_invalidate_readpix_cache(struct st_context *st)
 static inline bool
 st_user_clip_planes_enabled(struct gl_context *ctx)
 {
-   return (ctx->API == API_OPENGL_COMPAT ||
-           ctx->API == API_OPENGLES) && /* only ES 1.x */
+   return (_mesa_is_desktop_gl_compat(ctx) ||
+           _mesa_is_gles1(ctx)) && /* only ES 1.x */
           ctx->Transform.ClipPlanesEnabled;
 }
 

@@ -163,11 +163,6 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
       /* Nothing to do here, we do not specialize these opcodes by bit-size */
       break;
 
-   case nir_op_f2b1:
-      opcode = bit_size == 8 ? nir_op_f2b8 :
-                               bit_size == 16 ? nir_op_f2b16 : nir_op_f2b32;
-      break;
-
    case nir_op_b2b1:
       /* Since the canonical bit size is the size of the src, it's a no-op */
       opcode = nir_op_mov;
@@ -370,7 +365,7 @@ lower_phi_instr(nir_builder *b, nir_phi_instr *phi)
          dst_bit_size = src_bit_size;
       } else if (src_bit_size != dst_bit_size) {
          assert(phi_src->src.is_ssa);
-         b->cursor = nir_before_src(&phi_src->src, false);
+         b->cursor = nir_before_src(&phi_src->src);
          nir_op convert_op = get_bool_convert_opcode(dst_bit_size);
          nir_ssa_def *new_src =
             nir_build_alu(b, convert_op, phi_src->src.ssa, NULL, NULL, NULL);

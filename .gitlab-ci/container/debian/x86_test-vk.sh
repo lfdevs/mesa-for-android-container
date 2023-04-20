@@ -51,12 +51,12 @@ STABLE_EPHEMERAL=" \
 
 apt-get install -y --no-remove --no-install-recommends \
       $STABLE_EPHEMERAL \
+      curl \
       libepoxy0 \
       libxcb-shm0 \
       pciutils \
       python3-lxml \
       python3-simplejson \
-      wget \
       xinit \
       xserver-xorg-video-amdgpu \
       xserver-xorg-video-ati
@@ -101,7 +101,7 @@ wine64 \
 
 . .gitlab-ci/container/build-hang-detection.sh
 
-############### Build piglit
+############### Build piglit replayer
 
 PIGLIT_BUILD_TARGETS="piglit_replayer" . .gitlab-ci/container/build-piglit.sh
 

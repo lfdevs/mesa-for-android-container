@@ -81,7 +81,7 @@ get_named_matrix_stack(struct gl_context *ctx, GLenum mode, const char* caller)
    case GL_MATRIX5_ARB:
    case GL_MATRIX6_ARB:
    case GL_MATRIX7_ARB:
-      if (ctx->API == API_OPENGL_COMPAT
+      if (_mesa_is_desktop_gl_compat(ctx)
           && (ctx->Extensions.ARB_vertex_program ||
               ctx->Extensions.ARB_fragment_program)) {
          const GLuint m = mode - GL_MATRIX0_ARB;

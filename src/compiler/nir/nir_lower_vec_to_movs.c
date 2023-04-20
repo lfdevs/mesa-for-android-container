@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 #include "nir.h"
@@ -143,7 +139,10 @@ try_coalesce(nir_alu_instr *vec, unsigned start_idx, void *_data)
    /* If we are going to do a reswizzle, then the vecN operation must be the
     * only use of the source value.  We also can't have any source modifiers.
     */
-   nir_foreach_use(src, vec->src[start_idx].src.ssa) {
+   nir_foreach_use_including_if(src, vec->src[start_idx].src.ssa) {
+      if (src->is_if)
+         return 0;
+
       if (src->parent_instr != &vec->instr)
          return 0;
 
@@ -151,9 +150,6 @@ try_coalesce(nir_alu_instr *vec, unsigned start_idx, void *_data)
       if (alu_src->abs || alu_src->negate)
          return 0;
    }
-
-   if (!list_is_empty(&vec->src[start_idx].src.ssa->if_uses))
-      return 0;
 
    if (vec->src[start_idx].src.ssa->parent_instr->type != nir_instr_type_alu)
       return 0;

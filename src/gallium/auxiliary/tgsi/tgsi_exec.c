@@ -408,17 +408,6 @@ micro_dldexp(union tgsi_double_channel *dst,
 }
 
 static void
-micro_dfracexp(union tgsi_double_channel *dst,
-               union tgsi_exec_channel *dst_exp,
-               const union tgsi_double_channel *src)
-{
-   dst->d[0] = frexp(src->d[0], &dst_exp->i[0]);
-   dst->d[1] = frexp(src->d[1], &dst_exp->i[1]);
-   dst->d[2] = frexp(src->d[2], &dst_exp->i[2]);
-   dst->d[3] = frexp(src->d[3], &dst_exp->i[3]);
-}
-
-static void
 micro_exp2(union tgsi_exec_channel *dst,
            const union tgsi_exec_channel *src)
 {
@@ -3568,26 +3557,6 @@ exec_dldexp(struct tgsi_exec_machine *mach,
 }
 
 static void
-exec_dfracexp(struct tgsi_exec_machine *mach,
-              const struct tgsi_full_instruction *inst)
-{
-   union tgsi_double_channel src;
-   union tgsi_double_channel dst;
-   union tgsi_exec_channel dst_exp;
-
-   fetch_double_channel(mach, &src, &inst->Src[0], TGSI_CHAN_X, TGSI_CHAN_Y);
-   micro_dfracexp(&dst, &dst_exp, &src);
-   if ((inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_XY) == TGSI_WRITEMASK_XY)
-      store_double_channel(mach, &dst, &inst->Dst[0], inst, TGSI_CHAN_X, TGSI_CHAN_Y);
-   if ((inst->Dst[0].Register.WriteMask & TGSI_WRITEMASK_ZW) == TGSI_WRITEMASK_ZW)
-      store_double_channel(mach, &dst, &inst->Dst[0], inst, TGSI_CHAN_Z, TGSI_CHAN_W);
-   for (unsigned chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
-      if (inst->Dst[1].Register.WriteMask & (1 << chan))
-         store_dest(mach, &dst_exp, &inst->Dst[1], inst, chan);
-   }
-}
-
-static void
 exec_arg0_64_arg1_32(struct tgsi_exec_machine *mach,
             const struct tgsi_full_instruction *inst,
             micro_dop_sop op)
@@ -5802,10 +5771,6 @@ exec_instruction(
 
    case TGSI_OPCODE_DLDEXP:
       exec_dldexp(mach, inst);
-      break;
-
-   case TGSI_OPCODE_DFRACEXP:
-      exec_dfracexp(mach, inst);
       break;
 
    case TGSI_OPCODE_I2D:

@@ -39,6 +39,7 @@
 
 
 #include "pipe/p_state.h"
+#include "nir.h"
 
 struct pipe_context;
 struct draw_context;
@@ -130,7 +131,8 @@ boolean
 draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe);
 
 boolean
-draw_install_aapoint_stage(struct draw_context *draw, struct pipe_context *pipe);
+draw_install_aapoint_stage(struct draw_context *draw, struct pipe_context *pipe,
+                           nir_alu_type bool_type);
 
 boolean
 draw_install_pstipple_stage(struct draw_context *draw, struct pipe_context *pipe);

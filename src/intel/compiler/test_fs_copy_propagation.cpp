@@ -49,7 +49,7 @@ public:
                                struct brw_wm_prog_data *prog_data,
                                nir_shader *shader)
       : fs_visitor(compiler, NULL, mem_ctx, NULL,
-                   &prog_data->base, shader, 8, false) {}
+                   &prog_data->base, shader, 8, false, false) {}
 };
 
 
@@ -164,12 +164,12 @@ TEST_F(copy_propagation_test, maxmax_sat_imm)
       bool expected_result;
    } test[] = {
       /*   conditional mod,     imm, expected_result */
-      { BRW_CONDITIONAL_GE  ,  0.1f, true },
-      { BRW_CONDITIONAL_L   ,  0.1f, true },
-      { BRW_CONDITIONAL_GE  ,  0.5f, true },
-      { BRW_CONDITIONAL_L   ,  0.5f, true },
-      { BRW_CONDITIONAL_GE  ,  0.9f, true },
-      { BRW_CONDITIONAL_L   ,  0.9f, true },
+      { BRW_CONDITIONAL_GE  ,  0.1f, false },
+      { BRW_CONDITIONAL_L   ,  0.1f, false },
+      { BRW_CONDITIONAL_GE  ,  0.5f, false },
+      { BRW_CONDITIONAL_L   ,  0.5f, false },
+      { BRW_CONDITIONAL_GE  ,  0.9f, false },
+      { BRW_CONDITIONAL_L   ,  0.9f, false },
       { BRW_CONDITIONAL_GE  , -1.5f, false },
       { BRW_CONDITIONAL_L   , -1.5f, false },
       { BRW_CONDITIONAL_GE  ,  1.5f, false },

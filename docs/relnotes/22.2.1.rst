@@ -107,7 +107,7 @@ James Park (1):
 
 - meson,amd: Remove Windows libelf wrap
 
-Jason Ekstrand (3):
+Faith Ekstrand (3):
 
 - iris: Use a larger alignment for buffer allocations
 - iris: Fix more BO alignments

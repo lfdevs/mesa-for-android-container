@@ -23,15 +23,16 @@
  */
 #ifndef ACO_TEST_COMMON_H
 #define ACO_TEST_COMMON_H
-#include <map>
-#include <string>
-#include <stdio.h>
-
-#include "amd_family.h"
-#include "aco_ir.h"
 #include "aco_builder.h"
+#include "aco_ir.h"
+
 #include "util/macros.h"
-#include "vulkan/radv_shader.h"
+
+#include "ac_shader_util.h"
+#include "amd_family.h"
+#include <map>
+#include <stdio.h>
+#include <string>
 
 struct TestDef {
    const char *name;

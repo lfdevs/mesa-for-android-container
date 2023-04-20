@@ -29,7 +29,6 @@ files_libd3d12 = files(
   'd3d12_context.cpp',
   'd3d12_descriptor_pool.cpp',
   'd3d12_draw.cpp',
-  'd3d12_dxcore_screen.cpp',
   'd3d12_fence.cpp',
   'd3d12_format.c',
   'd3d12_gs_variant.cpp',
@@ -73,8 +72,16 @@ if with_gallium_d3d12_video
   ]
 endif
 
+is_xbox = target_machine.system().startswith('Gaming.Xbox')
 if host_machine.system() == 'windows'
-  files_libd3d12 += files('d3d12_dxgi_screen.cpp')
+  if is_xbox
+    files_libd3d12 += files('d3d12_dxgi_xbox_screen.cpp')
+  else
+    files_libd3d12 += files('d3d12_dxgi_screen.cpp')
+  endif
+endif
+if is_xbox == false
+  files_libd3d12 += files('d3d12_dxcore_screen.cpp')
 endif
 
 libd3d12 = static_library(

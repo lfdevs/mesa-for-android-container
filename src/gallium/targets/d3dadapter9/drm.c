@@ -230,7 +230,7 @@ drm_create_adapter( int fd,
 
     /* Although the fd is provided from external source, mesa/nine
      * takes ownership of it. */
-    fd = loader_get_user_preferred_fd(fd, &different_device);
+    different_device = loader_get_user_preferred_fd(&fd, NULL);
     ctx->fd = fd;
     ctx->base.linear_framebuffer = different_device;
 

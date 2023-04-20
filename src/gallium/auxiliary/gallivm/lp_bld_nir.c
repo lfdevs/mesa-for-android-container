@@ -245,23 +245,6 @@ assign_alu_dest(struct lp_build_nir_context *bld_base,
 }
 
 static LLVMValueRef
-flt_to_bool32(struct lp_build_nir_context *bld_base,
-              uint32_t src_bit_size,
-              LLVMValueRef val)
-{
-   LLVMBuilderRef builder = bld_base->base.gallivm->builder;
-   struct lp_build_context *flt_bld = get_flt_bld(bld_base, src_bit_size);
-   LLVMValueRef result =
-      lp_build_cmp(flt_bld, PIPE_FUNC_NOTEQUAL, val, flt_bld->zero);
-   if (src_bit_size == 64)
-      result = LLVMBuildTrunc(builder, result, bld_base->int_bld.vec_type, "");
-   if (src_bit_size == 16)
-      result = LLVMBuildSExt(builder, result, bld_base->int_bld.vec_type, "");
-   return result;
-}
-
-
-static LLVMValueRef
 fcmp32(struct lp_build_nir_context *bld_base,
        enum pipe_compare_func compare,
        uint32_t src_bit_size,
@@ -730,9 +713,6 @@ do_alu_action(struct lp_build_nir_context *bld_base,
       break;
    case nir_op_bitfield_reverse:
       result = lp_build_bitfield_reverse(get_int_bld(bld_base, false, src_bit_size[0]), src[0]);
-      break;
-   case nir_op_f2b32:
-      result = flt_to_bool32(bld_base, src_bit_size[0], src[0]);
       break;
    case nir_op_f2f16:
       if (src_bit_size[0] == 64)
@@ -1437,6 +1417,16 @@ visit_store_output(struct lp_build_nir_context *bld_base,
                        bit_size, &var, mask, NULL, 0, indir_index, src);
 }
 
+static bool
+compact_array_index_oob(struct lp_build_nir_context *bld_base, nir_variable *var, const uint32_t index)
+{
+   const struct glsl_type *type = var->type;
+   if (nir_is_arrayed_io(var, bld_base->shader->info.stage)) {
+      assert(glsl_type_is_array(type));
+      type = glsl_get_array_element(type);
+   }
+   return index >= glsl_get_length(type);
+}
 
 static void
 visit_load_var(struct lp_build_nir_context *bld_base,
@@ -1447,7 +1437,7 @@ visit_load_var(struct lp_build_nir_context *bld_base,
    nir_variable *var = nir_deref_instr_get_variable(deref);
    assert(util_bitcount(deref->modes) == 1);
    nir_variable_mode mode = deref->modes;
-   unsigned const_index;
+   unsigned const_index = 0;
    LLVMValueRef indir_index;
    LLVMValueRef indir_vertex_index = NULL;
    unsigned vertex_index = 0;
@@ -1471,6 +1461,17 @@ visit_load_var(struct lp_build_nir_context *bld_base,
                    gs_in ? &vertex_index : NULL,
                    (tcs_in || tcs_out || tes_in) ? &indir_vertex_index : NULL,
                    &const_index, &indir_index);
+
+      /* Return undef for loads definitely outside of the array bounds
+       * (tcs-tes-levels-out-of-bounds-read.shader_test).
+       */
+      if (var->data.compact && compact_array_index_oob(bld_base, var, const_index)) {
+         struct lp_build_context *undef_bld = get_int_bld(bld_base, true,
+                                                          instr->dest.ssa.bit_size);
+         for (int i = 0; i < instr->dest.ssa.num_components; i++)
+            result[i] = LLVMGetUndef(undef_bld->vec_type);
+         return;
+      }
    }
    bld_base->load_var(bld_base, mode, nc, bit_size, var, vertex_index,
                       indir_vertex_index, const_index, indir_index, result);
@@ -1496,6 +1497,12 @@ visit_store_var(struct lp_build_nir_context *bld_base,
       get_deref_offset(bld_base, deref, false, NULL,
                        tcs_out ? &indir_vertex_index : NULL,
                        &const_index, &indir_index);
+
+      /* Skip stores definitely outside of the array bounds
+       * (tcs-tes-levels-out-of-bounds-write.shader_test).
+       */
+      if (var->data.compact && compact_array_index_oob(bld_base, var, const_index))
+         return;
    }
    bld_base->store_var(bld_base, mode, instr->num_components, bit_size,
                        var, writemask, indir_vertex_index, const_index,
@@ -2142,19 +2149,9 @@ visit_intrinsic(struct lp_build_nir_context *bld_base,
    case nir_intrinsic_shared_atomic_fmax:
       visit_shared_atomic(bld_base, instr, result);
       break;
-   case nir_intrinsic_control_barrier:
-      visit_barrier(bld_base);
-      break;
    case nir_intrinsic_scoped_barrier:
       if (nir_intrinsic_execution_scope(instr) != NIR_SCOPE_NONE)
          visit_barrier(bld_base);
-      break;
-   case nir_intrinsic_group_memory_barrier:
-   case nir_intrinsic_memory_barrier:
-   case nir_intrinsic_memory_barrier_shared:
-   case nir_intrinsic_memory_barrier_buffer:
-   case nir_intrinsic_memory_barrier_image:
-   case nir_intrinsic_memory_barrier_tcs_patch:
       break;
    case nir_intrinsic_load_kernel_input:
       visit_load_kernel_input(bld_base, instr, result);
@@ -2657,6 +2654,7 @@ visit_if(struct lp_build_nir_context *bld_base, nir_if *if_stmt)
 static void
 visit_loop(struct lp_build_nir_context *bld_base, nir_loop *loop)
 {
+   assert(!nir_loop_has_continue_construct(loop));
    bld_base->bgnloop(bld_base);
    visit_cf_list(bld_base, &loop->body);
    bld_base->endloop(bld_base);
@@ -2714,10 +2712,10 @@ get_register_type(struct lp_build_nir_context *bld_base,
       get_int_bld(bld_base, true, reg->bit_size == 1 ? 32 : reg->bit_size);
 
    LLVMTypeRef type = int_bld->vec_type;
-   if (reg->num_array_elems)
-      type = LLVMArrayType(type, reg->num_array_elems);
    if (reg->num_components > 1)
       type = LLVMArrayType(type, reg->num_components);
+   if (reg->num_array_elems)
+      type = LLVMArrayType(type, reg->num_array_elems);
 
    return type;
 }
@@ -2798,7 +2796,7 @@ lp_build_opt_nir(struct nir_shader *nir)
    NIR_PASS_V(nir, nir_lower_frexp);
 
    NIR_PASS_V(nir, nir_lower_flrp, 16|32|64, true);
-   NIR_PASS_V(nir, nir_lower_fp16_casts);
+   NIR_PASS_V(nir, nir_lower_fp16_casts, nir_lower_fp16_all);
    do {
       progress = false;
       NIR_PASS(progress, nir, nir_opt_constant_folding);

@@ -45,6 +45,9 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
    if (!ac_query_gpu_info(fd, ws->dev, &ws->info))
       return false;
 
+   if (!ac_query_pci_bus_info(fd, &ws->info))
+      return false;
+
    if (ws->info.drm_minor < 23) {
       fprintf(stderr, "radv/amdgpu: DRM 3.23+ is required (Linux kernel 4.15+)\n");
       return false;

@@ -116,7 +116,11 @@ namespace {
 
       std::unique_ptr<TargetMachine> tm {
          t->createTargetMachine(target.triple, target.cpu, "", {},
+#if LLVM_VERSION_MAJOR >= 17
+                                std::nullopt, std::nullopt,
+#else
                                 ::llvm::None, ::llvm::None,
+#endif
                                 ::llvm::CodeGenOpt::Default) };
       if (!tm)
          fail(r_log, build_error(),

@@ -1,6 +1,6 @@
 dEQP-VK.dynamic_rendering.basic.*
-dEQP-VK.image.sample_texture.64_bit_compressed_format_two_samplers
-dEQP-VK.image.sample_texture.64_bit_compressed_format_two_samplers_cubemap
-dEQP-VK.image.sample_texture.128_bit_compressed_format_two_samplers
-dEQP-VK.image.sample_texture.128_bit_compressed_format_two_samplers_cubemap
 dEQP-VK.reconvergence.workgroup_uniform_control_flow_elect.compute.nesting4.2.35
+dEQP-VK.draw.renderpass.linear_interpolation.offset_max_2_samples
+dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.2_cmdbuffers_resuming
+dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.2_secondary_2_primary_cmdbuffers_resuming
+dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.linear_interpolation.offset_min_2_samples

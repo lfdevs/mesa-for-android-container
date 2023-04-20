@@ -24,9 +24,18 @@
 #include "common/intel_decoder.h"
 #include "intel_disasm.h"
 #include "util/macros.h"
+#include "util/u_debug.h"
 #include "util/u_math.h" /* Needed for ROUND_DOWN_TO */
 
 #include <string.h>
+
+static const struct debug_control debug_control[] = {
+   { "color",    INTEL_BATCH_DECODE_IN_COLOR },
+   { "full",     INTEL_BATCH_DECODE_FULL },
+   { "offsets",  INTEL_BATCH_DECODE_OFFSETS },
+   { "floats",   INTEL_BATCH_DECODE_FLOATS },
+   { NULL,    0 }
+};
 
 void
 intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
@@ -49,7 +58,7 @@ intel_batch_decode_ctx_init(struct intel_batch_decode_ctx *ctx,
    ctx->get_state_size = get_state_size;
    ctx->user_data = user_data;
    ctx->fp = fp;
-   ctx->flags = flags;
+   ctx->flags = parse_enable_string(getenv("INTEL_DECODE"), flags, debug_control);
    ctx->max_vbo_decoded_lines = -1; /* No limit! */
    ctx->engine = INTEL_ENGINE_CLASS_RENDER;
 
@@ -305,7 +314,7 @@ dump_binding_table(struct intel_batch_decode_ctx *ctx,
 
    if (count < 0) {
       count = update_count(ctx, bt_pool_base + offset,
-                           bt_pool_base, 1, 8);
+                           bt_pool_base, 1, 32);
    }
 
    if (offset % btp_alignment != 0 || offset >= (1u << btp_pointer_bits)) {
@@ -323,8 +332,9 @@ dump_binding_table(struct intel_batch_decode_ctx *ctx,
 
    const uint32_t *pointers = bind_bo.map;
    for (int i = 0; i < count; i++) {
-      if (pointers[i] == 0)
-         continue;
+      if (((uintptr_t)&pointers[i] >= ((uintptr_t)bind_bo.map + bind_bo.size)) ||
+          pointers[i] == 0)
+         break;
 
       uint64_t addr = ctx->surface_base + pointers[i];
       struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
@@ -466,6 +476,34 @@ handle_compute_walker(struct intel_batch_decode_ctx *ctx,
          handle_interface_descriptor_data(ctx, iter.struct_desc,
                                           &iter.p[iter.start_bit / 32]);
       }
+   }
+}
+
+static void
+handle_media_curbe_load(struct intel_batch_decode_ctx *ctx,
+                        const uint32_t *p)
+{
+   struct intel_group *inst = intel_ctx_find_instruction(ctx, p);
+
+   struct intel_field_iterator iter;
+   intel_field_iterator_init(&iter, inst, p, 0, false);
+
+   uint32_t dynamic_state_offset = 0;
+   uint32_t dynamic_state_length = 0;
+
+   while (intel_field_iterator_next(&iter)) {
+      if (strcmp(iter.name, "CURBE Data Start Address") == 0) {
+         dynamic_state_offset = iter.raw_value;
+      } else if (strcmp(iter.name, "CURBE Total Data Length") == 0) {
+         dynamic_state_length = iter.raw_value;
+      }
+   }
+
+   if (dynamic_state_length > 0) {
+      struct intel_batch_decode_bo buffer =
+         ctx_get_bo(ctx, true, ctx->dynamic_base + dynamic_state_offset);
+      if (buffer.map != NULL)
+         ctx_print_buffer(ctx, buffer, dynamic_state_length, 0, -1);
    }
 }
 
@@ -1361,6 +1399,7 @@ struct custom_decoder {
    { "3DSTATE_BINDING_TABLE_POOL_ALLOC", handle_binding_table_pool_alloc },
    { "MEDIA_INTERFACE_DESCRIPTOR_LOAD", handle_media_interface_descriptor_load },
    { "COMPUTE_WALKER", handle_compute_walker },
+   { "MEDIA_CURBE_LOAD", handle_media_curbe_load },
    { "3DSTATE_VERTEX_BUFFERS", handle_3dstate_vertex_buffers },
    { "3DSTATE_INDEX_BUFFER", handle_3dstate_index_buffer },
    { "3DSTATE_VS", decode_single_ksp },

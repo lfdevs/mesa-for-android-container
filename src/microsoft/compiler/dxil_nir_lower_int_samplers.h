@@ -53,6 +53,7 @@ typedef struct {
 
 bool
 dxil_lower_sample_to_txf_for_integer_tex(nir_shader *s,
+                                         unsigned n_texture_states,
                                          dxil_wrap_sampler_state *wrap_states,
                                          dxil_texture_swizzle_state *tex_swizzles,
                                          float max_bias);

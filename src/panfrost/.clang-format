@@ -46,6 +46,8 @@ ForEachMacros:
   - nir_foreach_register_safe
   - nir_foreach_use
   - nir_foreach_use_safe
+  - nir_foreach_use_including_if
+  - nir_foreach_use_including_if_safe
   - nir_foreach_if_use
   - nir_foreach_if_use_safe
   - nir_foreach_def

@@ -15,7 +15,7 @@ if [ $DEBIAN_ARCH = arm64 ]; then
     "
 elif [ $DEBIAN_ARCH = amd64 ]; then
     # Add llvm 13 to the build image
-    apt-get -y install --no-install-recommends wget gnupg2 software-properties-common
+    apt-get -y install --no-install-recommends curl gnupg2 software-properties-common
     apt-key add /llvm-snapshot.gpg.key
     add-apt-repository "deb https://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-13 main"
     # Debian bullseye has older wine 5.0, we want >= 7.0 for traces.
@@ -61,6 +61,7 @@ apt-get -y install --no-install-recommends \
     $EXTRA_LOCAL_PACKAGES \
     bash \
     ca-certificates \
+    curl \
     firmware-realtek \
     initramfs-tools \
     jq \
@@ -103,7 +104,6 @@ apt-get -y install --no-install-recommends \
     strace \
     waffle-utils \
     weston \
-    wget \
     xinit \
     xserver-xorg-core \
     xwayland \

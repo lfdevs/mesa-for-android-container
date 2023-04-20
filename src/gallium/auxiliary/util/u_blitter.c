@@ -2412,6 +2412,7 @@ void util_blitter_clear_render_target(struct blitter_context *blitter,
    fb_state.nr_cbufs = 1;
    fb_state.cbufs[0] = dstsurf;
    fb_state.zsbuf = NULL;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
    if (pipe->set_min_samples)
@@ -2497,6 +2498,7 @@ void util_blitter_clear_depth_stencil(struct blitter_context *blitter,
    fb_state.nr_cbufs = 0;
    fb_state.cbufs[0] = NULL;
    fb_state.zsbuf = dstsurf;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
    if (pipe->set_min_samples)
@@ -2568,6 +2570,7 @@ void util_blitter_custom_depth_stencil(struct blitter_context *blitter,
       fb_state.nr_cbufs = 0;
    }
    fb_state.zsbuf = zsurf;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, sample_mask);
    if (pipe->set_min_samples)
@@ -2706,6 +2709,7 @@ void util_blitter_custom_resolve_color(struct blitter_context *blitter,
    fb_state.cbufs[0] = srcsurf;
    fb_state.cbufs[1] = dstsurf;
    fb_state.zsbuf = NULL;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
 
    blitter_set_common_draw_rect_state(ctx, false,
@@ -2755,6 +2759,7 @@ void util_blitter_custom_color(struct blitter_context *blitter,
    fb_state.nr_cbufs = 1;
    fb_state.cbufs[0] = dstsurf;
    fb_state.zsbuf = NULL;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
    if (pipe->set_min_samples)
@@ -2818,6 +2823,7 @@ void util_blitter_custom_shader(struct blitter_context *blitter,
    fb_state.height = dstsurf->height;
    fb_state.nr_cbufs = 1;
    fb_state.cbufs[0] = dstsurf;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
    if (pipe->set_min_samples)
@@ -2914,6 +2920,7 @@ util_blitter_stencil_fallback(struct blitter_context *blitter,
    fb_state.width = dstbox->x + dstbox->width;
    fb_state.height = dstbox->y + dstbox->height;
    fb_state.zsbuf = dst_view;
+   fb_state.resolve = NULL;
    pipe->set_framebuffer_state(pipe, &fb_state);
    pipe->set_sample_mask(pipe, ~0);
    if (pipe->set_min_samples)

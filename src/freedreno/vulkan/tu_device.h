@@ -35,31 +35,6 @@
 /* extra space in vsc draw/prim streams */
 #define VSC_PAD 0x40
 
-enum tu_debug_flags
-{
-   TU_DEBUG_STARTUP = 1 << 0,
-   TU_DEBUG_NIR = 1 << 1,
-   TU_DEBUG_NOBIN = 1 << 3,
-   TU_DEBUG_SYSMEM = 1 << 4,
-   TU_DEBUG_FORCEBIN = 1 << 5,
-   TU_DEBUG_NOUBWC = 1 << 6,
-   TU_DEBUG_NOMULTIPOS = 1 << 7,
-   TU_DEBUG_NOLRZ = 1 << 8,
-   TU_DEBUG_PERFC = 1 << 9,
-   TU_DEBUG_FLUSHALL = 1 << 10,
-   TU_DEBUG_SYNCDRAW = 1 << 11,
-   TU_DEBUG_DONT_CARE_AS_LOAD = 1 << 12,
-   TU_DEBUG_GMEM = 1 << 13,
-   TU_DEBUG_RAST_ORDER = 1 << 14,
-   TU_DEBUG_UNALIGNED_STORE = 1 << 15,
-   TU_DEBUG_LAYOUT = 1 << 16,
-   TU_DEBUG_LOG_SKIP_GMEM_OPS = 1 << 17,
-   TU_DEBUG_PERF = 1 << 18,
-   TU_DEBUG_NOLRZFC = 1 << 19,
-   TU_DEBUG_DYNAMIC = 1 << 20,
-   TU_DEBUG_BOS = 1 << 21,
-};
-
 enum global_shader {
    GLOBAL_SH_VS_BLIT,
    GLOBAL_SH_VS_CLEAR,
@@ -116,6 +91,15 @@ struct tu_physical_device
    uint64_t va_start;
    uint64_t va_size;
 
+   bool has_cached_coherent_memory;
+   bool has_cached_non_coherent_memory;
+   uintptr_t level1_dcache_size;
+
+   struct {
+      uint32_t type_count;
+      VkMemoryPropertyFlags types[VK_MAX_MEMORY_TYPES];
+   } memory;
+
    struct fd_dev_id dev_id;
    const struct fd_dev_info *info;
 
@@ -139,16 +123,28 @@ struct tu_physical_device
 VK_DEFINE_HANDLE_CASTS(tu_physical_device, vk.base, VkPhysicalDevice,
                        VK_OBJECT_TYPE_PHYSICAL_DEVICE)
 
+struct tu_knl;
+
 struct tu_instance
 {
    struct vk_instance vk;
+
+   const struct tu_knl *knl;
 
    uint32_t api_version;
 
    struct driOptionCache dri_options;
    struct driOptionCache available_dri_options;
 
-   enum tu_debug_flags debug_flags;
+   bool dont_care_as_load;
+
+   /* Conservative LRZ (default true) invalidates LRZ on draws with
+    * blend and depth-write enabled, because this can lead to incorrect
+    * rendering.  Driconf can be used to disable conservative LRZ for
+    * games which do not have the problematic sequence of draws *and*
+    * suffer a performance loss with conservative LRZ.
+    */
+   bool conservative_lrz;
 };
 VK_DEFINE_HANDLE_CASTS(tu_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)
@@ -160,7 +156,8 @@ struct tu_queue
    struct tu_device *device;
 
    uint32_t msm_queue_id;
-   int fence;
+
+   int64_t last_submit_timestamp; /* timestamp of the last queue submission for kgsl */
 };
 VK_DEFINE_HANDLE_CASTS(tu_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
@@ -212,6 +209,23 @@ struct tu6_global
 };
 #define gb_offset(member) offsetof(struct tu6_global, member)
 #define global_iova(cmd, member) ((cmd)->device->global_bo->iova + gb_offset(member))
+#define global_iova_arr(cmd, member, idx)                                    \
+   (global_iova(cmd, member) + sizeof_field(struct tu6_global, member[0]) * (idx))
+
+struct tu_pvtmem_bo {
+      mtx_t mtx;
+      struct tu_bo *bo;
+      uint32_t per_fiber_size, per_sp_size;
+};
+
+#ifdef ANDROID
+enum tu_gralloc_type
+{
+   TU_GRALLOC_UNKNOWN,
+   TU_GRALLOC_CROS,
+   TU_GRALLOC_OTHER,
+};
+#endif
 
 struct tu_device
 {
@@ -240,13 +254,10 @@ struct tu_device
       bool initialized;
    } scratch_bos[48 - MIN_SCRATCH_BO_SIZE_LOG2];
 
-   struct tu_pvtmem_bo {
-      mtx_t mtx;
-      struct tu_bo *bo;
-      uint32_t per_fiber_size, per_sp_size;
-   } fiber_pvtmem_bo, wave_pvtmem_bo;
+   struct tu_pvtmem_bo fiber_pvtmem_bo, wave_pvtmem_bo;
 
    struct tu_bo *global_bo;
+   struct tu6_global *global_bo_map;
 
    uint32_t implicit_sync_bo_count;
 
@@ -324,13 +335,12 @@ struct tu_device
 
    struct breadcrumbs_context *breadcrumbs_ctx;
 
+   struct tu_cs *dbg_cmdbuf_stomp_cs;
+   struct tu_cs *dbg_renderpass_stomp_cs;
+
 #ifdef ANDROID
    const void *gralloc;
-   enum {
-      TU_GRALLOC_UNKNOWN,
-      TU_GRALLOC_CROS,
-      TU_GRALLOC_OTHER,
-   } gralloc_type;
+   enum tu_gralloc_type gralloc_type;
 #endif
 
    uint32_t submit_count;
@@ -428,9 +438,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(tu_sampler, base, VkSampler,
 
 uint64_t
 tu_get_system_heap_size(void);
-
-const char *
-tu_get_debug_option_name(int id);
 
 VkResult
 tu_physical_device_init(struct tu_physical_device *device,

@@ -77,38 +77,64 @@ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
 
    nir_shader *s = nir_shader_clone(NULL, ir);
 
+   /* While graphics shaders are preprocessed at CSO create time, compute
+    * kernels are not preprocessed until they're cloned since the driver does
+    * not get ownership of the NIR from compute CSOs. Do this preprocessing now.
+    * Compute CSOs call this function during create time, so preprocessing
+    * happens at CSO create time regardless.
+    */
+   if (gl_shader_stage_is_compute(s->info.stage))
+      pan_shader_preprocess(s, dev->gpu_id);
+
    struct panfrost_compile_inputs inputs = {
       .debug = dbg,
       .gpu_id = dev->gpu_id,
-      .fixed_sysval_ubo = -1,
    };
 
    /* Lower this early so the backends don't have to worry about it */
    if (s->info.stage == MESA_SHADER_FRAGMENT) {
       inputs.fixed_varying_mask = key->fs.fixed_varying_mask;
-
-      if (s->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_COLOR)) {
-         NIR_PASS_V(s, nir_lower_fragcolor, key->fs.nr_cbufs_for_fragcolor);
-      }
-
-      if (key->fs.sprite_coord_enable) {
-         NIR_PASS_V(s, nir_lower_texcoord_replace, key->fs.sprite_coord_enable,
-                    true /* point coord is sysval */, false /* Y-invert */);
-      }
-
-      if (key->fs.clip_plane_enable) {
-         NIR_PASS_V(s, nir_lower_clip_fs, key->fs.clip_plane_enable, false);
-      }
-
-      memcpy(inputs.rt_formats, key->fs.rt_formats, sizeof(inputs.rt_formats));
    } else if (s->info.stage == MESA_SHADER_VERTEX) {
       inputs.fixed_varying_mask = fixed_varying_mask;
 
       /* No IDVS for internal XFB shaders */
       inputs.no_idvs = s->info.has_transform_feedback_varyings;
+
+      if (s->info.has_transform_feedback_varyings) {
+         NIR_PASS_V(s, nir_io_add_const_offset_to_base,
+                    nir_var_shader_in | nir_var_shader_out);
+         NIR_PASS_V(s, nir_io_add_intrinsic_xfb_info);
+         NIR_PASS_V(s, pan_lower_xfb);
+      }
    }
 
    util_dynarray_init(&out->binary, NULL);
+
+   if (s->info.stage == MESA_SHADER_FRAGMENT) {
+      if (key->fs.nr_cbufs_for_fragcolor) {
+         NIR_PASS_V(s, panfrost_nir_remove_fragcolor_stores,
+                    key->fs.nr_cbufs_for_fragcolor);
+      }
+
+      if (key->fs.sprite_coord_enable) {
+         NIR_PASS_V(s, nir_lower_texcoord_replace_late,
+                    key->fs.sprite_coord_enable,
+                    true /* point coord is sysval */);
+      }
+
+      if (key->fs.clip_plane_enable) {
+         NIR_PASS_V(s, nir_lower_clip_fs, key->fs.clip_plane_enable, false);
+      }
+   }
+
+   if (dev->arch <= 5 && s->info.stage == MESA_SHADER_FRAGMENT) {
+      NIR_PASS_V(s, pan_lower_framebuffer, key->fs.rt_formats,
+                 pan_raw_format_mask_midgard(key->fs.rt_formats), 0,
+                 dev->gpu_id < 0x700);
+   }
+
+   NIR_PASS_V(s, panfrost_nir_lower_sysvals, &out->sysvals);
+
    screen->vtbl.compile_shader(s, &inputs, &out->binary, &out->info);
 
    assert(req_local_mem >= out->info.wls_size);
@@ -148,6 +174,7 @@ panfrost_shader_get(struct pipe_screen *pscreen,
    }
 
    state->info = res.info;
+   state->sysvals = res.sysvals;
 
    if (res.binary.size) {
       state->bin = panfrost_pool_take_ref(
@@ -171,8 +198,11 @@ panfrost_shader_get(struct pipe_screen *pscreen,
 
 static void
 panfrost_build_key(struct panfrost_context *ctx,
-                   struct panfrost_shader_key *key, const nir_shader *nir)
+                   struct panfrost_shader_key *key,
+                   struct panfrost_uncompiled_shader *uncompiled)
 {
+   const nir_shader *nir = uncompiled->nir;
+
    /* We don't currently have vertex shader variants */
    if (nir->info.stage != MESA_SHADER_FRAGMENT)
       return;
@@ -183,7 +213,7 @@ panfrost_build_key(struct panfrost_context *ctx,
    struct panfrost_uncompiled_shader *vs = ctx->uncompiled[MESA_SHADER_VERTEX];
 
    /* gl_FragColor lowering needs the number of colour buffers */
-   if (nir->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_COLOR)) {
+   if (uncompiled->fragcolor_lowered) {
       key->fs.nr_cbufs_for_fragcolor = fb->nr_cbufs;
    }
 
@@ -276,7 +306,7 @@ panfrost_update_shader_variant(struct panfrost_context *ctx,
    simple_mtx_lock(&uncompiled->lock);
 
    struct panfrost_shader_key key = {0};
-   panfrost_build_key(ctx, &key, uncompiled->nir);
+   panfrost_build_key(ctx, &key, uncompiled);
 
    util_dynarray_foreach(&uncompiled->variants, struct panfrost_compiled_shader,
                          so) {
@@ -291,9 +321,6 @@ panfrost_update_shader_variant(struct panfrost_context *ctx,
 
    ctx->prog[type] = compiled;
 
-   /* TODO: it would be more efficient to release the lock before
-    * compiling instead of after, but that can race if thread A compiles a
-    * variant while thread B searches for that same variant */
    simple_mtx_unlock(&uncompiled->lock);
 }
 
@@ -338,6 +365,18 @@ panfrost_create_shader_state(struct pipe_context *pctx,
          ~VARYING_BIT_POS & ~VARYING_BIT_PSIZ;
    }
 
+   /* gl_FragColor needs to be lowered before lowering I/O, do that now */
+   if (nir->info.stage == MESA_SHADER_FRAGMENT &&
+       nir->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_COLOR)) {
+
+      NIR_PASS_V(nir, nir_lower_fragcolor, 8);
+      so->fragcolor_lowered = true;
+   }
+
+   /* Then run the suite of lowering and optimization, including I/O lowering */
+   struct panfrost_device *dev = pan_device(pctx->screen);
+   pan_shader_preprocess(nir, dev->gpu_id);
+
    /* If this shader uses transform feedback, compile the transform
     * feedback program. This is a special shader variant.
     */
@@ -374,11 +413,8 @@ panfrost_create_shader_state(struct pipe_context *pctx,
     * gl_FragColor is used, there is only a single render target. The
     * implicit broadcast is neither especially useful nor required by GLES.
     */
-   if (so->nir->info.stage == MESA_SHADER_FRAGMENT &&
-       so->nir->info.outputs_written & BITFIELD_BIT(FRAG_RESULT_COLOR)) {
-
+   if (so->fragcolor_lowered)
       key.fs.nr_cbufs_for_fragcolor = 1;
-   }
 
    /* Creating a CSO is single-threaded, so it's ok to use the
     * locked function without explicitly taking the lock. Creating a
@@ -451,6 +487,21 @@ panfrost_bind_compute_state(struct pipe_context *pipe, void *cso)
       uncompiled ? util_dynarray_begin(&uncompiled->variants) : NULL;
 }
 
+static void
+panfrost_get_compute_state_info(struct pipe_context *pipe, void *cso,
+                                struct pipe_compute_state_object_info *info)
+{
+   struct panfrost_device *dev = pan_device(pipe->screen);
+   struct panfrost_uncompiled_shader *uncompiled = cso;
+   struct panfrost_compiled_shader *cs =
+      util_dynarray_begin(&uncompiled->variants);
+
+   info->max_threads =
+      panfrost_max_thread_count(dev->arch, cs->info.work_reg_count);
+   info->private_memory = cs->info.tls_size;
+   info->preferred_simd_size = pan_subgroup_size(dev->arch);
+}
+
 void
 panfrost_shader_context_init(struct pipe_context *pctx)
 {
@@ -464,5 +515,6 @@ panfrost_shader_context_init(struct pipe_context *pctx)
 
    pctx->create_compute_state = panfrost_create_compute_state;
    pctx->bind_compute_state = panfrost_bind_compute_state;
+   pctx->get_compute_state_info = panfrost_get_compute_state_info;
    pctx->delete_compute_state = panfrost_delete_shader_state;
 }

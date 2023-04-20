@@ -63,7 +63,7 @@ format, each 2x2 subspan coming out of a shader will land entirely within one
 cache-line pair.
 
 What is the correspondence between bits and cache-line pairs?  The best model I
-(Jason) know of is to consider the CCS as having a 1-bit color format for
+(Faith) know of is to consider the CCS as having a 1-bit color format for
 fast-clears and a 2-bit format for color compression and a special tiling
 format.  The CCS tiling formats operate on a 1 or 2-bit granularity rather than
 the byte granularity of most tiling formats.

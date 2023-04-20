@@ -5,6 +5,7 @@
 
 #include "agx_tilebuffer.h"
 #include <assert.h>
+#include "compiler/agx_internal_formats.h"
 #include "util/format/u_format.h"
 #include "agx_formats.h"
 #include "agx_usc.h"
@@ -64,7 +65,7 @@ agx_build_tilebuffer_layout(enum pipe_format *formats, uint8_t nr_cbufs,
       offset_B += size_B;
    }
 
-   assert(offset_B <= 128 && "should fit in uint8");
+   assert(offset_B <= 64 && "TIB strides must be <= 64");
    tib.sample_size_B = ALIGN_POT(offset_B, 8);
 
    tib.tile_size = agx_select_tile_size(tib.sample_size_B * nr_samples);
@@ -75,6 +76,13 @@ enum pipe_format
 agx_tilebuffer_physical_format(struct agx_tilebuffer_layout *tib, unsigned rt)
 {
    return agx_pixel_format[tib->logical_format[rt]].internal;
+}
+
+bool
+agx_tilebuffer_supports_mask(struct agx_tilebuffer_layout *tib, unsigned rt)
+{
+   enum pipe_format fmt = agx_tilebuffer_physical_format(tib, rt);
+   return agx_internal_format_supports_mask((enum agx_internal_formats)fmt);
 }
 
 static unsigned

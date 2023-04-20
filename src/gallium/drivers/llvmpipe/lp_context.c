@@ -257,7 +257,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    if (!llvmpipe->context)
       goto fail;
 
-#if LLVM_VERSION_MAJOR >= 15
+#if LLVM_VERSION_MAJOR == 15
    LLVMContextSetOpaquePointers(llvmpipe->context, false);
 #endif
 
@@ -303,7 +303,7 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
 
    /* plug in AA line/point stages */
    draw_install_aaline_stage(llvmpipe->draw, &llvmpipe->pipe);
-   draw_install_aapoint_stage(llvmpipe->draw, &llvmpipe->pipe);
+   draw_install_aapoint_stage(llvmpipe->draw, &llvmpipe->pipe, nir_type_bool32);
    draw_install_pstipple_stage(llvmpipe->draw, &llvmpipe->pipe);
 
    /* convert points and lines into triangles:

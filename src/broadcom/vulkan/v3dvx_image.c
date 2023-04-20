@@ -45,80 +45,84 @@ pack_texture_shader_state_helper(struct v3dv_device *device,
           image->vk.samples == VK_SAMPLE_COUNT_4_BIT);
    const uint32_t msaa_scale = image->vk.samples == VK_SAMPLE_COUNT_1_BIT ? 1 : 2;
 
-   v3dvx_pack(image_view->texture_shader_state[index], TEXTURE_SHADER_STATE, tex) {
+   for (uint8_t plane = 0; plane < image_view->plane_count; plane++) {
+      uint8_t iplane = image_view->planes[plane].image_plane;
+      v3dvx_pack(image_view->planes[plane].texture_shader_state[index], TEXTURE_SHADER_STATE, tex) {
 
-      tex.level_0_is_strictly_uif =
-         (image->slices[0].tiling == V3D_TILING_UIF_XOR ||
-          image->slices[0].tiling == V3D_TILING_UIF_NO_XOR);
+         tex.level_0_is_strictly_uif =
+            (image->planes[iplane].slices[0].tiling == V3D_TILING_UIF_XOR ||
+             image->planes[iplane].slices[0].tiling == V3D_TILING_UIF_NO_XOR);
 
-      tex.level_0_xor_enable = (image->slices[0].tiling == V3D_TILING_UIF_XOR);
+         tex.level_0_xor_enable = (image->planes[iplane].slices[0].tiling == V3D_TILING_UIF_XOR);
 
-      if (tex.level_0_is_strictly_uif)
-         tex.level_0_ub_pad = image->slices[0].ub_pad;
+         if (tex.level_0_is_strictly_uif)
+            tex.level_0_ub_pad = image->planes[iplane].slices[0].ub_pad;
 
-      /* FIXME: v3d never sets uif_xor_disable, but uses it on the following
-       * check so let's set the default value
-       */
-      tex.uif_xor_disable = false;
-      if (tex.uif_xor_disable ||
-          tex.level_0_is_strictly_uif) {
-         tex.extended = true;
+         /* FIXME: v3d never sets uif_xor_disable, but uses it on the following
+          * check so let's set the default value
+          */
+         tex.uif_xor_disable = false;
+         if (tex.uif_xor_disable ||
+             tex.level_0_is_strictly_uif) {
+            tex.extended = true;
+         }
+
+         tex.base_level = image_view->vk.base_mip_level;
+         tex.max_level = image_view->vk.base_mip_level +
+                         image_view->vk.level_count - 1;
+
+         tex.swizzle_r = v3d_translate_pipe_swizzle(image_view->planes[plane].swizzle[0]);
+         tex.swizzle_g = v3d_translate_pipe_swizzle(image_view->planes[plane].swizzle[1]);
+         tex.swizzle_b = v3d_translate_pipe_swizzle(image_view->planes[plane].swizzle[2]);
+         tex.swizzle_a = v3d_translate_pipe_swizzle(image_view->planes[plane].swizzle[3]);
+
+         tex.reverse_standard_border_color = image_view->planes[plane].channel_reverse;
+
+         tex.texture_type = image_view->format->planes[plane].tex_type;
+
+         if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
+            tex.image_depth = image->vk.extent.depth;
+         } else {
+            tex.image_depth = image_view->vk.layer_count;
+         }
+
+         /* Empirical testing with CTS shows that when we are sampling from cube
+          * arrays we want to set image depth to layers / 6, but not when doing
+          * image load/store.
+          */
+         if (image_view->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY &&
+             !for_cube_map_array_storage) {
+            assert(tex.image_depth % 6 == 0);
+            tex.image_depth /= 6;
+         }
+
+         tex.image_height = image->planes[iplane].height * msaa_scale;
+         tex.image_width = image->planes[iplane].width * msaa_scale;
+
+         /* On 4.x, the height of a 1D texture is redefined to be the
+          * upper 14 bits of the width (which is only usable with txf).
+          */
+         if (image->vk.image_type == VK_IMAGE_TYPE_1D)
+            tex.image_height = tex.image_width >> 14;
+
+         tex.image_width &= (1 << 14) - 1;
+         tex.image_height &= (1 << 14) - 1;
+
+         tex.array_stride_64_byte_aligned = image->planes[iplane].cube_map_stride / 64;
+
+         tex.srgb = vk_format_is_srgb(image_view->vk.view_format);
+
+         /* At this point we don't have the job. That's the reason the first
+          * parameter is NULL, to avoid a crash when cl_pack_emit_reloc tries to
+          * add the bo to the job. This also means that we need to add manually
+          * the image bo to the job using the texture.
+          */
+         const uint32_t base_offset =
+            image->planes[iplane].mem->bo->offset +
+            v3dv_layer_offset(image, 0, image_view->vk.base_array_layer,
+                              iplane);
+         tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
       }
-
-      tex.base_level = image_view->vk.base_mip_level;
-      tex.max_level = image_view->vk.base_mip_level +
-                      image_view->vk.level_count - 1;
-
-      tex.swizzle_r = v3d_translate_pipe_swizzle(image_view->swizzle[0]);
-      tex.swizzle_g = v3d_translate_pipe_swizzle(image_view->swizzle[1]);
-      tex.swizzle_b = v3d_translate_pipe_swizzle(image_view->swizzle[2]);
-      tex.swizzle_a = v3d_translate_pipe_swizzle(image_view->swizzle[3]);
-
-      tex.reverse_standard_border_color = image_view->channel_reverse;
-
-      tex.texture_type = image_view->format->tex_type;
-
-      if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
-         tex.image_depth = image->vk.extent.depth;
-      } else {
-         tex.image_depth = image_view->vk.layer_count;
-      }
-
-      /* Empirical testing with CTS shows that when we are sampling from cube
-       * arrays we want to set image depth to layers / 6, but not when doing
-       * image load/store.
-       */
-      if (image_view->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY &&
-          !for_cube_map_array_storage) {
-         assert(tex.image_depth % 6 == 0);
-         tex.image_depth /= 6;
-      }
-
-      tex.image_height = image->vk.extent.height * msaa_scale;
-      tex.image_width = image->vk.extent.width * msaa_scale;
-
-      /* On 4.x, the height of a 1D texture is redefined to be the
-       * upper 14 bits of the width (which is only usable with txf).
-       */
-      if (image->vk.image_type == VK_IMAGE_TYPE_1D) {
-         tex.image_height = tex.image_width >> 14;
-      }
-      tex.image_width &= (1 << 14) - 1;
-      tex.image_height &= (1 << 14) - 1;
-
-      tex.array_stride_64_byte_aligned = image->cube_map_stride / 64;
-
-      tex.srgb = vk_format_is_srgb(image_view->vk.view_format);
-
-      /* At this point we don't have the job. That's the reason the first
-       * parameter is NULL, to avoid a crash when cl_pack_emit_reloc tries to
-       * add the bo to the job. This also means that we need to add manually
-       * the image bo to the job using the texture.
-       */
-      const uint32_t base_offset =
-         image->mem->bo->offset +
-         v3dv_layer_offset(image, 0, image_view->vk.base_array_layer);
-      tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
    }
 }
 
@@ -139,10 +143,14 @@ v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
    const struct v3dv_buffer *buffer = buffer_view->buffer;
 
    v3dvx_pack(buffer_view->texture_shader_state, TEXTURE_SHADER_STATE, tex) {
-      tex.swizzle_r = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_X);
-      tex.swizzle_g = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_Y);
-      tex.swizzle_b = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_Z);
-      tex.swizzle_a = v3d_translate_pipe_swizzle(PIPE_SWIZZLE_W);
+      tex.swizzle_r =
+         v3d_translate_pipe_swizzle(buffer_view->format->planes[0].swizzle[0]);
+      tex.swizzle_g =
+         v3d_translate_pipe_swizzle(buffer_view->format->planes[0].swizzle[1]);
+      tex.swizzle_b =
+         v3d_translate_pipe_swizzle(buffer_view->format->planes[0].swizzle[2]);
+      tex.swizzle_a =
+         v3d_translate_pipe_swizzle(buffer_view->format->planes[0].swizzle[3]);
 
       tex.image_depth = 1;
 
@@ -156,7 +164,8 @@ v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
       tex.image_width &= (1 << 14) - 1;
       tex.image_height &= (1 << 14) - 1;
 
-      tex.texture_type = buffer_view->format->tex_type;
+      assert(buffer_view->format->plane_count == 1);
+      tex.texture_type = buffer_view->format->planes[0].tex_type;
       tex.srgb = vk_format_is_srgb(buffer_view->vk_format);
 
       /* At this point we don't have the job. That's the reason the first

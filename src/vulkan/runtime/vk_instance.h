@@ -78,6 +78,13 @@ struct vk_instance {
    /** VkInstanceCreateInfo::pApplicationInfo */
    struct vk_app_info app_info;
 
+   /** Table of all supported instance extensions
+    *
+    * This is the static const struct passed by the driver as the
+    * `supported_extensions` parameter to `vk_instance_init()`.
+    */
+   const struct vk_instance_extension_table *supported_extensions;
+
    /** Table of all enabled instance extensions
     *
     * This is generated automatically as part of `vk_instance_init()` from

@@ -39,6 +39,14 @@ ir3_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
 {
    unsigned byte_size = bit_size / 8;
 
+   /* Don't vectorize load_ssbo's that we could otherwise lower to isam,
+    * as the tex cache benefit outweighs the benefit of vectorizing
+    */
+   if ((low->intrinsic == nir_intrinsic_load_ssbo) &&
+       (nir_intrinsic_access(low) & ACCESS_CAN_REORDER)) {
+      return false;
+   }
+
    if (low->intrinsic != nir_intrinsic_load_ubo) {
       return bit_size <= 32 && align_mul >= byte_size &&
          align_offset % byte_size == 0 &&
@@ -146,7 +154,8 @@ ir3_optimize_loop(struct ir3_compiler *compiler, nir_shader *s)
       nir_load_store_vectorize_options vectorize_opts = {
          .modes = nir_var_mem_ubo | nir_var_mem_ssbo,
          .callback = ir3_nir_should_vectorize_mem,
-         .robust_modes = compiler->robust_buffer_access2 ? nir_var_mem_ubo | nir_var_mem_ssbo: 0,
+         .robust_modes = compiler->options.robust_buffer_access2 ?
+               nir_var_mem_ubo | nir_var_mem_ssbo : 0,
       };
       progress |= OPT(s, nir_opt_load_store_vectorize, &vectorize_opts);
 
@@ -320,6 +329,7 @@ ir3_finalize_nir(struct ir3_compiler *compiler, nir_shader *s)
       .lower_rect = 0,
       .lower_tg4_offsets = true,
       .lower_invalid_implicit_lod = true,
+      .lower_index_to_offset = true,
    };
 
    if (compiler->gen >= 4) {
@@ -339,6 +349,7 @@ ir3_finalize_nir(struct ir3_compiler *compiler, nir_shader *s)
    if (s->info.stage == MESA_SHADER_GEOMETRY)
       NIR_PASS_V(s, ir3_nir_lower_gs);
 
+   NIR_PASS_V(s, nir_lower_frexp);
    NIR_PASS_V(s, nir_lower_amul, ir3_glsl_type_size);
 
    OPT_V(s, nir_lower_regs_to_ssa);
@@ -462,6 +473,7 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
       NIR_PASS_V(s, ir3_nir_lower_load_barycentric_at_offset);
       NIR_PASS_V(s, ir3_nir_move_varying_inputs);
       NIR_PASS_V(s, nir_lower_fb_read);
+      NIR_PASS_V(s, ir3_nir_lower_layer_id);
    }
 
    if (compiler->gen >= 6 && s->info.stage == MESA_SHADER_FRAGMENT &&
@@ -573,6 +585,7 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
 
    const nir_lower_image_options lower_image_opts = {
       .lower_cube_size = true,
+      .lower_image_samples_to_one = true
    };
    NIR_PASS_V(s, nir_lower_image, &lower_image_opts);
 
@@ -592,7 +605,7 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
     * dwords.
     */
    if (compiler->gen >= 6)
-      OPT_V(s, ir3_nir_lower_ssbo_size, compiler->storage_16bit ? 1 : 2);
+      OPT_V(s, ir3_nir_lower_ssbo_size, compiler->options.storage_16bit ? 1 : 2);
 
    ir3_optimize_loop(compiler, s);
 }
@@ -626,6 +639,8 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
    }
 
    bool progress = false;
+
+   NIR_PASS_V(s, nir_lower_io_to_scalar, nir_var_mem_ssbo);
 
    if (so->key.has_gs || so->key.tessellation) {
       switch (so->type) {
@@ -771,7 +786,9 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so, nir_shader *s)
             .rounding_mode = nir_rounding_mode_rtz,
             .fold_tex_dest_types = nir_type_float,
             /* blob dumps have no half regs on pixel 2's ldib or stib, so only enable for a6xx+. */
-            .fold_image_load_store_data = so->compiler->gen >= 6,
+            .fold_image_dest_types = so->compiler->gen >= 6 ?
+                                        nir_type_float | nir_type_uint | nir_type_int : 0,
+            .fold_image_store_data = so->compiler->gen >= 6,
             .fold_srcs_options_count = 1,
             .fold_srcs_options = &fold_srcs_options,
          };

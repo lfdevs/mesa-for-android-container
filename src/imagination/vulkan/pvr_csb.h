@@ -131,6 +131,7 @@ void pvr_csb_init(struct pvr_device *device,
                   enum pvr_cmd_stream_type stream_type,
                   struct pvr_csb *csb);
 void pvr_csb_finish(struct pvr_csb *csb);
+VkResult pvr_csb_bake(struct pvr_csb *csb, struct list_head *bo_list_out);
 void *pvr_csb_alloc_dwords(struct pvr_csb *csb, uint32_t num_dwords);
 VkResult pvr_csb_copy(struct pvr_csb *csb_dst, struct pvr_csb *csb_src);
 void pvr_csb_emit_link(struct pvr_csb *csb, pvr_dev_addr_t addr, bool ret);

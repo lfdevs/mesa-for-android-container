@@ -16,7 +16,9 @@ Building using the Android NDK
 
 Download and install the NDK using whatever method you normally would.
 Then, create your Meson cross file to use it, something like this
-``~/.local/share/meson/cross/android-aarch64`` file::
+``~/.local/share/meson/cross/android-aarch64`` file:
+
+.. code-block:: ini
 
     [binaries]
     ar = 'NDKDIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar'
@@ -41,14 +43,14 @@ one cross-compiling the turnip driver for a stock Pixel phone)
 
 .. code-block:: console
 
-    meson build-android-aarch64 \
+    meson setup build-android-aarch64 \
         --cross-file android-aarch64 \
 	-Dplatforms=android \
 	-Dplatform-sdk-version=26 \
 	-Dandroid-stub=true \
 	-Dgallium-drivers= \
 	-Dvulkan-drivers=freedreno \
-	-Dfreedreno-kgsl=true
+	-Dfreedreno-kmds=kgsl
     ninja -C build-android-aarch64
 
 Replacing Android drivers on stock Android

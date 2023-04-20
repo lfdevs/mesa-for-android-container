@@ -118,6 +118,21 @@ zink_descriptor_type_to_size_idx_comp(enum zink_descriptor_type type)
    }
    unreachable("unknown type");
 }
+
+/* bindless descriptor bindings have their own struct indexing */
+ALWAYS_INLINE static VkDescriptorType
+zink_descriptor_type_from_bindless_index(unsigned idx)
+{
+   switch (idx) {
+   case 0: return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+   case 1: return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+   case 2: return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+   case 3: return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+   default:
+      unreachable("unknown index");
+   }
+}
+
 bool
 zink_descriptor_layouts_init(struct zink_screen *screen);
 
@@ -139,8 +154,12 @@ zink_descriptors_deinit_bindless(struct zink_context *ctx);
 void
 zink_descriptors_update_bindless(struct zink_context *ctx);
 
-
-
+void
+zink_descriptor_shader_get_binding_offsets(const struct zink_shader *shader, unsigned *offsets);
+void
+zink_descriptor_shader_init(struct zink_screen *screen, struct zink_shader *shader);
+void
+zink_descriptor_shader_deinit(struct zink_screen *screen, struct zink_shader *shader);
 
 bool
 zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg);

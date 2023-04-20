@@ -33,6 +33,43 @@
 #include "git_sha1.h"
 #include "vulkan/vulkan.h"
 
+static const struct spirv_to_nir_options
+spirv_to_nir_options = {
+   .caps = {
+      .draw_parameters = true,
+      .multiview = true,
+      .subgroup_basic = true,
+      .subgroup_ballot = true,
+      .subgroup_vote = true,
+      .subgroup_shuffle = true,
+      .subgroup_quad = true,
+      .subgroup_arithmetic = true,
+      .descriptor_array_dynamic_indexing = true,
+      .float_controls = true,
+      .float16 = true,
+      .int16 = true,
+      .storage_16bit = true,
+      .storage_8bit = true,
+      .descriptor_indexing = true,
+      .runtime_descriptor_array = true,
+      .descriptor_array_non_uniform_indexing = true,
+      .image_read_without_format = true,
+      .image_write_without_format = true,
+   },
+   .ubo_addr_format = nir_address_format_32bit_index_offset,
+   .ssbo_addr_format = nir_address_format_32bit_index_offset,
+   .shared_addr_format = nir_address_format_32bit_offset,
+
+   .min_ubo_alignment = 256, /* D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT */
+   .min_ssbo_alignment = 16, /* D3D12_RAW_UAV_SRV_BYTE_ALIGNMENT */
+};
+
+const struct spirv_to_nir_options*
+dxil_spirv_nir_get_spirv_options(void)
+{
+   return &spirv_to_nir_options;
+}
+
  /* Logic extracted from vk_spirv_to_nir() so we have the same preparation
  * steps for both the vulkan driver and the lib used by the WebGPU
  * implementation.
@@ -115,12 +152,6 @@ add_runtime_data_var(nir_shader *nir, unsigned desc_set, unsigned binding)
    return var;
 }
 
-struct lower_system_values_data {
-   nir_address_format ubo_format;
-   unsigned desc_set;
-   unsigned binding;
-};
-
 static bool
 lower_shader_system_values(struct nir_builder *builder, nir_instr *instr,
                            void *cb_data)
@@ -137,11 +168,18 @@ lower_shader_system_values(struct nir_builder *builder, nir_instr *instr,
 
    assert(intrin->dest.is_ssa);
 
+   const struct dxil_spirv_runtime_conf *conf =
+      (const struct dxil_spirv_runtime_conf *)cb_data;
+
    int offset = 0;
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_num_workgroups:
       offset =
          offsetof(struct dxil_spirv_compute_runtime_data, group_count_x);
+      break;
+   case nir_intrinsic_load_base_workgroup_id:
+      offset =
+         offsetof(struct dxil_spirv_compute_runtime_data, base_group_x);
       break;
    case nir_intrinsic_load_first_vertex:
       offset = offsetof(struct dxil_spirv_vertex_runtime_data, first_vertex);
@@ -156,21 +194,24 @@ lower_shader_system_values(struct nir_builder *builder, nir_instr *instr,
    case nir_intrinsic_load_draw_id:
       offset = offsetof(struct dxil_spirv_vertex_runtime_data, draw_id);
       break;
+   case nir_intrinsic_load_view_index:
+      if (!conf->lower_view_index)
+         return false;
+      offset = offsetof(struct dxil_spirv_vertex_runtime_data, view_index);
+      break;
    default:
       return false;
    }
 
-   struct lower_system_values_data *data =
-      (struct lower_system_values_data *)cb_data;
-
    builder->cursor = nir_after_instr(instr);
-   nir_address_format ubo_format = data->ubo_format;
+   nir_address_format ubo_format = nir_address_format_32bit_index_offset;
 
    nir_ssa_def *index = nir_vulkan_resource_index(
       builder, nir_address_format_num_components(ubo_format),
       nir_address_format_bit_size(ubo_format),
       nir_imm_int(builder, 0),
-      .desc_set = data->desc_set, .binding = data->binding,
+      .desc_set = conf->runtime_data_cbv.register_space,
+      .binding = conf->runtime_data_cbv.base_shader_register,
       .desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
    nir_ssa_def *load_desc = nir_load_vulkan_descriptor(
@@ -178,10 +219,15 @@ lower_shader_system_values(struct nir_builder *builder, nir_instr *instr,
       nir_address_format_bit_size(ubo_format),
       index, .desc_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
+   unsigned num_components = nir_dest_num_components(intrin->dest);
+   unsigned alignment = (num_components == 3 ? 4 : num_components) *
+      nir_dest_bit_size(intrin->dest) / 8;
+   assert(offset % alignment == 0);
    nir_ssa_def *load_data = build_load_ubo_dxil(
       builder, nir_channel(builder, load_desc, 0),
       nir_imm_int(builder, offset),
-      nir_dest_num_components(intrin->dest), nir_dest_bit_size(intrin->dest));
+      num_components, nir_dest_bit_size(intrin->dest),
+      alignment);
 
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, load_data);
    nir_instr_remove(instr);
@@ -190,19 +236,13 @@ lower_shader_system_values(struct nir_builder *builder, nir_instr *instr,
 
 static bool
 dxil_spirv_nir_lower_shader_system_values(nir_shader *shader,
-                                          nir_address_format ubo_format,
-                                          unsigned desc_set, unsigned binding)
+                                          const struct dxil_spirv_runtime_conf *conf)
 {
-   struct lower_system_values_data data = {
-      .ubo_format = ubo_format,
-      .desc_set = desc_set,
-      .binding = binding,
-   };
    return nir_shader_instructions_pass(shader, lower_shader_system_values,
                                        nir_metadata_block_index |
                                           nir_metadata_dominance |
                                           nir_metadata_loop_analysis,
-                                       &data);
+                                       (void *)conf);
 }
 
 static nir_variable *
@@ -270,7 +310,8 @@ lower_load_push_constant(struct nir_builder *builder, nir_instr *instr,
    nir_ssa_def *load_data = build_load_ubo_dxil(
       builder, nir_channel(builder, load_desc, 0),
       nir_iadd_imm(builder, offset, base),
-      nir_dest_num_components(intrin->dest), nir_dest_bit_size(intrin->dest));
+      nir_dest_num_components(intrin->dest), nir_dest_bit_size(intrin->dest),
+      nir_intrinsic_align(intrin));
 
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, load_data);
    nir_instr_remove(instr);
@@ -359,7 +400,7 @@ lower_yz_flip(struct nir_builder *builder, nir_instr *instr,
       dyn_yz_flip_mask =
          build_load_ubo_dxil(builder,
                              nir_channel(builder, load_desc, 0),
-                             nir_imm_int(builder, offset), 1, 32);
+                             nir_imm_int(builder, offset), 1, 32, 4);
       *data->reads_sysval_ubo = true;
    }
 
@@ -400,7 +441,7 @@ lower_yz_flip(struct nir_builder *builder, nir_instr *instr,
    return true;
 }
 
-static bool
+bool
 dxil_spirv_nir_lower_yz_flip(nir_shader *shader,
                              const struct dxil_spirv_runtime_conf *rt_conf,
                              bool *reads_sysval_ubo)
@@ -490,13 +531,14 @@ kill_undefined_varyings(struct nir_builder *b,
       return false;
 
    nir_variable *var = nir_intrinsic_get_var(intr, 0);
-   if (!var)
+   if (!var || var->data.mode != nir_var_shader_in)
       return false;
 
-   /* Ignore builtins for now, some of them get default values
+   /* Ignore most builtins for now, some of them get default values
     * when not written from previous stages.
     */
-   if (var->data.location < VARYING_SLOT_VAR0)
+   if (var->data.location < VARYING_SLOT_VAR0 &&
+       var->data.location != VARYING_SLOT_POS)
       return false;
 
    uint32_t loc = var->data.patch ?
@@ -504,14 +546,22 @@ kill_undefined_varyings(struct nir_builder *b,
    uint64_t written = var->data.patch ?
                       prev_stage_nir->info.patch_outputs_written :
                       prev_stage_nir->info.outputs_written;
-   if (BITFIELD64_BIT(loc) & written)
+   if (BITFIELD64_RANGE(loc, glsl_varying_count(var->type)) & written)
       return false;
 
    b->cursor = nir_after_instr(instr);
-   nir_ssa_def *undef =
-      nir_ssa_undef(b, nir_dest_num_components(intr->dest),
-                    nir_dest_bit_size(intr->dest));
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, undef);
+   /* Note: zero is used instead of undef, because optimization is not run here, but is
+    * run later on. If we load an undef here, and that undef ends up being used to store
+    * to position later on, that can cause some or all of the components in that position
+    * write to be removed, which is problematic especially in the case of all components,
+    * since that would remove the store instruction, and would make it tricky to satisfy
+    * the DXIL requirements of writing all position components.
+    */
+   unsigned int swizzle[NIR_MAX_VEC_COMPONENTS] = { 0 };
+   nir_ssa_def *zero =
+      nir_swizzle(b, nir_imm_intN_t(b, 0, nir_dest_bit_size(intr->dest)),
+                     swizzle, nir_dest_num_components(intr->dest));
+   nir_ssa_def_rewrite_uses(&intr->dest.ssa, zero);
    nir_instr_remove(instr);
    return true;
 }
@@ -555,7 +605,7 @@ kill_unused_outputs(struct nir_builder *b,
    unsigned loc = var->data.patch ?
                   var->data.location - VARYING_SLOT_PATCH0 :
                   var->data.location;
-   if (!(BITFIELD64_BIT(loc) & kill_mask))
+   if (!(BITFIELD64_RANGE(loc, glsl_varying_count(var->type)) & kill_mask))
       return false;
 
    nir_instr_remove(instr);
@@ -647,7 +697,7 @@ write_pntc_with_pos(nir_builder *b, nir_instr *instr, void *_data)
    nir_ssa_def *transform = nir_channels(b,
                                          build_load_ubo_dxil(b,
                                                              nir_channel(b, load_desc, 0),
-                                                             nir_imm_int(b, offset), 4, 32),
+                                                             nir_imm_int(b, offset), 4, 32, 16),
                                          0x6);
    nir_ssa_def *point_center_in_clip = nir_fmul(b, nir_channels(b, pos, 0x3), nir_frcp(b, nir_channel(b, pos, 3)));
    nir_ssa_def *point_center =
@@ -735,6 +785,78 @@ dxil_spirv_compute_pntc(nir_shader *nir)
                                 pos);
 }
 
+static bool
+lower_view_index_to_rt_layer_instr(nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_store_deref)
+      return false;
+
+   nir_variable *var = nir_intrinsic_get_var(intr, 0);
+   if (!var ||
+       var->data.mode != nir_var_shader_out ||
+       var->data.location != VARYING_SLOT_LAYER)
+      return false;
+
+   b->cursor = nir_before_instr(instr);
+   nir_ssa_def *layer = intr->src[1].ssa;
+   nir_ssa_def *new_layer = nir_iadd(b, layer,
+                                     nir_load_view_index(b));
+   nir_instr_rewrite_src_ssa(instr, &intr->src[1], new_layer);
+   return true;
+}
+
+static bool
+add_layer_write(nir_builder *b, nir_instr *instr, void *data)
+{
+   if (instr) {
+      if (instr->type != nir_instr_type_intrinsic)
+         return false;
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+      if (intr->intrinsic != nir_intrinsic_emit_vertex &&
+          intr->intrinsic != nir_intrinsic_emit_vertex_with_counter)
+         return false;
+      b->cursor = nir_before_instr(instr);
+   }
+   nir_variable *var = (nir_variable *)data;
+   nir_store_var(b, var, nir_load_view_index(b), 0x1);
+   return true;
+}
+
+static void
+lower_view_index_to_rt_layer(nir_shader *nir)
+{
+   bool existing_write =
+      nir_shader_instructions_pass(nir,
+                                   lower_view_index_to_rt_layer_instr,
+                                   nir_metadata_block_index |
+                                   nir_metadata_dominance |
+                                   nir_metadata_loop_analysis, NULL);
+
+   if (existing_write)
+      return;
+
+   nir_variable *var = nir_variable_create(nir, nir_var_shader_out,
+                                           glsl_uint_type(), "gl_Layer");
+   var->data.location = VARYING_SLOT_LAYER;
+   var->data.interpolation = INTERP_MODE_FLAT;
+   if (nir->info.stage == MESA_SHADER_GEOMETRY) {
+      nir_shader_instructions_pass(nir,
+                                   add_layer_write,
+                                   nir_metadata_block_index |
+                                   nir_metadata_dominance |
+                                   nir_metadata_loop_analysis, var);
+   } else {
+      nir_function_impl *func = nir_shader_get_entrypoint(nir);
+      nir_builder b;
+      nir_builder_init(&b, func);
+      b.cursor = nir_after_block(nir_impl_last_block(func));
+      add_layer_write(&b, NULL, var);
+   }
+}
+
 void
 dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
                     const struct dxil_spirv_runtime_conf *conf,
@@ -769,6 +891,25 @@ dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
    glsl_type_singleton_decref();
 }
 
+static unsigned
+lower_bit_size_callback(const nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return 0;
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   switch (intr->intrinsic) {
+   case nir_intrinsic_quad_swap_horizontal:
+   case nir_intrinsic_quad_swap_vertical:
+   case nir_intrinsic_quad_swap_diagonal:
+   case nir_intrinsic_reduce:
+   case nir_intrinsic_inclusive_scan:
+   case nir_intrinsic_exclusive_scan:
+      return intr->dest.ssa.bit_size == 1 ? 32 : 0;
+   default:
+      return 0;
+   }
+}
+
 void
 dxil_spirv_nir_passes(nir_shader *nir,
                       const struct dxil_spirv_runtime_conf *conf,
@@ -791,11 +932,31 @@ dxil_spirv_nir_passes(nir_shader *nir,
 
    NIR_PASS_V(nir, nir_lower_system_values);
 
+   nir_lower_compute_system_values_options compute_options = {
+      .has_base_workgroup_id = !conf->zero_based_compute_workgroup_id,
+   };
+   NIR_PASS_V(nir, nir_lower_compute_system_values, &compute_options);
+   NIR_PASS_V(nir, dxil_nir_lower_subgroup_id);
+   NIR_PASS_V(nir, dxil_nir_lower_num_subgroups);
+
+   nir_lower_subgroups_options subgroup_options = {
+      .ballot_bit_size = 32,
+      .ballot_components = 4,
+      .lower_subgroup_masks = true,
+      .lower_to_scalar = true,
+      .lower_relative_shuffle = true,
+   };
+   NIR_PASS_V(nir, nir_lower_subgroups, &subgroup_options);
+   NIR_PASS_V(nir, nir_lower_bit_size, lower_bit_size_callback, NULL);
+
+   // Ensure subgroup scans on bools are gone
+   NIR_PASS_V(nir, nir_opt_dce);
+   NIR_PASS_V(nir, dxil_nir_lower_unsupported_subgroup_scan);
+
    // Force sample-rate shading if we're asked to.
    if (conf->force_sample_rate_shading) {
       assert(nir->info.stage == MESA_SHADER_FRAGMENT);
-      nir_foreach_shader_in_variable(var, nir)
-         var->data.sample = true;
+      nir->info.fs.uses_sample_shading = true;
    }
 
    if (conf->zero_based_vertex_instance_id) {
@@ -809,18 +970,20 @@ dxil_spirv_nir_passes(nir_shader *nir,
                  ARRAY_SIZE(system_values));
    }
 
+   if (conf->lower_view_index_to_rt_layer)
+      NIR_PASS_V(nir, lower_view_index_to_rt_layer);
+
    *requires_runtime_data = false;
    NIR_PASS(*requires_runtime_data, nir,
             dxil_spirv_nir_lower_shader_system_values,
-            nir_address_format_32bit_index_offset,
-            conf->runtime_data_cbv.register_space,
-            conf->runtime_data_cbv.base_shader_register);
+            conf);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS_V(nir, nir_lower_input_attachments,
                  &(nir_input_attachment_options){
                      .use_fragcoord_sysval = false,
-                     .use_layer_id_sysval = true,
+                     .use_layer_id_sysval = !conf->lower_view_index,
+                     .use_view_id_for_layer = !conf->lower_view_index,
                  });
 
       /* This will lower load_helper to a memoized is_helper if needed; otherwise, load_helper
@@ -836,8 +999,11 @@ dxil_spirv_nir_passes(nir_shader *nir,
    }
 
    NIR_PASS_V(nir, nir_opt_deref);
+   NIR_PASS_V(nir, dxil_nir_split_unaligned_loads_stores,
+              nir_var_mem_ubo | nir_var_mem_push_const |
+              nir_var_mem_ssbo);
 
-   if (conf->read_only_images_as_srvs) {
+   if (conf->inferred_read_only_images_as_srvs) {
       const nir_opt_access_options opt_access_options = {
          .is_vulkan = true,
       };
@@ -867,8 +1033,9 @@ dxil_spirv_nir_passes(nir_shader *nir,
       NIR_PASS_V(nir, nir_lower_vars_to_explicit_types, nir_var_mem_shared,
                  shared_var_info);
    }
+   NIR_PASS_V(nir, dxil_nir_split_unaligned_loads_stores, nir_var_mem_shared);
    NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_shared,
-      nir_address_format_32bit_offset_as_64bit);
+      nir_address_format_32bit_offset);
 
    NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
    NIR_PASS_V(nir, nir_lower_io_to_temporaries, nir_shader_get_entrypoint(nir), true, true);
@@ -897,6 +1064,7 @@ dxil_spirv_nir_passes(nir_shader *nir,
                             conf->push_constant_cbv.base_shader_register);
    }
 
+   NIR_PASS_V(nir, nir_lower_fp16_casts, nir_lower_fp16_all & ~nir_lower_fp16_rtz);
    NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
    NIR_PASS_V(nir, nir_opt_dce);
    NIR_PASS_V(nir, dxil_nir_lower_double_math);
@@ -923,7 +1091,8 @@ dxil_spirv_nir_passes(nir_shader *nir,
       } while (progress);
    }
 
-   NIR_PASS_V(nir, nir_lower_readonly_images_to_tex, true);
+   if (conf->declared_read_only_images_as_srvs)
+      NIR_PASS_V(nir, nir_lower_readonly_images_to_tex, true);
    nir_lower_tex_options lower_tex_options = {
       .lower_txp = UINT32_MAX,
       .lower_invalid_implicit_lod = true,
@@ -933,7 +1102,10 @@ dxil_spirv_nir_passes(nir_shader *nir,
 
    NIR_PASS_V(nir, dxil_nir_lower_atomics_to_dxil);
    NIR_PASS_V(nir, dxil_nir_split_clip_cull_distance);
-   NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil);
+   const struct dxil_nir_lower_loads_stores_options loads_stores_options = {
+      .use_16bit_ssbo = conf->shader_model_max >= SHADER_MODEL_6_2,
+   };
+   NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil, &loads_stores_options);
    NIR_PASS_V(nir, dxil_nir_split_typed_samplers);
    NIR_PASS_V(nir, dxil_nir_lower_ubo_array_one_to_static);
    NIR_PASS_V(nir, nir_opt_dce);

@@ -21,11 +21,14 @@
  * IN THE SOFTWARE.
  */
 
+#include "u_debug_stack.h"
+
+#if WITH_LIBBACKTRACE
+
 #include <backtrace/Backtrace.h>
 
 #include "util/simple_mtx.h"
 #include "util/u_debug.h"
-#include "u_debug_stack.h"
 #include "util/hash_table.h"
 #include "util/u_thread.h"
 
@@ -120,3 +123,27 @@ debug_backtrace_print(FILE *f,
                  backtrace[i].off);
    }
 }
+
+#else
+
+void
+debug_backtrace_capture(debug_stack_frame *backtrace,
+                        unsigned start_frame,
+                        unsigned nr_frames)
+{
+}
+
+void
+debug_backtrace_dump(const debug_stack_frame *backtrace,
+                     unsigned nr_frames)
+{
+}
+
+void
+debug_backtrace_print(FILE *f,
+                      const debug_stack_frame *backtrace,
+                      unsigned nr_frames)
+{
+}
+
+#endif // WITH_LIBBACKTRACE

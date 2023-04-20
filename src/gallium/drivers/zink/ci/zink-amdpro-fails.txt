@@ -310,3 +310,7 @@ KHR-GL46.direct_state_access.renderbuffers_storage_multisample
 
 # VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT with VK_PRIMITIVE_TOPOLOGY_POINT_LIST is broken
 KHR-GL46.pipeline_statistics_query_tests_ARB.functional_primitives_vertices_submitted_and_clipping_input_output_primitives,Fail
+
+# Piglit xfb tests
+spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
+spec@ext_transform_feedback@tessellation quads wireframe,Fail

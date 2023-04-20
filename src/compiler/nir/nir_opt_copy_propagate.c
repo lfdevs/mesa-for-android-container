@@ -117,18 +117,7 @@ copy_propagate(nir_src *src, nir_alu_instr *copy)
    if (!is_swizzleless_move(copy))
       return false;
 
-   nir_instr_rewrite_src_ssa(src->parent_instr, src, copy->src[0].src.ssa);
-
-   return true;
-}
-
-static bool
-copy_propagate_if(nir_src *src, nir_alu_instr *copy)
-{
-   if (!is_swizzleless_move(copy))
-      return false;
-
-   nir_if_rewrite_condition_ssa(src->parent_if, src, copy->src[0].src.ssa);
+   nir_src_rewrite_ssa(src, copy->src[0].src.ssa);
 
    return true;
 }
@@ -146,15 +135,12 @@ copy_prop_instr(nir_function_impl *impl, nir_instr *instr)
 
    bool progress = false;
 
-   nir_foreach_use_safe(src, &mov->dest.dest.ssa) {
-      if (src->parent_instr->type == nir_instr_type_alu)
+   nir_foreach_use_including_if_safe(src, &mov->dest.dest.ssa) {
+      if (!src->is_if && src->parent_instr->type == nir_instr_type_alu)
          progress |= copy_propagate_alu(impl, container_of(src, nir_alu_src, src), mov);
       else
          progress |= copy_propagate(src, mov);
    }
-
-   nir_foreach_if_use_safe(src, &mov->dest.dest.ssa)
-      progress |= copy_propagate_if(src, mov);
 
    if (progress && nir_ssa_def_is_unused(&mov->dest.dest.ssa))
       nir_instr_remove(&mov->instr);

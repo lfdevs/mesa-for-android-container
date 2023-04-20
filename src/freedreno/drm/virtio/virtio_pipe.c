@@ -122,8 +122,12 @@ virtio_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence, uint64_t ti
 {
    MESA_TRACE_FUNC();
 
+   assert(fence->use_fence_fd);
+
    if (fence->use_fence_fd)
       return sync_wait(fence->fence_fd, timeout / 1000000);
+
+   /* TODO remove !use_fence_fd path */
 
    struct msm_ccmd_wait_fence_req req = {
          .hdr = MSM_CCMD(WAIT_FENCE, sizeof(req)),

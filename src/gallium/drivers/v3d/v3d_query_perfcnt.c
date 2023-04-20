@@ -29,102 +29,14 @@
 
 #include "v3d_query.h"
 
+#include "common/v3d_performance_counters.h"
+
 struct v3d_query_perfcnt
 {
         struct v3d_query base;
 
         unsigned num_queries;
         struct v3d_perfmon_state *perfmon;
-};
-
-static const char *v3d_counter_names[] = {
-        "FEP-valid-primitives-no-rendered-pixels",
-        "FEP-valid-primitives-rendered-pixels",
-        "FEP-clipped-quads",
-        "FEP-valid-quads",
-        "TLB-quads-not-passing-stencil-test",
-        "TLB-quads-not-passing-z-and-stencil-test",
-        "TLB-quads-passing-z-and-stencil-test",
-        "TLB-quads-with-zero-coverage",
-        "TLB-quads-with-non-zero-coverage",
-        "TLB-quads-written-to-color-buffer",
-        "PTB-primitives-discarded-outside-viewport",
-        "PTB-primitives-need-clipping",
-        "PTB-primitives-discared-reversed",
-        "QPU-total-idle-clk-cycles",
-        "QPU-total-active-clk-cycles-vertex-coord-shading",
-        "QPU-total-active-clk-cycles-fragment-shading",
-        "QPU-total-clk-cycles-executing-valid-instr",
-        "QPU-total-clk-cycles-waiting-TMU",
-        "QPU-total-clk-cycles-waiting-scoreboard",
-        "QPU-total-clk-cycles-waiting-varyings",
-        "QPU-total-instr-cache-hit",
-        "QPU-total-instr-cache-miss",
-        "QPU-total-uniform-cache-hit",
-        "QPU-total-uniform-cache-miss",
-        "TMU-total-text-quads-access",
-        "TMU-total-text-cache-miss",
-        "VPM-total-clk-cycles-VDW-stalled",
-        "VPM-total-clk-cycles-VCD-stalled",
-        "CLE-bin-thread-active-cycles",
-        "CLE-render-thread-active-cycles",
-        "L2T-total-cache-hit",
-        "L2T-total-cache-miss",
-        "cycle-count",
-        "QPU-total-clk-cycles-waiting-vertex-coord-shading",
-        "QPU-total-clk-cycles-waiting-fragment-shading",
-        "PTB-primitives-binned",
-        "AXI-writes-seen-watch-0",
-        "AXI-reads-seen-watch-0",
-        "AXI-writes-stalled-seen-watch-0",
-        "AXI-reads-stalled-seen-watch-0",
-        "AXI-write-bytes-seen-watch-0",
-        "AXI-read-bytes-seen-watch-0",
-        "AXI-writes-seen-watch-1",
-        "AXI-reads-seen-watch-1",
-        "AXI-writes-stalled-seen-watch-1",
-        "AXI-reads-stalled-seen-watch-1",
-        "AXI-write-bytes-seen-watch-1",
-        "AXI-read-bytes-seen-watch-1",
-        "TLB-partial-quads-written-to-color-buffer",
-        "TMU-total-config-access",
-        "L2T-no-id-stalled",
-        "L2T-command-queue-stalled",
-        "L2T-TMU-writes",
-        "TMU-active-cycles",
-        "TMU-stalled-cycles",
-        "CLE-thread-active-cycles",
-        "L2T-TMU-reads",
-        "L2T-CLE-reads",
-        "L2T-VCD-reads",
-        "L2T-TMU-config-reads",
-        "L2T-SLC0-reads",
-        "L2T-SLC1-reads",
-        "L2T-SLC2-reads",
-        "L2T-TMU-write-miss",
-        "L2T-TMU-read-miss",
-        "L2T-CLE-read-miss",
-        "L2T-VCD-read-miss",
-        "L2T-TMU-config-read-miss",
-        "L2T-SLC0-read-miss",
-        "L2T-SLC1-read-miss",
-        "L2T-SLC2-read-miss",
-        "core-memory-writes",
-        "L2T-memory-writes",
-        "PTB-memory-writes",
-        "TLB-memory-writes",
-        "core-memory-reads",
-        "L2T-memory-reads",
-        "PTB-memory-reads",
-        "PSE-memory-reads",
-        "TLB-memory-reads",
-        "GMP-memory-reads",
-        "PTB-memory-words-writes",
-        "TLB-memory-words-writes",
-        "PSE-memory-words-reads",
-        "TLB-memory-words-reads",
-        "TMU-MRU-hits",
-        "compute-active-cycles",
 };
 
 static void
@@ -154,7 +66,7 @@ v3d_get_driver_query_group_info_perfcnt(struct v3d_screen *screen, unsigned inde
 
         info->name = "V3D counters";
         info->max_active_queries = DRM_V3D_MAX_PERF_COUNTERS;
-        info->num_queries = ARRAY_SIZE(v3d_counter_names);
+        info->num_queries = ARRAY_SIZE(v3d_performance_counters);
 
         return 1;
 }
@@ -167,13 +79,13 @@ v3d_get_driver_query_info_perfcnt(struct v3d_screen *screen, unsigned index,
                 return 0;
 
         if (!info)
-                return ARRAY_SIZE(v3d_counter_names);
+                return ARRAY_SIZE(v3d_performance_counters);
 
-        if (index >= ARRAY_SIZE(v3d_counter_names))
+        if (index >= ARRAY_SIZE(v3d_performance_counters))
                 return 0;
 
         info->group_id = 0;
-        info->name = v3d_counter_names[index];
+        info->name = v3d_performance_counters[index][V3D_PERFCNT_NAME];
         info->query_type = PIPE_QUERY_DRIVER_SPECIFIC + index;
         info->result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE;
         info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
@@ -322,7 +234,7 @@ v3d_create_batch_query_perfcnt(struct v3d_context *v3d, unsigned num_queries,
         for (i = 0; i < num_queries; i++) {
                 if (query_types[i] < PIPE_QUERY_DRIVER_SPECIFIC ||
                     query_types[i] >= PIPE_QUERY_DRIVER_SPECIFIC +
-                    ARRAY_SIZE(v3d_counter_names)) {
+                    ARRAY_SIZE(v3d_performance_counters)) {
                         fprintf(stderr, "Invalid query type\n");
                         return NULL;
                 }

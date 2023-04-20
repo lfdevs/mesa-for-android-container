@@ -313,9 +313,6 @@ dEQP-GLES31.functional.ubo.random.all_per_block_buffers.20,Fail
 KHR-GLES2.core.internalformat.copy_tex_image.alpha8_oes,Fail
 KHR-GLES2.core.internalformat.copy_tex_image.alpha,Fail
 KHR-GLES3.core.internalformat.copy_tex_image.alpha,Fail
-KHR-GLES31.core.internalformat.copy_tex_image.alpha,Fail
-
-
 
 # "Invalid array size was returned. at es31cArrayOfArraysTests.cpp:4779"
 # msm 900000.mdss: [drm:a5xx_irq] *ERROR* gpu fault ring 0 fence 2c54ef status E40801C1 rb 0162/0162 ib1 000000000104B000/0000 ib2 000000000104C000/0000
@@ -375,7 +372,6 @@ KHR-GLES3.copy_tex_image_conversions.required.texture2d_texture2d,Fail
 KHR-GLES3.copy_tex_image_conversions.required.texture3d_cubemap_posx,Fail
 KHR-GLES3.copy_tex_image_conversions.required.texture3d_texture2d,Fail
 
-KHR-GLES3.packed_depth_stencil.blit.depth24_stencil8,Fail
 KHR-GLES3.packed_depth_stencil.blit.depth32f_stencil8,Fail
 
 # "Non-integer comparison: 1, 0, 18, 1e-05: 0.142857 == 0: not equal.
@@ -415,7 +411,7 @@ KHR-GLES3.packed_pixels.varied_rectangle.rgba32i,Fail
 KHR-GLES3.packed_pixels.varied_rectangle.rgba32ui,Fail
 
 
-glx@glx-make-current,Crash
+glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth -pixmap,Crash
@@ -443,13 +439,54 @@ shaders@point-vertex-id gl_vertexid,Crash
 shaders@point-vertex-id gl_vertexid divisor,Crash
 shaders@point-vertex-id gl_vertexid gl_instanceid,Crash
 shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Crash
+
+spec@!opengl 1.0@depth-clear-precision-check@depth24,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
+spec@!opengl 1.0@depth-clear-precision-check@depth24_stencil8,Fail
+spec@!opengl 1.0@depth-clear-precision-check,Fail
+
+# MESA: error: unknown vertex shader output name: VARYING_SLOT_EDGE
+spec@!opengl 1.0@gl-1.0-edgeflag-quads,Crash
+spec@!opengl 2.0@gl-2.0-edgeflag,Crash
+
+spec@!opengl 1.0@rasterpos,Crash
+spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
+
+spec@!opengl 1.1@copyteximage 2d,Fail
+spec@!opengl 1.2@copyteximage 3d,Fail
+spec@!opengl 1.1@depthstencil-default_fb-blit samples=2,Fail
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=4,Fail
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2,Fail
+spec@!opengl 1.1@depthstencil-default_fb-readpixels-32f_24_8_rev samples=2,Fail
+
+spec@!opengl 1.1@line-smooth-stipple,Fail
+
+spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
+spec@!opengl 1.1@linestipple@Line strip,Fail
+spec@!opengl 1.1@linestipple@Line loop,Fail
+spec@!opengl 1.1@linestipple@Factor 2x,Fail
+spec@!opengl 1.1@linestipple@Factor 3x,Fail
+spec@!opengl 1.1@linestipple,Fail
+
+spec@!opengl 1.1@polygon-mode,Fail
+spec@!opengl 1.1@ppgtt_memory_alignment,Crash
+
+spec@!opengl 1.4@copy-pixels,Fail
+
+spec@!opengl 2.0@max-samplers border,Fail
+spec@!opengl 2.1@polygon-stipple-fs,Fail
+
+spec@!opengl 3.0@clearbuffer-depth,Fail
+spec@!opengl 3.0@clearbuffer-stencil,Fail
+
+spec@!opengl 3.1@vao-broken-attrib,Crash
+
 spec@arb_depth_buffer_float@fbo-clear-formats stencil,Fail
 spec@arb_depth_buffer_float@fbo-clear-formats stencil@GL_DEPTH32F_STENCIL8,Fail
 spec@arb_depth_buffer_float@fbo-depthstencil-gl_depth32f_stencil8-blit,Fail
 spec@arb_depth_buffer_float@fbo-depthstencil-gl_depth32f_stencil8-copypixels,Fail
 spec@arb_depth_buffer_float@fbo-stencil-gl_depth32f_stencil8-blit,Fail
 spec@arb_depth_buffer_float@fbo-stencil-gl_depth32f_stencil8-copypixels,Fail
-spec@arb_draw_buffers@arb_draw_buffers-state_change,Fail
 spec@arb_enhanced_layouts@linker@component-layout@intrastage-vs,Fail
 spec@arb_enhanced_layouts@linker@component-layout@vs-to-fs,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit depth_stencil gl_depth24_stencil8,Fail
@@ -523,7 +560,6 @@ spec@ext_render_snorm@render@format 0x8f94 read fail,Fail
 spec@ext_render_snorm@render@format 0x8f95 read fail,Fail
 spec@ext_render_snorm@render@format 0x8f97 read fail,Fail
 spec@ext_transform_feedback2@draw-auto,Fail
-spec@ext_transform_feedback@max-varyings,Fail
 
 spec@ext_transform_feedback@generatemipmap prims_generated,Fail
 spec@ext_transform_feedback@immediate-reuse,Fail
@@ -580,20 +616,6 @@ spec@ext_transform_feedback@tessellation triangles wireframe,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-giant-temp-array,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-giant-temp-array,Fail
 
-spec@glsl-1.10@execution@algebraic@glsl-algebraic-logicand-false,Fail
-spec@glsl-1.10@execution@built-in-functions@fs-op-uplus-ivec2,Fail
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-fixed,Fail
-spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-07,Fail
-spec@glsl-1.30@execution@built-in-functions@fs-atanh-float,Fail
-
-# Probably regressed with !14643
-# msm 900000.mdss: [drm:a5xx_irq] *ERROR* gpu fault ring 0 fence 13b4d status C10001C3 rb 1872/1872 ib1 000000000105F000/0000 ib2 000000000105E000/0000
-# msm 900000.mdss: [drm:recover_worker] *ERROR* A530: hangcheck recover!
-# msm 900000.mdss: [drm:recover_worker] *ERROR* A530: offending task: shader_run:sq0 (/piglit/bin/shader_runner tests/spec/glsl-1.20/execution/clipping/vs-clip-vertex-enables.shader_test -auto -fbo)"
-spec@glsl-1.20@execution@clipping@fixed-clip-enables,Fail
-spec@glsl-1.20@execution@clipping@vs-clip-vertex-enables,Fail
-spec@glsl-1.30@execution@clipping@vs-clip-distance-enables,Fail
-
 spec@glsl-1.30@execution@texelfetch fs sampler3d 1x129x9-98x129x9,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 98x129x1-98x129x9,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 98x1x9-98x129x9,Fail
@@ -605,6 +627,14 @@ spec@khr_texture_compression_astc@array-gl@5x5 Block Dim,Fail
 spec@khr_texture_compression_astc@array-gles,Fail
 spec@khr_texture_compression_astc@array-gles@12x12 Block Dim,Fail
 spec@khr_texture_compression_astc@array-gles@5x5 Block Dim,Fail
+spec@khr_texture_compression_astc@miptree-gl ldr@LDR Profile,Fail
+spec@khr_texture_compression_astc@miptree-gl ldr,Fail
+spec@khr_texture_compression_astc@miptree-gles hdr@HDR Profile,Fail
+spec@khr_texture_compression_astc@miptree-gles hdr,Fail
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles hdr@HDR Profile,Fail
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles hdr,Fail
+spec@khr_texture_compression_astc@miptree-gl srgb-sd@sRGB skip decode,Fail
+spec@khr_texture_compression_astc@miptree-gl srgb-sd,Fail
 
 spec@nv_copy_image@nv_copy_image-formats,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_DEPTH32F_STENCIL8/Destination: GL_DEPTH32F_STENCIL8,Fail
@@ -618,4 +648,565 @@ spec@arb_uniform_buffer_object@execution@shared-struct-array-array-array-struct,
 spec@arb_uniform_buffer_object@execution@std140-struct-array-array-array-struct,Fail
 spec@arb_uniform_buffer_object@execution@shared-array-struct-array-struct,Fail
 spec@arb_uniform_buffer_object@execution@std140-array-struct-array-struct,Fail
-spec@arb_uniform_buffer_object@execution@std140-row_major-struct-array-mat4x4,Fail
+
+dEQP-GLES31.functional.compute.basic.copy_ssbo_to_image_large,Fail
+dEQP-GLES31.functional.compute.basic.copy_ssbo_to_image_small,Fail
+dEQP-GLES31.functional.compute.basic.image_atomic_op_local_size_1,Fail
+dEQP-GLES31.functional.compute.basic.image_atomic_op_local_size_8,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.r32f_rgba8_snorm,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_rgba8_snorm,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_snorm_r32f,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_snorm_rgba8,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.format_reinterpret.rgba8_snorm_rgba8i,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.load_store.rgba16f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.load_store.rgba32f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.load_store.rgba8_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.2d_array.store.rgba8_snorm_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.r32f_rgba8,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.r32f_rgba8ui,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba16f_rgba16i,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba16f_rgba16ui,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_r32i,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_rgba8i,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_snorm_r32i,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_snorm_rgba8i,Fail
+dEQP-GLES31.functional.image_load_store.2d.format_reinterpret.rgba8_snorm_rgba8ui,Fail
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.r32f_rgba8_snorm,Fail
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba16f_rgba16i,Fail
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba16f_rgba16ui,Fail
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_r32ui,Fail
+dEQP-GLES31.functional.image_load_store.3d.format_reinterpret.rgba8_snorm_r32i,Fail
+dEQP-GLES31.functional.image_load_store.3d.store.r32f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.3d.store.rgba16f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.3d.store.rgba32f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.r32f_rgba8_snorm,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32f,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32i,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_r32ui,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_snorm_r32f,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_snorm_r32i,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_snorm_r32ui,Fail
+dEQP-GLES31.functional.image_load_store.cube.format_reinterpret.rgba8_snorm_rgba8ui,Fail
+dEQP-GLES31.functional.image_load_store.cube.load_store.r32f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.load_store.rgba16f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.load_store.rgba16f,Fail
+dEQP-GLES31.functional.image_load_store.cube.load_store.rgba8_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.load_store.rgba8_snorm_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.qualifiers.volatile_r32f,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.r32f,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba16f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba16f,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba32f_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba32f,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba8_snorm_single_layer,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba8_snorm,Fail
+dEQP-GLES31.functional.image_load_store.cube.store.rgba8,Fail
+dEQP-GLES31.functional.layout_binding.ssbo.fragment_binding_max,Fail
+dEQP-GLES31.functional.program_uniform.by_pointer.render.array_in_struct.sampler2D_samplerCube_both,Fail
+dEQP-GLES31.functional.program_uniform.by_value.render.basic_array.sampler2D_fragment,Fail
+dEQP-GLES31.functional.program_uniform.by_value.render.basic_struct.sampler2D_samplerCube_fragment,Fail
+dEQP-GLES31.functional.shaders.opaque_type_indexing.ssbo.const_expression_fragment,Fail
+dEQP-GLES31.functional.shaders.opaque_type_indexing.ssbo.const_literal_fragment,Fail
+dEQP-GLES31.functional.srgb_texture_decode.skip_decode.sr8.skipped,Fail
+dEQP-GLES31.functional.srgb_texture_decode.skip_decode.srg8.conversion_gpu,Fail
+dEQP-GLES31.functional.ssbo.layout.random.all_per_block_buffers.11,Fail
+dEQP-GLES31.functional.ssbo.layout.random.all_per_block_buffers.19,Fail
+dEQP-GLES31.functional.ssbo.layout.random.all_per_block_buffers.24,Fail
+dEQP-GLES31.functional.ssbo.layout.random.all_per_block_buffers.45,Fail
+dEQP-GLES31.functional.ssbo.layout.random.basic_arrays.18,Fail
+dEQP-GLES31.functional.ssbo.layout.random.basic_instance_arrays.1,Fail
+dEQP-GLES31.functional.ssbo.layout.random.basic_instance_arrays.19,Fail
+dEQP-GLES31.functional.ssbo.layout.random.basic_instance_arrays.23,Fail
+dEQP-GLES31.functional.ssbo.layout.random.nested_structs.7,Fail
+dEQP-GLES31.functional.ssbo.layout.random.nested_structs.9,Fail
+dEQP-GLES31.functional.ssbo.layout.random.vector_types.3,Fail
+dEQP-GLES31.functional.ssbo.layout.single_struct_array.per_block_buffer.packed_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.single_struct_array.per_block_buffer.std430_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.single_struct_array.single_buffer.packed_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.single_struct_array.single_buffer.shared_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.single_struct_array.single_buffer.std430_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.unsized_struct_array.per_block_buffer.shared_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.unsized_struct_array.per_block_buffer.std430_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.unsized_struct_array.single_buffer.packed_instance_array,Fail
+dEQP-GLES31.functional.ssbo.layout.unsized_struct_array.single_buffer.std140_instance_array,Fail
+dEQP-GLES31.functional.texture.gather.basic.2d_array.rgba8i.texture_swizzle.blue_alpha_zero_one,Fail
+dEQP-GLES31.functional.texture.gather.basic.2d.rgba8i.texture_swizzle.red_green_blue_alpha,Fail
+dEQP-GLES31.functional.texture.gather.basic.2d.rgba8ui.base_level.level_1,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d_array.depth32f.size_npot.compare_less.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d_array.rgba8i.size_npot.clamp_to_edge_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d_array.rgba8ui.filter_mode.min_nearest_mipmap_nearest_mag_nearest,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d_array.rgba8ui.size_npot.mirrored_repeat_clamp_to_edge,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d.depth32f.size_npot.compare_greater.mirrored_repeat_clamp_to_edge,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_npot.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset_dynamic.min_required_offset.2d_array.rgba8.size_pot.clamp_to_edge_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d_array.depth32f.size_npot.compare_greater.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d_array.depth32f.size_pot.compare_greater.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d_array.rgba8.base_level.level_1,Fail
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d.rgba8i.size_npot.clamp_to_edge_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d.rgba8ui.base_level.level_1,Fail
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d.rgba8ui.size_npot.mirrored_repeat_clamp_to_edge,Fail
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d_array.depth32f.size_npot.compare_greater.clamp_to_edge_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d_array.depth32f.size_npot.compare_less.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d_array.rgba8.size_pot.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d_array.rgba8ui.size_npot.clamp_to_edge_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offsets.implementation_offset.2d_array.depth32f.base_level.level_2,Fail
+dEQP-GLES31.functional.texture.gather.offsets.implementation_offset.2d_array.rgba8i.texture_swizzle.one_red_green_blue,Fail
+dEQP-GLES31.functional.texture.gather.offsets.implementation_offset.2d_array.rgba8ui.texture_swizzle.alpha_zero_one_red,Fail
+dEQP-GLES31.functional.texture.gather.offsets.implementation_offset.2d.depth32f.size_pot.compare_less.repeat_mirrored_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offsets.implementation_offset.2d.rgba8ui.texture_swizzle.green_blue_alpha_zero,Fail
+dEQP-GLES31.functional.texture.gather.offsets.min_required_offset.2d_array.depth32f.size_npot.compare_less.mirrored_repeat_clamp_to_edge,Fail
+dEQP-GLES31.functional.texture.gather.offsets.min_required_offset.2d.depth32f.size_npot.compare_less.mirrored_repeat_clamp_to_edge,Fail
+dEQP-GLES31.functional.texture.gather.offsets.min_required_offset.2d.rgba8i.size_npot.clamp_to_edge_repeat,Fail
+dEQP-GLES31.functional.texture.gather.offsets.min_required_offset.2d.rgba8ui.size_pot.mirrored_repeat_clamp_to_edge,Fail
+dEQP-GLES31.functional.texture.multisample.samples_1.use_texture_depth_2d,Fail
+dEQP-GLES31.functional.texture.multisample.samples_4.use_texture_int_2d_array,Fail
+dEQP-GLES31.functional.texture.texture_buffer.modify.mapbuffer_readwrite.buffer_size_513,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render_modify.as_vertex_array_as_index_array_as_fragment_texture.bufferdata,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render_modify.as_vertex_array_as_index_array.mapbuffer_write,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render_modify.as_vertex_array_as_vertex_texture.mapbuffer_readwrite,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render.as_index_array_as_vertex_texture_as_fragment_texture.offset_7_alignments,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_array_as_fragment_texture.buffer_size_65537,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_array_as_index_array_as_fragment_texture.range_size_65537,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_array_as_index_array_as_vertex_texture_as_fragment_texture.offset_1_alignments,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_texture_as_fragment_texture.offset_1_alignments,Fail
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_texture_as_fragment_texture.offset_7_alignments,Fail
+KHR-GLES31.core.compressed_format.format.signed_rg11_eac,Fail
+KHR-GLES31.core.compute_shader.resource-texture,Fail
+KHR-GLES31.core.explicit_uniform_location.uniform-loc-types-samplers,Fail
+KHR-GLES31.core.internalformat.texture2d.red_integer_int_r32i,Fail
+KHR-GLES31.core.internalformat.texture2d.rgb_integer_byte_rgb8i,Fail
+KHR-GLES31.core.internalformat.texture2d.rgb_integer_int_rgb32i,Fail
+KHR-GLES31.core.internalformat.texture2d.rgb_integer_unsigned_int_rgb32ui,Fail
+KHR-GLES31.core.internalformat.texture2d.rgb_integer_unsigned_short_rgb16ui,Fail
+KHR-GLES31.core.nearest_edge.offset_left,Fail
+KHR-GLES31.core.nearest_edge.offset_right,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r11g11b10f.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r11g11b10f.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16i.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16i.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16ui.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16ui.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r16ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32f.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32f.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32f.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32f.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32i.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32i.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32i.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32i.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32ui.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r32ui.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8i.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8i.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8i.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8i.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8i.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8snorm.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8snorm.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8snorm.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8snorm.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8snorm.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.r8ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16f.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16f.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16f.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16f.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16f.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16i.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16i.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16i.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg16ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32f.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32f.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32f.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32i.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32i.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg32ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8i.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8i.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8i.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8snorm.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8snorm.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8ui.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8ui.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rg8ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb10a2ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16f.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16f.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16f.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16f.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16i.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16i.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb16ui.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32f.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32f.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32f.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32f.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32f.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32i.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32i.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb32ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb565.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb565.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb5a1.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb5a1.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb5a1.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8i.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8i.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8i.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8i.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8i.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8snorm.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8snorm.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8snorm.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8snorm.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8ui.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgb8ui.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16f.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16f.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16f.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16f.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16i.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16i.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba16ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32f.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32f.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32f.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32f.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32f.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32i.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32i.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32ui.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32ui.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba32ui.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba4.1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba4.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba4.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8.1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8snorm.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8snorm.16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8snorm.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8snorm.16_16,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8ui.0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage2d.rgba8ui.16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r11g11b10f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r11g11b10f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r11g11b10f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16i.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16i.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r16ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32f.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32f.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32f.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32i.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32i.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32ui.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r32ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8i.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8snorm.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8snorm.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8snorm.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8snorm.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8snorm.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8snorm.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.r8ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16f.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16f.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16i.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16i.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16i.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg16ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32f.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32f.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32f.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32f.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32i.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32i.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg32ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8i.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8i.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8snorm.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8snorm.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8snorm.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8snorm.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rg8ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2ui.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb10a2ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16f.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16f.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16f.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16f.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16i.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16i.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb16ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32i.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32i.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb32ui.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb565.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb565.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb565.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb565.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb565.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb5a1.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8i.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8snorm.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8ui.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8ui.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8ui.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgb8ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16f.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16f.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16f.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16i.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16ui.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba16ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32f.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32i.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32ui.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba32ui.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.1_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba4.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8i.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8i.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8i.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8i.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8i.16_16_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8i.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.16_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8snorm.16_16_4,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.0_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.1_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.1_1_1,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.16_0_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.16_1_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.16_16_0,Fail
+KHR-GLES31.core.pixelstoragemodes.teximage3d.rgba8ui.16_16_1,Fail
+KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
+KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail
+KHR-GLES31.core.shader_image_load_store.basic-glsl-earlyFragTests,Fail
+KHR-GLES31.core.shader_storage_buffer_object.advanced-usage-operators-cs,Fail
+KHR-GLES31.core.shader_storage_buffer_object.basic-std140Layout-case3-cs,Fail
+KHR-GLES31.core.shader_storage_buffer_object.basic-std430Layout-case2-cs,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_conv_int_to_float,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_max_size,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_buffer_load,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_ssbo_writes,Fail
+KHR-GLES31.shaders.layout_location.isampler_2d_array,Fail
+KHR-GLES31.shaders.layout_location.isampler_2d,Fail
+KHR-GLES31.shaders.layout_location.isampler_3d,Fail
+KHR-GLES31.shaders.layout_location.isampler_cube,Fail
+KHR-GLES31.shaders.layout_location.sampler_2d_array,Fail
+KHR-GLES31.shaders.layout_location.sampler_2d,Fail
+KHR-GLES31.shaders.layout_location.sampler_3d,Fail
+KHR-GLES31.shaders.layout_location.sampler_cube_shadow,Fail
+KHR-GLES31.shaders.layout_location.usampler_2d_array,Fail
+KHR-GLES31.shaders.layout_location.usampler_3d,Fail
+KHR-GLES31.shaders.layout_location.usampler_cube,Fail

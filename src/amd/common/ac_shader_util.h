@@ -132,6 +132,10 @@ const struct ac_vtx_format_info *ac_get_vtx_format_info(enum amd_gfx_level level
                                                         enum radeon_family family,
                                                         enum pipe_format fmt);
 
+unsigned ac_get_safe_fetch_size(const enum amd_gfx_level gfx_level, const struct ac_vtx_format_info* vtx_info,
+                                const unsigned offset, const unsigned max_channels, const unsigned alignment,
+                                const unsigned num_channels);
+
 enum ac_image_dim ac_get_sampler_dim(enum amd_gfx_level gfx_level, enum glsl_sampler_dim dim,
                                      bool is_array);
 
@@ -162,9 +166,8 @@ unsigned ac_compute_esgs_workgroup_size(enum amd_gfx_level gfx_level, unsigned w
 unsigned ac_compute_ngg_workgroup_size(unsigned es_verts, unsigned gs_inst_prims,
                                        unsigned max_vtx_out, unsigned prim_amp_factor);
 
-void ac_set_reg_cu_en(void *cs, unsigned reg_offset, uint32_t value, uint32_t clear_mask,
-                      unsigned value_shift, const struct radeon_info *info,
-                      void set_sh_reg(void*, unsigned, uint32_t));
+uint32_t ac_apply_cu_en(uint32_t value, uint32_t clear_mask, unsigned value_shift,
+                        const struct radeon_info *info);
 
 void ac_get_scratch_tmpring_size(const struct radeon_info *info,
                                  unsigned bytes_per_wave, unsigned *max_seen_bytes_per_wave,

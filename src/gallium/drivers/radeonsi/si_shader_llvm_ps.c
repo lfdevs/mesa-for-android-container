@@ -26,92 +26,6 @@
 #include "si_shader_internal.h"
 #include "sid.h"
 
-LLVMValueRef si_get_sample_id(struct si_shader_context *ctx)
-{
-   return si_unpack_param(ctx, ctx->args->ac.ancillary, 8, 4);
-}
-
-static LLVMValueRef load_sample_position(struct ac_shader_abi *abi, LLVMValueRef sample_id)
-{
-   struct si_shader_context *ctx = si_shader_context_from_abi(abi);
-   LLVMValueRef buf_index = LLVMConstInt(ctx->ac.i32, SI_PS_CONST_SAMPLE_POSITIONS, 0);
-   LLVMValueRef resource = ac_build_load_to_sgpr(
-      &ctx->ac, ac_get_ptr_arg(&ctx->ac, &ctx->args->ac, ctx->args->internal_bindings), buf_index);
-
-   /* offset = sample_id * 8  (8 = 2 floats containing samplepos.xy) */
-   LLVMValueRef offset0 =
-      LLVMBuildMul(ctx->ac.builder, sample_id, LLVMConstInt(ctx->ac.i32, 8, 0), "");
-   LLVMValueRef offset1 =
-      LLVMBuildAdd(ctx->ac.builder, offset0, LLVMConstInt(ctx->ac.i32, 4, 0), "");
-
-   LLVMValueRef pos[4] = {si_buffer_load_const(ctx, resource, offset0),
-                          si_buffer_load_const(ctx, resource, offset1),
-                          LLVMConstReal(ctx->ac.f32, 0), LLVMConstReal(ctx->ac.f32, 0)};
-
-   return ac_build_gather_values(&ctx->ac, pos, 4);
-}
-
-static LLVMValueRef si_nir_emit_fbfetch(struct ac_shader_abi *abi)
-{
-   struct si_shader_context *ctx = si_shader_context_from_abi(abi);
-   struct ac_image_args args = {};
-   LLVMValueRef ptr, image, fmask;
-
-   /* Ignore src0, because KHR_blend_func_extended disallows multiple render
-    * targets.
-    */
-
-   /* Load the image descriptor. */
-   STATIC_ASSERT(SI_PS_IMAGE_COLORBUF0 % 2 == 0);
-   STATIC_ASSERT(SI_PS_IMAGE_COLORBUF0_FMASK % 2 == 0);
-
-   ptr = ac_get_arg(&ctx->ac, ctx->args->internal_bindings);
-   ptr =
-      LLVMBuildPointerCast(ctx->ac.builder, ptr, ac_array_in_const32_addr_space(ctx->ac.v8i32), "");
-   struct ac_llvm_pointer desc = { .v = ptr, .t = ctx->ac.v8i32 };
-
-   image = ac_build_load_to_sgpr(&ctx->ac, desc, LLVMConstInt(ctx->ac.i32, SI_PS_IMAGE_COLORBUF0 / 2, 0));
-
-   unsigned chan = 0;
-
-   args.coords[chan++] = si_unpack_param(ctx, ctx->args->pos_fixed_pt, 0, 16);
-
-   if (!ctx->shader->key.ps.mono.fbfetch_is_1D)
-      args.coords[chan++] = si_unpack_param(ctx, ctx->args->pos_fixed_pt, 16, 16);
-
-   /* Get the current render target layer index. */
-   if (ctx->shader->key.ps.mono.fbfetch_layered)
-      args.coords[chan++] = si_unpack_param(ctx, ctx->args->ac.ancillary, 16, 11);
-
-   if (ctx->shader->key.ps.mono.fbfetch_msaa)
-      args.coords[chan++] = si_get_sample_id(ctx);
-
-   if (ctx->screen->info.gfx_level < GFX11 &&
-       ctx->shader->key.ps.mono.fbfetch_msaa &&
-       !(ctx->screen->debug_flags & DBG(NO_FMASK))) {
-
-      fmask = ac_build_load_to_sgpr(&ctx->ac, desc, LLVMConstInt(ctx->ac.i32, SI_PS_IMAGE_COLORBUF0_FMASK / 2, 0));
-
-      ac_apply_fmask_to_sample(&ctx->ac, fmask, args.coords,
-                               ctx->shader->key.ps.mono.fbfetch_layered);
-   }
-
-   args.opcode = ac_image_load;
-   args.resource = image;
-   args.dmask = 0xf;
-   args.attributes = AC_ATTR_INVARIANT_LOAD;
-
-   if (ctx->shader->key.ps.mono.fbfetch_msaa)
-      args.dim =
-         ctx->shader->key.ps.mono.fbfetch_layered ? ac_image_2darraymsaa : ac_image_2dmsaa;
-   else if (ctx->shader->key.ps.mono.fbfetch_is_1D)
-      args.dim = ctx->shader->key.ps.mono.fbfetch_layered ? ac_image_1darray : ac_image_1d;
-   else
-      args.dim = ctx->shader->key.ps.mono.fbfetch_layered ? ac_image_2darray : ac_image_2d;
-
-   return ac_build_image_opcode(&ctx->ac, &args);
-}
-
 static LLVMValueRef si_build_fs_interp(struct si_shader_context *ctx, unsigned attr_index,
                                        unsigned chan, LLVMValueRef prim_mask, LLVMValueRef i,
                                        LLVMValueRef j)
@@ -570,7 +484,8 @@ static void si_llvm_emit_polygon_stipple(struct si_shader_context *ctx,
  * overriden by other states. (e.g. per-sample interpolation)
  * Interpolated colors are stored after the preloaded VGPRs.
  */
-void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part_key *key)
+void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part_key *key,
+                             bool separate_prolog)
 {
    LLVMValueRef ret, func;
    int num_returns, i, num_color_channels;
@@ -694,13 +609,13 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
 
       /* Read LINEAR_SAMPLE. */
       for (i = 0; i < 2; i++)
-         linear_sample[i] = LLVMGetParam(func, base + 6 + i);
+         linear_sample[i] = LLVMGetParam(func, base + (separate_prolog ? 6 : 9) + i);
       /* Overwrite LINEAR_CENTER. */
       for (i = 0; i < 2; i++)
-         ret = LLVMBuildInsertValue(ctx->ac.builder, ret, linear_sample[i], base + 8 + i, "");
+         ret = LLVMBuildInsertValue(ctx->ac.builder, ret, linear_sample[i], base + (separate_prolog ? 8 : 11) + i, "");
       /* Overwrite LINEAR_CENTROID. */
       for (i = 0; i < 2; i++)
-         ret = LLVMBuildInsertValue(ctx->ac.builder, ret, linear_sample[i], base + 10 + i, "");
+         ret = LLVMBuildInsertValue(ctx->ac.builder, ret, linear_sample[i], base + (separate_prolog ? 10 : 13) + i, "");
    }
 
    /* Force center interpolation. */
@@ -825,7 +740,8 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
  * Build the pixel shader epilog function. This handles everything that must be
  * emulated for pixel shader exports. (alpha-test, format conversions, etc)
  */
-void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part_key *key)
+void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part_key *key,
+                             UNUSED bool separate_epilog)
 {
    int i;
    struct si_ps_exports exp = {};
@@ -934,36 +850,26 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
 
 void si_llvm_build_monolithic_ps(struct si_shader_context *ctx, struct si_shader *shader)
 {
-   struct ac_llvm_pointer parts[3];
-   unsigned num_parts = 0, main_index;
+   union si_shader_part_key prolog_key;
+   si_get_ps_prolog_key(shader, &prolog_key, false);
+
+   /* If no prolog is needed, we only have the main part, no need to build wrapper function. */
+   if (!si_need_ps_prolog(&prolog_key))
+      return;
+
    struct ac_llvm_pointer main_fn = ctx->main_fn;
+
    /* Preserve main arguments. */
    enum ac_arg_type main_arg_types[AC_MAX_ARGS];
    for (int i = 0; i < ctx->args->ac.arg_count; i++)
       main_arg_types[i] = ctx->args->ac.args[i].type;
 
+   si_llvm_build_ps_prolog(ctx, &prolog_key, false);
 
-   union si_shader_part_key prolog_key;
-   si_get_ps_prolog_key(shader, &prolog_key, false);
+   struct ac_llvm_pointer parts[2] = {
+      ctx->main_fn, /* prolog */
+      main_fn,      /* main */
+   };
 
-   if (si_need_ps_prolog(&prolog_key)) {
-      si_llvm_build_ps_prolog(ctx, &prolog_key);
-      parts[num_parts++] = ctx->main_fn;
-   }
-
-   main_index = num_parts;
-   parts[num_parts++] = main_fn;
-
-   union si_shader_part_key epilog_key;
-   si_get_ps_epilog_key(shader, &epilog_key);
-   si_llvm_build_ps_epilog(ctx, &epilog_key);
-   parts[num_parts++] = ctx->main_fn;
-
-   si_build_wrapper_function(ctx, parts, num_parts, main_index, 0, main_arg_types, false);
-}
-
-void si_llvm_init_ps_callbacks(struct si_shader_context *ctx)
-{
-   ctx->abi.load_sample_position = load_sample_position;
-   ctx->abi.emit_fbfetch = si_nir_emit_fbfetch;
+   si_build_wrapper_function(ctx, parts, 2, 1, 0, main_arg_types, false);
 }

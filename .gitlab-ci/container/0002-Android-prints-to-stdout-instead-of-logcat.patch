@@ -1,0 +1,27 @@
+From c2d5252f4a8be94720235feb9e358ecb0a2e8e11 Mon Sep 17 00:00:00 2001
+From: Helen Koike <helen.koike@collabora.com>
+Date: Tue, 27 Sep 2022 12:35:22 -0300
+Subject: [PATCH 2/2] Android prints to stdout instead of logcat
+
+Signed-off-by: Helen Koike <helen.koike@collabora.com>
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+---
+ framework/qphelper/qpDebugOut.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/framework/qphelper/qpDebugOut.c b/framework/qphelper/qpDebugOut.c
+index 6579e9f..c200c6f 100644
+--- a/framework/qphelper/qpDebugOut.c
++++ b/framework/qphelper/qpDebugOut.c
+@@ -98,7 +98,7 @@ void qpDiev (const char* format, va_list args)
+ }
+ 
+ /* print() implementation. */
+-#if (DE_OS == DE_OS_ANDROID)
++#if (0)
+ 
+ #include <android/log.h>
+ 
+-- 
+2.39.1
+

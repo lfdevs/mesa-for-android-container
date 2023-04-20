@@ -820,7 +820,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
 
    if (is_scalar) {
       fs_visitor v(compiler, params->log_data, mem_ctx, &c, prog_data, nir,
-                   debug_enabled);
+                   params->stats != NULL, debug_enabled);
       if (v.run_gs()) {
          prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
          prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs;

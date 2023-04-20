@@ -1906,7 +1906,7 @@ Jan Beich (1):
 
 - meson: disable -Werror=thread-safety on FreeBSD
 
-Jason Ekstrand (192):
+Faith Ekstrand (192):
 
 - intel/dev: Handle CHV CS thread weirdness in get_device_info_from_fd
 - intel/dev: Put the device name in intel_device_info

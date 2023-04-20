@@ -620,27 +620,24 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
       print_sync(mtbuf.sync, output);
       break;
    }
-   case Format::VOP3P: {
-      if (instr->vop3p().clamp)
-         fprintf(output, " clamp");
-      break;
-   }
    default: {
       break;
    }
    }
-   if (instr->isVOP3()) {
-      const VOP3_instruction& vop3 = instr->vop3();
-      switch (vop3.omod) {
+   if (instr->isVALU()) {
+      const VALU_instruction& valu = instr->valu();
+      switch (valu.omod) {
       case 1: fprintf(output, " *2"); break;
       case 2: fprintf(output, " *4"); break;
       case 3: fprintf(output, " *0.5"); break;
       }
-      if (vop3.clamp)
+      if (valu.clamp)
          fprintf(output, " clamp");
-      if (vop3.opsel & (1 << 3))
+      if (valu.opsel & (1 << 3))
          fprintf(output, " opsel_hi");
-   } else if (instr->isDPP16()) {
+   }
+
+   if (instr->isDPP16()) {
       const DPP16_instruction& dpp = instr->dpp16();
       if (dpp.dpp_ctrl <= 0xff) {
          fprintf(output, " quad_perm:[%d,%d,%d,%d]", dpp.dpp_ctrl & 0x3, (dpp.dpp_ctrl >> 2) & 0x3,
@@ -667,6 +664,10 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
          fprintf(output, " row_bcast:15");
       } else if (dpp.dpp_ctrl == dpp_row_bcast31) {
          fprintf(output, " row_bcast:31");
+      } else if (dpp.dpp_ctrl >= dpp_row_share(0) && dpp.dpp_ctrl <= dpp_row_share(15)) {
+         fprintf(output, " row_share:%d", dpp.dpp_ctrl & 0xf);
+      } else if (dpp.dpp_ctrl >= dpp_row_xmask(0) && dpp.dpp_ctrl <= dpp_row_xmask(15)) {
+         fprintf(output, " row_xmask:%d", dpp.dpp_ctrl & 0xf);
       } else {
          fprintf(output, " dpp_ctrl:0x%.3x", dpp.dpp_ctrl);
       }
@@ -683,13 +684,6 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
               dpp.lane_sel[7]);
    } else if (instr->isSDWA()) {
       const SDWA_instruction& sdwa = instr->sdwa();
-      switch (sdwa.omod) {
-      case 1: fprintf(output, " *2"); break;
-      case 2: fprintf(output, " *4"); break;
-      case 3: fprintf(output, " *0.5"); break;
-      }
-      if (sdwa.clamp)
-         fprintf(output, " clamp");
       if (!instr->isVOPC()) {
          char sext = sdwa.dst_sel.sign_extend() ? 's' : 'u';
          unsigned offset = sdwa.dst_sel.offset();
@@ -716,12 +710,6 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
          default: break;
          }
       }
-   } else if (instr->isVINTERP_INREG()) {
-      const VINTERP_inreg_instruction& vinterp = instr->vinterp_inreg();
-      if (vinterp.clamp)
-         fprintf(output, " clamp");
-      if (vinterp.opsel & (1 << 3))
-         fprintf(output, " opsel_hi");
    }
 }
 
@@ -753,40 +741,20 @@ aco_print_instr(enum amd_gfx_level gfx_level, const Instruction* instr, FILE* ou
       bool is_mad_mix = instr->opcode == aco_opcode::v_fma_mix_f32 ||
                         instr->opcode == aco_opcode::v_fma_mixlo_f16 ||
                         instr->opcode == aco_opcode::v_fma_mixhi_f16;
-      if (instr->isVOP3()) {
-         const VOP3_instruction& vop3 = instr->vop3();
+      if (instr->isVALU() && !instr->isVOP3P()) {
+         const VALU_instruction& valu = instr->valu();
          for (unsigned i = 0; i < MIN2(num_operands, 3); ++i) {
-            abs[i] = vop3.abs[i];
-            neg[i] = vop3.neg[i];
-            opsel[i] = vop3.opsel & (1 << i);
-         }
-      } else if (instr->isDPP16()) {
-         const DPP16_instruction& dpp = instr->dpp16();
-         for (unsigned i = 0; i < MIN2(num_operands, 2); ++i) {
-            abs[i] = dpp.abs[i];
-            neg[i] = dpp.neg[i];
-            opsel[i] = false;
-         }
-      } else if (instr->isSDWA()) {
-         const SDWA_instruction& sdwa = instr->sdwa();
-         for (unsigned i = 0; i < MIN2(num_operands, 2); ++i) {
-            abs[i] = sdwa.abs[i];
-            neg[i] = sdwa.neg[i];
-            opsel[i] = false;
+            abs[i] = valu.abs[i];
+            neg[i] = valu.neg[i];
+            opsel[i] = valu.opsel[i];
          }
       } else if (instr->isVOP3P() && is_mad_mix) {
-         const VOP3P_instruction& vop3p = instr->vop3p();
+         const VALU_instruction& vop3p = instr->valu();
          for (unsigned i = 0; i < MIN2(num_operands, 3); ++i) {
             abs[i] = vop3p.neg_hi[i];
             neg[i] = vop3p.neg_lo[i];
-            f2f32[i] = vop3p.opsel_hi & (1 << i);
-            opsel[i] = f2f32[i] && (vop3p.opsel_lo & (1 << i));
-         }
-      } else if (instr->isVINTERP_INREG()) {
-         const VINTERP_inreg_instruction& vinterp = instr->vinterp_inreg();
-         for (unsigned i = 0; i < MIN2(num_operands, 3); ++i) {
-            neg[i] = vinterp.neg[i];
-            opsel[i] = vinterp.opsel & (1 << i);
+            f2f32[i] = vop3p.opsel_hi[i];
+            opsel[i] = f2f32[i] && vop3p.opsel_lo[i];
          }
       }
       for (unsigned i = 0; i < num_operands; ++i) {
@@ -810,10 +778,9 @@ aco_print_instr(enum amd_gfx_level gfx_level, const Instruction* instr, FILE* ou
             fprintf(output, "|");
 
          if (instr->isVOP3P() && !is_mad_mix) {
-            const VOP3P_instruction& vop3 = instr->vop3p();
-            if ((vop3.opsel_lo & (1 << i)) || !(vop3.opsel_hi & (1 << i))) {
-               fprintf(output, ".%c%c", vop3.opsel_lo & (1 << i) ? 'y' : 'x',
-                       vop3.opsel_hi & (1 << i) ? 'y' : 'x');
+            const VALU_instruction& vop3 = instr->valu();
+            if (vop3.opsel_lo[i] || !vop3.opsel_hi[i]) {
+               fprintf(output, ".%c%c", vop3.opsel_lo[i] ? 'y' : 'x', vop3.opsel_hi[i] ? 'y' : 'x');
             }
             if (vop3.neg_lo[i] && vop3.neg_hi[i])
                fprintf(output, "*[-1,-1]");
@@ -901,6 +868,8 @@ print_stage(Stage stage, FILE* output)
       fprintf(output, "mesh_ngg");
    else if (stage == task_cs)
       fprintf(output, "task_cs");
+   else if (stage == raytracing_cs)
+      fprintf(output, "raytracing_cs");
    else
       fprintf(output, "unknown");
 

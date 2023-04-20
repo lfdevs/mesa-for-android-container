@@ -1019,6 +1019,7 @@ loop_last_block(struct exec_list *list)
 static void
 emit_loop(struct ir2_context *ctx, nir_loop *nloop)
 {
+   assert(!nir_loop_has_continue_construct(nloop));
    ctx->loop_last_block[++ctx->loop_depth] = loop_last_block(&nloop->body);
    emit_cf_list(ctx, &nloop->body);
    ctx->loop_depth--;
@@ -1111,7 +1112,7 @@ ir2_nir_compile(struct ir2_context *ctx, bool binning)
    OPT_V(ctx->nir, nir_opt_move, nir_move_comparisons);
 
    OPT_V(ctx->nir, nir_lower_int_to_float);
-   OPT_V(ctx->nir, nir_lower_bool_to_float);
+   OPT_V(ctx->nir, nir_lower_bool_to_float, true);
    while (OPT(ctx->nir, nir_opt_algebraic))
       ;
    OPT_V(ctx->nir, nir_opt_algebraic_late);

@@ -36,7 +36,13 @@
 #include "util/u_dynarray.h"
 #include "decode.h"
 
+#include "compiler/bifrost/disassemble.h"
+#include "compiler/valhall/disassemble.h"
+#include "midgard/disassemble.h"
+
 FILE *pandecode_dump_stream;
+
+unsigned pandecode_indent;
 
 /* Memory handling */
 
@@ -97,6 +103,43 @@ pandecode_find_mapped_gpu_mem_containing(uint64_t addr)
    }
 
    return mem;
+}
+
+/*
+ * To check for memory safety issues, validates that the given pointer in GPU
+ * memory is valid, containing at least sz bytes. This function is a tool to
+ * detect GPU-side memory bugs by validating pointers.
+ */
+void
+pandecode_validate_buffer(mali_ptr addr, size_t sz)
+{
+   if (!addr) {
+      pandecode_log("// XXX: null pointer deref\n");
+      return;
+   }
+
+   /* Find a BO */
+
+   struct pandecode_mapped_memory *bo =
+      pandecode_find_mapped_gpu_mem_containing(addr);
+
+   if (!bo) {
+      pandecode_log("// XXX: invalid memory dereference\n");
+      return;
+   }
+
+   /* Bounds check */
+
+   unsigned offset = addr - bo->gpu_va;
+   unsigned total = offset + sz;
+
+   if (total > bo->length) {
+      pandecode_log("// XXX: buffer overrun. "
+                    "Chunk of size %zu at offset %d in buffer of size %zu. "
+                    "Overrun by %zu bytes. \n",
+                    sz, offset, bo->length, total - bo->length);
+      return;
+   }
 }
 
 void
@@ -218,7 +261,7 @@ pandecode_dump_file_open(void)
    const char *dump_file_base =
       debug_get_option("PANDECODE_DUMP_FILE", "pandecode.dump");
    if (force_stderr || !strcmp(dump_file_base, "stderr"))
-      pandecode_dump_stream = stderr;
+      pandecode_dump_stream = stdout; // stderr;
    else {
       char buffer[1024];
       snprintf(buffer, sizeof(buffer), "%s.%04d", dump_file_base,
@@ -356,4 +399,48 @@ pandecode_jc(mali_ptr jc_gpu_va, unsigned gpu_id)
    }
 
    simple_mtx_unlock(&pandecode_lock);
+}
+
+void
+pandecode_cs(mali_ptr queue_gpu_va, uint32_t size, unsigned gpu_id,
+             uint32_t *regs)
+{
+   simple_mtx_lock(&pandecode_lock);
+
+   switch (pan_arch(gpu_id)) {
+   case 10:
+      pandecode_cs_v10(queue_gpu_va, size, gpu_id, regs);
+      break;
+   default:
+      unreachable("Unsupported architecture");
+   }
+
+   simple_mtx_unlock(&pandecode_lock);
+}
+
+void
+pandecode_shader_disassemble(mali_ptr shader_ptr, unsigned gpu_id)
+{
+   uint8_t *PANDECODE_PTR_VAR(code, shader_ptr);
+
+   /* Compute maximum possible size */
+   struct pandecode_mapped_memory *mem =
+      pandecode_find_mapped_gpu_mem_containing(shader_ptr);
+   size_t sz = mem->length - (shader_ptr - mem->gpu_va);
+
+   /* Print some boilerplate to clearly denote the assembly (which doesn't
+    * obey indentation rules), and actually do the disassembly! */
+
+   pandecode_log_cont("\nShader %p (GPU VA %" PRIx64 ") sz %" PRId64 "\n", code,
+                      shader_ptr, sz);
+
+   if (pan_arch(gpu_id) >= 9) {
+      disassemble_valhall(pandecode_dump_stream, (const uint64_t *)code, sz,
+                          true);
+   } else if (pan_arch(gpu_id) >= 6)
+      disassemble_bifrost(pandecode_dump_stream, code, sz, false);
+   else
+      disassemble_midgard(pandecode_dump_stream, code, sz, gpu_id, true);
+
+   pandecode_log_cont("\n\n");
 }

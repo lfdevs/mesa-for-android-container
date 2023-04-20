@@ -36,7 +36,7 @@ traces:
       checksum: aef0b32ce99a3b25d35304ca08032833
   gputest/plot3d-v2.trace:
     gl-virgl:
-      checksum: 817a36e53edccdf946061315596e9cdd
+      checksum: 96f9fdf530e6041a4f56762b8378f22e
   gputest/tessmark-v2.trace:
     gl-virgl:
       label: [skip, slow]
@@ -58,9 +58,6 @@ traces:
   humus/VolumetricFogging2-v2.trace:
     gl-virgl:
       checksum: 2eb71553403ad8e0171abc9dc25e5bc1
-  itoral-gl-terrain-demo/demo-v2.trace:
-    gl-virgl:
-      checksum: 716d4fe36a6212b161285fed8a423ee8
   neverball/neverball-v2.trace:
     gl-virgl:
       checksum: 0b8ae7dd4f7f26c3278ded8a5694b983

@@ -30,14 +30,27 @@
 #define OS_PROCESS_H
 
 #include <stdbool.h>
+#include <string.h>
 
+#include "util/u_debug.h"
 #include "util/u_process.h"
 
 
 static inline bool
 os_get_process_name(char *str, size_t size)
 {
-   return util_get_process_name_may_override("GALLIUM_PROCESS_NAME", str, size);
+   const char *process_name = debug_get_option("GALLIUM_PROCESS_NAME",
+                                               util_get_process_name());
+   if (!process_name)
+      return false;
+
+   assert(str);
+   assert(size);
+
+   size_t len = strnlen(process_name, size - 1);
+   memcpy(str, process_name, len);
+   str[len] = '\0';
+   return true;
 }
 
 

@@ -304,6 +304,7 @@ struct iris_bo {
 #define BO_ALLOC_NO_SUBALLOC (1<<4)
 #define BO_ALLOC_LMEM        (1<<5)
 #define BO_ALLOC_PROTECTED   (1<<6)
+#define BO_ALLOC_SHARED      (1<<7)
 
 /**
  * Allocate a buffer object.
@@ -472,20 +473,6 @@ void iris_bo_mark_exported(struct iris_bo *bo);
  */
 bool iris_bo_busy(struct iris_bo *bo);
 
-/**
- * Specify the volatility of the buffer.
- * \param bo Buffer to create a name for
- * \param madv The purgeable status
- *
- * Use I915_MADV_DONTNEED to mark the buffer as purgeable, and it will be
- * reclaimed under memory pressure. If you subsequently require the buffer,
- * then you must pass I915_MADV_WILLNEED to mark the buffer as required.
- *
- * Returns 1 if the buffer was retained, or 0 if it was discarded whilst
- * marked as I915_MADV_DONTNEED.
- */
-int iris_bo_madvise(struct iris_bo *bo, int madv);
-
 struct iris_bufmgr *iris_bufmgr_get_for_fd(int fd, bool bo_reuse);
 int iris_bufmgr_get_fd(struct iris_bufmgr *bufmgr);
 
@@ -494,18 +481,6 @@ struct iris_bo *iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
                                              unsigned handle);
 
 void* iris_bufmgr_get_aux_map_context(struct iris_bufmgr *bufmgr);
-
-uint32_t iris_create_hw_context(struct iris_bufmgr *bufmgr, bool protected);
-uint32_t iris_clone_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
-int iris_kernel_context_get_priority(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
-
-void iris_hw_context_set_unrecoverable(struct iris_bufmgr *bufmgr,
-                                       uint32_t ctx_id);
-void iris_hw_context_set_vm_id(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
-int iris_hw_context_set_priority(struct iris_bufmgr *bufmgr,
-                                 uint32_t ctx_id, int priority);
-
-void iris_destroy_kernel_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 
 int iris_gem_get_tiling(struct iris_bo *bo, uint32_t *tiling);
 int iris_gem_set_tiling(struct iris_bo *bo, const struct isl_surf *surf);
@@ -596,5 +571,14 @@ uint32_t iris_upload_border_color(struct iris_border_color_pool *pool,
 uint64_t iris_bufmgr_vram_size(struct iris_bufmgr *bufmgr);
 uint64_t iris_bufmgr_sram_size(struct iris_bufmgr *bufmgr);
 const struct intel_device_info *iris_bufmgr_get_device_info(struct iris_bufmgr *bufmgr);
+const struct iris_kmd_backend *
+iris_bufmgr_get_kernel_driver_backend(struct iris_bufmgr *bufmgr);
+uint32_t iris_bufmgr_get_global_vm_id(struct iris_bufmgr *bufmgr);
+bool iris_bufmgr_use_global_vm_id(struct iris_bufmgr *bufmgr);
+
+enum iris_madvice {
+   IRIS_MADVICE_WILL_NEED = 0,
+   IRIS_MADVICE_DONT_NEED = 1,
+};
 
 #endif /* IRIS_BUFMGR_H */

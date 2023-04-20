@@ -24,12 +24,27 @@
 #include "vk_shader_module.h"
 
 #include "util/mesa-sha1.h"
+#include "vk_alloc.h"
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
 #include "vk_log.h"
 #include "vk_nir.h"
 #include "vk_pipeline.h"
 #include "vk_util.h"
+
+void vk_shader_module_init(struct vk_device *device,
+                           struct vk_shader_module *module,
+                           const VkShaderModuleCreateInfo *create_info)
+{
+   vk_object_base_init(device, &module->base, VK_OBJECT_TYPE_SHADER_MODULE);
+
+   module->nir = NULL;
+
+   module->size = create_info->codeSize;
+   memcpy(module->data, create_info->pCode, module->size);
+
+   _mesa_sha1_compute(module->data, module->size, module->sha1);
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_common_CreateShaderModule(VkDevice _device,
@@ -43,17 +58,13 @@ vk_common_CreateShaderModule(VkDevice _device,
     assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO);
     assert(pCreateInfo->flags == 0);
 
-    module = vk_object_alloc(device, pAllocator,
-                             sizeof(*module) + pCreateInfo->codeSize,
-                             VK_OBJECT_TYPE_SHADER_MODULE);
+    module = vk_alloc2(&device->alloc, pAllocator,
+                       sizeof(*module) + pCreateInfo->codeSize, 8,
+                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
     if (module == NULL)
        return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    module->size = pCreateInfo->codeSize;
-    module->nir = NULL;
-    memcpy(module->data, pCreateInfo->pCode, module->size);
-
-    _mesa_sha1_compute(module->data, module->size, module->sha1);
+    vk_shader_module_init(device, module, pCreateInfo);
 
     *pShaderModule = vk_shader_module_to_handle(module);
 

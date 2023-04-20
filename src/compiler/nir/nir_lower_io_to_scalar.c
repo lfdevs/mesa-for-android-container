@@ -268,14 +268,14 @@ nir_lower_io_to_scalar_instr(nir_builder *b, nir_instr *instr, void *data)
    return false;
 }
 
-void
+bool
 nir_lower_io_to_scalar(nir_shader *shader, nir_variable_mode mask)
 {
-   nir_shader_instructions_pass(shader,
-                                nir_lower_io_to_scalar_instr,
-                                nir_metadata_block_index |
-                                nir_metadata_dominance,
-                                &mask);
+   return nir_shader_instructions_pass(shader,
+                                       nir_lower_io_to_scalar_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       &mask);
 }
 
 static nir_variable **

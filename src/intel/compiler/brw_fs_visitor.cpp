@@ -290,12 +290,13 @@ fs_visitor::emit_interpolation_setup_gfx6()
    this->pixel_x = vgrf(glsl_type::float_type);
    this->pixel_y = vgrf(glsl_type::float_type);
 
+   const struct brw_wm_prog_key *wm_key = (brw_wm_prog_key*) this->key;
    struct brw_wm_prog_data *wm_prog_data = brw_wm_prog_data(prog_data);
 
-   fs_reg int_pixel_offset_x, int_pixel_offset_y; /* Used on Gen12HP+ */
-   fs_reg int_pixel_offset_xy; /* Used on Gen8+ */
-   fs_reg half_int_pixel_offset_x, half_int_pixel_offset_y;
-   if (!wm_prog_data->per_coarse_pixel_dispatch) {
+   fs_reg int_sample_offset_x, int_sample_offset_y; /* Used on Gen12HP+ */
+   fs_reg int_sample_offset_xy; /* Used on Gen8+ */
+   fs_reg half_int_sample_offset_x, half_int_sample_offset_y;
+   if (wm_prog_data->coarse_pixel_dispatch != BRW_ALWAYS) {
       /* The thread payload only delivers subspan locations (ss0, ss1,
        * ss2, ...). Since subspans covers 2x2 pixels blocks, we need to
        * generate 4 pixel coordinates out of each subspan location. We do this
@@ -325,9 +326,9 @@ fs_visitor::emit_interpolation_setup_gfx6()
        * coordinates out of 2 subspans coordinates in a single ADD instruction
        * (twice the operation above).
        */
-      int_pixel_offset_xy = fs_reg(brw_imm_v(0x11001010));
-      half_int_pixel_offset_x = fs_reg(brw_imm_uw(0));
-      half_int_pixel_offset_y = fs_reg(brw_imm_uw(0));
+      int_sample_offset_xy = fs_reg(brw_imm_v(0x11001010));
+      half_int_sample_offset_x = fs_reg(brw_imm_uw(0));
+      half_int_sample_offset_y = fs_reg(brw_imm_uw(0));
       /* On Gfx12.5, because of regioning restrictions, the interpolation code
        * is slightly different and works off X & Y only inputs. The ordering
        * of the half bytes here is a bit odd, with each subspan replicated
@@ -337,9 +338,14 @@ fs_visitor::emit_interpolation_setup_gfx6()
        *  X offset:    0      0      1      0      0      0      1      0
        *  Y offset:    0      0      0      0      1      0      1      0
        */
-      int_pixel_offset_x = fs_reg(brw_imm_v(0x01000100));
-      int_pixel_offset_y = fs_reg(brw_imm_v(0x01010000));
-   } else {
+      int_sample_offset_x = fs_reg(brw_imm_v(0x01000100));
+      int_sample_offset_y = fs_reg(brw_imm_v(0x01010000));
+   }
+
+   fs_reg int_coarse_offset_x, int_coarse_offset_y; /* Used on Gen12HP+ */
+   fs_reg int_coarse_offset_xy; /* Used on Gen8+ */
+   fs_reg half_int_coarse_offset_x, half_int_coarse_offset_y;
+   if (wm_prog_data->coarse_pixel_dispatch != BRW_NEVER) {
       /* In coarse pixel dispatch we have to do the same ADD instruction that
        * we do in normal per pixel dispatch, except this time we're not adding
        * 1 in each direction, but instead the coarse pixel size.
@@ -355,34 +361,94 @@ fs_visitor::emit_interpolation_setup_gfx6()
          /* To build the array of half bytes we do and AND operation with the
           * right mask in X.
           */
-         int_pixel_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
-         dbld.AND(int_pixel_offset_x, byte_offset(r1_0, 0), brw_imm_v(0x0f000f00));
+         int_coarse_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_coarse_offset_x, byte_offset(r1_0, 0), brw_imm_v(0x0f000f00));
 
          /* And the right mask in Y. */
-         int_pixel_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
-         dbld.AND(int_pixel_offset_y, byte_offset(r1_0, 1), brw_imm_v(0x0f0f0000));
+         int_coarse_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_coarse_offset_y, byte_offset(r1_0, 1), brw_imm_v(0x0f0f0000));
       } else {
          /* To build the array of half bytes we do and AND operation with the
           * right mask in X.
           */
-         int_pixel_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
-         dbld.AND(int_pixel_offset_x, byte_offset(r1_0, 0), brw_imm_v(0x0000f0f0));
+         int_coarse_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_coarse_offset_x, byte_offset(r1_0, 0), brw_imm_v(0x0000f0f0));
 
          /* And the right mask in Y. */
-         int_pixel_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
-         dbld.AND(int_pixel_offset_y, byte_offset(r1_0, 1), brw_imm_v(0xff000000));
+         int_coarse_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.AND(int_coarse_offset_y, byte_offset(r1_0, 1), brw_imm_v(0xff000000));
 
          /* Finally OR the 2 registers. */
-         int_pixel_offset_xy = dbld.vgrf(BRW_REGISTER_TYPE_UW);
-         dbld.OR(int_pixel_offset_xy, int_pixel_offset_x, int_pixel_offset_y);
+         int_coarse_offset_xy = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+         dbld.OR(int_coarse_offset_xy, int_coarse_offset_x, int_coarse_offset_y);
       }
 
-      /* Also compute the half pixel size used to center pixels. */
-      half_int_pixel_offset_x = bld.vgrf(BRW_REGISTER_TYPE_UW);
-      half_int_pixel_offset_y = bld.vgrf(BRW_REGISTER_TYPE_UW);
+      /* Also compute the half coarse size used to center coarses. */
+      half_int_coarse_offset_x = bld.vgrf(BRW_REGISTER_TYPE_UW);
+      half_int_coarse_offset_y = bld.vgrf(BRW_REGISTER_TYPE_UW);
 
-      bld.SHR(half_int_pixel_offset_x, suboffset(r1_0, 0), brw_imm_ud(1));
-      bld.SHR(half_int_pixel_offset_y, suboffset(r1_0, 1), brw_imm_ud(1));
+      bld.SHR(half_int_coarse_offset_x, suboffset(r1_0, 0), brw_imm_ud(1));
+      bld.SHR(half_int_coarse_offset_y, suboffset(r1_0, 1), brw_imm_ud(1));
+   }
+
+   fs_reg int_pixel_offset_x, int_pixel_offset_y; /* Used on Gen12HP+ */
+   fs_reg int_pixel_offset_xy; /* Used on Gen8+ */
+   fs_reg half_int_pixel_offset_x, half_int_pixel_offset_y;
+   switch (wm_prog_data->coarse_pixel_dispatch) {
+   case BRW_NEVER:
+      int_pixel_offset_x = int_sample_offset_x;
+      int_pixel_offset_y = int_sample_offset_y;
+      int_pixel_offset_xy = int_sample_offset_xy;
+      half_int_pixel_offset_x = half_int_sample_offset_x;
+      half_int_pixel_offset_y = half_int_sample_offset_y;
+      break;
+
+   case BRW_SOMETIMES: {
+      const fs_builder dbld =
+         abld.exec_all().group(MIN2(16, dispatch_width) * 2, 0);
+
+      check_dynamic_msaa_flag(dbld, wm_prog_data,
+                              BRW_WM_MSAA_FLAG_COARSE_RT_WRITES);
+
+      int_pixel_offset_x = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+      set_predicate(BRW_PREDICATE_NORMAL,
+                    dbld.SEL(int_pixel_offset_x,
+                             int_coarse_offset_x,
+                             int_sample_offset_x));
+
+      int_pixel_offset_y = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+      set_predicate(BRW_PREDICATE_NORMAL,
+                    dbld.SEL(int_pixel_offset_y,
+                             int_coarse_offset_y,
+                             int_sample_offset_y));
+
+      int_pixel_offset_xy = dbld.vgrf(BRW_REGISTER_TYPE_UW);
+      set_predicate(BRW_PREDICATE_NORMAL,
+                    dbld.SEL(int_pixel_offset_xy,
+                             int_coarse_offset_xy,
+                             int_sample_offset_xy));
+
+      half_int_pixel_offset_x = bld.vgrf(BRW_REGISTER_TYPE_UW);
+      set_predicate(BRW_PREDICATE_NORMAL,
+                    bld.SEL(half_int_pixel_offset_x,
+                            half_int_coarse_offset_x,
+                            half_int_sample_offset_x));
+
+      half_int_pixel_offset_y = bld.vgrf(BRW_REGISTER_TYPE_UW);
+      set_predicate(BRW_PREDICATE_NORMAL,
+                    bld.SEL(half_int_pixel_offset_y,
+                            half_int_coarse_offset_y,
+                            half_int_sample_offset_y));
+      break;
+   }
+
+   case BRW_ALWAYS:
+      int_pixel_offset_x = int_coarse_offset_x;
+      int_pixel_offset_y = int_coarse_offset_y;
+      int_pixel_offset_xy = int_coarse_offset_xy;
+      half_int_pixel_offset_x = half_int_coarse_offset_x;
+      half_int_pixel_offset_y = half_int_coarse_offset_y;
+      break;
    }
 
    for (unsigned i = 0; i < DIV_ROUND_UP(dispatch_width, 16); i++) {
@@ -402,11 +468,15 @@ fs_visitor::emit_interpolation_setup_gfx6()
                   fs_reg(stride(suboffset(gi_uw, 5), 2, 8, 0)),
                   int_pixel_offset_y);
 
-         if (wm_prog_data->per_coarse_pixel_dispatch) {
-            dbld.ADD(int_pixel_x, int_pixel_x,
-                     horiz_stride(half_int_pixel_offset_x, 0));
-            dbld.ADD(int_pixel_y, int_pixel_y,
-                     horiz_stride(half_int_pixel_offset_y, 0));
+         if (wm_prog_data->coarse_pixel_dispatch != BRW_NEVER) {
+            fs_inst *addx = dbld.ADD(int_pixel_x, int_pixel_x,
+                                     horiz_stride(half_int_pixel_offset_x, 0));
+            fs_inst *addy = dbld.ADD(int_pixel_y, int_pixel_y,
+                                     horiz_stride(half_int_pixel_offset_y, 0));
+            if (wm_prog_data->coarse_pixel_dispatch != BRW_ALWAYS) {
+               addx->predicate = BRW_PREDICATE_NORMAL;
+               addy->predicate = BRW_PREDICATE_NORMAL;
+            }
          }
 
          hbld.MOV(offset(pixel_x, hbld, i), horiz_stride(int_pixel_x, 2));
@@ -464,8 +534,8 @@ fs_visitor::emit_interpolation_setup_gfx6()
    }
 
    abld = bld.annotate("compute pos.z");
+   fs_reg coarse_z;
    if (wm_prog_data->uses_depth_w_coefficients) {
-      assert(!wm_prog_data->uses_src_depth);
       /* In coarse pixel mode, the HW doesn't interpolate Z coordinate
        * properly. In the same way we have to add the coarse pixel size to
        * pixels locations, here we recompute the Z value with 2 coefficients
@@ -502,9 +572,9 @@ fs_visitor::emit_interpolation_setup_gfx6()
       abld.MAD(float_pixel_x, float_pixel_x, brw_imm_f(0.5f), f_cps_width);
       abld.MAD(float_pixel_y, float_pixel_y, brw_imm_f(0.5f), f_cps_height);
 
-      this->pixel_z = abld.vgrf(BRW_REGISTER_TYPE_F);
-      abld.MAD(this->pixel_z, z_c0, z_cx, float_pixel_x);
-      abld.MAD(this->pixel_z, this->pixel_z, z_cy, float_pixel_y);
+      coarse_z = abld.vgrf(BRW_REGISTER_TYPE_F);
+      abld.MAD(coarse_z, z_c0, z_cx, float_pixel_x);
+      abld.MAD(coarse_z, coarse_z, z_cy, float_pixel_y);
    }
 
    if (wm_prog_data->uses_src_depth) {
@@ -512,11 +582,88 @@ fs_visitor::emit_interpolation_setup_gfx6()
       this->pixel_z = fetch_payload_reg(bld, fs_payload().source_depth_reg);
    }
 
+   if (wm_prog_data->uses_depth_w_coefficients ||
+       wm_prog_data->uses_src_depth) {
+      fs_reg sample_z = this->pixel_z;
+
+      switch (wm_prog_data->coarse_pixel_dispatch) {
+      case BRW_NEVER:
+         assert(wm_prog_data->uses_src_depth);
+         assert(!wm_prog_data->uses_depth_w_coefficients);
+         this->pixel_z = sample_z;
+         break;
+
+      case BRW_SOMETIMES:
+         assert(wm_prog_data->uses_src_depth);
+         assert(wm_prog_data->uses_depth_w_coefficients);
+         this->pixel_z = abld.vgrf(BRW_REGISTER_TYPE_F);
+
+         /* We re-use the check_dynamic_msaa_flag() call from above */
+         abld.SEL(this->pixel_z, coarse_z, sample_z);
+         break;
+
+      case BRW_ALWAYS:
+         assert(!wm_prog_data->uses_src_depth);
+         assert(wm_prog_data->uses_depth_w_coefficients);
+         this->pixel_z = coarse_z;
+         break;
+      }
+   }
+
    if (wm_prog_data->uses_src_w) {
       abld = bld.annotate("compute pos.w");
       this->pixel_w = fetch_payload_reg(abld, fs_payload().source_w_reg);
       this->wpos_w = vgrf(glsl_type::float_type);
       abld.emit(SHADER_OPCODE_RCP, this->wpos_w, this->pixel_w);
+   }
+
+   if (wm_key->persample_interp == BRW_SOMETIMES) {
+      assert(!devinfo->needs_unlit_centroid_workaround);
+
+      const fs_builder ubld = bld.exec_all().group(16, 0);
+      bool loaded_flag = false;
+
+      for (int i = 0; i < BRW_BARYCENTRIC_MODE_COUNT; ++i) {
+         if (!(wm_prog_data->barycentric_interp_modes & BITFIELD_BIT(i)))
+            continue;
+
+         /* The sample mode will always be the top bit set in the perspective
+          * or non-perspective section.  In the case where no SAMPLE mode was
+          * requested, wm_prog_data_barycentric_modes() will swap out the top
+          * mode for SAMPLE so this works regardless of whether SAMPLE was
+          * requested or not.
+          */
+         int sample_mode;
+         if (BITFIELD_BIT(i) & BRW_BARYCENTRIC_NONPERSPECTIVE_BITS) {
+            sample_mode = util_last_bit(wm_prog_data->barycentric_interp_modes &
+                                        BRW_BARYCENTRIC_NONPERSPECTIVE_BITS) - 1;
+         } else {
+            sample_mode = util_last_bit(wm_prog_data->barycentric_interp_modes &
+                                        BRW_BARYCENTRIC_PERSPECTIVE_BITS) - 1;
+         }
+         assert(wm_prog_data->barycentric_interp_modes &
+                BITFIELD_BIT(sample_mode));
+
+         if (i == sample_mode)
+            continue;
+
+         uint8_t *barys = fs_payload().barycentric_coord_reg[i];
+
+         uint8_t *sample_barys = fs_payload().barycentric_coord_reg[sample_mode];
+         assert(barys[0] && sample_barys[0]);
+
+         if (!loaded_flag) {
+            check_dynamic_msaa_flag(ubld, wm_prog_data,
+                                    BRW_WM_MSAA_FLAG_PERSAMPLE_INTERP);
+         }
+
+         for (unsigned j = 0; j < dispatch_width / 8; j++) {
+            fs_inst *mov =
+               ubld.MOV(brw_vec8_grf(barys[j / 2] + (j % 2) * 2, 0),
+                        brw_vec8_grf(sample_barys[j / 2] + (j % 2) * 2, 0));
+            mov->predicate = BRW_PREDICATE_NORMAL;
+         }
+      }
    }
 
    for (int i = 0; i < BRW_BARYCENTRIC_MODE_COUNT; ++i) {
@@ -662,13 +809,54 @@ fs_visitor::emit_single_fb_write(const fs_builder &bld,
 }
 
 void
+fs_visitor::do_emit_fb_writes(int nr_color_regions, bool replicate_alpha)
+{
+   fs_inst *inst = NULL;
+
+   for (int target = 0; target < nr_color_regions; target++) {
+      /* Skip over outputs that weren't written. */
+      if (this->outputs[target].file == BAD_FILE)
+         continue;
+
+      const fs_builder abld = bld.annotate(
+         ralloc_asprintf(this->mem_ctx, "FB write target %d", target));
+
+      fs_reg src0_alpha;
+      if (devinfo->ver >= 6 && replicate_alpha && target != 0)
+         src0_alpha = offset(outputs[0], bld, 3);
+
+      inst = emit_single_fb_write(abld, this->outputs[target],
+                                  this->dual_src_output, src0_alpha, 4);
+      inst->target = target;
+   }
+
+   if (inst == NULL) {
+      /* Even if there's no color buffers enabled, we still need to send
+       * alpha out the pipeline to our null renderbuffer to support
+       * alpha-testing, alpha-to-coverage, and so on.
+       */
+      /* FINISHME: Factor out this frequently recurring pattern into a
+       * helper function.
+       */
+      const fs_reg srcs[] = { reg_undef, reg_undef,
+                              reg_undef, offset(this->outputs[0], bld, 3) };
+      const fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD, 4);
+      bld.LOAD_PAYLOAD(tmp, srcs, 4, 0);
+
+      inst = emit_single_fb_write(bld, tmp, reg_undef, reg_undef, 4);
+      inst->target = 0;
+   }
+
+   inst->last_rt = true;
+   inst->eot = true;
+}
+
+void
 fs_visitor::emit_fb_writes()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
    struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
-
-   fs_inst *inst = NULL;
 
    if (source_depth_to_render_target && devinfo->ver == 6) {
       /* For outputting oDepth on gfx6, SIMD8 writes have to be used.  This
@@ -697,47 +885,16 @@ fs_visitor::emit_fb_writes()
       (key->nr_color_regions > 1 && key->alpha_to_coverage &&
        (sample_mask.file == BAD_FILE || devinfo->ver == 6));
 
-   for (int target = 0; target < key->nr_color_regions; target++) {
-      /* Skip over outputs that weren't written. */
-      if (this->outputs[target].file == BAD_FILE)
-         continue;
-
-      const fs_builder abld = bld.annotate(
-         ralloc_asprintf(this->mem_ctx, "FB write target %d", target));
-
-      fs_reg src0_alpha;
-      if (devinfo->ver >= 6 && replicate_alpha && target != 0)
-         src0_alpha = offset(outputs[0], bld, 3);
-
-      inst = emit_single_fb_write(abld, this->outputs[target],
-                                  this->dual_src_output, src0_alpha, 4);
-      inst->target = target;
-   }
-
    prog_data->dual_src_blend = (this->dual_src_output.file != BAD_FILE &&
                                 this->outputs[0].file != BAD_FILE);
    assert(!prog_data->dual_src_blend || key->nr_color_regions == 1);
 
-   if (inst == NULL) {
-      /* Even if there's no color buffers enabled, we still need to send
-       * alpha out the pipeline to our null renderbuffer to support
-       * alpha-testing, alpha-to-coverage, and so on.
-       */
-      /* FINISHME: Factor out this frequently recurring pattern into a
-       * helper function.
-       */
-      const fs_reg srcs[] = { reg_undef, reg_undef,
-                              reg_undef, offset(this->outputs[0], bld, 3) };
-      const fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD, 4);
-      bld.LOAD_PAYLOAD(tmp, srcs, 4, 0);
-
-      inst = emit_single_fb_write(bld, tmp, reg_undef, reg_undef, 4);
-      inst->target = 0;
-   }
-
-   inst->last_rt = true;
-   inst->eot = true;
-
+   /* Following condition implements Wa_14017468336:
+    *
+    * "If dual source blend is enabled do not enable SIMD32 dispatch" and
+    * "For a thread dispatched as SIMD32, must not issue SIMD8 message with Last
+    *  Render Target Select set."
+    */
    if (devinfo->ver >= 11 && devinfo->ver <= 12 &&
        prog_data->dual_src_blend) {
       /* The dual-source RT write messages fail to release the thread
@@ -754,6 +911,8 @@ fs_visitor::emit_fb_writes()
       limit_dispatch_width(8, "Dual source blending unsupported "
                            "in SIMD16 and SIMD32 modes.\n");
    }
+
+   do_emit_fb_writes(key->nr_color_regions, replicate_alpha);
 }
 
 void
@@ -1195,12 +1354,14 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
                        struct brw_stage_prog_data *prog_data,
                        const nir_shader *shader,
                        unsigned dispatch_width,
+                       bool needs_register_pressure,
                        bool debug_enabled)
    : backend_shader(compiler, log_data, mem_ctx, shader, prog_data,
                     debug_enabled),
      key(key), gs_compile(NULL), prog_data(prog_data),
      live_analysis(this), regpressure_analysis(this),
      performance_analysis(this),
+     needs_register_pressure(needs_register_pressure),
      dispatch_width(dispatch_width),
      api_subgroup_size(brw_nir_api_subgroup_size(shader, dispatch_width)),
      bld(fs_builder(this, dispatch_width).at_end())
@@ -1217,6 +1378,7 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
                        struct brw_gs_compile *c,
                        struct brw_gs_prog_data *prog_data,
                        const nir_shader *shader,
+                       bool needs_register_pressure,
                        bool debug_enabled)
    : backend_shader(compiler, log_data, mem_ctx, shader,
                     &prog_data->base.base, debug_enabled),
@@ -1224,6 +1386,7 @@ fs_visitor::fs_visitor(const struct brw_compiler *compiler, void *log_data,
      prog_data(&prog_data->base.base),
      live_analysis(this), regpressure_analysis(this),
      performance_analysis(this),
+     needs_register_pressure(needs_register_pressure),
      dispatch_width(8),
      api_subgroup_size(brw_nir_api_subgroup_size(shader, dispatch_width)),
      bld(fs_builder(this, dispatch_width).at_end())
@@ -1263,10 +1426,7 @@ fs_visitor::init()
    this->last_scratch = 0;
    this->push_constant_loc = NULL;
 
-   this->shader_stats.scheduler_mode = NULL;
-   this->shader_stats.promoted_constants = 0,
-   this->shader_stats.spill_count = 0,
-   this->shader_stats.fill_count = 0,
+   memset(&this->shader_stats, 0, sizeof(this->shader_stats));
 
    this->grf_used = 0;
    this->spilled_any_registers = false;

@@ -10,7 +10,7 @@
 
 #include "freedreno_pm4.h"
 
-#include "tu_drm.h"
+#include "tu_knl.h"
 
 /* For breadcrumbs we may open a network socket based on the envvar,
  * it's not something that should be enabled by default.
@@ -403,11 +403,14 @@ tu_cs_emit_debug_msg(struct tu_cs *cs, const char *fmt, ...);
 
 typedef struct tu_cs *tu_debug_scope;
 
-__attribute__((format(printf, 2, 3))) void
-tu_cs_trace_start(void *cs, const char *fmt, ...);
+__attribute__((format(printf, 3, 4))) void
+tu_cs_trace_start(struct u_trace_context *utctx,
+                  void *cs,
+                  const char *fmt,
+                  ...);
 
-__attribute__((format(printf, 2, 3))) void
-tu_cs_trace_end(void *cs, const char *fmt, ...);
+__attribute__((format(printf, 3, 4))) void
+tu_cs_trace_end(struct u_trace_context *utctx, void *cs, const char *fmt, ...);
 
 /* Helpers for bracketing a large sequence of commands of unknown size inside
  * a CP_COND_REG_EXEC packet.
@@ -452,8 +455,8 @@ tu_cond_exec_end(struct tu_cs *cs)
 struct tu_reg_value {
    uint32_t reg;
    uint64_t value;
-   bool is_address;
    struct tu_bo *bo;
+   bool is_address;
    bool bo_write;
    uint32_t bo_offset;
    uint32_t bo_shift;

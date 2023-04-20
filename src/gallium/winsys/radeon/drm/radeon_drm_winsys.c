@@ -443,9 +443,12 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
        * This fails (silently) on non-GCN or older kernels, overwriting the
        * default enabled_rb_mask with the result of the last query.
        */
-      if (ws->gen >= DRV_SI)
-         radeon_get_drm_value(ws->fd, RADEON_INFO_SI_BACKEND_ENABLED_MASK, NULL,
-                              &ws->info.enabled_rb_mask);
+      if (ws->gen >= DRV_SI) {
+         uint32_t mask;
+
+         radeon_get_drm_value(ws->fd, RADEON_INFO_SI_BACKEND_ENABLED_MASK, NULL, &mask);
+         ws->info.enabled_rb_mask = mask;
+      }
 
       ws->info.r600_has_virtual_memory = false;
 
@@ -621,10 +624,7 @@ static void radeon_winsys_destroy(struct radeon_winsys *rws)
    FREE(rws);
 }
 
-static void radeon_query_info(struct radeon_winsys *rws,
-                              struct radeon_info *info,
-                              bool enable_smart_access_memory,
-                              bool disable_smart_access_memory)
+static void radeon_query_info(struct radeon_winsys *rws, struct radeon_info *info)
 {
    *info = ((struct radeon_drm_winsys *)rws)->info;
 }
@@ -795,6 +795,14 @@ static bool radeon_cs_set_pstate(struct radeon_cmdbuf* cs, enum radeon_ctx_pstat
     return false;
 }
 
+static int
+radeon_drm_winsys_get_fd(struct radeon_winsys *ws)
+{
+   struct radeon_drm_winsys *rws = (struct radeon_drm_winsys*)ws;
+
+   return rws->fd;
+}
+
 PUBLIC struct radeon_winsys *
 radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
                          radeon_screen_create_t screen_create)
@@ -861,6 +869,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
    /* Set functions. */
    ws->base.unref = radeon_winsys_unref;
    ws->base.destroy = radeon_winsys_destroy;
+   ws->base.get_fd = radeon_drm_winsys_get_fd;
    ws->base.query_info = radeon_query_info;
    ws->base.pin_threads_to_L3_cache = radeon_pin_threads_to_L3_cache;
    ws->base.cs_request_feature = radeon_cs_request_feature;

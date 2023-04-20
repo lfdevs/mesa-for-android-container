@@ -39,7 +39,7 @@ class InstrFactory : public Allocate {
 public:
    InstrFactory();
 
-   PInst from_string(const std::string& s, int nesting_depth);
+   PInst from_string(const std::string& s, int nesting_depth, bool is_cayman);
    bool from_nir(nir_instr *instr, Shader& shader);
    auto& value_factory() { return m_value_factory; }
 

@@ -127,7 +127,7 @@ Jan Palus (1):
 
 - vdpau: allow building vdpau st with virgl only
 
-Jason Ekstrand (4):
+Faith Ekstrand (4):
 
 - nir: Use nir_const_value_for_int in nir_lower_subgroups
 - st/mesa: Use nir_const_value_for_bool() in ATIFS

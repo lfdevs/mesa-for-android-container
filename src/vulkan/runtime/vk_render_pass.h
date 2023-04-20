@@ -30,26 +30,6 @@ extern "C" {
 #endif
 
 /**
- * Pseudo-extension struct that may be chained into VkRenderingInfo,
- * VkCommandBufferInheritanceRenderingInfo, or VkPipelineRenderingCreateInfo
- * to provide self-dependency information.
- */
-typedef struct VkRenderingSelfDependencyInfoMESA {
-    VkStructureType    sType;
-#define VK_STRUCTURE_TYPE_RENDERING_SELF_DEPENDENCY_INFO_MESA (VkStructureType)1000044900
-    const void*        pNext;
-
-    /** Bitset of which color attachments have self-dependencies */
-    uint32_t           colorSelfDependencies;
-
-    /** True if there is a depth self-dependency */
-    VkBool32           depthSelfDependency;
-
-    /** True if there is a stencil self-dependency */
-    VkBool32           stencilSelfDependency;
-} VkRenderingSelfDependencyInfoMESA;
-
-/**
  * Pseudo-extension struct that may be chained into VkRenderingAttachmentInfo
  * to indicate an initial layout for the attachment.  This is only allowed if
  * all of the following conditions are met:
@@ -73,6 +53,7 @@ typedef struct VkRenderingSelfDependencyInfoMESA {
 typedef struct VkRenderingAttachmentInitialLayoutInfoMESA {
     VkStructureType    sType;
 #define VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INITIAL_LAYOUT_INFO_MESA (VkStructureType)1000044901
+#define VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INITIAL_LAYOUT_INFO_MESA_cast VkRenderingAttachmentInitialLayoutInfoMESA
     const void*        pNext;
 
     /** Initial layout of the attachment */
@@ -171,11 +152,8 @@ struct vk_subpass {
    /** VkFragmentShadingRateAttachmentInfoKHR::shadingRateAttachmentTexelSize */
    VkExtent2D fragment_shading_rate_attachment_texel_size;
 
-   /** VkRenderingSelfDependencyInfoMESA for this subpass
-    *
-    * This is in the pNext chain of pipeline_info and inheritance_info.
-    */
-   VkRenderingSelfDependencyInfoMESA self_dep_info;
+   /** Extra VkPipelineCreateFlags for this subpass */
+   VkPipelineCreateFlagBits pipeline_flags;
 
    /** VkAttachmentSampleCountInfoAMD for this subpass
     *
@@ -305,6 +283,9 @@ struct vk_render_pass {
    /** VkRenderPassCreateInfo2::dependencyCount */
    uint32_t dependency_count;
 
+   /** VkRenderPassFragmentDensityMapCreateInfoEXT::fragmentDensityMapAttachment */
+   VkAttachmentReference fragment_density_map;
+
    /** VkRenderPassCreateInfo2::pDependencies */
    struct vk_subpass_dependency *dependencies;
 };
@@ -326,6 +307,25 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(vk_render_pass, base, VkRenderPass,
  */
 const VkPipelineRenderingCreateInfo *
 vk_get_pipeline_rendering_create_info(const VkGraphicsPipelineCreateInfo *info);
+
+/** Returns any extra VkPipelineCreateFlags from the render pass
+ *
+ * For render-pass-free drivers, this can be used to get any extra pipeline
+ * create flags implied by the render pass.  In particular, a render pass may
+ * want to add one or both of the following:
+ *
+ *  - VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT
+ *  - VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT
+ *  - VK_PIPELINE_CREATE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR
+ *  - VK_PIPELINE_CREATE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT
+ *
+ * If VkGraphicsPipelineCreateInfo::renderPass is VK_NULL_HANDLE, the relevant
+ * flags from VkGraphicsPipelineCreateInfo::flags will be returned.
+ *
+ * @param[in]  info  One of the pCreateInfos from vkCreateGraphicsPipelines
+ */
+VkPipelineCreateFlags
+vk_get_pipeline_rendering_flags(const VkGraphicsPipelineCreateInfo *info);
 
 /** Returns the VkAttachmentSampleCountInfoAMD for a graphics pipeline
  *

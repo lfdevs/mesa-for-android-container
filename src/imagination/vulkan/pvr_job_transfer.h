@@ -35,10 +35,7 @@ struct vk_sync;
 VkResult pvr_transfer_job_submit(struct pvr_device *device,
                                  struct pvr_transfer_ctx *ctx,
                                  struct pvr_sub_cmd_transfer *sub_cmd,
-                                 struct vk_sync *barrier,
-                                 struct vk_sync **waits,
-                                 uint32_t wait_count,
-                                 uint32_t *stage_flags,
+                                 struct vk_sync *wait,
                                  struct vk_sync *signal_sync);
 
 #endif /* PVR_JOB_TRANSFER_H */

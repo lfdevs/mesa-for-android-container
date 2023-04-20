@@ -102,6 +102,8 @@ anv_create_cmd_buffer(struct vk_command_pool *pool,
 
    cmd_buffer->vk.dynamic_graphics_state.ms.sample_locations =
       &cmd_buffer->state.gfx.sample_locations;
+   cmd_buffer->vk.dynamic_graphics_state.vi =
+      &cmd_buffer->state.gfx.vertex_input;
 
    cmd_buffer->batch.status = VK_SUCCESS;
    cmd_buffer->generation_batch.status = VK_SUCCESS;
@@ -130,7 +132,9 @@ anv_create_cmd_buffer(struct vk_command_pool *pool,
 
    cmd_buffer->self_mod_locations = NULL;
 
+   cmd_buffer->generation_jump_addr = ANV_NULL_ADDRESS;
    cmd_buffer->generation_return_addr = ANV_NULL_ADDRESS;
+   cmd_buffer->generation_bt_state = ANV_STATE_NULL;
 
    anv_cmd_state_init(cmd_buffer);
 
@@ -195,6 +199,10 @@ anv_cmd_buffer_reset(struct vk_command_buffer *vk_cmd_buffer,
    cmd_buffer->perf_query_pool = NULL;
    anv_cmd_buffer_reset_batch_bo_chain(cmd_buffer);
    anv_cmd_state_reset(cmd_buffer);
+
+   cmd_buffer->generation_jump_addr = ANV_NULL_ADDRESS;
+   cmd_buffer->generation_return_addr = ANV_NULL_ADDRESS;
+   cmd_buffer->generation_bt_state = ANV_STATE_NULL;
 
    anv_state_stream_finish(&cmd_buffer->surface_state_stream);
    anv_state_stream_init(&cmd_buffer->surface_state_stream,
@@ -384,7 +392,6 @@ void anv_CmdBindPipeline(
          return;
 
       cmd_buffer->state.gfx.pipeline = gfx_pipeline;
-      cmd_buffer->state.gfx.vb_dirty |= gfx_pipeline->vb_used;
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;
 
       anv_foreach_stage(stage, gfx_pipeline->active_stages) {
@@ -967,7 +974,7 @@ void anv_CmdPushDescriptorSetKHR(
          assert(accel_write->accelerationStructureCount ==
                 write->descriptorCount);
          for (uint32_t j = 0; j < write->descriptorCount; j++) {
-            ANV_FROM_HANDLE(anv_acceleration_structure, accel,
+            ANV_FROM_HANDLE(vk_acceleration_structure, accel,
                             accel_write->pAccelerationStructures[j]);
             anv_descriptor_set_write_acceleration_structure(cmd_buffer->device,
                                                             set, accel,

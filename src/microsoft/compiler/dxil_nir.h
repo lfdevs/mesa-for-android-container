@@ -37,12 +37,15 @@ bool dxil_nir_lower_16bit_conv(nir_shader *shader);
 bool dxil_nir_lower_x2b(nir_shader *shader);
 bool dxil_nir_lower_fquantize2f16(nir_shader *shader);
 bool dxil_nir_lower_ubo_to_temp(nir_shader *shader);
-bool dxil_nir_lower_loads_stores_to_dxil(nir_shader *shader);
+struct dxil_nir_lower_loads_stores_options {
+   bool use_16bit_ssbo;
+};
+bool dxil_nir_lower_loads_stores_to_dxil(nir_shader *shader,
+                                         const struct dxil_nir_lower_loads_stores_options *options);
 bool dxil_nir_lower_atomics_to_dxil(nir_shader *shader);
 bool dxil_nir_lower_deref_ssbo(nir_shader *shader);
 bool dxil_nir_opt_alu_deref_srcs(nir_shader *shader);
 bool dxil_nir_lower_upcast_phis(nir_shader *shader, unsigned min_bit_size);
-bool dxil_nir_lower_fp16_casts(nir_shader *shader);
 bool dxil_nir_split_clip_cull_distance(nir_shader *shader);
 bool dxil_nir_lower_double_math(nir_shader *shader);
 bool dxil_nir_lower_system_values_to_zero(nir_shader *shader,
@@ -56,7 +59,7 @@ bool dxil_nir_lower_vs_vertex_conversion(nir_shader *s, enum pipe_format target_
 nir_ssa_def *
 build_load_ubo_dxil(nir_builder *b, nir_ssa_def *buffer,
                     nir_ssa_def *offset, unsigned num_components,
-                    unsigned bit_size);
+                    unsigned bit_size, unsigned alignment);
 
 uint64_t
 dxil_sort_by_driver_location(nir_shader* s, nir_variable_mode modes);
@@ -76,6 +79,11 @@ bool dxil_nir_fix_io_uint_type(nir_shader *s, uint64_t in_mask, uint64_t out_mas
 bool dxil_nir_lower_discard_and_terminate(nir_shader* s);
 bool dxil_nir_ensure_position_writes(nir_shader *s);
 bool dxil_nir_lower_sample_pos(nir_shader *s);
+bool dxil_nir_lower_subgroup_id(nir_shader *s);
+bool dxil_nir_lower_num_subgroups(nir_shader *s);
+bool dxil_nir_split_unaligned_loads_stores(nir_shader *shader, nir_variable_mode modes);
+bool dxil_nir_lower_unsupported_subgroup_scan(nir_shader *s);
+bool dxil_nir_forward_front_face(nir_shader *s);
 
 #ifdef __cplusplus
 }

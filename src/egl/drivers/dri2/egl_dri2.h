@@ -222,7 +222,14 @@ struct dri2_egl_display
 
    int dri2_major;
    int dri2_minor;
-   __DRIscreen *dri_screen;
+   __DRIscreen *dri_screen_render_gpu;
+   /* dri_screen_display_gpu holds display GPU in case of prime gpu offloading else
+    * dri_screen_render_gpu and dri_screen_display_gpu is same.
+    * In case of prime gpu offloading, if display and render driver names are different
+    * (potentially not compatible), dri_screen_display_gpu will be NULL but fd_display_gpu
+    * will still hold fd for display driver.
+    */
+   __DRIscreen *dri_screen_display_gpu;
    bool own_dri_screen;
    const __DRIconfig **driver_configs;
    void *driver;
@@ -243,7 +250,13 @@ struct dri2_egl_display
    const __DRI2interopExtension *interop;
    const __DRIconfigOptionsExtension *configOptions;
    const __DRImutableRenderBufferDriverExtension *mutable_render_buffer;
-   int fd;
+   /* fd of the GPU used for rendering. */
+   int fd_render_gpu;
+   /* fd of the GPU used for display. If the same GPU is used for display
+    * and rendering, then fd_render_gpu == fd_display_gpu (no need to use
+    * os_same_file_description).
+    */
+   int fd_display_gpu;
 
    /* dri2_initialize/dri2_terminate increment/decrement this count, so does
     * dri2_make_current (tracks if there are active contexts/surfaces). */
@@ -303,7 +316,6 @@ struct dri2_egl_display
 #endif
 
    bool is_render_node;
-   bool is_different_gpu;
 };
 
 struct dri2_egl_context
@@ -594,6 +606,9 @@ static inline void
 dri2_teardown_device(struct dri2_egl_display *dri2_dpy) { /* noop */ }
 
 void
+dri2_flush_drawable_for_swapbuffers_flags(_EGLDisplay *disp, _EGLSurface *draw,
+                                          enum __DRI2throttleReason throttle_reason);
+void
 dri2_flush_drawable_for_swapbuffers(_EGLDisplay *disp, _EGLSurface *draw);
 
 const __DRIconfig *
@@ -612,7 +627,7 @@ dri2_set_WL_bind_wayland_display(_EGLDisplay *disp)
            int capabilities;
 
            capabilities =
-               dri2_dpy->image->getCapabilities(dri2_dpy->dri_screen);
+               dri2_dpy->image->getCapabilities(dri2_dpy->dri_screen_render_gpu);
            disp->Extensions.WL_bind_wayland_display =
                (capabilities & __DRI_IMAGE_CAP_GLOBAL_NAMES) != 0;
        } else {

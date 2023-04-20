@@ -137,6 +137,8 @@ html_extra_path = [
 
 html_redirects = [
   ('webmaster', 'https://www.mesa3d.org/website/'),
+  ('developers', 'https://www.mesa3d.org/developers/'),
+  ('thanks', 'https://gitlab.freedesktop.org/mesa/mesa/-/blob/amber/docs/thanks.rst'),
 ]
 
 

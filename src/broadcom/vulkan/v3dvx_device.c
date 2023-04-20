@@ -58,6 +58,15 @@ static union pipe_color_union encode_border_color(
 
    const struct v3dv_format *format = v3dX(get_format)(bc_info->format);
 
+   /* YCbCr doesn't interact with border color at all. From spec:
+    *
+    *   "If sampler YCBCR conversion is enabled, addressModeU, addressModeV,
+    *    and addressModeW must be VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    *    anisotropyEnable must be VK_FALSE, and unnormalizedCoordinates must
+    *    be VK_FALSE"
+    */
+   assert(format->plane_count == 1);
+
    /* We use the swizzle in our format table to determine swizzle configuration
     * for sampling as well as to decide if we need to use the Swap R/B and
     * Reverse Channels bits for Tile Load/Store operations. The order of the
@@ -68,19 +77,19 @@ static union pipe_color_union encode_border_color(
     * colors so we need to fix up the swizzle manually for this case.
     */
    uint8_t swizzle[4];
-   if (v3dv_format_swizzle_needs_reverse(format->swizzle) &&
-       v3dv_format_swizzle_needs_rb_swap(format->swizzle)) {
+   if (v3dv_format_swizzle_needs_reverse(format->planes[0].swizzle) &&
+       v3dv_format_swizzle_needs_rb_swap(format->planes[0].swizzle)) {
       swizzle[0] = PIPE_SWIZZLE_W;
       swizzle[1] = PIPE_SWIZZLE_X;
       swizzle[2] = PIPE_SWIZZLE_Y;
       swizzle[3] = PIPE_SWIZZLE_Z;
    } else {
-      memcpy(swizzle, format->swizzle, sizeof (swizzle));
+      memcpy(swizzle, format->planes[0].swizzle, sizeof (swizzle));
    }
 
    union pipe_color_union border;
    for (int i = 0; i < 4; i++) {
-      if (format->swizzle[i] <= 3)
+      if (format->planes[0].swizzle[i] <= 3)
          border.ui[i] = bc_info->customBorderColor.uint32[swizzle[i]];
       else
          border.ui[i] = 0;
@@ -259,9 +268,10 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(
 
          const struct v3dv_image_view *att = attachments[att_idx].image_view;
          assert(att);
+         assert(att->plane_count == 1);
 
          if (att->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT)
-            *max_bpp = MAX2(*max_bpp, att->internal_bpp);
+            *max_bpp = MAX2(*max_bpp, att->planes[0].internal_bpp);
 
          if (att->vk.image->samples > VK_SAMPLE_COUNT_1_BIT)
             *msaa = true;
@@ -283,9 +293,10 @@ v3dX(framebuffer_compute_internal_bpp_msaa)(
    for (uint32_t i = 0; i < framebuffer->attachment_count; i++) {
       const struct v3dv_image_view *att = attachments[i].image_view;
       assert(att);
+      assert(att->plane_count == 1);
 
       if (att->vk.aspects & VK_IMAGE_ASPECT_COLOR_BIT)
-         *max_bpp = MAX2(*max_bpp, att->internal_bpp);
+         *max_bpp = MAX2(*max_bpp, att->planes[0].internal_bpp);
 
       if (att->vk.image->samples > VK_SAMPLE_COUNT_1_BIT)
          *msaa = true;

@@ -493,6 +493,7 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
     enum pipe_format srgb_format;
     unsigned i;
     uint8_t swizzle[4];
+    memset(&templ, 0, sizeof(templ));
 
     DBG("This=%p sRGB=%d\n", This, sRGB);
 

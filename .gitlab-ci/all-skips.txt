@@ -15,3 +15,20 @@ glx@glx_arb_sync_control@timing.*
 
 # This test is not built with waffle, while we do build tests with waffle
 spec@!opengl 1.1@windowoverlap
+
+# These tests all read from the front buffer after a swap.  Given that we
+# run piglit tests in parallel in Mesa CI, and don't have a compositor
+# running, the frontbuffer reads may end up with undefined results from
+# windows overlapping us.
+#
+# Piglit does mark these tests as not to be run in parallel, but deqp-runner
+# doesn't respect that.  We need to extend deqp-runner to allow some tests to be
+# marked as single-threaded and run after the rayon loop if we want to support
+# them.
+#
+# Note that "glx-" tests don't appear in x11-skips.txt because they can be
+# run even if PIGLIT_PLATFORM=gbm (for example)
+glx@glx-copy-sub-buffer.*
+# Reads the front buffer but it doesn't have to.
+# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/755
+glx-swap-copy

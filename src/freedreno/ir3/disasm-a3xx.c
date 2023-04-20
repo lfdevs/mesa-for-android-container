@@ -316,6 +316,7 @@ static const struct opc_info {
    OPC(5, OPC_QUAD_SHUFFLE_HORIZ, quad_shuffle.horiz),
    OPC(5, OPC_QUAD_SHUFFLE_VERT,  quad_shuffle.vert),
    OPC(5, OPC_QUAD_SHUFFLE_DIAG,  quad_shuffle.diag),
+   OPC(5, OPC_TCINV,        tcinv),
    /* macros are needed here for ir3_print */
    OPC(5, OPC_DSXPP_MACRO,  dsxpp.macro),
    OPC(5, OPC_DSYPP_MACRO,  dsypp.macro),
@@ -409,7 +410,7 @@ static const struct opc_info {
 const char *
 disasm_a3xx_instr_name(opc_t opc)
 {
-   if (opc_cat(opc) == -1)
+   if (opc_cat(opc) == OPC_META)
       return "??meta??";
    return opcs[opc].name;
 }

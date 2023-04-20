@@ -20,9 +20,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
-#
-# Authors:
-#    Jason Ekstrand (jason@jlekstrand.net)
 
 from collections import OrderedDict
 import nir_algebraic
@@ -129,13 +126,14 @@ optimizations = [
     '!options->lower_bitops'),
    (('irem', a, '#b(is_neg_power_of_two)'), ('irem', a, ('iabs', b)), '!options->lower_bitops'),
 
+   (('~fmul', ('fsign', a), ('ffloor', ('fadd', ('fabs', a), 0.5))), ('ftrunc', ('fadd', a, ('fmul', ('fsign', a), 0.5))), '!options->lower_ftrunc || options->lower_ffloor'),
+
    (('~fneg', ('fneg', a)), a),
    (('ineg', ('ineg', a)), a),
    (('fabs', ('fneg', a)), ('fabs', a)),
    (('fabs', ('u2f', a)), ('u2f', a)),
    (('iabs', ('iabs', a)), ('iabs', a)),
    (('iabs', ('ineg', a)), ('iabs', a)),
-   (('f2b', ('fneg', a)), ('f2b', a)),
    (('~fadd', a, 0.0), a),
    # a+0.0 is 'a' unless 'a' is denormal or -0.0. If it's only used by a
    # floating point instruction, they should flush any input denormals and we
@@ -165,6 +163,8 @@ optimizations = [
    (('ior', ('iand', a, b), ('iand', a, c)), ('iand', a, ('ior', b, c))),
    (('ieq', ('iand', a, '#b(is_pos_power_of_two)'), b), ('ine', ('iand', a, b), 0)),
    (('ine', ('iand', a, '#b(is_pos_power_of_two)'), b), ('ieq', ('iand', a, b), 0)),
+   (('ieq', ('ushr(is_used_once)', a, '#b'), 0), ('ult', a, ('ishl', 1, b))),
+   (('ine', ('ushr(is_used_once)', a, '#b'), 0), ('uge', a, ('ishl', 1, b))),
    (('~fadd', ('fneg', a), a), 0.0),
    (('iadd', ('ineg', a), a), 0),
    (('iadd', ('ineg', a), ('iadd', a, b)), b),
@@ -399,6 +399,10 @@ optimizations.extend([
     ('bcsel', a, ('fmul', ('fadd', ('fmul', b, c), d), e), ('fmul', d, e))),
 
    (('fdph', a, b), ('fdot4', ('vec4', 'a.x', 'a.y', 'a.z', 1.0), b), 'options->lower_fdph'),
+
+   (('fdot4', a, 0.0), 0.0),
+   (('fdot3', a, 0.0), 0.0),
+   (('fdot2', a, 0.0), 0.0),
 
    (('fdot4', ('vec4', a, b,   c,   1.0), d), ('fdph',  ('vec3', a, b, c), d), '!options->lower_fdph'),
    (('fdot4', ('vec4', a, 0.0, 0.0, 0.0), b), ('fmul', a, b)),
@@ -829,6 +833,7 @@ optimizations.extend([
    (('umin', ('umax', ('umin', ('umax', a, b), c), b), c), ('umin', ('umax', a, b), c)),
    # Both the left and right patterns are "b" when isnan(a), so this is exact.
    (('fmax', ('fsat', a), '#b(is_zero_to_one)'), ('fsat', ('fmax', a, b))),
+   (('fmax', ('fsat(is_used_once)', a), ('fsat(is_used_once)', b)), ('fsat', ('fmax', a, b))),
    # The left pattern is 0.0 when isnan(a) (because fmin(fsat(NaN), b) ->
    # fmin(0.0, b)) while the right one is "b", so this optimization is inexact.
    (('~fmin', ('fsat', a), '#b(is_zero_to_one)'), ('fsat', ('fmin', a, b))),
@@ -924,6 +929,11 @@ for s in [16, 32, 64]:
        (('~iand', ('fge(is_used_once)', 0.0, 'a@{}'.format(s)), ('fge', 'b@{}'.format(s), 0.0)), ('fge', 0.0, ('fmax', a, ('fneg', b)))),
        (('~iand', ('fge', 0.0, 'a@{}'.format(s)), ('fge(is_used_once)', 'b@{}'.format(s), 0.0)), ('fge', 0.0, ('fmax', a, ('fneg', b)))),
 
+       (('ior', ('feq(is_used_once)', 'a@{}'.format(s), 0.0), ('feq', 'b@{}'.format(s), 0.0)), ('feq', ('fmin', ('fabs', a), ('fabs', b)), 0.0)),
+       (('ior', ('fneu(is_used_once)', 'a@{}'.format(s), 0.0), ('fneu', 'b@{}'.format(s), 0.0)), ('fneu', ('fadd', ('fabs', a), ('fabs', b)), 0.0)),
+       (('iand', ('feq(is_used_once)', 'a@{}'.format(s), 0.0), ('feq', 'b@{}'.format(s), 0.0)), ('feq', ('fadd', ('fabs', a), ('fabs', b)), 0.0)),
+       (('iand', ('fneu(is_used_once)', 'a@{}'.format(s), 0.0), ('fneu', 'b@{}'.format(s), 0.0)), ('fneu', ('fmin', ('fabs', a), ('fabs', b)), 0.0)),
+
        # The (i2f32, ...) part is an open-coded fsign.  When that is combined
        # with the bcsel, it's basically copysign(1.0, a).  There are some
        # behavior differences between this pattern and copysign w.r.t. ±0 and
@@ -975,16 +985,17 @@ for s in [16, 32, 64]:
        # float? -> float? -> intS ==> float? -> intS
        (('~f2u{}'.format(s), ('f2f', a)), ('f2u{}'.format(s), a)),
        (('~f2i{}'.format(s), ('f2f', a)), ('f2i{}'.format(s), a)),
+
+       # HLSL's sign function returns an integer
+       (('i2f{}'.format(s), ('f2i', ('fsign', 'a@{}'.format(s)))), ('fsign', a)),
     ])
 
     for B in [32, 64]:
         if s < B:
             optimizations.extend([
                # S = smaller, B = bigger
-               # typeS -> typeB -> typeS ==> identity
-               (('f2f{}'.format(s), ('f2f{}'.format(B), 'a@{}'.format(s))), a),
-               (('i2i{}'.format(s), ('i2i{}'.format(B), 'a@{}'.format(s))), a),
-               (('u2u{}'.format(s), ('u2u{}'.format(B), 'a@{}'.format(s))), a),
+               # floatS -> floatB -> floatS ==> identity
+               (('~f2f{}'.format(s), ('f2f{}'.format(B), 'a@{}'.format(s))), a),
 
                # floatS -> floatB -> intB ==> floatS -> intB
                (('f2u{}'.format(B), ('f2f{}'.format(B), 'a@{}'.format(s))), ('f2u{}'.format(B), a)),
@@ -993,10 +1004,27 @@ for s in [16, 32, 64]:
                # int? -> floatB -> floatS ==> int? -> floatS
                (('f2f{}'.format(s), ('u2f{}'.format(B), a)), ('u2f{}'.format(s), a)),
                (('f2f{}'.format(s), ('i2f{}'.format(B), a)), ('i2f{}'.format(s), a)),
+            ])
 
-               # intS -> intB -> floatB ==> intS -> floatB
-               (('u2f{}'.format(B), ('u2u{}'.format(B), 'a@{}'.format(s))), ('u2f{}'.format(B), a)),
-               (('i2f{}'.format(B), ('i2i{}'.format(B), 'a@{}'.format(s))), ('i2f{}'.format(B), a)),
+for S in [1, 8, 16, 32]:
+    for B in [8, 16, 32, 64]:
+        if B <= S:
+            continue
+        optimizations.extend([
+            # intS -> intB -> intS ==> identity
+            (('i2i{}'.format(S), ('i2i{}'.format(B), 'a@{}'.format(S))), a),
+            (('u2u{}'.format(S), ('u2u{}'.format(B), 'a@{}'.format(S))), a),
+        ])
+
+        if B < 16:
+            continue
+        for C in [8, 16, 32, 64]:
+            if C <= S:
+                continue
+            optimizations.extend([
+                # intS -> intC -> floatB ==> intS -> floatB
+                (('u2f{}'.format(B), ('u2u{}'.format(C), 'a@{}'.format(S))), ('u2f{}'.format(B), a)),
+                (('i2f{}'.format(B), ('i2i{}'.format(C), 'a@{}'.format(S))), ('i2f{}'.format(B), a)),
             ])
 
 # mediump variants of the above
@@ -1445,7 +1473,6 @@ optimizations.extend([
    # Conversions
    (('f2i', ('ftrunc', a)), ('f2i', a)),
    (('f2u', ('ftrunc', a)), ('f2u', a)),
-   (('inot', ('f2b1', a)), ('feq', a, 0.0)),
 
    # Conversions from 16 bits to 32 bits and back can always be removed
    (('f2fmp', ('f2f32', 'a@16')), a),
@@ -1472,14 +1499,16 @@ optimizations.extend([
    (('i2i32', ('i2imp', 'a@32')), a),
    (('u2u32', ('i2imp', 'a@32')), a),
 
+   # typeA@32 -> typeB@16 -> typeB@32 ==> typeA@32 -> typeB@32
    (('i2i32', ('f2imp', 'a@32')), ('f2i32', a)),
    (('u2u32', ('f2ump', 'a@32')), ('f2u32', a)),
    (('f2f32', ('i2fmp', 'a@32')), ('i2f32', a)),
    (('f2f32', ('u2fmp', 'a@32')), ('u2f32', a)),
 
-   # Conversions from float32 to float64 and back can be removed as long as
-   # it doesn't need to be precise, since the conversion may e.g. flush denorms
-   (('~f2f32', ('f2f64', 'a@32')), a),
+   # typeA@32 -> typeA@16 -> typeB@32 ==> typeA@32 -> typeB@32
+   (('f2i32', ('f2fmp', 'a@32')), ('f2i32', a)),
+   (('f2u32', ('f2fmp', 'a@32')), ('f2u32', a)),
+   (('i2f32', ('i2imp', 'a@32')), ('i2f32', a)),
 
    (('ffloor', 'a(is_integral)'), a),
    (('fceil', 'a(is_integral)'), a),
@@ -1622,6 +1651,7 @@ optimizations.extend([
    # Lower pack/unpack
    (('pack_64_2x32_split', a, b), ('ior', ('u2u64', a), ('ishl', ('u2u64', b), 32)), 'options->lower_pack_64_2x32_split'),
    (('pack_32_2x16_split', a, b), ('ior', ('u2u32', a), ('ishl', ('u2u32', b), 16)), 'options->lower_pack_32_2x16_split'),
+   (('pack_half_2x16_split', a, b), ('pack_half_2x16_rtz_split', a, b), 'options->has_pack_half_2x16_rtz'),
    (('unpack_64_2x32_split_x', a), ('u2u32', a), 'options->lower_unpack_64_2x32_split'),
    (('unpack_64_2x32_split_y', a), ('u2u32', ('ushr', a, 32)), 'options->lower_unpack_64_2x32_split'),
    (('unpack_32_2x16_split_x', a), ('u2u16', a), 'options->lower_unpack_32_2x16_split'),
@@ -1654,8 +1684,15 @@ optimizations.extend([
    (('ushr', ('pack_half_2x16_split', 0, a), 16), ('pack_half_2x16_split', a, 0)),
    (('extract_u16', ('pack_half_2x16_split', 0, a), 1), ('pack_half_2x16_split', a, 0)),
 
+   (('ishl', ('pack_half_2x16_rtz_split', a, 0), 16), ('pack_half_2x16_rtz_split', 0, a)),
+   (('ushr', ('pack_half_2x16_rtz_split', 0, a), 16), ('pack_half_2x16_rtz_split', a, 0)),
+   (('extract_u16', ('pack_half_2x16_rtz_split', 0, a), 1), ('pack_half_2x16_rtz_split', a, 0)),
+
    (('iadd', ('pack_half_2x16_split', a, 0), ('pack_half_2x16_split', 0, b)), ('pack_half_2x16_split', a, b)),
    (('ior',  ('pack_half_2x16_split', a, 0), ('pack_half_2x16_split', 0, b)), ('pack_half_2x16_split', a, b)),
+
+   (('iadd', ('pack_half_2x16_rtz_split', a, 0), ('pack_half_2x16_rtz_split', 0, b)), ('pack_half_2x16_rtz_split', a, b)),
+   (('ior',  ('pack_half_2x16_rtz_split', a, 0), ('pack_half_2x16_rtz_split', 0, b)), ('pack_half_2x16_rtz_split', a, b)),
 
    (('extract_i8', ('pack_32_4x8_split', a, b, c, d), 0), ('i2i', a)),
    (('extract_i8', ('pack_32_4x8_split', a, b, c, d), 1), ('i2i', b)),
@@ -1785,8 +1822,12 @@ optimizations.extend([
    (('bcsel', ('ine', 'a@32', 0), ('iadd', 31, ('ineg', ('ufind_msb_rev', a))), ('ufind_msb_rev', a)), ('ufind_msb', a), '!options->lower_find_msb_to_reverse'),
    (('bcsel', ('ieq', 'a@32', 0), ('ufind_msb_rev', a), ('iadd', 31, ('ineg', ('ufind_msb_rev', a)))), ('ufind_msb', a), '!options->lower_find_msb_to_reverse'),
 
+   # This is safe. Both ufind_msb_rev and bitfield_reverse can only have
+   # 32-bit sources, so the transformation can only generate correct NIR.
    (('find_lsb', ('bitfield_reverse', a)), ('ufind_msb_rev', a), 'options->has_find_msb_rev'),
    (('ufind_msb_rev', ('bitfield_reverse', a)), ('find_lsb', a), '!options->lower_find_lsb'),
+
+   (('ifind_msb', ('f2i32(is_used_once)', a)), ('ufind_msb', ('f2i32', ('fabs', a)))),
 
    (('~fmul', ('bcsel(is_used_once)', c, -1.0, 1.0), b), ('bcsel', c, ('fneg', b), b)),
    (('~fmul', ('bcsel(is_used_once)', c, 1.0, -1.0), b), ('bcsel', c, b, ('fneg', b))),
@@ -1989,16 +2030,46 @@ optimizations.extend([
      ('ifind_msb_rev', 'value')),
     'options->lower_find_msb_to_reverse'),
 
-    (('ufind_msb', 'value'),
-     ('bcsel', ('ige', ('ufind_msb_rev', 'value'), 0),
-      ('isub', 31, ('ufind_msb_rev', 'value')),
-      ('ufind_msb_rev', 'value')),
-     'options->lower_find_msb_to_reverse'),
+   # uclz of an absolute value source almost always does the right thing.
+   # There are a couple problem values:
+   #
+   # * 0x80000000.  Since abs(0x80000000) == 0x80000000, uclz returns 0.
+   #   However, findMSB(int(0x80000000)) == 30.
+   #
+   # * 0xffffffff.  Since abs(0xffffffff) == 1, uclz returns 31.  Section 8.8
+   #   (Integer Functions) of the GLSL 4.50 spec says:
+   #
+   #    For a value of zero or negative one, -1 will be returned.
+   #
+   # * Negative powers of two.  uclz(abs(-(1<<x))) returns x, but
+   #   findMSB(-(1<<x)) should return x-1.
+   #
+   # For all negative number cases, including 0x80000000 and 0xffffffff, the
+   # correct value is obtained from uclz if instead of negating the (already
+   # negative) value the logical-not is used.  A conditional logical-not can
+   # be achieved by (x ^ (x >> 31)).
+   (('ifind_msb', 'value'),
+    ('isub', 31, ('uclz', ('ixor', 'value', ('ishr', 'value', 31)))),
+    'options->lower_ifind_msb_to_uclz'),
+
+   (('ufind_msb', 'value@32'),
+    ('bcsel', ('ige', ('ufind_msb_rev', 'value'), 0),
+     ('isub', 31, ('ufind_msb_rev', 'value')),
+     ('ufind_msb_rev', 'value')),
+    'options->lower_find_msb_to_reverse'),
+
+   (('ufind_msb', 'value@32'),
+    ('isub', 31, ('uclz', 'value')),
+    'options->lower_ufind_msb_to_uclz'),
 
    (('uclz', a), ('umin', 32, ('ufind_msb_rev', a)), 'options->lower_uclz'),
 
-   (('find_lsb', 'value'),
+   (('find_lsb', 'value@64'),
     ('ufind_msb', ('iand', 'value', ('ineg', 'value'))),
+    'options->lower_find_lsb'),
+
+   (('find_lsb', 'value'),
+    ('ufind_msb', ('u2u32', ('iand', 'value', ('ineg', 'value')))),
     'options->lower_find_lsb'),
 
    (('extract_i8', a, 'b@32'),
@@ -2182,12 +2253,6 @@ for left, right in itertools.combinations_with_replacement(invert.keys(), 2):
                          ('iand', (invert[left], a, b), (invert[right], c, d))))
    optimizations.append((('inot', ('iand(is_used_once)', (left, a, b), (right, c, d))),
                          ('ior', (invert[left], a, b), (invert[right], c, d))))
-
-# Optimize f2bN(b2f(x)) -> x
-for size in type_sizes('bool'):
-    aN = 'a@' + str(size)
-    f2bN = 'f2b' + str(size)
-    optimizations.append(((f2bN, ('b2f', aN)), a))
 
 # Optimize x2yN(b2x(x)) -> b2y
 for x, y in itertools.product(['f', 'u', 'i'], ['f', 'u', 'i']):
@@ -2470,6 +2535,26 @@ def bitfield_reverse_cp2077(u):
 optimizations += [(bitfield_reverse_ue4('x@32'), ('bitfield_reverse', 'x'), '!options->lower_bitfield_reverse')]
 optimizations += [(bitfield_reverse_cp2077('x@32'), ('bitfield_reverse', 'x'), '!options->lower_bitfield_reverse')]
 
+# VKD3D-Proton DXBC f32 to f16 conversion implements a float conversion using PackHalf2x16.
+# Because the spec does not specify a rounding mode or behaviour regarding infinity,
+# it emits a sequence to ensure D3D-like behaviour for infinity.
+# When we know the current backend already behaves like we need, we can eliminate the extra sequence.
+#
+# Input is f32, output is u32 that has the f16 packed into its low bits.
+def vkd3d_proton_packed_f2f16_rtz_lo(a, abs_a):
+    packed_half = ('pack_half_2x16_rtz_split', a, 0)
+    packed_half_minus1 = ('iadd', packed_half, 0xffffffff)
+    f32_was_not_inf = ('ine', abs_a, 0x7f800000)
+    f16_is_now_inf = ('ieq', ('iand', packed_half, 0x7fff), 0x7c00)
+    return ('bcsel', ('iand', f32_was_not_inf, f16_is_now_inf), packed_half_minus1, packed_half)
+
+optimizations += [
+   (vkd3d_proton_packed_f2f16_rtz_lo('x', ('fabs', 'x')), ('pack_half_2x16_rtz_split', 'x', 0)),
+   (vkd3d_proton_packed_f2f16_rtz_lo('x(is_not_negative)', 'x'), ('pack_half_2x16_rtz_split', 'x', 0)),
+   (vkd3d_proton_packed_f2f16_rtz_lo(('fneg', 'x'), ('fabs', 'x')), ('pack_half_2x16_rtz_split', ('fneg', 'x'), 0)),
+]
+
+
 # "all_equal(eq(a, b), vec(~0))" is the same as "all_equal(a, b)"
 # "any_nequal(neq(a, b), vec(0))" is the same as "any_nequal(a, b)"
 for ncomp in [2, 3, 4, 8, 16]:
@@ -2583,7 +2668,7 @@ for op in ['fpow']:
         (('bcsel', a, (op, b, c), (op + '(is_used_once)', d, c)), (op, ('bcsel', a, b, d), c)),
     ]
 
-for op in ['frcp', 'frsq', 'fsqrt', 'fexp2', 'flog2', 'fsign', 'fsin', 'fcos', 'fsin_amd', 'fcos_amd', 'fneg', 'fabs', 'fsign']:
+for op in ['frcp', 'frsq', 'fsqrt', 'fexp2', 'flog2', 'fsign', 'fsin', 'fcos', 'fsin_amd', 'fcos_amd', 'fsin_mdg', 'fcos_mdg', 'fsin_agx', 'fneg', 'fabs', 'fsign']:
     optimizations += [
         (('bcsel', c, (op + '(is_used_once)', a), (op + '(is_used_once)', b)), (op, ('bcsel', c, a, b))),
     ]

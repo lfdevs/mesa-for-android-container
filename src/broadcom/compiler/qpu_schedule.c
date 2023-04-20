@@ -496,6 +496,8 @@ struct choose_scoreboard {
         bool last_thrsw_emitted;
         bool fixup_ldvary;
         int ldvary_count;
+        int pending_ldtmu_count;
+        bool first_ldtmu_after_thrsw;
 };
 
 static bool
@@ -1207,6 +1209,29 @@ retry:
                                 continue;
                         }
 
+                        /* We can emit a new tmu lookup with a previous ldtmu
+                         * if doing this would free just enough space in the
+                         * TMU output fifo so we don't overflow, however, this
+                         * is only safe if the ldtmu cannot stall.
+                         *
+                         * A ldtmu can stall if it is not the first following a
+                         * thread switch and corresponds to the first word of a
+                         * read request.
+                         *
+                         * FIXME: For now we forbid pairing up a new lookup
+                         * with a previous ldtmu that is not the first after a
+                         * thrsw if that could overflow the TMU output fifo
+                         * regardless of whether the ldtmu is reading the first
+                         * word of a TMU result or not, since we don't track
+                         * this aspect in the compiler yet.
+                         */
+                        if (prev_inst->inst->qpu.sig.ldtmu &&
+                            !scoreboard->first_ldtmu_after_thrsw &&
+                            (scoreboard->pending_ldtmu_count +
+                             n->inst->ldtmu_count > 16 / c->threads)) {
+                                continue;
+                        }
+
                         struct v3d_qpu_instr merged_inst;
                         if (!qpu_merge_inst(c->devinfo, &merged_inst,
                                             &prev_inst->inst->qpu, inst)) {
@@ -1295,10 +1320,31 @@ update_scoreboard_for_sfu_stall_waddr(struct choose_scoreboard *scoreboard,
 }
 
 static void
+update_scoreboard_tmu_tracking(struct choose_scoreboard *scoreboard,
+                               const struct qinst *inst)
+{
+        /* Track if the have seen any ldtmu after the last thread switch */
+        if (scoreboard->tick == scoreboard->last_thrsw_tick + 2)
+                scoreboard->first_ldtmu_after_thrsw = true;
+
+        /* Track the number of pending ldtmu instructions for outstanding
+         * TMU lookups.
+         */
+        scoreboard->pending_ldtmu_count += inst->ldtmu_count;
+        if (inst->qpu.sig.ldtmu) {
+                assert(scoreboard->pending_ldtmu_count > 0);
+                scoreboard->pending_ldtmu_count--;
+                scoreboard->first_ldtmu_after_thrsw = false;
+        }
+}
+
+static void
 update_scoreboard_for_chosen(struct choose_scoreboard *scoreboard,
-                             const struct v3d_qpu_instr *inst,
+                             const struct qinst *qinst,
                              const struct v3d_device_info *devinfo)
 {
+        const struct v3d_qpu_instr *inst = &qinst->qpu;
+
         if (inst->type == V3D_QPU_INSTR_TYPE_BRANCH)
                 return;
 
@@ -1334,6 +1380,8 @@ update_scoreboard_for_chosen(struct choose_scoreboard *scoreboard,
 
         if (inst->sig.ldvary)
                 scoreboard->last_ldvary_tick = scoreboard->tick;
+
+        update_scoreboard_tmu_tracking(scoreboard, qinst);
 }
 
 static void
@@ -1495,7 +1543,7 @@ insert_scheduled_instruction(struct v3d_compile *c,
 {
         list_addtail(&inst->link, &block->instructions);
 
-        update_scoreboard_for_chosen(scoreboard, &inst->qpu, c->devinfo);
+        update_scoreboard_for_chosen(scoreboard, inst, c->devinfo);
         c->qpu_inst_count++;
         scoreboard->tick++;
 }
@@ -2229,6 +2277,9 @@ schedule_instructions(struct v3d_compile *c,
                                                 merge->inst->uniform;
                                 }
 
+                                chosen->inst->ldtmu_count +=
+                                        merge->inst->ldtmu_count;
+
                                 if (debug) {
                                         fprintf(stderr, "t=%4d: merging: ",
                                                 time);
@@ -2478,6 +2529,7 @@ v3d_qpu_schedule_instructions(struct v3d_compile *c)
         scoreboard.last_branch_tick = -10;
         scoreboard.last_setmsf_tick = -10;
         scoreboard.last_stallable_sfu_tick = -10;
+        scoreboard.first_ldtmu_after_thrsw = true;
 
         if (debug) {
                 fprintf(stderr, "Pre-schedule instructions\n");

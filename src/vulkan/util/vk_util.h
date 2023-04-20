@@ -29,13 +29,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "vk_struct_type_cast.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* common inlines and macros for vulkan drivers */
 
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 struct vk_pnext_iterator {
    VkBaseOutStructure *pos;
@@ -269,11 +271,13 @@ __vk_find_struct(void *start, VkStructureType sType)
    return NULL;
 }
 
-#define vk_find_struct(__start, __sType) \
-   __vk_find_struct((__start), VK_STRUCTURE_TYPE_##__sType)
+#define vk_find_struct(__start, __sType)                                       \
+  (VK_STRUCTURE_TYPE_##__sType##_cast *)__vk_find_struct(                      \
+      (__start), VK_STRUCTURE_TYPE_##__sType)
 
-#define vk_find_struct_const(__start, __sType) \
-   (const void *)__vk_find_struct((void *)(__start), VK_STRUCTURE_TYPE_##__sType)
+#define vk_find_struct_const(__start, __sType)                                 \
+  (const VK_STRUCTURE_TYPE_##__sType##_cast *)__vk_find_struct(                \
+      (void *)(__start), VK_STRUCTURE_TYPE_##__sType)
 
 static inline void
 __vk_append_struct(void *start, void *element)
@@ -328,14 +332,14 @@ mesa_to_vk_shader_stage(gl_shader_stage mesa_stage)
 /* iterate over a sequence of indexed multidraws for VK_EXT_multi_draw extension */
 /* 'i' must be explicitly declared */
 #define vk_foreach_multi_draw_indexed(_draw, _i, _pDrawInfo, _num_draws, _stride) \
-   for (const VkMultiDrawIndexedInfoEXT *_draw = (const void*)(_pDrawInfo); \
+   for (const VkMultiDrawIndexedInfoEXT *_draw = (const VkMultiDrawIndexedInfoEXT*)(_pDrawInfo); \
         (_i) < (_num_draws); \
         (_i)++, (_draw) = (const VkMultiDrawIndexedInfoEXT*)((const uint8_t*)(_draw) + (_stride)))
 
 /* iterate over a sequence of multidraws for VK_EXT_multi_draw extension */
 /* 'i' must be explicitly declared */
 #define vk_foreach_multi_draw(_draw, _i, _pDrawInfo, _num_draws, _stride) \
-   for (const VkMultiDrawInfoEXT *_draw = (const void*)(_pDrawInfo); \
+   for (const VkMultiDrawInfoEXT *_draw = (const VkMultiDrawInfoEXT*)(_pDrawInfo); \
         (_i) < (_num_draws); \
         (_i)++, (_draw) = (const VkMultiDrawInfoEXT*)((const uint8_t*)(_draw) + (_stride)))
 

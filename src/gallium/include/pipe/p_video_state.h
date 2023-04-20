@@ -793,6 +793,10 @@ struct pipe_mjpeg_picture_desc
       } components[255];
 
       uint8_t num_components;
+      uint16_t crop_x;
+      uint16_t crop_y;
+      uint16_t crop_width;
+      uint16_t crop_height;
    } picture_parameter;
 
    struct
@@ -1041,6 +1045,7 @@ struct pipe_av1_picture_desc
          uint32_t disable_frame_end_update_cdf:1;
          uint32_t uniform_tile_spacing_flag:1;
          uint32_t allow_warped_motion:1;
+         uint32_t large_scale_tile:1;
       } pic_info_fields;
 
       uint8_t superres_scale_denominator;

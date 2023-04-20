@@ -1,23 +1,6 @@
-# Copyright © 2018 Rob Clark
-# Copyright © 2019 Collabora
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# Copyright 2018 Rob Clark
+# Copyright 2019 Collabora, Ltd.
+# SPDX-License-Identifier: MIT
 
 libasahi_agx_files = files(
   'agx_compile.c',
@@ -25,22 +8,36 @@ libasahi_agx_files = files(
   'agx_liveness.c',
   'agx_insert_waits.c',
   'agx_nir_lower_address.c',
+  'agx_nir_lower_frag_sidefx.c',
   'agx_nir_lower_zs_emit.c',
   'agx_nir_lower_texture.c',
   'agx_nir_lower_load_mask.c',
+  'agx_nir_lower_shared_bitsize.c',
   'agx_nir_lower_ubo.c',
   'agx_nir_opt_preamble.c',
   'agx_lower_64bit.c',
-  'agx_lower_resinfo.c',
   'agx_lower_parallel_copy.c',
   'agx_lower_pseudo.c',
+  'agx_lower_uniform_sources.c',
   'agx_pack.c',
+  'agx_performance.c',
   'agx_print.c',
+  'agx_ir.c',
   'agx_opt_cse.c',
   'agx_optimizer.c',
   'agx_register_allocate.c',
-  'agx_uniforms.c',
   'agx_validate.c',
+)
+
+agx_nir_algebraic_c = custom_target(
+  'agx_nir_algebraic.c',
+  input : 'agx_nir_algebraic.py',
+  output : 'agx_nir_algebraic.c',
+  command : [
+    prog_python, '@INPUT@', '-p', dir_compiler_nir,
+  ],
+  capture : true,
+  depend_files : nir_algebraic_depends,
 )
 
 agx_opcodes_h = custom_target(
@@ -82,7 +79,7 @@ idep_agx_builder_h = declare_dependency(
 
 libasahi_compiler = static_library(
   'asahi_compiler',
-  [libasahi_agx_files, agx_opcodes_c],
+  [libasahi_agx_files, agx_opcodes_c, agx_nir_algebraic_c],
   include_directories : [inc_include, inc_src, inc_mesa, inc_gallium, inc_gallium_aux, inc_mapi],
   dependencies: [idep_nir, idep_agx_opcodes_h, idep_agx_builder_h, idep_agx_pack],
   c_args : [no_override_init_args],
@@ -108,6 +105,6 @@ if with_tests
       link_with : [libasahi_compiler],
     ),
     suite : ['asahi'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif

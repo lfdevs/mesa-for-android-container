@@ -16,6 +16,7 @@
 #include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
+#include "state_tracker/st_context.h"
 
 #include "GLView.h"
 
@@ -43,8 +44,7 @@ hgl_st_context(struct st_context *st)
 
 
 // Perform a safe void to hgl_buffer cast
-//static inline struct hgl_buffer*
-struct hgl_buffer*
+static struct hgl_buffer*
 hgl_st_framebuffer(struct pipe_frontend_drawable *drawable)
 {
 	struct hgl_buffer* buffer;
@@ -109,17 +109,17 @@ hgl_st_framebuffer_validate_textures(struct pipe_frontend_drawable *drawable,
 		enum pipe_format format;
 		unsigned bind;
 
-		if (((1 << i) & buffer->visual->buffer_mask) && buffer->textures[i] == NULL) {
+		if (((1 << i) & buffer->visual.buffer_mask) && buffer->textures[i] == NULL) {
 			switch (i) {
 				case ST_ATTACHMENT_FRONT_LEFT:
 				case ST_ATTACHMENT_BACK_LEFT:
 				case ST_ATTACHMENT_FRONT_RIGHT:
 				case ST_ATTACHMENT_BACK_RIGHT:
-					format = buffer->visual->color_format;
+					format = buffer->visual.color_format;
 					bind = PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_RENDER_TARGET;
 					break;
 				case ST_ATTACHMENT_DEPTH_STENCIL:
-					format = buffer->visual->depth_stencil_format;
+					format = buffer->visual.depth_stencil_format;
 					bind = PIPE_BIND_DEPTH_STENCIL;
 					break;
 				default:
@@ -155,9 +155,8 @@ hgl_st_framebuffer_validate_textures(struct pipe_frontend_drawable *drawable,
 static bool
 hgl_st_framebuffer_validate(struct st_context *st,
 	struct pipe_frontend_drawable *drawable, const enum st_attachment_type *statts,
-	unsigned count, struct pipe_resource **out)
+	unsigned count, struct pipe_resource **out, struct pipe_resource **resolve)
 {
-	struct hgl_context* context;
 	struct hgl_buffer* buffer;
 	unsigned stAttachmentMask, newMask;
 	unsigned i;
@@ -165,7 +164,6 @@ hgl_st_framebuffer_validate(struct st_context *st,
 
 	CALLED();
 
-	context = hgl_st_context(st);
 	buffer = hgl_st_framebuffer(drawable);
 
 	// Build mask of current attachments
@@ -175,16 +173,16 @@ hgl_st_framebuffer_validate(struct st_context *st,
 
 	newMask = stAttachmentMask & ~buffer->mask;
 
-	resized = (buffer->width != context->width)
-		|| (buffer->height != context->height);
+	resized = (buffer->width != buffer->newWidth)
+		|| (buffer->height != buffer->newHeight);
 
 	if (resized || newMask) {
 		boolean ret;
 		TRACE("%s: resize event. old:  %d x %d; new: %d x %d\n", __func__,
-			buffer->width, buffer->height, context->width, context->height);
+			buffer->width, buffer->height, buffer->newWidth, buffer->newHeight);
 
 		ret = hgl_st_framebuffer_validate_textures(drawable,
-			context->width, context->height, stAttachmentMask);
+			buffer->newWidth, buffer->newHeight, stAttachmentMask);
 
 		if (!ret)
 			return ret;
@@ -217,22 +215,21 @@ static uint32_t hgl_fb_ID = 0;
  * Create new framebuffer
  */
 struct hgl_buffer *
-hgl_create_st_framebuffer(struct hgl_context* context, void *winsysContext)
+hgl_create_st_framebuffer(struct hgl_display *display, struct st_visual* visual, void *winsysContext)
 {
 	struct hgl_buffer *buffer;
 	CALLED();
 
 	// Our requires before creating a framebuffer
-	assert(context);
-	assert(context->display);
-	assert(context->stVisual);
+	assert(display);
+	assert(visual);
 
 	buffer = CALLOC_STRUCT(hgl_buffer);
 	assert(buffer);
 
 	// Prepare our buffer
-	buffer->visual = context->stVisual;
-	buffer->screen = context->display->fscreen->screen;
+	buffer->visual = *visual;
+	buffer->screen = display->fscreen->screen;
 	buffer->winsysContext = winsysContext;
 
 	if (buffer->screen->get_param(buffer->screen, PIPE_CAP_NPOT_TEXTURES))
@@ -243,11 +240,11 @@ hgl_create_st_framebuffer(struct hgl_context* context, void *winsysContext)
 	// Prepare our frontend interface
 	buffer->base.flush_front = hgl_st_framebuffer_flush_front;
 	buffer->base.validate = hgl_st_framebuffer_validate;
-	buffer->base.visual = context->stVisual;
+	buffer->base.visual = &buffer->visual;
 
 	p_atomic_set(&buffer->base.stamp, 1);
 	buffer->base.ID = p_atomic_inc_return(&hgl_fb_ID);
-	buffer->base.fscreen = context->display->fscreen;
+	buffer->base.fscreen = display->fscreen;
 
 	return buffer;
 }
@@ -266,14 +263,61 @@ hgl_destroy_st_framebuffer(struct hgl_buffer *buffer)
 }
 
 
-struct st_visual*
-hgl_create_st_visual(ulong options)
+struct hgl_context*
+hgl_create_context(struct hgl_display *display, struct st_visual* visual, struct st_context* shared)
 {
-	struct st_visual* visual;
+	struct hgl_context* context = CALLOC_STRUCT(hgl_context);
+	assert(context);
+	context->display = display;
 
+	struct st_context_attribs attribs;
+	memset(&attribs, 0, sizeof(attribs));
+	attribs.options.force_glsl_extensions_warn = false;
+	attribs.profile = API_OPENGL_COMPAT;
+	attribs.visual = *visual;
+	attribs.major = 1;
+	attribs.minor = 0;
+
+	enum st_context_error result;
+	context->st = st_api_create_context(display->fscreen, &attribs, &result, shared);
+	if (context->st == NULL) {
+		FREE(context);
+		return NULL;
+	}
+
+	assert(!context->st->frontend_context);
+	context->st->frontend_context = (void*)context;
+
+	struct st_context *stContext = (struct st_context*)context->st;
+
+	// Init Gallium3D Post Processing
+	// TODO: no pp filters are enabled yet through postProcessEnable
+	context->postProcess = pp_init(stContext->pipe, context->postProcessEnable, stContext->cso_context, stContext, (void*)st_context_invalidate_state);
+
+	return context;
+}
+
+
+void
+hgl_destroy_context(struct hgl_context* context)
+{
+	if (context->st) {
+		st_context_flush(context->st, 0, NULL, NULL, NULL);
+		st_destroy_context(context->st);
+	}
+
+	if (context->postProcess)
+		pp_free(context->postProcess);
+
+	FREE(context);
+}
+
+
+void
+hgl_get_st_visual(struct st_visual* visual, ulong options)
+{
 	CALLED();
 
-	visual = CALLOC_STRUCT(st_visual);
 	assert(visual);
 
 	// Determine color format
@@ -301,30 +345,19 @@ hgl_create_st_visual(ulong options)
 		visual->buffer_mask |= ST_ATTACHMENT_BACK_LEFT_MASK;
 	}
 
-	#if 0
+#if 0
 	if ((options & BGL_STEREO) != 0) {
 		visual->buffer_mask |= ST_ATTACHMENT_FRONT_RIGHT_MASK;
 		if ((options & BGL_DOUBLE) != 0)
 			visual->buffer_mask |= ST_ATTACHMENT_BACK_RIGHT_MASK;
-    }
-	#endif
+  }
+#endif
 
 	if ((options & BGL_DEPTH) || (options & BGL_STENCIL))
 		visual->buffer_mask |= ST_ATTACHMENT_DEPTH_STENCIL_MASK;
 
 	TRACE("%s: Visual color format: %s\n", __func__,
 		util_format_name(visual->color_format));
-
-	return visual;
-}
-
-
-void
-hgl_destroy_st_visual(struct st_visual* visual)
-{
-	CALLED();
-
-	FREE(visual);
 }
 
 

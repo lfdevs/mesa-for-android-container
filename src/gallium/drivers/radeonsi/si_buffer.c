@@ -56,10 +56,7 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
    switch (res->b.b.usage) {
    case PIPE_USAGE_STREAM:
       res->flags |= RADEON_FLAG_GTT_WC;
-      if (sscreen->info.smart_access_memory)
-         res->domains = RADEON_DOMAIN_VRAM;
-      else
-         res->domains = RADEON_DOMAIN_GTT;
+      res->domains = RADEON_DOMAIN_GTT;
       break;
    case PIPE_USAGE_STAGING:
       /* Transfers are likely to occur more often with these
@@ -105,6 +102,12 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
       res->flags |= RADEON_FLAG_NO_SUBALLOC; /* shareable */
    else
       res->flags |= RADEON_FLAG_NO_INTERPROCESS_SHARING;
+
+   /* PIPE_BIND_CUSTOM is used by si_vid_create_buffer which wants
+    * non-suballocated buffers.
+    */
+   if (res->b.b.bind & PIPE_BIND_CUSTOM)
+      res->flags |= RADEON_FLAG_NO_SUBALLOC;
 
    if (res->b.b.bind & PIPE_BIND_PROTECTED ||
        /* Force scanout/depth/stencil buffer allocation to be encrypted */
@@ -157,8 +160,7 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
        * because they might never be moved back again. If a buffer is large enough,
        * upload data by copying from a temporary GTT buffer.
        */
-      if (!sscreen->info.smart_access_memory &&
-          sscreen->info.has_dedicated_vram &&
+      if (sscreen->info.has_dedicated_vram &&
           !res->b.cpu_storage && /* TODO: The CPU storage breaks this. */
           size >= sscreen->options.max_vram_map_size)
          res->b.b.flags |= PIPE_RESOURCE_FLAG_DONT_MAP_DIRECTLY;

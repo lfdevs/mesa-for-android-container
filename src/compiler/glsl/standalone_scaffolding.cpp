@@ -35,6 +35,7 @@
 #include "util/ralloc.h"
 #include "util/strtod.h"
 #include "main/mtypes.h"
+#include "string_to_uint_map.h"
 
 void
 _mesa_warning(struct gl_context *ctx, const char *fmt, ...)
@@ -55,7 +56,7 @@ _mesa_warning(struct gl_context *ctx, const char *fmt, ...)
 }
 
 void
-_mesa_problem(struct gl_context *ctx, const char *fmt, ...)
+_mesa_problem(const struct gl_context *ctx, const char *fmt, ...)
 {
     va_list vargs;
     (void) ctx;
@@ -177,6 +178,25 @@ _mesa_clear_shader_program_data(struct gl_context *ctx,
    shProg->data->NumAtomicBuffers = 0;
 }
 
+
+static void
+init_gl_program(struct gl_program *prog, bool is_arb_asm, gl_shader_stage stage)
+{
+   prog->RefCount = 1;
+   prog->Format = GL_PROGRAM_FORMAT_ASCII_ARB;
+   prog->info.use_legacy_math_rules = is_arb_asm;
+   prog->info.stage = stage;
+}
+
+static struct gl_program *
+standalone_new_program(UNUSED struct gl_context *ctx, gl_shader_stage stage,
+                       UNUSED GLuint id, bool is_arb_asm)
+{
+   struct gl_program *prog = rzalloc(NULL, struct gl_program);
+   init_gl_program(prog, is_arb_asm, stage);
+   return prog;
+}
+
 void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
 {
    memset(ctx, 0, sizeof(*ctx));
@@ -270,4 +290,59 @@ void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
       memcpy(&ctx->Const.ShaderCompilerOptions[sh], &options, sizeof(options));
 
    _mesa_locale_init();
+
+   ctx->Driver.NewProgram = standalone_new_program;
+}
+
+struct gl_shader_program *
+standalone_create_shader_program(void)
+{
+   struct gl_shader_program *whole_program;
+
+   whole_program = rzalloc (NULL, struct gl_shader_program);
+   assert(whole_program != NULL);
+   whole_program->data = rzalloc(whole_program, struct gl_shader_program_data);
+   assert(whole_program->data != NULL);
+   whole_program->data->InfoLog = ralloc_strdup(whole_program->data, "");
+
+   /* Created just to avoid segmentation faults */
+   whole_program->AttributeBindings = new string_to_uint_map;
+   whole_program->FragDataBindings = new string_to_uint_map;
+   whole_program->FragDataIndexBindings = new string_to_uint_map;
+
+   return whole_program;
+}
+
+void
+standalone_destroy_shader_program(struct gl_shader_program *whole_program)
+{
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (whole_program->_LinkedShaders[i])
+         _mesa_delete_linked_shader(NULL, whole_program->_LinkedShaders[i]);
+   }
+
+   delete whole_program->AttributeBindings;
+   delete whole_program->FragDataBindings;
+   delete whole_program->FragDataIndexBindings;
+   delete whole_program->UniformHash;
+
+   ralloc_free(whole_program);
+}
+
+struct gl_shader *
+standalone_add_shader_source(struct gl_context *ctx, struct gl_shader_program *whole_program, GLenum type, const char *source)
+{
+   struct gl_shader *shader = rzalloc(whole_program, gl_shader);
+   shader->Type = type;
+   shader->Stage = _mesa_shader_enum_to_shader_stage(type);
+   shader->Source = source;
+
+   whole_program->Shaders = reralloc(whole_program, whole_program->Shaders,
+                                     struct gl_shader *, whole_program->NumShaders + 1);
+   assert(whole_program->Shaders != NULL);
+
+   whole_program->Shaders[whole_program->NumShaders] = shader;
+   whole_program->NumShaders++;
+
+   return shader;
 }

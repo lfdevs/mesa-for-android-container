@@ -160,13 +160,26 @@ static void pvr_submit_info_ext_stream_init(
       submit_info->fw_ext_stream_len = 0;
 }
 
+static void
+pvr_submit_info_flags_init(const struct pvr_device_info *const dev_info,
+                           const struct pvr_sub_cmd_compute *const sub_cmd,
+                           uint32_t *const flags)
+{
+   *flags = 0;
+
+   if (sub_cmd->uses_barrier)
+      *flags |= PVR_WINSYS_COMPUTE_FLAG_PREVENT_ALL_OVERLAP;
+
+   if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support) &&
+       sub_cmd->uses_atomic_ops) {
+      *flags |= PVR_WINSYS_COMPUTE_FLAG_SINGLE_CORE;
+   }
+}
+
 static void pvr_compute_job_ws_submit_info_init(
    struct pvr_compute_ctx *ctx,
    struct pvr_sub_cmd_compute *sub_cmd,
-   struct vk_sync *barrier,
-   struct vk_sync **waits,
-   uint32_t wait_count,
-   uint32_t *stage_flags,
+   struct vk_sync *wait,
    struct pvr_winsys_compute_submit_info *submit_info)
 {
    const struct pvr_device *const device = ctx->device;
@@ -175,44 +188,24 @@ static void pvr_compute_job_ws_submit_info_init(
    memset(submit_info, 0, sizeof(*submit_info));
 
    submit_info->frame_num = device->global_queue_present_count;
-   submit_info->job_num = device->global_queue_job_count;
+   submit_info->job_num = device->global_cmd_buffer_submit_count;
 
-   submit_info->barrier = barrier;
-
-   submit_info->waits = waits;
-   submit_info->wait_count = wait_count;
-   submit_info->stage_flags = stage_flags;
+   submit_info->wait = wait;
 
    pvr_submit_info_stream_init(ctx, sub_cmd, submit_info);
    pvr_submit_info_ext_stream_init(ctx, submit_info);
-
-   if (sub_cmd->uses_barrier)
-      submit_info->flags |= PVR_WINSYS_COMPUTE_FLAG_PREVENT_ALL_OVERLAP;
-
-   if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support) &&
-       sub_cmd->uses_atomic_ops) {
-      submit_info->flags |= PVR_WINSYS_COMPUTE_FLAG_SINGLE_CORE;
-   }
+   pvr_submit_info_flags_init(dev_info, sub_cmd, &submit_info->flags);
 }
 
 VkResult pvr_compute_job_submit(struct pvr_compute_ctx *ctx,
                                 struct pvr_sub_cmd_compute *sub_cmd,
-                                struct vk_sync *barrier,
-                                struct vk_sync **waits,
-                                uint32_t wait_count,
-                                uint32_t *stage_flags,
+                                struct vk_sync *wait,
                                 struct vk_sync *signal_sync)
 {
    struct pvr_winsys_compute_submit_info submit_info;
    struct pvr_device *device = ctx->device;
 
-   pvr_compute_job_ws_submit_info_init(ctx,
-                                       sub_cmd,
-                                       barrier,
-                                       waits,
-                                       wait_count,
-                                       stage_flags,
-                                       &submit_info);
+   pvr_compute_job_ws_submit_info_init(ctx, sub_cmd, wait, &submit_info);
 
    if (PVR_IS_DEBUG_SET(DUMP_CONTROL_STREAM)) {
       pvr_csb_dump(&sub_cmd->control_stream,

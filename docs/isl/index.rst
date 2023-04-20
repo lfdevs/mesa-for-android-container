@@ -3,7 +3,7 @@ Intel Surface Layout (ISL)
 
 The Intel Surface Layout library (**ISL**) is a subproject in Mesa for doing
 surface layout calculations for Intel graphics drivers.  It was originally
-written by Chad Versace and is now maintained by Jason Ekstrand and Nanley
+written by Lina Versace and is now maintained by Faith Ekstrand and Nanley
 Chery.
 
 .. toctree::

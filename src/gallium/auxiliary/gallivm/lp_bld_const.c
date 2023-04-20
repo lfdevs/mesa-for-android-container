@@ -349,6 +349,24 @@ lp_build_const_int_vec(struct gallivm_state *gallivm, struct lp_type type,
    return LLVMConstVector(elems, type.length);
 }
 
+/* Returns an integer vector of [0, 1, 2, ...] */
+LLVMValueRef
+lp_build_const_channel_vec(struct gallivm_state *gallivm, struct lp_type type)
+{
+   LLVMTypeRef elem_type = lp_build_int_elem_type(gallivm, type);
+   LLVMValueRef elems[LP_MAX_VECTOR_LENGTH];
+
+   assert(type.length <= LP_MAX_VECTOR_LENGTH);
+
+   for (unsigned i = 0; i < type.length; ++i)
+      elems[i] = LLVMConstInt(elem_type, i, 0);
+
+   if (type.length == 1)
+      return elems[0];
+
+   return LLVMConstVector(elems, type.length);
+}
+
 
 LLVMValueRef
 lp_build_const_aos(struct gallivm_state *gallivm,

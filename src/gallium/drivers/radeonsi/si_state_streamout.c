@@ -110,9 +110,13 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
        */
       sctx->flags |= SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE;
 
-      /* The BUFFER_FILLED_SIZE is written using a PS_DONE event. */
       if (sctx->screen->use_ngg_streamout) {
-         sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
+         if (sctx->gfx_level >= GFX11) {
+            sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
+         } else {
+            /* The BUFFER_FILLED_SIZE is written using a PS_DONE event. */
+            sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
+         }
 
          /* Wait now. This is needed to make sure that GDS is not
           * busy at the end of IBs.
@@ -142,6 +146,10 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
    /* Stop streamout. */
    if (sctx->streamout.num_targets && sctx->streamout.begin_emitted)
       si_emit_streamout_end(sctx);
+
+   /* TODO: This is a hack that fixes streamout failures. It shouldn't be necessary. */
+   if (sctx->gfx_level >= GFX11 && !wait_now)
+      si_flush_gfx_cs(sctx, 0, NULL);
 
    /* Set the new targets. */
    unsigned enabled_mask = 0, append_bitmask = 0;
@@ -236,7 +244,7 @@ static void si_flush_vgt_streamout(struct si_context *sctx)
    }
 
    radeon_emit(PKT3(PKT3_EVENT_WRITE, 0, 0));
-   radeon_emit(EVENT_TYPE(EVENT_TYPE_SO_VGTSTREAMOUT_FLUSH) | EVENT_INDEX(0));
+   radeon_emit(EVENT_TYPE(V_028A90_SO_VGTSTREAMOUT_FLUSH) | EVENT_INDEX(0));
 
    radeon_emit(PKT3(PKT3_WAIT_REG_MEM, 5, 0));
    radeon_emit(WAIT_REG_MEM_EQUAL); /* wait until the register is equal to the reference value */
@@ -262,7 +270,20 @@ static void si_emit_streamout_begin(struct si_context *sctx)
 
       t[i]->stride_in_dw = sctx->streamout.stride_in_dw[i];
 
-      if (sctx->screen->use_ngg_streamout) {
+      if (sctx->gfx_level >= GFX11) {
+         if (sctx->streamout.append_bitmask & (1 << i)) {
+            /* Restore the register value. */
+            si_cp_copy_data(sctx, cs, COPY_DATA_REG, NULL,
+                            (R_031088_GDS_STRMOUT_DWORDS_WRITTEN_0 / 4) + i,
+                            COPY_DATA_SRC_MEM, t[i]->buf_filled_size,
+                            t[i]->buf_filled_size_offset);
+         } else {
+            /* Set to 0. */
+            radeon_begin(cs);
+            radeon_set_uconfig_reg(R_031088_GDS_STRMOUT_DWORDS_WRITTEN_0 + i * 4, 0);
+            radeon_end();
+         }
+      } else if (sctx->screen->use_ngg_streamout) {
          bool append = sctx->streamout.append_bitmask & (1 << i);
          uint64_t va = 0;
 
@@ -330,8 +351,13 @@ void si_emit_streamout_end(struct si_context *sctx)
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    struct si_streamout_target **t = sctx->streamout.targets;
 
-   if (!sctx->screen->use_ngg_streamout)
+   if (sctx->gfx_level >= GFX11) {
+      /* Wait for streamout to finish before reading GDS_STRMOUT registers. */
+      sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH;
+      sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
+   } else if (!sctx->screen->use_ngg_streamout) {
       si_flush_vgt_streamout(sctx);
+   }
 
    for (unsigned i = 0; i < sctx->streamout.num_targets; i++) {
       if (!t[i])
@@ -339,7 +365,13 @@ void si_emit_streamout_end(struct si_context *sctx)
 
       uint64_t va = t[i]->buf_filled_size->gpu_address + t[i]->buf_filled_size_offset;
 
-      if (sctx->screen->use_ngg_streamout) {
+      if (sctx->gfx_level >= GFX11) {
+         si_cp_copy_data(sctx, &sctx->gfx_cs, COPY_DATA_DST_MEM,
+                         t[i]->buf_filled_size, t[i]->buf_filled_size_offset,
+                         COPY_DATA_REG, NULL,
+                         (R_031088_GDS_STRMOUT_DWORDS_WRITTEN_0 >> 2) + i);
+         sctx->flags |= SI_CONTEXT_PFP_SYNC_ME;
+      } else if (sctx->screen->use_ngg_streamout) {
          /* TODO: PS_DONE doesn't ensure completion of VS if there are no PS waves. */
          si_cp_release_mem(sctx, &sctx->gfx_cs, V_028A90_PS_DONE, 0, EOP_DST_SEL_TC_L2,
                            EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM, EOP_DATA_SEL_GDS,

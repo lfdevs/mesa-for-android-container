@@ -125,6 +125,7 @@ namespace {
       const pipe_binary_program_header header { uint32_t(code.size()) };
       binary::section text { 0, section_type, header.num_bytes, {} };
 
+      text.data.reserve(sizeof(header) + header.num_bytes);
       text.data.insert(text.data.end(), reinterpret_cast<const char *>(&header),
                        reinterpret_cast<const char *>(&header) + sizeof(header));
       text.data.insert(text.data.end(), code.begin(), code.end());

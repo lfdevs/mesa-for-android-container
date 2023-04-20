@@ -36,7 +36,7 @@ $depsInstallPath="C:\mesa-deps"
 
 Push-Location $builddir
 
-meson `
+meson setup `
 --default-library=shared `
 --buildtype=release `
 --wrap-mode=nodownload `
@@ -49,7 +49,7 @@ meson `
 -Dshared-llvm=disabled `
 -Dvulkan-drivers="swrast,amd,microsoft-experimental" `
 -Dgallium-drivers="swrast,d3d12,zink" `
--Dgallium-va=true `
+-Dgallium-va=enabled `
 -Dvideo-codecs="h264dec,h264enc,h265dec,h265enc,vc1dec" `
 -Dshared-glapi=enabled `
 -Dgles1=enabled `

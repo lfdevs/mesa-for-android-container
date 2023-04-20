@@ -32,6 +32,8 @@
 
 #include "freedreno_context.h"
 
+BEGINC;
+
 bool fd_blitter_blit(struct fd_context *ctx,
                      const struct pipe_blit_info *info) assert_dt;
 
@@ -69,5 +71,7 @@ bool fd_blit(struct pipe_context *pctx,
       } \
    } \
 } while (0)
+
+ENDC;
 
 #endif /* FREEDRENO_BLIT_H_ */

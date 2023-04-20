@@ -1443,11 +1443,11 @@ static unsigned r600_bytecode_num_tex_and_vtx_instructions(const struct r600_byt
 	}
 }
 
-static inline boolean last_inst_was_not_vtx_fetch(struct r600_bytecode *bc)
+static inline boolean last_inst_was_not_vtx_fetch(struct r600_bytecode *bc, bool use_tc)
 {
 	return !((r600_isa_cf(bc->cf_last->op)->flags & CF_FETCH) &&
 		 bc->cf_last->op != CF_OP_GDS &&
-		 (bc->gfx_level == CAYMAN ||
+		 (bc->gfx_level == CAYMAN || use_tc ||
 		  bc->cf_last->op != CF_OP_TEX));
 }
 
@@ -1467,9 +1467,10 @@ static int r600_bytecode_add_vtx_internal(struct r600_bytecode *bc, const struct
 			egcm_load_index_reg(bc, vtx->buffer_index_mode - 1, false);
 	}
 
+
 	/* cf can contains only alu or only vtx or only tex */
 	if (bc->cf_last == NULL ||
-	    last_inst_was_not_vtx_fetch(bc) ||
+	    last_inst_was_not_vtx_fetch(bc, use_tc) ||
 	    bc->force_add_cf) {
 		r = r600_bytecode_add_cf(bc);
 		if (r) {

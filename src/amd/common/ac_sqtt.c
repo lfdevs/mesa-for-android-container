@@ -158,9 +158,12 @@ ac_check_profile_state(const struct radeon_info *info)
    char data[128];
    int n;
 
+   if (!info->pci.valid)
+      return false; /* Unknown but optimistic. */
+
    snprintf(path, sizeof(path),
             "/sys/bus/pci/devices/%04x:%02x:%02x.%x/power_dpm_force_performance_level",
-            info->pci_domain, info->pci_bus, info->pci_dev, info->pci_func);
+            info->pci.domain, info->pci.bus, info->pci.dev, info->pci.func);
 
    FILE *f = fopen(path, "r");
    if (!f)

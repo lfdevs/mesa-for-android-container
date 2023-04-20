@@ -440,6 +440,7 @@ st_create_texture_sampler_view_from_stobj(struct st_context *st,
    unsigned swizzle = glsl130_or_later ? texObj->SwizzleGLSL130 : texObj->Swizzle;
 
    templ.format = format;
+   templ.is_tex2d_from_buf = false;
 
    if (texObj->level_override >= 0) {
       templ.u.tex.first_level = templ.u.tex.last_level = texObj->level_override;
@@ -579,6 +580,7 @@ st_get_buffer_sampler_view_from_stobj(struct st_context *st,
     */
    struct pipe_sampler_view templ;
 
+   templ.is_tex2d_from_buf = false;
    templ.format =
       st_mesa_format_to_pipe_format(st, texObj->_BufferObjectFormat);
    templ.target = PIPE_BUFFER;

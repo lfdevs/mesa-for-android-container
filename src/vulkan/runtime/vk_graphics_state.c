@@ -62,8 +62,11 @@ get_dynamic_state_groups(BITSET_WORD *dynamic,
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE);
    }
 
-   if (groups & MESA_VK_GRAPHICS_STATE_DISCARD_RECTANGLES_BIT)
+   if (groups & MESA_VK_GRAPHICS_STATE_DISCARD_RECTANGLES_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_DR_RECTANGLES);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_DR_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_DR_MODE);
+   }
 
    if (groups & MESA_VK_GRAPHICS_STATE_RASTERIZATION_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_RS_RASTERIZER_DISCARD_ENABLE);
@@ -228,6 +231,8 @@ vk_get_dynamic_graphics_states(BITSET_WORD *dynamic,
       CASE( DEPTH_BIAS_ENABLE,            RS_DEPTH_BIAS_ENABLE)
       CASE( PRIMITIVE_RESTART_ENABLE,     IA_PRIMITIVE_RESTART_ENABLE)
       CASE( DISCARD_RECTANGLE_EXT,        DR_RECTANGLES)
+      CASE( DISCARD_RECTANGLE_ENABLE_EXT, DR_ENABLE)
+      CASE( DISCARD_RECTANGLE_MODE_EXT,   DR_MODE)
       CASE( SAMPLE_LOCATIONS_EXT,         MS_SAMPLE_LOCATIONS)
       CASE( FRAGMENT_SHADING_RATE_KHR,    FSR)
       CASE( LINE_STIPPLE_EXT,             RS_LINE_STIPPLE)
@@ -477,6 +482,8 @@ vk_dynamic_graphics_state_init_dr(struct vk_dynamic_graphics_state *dst,
                                   const BITSET_WORD *needed,
                                   const struct vk_discard_rectangles_state *dr)
 {
+   dst->dr.enable = dr->rectangle_count > 0;
+   dst->dr.mode = dr->mode;
    dst->dr.rectangle_count = dr->rectangle_count;
    typed_memcpy(dst->dr.rectangles, dr->rectangles, dr->rectangle_count);
 }
@@ -653,8 +660,13 @@ vk_multisample_state_init(struct vk_multisample_state *ms,
                           const BITSET_WORD *dynamic,
                           const VkPipelineMultisampleStateCreateInfo *ms_info)
 {
-   assert(ms_info->rasterizationSamples <= MESA_VK_MAX_SAMPLES);
-   ms->rasterization_samples = ms_info->rasterizationSamples;
+   if (IS_DYNAMIC(MS_RASTERIZATION_SAMPLES)) {
+      ms->rasterization_samples = 0;
+   } else {
+      assert(ms_info->rasterizationSamples <= MESA_VK_MAX_SAMPLES);
+      ms->rasterization_samples = ms_info->rasterizationSamples;
+   }
+
    ms->sample_shading_enable = ms_info->sampleShadingEnable;
    ms->min_sample_shading = ms_info->minSampleShading;
 
@@ -969,17 +981,34 @@ vk_render_pass_state_init(struct vk_render_pass_state *rp,
                           const struct vk_subpass_info *sp_info,
                           VkGraphicsPipelineLibraryFlagsEXT lib)
 {
+   VkPipelineCreateFlags valid_pipeline_flags = 0;
+   if (lib & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) {
+      valid_pipeline_flags |=
+         VK_PIPELINE_CREATE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR |
+         VK_PIPELINE_CREATE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_BIT_EXT;
+   }
+   if (lib & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT) {
+      valid_pipeline_flags |=
+         VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT |
+         VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+   }
+   const VkPipelineCreateFlags pipeline_flags =
+      vk_get_pipeline_rendering_flags(info) & valid_pipeline_flags;
+
    /* If we already have render pass state and it has attachment info, then
-    * it's complete and we don't need a new one.
+    * it's complete and we don't need a new one.  The one caveat here is that
+    * we may need to add in some rendering flags.
     */
    if (old_rp != NULL && vk_render_pass_state_is_complete(old_rp)) {
       *rp = *old_rp;
+      rp->pipeline_flags |= pipeline_flags;
       return;
    }
 
    *rp = (struct vk_render_pass_state) {
       .render_pass = info->renderPass,
       .subpass = info->subpass,
+      .pipeline_flags = pipeline_flags,
       .depth_attachment_format = VK_FORMAT_UNDEFINED,
       .stencil_attachment_format = VK_FORMAT_UNDEFINED,
    };
@@ -1035,16 +1064,6 @@ vk_render_pass_state_init(struct vk_render_pass_state *rp,
    rp->stencil_attachment_format = r_info->stencilAttachmentFormat;
    if (r_info->stencilAttachmentFormat != VK_FORMAT_UNDEFINED)
       rp->attachment_aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-   const VkRenderingSelfDependencyInfoMESA *rsd_info =
-      vk_find_struct_const(r_info->pNext, RENDERING_SELF_DEPENDENCY_INFO_MESA);
-   if (rsd_info != NULL) {
-      STATIC_ASSERT(sizeof(rp->color_self_dependencies) * 8 >=
-                    MESA_VK_MAX_COLOR_ATTACHMENTS);
-      rp->color_self_dependencies = rsd_info->colorSelfDependencies;
-      rp->depth_self_dependency = rsd_info->depthSelfDependency;
-      rp->stencil_self_dependency = rsd_info->stencilSelfDependency;
-   }
 
    const VkAttachmentSampleCountInfoAMD *asc_info =
       vk_get_pipeline_sample_count_info_amd(info);
@@ -1144,22 +1163,73 @@ vk_graphics_pipeline_state_fill(const struct vk_device *device,
    BITSET_DECLARE(dynamic, MESA_VK_DYNAMIC_GRAPHICS_STATE_ENUM_MAX);
    vk_get_dynamic_graphics_states(dynamic, info->pDynamicState);
 
-   for (uint32_t i = 0; i < info->stageCount; i++)
-      state->shader_stages |= info->pStages[i].stage;
-
-   /* In case we return early */
-   if (alloc_ptr_out != NULL)
-      *alloc_ptr_out = NULL;
-
    /*
     * First, figure out which library-level shader/state groups we need
     */
 
    VkGraphicsPipelineLibraryFlagsEXT lib;
-   if (info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR) {
-      const VkGraphicsPipelineLibraryCreateInfoEXT *gfx_lib_info =
-         vk_find_struct_const(info->pNext, GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT);
-      lib = gfx_lib_info->flags;
+   const VkGraphicsPipelineLibraryCreateInfoEXT *gpl_info =
+      vk_find_struct_const(info->pNext, GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT);
+   const VkPipelineLibraryCreateInfoKHR *lib_info =
+      vk_find_struct_const(info->pNext, PIPELINE_LIBRARY_CREATE_INFO_KHR);
+
+   VkShaderStageFlagBits allowed_stages;
+   if (!(info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) {
+      allowed_stages = VK_SHADER_STAGE_ALL_GRAPHICS |
+                       VK_SHADER_STAGE_TASK_BIT_EXT |
+                       VK_SHADER_STAGE_MESH_BIT_EXT;
+   } else if (gpl_info) {
+      allowed_stages = 0;
+
+      /* If we're creating a pipeline library without pre-rasterization,
+       * discard all the associated stages.
+       */
+      if (gpl_info->flags &
+          VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
+         allowed_stages |= (VK_SHADER_STAGE_VERTEX_BIT |
+                            VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+                            VK_SHADER_STAGE_GEOMETRY_BIT |
+                            VK_SHADER_STAGE_TASK_BIT_EXT |
+                            VK_SHADER_STAGE_MESH_BIT_EXT);
+      }
+
+      /* If we're creating a pipeline library without fragment shader,
+       * discard that stage.
+       */
+      if (gpl_info->flags &
+           VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)
+         allowed_stages |= VK_SHADER_STAGE_FRAGMENT_BIT;
+   } else {
+      /* VkGraphicsPipelineLibraryCreateInfoEXT was omitted, flags should
+       * be assumed to be empty and therefore no shader stage should be
+       * considered.
+       */
+      allowed_stages = 0;
+   }
+
+   for (uint32_t i = 0; i < info->stageCount; i++) {
+      state->shader_stages |= info->pStages[i].stage & allowed_stages;
+   }
+
+   /* In case we return early */
+   if (alloc_ptr_out != NULL)
+      *alloc_ptr_out = NULL;
+
+   if (gpl_info) {
+      lib = gpl_info->flags;
+   } else if ((lib_info && lib_info->libraryCount > 0) ||
+              (info->flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)) {
+     /*
+      * From the Vulkan 1.3.210 spec:
+      *    "If this structure is omitted, and either VkGraphicsPipelineCreateInfo::flags
+      *    includes VK_PIPELINE_CREATE_LIBRARY_BIT_KHR or the
+      *    VkGraphicsPipelineCreateInfo::pNext chain includes a
+      *    VkPipelineLibraryCreateInfoKHR structure with a libraryCount greater than 0,
+      *    it is as if flags is 0. Otherwise if this structure is omitted, it is as if
+      *    flags includes all possible subsets of the graphics pipeline."
+      */
+      lib = 0;
    } else {
       /* We're building a complete pipeline.  From the Vulkan 1.3.218 spec:
        *
@@ -1653,6 +1723,8 @@ vk_dynamic_graphics_state_copy(struct vk_dynamic_graphics_state *dst,
    COPY_IF_SET(VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE,
                vp.depth_clip_negative_one_to_one);
 
+   COPY_IF_SET(DR_ENABLE, dr.enable);
+   COPY_IF_SET(DR_MODE, dr.mode);
    if (IS_SET_IN_SRC(DR_RECTANGLES)) {
       COPY_MEMBER(DR_RECTANGLES, dr.rectangle_count);
       COPY_ARRAY(DR_RECTANGLES, dr.rectangles, src->dr.rectangle_count);
@@ -2191,8 +2263,9 @@ vk_common_CmdSetSampleMaskEXT(VkCommandBuffer commandBuffer,
    struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
 
    assert(samples <= MESA_VK_MAX_SAMPLES);
+   VkSampleMask sample_mask = *pSampleMask & BITFIELD_MASK(MESA_VK_MAX_SAMPLES);
 
-   SET_DYN_VALUE(dyn, MS_SAMPLE_MASK, ms.sample_mask, *pSampleMask);
+   SET_DYN_VALUE(dyn, MS_SAMPLE_MASK, ms.sample_mask, sample_mask);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2550,4 +2623,24 @@ vk_common_CmdSetColorBlendAdvancedEXT(VkCommandBuffer commandBuffer,
                                       const VkColorBlendAdvancedEXT* pColorBlendAdvanced)
 {
    unreachable("VK_EXT_blend_operation_advanced unsupported");
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetDiscardRectangleEnableEXT(VkCommandBuffer commandBuffer,
+                                          VkBool32 discardRectangleEnable)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, DR_ENABLE, dr.enable, discardRectangleEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetDiscardRectangleModeEXT(VkCommandBuffer commandBuffer,
+                                        VkDiscardRectangleModeEXT discardRectangleMode)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, DR_MODE, dr.mode, discardRectangleMode);
 }

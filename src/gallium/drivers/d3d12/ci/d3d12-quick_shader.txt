@@ -1,12 +1,5 @@
-spec@arb_gpu_shader5@execution@built-in-functions@fs-interpolateatcentroid-array-of-structs,Crash
-spec@arb_gpu_shader5@execution@ubo_array_indexing@fs-masked,Fail
-spec@arb_gpu_shader5@execution@ubo_array_indexing@fs-nonuniform-control-flow,Fail
-spec@arb_gpu_shader5@execution@ubo_array_indexing@vs-nonuniform-control-flow,Fail
-spec@arb_gpu_shader_fp64@execution@inout@vs-out-fs-in-s1@2-s2@2-s3@2-double-location-0,Crash
 spec@arb_gpu_shader_fp64@execution@vs-fs-explicit-locations,Crash
 spec@arb_gpu_shader_int64@execution@indirect-array-two-accesses,Fail
-spec@arb_gpu_shader_int64@execution@inout@vs-out-fs-in-s1@2-s2@2-s3@2-int64_t-location-0,Crash
-spec@arb_gpu_shader_int64@execution@inout@vs-out-fs-in-s1@2-s2@2-s3@2-uint64_t-location-0,Crash
 spec@arb_separate_shader_objects@execution@layout-location-block-with-struct-member,Crash
 spec@arb_separate_shader_objects@execution@layout-location-struct-mixed-with-implicitly-assigned-varying,Crash
 spec@arb_shader_storage_buffer_object@execution@ssbo-atomiccompswap-int,Fail
@@ -56,4 +49,3 @@ spec@glsl-1.50@execution@primitive-id-no-gs-line,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Crash
-spec@glsl-4.00@execution@inout@vs-out-fs-in-s1@2-s2@2-s3@2-double-location-0,Crash

@@ -476,6 +476,11 @@ st_translate_stream_output_info(struct gl_program *prog)
    struct pipe_stream_output_info *so_info =
       &prog->state.stream_output;
 
+   if (!num_outputs) {
+      so_info->num_outputs = 0;
+      return;
+   }
+
    for (unsigned i = 0; i < info->NumOutputs; i++) {
       so_info->output[i].register_index =
          output_mapping[info->Outputs[i].OutputRegister];
@@ -937,6 +942,14 @@ st_create_fp_variant(struct st_context *st,
       nir_shader *shader = state.ir.nir;
       nir_foreach_shader_in_variable(var, shader)
          var->data.sample = true;
+
+      /* In addition to requiring per-sample interpolation, sample shading
+       * changes the behaviour of gl_SampleMaskIn, so we need per-sample shading
+       * even if there are no shader-in variables at all. In that case,
+       * uses_sample_shading won't be set by glsl_to_nir. We need to do so here.
+       */
+      shader->info.fs.uses_sample_shading = true;
+
       finalize = true;
    }
 
@@ -1262,7 +1275,7 @@ st_precompile_shader_variant(struct st_context *st,
 
       memset(&key, 0, sizeof(key));
 
-      if (st->ctx->API == API_OPENGL_COMPAT &&
+      if (_mesa_is_desktop_gl_compat(st->ctx) &&
           st->clamp_vert_color_in_shader &&
           (prog->info.outputs_written & (VARYING_SLOT_COL0 |
                                          VARYING_SLOT_COL1 |

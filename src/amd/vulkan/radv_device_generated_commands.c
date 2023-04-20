@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "radv_meta.h"
+#include "meta/radv_meta.h"
 #include "radv_private.h"
 
 #include "nir_builder.h"
@@ -33,11 +33,13 @@ radv_get_sequence_size(const struct radv_indirect_command_layout *layout,
                        const struct radv_graphics_pipeline *pipeline, uint32_t *cmd_size,
                        uint32_t *upload_size)
 {
+   const struct radv_device *device = container_of(layout->base.device, struct radv_device, vk);
+   const struct radv_shader *vs = radv_get_shader(pipeline->base.shaders, MESA_SHADER_VERTEX);
    *cmd_size = 0;
    *upload_size = 0;
 
    if (layout->bind_vbo_mask) {
-      *upload_size += 16 * util_bitcount(pipeline->vb_desc_usage_mask);
+      *upload_size += 16 * util_bitcount(vs->info.vs.vb_desc_usage_mask);
 
      /* One PKT3_SET_SH_REG for emitting VBO pointer (32-bit) */
       *cmd_size += 3 * 4;
@@ -85,7 +87,7 @@ radv_get_sequence_size(const struct radv_indirect_command_layout *layout,
       /* One PKT3_SET_CONTEXT_REG (PA_SU_SC_MODE_CNTL) */
       *cmd_size += 3 * 4;
 
-      if (pipeline->base.device->physical_device->rad_info.has_gfx9_scissor_bug) {
+      if (device->physical_device->rad_info.has_gfx9_scissor_bug) {
          /* 1 reg write of 4 regs + 1 reg write of 2 regs per scissor */
          *cmd_size += (8 + 2 * MAX_SCISSORS) * 4;
       }
@@ -965,7 +967,7 @@ radv_device_init_dgc_prepare_state(struct radv_device *device)
 
    result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
                                          &pipeline_info, &device->meta_state.alloc,
-                                         &device->meta_state.dgc_prepare.pipeline, true);
+                                         &device->meta_state.dgc_prepare.pipeline);
    if (result != VK_SUCCESS)
       goto cleanup;
 
@@ -1106,6 +1108,7 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
    VK_FROM_HANDLE(radv_pipeline, pipeline, pGeneratedCommandsInfo->pipeline);
    VK_FROM_HANDLE(radv_buffer, prep_buffer, pGeneratedCommandsInfo->preprocessBuffer);
    struct radv_graphics_pipeline *graphics_pipeline = radv_pipeline_to_graphics(pipeline);
+   struct radv_shader *vs = radv_get_shader(graphics_pipeline->base.shaders, MESA_SHADER_VERTEX);
    struct radv_meta_saved_state saved_state;
    struct radv_buffer token_buffer;
 
@@ -1115,7 +1118,7 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
    unsigned cmd_buf_size =
       radv_align_cmdbuf_size(cmd_stride * pGeneratedCommandsInfo->sequencesCount);
 
-   unsigned vb_size = layout->bind_vbo_mask ? util_bitcount(graphics_pipeline->vb_desc_usage_mask) * 24 : 0;
+   unsigned vb_size = layout->bind_vbo_mask ? util_bitcount(vs->info.vs.vb_desc_usage_mask) * 24 : 0;
    unsigned const_size = graphics_pipeline->base.push_constant_size +
                          16 * graphics_pipeline->base.dynamic_offset_count +
                          sizeof(layout->push_constant_offsets) + ARRAY_SIZE(graphics_pipeline->base.shaders) * 12;
@@ -1151,11 +1154,12 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
    if (cmd_buffer->state.graphics_pipeline->uses_baseinstance)
       vtx_base_sgpr |= DGC_USES_BASEINSTANCE;
 
-   uint16_t vbo_sgpr =
-      ((radv_lookup_user_sgpr(&graphics_pipeline->base, MESA_SHADER_VERTEX, AC_UD_VS_VERTEX_BUFFERS)->sgpr_idx * 4 +
-        graphics_pipeline->base.user_data_0[MESA_SHADER_VERTEX]) -
-       SI_SH_REG_OFFSET) >>
-      2;
+   const struct radv_shader *vertex_shader =
+      radv_get_shader(graphics_pipeline->base.shaders, MESA_SHADER_VERTEX);
+   uint16_t vbo_sgpr = ((radv_get_user_sgpr(vertex_shader, AC_UD_VS_VERTEX_BUFFERS)->sgpr_idx * 4 +
+                         vertex_shader->info.user_data_0) -
+                        SI_SH_REG_OFFSET) >>
+                       2;
    struct radv_dgc_params params = {
       .cmd_buf_stride = cmd_stride,
       .cmd_buf_size = cmd_buf_size,
@@ -1179,20 +1183,22 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
    };
 
    if (layout->bind_vbo_mask) {
+      uint32_t mask = vertex_shader->info.vs.vb_desc_usage_mask;
+      unsigned vb_desc_alloc_size = util_bitcount(mask) * 16;
+
       radv_write_vertex_descriptors(cmd_buffer, graphics_pipeline, true, upload_data);
 
-      uint32_t *vbo_info = (uint32_t *)((char *)upload_data + graphics_pipeline->vb_desc_alloc_size);
+      uint32_t *vbo_info = (uint32_t *)((char *)upload_data + vb_desc_alloc_size);
 
-      uint32_t mask = graphics_pipeline->vb_desc_usage_mask;
       unsigned idx = 0;
       while (mask) {
          unsigned i = u_bit_scan(&mask);
          unsigned binding =
-            graphics_pipeline->use_per_attribute_vb_descs ? graphics_pipeline->attrib_bindings[i] : i;
+            vertex_shader->info.vs.use_per_attribute_vb_descs ? graphics_pipeline->attrib_bindings[i] : i;
          uint32_t attrib_end = graphics_pipeline->attrib_ends[i];
 
          params.vbo_bind_mask |= ((layout->bind_vbo_mask >> binding) & 1u) << idx;
-         vbo_info[2 * idx] = ((graphics_pipeline->use_per_attribute_vb_descs ? 1u : 0u) << 31) |
+         vbo_info[2 * idx] = ((vertex_shader->info.vs.use_per_attribute_vb_descs ? 1u : 0u) << 31) |
                              layout->vbo_offsets[binding];
          vbo_info[2 * idx + 1] = graphics_pipeline->attrib_index_offset[i] | (attrib_end << 16);
          ++idx;
@@ -1210,7 +1216,8 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
          if (!graphics_pipeline->base.shaders[i])
             continue;
 
-         struct radv_userdata_locations *locs = &graphics_pipeline->base.shaders[i]->info.user_sgprs_locs;
+         const struct radv_shader *shader = graphics_pipeline->base.shaders[i];
+         const struct radv_userdata_locations *locs = &shader->info.user_sgprs_locs;
          if (locs->shader_data[AC_UD_PUSH_CONSTANTS].sgpr_idx >= 0)
             params.const_copy = 1;
 
@@ -1221,13 +1228,13 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
 
             if (locs->shader_data[AC_UD_PUSH_CONSTANTS].sgpr_idx >= 0) {
                upload_sgpr =
-                  (graphics_pipeline->base.user_data_0[i] + 4 * locs->shader_data[AC_UD_PUSH_CONSTANTS].sgpr_idx -
+                  (shader->info.user_data_0 + 4 * locs->shader_data[AC_UD_PUSH_CONSTANTS].sgpr_idx -
                    SI_SH_REG_OFFSET) >>
                   2;
             }
 
             if (locs->shader_data[AC_UD_INLINE_PUSH_CONSTANTS].sgpr_idx >= 0) {
-               inline_sgpr = (graphics_pipeline->base.user_data_0[i] +
+               inline_sgpr = (shader->info.user_data_0 +
                               4 * locs->shader_data[AC_UD_INLINE_PUSH_CONSTANTS].sgpr_idx -
                               SI_SH_REG_OFFSET) >>
                              2;

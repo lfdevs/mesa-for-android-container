@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <vulkan/vulkan.h>
 
+#include "pvr_srv_sync.h"
 #include "pvr_winsys.h"
 #include "util/macros.h"
 #include "util/vma.h"
@@ -70,6 +71,9 @@ struct pvr_srv_winsys {
 
    int master_fd;
    int render_fd;
+
+   struct pvr_device *presignaled_sync_device;
+   struct pvr_srv_sync *presignaled_sync;
 
    const VkAllocationCallbacks *alloc;
 
@@ -129,5 +133,8 @@ pvr_srv_sync_prim_get_fw_addr(const struct pvr_srv_sync_prim *const sync_prim)
 {
    return sync_prim->srv_ws->sync_block_fw_addr + sync_prim->offset;
 }
+
+VkResult pvr_srv_sync_get_presignaled_sync(struct pvr_device *device,
+                                           struct pvr_srv_sync **out_sync);
 
 #endif /* PVR_SRV_H */

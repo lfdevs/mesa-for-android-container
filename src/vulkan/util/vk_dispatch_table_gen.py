@@ -461,7 +461,7 @@ vk_device_entrypoint_is_enabled(int index, uint32_t core_version,
 #ifdef _MSC_VER
 VKAPI_ATTR void VKAPI_CALL vk_entrypoint_stub(void)
 {
-   unreachable(!"Entrypoint not implemented");
+   unreachable("Entrypoint not implemented");
 }
 
 static const void *get_function_target(const void *func)

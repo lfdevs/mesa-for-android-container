@@ -286,6 +286,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
    info.base_level = iview->vk.base_mip_level;
    info.mip_levels = iview->vk.level_count;
    info.extent = image->vk.extent;
+   info.aspect_mask = image->vk.aspects;
    info.is_cube = (info.type == VK_IMAGE_VIEW_TYPE_CUBE ||
                    info.type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY);
    info.array_size = iview->vk.layer_count;
@@ -299,10 +300,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
    info.sample_count = image->vk.samples;
    info.addr = image->dev_addr;
 
-   /* TODO: if ERN_46863 is supported, Depth and stencil are sampled separately
-    * from images with combined depth+stencil. Add logic here to handle it.
-    */
-   info.format = iview->vk.format;
+   info.format = pCreateInfo->format;
 
    vk_component_mapping_to_pipe_swizzle(iview->vk.swizzle, input_swizzle);
    format_swizzle = pvr_get_format_swizzle(info.format);

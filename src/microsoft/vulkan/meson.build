@@ -84,12 +84,12 @@ libvulkan_dzn = shared_library(
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux,
     inc_compiler, inc_util
   ],
-  dependencies : [dzn_deps, idep_vulkan_wsi],
+  dependencies : [dzn_deps, idep_vulkan_wsi, idep_xmlconfig],
   c_args : dzn_flags,
   cpp_args : dzn_cpp_flags,
   gnu_symbol_visibility : 'hidden',
   link_args : [ld_args_bsymbolic, ld_args_gc_sections],
-  name_prefix : host_machine.system() == 'windows' ? '' : 'lib',
+  name_prefix : host_machine.system() == 'windows' ? '' : [],
   install : true,
 )
 
@@ -130,15 +130,13 @@ dzn_icd = custom_target(
   install : true,
 )
 
-if meson.version().version_compare('>= 0.58')
-  _dev_icdname = 'dzn_devenv_icd.@0@.json'.format(host_machine.cpu())
-  custom_target(
-    'dzn_devenv_icd',
-    input : [vk_icd_gen, vk_api_xml],
-    output : _dev_icdname,
-    command : icd_dev_command,
-    build_by_default : true,
-  )
+_dev_icdname = 'dzn_devenv_icd.@0@.json'.format(host_machine.cpu())
+_dev_icd = custom_target(
+  'dzn_devenv_icd',
+  input : [vk_icd_gen, vk_api_xml],
+  output : _dev_icdname,
+  command : icd_dev_command,
+  build_by_default : true,
+)
 
-  devenv.append('VK_ICD_FILENAMES', meson.current_build_dir() / _dev_icdname)
-endif
+devenv.append('VK_ICD_FILENAMES', _dev_icd.full_path())

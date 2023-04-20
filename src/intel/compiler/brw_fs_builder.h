@@ -627,8 +627,6 @@ namespace brw {
       ALU2(DP3)
       ALU2(DP4)
       ALU2(DPH)
-      ALU1(F16TO32)
-      ALU1(F32TO16)
       ALU1(FBH)
       ALU1(FBL)
       ALU1(FRC)
@@ -661,6 +659,36 @@ namespace brw {
 #undef ALU2_ACC
 #undef ALU2
 #undef ALU1
+
+      instruction *
+      F32TO16(const dst_reg &dst, const src_reg &src) const
+      {
+         assert(dst.type == BRW_REGISTER_TYPE_HF);
+         assert(src.type == BRW_REGISTER_TYPE_F);
+
+         if (shader->devinfo->ver >= 8) {
+            return MOV(dst, src);
+         } else {
+            assert(shader->devinfo->ver == 7);
+            return emit(BRW_OPCODE_F32TO16,
+                        retype(dst, BRW_REGISTER_TYPE_W), src);
+         }
+      }
+
+      instruction *
+      F16TO32(const dst_reg &dst, const src_reg &src) const
+      {
+         assert(dst.type == BRW_REGISTER_TYPE_F);
+         assert(src.type == BRW_REGISTER_TYPE_HF);
+
+         if (shader->devinfo->ver >= 8) {
+            return MOV(dst, src);
+         } else {
+            assert(shader->devinfo->ver == 7);
+            return emit(BRW_OPCODE_F16TO32,
+                        dst, retype(src, BRW_REGISTER_TYPE_W));
+         }
+      }
       /** @} */
 
       /**

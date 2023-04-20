@@ -42,9 +42,13 @@
 #endif
 
 #if defined(__GNUC__)
+    #include <signal.h>
     #include <assert.h>
 #endif
 
+#if defined(_WIN32)
+#include <intrin.h>
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Platform specific debug break defines
@@ -89,7 +93,13 @@
     #else
         #define ADDR_ASSERT(__e) if ( !((__e) ? TRUE : FALSE)) { ADDR_DBG_BREAK(); }
     #endif
-    #define ADDR_ASSERT_ALWAYS() ADDR_DBG_BREAK()
+
+    #if ADDR_SILENCE_ASSERT_ALWAYS
+        #define ADDR_ASSERT_ALWAYS()
+    #else
+        #define ADDR_ASSERT_ALWAYS() ADDR_DBG_BREAK()
+    #endif
+
     #define ADDR_UNHANDLED_CASE() ADDR_ASSERT(!"Unhandled case")
     #define ADDR_NOT_IMPLEMENTED() ADDR_ASSERT(!"Not implemented");
 #else //DEBUG
@@ -317,6 +327,49 @@ static inline UINT_32 XorReduce(
     }
 
     return result;
+}
+
+/**
+****************************************************************************************************
+*   Unset least bit
+*
+*   @brief
+*       Returns a copy of the value with the least-significant '1' bit unset
+****************************************************************************************************
+*/
+static inline UINT_32 UnsetLeastBit(
+    UINT_32 val)
+{
+    return val & (val - 1);
+}
+
+/**
+****************************************************************************************************
+*   BitScanForward
+*
+*   @brief
+*       Returns the index-position of the least-significant '1' bit. Must not be 0.
+****************************************************************************************************
+*/
+static inline UINT_32 BitScanForward(
+    UINT_32 mask) ///< [in] Bitmask to scan
+{
+    ADDR_ASSERT(mask > 0);
+    unsigned long out = 0;
+#if (defined(_WIN64) && defined(_M_X64)) || (defined(_WIN32) && defined(_M_IX64))
+    out = ::_tzcnt_u32(mask);
+#elif (defined(_WIN32) || defined(_WIN64))
+    ::_BitScanForward(&out, mask);
+#elif defined(__GNUC__)
+    out = __builtin_ctz(mask);
+#else
+    while ((mask & 1) == 0)
+    {
+        mask >>= 1;
+        out++;
+    }
+#endif
+    return out;
 }
 
 /**
@@ -973,6 +1026,37 @@ static inline UINT_32 GetCoordActiveMask(
     }
 
     return mask;
+}
+
+/**
+****************************************************************************************************
+*   FillEqBitComponents
+*
+*   @brief
+*       Fill the 'numBitComponents' field based on the equation.
+****************************************************************************************************
+*/
+static inline void FillEqBitComponents(
+    ADDR_EQUATION *pEquation) // [in/out] Equation to calculate bit components for
+{
+    pEquation->numBitComponents = 1; // We always have at least the address
+    for (UINT_32 xorN = 1; xorN < ADDR_MAX_EQUATION_COMP; xorN++)
+    {
+        for (UINT_32 bit = 0; bit < ADDR_MAX_EQUATION_BIT; bit++)
+        {
+            if (pEquation->comps[xorN][bit].valid)
+            {
+                pEquation->numBitComponents = xorN + 1;
+                break;
+            }
+        }
+
+        if (pEquation->numBitComponents != (xorN + 1))
+        {
+            // Skip following components if this one wasn't valid
+            break;
+        }
+    }
 }
 
 /**

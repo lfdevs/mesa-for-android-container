@@ -97,7 +97,8 @@ dzn_wsi_init(struct dzn_physical_device *physical_device)
                             dzn_physical_device_to_handle(physical_device),
                             dzn_wsi_proc_addr,
                             &physical_device->vk.instance->alloc,
-                            -1, NULL, sw);
+                            -1, NULL,
+                            &(struct wsi_device_options){.sw_device = sw});
 
    if (result != VK_SUCCESS)
       return result;

@@ -1342,11 +1342,6 @@ emit_3dstate_vs(struct anv_graphics_pipeline *pipeline)
       assert(!vs_prog_data->base.base.use_alt_mode);
       vs.SingleVertexDispatch       = false;
       vs.VectorMaskEnable           = false;
-      /* Wa_1606682166:
-       * Incorrect TDL's SSP address shift in SARB for 16:6 & 18:8 modes.
-       * Disable the Sampler state prefetch functionality in the SARB by
-       * programming 0xB000[30] to '1'.
-       */
       vs.SamplerCount               = get_sampler_count(vs_bin);
       vs.BindingTableEntryCount     = vs_bin->bind_map.surface_count;
       vs.FloatingPointMode          = IEEE754;
@@ -1396,7 +1391,6 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       hs.Enable = true;
       hs.StatisticsEnable = true;
       hs.KernelStartPointer = tcs_bin->kernel.offset;
-      /* Wa_1606682166 */
       hs.SamplerCount = get_sampler_count(tcs_bin);
       hs.BindingTableEntryCount = tcs_bin->bind_map.surface_count;
 
@@ -1440,7 +1434,6 @@ emit_3dstate_hs_te_ds(struct anv_graphics_pipeline *pipeline,
       ds.Enable = true;
       ds.StatisticsEnable = true;
       ds.KernelStartPointer = tes_bin->kernel.offset;
-      /* Wa_1606682166 */
       ds.SamplerCount = get_sampler_count(tes_bin);
       ds.BindingTableEntryCount = tes_bin->bind_map.surface_count;
       ds.MaximumNumberofThreads = devinfo->max_tes_threads - 1;
@@ -1493,7 +1486,6 @@ emit_3dstate_gs(struct anv_graphics_pipeline *pipeline)
 
       gs.SingleProgramFlow       = false;
       gs.VectorMaskEnable        = false;
-      /* Wa_1606682166 */
       gs.SamplerCount            = get_sampler_count(gs_bin);
       gs.BindingTableEntryCount  = gs_bin->bind_map.surface_count;
       gs.IncludeVertexHandles    = gs_prog_data->base.include_vue_handles;
@@ -1536,6 +1528,13 @@ emit_3dstate_gs(struct anv_graphics_pipeline *pipeline)
       gs.ScratchSpaceBasePointer =
          get_scratch_address(&pipeline->base, MESA_SHADER_GEOMETRY, gs_bin);
    }
+}
+
+static bool
+rp_has_ds_self_dep(const struct vk_render_pass_state *rp)
+{
+   return rp->pipeline_flags &
+      VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 }
 
 static void
@@ -1588,7 +1587,7 @@ emit_3dstate_wm(struct anv_graphics_pipeline *pipeline,
 #endif
 
       wm.BarycentricInterpolationMode =
-         wm_prog_data->barycentric_interp_modes;
+         wm_prog_data_barycentric_modes(wm_prog_data, 0);
 
 #if GFX_VER < 8
       wm.PixelShaderComputedDepthMode  = wm_prog_data->computed_depth_mode;
@@ -1603,9 +1602,9 @@ emit_3dstate_wm(struct anv_graphics_pipeline *pipeline,
        * may get the depth or stencil value from the current draw rather
        * than the previous one.
        */
-      wm.PixelShaderKillsPixel         = rp->depth_self_dependency ||
-                                         rp->stencil_self_dependency ||
-                                         wm_prog_data->uses_kill;
+      wm.PixelShaderKillsPixel         = rp_has_ds_self_dep(rp) ||
+                                         wm_prog_data->uses_kill ||
+                                         wm_prog_data->uses_omask;
 
       pipeline->force_fragment_thread_dispatch =
          wm.PixelShaderComputedDepthMode != PSCDEPTH_OFF ||
@@ -1613,7 +1612,7 @@ emit_3dstate_wm(struct anv_graphics_pipeline *pipeline,
          wm.PixelShaderKillsPixel;
 
       if (ms != NULL && ms->rasterization_samples > 1) {
-         if (wm_prog_data->persample_dispatch) {
+         if (brw_wm_prog_data_is_persample(wm_prog_data, 0)) {
             wm.MultisampleDispatchMode = MSDISPMODE_PERSAMPLE;
          } else {
             wm.MultisampleDispatchMode = MSDISPMODE_PERPIXEL;
@@ -1679,7 +1678,8 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
 
    anv_batch_emit(&pipeline->base.batch, GENX(3DSTATE_PS), ps) {
       intel_set_ps_dispatch_state(&ps, devinfo, wm_prog_data,
-                                  ms != NULL ? ms->rasterization_samples : 1);
+                                  ms != NULL ? ms->rasterization_samples : 1,
+                                  0 /* msaa_flags */);
 
       ps.KernelStartPointer0 = fs_bin->kernel.offset +
                                brw_wm_prog_data_prog_offset(wm_prog_data, ps, 0);
@@ -1691,7 +1691,6 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
       ps.SingleProgramFlow          = false;
       ps.VectorMaskEnable           = GFX_VER >= 8 &&
                                       wm_prog_data->uses_vmask;
-      /* Wa_1606682166 */
       ps.SamplerCount               = get_sampler_count(fs_bin);
       ps.BindingTableEntryCount     = fs_bin->bind_map.surface_count;
       ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0 ||
@@ -1748,7 +1747,8 @@ emit_3dstate_ps_extra(struct anv_graphics_pipeline *pipeline,
       ps.PixelShaderValid              = true;
       ps.AttributeEnable               = wm_prog_data->num_varying_inputs > 0;
       ps.oMaskPresenttoRenderTarget    = wm_prog_data->uses_omask;
-      ps.PixelShaderIsPerSample        = wm_prog_data->persample_dispatch;
+      ps.PixelShaderIsPerSample        =
+         brw_wm_prog_data_is_persample(wm_prog_data, 0);
       ps.PixelShaderComputedDepthMode  = wm_prog_data->computed_depth_mode;
       ps.PixelShaderUsesSourceDepth    = wm_prog_data->uses_src_depth;
       ps.PixelShaderUsesSourceW        = wm_prog_data->uses_src_w;
@@ -1759,8 +1759,7 @@ emit_3dstate_ps_extra(struct anv_graphics_pipeline *pipeline,
        * around to fetching from the input attachment and we may get the depth
        * or stencil value from the current draw rather than the previous one.
        */
-      ps.PixelShaderKillsPixel         = rp->depth_self_dependency ||
-                                         rp->stencil_self_dependency ||
+      ps.PixelShaderKillsPixel         = rp_has_ds_self_dep(rp) ||
                                          wm_prog_data->uses_kill;
 
       ps.PixelShaderUsesInputCoverageMask = wm_prog_data->uses_sample_mask;
@@ -1803,8 +1802,7 @@ compute_kill_pixel(struct anv_graphics_pipeline *pipeline,
     * of an alpha test.
     */
    pipeline->kill_pixel =
-      rp->depth_self_dependency ||
-      rp->stencil_self_dependency ||
+      rp_has_ds_self_dep(rp) ||
       wm_prog_data->uses_kill ||
       wm_prog_data->uses_omask ||
       (ms && ms->alpha_to_coverage_enable);
@@ -1924,8 +1922,6 @@ genX(compute_pipeline_emit)(struct anv_compute_pipeline *pipeline)
       .KernelStartPointer     =
          cs_bin->kernel.offset +
          brw_cs_prog_data_prog_offset(cs_prog_data, dispatch.simd_size),
-
-      /* Wa_1606682166 */
       .SamplerCount           = get_sampler_count(cs_bin),
       /* We add 1 because the CS indirect parameters buffer isn't accounted
        * for in bind_map.surface_count.

@@ -57,36 +57,36 @@ __anv_perf_warn(struct anv_device *device,
 }
 
 void
-anv_dump_pipe_bits(enum anv_pipe_bits bits)
+anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
 {
    if (bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT)
-      fputs("+depth_flush ", stderr);
+      fputs("+depth_flush ", f);
    if (bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT)
-      fputs("+dc_flush ", stderr);
+      fputs("+dc_flush ", f);
    if (bits & ANV_PIPE_HDC_PIPELINE_FLUSH_BIT)
-      fputs("+hdc_flush ", stderr);
+      fputs("+hdc_flush ", f);
    if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
-      fputs("+rt_flush ", stderr);
+      fputs("+rt_flush ", f);
    if (bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT)
-      fputs("+tile_flush ", stderr);
+      fputs("+tile_flush ", f);
    if (bits & ANV_PIPE_STATE_CACHE_INVALIDATE_BIT)
-      fputs("+state_inval ", stderr);
+      fputs("+state_inval ", f);
    if (bits & ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT)
-      fputs("+const_inval ", stderr);
+      fputs("+const_inval ", f);
    if (bits & ANV_PIPE_VF_CACHE_INVALIDATE_BIT)
-      fputs("+vf_inval ", stderr);
+      fputs("+vf_inval ", f);
    if (bits & ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT)
-      fputs("+tex_inval ", stderr);
+      fputs("+tex_inval ", f);
    if (bits & ANV_PIPE_INSTRUCTION_CACHE_INVALIDATE_BIT)
-      fputs("+ic_inval ", stderr);
+      fputs("+ic_inval ", f);
    if (bits & ANV_PIPE_STALL_AT_SCOREBOARD_BIT)
-      fputs("+pb_stall ", stderr);
+      fputs("+pb_stall ", f);
    if (bits & ANV_PIPE_PSS_STALL_SYNC_BIT)
-      fputs("+pss_stall ", stderr);
+      fputs("+pss_stall ", f);
    if (bits & ANV_PIPE_DEPTH_STALL_BIT)
-      fputs("+depth_stall ", stderr);
+      fputs("+depth_stall ", f);
    if (bits & ANV_PIPE_CS_STALL_BIT)
-      fputs("+cs_stall ", stderr);
+      fputs("+cs_stall ", f);
    if (bits & ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT)
-      fputs("+utdp_flush", stderr);
+      fputs("+utdp_flush", f);
 }

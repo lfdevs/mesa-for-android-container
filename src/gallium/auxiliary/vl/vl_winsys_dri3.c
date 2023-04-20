@@ -133,13 +133,21 @@ dri3_handle_stamps(struct vl_dri3_screen *scrn, uint64_t ust, uint64_t msc)
    scrn->last_msc = msc;
 }
 
-static void
+/* XXX this belongs in presentproto */
+#ifndef PresentWindowDestroyed
+#define PresentWindowDestroyed (1 << 0)
+#endif
+static bool
 dri3_handle_present_event(struct vl_dri3_screen *scrn,
                           xcb_present_generic_event_t *ge)
 {
    switch (ge->evtype) {
    case XCB_PRESENT_CONFIGURE_NOTIFY: {
       xcb_present_configure_notify_event_t *ce = (void *) ge;
+      if (ce->pixmap_flags & PresentWindowDestroyed) {
+         free(ge);
+         return false;
+      }
       scrn->width = ce->width;
       scrn->height = ce->height;
       break;
@@ -171,6 +179,7 @@ dri3_handle_present_event(struct vl_dri3_screen *scrn,
    }
    }
    free(ge);
+   return true;
 }
 
 static void
@@ -179,8 +188,10 @@ dri3_flush_present_events(struct vl_dri3_screen *scrn)
    if (scrn->special_event) {
       xcb_generic_event_t *ev;
       while ((ev = xcb_poll_for_special_event(
-                   scrn->conn, scrn->special_event)) != NULL)
-         dri3_handle_present_event(scrn, (xcb_present_generic_event_t *)ev);
+                   scrn->conn, scrn->special_event)) != NULL) {
+         if (!dri3_handle_present_event(scrn, (xcb_present_generic_event_t *)ev))
+            break;
+      }
    }
 }
 
@@ -192,8 +203,7 @@ dri3_wait_present_events(struct vl_dri3_screen *scrn)
       ev = xcb_wait_for_special_event(scrn->conn, scrn->special_event);
       if (!ev)
          return false;
-      dri3_handle_present_event(scrn, (xcb_present_generic_event_t *)ev);
-      return true;
+      return dri3_handle_present_event(scrn, (xcb_present_generic_event_t *)ev);
    }
    return false;
 }
@@ -811,7 +821,7 @@ vl_dri3_screen_create(Display *display, int screen)
    fcntl(fd, F_SETFD, FD_CLOEXEC);
    free(open_reply);
 
-   fd = loader_get_user_preferred_fd(fd, &scrn->is_different_gpu);
+   scrn->is_different_gpu = loader_get_user_preferred_fd(&fd, NULL);
 
    geom_cookie = xcb_get_geometry(scrn->conn, RootWindow(display, screen));
    geom_reply = xcb_get_geometry_reply(scrn->conn, geom_cookie, NULL);

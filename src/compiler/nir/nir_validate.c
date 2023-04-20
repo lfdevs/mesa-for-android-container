@@ -49,7 +49,7 @@ typedef struct {
     * equivalent to the uses and defs in nir_register, but built up by the
     * validator. At the end, we verify that the sets have the same entries.
     */
-   struct set *uses, *if_uses, *defs;
+   struct set *uses, *defs;
    nir_function_impl *where_defined; /* NULL for global registers */
 } reg_validate_state;
 
@@ -76,6 +76,9 @@ typedef struct {
 
    /* the current loop being visited */
    nir_loop *loop;
+
+   /* weather the loop continue construct is being visited */
+   bool in_loop_continue_construct;
 
    /* the parent of the current cf node being visited */
    nir_cf_node *parent_node;
@@ -160,7 +163,8 @@ validate_reg_src(nir_src *src, validate_state *state,
       _mesa_set_add(reg_state->uses, src);
    } else {
       validate_assert(state, state->if_stmt);
-      _mesa_set_add(reg_state->if_uses, src);
+      validate_assert(state, src->is_if);
+      _mesa_set_add(reg_state->uses, src);
    }
 
    validate_assert(state, reg_state->where_defined == state->impl &&
@@ -184,9 +188,6 @@ validate_reg_src(nir_src *src, validate_state *state,
    }
 }
 
-#define SET_PTR_BIT(ptr, bit) \
-   (void *)(((uintptr_t)(ptr)) | (((uintptr_t)1) << bit))
-
 static void
 validate_ssa_src(nir_src *src, validate_state *state,
                  unsigned bit_sizes, unsigned num_components)
@@ -196,12 +197,7 @@ validate_ssa_src(nir_src *src, validate_state *state,
    /* As we walk SSA defs, we add every use to this set.  We need to make sure
     * our use is seen in a use list.
     */
-   struct set_entry *entry;
-   if (state->instr) {
-      entry = _mesa_set_search(state->ssa_srcs, src);
-   } else {
-      entry = _mesa_set_search(state->ssa_srcs, SET_PTR_BIT(src, 0));
-   }
+   struct set_entry *entry = _mesa_set_search(state->ssa_srcs, src);
    validate_assert(state, entry);
 
    /* This will let us prove that we've seen all the sources */
@@ -297,22 +293,12 @@ validate_ssa_def(nir_ssa_def *def, validate_state *state)
    validate_num_components(state, def->num_components);
 
    list_validate(&def->uses);
-   nir_foreach_use(src, def) {
+   nir_foreach_use_including_if(src, def) {
       validate_assert(state, src->is_ssa);
       validate_assert(state, src->ssa == def);
+
       bool already_seen = false;
       _mesa_set_search_and_add(state->ssa_srcs, src, &already_seen);
-      /* A nir_src should only appear once and only in one SSA def use list */
-      validate_assert(state, !already_seen);
-   }
-
-   list_validate(&def->if_uses);
-   nir_foreach_if_use(src, def) {
-      validate_assert(state, src->is_ssa);
-      validate_assert(state, src->ssa == def);
-      bool already_seen = false;
-      _mesa_set_search_and_add(state->ssa_srcs, SET_PTR_BIT(src, 0),
-                               &already_seen);
       /* A nir_src should only appear once and only in one SSA def use list */
       validate_assert(state, !already_seen);
    }
@@ -346,7 +332,7 @@ validate_alu_dest(nir_alu_instr *instr, validate_state *state)
     * validate that the instruction doesn't write to components not in the
     * register/SSA value
     */
-   validate_assert(state, !(dest->write_mask & ~((1 << dest_size) - 1)));
+   validate_assert(state, !(dest->write_mask & ~nir_component_mask(dest_size)));
 
    /* validate that saturate is only ever used on instructions with
     * destinations of type float
@@ -381,6 +367,21 @@ validate_alu_instr(nir_alu_instr *instr, validate_state *state)
          /* 8-bit float isn't a thing */
          validate_assert(state, src_bit_size == 16 || src_bit_size == 32 ||
                                 src_bit_size == 64);
+      }
+
+      /* In nir_opcodes.py, these are defined to take general uint or int
+       * sources.  However, they're really only defined for 32-bit or 64-bit
+       * sources.  This seems to be the only place to enforce this
+       * restriction.
+       */
+      switch (instr->op) {
+      case nir_op_ufind_msb:
+      case nir_op_ufind_msb_rev:
+         validate_assert(state, src_bit_size == 32 || src_bit_size == 64);
+         break;
+
+      default:
+         break;
       }
 
       validate_alu_src(instr, i, state);
@@ -527,16 +528,17 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
     */
    validate_dest(&instr->dest, state, 0, 0);
 
-   /* Deref instructions as if conditions don't make sense because if
-    * conditions expect well-formed Booleans.  If you want to compare with
-    * NULL, an explicit comparison operation should be used.
-    */
-   validate_assert(state, list_is_empty(&instr->dest.ssa.if_uses));
-
    /* Certain modes cannot be used as sources for phi instructions because
     * way too many passes assume that they can always chase deref chains.
     */
-   nir_foreach_use(use, &instr->dest.ssa) {
+   nir_foreach_use_including_if(use, &instr->dest.ssa) {
+      /* Deref instructions as if conditions don't make sense because if
+       * conditions expect well-formed Booleans.  If you want to compare with
+       * NULL, an explicit comparison operation should be used.
+       */
+      if (!validate_assert(state, !use->is_if))
+         continue;
+
       if (use->parent_instr->type == nir_instr_type_phi) {
          validate_assert(state, !(instr->modes & (nir_var_shader_in |
                                                   nir_var_shader_out |
@@ -643,6 +645,12 @@ validate_intrinsic_instr(nir_intrinsic_instr *instr, validate_state *state)
       validate_assert(state, glsl_get_bare_type(dst->type) ==
                              glsl_get_bare_type(src->type));
       validate_assert(state, !nir_deref_mode_may_be(dst, nir_var_read_only_modes));
+      /* FIXME: now that we track if the var copies were lowered, it would be
+       * good to validate here that no new copy derefs were added. Right now
+       * we can't as there are some specific cases where copies are added even
+       * after the lowering. One example is the Intel compiler, that calls
+       * nir_lower_io_to_temporaries when linking some shader stages.
+       */
       break;
    }
 
@@ -914,6 +922,7 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
          case nir_texop_sampler_descriptor_amd:
             break;
          case nir_texop_lod:
+         case nir_texop_lod_bias_agx:
             validate_assert(state, nir_alu_type_get_base_type(instr->dest_type) == nir_type_float);
             break;
          case nir_texop_samples_identical:
@@ -1067,6 +1076,7 @@ validate_jump_instr(nir_jump_instr *instr, validate_state *state)
       validate_assert(state, block->successors[1] == NULL);
       validate_assert(state, instr->target == NULL);
       validate_assert(state, instr->else_target == NULL);
+      validate_assert(state, !state->in_loop_continue_construct);
       break;
 
    case nir_jump_break:
@@ -1086,12 +1096,13 @@ validate_jump_instr(nir_jump_instr *instr, validate_state *state)
       validate_assert(state, state->impl->structured);
       validate_assert(state, state->loop != NULL);
       if (state->loop) {
-         nir_block *first = nir_loop_first_block(state->loop);
-         validate_assert(state, block->successors[0] == first);
+         nir_block *cont_block = nir_loop_continue_target(state->loop);
+         validate_assert(state, block->successors[0] == cont_block);
       }
       validate_assert(state, block->successors[1] == NULL);
       validate_assert(state, instr->target == NULL);
       validate_assert(state, instr->else_target == NULL);
+      validate_assert(state, !state->in_loop_continue_construct);
       break;
 
    case nir_jump_goto:
@@ -1236,6 +1247,7 @@ collect_blocks(struct exec_list *cf_list, validate_state *state)
 
       case nir_cf_node_loop:
          collect_blocks(&nir_cf_node_as_loop(node)->body, state);
+         collect_blocks(&nir_cf_node_as_loop(node)->continue_list, state);
          break;
 
       default:
@@ -1304,8 +1316,15 @@ validate_block(nir_block *block, validate_state *state)
       if (next == NULL) {
          switch (state->parent_node->type) {
          case nir_cf_node_loop: {
-            nir_block *first = nir_loop_first_block(state->loop);
-            validate_assert(state, block->successors[0] == first);
+            if (block == nir_loop_last_block(state->loop)) {
+               nir_block *cont = nir_loop_continue_target(state->loop);
+               validate_assert(state, block->successors[0] == cont);
+            } else {
+               validate_assert(state, nir_loop_has_continue_construct(state->loop) &&
+                                      block == nir_loop_last_continue_block(state->loop));
+               nir_block *head = nir_loop_first_block(state->loop);
+               validate_assert(state, block->successors[0] == head);
+            }
             /* due to the hack for infinite loops, block->successors[1] may
              * point to the block after the loop.
              */
@@ -1377,6 +1396,7 @@ validate_if(nir_if *if_stmt, validate_state *state)
    nir_cf_node *next_node = nir_cf_node_next(&if_stmt->cf_node);
    validate_assert(state, next_node->type == nir_cf_node_block);
 
+   validate_assert(state, if_stmt->condition.is_if);
    validate_src(&if_stmt->condition, state, 0, 1);
 
    validate_assert(state, !exec_list_is_empty(&if_stmt->then_list));
@@ -1415,14 +1435,21 @@ validate_loop(nir_loop *loop, validate_state *state)
    nir_cf_node *old_parent = state->parent_node;
    state->parent_node = &loop->cf_node;
    nir_loop *old_loop = state->loop;
+   bool old_continue_construct = state->in_loop_continue_construct;
    state->loop = loop;
+   state->in_loop_continue_construct = false;
 
    foreach_list_typed(nir_cf_node, cf_node, node, &loop->body) {
       validate_cf_node(cf_node, state);
    }
-
+   state->in_loop_continue_construct = true;
+   foreach_list_typed(nir_cf_node, cf_node, node, &loop->continue_list) {
+      validate_cf_node(cf_node, state);
+   }
+   state->in_loop_continue_construct = false;
    state->parent_node = old_parent;
    state->loop = old_loop;
+   state->in_loop_continue_construct = old_continue_construct;
 }
 
 static void
@@ -1458,11 +1485,9 @@ prevalidate_reg_decl(nir_register *reg, validate_state *state)
 
    list_validate(&reg->uses);
    list_validate(&reg->defs);
-   list_validate(&reg->if_uses);
 
    reg_validate_state *reg_state = ralloc(state->regs, reg_validate_state);
    reg_state->uses = _mesa_pointer_set_create(reg_state);
-   reg_state->if_uses = _mesa_pointer_set_create(reg_state);
    reg_state->defs = _mesa_pointer_set_create(reg_state);
 
    reg_state->where_defined = state->impl;
@@ -1478,19 +1503,12 @@ postvalidate_reg_decl(nir_register *reg, validate_state *state)
    assume(entry);
    reg_validate_state *reg_state = (reg_validate_state *) entry->data;
 
-   nir_foreach_use(src, reg) {
+   nir_foreach_use_including_if(src, reg) {
       struct set_entry *entry = _mesa_set_search(reg_state->uses, src);
       validate_assert(state, entry);
       _mesa_set_remove(reg_state->uses, entry);
    }
    validate_assert(state, reg_state->uses->entries == 0);
-
-   nir_foreach_if_use(src, reg) {
-      struct set_entry *entry = _mesa_set_search(reg_state->if_uses, src);
-      validate_assert(state, entry);
-      _mesa_set_remove(reg_state->if_uses, entry);
-   }
-   validate_assert(state, reg_state->if_uses->entries == 0);
 
    nir_foreach_def(src, reg) {
       struct set_entry *entry = _mesa_set_search(reg_state->defs, src);
@@ -1736,6 +1754,7 @@ init_validate_state(validate_state *state)
    state->errors = _mesa_pointer_hash_table_create(state->mem_ctx);
 
    state->loop = NULL;
+   state->in_loop_continue_construct = false;
    state->instr = NULL;
    state->var = NULL;
 }

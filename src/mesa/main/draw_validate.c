@@ -146,7 +146,7 @@ _mesa_update_valid_to_render_state(struct gl_context *ctx)
          return;
    }
 
-   if (ctx->API == API_OPENGL_COMPAT) {
+   if (_mesa_is_desktop_gl_compat(ctx)) {
       if (!shader->CurrentProgram[MESA_SHADER_FRAGMENT]) {
          if (ctx->FragmentProgram.Enabled &&
              !_mesa_arb_fragment_program_enabled(ctx))

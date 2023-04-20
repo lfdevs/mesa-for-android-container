@@ -168,7 +168,10 @@ lower_swizzle(bi_context *ctx, bi_instr *ins, unsigned src)
    /* Lower it away */
    bi_builder b = bi_init_builder(ctx, bi_before_instr(ins));
 
-   bool is_8 = (bi_opcode_props[ins->op].size == BI_SIZE_8);
+   bool is_8 = (bi_opcode_props[ins->op].size == BI_SIZE_8) ||
+               (bi_opcode_props[ins->op].size == BI_SIZE_32 &&
+                ins->src[src].swizzle >= BI_SWIZZLE_B0000);
+
    bi_index orig = ins->src[src];
    bi_index stripped = bi_replace_index(bi_null(), orig);
    stripped.swizzle = ins->src[src].swizzle;

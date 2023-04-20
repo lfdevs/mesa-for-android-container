@@ -64,9 +64,6 @@ struct lima_screen {
    struct pipe_screen base;
    struct renderonly *ro;
 
-   int refcnt;
-   void *winsys_priv;
-
    int fd;
    int gpu_type;
    int num_pp;
@@ -104,6 +101,7 @@ lima_screen(struct pipe_screen *pscreen)
 }
 
 struct pipe_screen *
-lima_screen_create(int fd, struct renderonly *ro);
+lima_screen_create(int fd, const struct pipe_screen_config *config,
+                   struct renderonly *ro);
 
 #endif

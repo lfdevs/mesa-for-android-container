@@ -44,7 +44,7 @@ if dep_dxheaders.found() and host_machine.system() == 'windows'
   )
 
   if build_machine.system() == 'windows'
-    test('clc_compiler_test', clc_compiler_test, timeout: 180, protocol : gtest_test_protocol)
+    test('clc_compiler_test', clc_compiler_test, timeout: 180, protocol : 'gtest')
   endif
 
 endif

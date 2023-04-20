@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "anv_private.h"
 #include "genX_grl.h"
 
 static struct anv_shader_bin *
@@ -88,4 +89,20 @@ genX(grl_dispatch)(struct anv_cmd_buffer *cmd_buffer,
 
    genX(cmd_buffer_dispatch_kernel)(cmd_buffer, &ak, global_size,
                                     arg_count, args);
+}
+
+uint32_t
+genX(grl_max_scratch_size)(void)
+{
+   uint32_t scratch_size = 0;
+
+   for (uint32_t i = 0; i < GRL_CL_KERNEL_MAX; i++) {
+      struct brw_kernel kernel_data;
+      genX(grl_get_cl_kernel)(&kernel_data, i);
+
+      scratch_size = MAX2(kernel_data.prog_data.base.total_scratch,
+                          scratch_size);
+   }
+
+   return scratch_size;
 }

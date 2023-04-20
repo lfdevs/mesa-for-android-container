@@ -309,14 +309,15 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
       va += (uint64_t)base_level_info->offset_256B * 256;
    }
 
+   if (!sscreen->info.has_image_opcodes) {
+      /* Set it as a buffer descriptor. */
+      state[0] = va;
+      state[1] |= S_008F04_BASE_ADDRESS_HI(va >> 32);
+      return;
+   }
+
    state[0] = va >> 8;
    state[1] |= S_008F14_BASE_ADDRESS_HI(va >> 40);
-
-   /* Only macrotiled modes can set tile swizzle.
-    * GFX9 doesn't use (legacy) base_level_info.
-    */
-   if (sscreen->info.gfx_level >= GFX9 || base_level_info->mode == RADEON_SURF_MODE_2D)
-      state[0] |= tex->surface.tile_swizzle;
 
    if (sscreen->info.gfx_level >= GFX8) {
       if (!(access & SI_IMAGE_ACCESS_DCC_OFF) && vi_dcc_enabled(tex, first_level)) {
@@ -334,15 +335,11 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
                                             is_stencil ? PIPE_MASK_S : PIPE_MASK_Z)) {
          meta_va = tex->buffer.gpu_address + tex->surface.meta_offset;
       }
-
-      if (meta_va)
-         state[6] |= S_008F28_COMPRESSION_EN(1);
    }
 
-   if (sscreen->info.gfx_level >= GFX8 && sscreen->info.gfx_level <= GFX9)
-      state[7] = meta_va >> 8;
-
    if (sscreen->info.gfx_level >= GFX10) {
+      state[0] |= tex->surface.tile_swizzle;
+
       if (is_stencil) {
          state[3] |= S_00A00C_SW_MODE(tex->surface.u.gfx9.zs.stencil_swizzle_mode);
       } else {
@@ -358,7 +355,8 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
          if (!tex->is_depth && tex->surface.meta_offset)
             meta = tex->surface.u.gfx9.color.dcc;
 
-         state[6] |= S_00A018_META_PIPE_ALIGNED(meta.pipe_aligned) |
+         state[6] |= S_00A018_COMPRESSION_EN(1) |
+                     S_00A018_META_PIPE_ALIGNED(meta.pipe_aligned) |
                      S_00A018_META_DATA_ADDRESS_LO(meta_va >> 8) |
                      /* DCC image stores require the following settings:
                       * - INDEPENDENT_64B_BLOCKS = 0
@@ -375,10 +373,12 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
          /* TC-compatible MSAA HTILE requires ITERATE_256. */
          if (tex->is_depth && tex->buffer.b.b.nr_samples >= 2)
             state[6] |= S_00A018_ITERATE_256(1);
-      }
 
-      state[7] = meta_va >> 16;
+         state[7] = meta_va >> 16;
+      }
    } else if (sscreen->info.gfx_level == GFX9) {
+      state[0] |= tex->surface.tile_swizzle;
+
       if (is_stencil) {
          state[3] |= S_008F1C_SW_MODE(tex->surface.u.gfx9.zs.stencil_swizzle_mode);
          state[4] |= S_008F20_PITCH(tex->surface.u.gfx9.zs.stencil_epitch);
@@ -397,8 +397,6 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
          state[4] |= S_008F20_PITCH(epitch);
       }
 
-      state[5] &=
-         C_008F24_META_DATA_ADDRESS & C_008F24_META_PIPE_ALIGNED & C_008F24_META_RB_ALIGNED;
       if (meta_va) {
          struct gfx9_surf_meta_flags meta = {
             .rb_aligned = 1,
@@ -411,14 +409,25 @@ void si_set_mutable_tex_desc_fields(struct si_screen *sscreen, struct si_texture
          state[5] |= S_008F24_META_DATA_ADDRESS(meta_va >> 40) |
                      S_008F24_META_PIPE_ALIGNED(meta.pipe_aligned) |
                      S_008F24_META_RB_ALIGNED(meta.rb_aligned);
+         state[6] |= S_008F28_COMPRESSION_EN(1);
+         state[7] = meta_va >> 8;
       }
    } else {
       /* GFX6-GFX8 */
       unsigned pitch = base_level_info->nblk_x * block_width;
       unsigned index = si_tile_mode_index(tex, base_level, is_stencil);
 
+      /* Only macrotiled modes can set tile swizzle. */
+      if (base_level_info->mode == RADEON_SURF_MODE_2D)
+         state[0] |= tex->surface.tile_swizzle;
+
       state[3] |= S_008F1C_TILING_INDEX(index);
       state[4] |= S_008F20_PITCH(pitch - 1);
+
+      if (sscreen->info.gfx_level == GFX8 && meta_va) {
+         state[6] |= S_008F28_COMPRESSION_EN(1);
+         state[7] = meta_va >> 8;
+      }
    }
 
    if (tex->swap_rgb_to_bgr) {
@@ -820,7 +829,8 @@ static void si_set_shader_image_desc(struct si_context *ctx, const struct pipe_i
 
       screen->make_texture_descriptor(
          screen, tex, false, res->b.b.target, view->format, swizzle, hw_level, hw_level,
-         view->u.tex.first_layer, view->u.tex.last_layer, width, height, depth, desc, fmask_desc);
+         view->u.tex.first_layer, view->u.tex.last_layer, width, height, depth, false,
+         desc, fmask_desc);
       si_set_mutable_tex_desc_fields(screen, tex, &tex->surface.u.legacy.level[level], level, level,
                                      util_format_get_blockwidth(view->format),
                                      false, access, desc);
@@ -2168,37 +2178,30 @@ static void si_emit_global_shader_pointers(struct si_context *sctx, struct si_de
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B030_SPI_SHADER_USER_DATA_PS_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B230_SPI_SHADER_USER_DATA_GS_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B430_SPI_SHADER_USER_DATA_HS_0);
-      radeon_end();
-      return;
    } else if (sctx->gfx_level >= GFX10) {
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B030_SPI_SHADER_USER_DATA_PS_0);
       /* HW VS stage only used in non-NGG mode. */
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B130_SPI_SHADER_USER_DATA_VS_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B230_SPI_SHADER_USER_DATA_GS_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B430_SPI_SHADER_USER_DATA_HS_0);
-      radeon_end();
-      return;
    } else if (sctx->gfx_level == GFX9 && sctx->shadowed_regs) {
       /* We can't use the COMMON registers with register shadowing. */
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B030_SPI_SHADER_USER_DATA_PS_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B130_SPI_SHADER_USER_DATA_VS_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B330_SPI_SHADER_USER_DATA_ES_0);
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B430_SPI_SHADER_USER_DATA_LS_0);
-      radeon_end();
-      return;
    } else if (sctx->gfx_level == GFX9) {
       /* Broadcast it to all shader stages. */
       radeon_emit_one_32bit_pointer(sctx, descs, R_00B530_SPI_SHADER_USER_DATA_COMMON_0);
-      radeon_end();
-      return;
+   } else {
+      radeon_emit_one_32bit_pointer(sctx, descs, R_00B030_SPI_SHADER_USER_DATA_PS_0);
+      radeon_emit_one_32bit_pointer(sctx, descs, R_00B130_SPI_SHADER_USER_DATA_VS_0);
+      radeon_emit_one_32bit_pointer(sctx, descs, R_00B330_SPI_SHADER_USER_DATA_ES_0);
+      radeon_emit_one_32bit_pointer(sctx, descs, R_00B230_SPI_SHADER_USER_DATA_GS_0);
+      radeon_emit_one_32bit_pointer(sctx, descs, R_00B430_SPI_SHADER_USER_DATA_HS_0);
+      radeon_emit_one_32bit_pointer(sctx, descs, R_00B530_SPI_SHADER_USER_DATA_LS_0);
    }
 
-   radeon_emit_one_32bit_pointer(sctx, descs, R_00B030_SPI_SHADER_USER_DATA_PS_0);
-   radeon_emit_one_32bit_pointer(sctx, descs, R_00B130_SPI_SHADER_USER_DATA_VS_0);
-   radeon_emit_one_32bit_pointer(sctx, descs, R_00B330_SPI_SHADER_USER_DATA_ES_0);
-   radeon_emit_one_32bit_pointer(sctx, descs, R_00B230_SPI_SHADER_USER_DATA_GS_0);
-   radeon_emit_one_32bit_pointer(sctx, descs, R_00B430_SPI_SHADER_USER_DATA_HS_0);
-   radeon_emit_one_32bit_pointer(sctx, descs, R_00B530_SPI_SHADER_USER_DATA_LS_0);
    radeon_end();
 }
 
@@ -2711,7 +2714,7 @@ void si_init_all_descriptors(struct si_context *sctx)
       if (is_2nd) {
          if (i == PIPE_SHADER_TESS_CTRL) {
             rel_dw_offset =
-               (hs_sgpr0 - R_00B430_SPI_SHADER_USER_DATA_LS_0) / 4;
+               (hs_sgpr0 - R_00B430_SPI_SHADER_USER_DATA_HS_0) / 4;
          } else if (sctx->gfx_level >= GFX10) { /* PIPE_SHADER_GEOMETRY */
             rel_dw_offset =
                (gs_sgpr0 - R_00B230_SPI_SHADER_USER_DATA_GS_0) / 4;
@@ -2731,7 +2734,7 @@ void si_init_all_descriptors(struct si_context *sctx)
       if (is_2nd) {
          if (i == PIPE_SHADER_TESS_CTRL) {
             rel_dw_offset =
-               (hs_sgpr0 + 4 - R_00B430_SPI_SHADER_USER_DATA_LS_0) / 4;
+               (hs_sgpr0 + 4 - R_00B430_SPI_SHADER_USER_DATA_HS_0) / 4;
          } else if (sctx->gfx_level >= GFX10) { /* PIPE_SHADER_GEOMETRY */
             rel_dw_offset =
                (gs_sgpr0 + 4 - R_00B230_SPI_SHADER_USER_DATA_GS_0) / 4;

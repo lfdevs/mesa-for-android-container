@@ -25,25 +25,27 @@ SOFTWARE.
 <isa>
 
 <!--
-	Cat7 Instructions:  barrier instructions
+	Cat7 Instructions:  barrier, cache, sleep instructions
  -->
 
 <bitset name="#instruction-cat7" extends="#instruction">
+	<pattern low="0"  high="31">xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</pattern>
+	<pattern low="32" high="43">xxxxxxxxxxxx</pattern>
+	<pattern pos="44"          >x</pattern>  <!-- blob tells that it is (ss) -->
+	<field   pos="59"          name="JP" type="bool" display="(jp)"/>
+	<field   pos="60"          name="SY" type="bool" display="(sy)"/>
+	<pattern low="61" high="63">111</pattern>  <!-- cat7 -->
+</bitset>
+
+<bitset name="#instruction-cat7-barrier" extends="#instruction-cat7">
 	<display>
 		{SY}{JP}{NAME}{G}{L}{R}{W}
 	</display>
-	<pattern low="0"  high="31">xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</pattern>
-	<pattern low="32" high="43">xxxxxxxxxxxx</pattern>
-	<pattern pos="44"          >x</pattern>  <!-- possilby (ss) ? -->
 	<pattern low="45" high="50">x1xxxx</pattern>
 	<field   pos="51"          name="W"  type="bool" display=".w"  />  <!-- write -->
 	<field   pos="52"          name="R"  type="bool" display=".r"  />  <!-- read -->
 	<field   pos="53"          name="L"  type="bool" display=".l"  />  <!-- local -->
 	<field   pos="54"          name="G"  type="bool" display=".g"  />  <!-- global -->
-	<!-- 4b OPC -->
-	<field   pos="59"          name="JP" type="bool" display="(jp)"/>
-	<field   pos="60"          name="SY" type="bool" display="(sy)"/>
-	<pattern low="61" high="63">111</pattern>  <!-- cat7 -->
 	<encode>
 		<map name="W">src->cat7.w</map>
 		<map name="R">src->cat7.r</map>
@@ -52,12 +54,95 @@ SOFTWARE.
 	</encode>
 </bitset>
 
-<bitset name="bar" extends="#instruction-cat7">
+<bitset name="bar" extends="#instruction-cat7-barrier">
 	<pattern low="55" high="58">0000</pattern>
 </bitset>
 
-<bitset name="fence" extends="#instruction-cat7">
+<bitset name="fence" extends="#instruction-cat7-barrier">
 	<pattern low="55" high="58">0001</pattern>
+</bitset>
+
+<enum name="#dccln-type">
+	<value val="0" display=".shr"/>
+	<value val="1" display=".all"/>
+</enum>
+
+<bitset name="#instruction-cat7-data" extends="#instruction-cat7">
+	<display>
+		{SY}{JP}{NAME}{TYPE}
+	</display>
+	<pattern low="45" high="50">xxxxxx</pattern>
+	<field   pos="51" 		   name="TYPE" type="#dccln-type"/>
+	<pattern low="52" high="54">xxx</pattern>
+	<encode>
+		<!-- TODO: read handle type -->
+		<map name="TYPE">1</map>
+	</encode>
+</bitset>
+
+<enum name="#sleep-duration">
+	<value val="0" display=".s">
+		<doc>
+			Short sleep
+		</doc>
+	</value>
+	<value val="1" display=".l">
+		<doc>
+			Long sleep, around 20x longer than short
+		</doc>
+	</value>
+</enum>
+
+<bitset name="sleep" extends="#instruction-cat7">
+	<doc>
+		Short/Long Sleep
+		TODO: how is it different from a bunch of nops?
+	</doc>
+	<display>
+		{SY}{JP}{NAME}{DURATION}
+	</display>
+	<pattern low="45" high="50">xxxxxx</pattern>
+	<field   pos="51"          name="DURATION" type="#sleep-duration"/>
+	<pattern low="52" high="54">xxx</pattern>
+	<pattern low="55" high="58">0010</pattern>
+	<encode>
+		<!-- TODO: read duration -->
+		<map name="DURATION">1</map>
+	</encode>
+</bitset>
+
+<bitset name="icinv" extends="#instruction-cat7">
+	<doc>
+		Seem to be Instruction Cache Invalidate, supported by the fact
+		that it considerably slows shader execution compared to
+		data cache instructions.
+	</doc>
+	<display>
+		{SY}{JP}{NAME}
+	</display>
+	<pattern low="45" high="54">xxxxxxxxxx</pattern>
+	<pattern low="55" high="58">0011</pattern>
+</bitset>
+
+<bitset name="dccln" extends="#instruction-cat7-data">
+	<doc>
+		Data (Cache?) Clean
+	</doc>
+	<pattern low="55" high="58">0100</pattern>
+</bitset>
+
+<bitset name="dcinv" extends="#instruction-cat7-data">
+	<doc>
+		Data (Cache?) Invalidate
+	</doc>
+	<pattern low="55" high="58">0101</pattern>
+</bitset>
+
+<bitset name="dcflu" extends="#instruction-cat7-data">
+	<doc>
+		Data (Cache?) Flush
+	</doc>
+	<pattern low="55" high="58">0110</pattern>
 </bitset>
 
 </isa>

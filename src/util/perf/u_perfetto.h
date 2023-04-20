@@ -16,9 +16,9 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef _UTIL_PERFETTO_H
@@ -41,8 +41,7 @@ enum util_perfetto_category {
 
 extern int util_perfetto_category_states[UTIL_PERFETTO_CATEGORY_COUNT];
 
-void
-util_perfetto_init(void);
+void util_perfetto_init(void);
 
 static inline bool
 util_perfetto_is_category_enabled(enum util_perfetto_category category)
@@ -50,12 +49,10 @@ util_perfetto_is_category_enabled(enum util_perfetto_category category)
    return p_atomic_read_relaxed(&util_perfetto_category_states[category]);
 }
 
-void
-util_perfetto_trace_begin(enum util_perfetto_category category,
-                          const char *name);
+void util_perfetto_trace_begin(enum util_perfetto_category category,
+                               const char *name);
 
-void
-util_perfetto_trace_end(enum util_perfetto_category category);
+void util_perfetto_trace_end(enum util_perfetto_category category);
 
 #else /* HAVE_PERFETTO */
 

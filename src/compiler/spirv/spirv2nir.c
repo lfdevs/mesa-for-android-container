@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 /*
@@ -162,7 +158,6 @@ int main(int argc, char **argv)
 
    struct spirv_to_nir_options spirv_opts = {
       .environment = env,
-      .use_deref_buffer_array_length = env == NIR_SPIRV_OPENGL,
    };
 
    if (shader_stage == MESA_SHADER_KERNEL) {

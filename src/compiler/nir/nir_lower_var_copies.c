@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 #include "nir.h"
@@ -163,6 +159,8 @@ bool
 nir_lower_var_copies(nir_shader *shader)
 {
    bool progress = false;
+
+   shader->info.var_copies_lowered = true;
 
    nir_foreach_function(function, shader) {
       if (function->impl)

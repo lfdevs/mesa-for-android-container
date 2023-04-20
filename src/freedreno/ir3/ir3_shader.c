@@ -282,6 +282,8 @@ alloc_variant(struct ir3_shader *shader, const struct ir3_shader_key *key,
    case MESA_SHADER_FRAGMENT:
       v->fs.early_fragment_tests = info->fs.early_fragment_tests;
       v->fs.color_is_dual_source = info->fs.color_is_dual_source;
+      v->fs.uses_fbfetch_output  = info->fs.uses_fbfetch_output;
+      v->fs.fbfetch_coherent     = info->fs.fbfetch_coherent;
       break;
 
    case MESA_SHADER_COMPUTE:
@@ -784,6 +786,11 @@ find_input_reg_id(struct ir3_shader_variant *so, uint32_t input_idx)
 }
 
 void
+print_raw(FILE *out, const BITSET_WORD *data, size_t size) {
+   fprintf(out, "raw 0x%X%X\n", data[0], data[1]);
+}
+
+void
 ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 {
    struct ir3 *ir = so->ir;
@@ -832,6 +839,7 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
                  .gpu_id = fd_dev_gpu_id(ir->compiler->dev_id),
                  .show_errors = true,
                  .branch_labels = true,
+                 .no_match_cb = print_raw,
               });
 
    fprintf(out, "; %s: outputs:", type);

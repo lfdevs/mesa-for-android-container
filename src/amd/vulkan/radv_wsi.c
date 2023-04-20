@@ -25,7 +25,7 @@
 
 #include "util/macros.h"
 #include "radv_debug.h"
-#include "radv_meta.h"
+#include "meta/radv_meta.h"
 #include "radv_private.h"
 #include "vk_fence.h"
 #include "vk_semaphore.h"
@@ -92,7 +92,7 @@ radv_init_wsi(struct radv_physical_device *physical_device)
    VkResult result =
       wsi_device_init(&physical_device->wsi_device, radv_physical_device_to_handle(physical_device),
                       radv_wsi_proc_addr, &physical_device->instance->vk.alloc,
-                      physical_device->master_fd, &physical_device->instance->dri_options, false);
+                      physical_device->master_fd, &physical_device->instance->dri_options, &(struct wsi_device_options){.sw_device = false});
    if (result != VK_SUCCESS)
       return result;
 

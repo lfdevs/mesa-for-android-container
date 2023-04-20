@@ -16,8 +16,9 @@ fi
 TMP_DIR=$(mktemp -d)
 
 echo "Downloading archived master..."
-/usr/bin/wget -O $TMP_DIR/$CI_PROJECT_NAME.tar.gz \
-              https://${MINIO_HOST}/git-cache/${FDO_UPSTREAM_REPO}/$CI_PROJECT_NAME.tar.gz
+/usr/bin/wget \
+	      -O "$TMP_DIR/$CI_PROJECT_NAME.tar.gz" \
+              "https://${MINIO_HOST}/git-cache/${FDO_UPSTREAM_REPO}/$CI_PROJECT_NAME.tar.gz"
 
 # check wget error code
 if [[ $? -ne 0 ]]

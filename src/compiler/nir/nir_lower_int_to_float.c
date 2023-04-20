@@ -178,6 +178,9 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_bany_inequal3: alu->op = nir_op_bany_fnequal3; break;
    case nir_op_bany_inequal4: alu->op = nir_op_bany_fnequal4; break;
 
+   case nir_op_i32csel_gt: alu->op = nir_op_fcsel_gt; break;
+   case nir_op_i32csel_ge: alu->op = nir_op_fcsel_ge; break;
+
    default:
       assert(nir_alu_type_get_base_type(info->output_type) != nir_type_int &&
              nir_alu_type_get_base_type(info->output_type) != nir_type_uint);

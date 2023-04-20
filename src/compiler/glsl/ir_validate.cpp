@@ -696,7 +696,6 @@ ir_validate::visit_leave(ir_expression *ir)
 
    case ir_unop_frexp_sig:
       assert(ir->operands[0]->type->is_float_32_64());
-      assert(ir->type->is_double());
       break;
    case ir_unop_frexp_exp:
       assert(ir->operands[0]->type->is_float_32_64());

@@ -84,8 +84,7 @@ namespace {
             if (inst->src[i].file != BAD_FILE &&
                 !inst->is_control_source(i)) {
                const brw_reg_type t = inst->src[i].type;
-               has_int_src |= !brw_reg_type_is_floating_point(t) &&
-                              inst->opcode != BRW_OPCODE_F16TO32;
+               has_int_src |= !brw_reg_type_is_floating_point(t);
                has_long_src |= type_sz(t) >= 8;
             }
          }
@@ -133,9 +132,6 @@ namespace {
                inst->opcode == SHADER_OPCODE_SHUFFLE ||
                (inst->opcode == SHADER_OPCODE_SEL_EXEC &&
                 type_sz(inst->dst.type) > 4))
-         return TGL_PIPE_INT;
-      else if (inst->opcode == SHADER_OPCODE_BROADCAST &&
-               !devinfo->has_64bit_float && type_sz(t) >= 8)
          return TGL_PIPE_INT;
       else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
          return TGL_PIPE_FLOAT;

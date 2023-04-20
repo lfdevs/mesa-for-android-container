@@ -408,17 +408,6 @@ find_lowerable_rvalues_visitor::visit_enter(ir_expression *ir)
    return visit_continue;
 }
 
-static bool
-function_always_returns_mediump_or_lowp(const char *name)
-{
-   return !strcmp(name, "bitCount") ||
-          !strcmp(name, "findLSB") ||
-          !strcmp(name, "findMSB") ||
-          !strcmp(name, "unpackHalf2x16") ||
-          !strcmp(name, "unpackUnorm4x8") ||
-          !strcmp(name, "unpackSnorm4x8");
-}
-
 static unsigned
 handle_call(ir_call *ir, const struct set *lowerable_rvalues)
 {
@@ -431,7 +420,7 @@ handle_call(ir_call *ir, const struct set *lowerable_rvalues)
       ir_rvalue *param = (ir_rvalue*)ir->actual_parameters.get_head();
       ir_variable *resource = param->variable_referenced();
 
-      assert(ir->callee->return_precision == GLSL_PRECISION_NONE);
+      assert(ir->callee->return_precision == GLSL_PRECISION_HIGH);
       assert(resource->type->without_array()->is_image());
 
       /* GLSL ES 3.20 requires that images have a precision modifier, but if
@@ -460,7 +449,7 @@ handle_call(ir_call *ir, const struct set *lowerable_rvalues)
    }
 
    /* Return the declared precision for user-defined functions. */
-   if (!ir->callee->is_builtin())
+   if (!ir->callee->is_builtin() || ir->callee->return_precision != GLSL_PRECISION_NONE)
       return ir->callee->return_precision;
 
    /* Handle special calls. */
@@ -476,10 +465,6 @@ handle_call(ir_call *ir, const struct set *lowerable_rvalues)
        * uses lower precision. The function parameters don't matter.
        */
       if (var && var->type->without_array()->is_sampler()) {
-         /* textureSize always returns highp. */
-         if (!strcmp(ir->callee_name(), "textureSize"))
-            return GLSL_PRECISION_HIGH;
-
          /* textureGatherOffsets always takes a highp array of constants. As
           * per the discussion https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/16547#note_1393704
           * trying to lower the precision results in segfault later on
@@ -493,56 +478,39 @@ handle_call(ir_call *ir, const struct set *lowerable_rvalues)
       }
    }
 
-   if (/* Parameters are always highp: */
+   if (ir->callee->return_precision != GLSL_PRECISION_NONE)
+      return ir->callee->return_precision;
+
+   if (/* Parameters are always implicitly promoted to highp: */
        !strcmp(ir->callee_name(), "floatBitsToInt") ||
        !strcmp(ir->callee_name(), "floatBitsToUint") ||
        !strcmp(ir->callee_name(), "intBitsToFloat") ||
-       !strcmp(ir->callee_name(), "uintBitsToFloat") ||
-       !strcmp(ir->callee_name(), "bitfieldReverse") ||
-       !strcmp(ir->callee_name(), "frexp") ||
-       !strcmp(ir->callee_name(), "ldexp") ||
-       /* Parameters and outputs are always highp: */
-       /* TODO: The operations are highp, but carry and borrow outputs are lowp. */
-       !strcmp(ir->callee_name(), "uaddCarry") ||
-       !strcmp(ir->callee_name(), "usubBorrow") ||
-       !strcmp(ir->callee_name(), "imulExtended") ||
-       !strcmp(ir->callee_name(), "umulExtended") ||
-       !strcmp(ir->callee_name(), "unpackUnorm2x16") ||
-       !strcmp(ir->callee_name(), "unpackSnorm2x16") ||
-       /* Outputs are highp: */
-       !strcmp(ir->callee_name(), "packUnorm2x16") ||
-       !strcmp(ir->callee_name(), "packSnorm2x16") ||
-       /* Parameters are mediump and outputs are highp. The parameters should
-        * be optimized in NIR, not here, e.g:
-        * - packHalf2x16 can just be a bitcast from f16vec2 to uint32
-        * - Other opcodes don't have to convert parameters to highp if the hw
-        *   has f16 versions. Optimize in NIR accordingly.
-        */
-       !strcmp(ir->callee_name(), "packHalf2x16") ||
-       !strcmp(ir->callee_name(), "packUnorm4x8") ||
-       !strcmp(ir->callee_name(), "packSnorm4x8") ||
-       /* Atomic functions are not lowered. */
-       strstr(ir->callee_name(), "atomic") == ir->callee_name())
+       !strcmp(ir->callee_name(), "uintBitsToFloat"))
       return GLSL_PRECISION_HIGH;
-
-   assert(ir->callee->return_precision == GLSL_PRECISION_NONE);
 
    /* Number of parameters to check if they are lowerable. */
    unsigned check_parameters = ir->actual_parameters.length();
 
-   /* Interpolation functions only consider the precision of the interpolant. */
-   /* Bitfield functions ignore the precision of "offset" and "bits". */
+   /* "For the interpolateAt* functions, the call will return a precision
+    *  qualification matching the precision of the interpolant argument to the
+    *  function call."
+    *
+    * and
+    *
+    * "The precision qualification of the value returned from bitfieldExtract()
+    *  matches the precision qualification of the call's input argument
+    *  “value”."
+    */
    if (!strcmp(ir->callee_name(), "interpolateAtOffset") ||
        !strcmp(ir->callee_name(), "interpolateAtSample") ||
        !strcmp(ir->callee_name(), "bitfieldExtract")) {
       check_parameters = 1;
    } else if (!strcmp(ir->callee_name(), "bitfieldInsert")) {
-      check_parameters = 2;
-   } if (function_always_returns_mediump_or_lowp(ir->callee_name())) {
-      /* These only lower the return value. Parameters keep their precision,
-       * which is preserved in map_builtin.
+      /* "The precision qualification of the value returned from bitfieldInsert
+       * matches the highest precision qualification of the call's input
+       * arguments “base” and “insert”."
        */
-      check_parameters = 0;
+      check_parameters = 2;
    }
 
    /* If the call is to a builtin, then the function won’t have a return
@@ -587,10 +555,12 @@ find_lowerable_rvalues_visitor::visit_leave(ir_call *ir)
       handle_precision(var->type, return_precision);
 
    if (lower_state == SHOULD_LOWER) {
-      /* There probably shouldn’t be any situations where multiple ir_call
-       * instructions write to the same temporary?
+      /* Function calls always write to a temporary return value in the caller,
+       * which has no other users.  That temp may start with the precision of
+       * the function's signature, but if we're inferring the precision of an
+       * unqualified builtin operation (particularly the imageLoad overrides!)
+       * then we need to update it.
        */
-      assert(var->data.precision == GLSL_PRECISION_NONE);
       var->data.precision = GLSL_PRECISION_MEDIUM;
    } else {
       var->data.precision = GLSL_PRECISION_HIGH;
@@ -925,13 +895,17 @@ find_precision_visitor::map_builtin(ir_function_signature *sig)
    ir_function_signature *lowered_sig =
       sig->clone(lowered_builtin_mem_ctx, clone_ht);
 
-   /* Functions that always return mediump or lowp should keep their
-    * parameters intact, because they can be highp. NIR can lower
-    * the up-conversion for parameters if needed.
+   /* If we're lowering the output precision of the function, then also lower
+    * the precision of its inputs unless they have a specific qualifier.  The
+    * exception is bitCount, which doesn't declare its arguments highp but
+    * should not be lowering the args to mediump just because the output is
+    * lowp.
     */
-   if (!function_always_returns_mediump_or_lowp(sig->function_name())) {
+   if (strcmp(sig->function_name(), "bitCount") != 0) {
       foreach_in_list(ir_variable, param, &lowered_sig->parameters) {
-         param->data.precision = GLSL_PRECISION_MEDIUM;
+         /* Demote the precision of unqualified function arguments. */
+         if (param->data.precision == GLSL_PRECISION_NONE)
+            param->data.precision = GLSL_PRECISION_MEDIUM;
       }
    }
 

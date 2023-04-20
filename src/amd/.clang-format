@@ -17,7 +17,6 @@ BinPackParameters: true
 BreakBeforeBraces: Custom
 ColumnLimit: 100
 ContinuationIndentWidth: 3
-Cpp11BracedListStyle: false
 Cpp11BracedListStyle: true
 ForEachMacros:
   - LIST_FOR_EACH_ENTRY
@@ -83,6 +82,7 @@ ForEachMacros:
   - set_foreach
   - u_foreach_bit
   - u_foreach_bit64
+  - radv_foreach_stage
   - PHASE
 
 TypenameMacros:

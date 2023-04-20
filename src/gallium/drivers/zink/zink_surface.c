@@ -125,6 +125,22 @@ init_surface_info(struct zink_surface *surface, struct zink_resource *res, VkIma
    }
 }
 
+static void
+init_pipe_surface_info(struct pipe_context *pctx, struct pipe_surface *psurf, const struct pipe_surface *templ, const struct pipe_resource *pres)
+{
+   unsigned int level = templ->u.tex.level;
+   psurf->context = pctx;
+   psurf->format = templ->format;
+   psurf->width = u_minify(pres->width0, level);
+   assert(psurf->width);
+   psurf->height = u_minify(pres->height0, level);
+   assert(psurf->height);
+   psurf->nr_samples = templ->nr_samples;
+   psurf->u.tex.level = level;
+   psurf->u.tex.first_layer = templ->u.tex.first_layer;
+   psurf->u.tex.last_layer = templ->u.tex.last_layer;
+}
+
 static struct zink_surface *
 create_surface(struct pipe_context *pctx,
                struct pipe_resource *pres,
@@ -134,7 +150,6 @@ create_surface(struct pipe_context *pctx,
 {
    struct zink_screen *screen = zink_screen(pctx->screen);
    struct zink_resource *res = zink_resource(pres);
-   unsigned int level = templ->u.tex.level;
 
    struct zink_surface *surface = CALLOC_STRUCT(zink_surface);
    if (!surface)
@@ -163,16 +178,7 @@ create_surface(struct pipe_context *pctx,
 
    pipe_resource_reference(&surface->base.texture, pres);
    pipe_reference_init(&surface->base.reference, 1);
-   surface->base.context = pctx;
-   surface->base.format = templ->format;
-   surface->base.width = u_minify(pres->width0, level);
-   assert(surface->base.width);
-   surface->base.height = u_minify(pres->height0, level);
-   assert(surface->base.height);
-   surface->base.nr_samples = templ->nr_samples;
-   surface->base.u.tex.level = level;
-   surface->base.u.tex.first_layer = templ->u.tex.first_layer;
-   surface->base.u.tex.last_layer = templ->u.tex.last_layer;
+   init_pipe_surface_info(pctx, &surface->base, templ, pres);
    surface->obj = zink_resource(pres)->obj;
 
    init_surface_info(surface, res, ivci);
@@ -203,7 +209,7 @@ do_create_surface(struct pipe_context *pctx, struct pipe_resource *pres, const s
    /* create a new surface */
    struct zink_surface *surface = create_surface(pctx, pres, templ, ivci, actually);
    /* only transient surfaces have nr_samples set */
-   surface->base.nr_samples = 0;
+   surface->base.nr_samples = zink_screen(pctx->screen)->info.have_EXT_multisampled_render_to_single_sampled ? templ->nr_samples : 0;
    surface->hash = hash;
    surface->ivci = *ivci;
    return surface;
@@ -247,7 +253,7 @@ zink_get_surface(struct zink_context *ctx,
 
 /* wrap a surface for use as a framebuffer attachment */
 static struct pipe_surface *
-wrap_surface(struct pipe_context *pctx, struct pipe_surface *psurf)
+wrap_surface(struct pipe_context *pctx, const struct pipe_surface *psurf)
 {
    struct zink_ctx_surface *csurf = CALLOC_STRUCT(zink_ctx_surface);
    csurf->base = *psurf;
@@ -266,10 +272,26 @@ zink_create_surface(struct pipe_context *pctx,
 {
    struct zink_resource *res = zink_resource(pres);
    bool is_array = templ->u.tex.last_layer != templ->u.tex.first_layer;
+   bool needs_mutable = false;
    enum pipe_texture_target target_2d[] = {PIPE_TEXTURE_2D, PIPE_TEXTURE_2D_ARRAY};
-   if (!res->obj->dt && pres->format != templ->format)
+   if (!res->obj->dt && pres->format != templ->format) {
       /* mutable not set by default */
+      needs_mutable = !(res->base.b.bind & ZINK_BIND_MUTABLE);
+      /*
+         VUID-VkImageViewCreateInfo-image-07072
+         If image was created with the VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT flag and
+         format is a non-compressed format, the levelCount and layerCount members of
+         subresourceRange must both be 1
+       */
+      if (util_format_is_compressed(pres->format) && templ->u.tex.first_layer != templ->u.tex.last_layer)
+         return NULL;
+   }
+
+   if (!zink_screen(pctx->screen)->threaded && needs_mutable) {
+      /* this is fine without tc */
+      needs_mutable = false;
       zink_resource_object_init_mutable(zink_context(pctx), res);
+   }
 
    if (!zink_get_format(zink_screen(pctx->screen), templ->format))
       return NULL;
@@ -285,15 +307,21 @@ zink_create_surface(struct pipe_context *pctx,
          surface->is_swapchain = true;
          psurf = &surface->base;
       }
-   } else
+   } else if (!needs_mutable) {
       psurf = zink_get_surface(zink_context(pctx), pres, templ, &ivci);
-   if (!psurf)
+   }
+   if (!psurf && !needs_mutable)
       return NULL;
 
-   struct zink_ctx_surface *csurf = (struct zink_ctx_surface*)wrap_surface(pctx, psurf);
+   struct zink_ctx_surface *csurf = (struct zink_ctx_surface*)wrap_surface(pctx, needs_mutable ? templ : psurf);
+   csurf->needs_mutable = needs_mutable;
+   if (needs_mutable) {
+      csurf->surf = NULL;
+      pipe_resource_reference(&csurf->base.texture, pres);
+      init_pipe_surface_info(pctx, &csurf->base, templ, pres);
+   }
 
-   /* TODO: use VK_EXT_multisampled_render_to_single_sampled and skip this entirely */
-   if (templ->nr_samples) {
+   if (templ->nr_samples && !zink_screen(pctx->screen)->info.have_EXT_multisampled_render_to_single_sampled) {
       /* transient fb attachment: not cached */
       struct pipe_resource rtempl = *pres;
       rtempl.nr_samples = templ->nr_samples;
@@ -319,7 +347,7 @@ zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
 {
    struct zink_surface *surface = zink_surface(psurface);
    struct zink_resource *res = zink_resource(psurface->texture);
-   if (!psurface->nr_samples && !surface->is_swapchain) {
+   if ((!psurface->nr_samples || screen->info.have_EXT_multisampled_render_to_single_sampled) && !surface->is_swapchain) {
       simple_mtx_lock(&res->surface_mtx);
       if (psurface->reference.count) {
          /* a different context got a cache hit during deletion: this surface is alive again */
@@ -352,6 +380,9 @@ zink_surface_destroy(struct pipe_context *pctx,
                      struct pipe_surface *psurface)
 {
    struct zink_ctx_surface *csurf = (struct zink_ctx_surface *)psurface;
+   if (csurf->needs_mutable)
+      /* this has an extra resource ref */
+      pipe_resource_reference(&csurf->base.texture, NULL);
    zink_surface_reference(zink_screen(pctx->screen), &csurf->surf, NULL);
    pipe_surface_release(pctx, (struct pipe_surface**)&csurf->transient);
    FREE(csurf);

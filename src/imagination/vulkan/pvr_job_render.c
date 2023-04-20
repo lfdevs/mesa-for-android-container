@@ -1261,24 +1261,32 @@ pvr_geom_state_stream_ext_init(struct pvr_render_ctx *ctx,
       state->fw_ext_stream_len = 0;
 }
 
+static void pvr_geom_state_flags_init(const struct pvr_render_job *const job,
+                                      uint32_t *const flags)
+{
+   *flags = 0;
+
+   if (!job->rt_dataset->need_frag)
+      *flags |= PVR_WINSYS_GEOM_FLAG_FIRST_GEOMETRY;
+
+   if (job->geometry_terminate)
+      *flags |= PVR_WINSYS_GEOM_FLAG_LAST_GEOMETRY;
+
+   if (job->frag_uses_atomic_ops)
+      *flags |= PVR_WINSYS_GEOM_FLAG_SINGLE_CORE;
+}
+
 static void
 pvr_render_job_ws_geometry_state_init(struct pvr_render_ctx *ctx,
                                       struct pvr_render_job *job,
+                                      struct vk_sync *wait,
                                       struct pvr_winsys_geometry_state *state)
 {
    pvr_geom_state_stream_init(ctx, job, state);
    pvr_geom_state_stream_ext_init(ctx, job, state);
 
-   state->flags = 0;
-
-   if (!job->rt_dataset->need_frag)
-      state->flags |= PVR_WINSYS_GEOM_FLAG_FIRST_GEOMETRY;
-
-   if (job->geometry_terminate)
-      state->flags |= PVR_WINSYS_GEOM_FLAG_LAST_GEOMETRY;
-
-   if (job->frag_uses_atomic_ops)
-      state->flags |= PVR_WINSYS_GEOM_FLAG_SINGLE_CORE;
+   state->wait = wait;
+   pvr_geom_state_flags_init(job, &state->flags);
 }
 
 static inline void
@@ -1435,11 +1443,12 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
       if (job->has_stencil_attachment) {
          value.addr = job->ds.addr;
 
-         /* This should be set iff we only have a stencil attachment; all
-          * currently supported formats with a stencil component also contain
-          * depth.
+         /* Enable separate stencil. This should be enabled iff the buffer set
+          * in CR_ISP_STENCIL_LOAD_BASE does not contain a depth component.
           */
-         value.enable = false;
+         assert(job->has_depth_attachment ||
+                job->ds.vk_format == VK_FORMAT_S8_UINT);
+         value.enable = !job->has_depth_attachment;
       }
    }
    stream_ptr += pvr_cmd_length(CR_ISP_STENCIL_LOAD_BASE);
@@ -1467,8 +1476,11 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
           sizeof(job->pds_bgnd_reg_values));
    stream_ptr += 3U * 2U;
 
-   /* Set pds_pr_bgnd array to 0 */
-   memset(stream_ptr, 0, 3U * sizeof(uint64_t));
+   STATIC_ASSERT(ARRAY_SIZE(job->pds_pr_bgnd_reg_values) == 3U);
+   STATIC_ASSERT(sizeof(job->pds_pr_bgnd_reg_values[0]) == sizeof(uint64_t));
+   memcpy(stream_ptr,
+          job->pds_pr_bgnd_reg_values,
+          sizeof(job->pds_pr_bgnd_reg_values));
    stream_ptr += 3U * 2U;
 
    /* Set usc_clear_register array to 0 */
@@ -1655,43 +1667,48 @@ pvr_frag_state_stream_ext_init(struct pvr_render_ctx *ctx,
       state->fw_ext_stream_len = 0;
 }
 
+static void pvr_frag_state_flags_init(const struct pvr_render_job *const job,
+                                      uint32_t *const flags)
+{
+   *flags = 0;
+
+   if (job->has_depth_attachment)
+      *flags |= PVR_WINSYS_FRAG_FLAG_DEPTH_BUFFER_PRESENT;
+
+   if (job->has_stencil_attachment)
+      *flags |= PVR_WINSYS_FRAG_FLAG_STENCIL_BUFFER_PRESENT;
+
+   if (job->disable_compute_overlap)
+      *flags |= PVR_WINSYS_FRAG_FLAG_PREVENT_CDM_OVERLAP;
+
+   if (job->frag_uses_atomic_ops)
+      *flags |= PVR_WINSYS_FRAG_FLAG_SINGLE_CORE;
+
+   if (job->get_vis_results)
+      *flags |= PVR_WINSYS_FRAG_FLAG_GET_VIS_RESULTS;
+
+   if (job->requires_spm_scratch_buffer)
+      *flags |= PVR_WINSYS_FRAG_FLAG_SPMSCRATCHBUFFER;
+}
+
 static void
 pvr_render_job_ws_fragment_state_init(struct pvr_render_ctx *ctx,
                                       struct pvr_render_job *job,
+                                      struct vk_sync *wait,
                                       struct pvr_winsys_fragment_state *state)
 {
-   /* FIXME: what to do when job->run_frag is false? */
-
    pvr_frag_state_stream_init(ctx, job, state);
    pvr_frag_state_stream_ext_init(ctx, job, state);
 
-   /* FIXME: move to its own function? */
-   state->flags = 0;
-
-   if (job->has_depth_attachment)
-      state->flags |= PVR_WINSYS_FRAG_FLAG_DEPTH_BUFFER_PRESENT;
-
-   if (job->has_stencil_attachment)
-      state->flags |= PVR_WINSYS_FRAG_FLAG_STENCIL_BUFFER_PRESENT;
-
-   if (job->disable_compute_overlap)
-      state->flags |= PVR_WINSYS_FRAG_FLAG_PREVENT_CDM_OVERLAP;
-
-   if (job->frag_uses_atomic_ops)
-      state->flags |= PVR_WINSYS_FRAG_FLAG_SINGLE_CORE;
-
-   if (job->get_vis_results)
-      state->flags |= PVR_WINSYS_FRAG_FLAG_GET_VIS_RESULTS;
+   state->wait = wait;
+   pvr_frag_state_flags_init(job, &state->flags);
 }
 
 static void pvr_render_job_ws_submit_info_init(
    struct pvr_render_ctx *ctx,
    struct pvr_render_job *job,
-   struct vk_sync *barrier_geom,
-   struct vk_sync *barrier_frag,
-   struct vk_sync **waits,
-   uint32_t wait_count,
-   uint32_t *stage_flags,
+   struct vk_sync *wait_geom,
+   struct vk_sync *wait_frag,
    struct pvr_winsys_render_submit_info *submit_info)
 {
    memset(submit_info, 0, sizeof(*submit_info));
@@ -1700,28 +1717,27 @@ static void pvr_render_job_ws_submit_info_init(
    submit_info->rt_data_idx = job->rt_dataset->rt_data_idx;
 
    submit_info->frame_num = ctx->device->global_queue_present_count;
-   submit_info->job_num = ctx->device->global_queue_job_count;
+   submit_info->job_num = ctx->device->global_cmd_buffer_submit_count;
 
-   submit_info->run_frag = job->run_frag;
+   pvr_render_job_ws_geometry_state_init(ctx,
+                                         job,
+                                         wait_geom,
+                                         &submit_info->geometry);
 
-   submit_info->barrier_geom = barrier_geom;
-   submit_info->barrier_frag = barrier_frag;
+   if (job->run_frag) {
+      submit_info->run_frag = true;
 
-   submit_info->waits = waits;
-   submit_info->wait_count = wait_count;
-   submit_info->stage_flags = stage_flags;
-
-   pvr_render_job_ws_geometry_state_init(ctx, job, &submit_info->geometry);
-   pvr_render_job_ws_fragment_state_init(ctx, job, &submit_info->fragment);
+      pvr_render_job_ws_fragment_state_init(ctx,
+                                            job,
+                                            wait_frag,
+                                            &submit_info->fragment);
+   }
 }
 
 VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
                                struct pvr_render_job *job,
-                               struct vk_sync *barrier_geom,
-                               struct vk_sync *barrier_frag,
-                               struct vk_sync **waits,
-                               uint32_t wait_count,
-                               uint32_t *stage_flags,
+                               struct vk_sync *wait_geom,
+                               struct vk_sync *wait_frag,
                                struct vk_sync *signal_sync_geom,
                                struct vk_sync *signal_sync_frag)
 {
@@ -1732,11 +1748,8 @@ VkResult pvr_render_job_submit(struct pvr_render_ctx *ctx,
 
    pvr_render_job_ws_submit_info_init(ctx,
                                       job,
-                                      barrier_geom,
-                                      barrier_frag,
-                                      waits,
-                                      wait_count,
-                                      stage_flags,
+                                      wait_geom,
+                                      wait_frag,
                                       &submit_info);
 
    if (PVR_IS_DEBUG_SET(DUMP_CONTROL_STREAM)) {

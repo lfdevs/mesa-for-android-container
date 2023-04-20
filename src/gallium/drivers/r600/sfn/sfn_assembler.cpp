@@ -671,7 +671,12 @@ AssamblerVisitor::visit(const EmitVertexInstr& instr)
 void
 AssamblerVisitor::visit(const FetchInstr& fetch_instr)
 {
-   clear_states(sf_tex | sf_alu);
+   bool use_tc =
+      fetch_instr.has_fetch_flag(FetchInstr::use_tc) || (m_bc->gfx_level == CAYMAN);
+
+   auto clear_flags = use_tc ? sf_vtx : sf_tex;
+
+   clear_states(clear_flags | sf_alu);
 
    auto buffer_offset = fetch_instr.resource_offset();
    EBufferIndexMode rat_index_mode = bim_none;
@@ -682,8 +687,7 @@ AssamblerVisitor::visit(const FetchInstr& fetch_instr)
    if (fetch_instr.has_fetch_flag(FetchInstr::wait_ack))
       emit_wait_ack();
 
-   bool use_tc =
-      fetch_instr.has_fetch_flag(FetchInstr::use_tc) || (m_bc->gfx_level == CAYMAN);
+
    if (!use_tc &&
        vtx_fetch_results.find(fetch_instr.src().sel()) != vtx_fetch_results.end()) {
       m_bc->force_add_cf = 1;

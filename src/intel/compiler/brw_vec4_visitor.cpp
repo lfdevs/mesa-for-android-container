@@ -183,6 +183,7 @@ ALU3(BFI2)
 ALU1(FBH)
 ALU1(FBL)
 ALU1(CBIT)
+ALU1(LZD)
 ALU3(MAD)
 ALU2_ACC(ADDC)
 ALU2_ACC(SUBB)
@@ -1344,6 +1345,27 @@ vec4_visitor::resolve_ud_negate(src_reg *reg)
    src_reg temp = src_reg(this, glsl_type::uvec4_type);
    emit(BRW_OPCODE_MOV, dst_reg(temp), *reg);
    *reg = temp;
+}
+
+static brw_rnd_mode
+brw_rnd_mode_from_execution_mode(unsigned execution_mode)
+{
+   if (nir_has_any_rounding_mode_rtne(execution_mode))
+      return BRW_RND_MODE_RTNE;
+   if (nir_has_any_rounding_mode_rtz(execution_mode))
+      return BRW_RND_MODE_RTZ;
+   return BRW_RND_MODE_UNSPECIFIED;
+}
+
+void
+vec4_visitor::emit_shader_float_controls_execution_mode()
+{
+   unsigned execution_mode = this->nir->info.float_controls_execution_mode;
+   if (nir_has_any_rounding_mode_enabled(execution_mode)) {
+      brw_rnd_mode rnd = brw_rnd_mode_from_execution_mode(execution_mode);
+      const vec4_builder bld = vec4_builder(this).at_end();
+      bld.exec_all().emit(SHADER_OPCODE_RND_MODE, dst_null_ud(), brw_imm_d(rnd));
+   }
 }
 
 vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,

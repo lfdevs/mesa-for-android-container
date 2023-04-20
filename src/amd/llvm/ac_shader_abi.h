@@ -44,6 +44,7 @@ struct ac_shader_abi {
 
    /* These input registers sometimes need to be fixed up. */
    LLVMValueRef vertex_id;
+   LLVMValueRef vs_rel_patch_id;
    LLVMValueRef instance_id;
    LLVMValueRef persp_centroid, linear_centroid;
    LLVMValueRef color0, color1;
@@ -60,17 +61,10 @@ struct ac_shader_abi {
    /* Varying -> attribute number mapping. Also NIR-only */
    unsigned fs_input_attr_indices[MAX_VARYING];
 
-   void (*export_vertex)(struct ac_shader_abi *abi);
-
    void (*emit_primitive)(struct ac_shader_abi *abi, unsigned stream);
 
    void (*emit_vertex_with_counter)(struct ac_shader_abi *abi, unsigned stream,
                                     LLVMValueRef vertexidx, LLVMValueRef *addrs);
-
-   LLVMValueRef (*load_inputs)(struct ac_shader_abi *abi,
-                               unsigned driver_location, unsigned component,
-                               unsigned num_components, unsigned vertex_index,
-                               LLVMTypeRef type);
 
    LLVMValueRef (*load_tess_varyings)(struct ac_shader_abi *abi, LLVMTypeRef type,
                                       LLVMValueRef vertex_index, LLVMValueRef param_index,
@@ -98,16 +92,11 @@ struct ac_shader_abi {
    LLVMValueRef (*load_sampler_desc)(struct ac_shader_abi *abi, LLVMValueRef index,
                                      enum ac_descriptor_type desc_type);
 
-   LLVMValueRef (*load_sample_position)(struct ac_shader_abi *abi, LLVMValueRef sample_id);
-
-   LLVMValueRef (*emit_fbfetch)(struct ac_shader_abi *abi);
-
    LLVMValueRef (*intrinsic_load)(struct ac_shader_abi *abi, nir_intrinsic_instr *intrin);
 
    /* Whether to clamp the shadow reference value to [0,1]on GFX8. Radeonsi currently
     * uses it due to promoting D16 to D32, but radv needs it off. */
    bool clamp_shadow_reference;
-   bool interp_at_sample_force_center;
 
    /* Whether bounds checks are required */
    bool robust_buffer_access;
@@ -130,6 +119,9 @@ struct ac_shader_abi {
 
    /* Whether to disable anisotropic filtering. */
    bool disable_aniso_single_level;
+
+   /* Equal to radeon_info::conformant_trunc_coord. */
+   bool conformant_trunc_coord;
 
    /* Number of all interpolated inputs */
    unsigned num_interp;

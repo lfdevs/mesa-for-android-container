@@ -16,7 +16,7 @@
     </function>
 
     <function name="VertexAttribFormat" es2="3.1"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribFormat(ctx, attribindex, size, type, relativeoffset);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribFormat(ctx, attribindex, MESA_PACK_VFORMAT(type, size, normalized, 0, 0), relativeoffset);">
         <param name="attribindex" type="GLuint"/>
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
@@ -25,7 +25,7 @@
     </function>
 
     <function name="VertexAttribIFormat" es2="3.1"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribFormat(ctx, attribindex, size, type, relativeoffset);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribFormat(ctx, attribindex, MESA_PACK_VFORMAT(type, size, 0, 1, 0), relativeoffset);">
         <param name="attribindex" type="GLuint"/>
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
@@ -33,7 +33,7 @@
     </function>
 
     <function name="VertexAttribLFormat"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribFormat(ctx, attribindex, size, type, relativeoffset);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribFormat(ctx, attribindex, MESA_PACK_VFORMAT(type, size, 0, 0, 1), relativeoffset);">
         <param name="attribindex" type="GLuint"/>
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
@@ -62,7 +62,7 @@
     </function>
 
     <function name="VertexArrayVertexAttribFormatEXT"
-              marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribFormat(ctx, vaobj, attribindex, size, type, relativeoffset);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribFormat(ctx, vaobj, attribindex, MESA_PACK_VFORMAT(type, size, normalized, 0, 0), relativeoffset);">
         <param name="vaobj" type="GLuint"/>
         <param name="attribindex" type="GLuint"/>
         <param name="size" type="GLint"/>
@@ -72,7 +72,7 @@
     </function>
 
     <function name="VertexArrayVertexAttribIFormatEXT"
-              marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribFormat(ctx, vaobj, attribindex, size, type, relativeoffset);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribFormat(ctx, vaobj, attribindex, MESA_PACK_VFORMAT(type, size, 0, 1, 0), relativeoffset);">
         <param name="vaobj" type="GLuint"/>
         <param name="attribindex" type="GLuint"/>
         <param name="size" type="GLint"/>
@@ -81,7 +81,7 @@
     </function>
 
     <function name="VertexArrayVertexAttribLFormatEXT"
-              marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribFormat(ctx, vaobj, attribindex, size, type, relativeoffset);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_DSAAttribFormat(ctx, vaobj, attribindex, MESA_PACK_VFORMAT(type, size, 0, 0, 1), relativeoffset);">
         <param name="vaobj" type="GLuint"/>
         <param name="attribindex" type="GLuint"/>
         <param name="size" type="GLint"/>

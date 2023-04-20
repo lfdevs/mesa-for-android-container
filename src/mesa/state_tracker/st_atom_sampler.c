@@ -80,6 +80,20 @@ st_convert_sampler(const struct st_context *st,
    if (texobj->Target == GL_TEXTURE_RECTANGLE_ARB && !st->lower_rect_tex)
       sampler->unnormalized_coords = 1;
 
+   /*
+    * The spec says that "texture wrap modes are ignored" for seamless cube
+    * maps, so normalize the CSO. This works around Apple hardware which honours
+    * REPEAT modes even for seamless cube maps.
+    */
+   if ((texobj->Target == GL_TEXTURE_CUBE_MAP ||
+        texobj->Target == GL_TEXTURE_CUBE_MAP_ARRAY) &&
+       sampler->seamless_cube_map) {
+
+      sampler->wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+      sampler->wrap_t = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+      sampler->wrap_r = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
+   }
+
    sampler->lod_bias += tex_unit_lod_bias;
 
    /* Check that only wrap modes using the border color have the first bit
@@ -223,10 +237,10 @@ update_shader_samplers(struct st_context *st,
        * states that are NULL.
        */
       if (samplers_used & 1 &&
-          (ctx->Texture.Unit[tex_unit]._Current->Target != GL_TEXTURE_BUFFER ||
-           st->texture_buffer_sampler)) {
-         st_convert_sampler_from_unit(st, sampler, tex_unit,
-                                      prog->sh.data && prog->sh.data->Version >= 130);
+          (ctx->Texture.Unit[tex_unit]._Current->Target != GL_TEXTURE_BUFFER)) {
+         st_convert_sampler_from_unit(
+            st, sampler, tex_unit,
+            prog->shader_program && prog->shader_program->GLSL_Version >= 130);
          states[unit] = sampler;
       } else {
          states[unit] = NULL;

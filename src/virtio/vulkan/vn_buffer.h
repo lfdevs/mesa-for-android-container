@@ -19,9 +19,8 @@ struct vn_buffer_memory_requirements {
 };
 
 struct vn_buffer_cache_entry {
-   const VkBufferCreateInfo *create_info;
-
    struct vn_buffer_memory_requirements requirements;
+   atomic_bool valid;
 };
 
 struct vn_buffer_cache {
@@ -30,9 +29,15 @@ struct vn_buffer_cache {
 
    uint64_t max_buffer_size;
 
-   /* cache memory requirements for common native buffer infos */
-   struct vn_buffer_cache_entry *entries;
-   uint32_t entry_count;
+   /* lazily cache memory requirements for native buffer infos */
+   struct util_sparse_array entries;
+   simple_mtx_t mutex;
+
+   struct {
+      uint32_t cache_skip_count;
+      uint32_t cache_hit_count;
+      uint32_t cache_miss_count;
+   } debug;
 };
 
 struct vn_buffer {

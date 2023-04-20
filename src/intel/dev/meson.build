@@ -21,21 +21,40 @@
 # TODO: android?
 
 files_libintel_dev = files(
+  'i915/intel_device_info.c',
+  'i915/intel_device_info.h',
+  'xe/intel_device_info.c',
+  'xe/intel_device_info.h',
   'intel_debug.c',
   'intel_debug.h',
   'intel_device_info.c',
   'intel_device_info.h',
   'intel_hwconfig.c',
   'intel_hwconfig.h',
+  'intel_kmd.c',
+  'intel_kmd.h',
 )
+
+intel_dev_wa_src = custom_target('intel_wa.[ch]',
+                                 input : ['gen_wa_helpers.py', 'mesa_defs.json'],
+                                 output : ['intel_wa.h', 'intel_wa.c'],
+                                 command : [prog_python, '@INPUT@', '@OUTPUT@'])
+
+# ensures intel_wa.h exists before implementation files are compiled
+idep_intel_dev_wa = declare_dependency(sources : [intel_dev_wa_src[0]])
 
 libintel_dev = static_library(
   'intel_dev',
-  [files_libintel_dev, sha1_h],
+  [files_libintel_dev, sha1_h, [intel_dev_wa_src]],
   include_directories : [inc_include, inc_src, inc_intel],
-  dependencies : [dep_libdrm, idep_mesautil],
+  dependencies : [dep_libdrm, idep_mesautil, idep_intel_dev_wa],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
+)
+
+idep_intel_dev = declare_dependency(
+  link_with : libintel_dev,
+  dependencies : idep_intel_dev_wa,
 )
 
 if with_tests
@@ -43,8 +62,8 @@ if with_tests
        executable(
          'intel_device_info_test',
          'intel_device_info_test.c',
-         include_directories : [inc_include, inc_src],
-         link_with : libintel_dev,
+         include_directories : [inc_include, inc_src, inc_intel],
+         dependencies : idep_intel_dev,
        ),
        suite : ['intel'],
       )
@@ -62,9 +81,8 @@ if with_tests and with_tools.contains('drm-shim') and with_tools.contains('intel
   intel_devinfo_override_test = executable(
     'intel_device_info_override_test',
     'intel_device_info_override_test.c',
-    dependencies : [dep_libdrm],
-    include_directories : [inc_include, inc_src],
-    link_with : libintel_dev,
+    dependencies : [dep_libdrm, idep_intel_dev],
+    include_directories : [inc_include, inc_src, inc_intel],
   )
   intel_drm_ld_preload = join_paths(meson.current_build_dir(), '..', 'tools', 'libintel_noop_drm_shim.so')
   foreach _gens : platforms
@@ -88,9 +106,8 @@ if with_intel_tools
   intel_dev_info = executable(
     'intel_dev_info',
     files('intel_dev_info.c'),
-    dependencies : [dep_libdrm, dep_dl, dep_thread, dep_m],
+    dependencies : [dep_libdrm, dep_dl, dep_thread, dep_m, idep_intel_dev],
     include_directories : [inc_include, inc_src, inc_intel],
-    link_with : libintel_dev,
     c_args : [no_override_init_args],
     gnu_symbol_visibility : 'hidden',
     install : true

@@ -1,9 +1,8 @@
 # Manual test rules for using anholt's shared g41.
 .anholt-g41-test:
   extends:
-    - .crocus-rules
+    - .crocus-manual-rules
     - .test-gl
-    - .test-manual-mr
   tags:
     - anholt-g41
   variables:
@@ -13,30 +12,32 @@
 # Manual test rules for using anholt's shared hsw.
 .anholt-hsw-test:
   extends:
-    - .crocus-rules
     - .test-gl
-    - .test-manual-mr
   tags:
     - anholt-hsw
   variables:
-    GPU_VERSION: crocus-hsw
     FDO_CI_CONCURRENT: 12
 
-crocus-g41:
+# System is dead at the moment. needs maintenance.
+.crocus-g41:
   extends:
     - .anholt-g41-test
     - .deqp-test
   variables:
     DEQP_SUITE: crocus-g41
+    PIGLIT_PLATFORM: gbm
 
 crocus-hsw:
   extends:
     - .anholt-hsw-test
     - .deqp-test
+    - .crocus-manual-rules
   variables:
+    GPU_VERSION: crocus-hsw
     DEQP_SUITE: crocus-hsw
+    PIGLIT_PLATFORM: gbm
 
-crocus-g41-traces:
+.crocus-g41-traces:
   extends:
     - .anholt-g41-test
     - .piglit-traces-test
@@ -49,6 +50,7 @@ crocus-hsw-traces:
   extends:
     - .anholt-hsw-test
     - .piglit-traces-test
+    - .crocus-manual-rules
   variables:
     EGL_PLATFORM: "surfaceless"
     PIGLIT_REPLAY_DESCRIPTION_FILE: "${CI_PROJECT_DIR}/install/traces-crocus.yml"

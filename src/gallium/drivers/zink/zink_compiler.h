@@ -29,6 +29,8 @@
 #define ZINK_WORKGROUP_SIZE_X 1
 #define ZINK_WORKGROUP_SIZE_Y 2
 #define ZINK_WORKGROUP_SIZE_Z 3
+#define ZINK_INLINE_VAL_FLAT_MASK 0
+#define ZINK_INLINE_VAL_PV_LAST_VERT 1
 
 /* stop inlining shaders if they have >limit ssa vals after inlining:
  * recompile time isn't worth the inline
@@ -41,9 +43,9 @@ struct spirv_shader;
 struct tgsi_token;
 
 static inline gl_shader_stage
-clamp_stage(nir_shader *nir)
+clamp_stage(const shader_info *info)
 {
-   return nir->info.stage == MESA_SHADER_KERNEL ? MESA_SHADER_COMPUTE : nir->info.stage;
+   return info->stage == MESA_SHADER_KERNEL ? MESA_SHADER_COMPUTE : info->stage;
 }
 
 const void *
@@ -54,13 +56,20 @@ zink_get_compiler_options(struct pipe_screen *screen,
 struct nir_shader *
 zink_tgsi_to_nir(struct pipe_screen *screen, const struct tgsi_token *tokens);
 
+nir_shader*
+zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
+                               const nir_shader *prev_stage,
+                               int last_pv_vert_offset);
 
 void
 zink_screen_init_compiler(struct zink_screen *screen);
 void
 zink_compiler_assign_io(struct zink_screen *screen, nir_shader *producer, nir_shader *consumer);
+/* pass very large shader key data with extra_data */
 VkShaderModule
-zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shader *nir, const struct zink_shader_key *key);
+zink_shader_compile(struct zink_screen *screen, struct zink_shader *zs, nir_shader *nir, const struct zink_shader_key *key, const void *extra_data);
+VkShaderModule
+zink_shader_compile_separate(struct zink_screen *screen, struct zink_shader *zs);
 VkShaderModule
 zink_shader_spirv_compile(struct zink_screen *screen, struct zink_shader *zs, struct spirv_shader *spirv);
 struct zink_shader *
@@ -76,7 +85,7 @@ zink_shader_free(struct zink_screen *screen, struct zink_shader *shader);
 VkShaderModule
 zink_shader_tcs_compile(struct zink_screen *screen, struct zink_shader *zs, unsigned patch_vertices);
 struct zink_shader *
-zink_shader_tcs_create(struct zink_screen *screen, struct zink_shader *vs, unsigned vertices_per_patch);
+zink_shader_tcs_create(struct zink_screen *screen, nir_shader *vs, unsigned vertices_per_patch, nir_shader **nir_ret);
 
 static inline bool
 zink_shader_descriptor_is_buffer(struct zink_shader *zs, enum zink_descriptor_type type, unsigned i)
@@ -87,4 +96,10 @@ zink_shader_descriptor_is_buffer(struct zink_shader *zs, enum zink_descriptor_ty
 
 bool
 zink_shader_has_cubes(nir_shader *nir);
+nir_shader *
+zink_shader_blob_deserialize(struct zink_screen *screen, struct blob *blob);
+nir_shader *
+zink_shader_deserialize(struct zink_screen *screen, struct zink_shader *zs);
+void
+zink_shader_serialize_blob(nir_shader *nir, struct blob *blob);
 #endif

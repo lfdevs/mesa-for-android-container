@@ -19,10 +19,35 @@ else
     DEQP_RUNNER_CARGO_ARGS="--version 0.16.0 ${EXTRA_CARGO_ARGS} -- deqp-runner"
 fi
 
-cargo install --locked  \
-    -j ${FDO_CI_CONCURRENT:-4} \
-    --root /usr/local \
-    ${DEQP_RUNNER_CARGO_ARGS}
+if [ -z "$ANDROID_NDK_HOME" ]; then
+    cargo install --locked  \
+        -j ${FDO_CI_CONCURRENT:-4} \
+        --root /usr/local \
+        ${DEQP_RUNNER_CARGO_ARGS}
+else
+    mkdir -p /deqp-runner
+    pushd /deqp-runner
+    git clone --branch v0.16.1 --depth 1 https://gitlab.freedesktop.org/anholt/deqp-runner.git deqp-runner-git
+    pushd deqp-runner-git
+
+    cargo install --locked  \
+        -j ${FDO_CI_CONCURRENT:-4} \
+        --root /usr/local --version 2.10.0 \
+        cargo-ndk
+
+    rustup target add x86_64-linux-android
+    RUSTFLAGS='-C target-feature=+crt-static' cargo ndk --target x86_64-linux-android build
+
+    mv target/x86_64-linux-android/debug/deqp-runner /deqp-runner
+
+    cargo uninstall --locked  \
+        --root /usr/local \
+        cargo-ndk
+
+    popd
+    rm -rf deqp-runner-git
+    popd
+fi
 
 # remove unused test runners to shrink images for the Mesa CI build (not kernel,
 # which chooses its own deqp branch)

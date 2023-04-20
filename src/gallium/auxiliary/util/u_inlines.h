@@ -891,13 +891,17 @@ util_writes_stencil(const struct pipe_stencil_state *s)
 }
 
 static inline bool
+util_writes_depth(const struct pipe_depth_stencil_alpha_state *zsa)
+{
+   return zsa->depth_enabled && zsa->depth_writemask &&
+         (zsa->depth_func != PIPE_FUNC_NEVER);
+}
+
+static inline bool
 util_writes_depth_stencil(const struct pipe_depth_stencil_alpha_state *zsa)
 {
-   if (zsa->depth_enabled && zsa->depth_writemask &&
-       (zsa->depth_func != PIPE_FUNC_NEVER))
-      return true;
-
-   return util_writes_stencil(&zsa->stencil[0]) ||
+   return util_writes_depth(zsa) ||
+          util_writes_stencil(&zsa->stencil[0]) ||
           util_writes_stencil(&zsa->stencil[1]);
 }
 

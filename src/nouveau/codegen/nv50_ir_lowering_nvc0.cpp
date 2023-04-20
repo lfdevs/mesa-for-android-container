@@ -523,7 +523,7 @@ NVC0LegalizePostRA::insertTextureBarriers(Function *fn)
    }
 
    // gather the first uses for each TEX
-   for (int i = 0; i < insns.getSize(); ++i) {
+   for (unsigned int i = 0; i < insns.getSize(); ++i) {
       Instruction *tex = reinterpret_cast<Instruction *>(insns.get(i));
       if (isTextureOp(tex->op)) {
          texes.push_back(tex);

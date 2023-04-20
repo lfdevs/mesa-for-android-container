@@ -72,6 +72,13 @@ def get_args() -> 'Arguments':
                         default="vert",
                         choices=['vert', 'tesc', 'tese', 'geom', 'frag', 'comp'],
                         help="Uses specified stage rather than parsing the file extension")
+
+    parser.add_argument("-I",
+                        dest="includes",
+                        default=[],
+                        action='append',
+                        help="Include directory")
+
     args = parser.parse_args()
     return args
 
@@ -156,6 +163,9 @@ def process_file(args: 'Arguments') -> None:
 
     if args.create_entry is not None:
         cmd_list.extend(["--entry-point", args.create_entry])
+
+    for f in args.includes:
+        cmd_list.append('-I' + f)
 
     cmd_list.extend([
         '-V',

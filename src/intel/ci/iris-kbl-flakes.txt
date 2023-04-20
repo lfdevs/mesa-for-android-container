@@ -3,9 +3,6 @@ spec@amd_performance_monitor@measure
 spec@amd_performance_monitor@measure@change counters while active
 spec@amd_performance_monitor@measure@counters in range
 
-glx@glx-copy-sub-buffer samples=2
-glx@glx-copy-sub-buffer samples=16
-
 #X Error of failed request:  BadValue (integer parameter out of range for operation)
 #  Major opcode of failed request:  148 ()
 #  Minor opcode of failed request:  4
@@ -13,8 +10,6 @@ glx@glx-copy-sub-buffer samples=16
 #  Serial number of failed request:  41
 #  Current serial number in output stream:  45
 glx@glx-multi-context-ib-1
-
-glx@glx-swap-copy
 
 # The following two case are xfails, but sometimes pass.
 spec@egl_chromium_sync_control@conformance

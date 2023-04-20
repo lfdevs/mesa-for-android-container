@@ -66,9 +66,6 @@ class d3d12_video_bitstream_builder_h264 : public d3d12_video_bitstream_builder_
    void print_pps(const H264_PPS &pps);
    void print_sps(const H264_SPS &sps);
 
-   uint32_t m_activeSPSIndex = 0;
-   uint32_t m_activePPSIndex = 0;
-
    uint32_t get_active_sps_id()
    {
       return m_activeSPSIndex;
@@ -76,6 +73,11 @@ class d3d12_video_bitstream_builder_h264 : public d3d12_video_bitstream_builder_
    uint32_t get_active_pps_id()
    {
       return m_activePPSIndex;
+   };
+
+   std::vector<uint8_t>& get_active_pps()
+   {
+      return m_activePPS;
    };
 
    void set_active_sps_id(uint32_t active_sps_id)
@@ -91,6 +93,9 @@ class d3d12_video_bitstream_builder_h264 : public d3d12_video_bitstream_builder_
 
  private:
    d3d12_video_nalu_writer_h264 m_h264Encoder;
+   std::vector<uint8_t> m_activePPS;
+   uint32_t m_activeSPSIndex = 0;
+   uint32_t m_activePPSIndex = 0;
 };
 
 #endif

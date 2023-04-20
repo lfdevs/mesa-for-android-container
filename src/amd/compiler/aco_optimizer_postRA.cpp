@@ -511,6 +511,11 @@ try_combine_dpp(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
       if (i && !can_swap_operands(instr, &instr->opcode))
          continue;
 
+      bool input_mods = instr_info.can_use_input_modifiers[(int)instr->opcode] &&
+                        instr_info.operand_size[(int)instr->opcode] == 32;
+      if (!dpp8 && (mov->dpp16().neg[0] || mov->dpp16().abs[0]) && !input_mods)
+         continue;
+
       if (!dpp8) /* anything else doesn't make sense in SSA */
          assert(mov->dpp16().row_mask == 0xf && mov->dpp16().bank_mask == 0xf);
 
@@ -519,21 +524,20 @@ try_combine_dpp(pr_opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
       convert_to_DPP(instr, dpp8);
 
+      if (i) {
+         std::swap(instr->operands[0], instr->operands[1]);
+         instr->valu().neg[0].swap(instr->valu().neg[1]);
+         instr->valu().abs[0].swap(instr->valu().abs[1]);
+         instr->valu().opsel[0].swap(instr->valu().opsel[1]);
+      }
+
+      instr->operands[0] = mov->operands[0];
+
       if (dpp8) {
          DPP8_instruction* dpp = &instr->dpp8();
-         if (i) {
-            std::swap(dpp->operands[0], dpp->operands[1]);
-         }
-         dpp->operands[0] = mov->operands[0];
          memcpy(dpp->lane_sel, mov->dpp8().lane_sel, sizeof(dpp->lane_sel));
       } else {
          DPP16_instruction* dpp = &instr->dpp16();
-         if (i) {
-            std::swap(dpp->operands[0], dpp->operands[1]);
-            std::swap(dpp->neg[0], dpp->neg[1]);
-            std::swap(dpp->abs[0], dpp->abs[1]);
-         }
-         dpp->operands[0] = mov->operands[0];
          dpp->dpp_ctrl = mov->dpp16().dpp_ctrl;
          dpp->bound_ctrl = true;
          dpp->neg[0] ^= mov->dpp16().neg[0] && !dpp->abs[0];
@@ -563,7 +567,7 @@ num_encoded_alu_operands(const aco_ptr<Instruction>& instr)
       else if (instr->opcode == aco_opcode::v_writelane_b32_e64 ||
                instr->opcode == aco_opcode::v_writelane_b32)
          return 2; /* potentially VOP3, but reads VDST as SRC2 */
-      else if (instr->isVOP3() || instr->isVOP3P())
+      else if (instr->isVOP3() || instr->isVOP3P() || instr->isVINTERP_INREG())
          return instr->operands.size();
    }
 

@@ -156,8 +156,7 @@ _mesa_primitive_restart_index(const struct gl_context *ctx,
 void
 _mesa_InternalBindVertexBuffers(struct gl_context *ctx,
                                 const struct glthread_attrib_binding *buffers,
-                                GLbitfield buffer_mask,
-                                GLboolean restore_pointers);
+                                GLbitfield buffer_mask);
 
 extern void
 _mesa_print_arrays(struct gl_context *ctx);

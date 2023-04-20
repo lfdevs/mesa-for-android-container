@@ -866,7 +866,7 @@ static const struct ac_reg_range Gfx11ShShadowRange[] =
    },
    {
       R_00B220_SPI_SHADER_PGM_LO_GS,
-      R_00B2AC_SPI_SHADER_USER_DATA_GS_31 - R_00B220_SPI_SHADER_PGM_LO_GS + 4,
+      R_00B2B4_SPI_SHADER_GS_MESHLET_EXP_ALLOC - R_00B220_SPI_SHADER_PGM_LO_GS + 4,
    },
    {
       R_00B2C8_SPI_SHADER_USER_ACCUM_ESGS_0,
@@ -1193,6 +1193,10 @@ static const struct ac_reg_range Gfx11NonShadowedRanges[] =
       R_00B868_COMPUTE_STATIC_THREAD_MGMT_SE3 - R_00B864_COMPUTE_STATIC_THREAD_MGMT_SE2 + 4,
    },
    {
+      R_00B894_COMPUTE_STATIC_THREAD_MGMT_SE4,
+      R_00B8A0_COMPUTE_STATIC_THREAD_MGMT_SE7 - R_00B894_COMPUTE_STATIC_THREAD_MGMT_SE4 + 4,
+   },
+   {
       R_030800_GRBM_GFX_INDEX,
       4,
    },
@@ -1238,7 +1242,13 @@ static const struct ac_reg_range Gfx11NonShadowedRanges[] =
       R_035980_SDMA0_PERFCNT_PERFCOUNTER_LO,
       R_035994_SDMA0_PERFCOUNTER1_HI - R_035980_SDMA0_PERFCNT_PERFCOUNTER_LO + 4,
    },
+   {
+      R_031100_SPI_CONFIG_CNTL,
+      4,
+   },
 };
+
+/* TODO: Port Gfx11CpRs64InitShRanges and Gfx11CpRs64InitCsShRanges from PAL. */
 
 void ac_get_reg_ranges(enum amd_gfx_level gfx_level, enum radeon_family family,
                        enum ac_reg_range_type type, unsigned *num_ranges,
@@ -4127,4 +4137,157 @@ void ac_print_shadowed_regs(const struct radeon_info *info)
          printf("--------------------------------------------\n");
       }
    }
+}
+
+static void ac_build_load_reg(const struct radeon_info *info,
+                              pm4_cmd_add_fn pm4_cmd_add, void *pm4_cmdbuf,
+                              enum ac_reg_range_type type,
+                              uint64_t gpu_address)
+{
+   unsigned packet, num_ranges, offset;
+   const struct ac_reg_range *ranges;
+
+   ac_get_reg_ranges(info->gfx_level, info->family,
+                     type, &num_ranges, &ranges);
+
+   switch (type) {
+   case SI_REG_RANGE_UCONFIG:
+      gpu_address += SI_SHADOWED_UCONFIG_REG_OFFSET;
+      offset = CIK_UCONFIG_REG_OFFSET;
+      packet = PKT3_LOAD_UCONFIG_REG;
+      break;
+   case SI_REG_RANGE_CONTEXT:
+      gpu_address += SI_SHADOWED_CONTEXT_REG_OFFSET;
+      offset = SI_CONTEXT_REG_OFFSET;
+      packet = PKT3_LOAD_CONTEXT_REG;
+      break;
+   default:
+      gpu_address += SI_SHADOWED_SH_REG_OFFSET;
+      offset = SI_SH_REG_OFFSET;
+      packet = PKT3_LOAD_SH_REG;
+      break;
+   }
+
+   pm4_cmd_add(pm4_cmdbuf, PKT3(packet, 1 + num_ranges * 2, 0));
+   pm4_cmd_add(pm4_cmdbuf, gpu_address);
+   pm4_cmd_add(pm4_cmdbuf, gpu_address >> 32);
+   for (unsigned i = 0; i < num_ranges; i++) {
+      pm4_cmd_add(pm4_cmdbuf, (ranges[i].offset - offset) / 4);
+      pm4_cmd_add(pm4_cmdbuf, ranges[i].size / 4);
+   }
+}
+
+void ac_create_shadowing_ib_preamble(const struct radeon_info *info,
+                                     pm4_cmd_add_fn pm4_cmd_add, void *pm4_cmdbuf,
+                                     uint64_t gpu_address,
+                                     bool dpbb_allowed)
+{
+   if (dpbb_allowed) {
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_EVENT_WRITE, 0, 0));
+      pm4_cmd_add(pm4_cmdbuf, EVENT_TYPE(V_028A90_BREAK_BATCH) | EVENT_INDEX(0));
+   }
+
+   /* Wait for idle, because we'll update VGT ring pointers. */
+   pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_EVENT_WRITE, 0, 0));
+   pm4_cmd_add(pm4_cmdbuf, EVENT_TYPE(V_028A90_VS_PARTIAL_FLUSH) | EVENT_INDEX(4));
+
+   /* VGT_FLUSH is required even if VGT is idle. It resets VGT pointers. */
+   pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_EVENT_WRITE, 0, 0));
+   pm4_cmd_add(pm4_cmdbuf, EVENT_TYPE(V_028A90_VGT_FLUSH) | EVENT_INDEX(0));
+
+   if (info->gfx_level >= GFX11) {
+      uint64_t rb_mask = BITFIELD64_MASK(info->max_render_backends);
+
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_EVENT_WRITE, 2, 0));
+      pm4_cmd_add(pm4_cmdbuf, EVENT_TYPE(V_028A90_PIXEL_PIPE_STAT_CONTROL) | EVENT_INDEX(1));
+      pm4_cmd_add(pm4_cmdbuf, PIXEL_PIPE_STATE_CNTL_COUNTER_ID(0) |
+                              PIXEL_PIPE_STATE_CNTL_STRIDE(2) |
+                              PIXEL_PIPE_STATE_CNTL_INSTANCE_EN_LO(rb_mask));
+      pm4_cmd_add(pm4_cmdbuf, PIXEL_PIPE_STATE_CNTL_INSTANCE_EN_HI(rb_mask));
+
+      /* We must wait for idle using an EOP event before changing the attribute ring registers.
+       * Use the bottom-of-pipe EOP event, but increment the PWS counter instead of writing memory.
+       */
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_RELEASE_MEM, 6, 0));
+      pm4_cmd_add(pm4_cmdbuf, S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) |
+                              S_490_EVENT_INDEX(5) |
+                              S_490_PWS_ENABLE(1));
+      pm4_cmd_add(pm4_cmdbuf, 0); /* DST_SEL, INT_SEL, DATA_SEL */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* ADDRESS_LO */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* ADDRESS_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* DATA_LO */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* DATA_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* INT_CTXID */
+
+      unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
+                          S_586_GLM_INV(1) | S_586_GLM_WB(1) |
+                          S_586_GL1_INV(1) | S_586_GLV_INV(1) |
+                          S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
+
+      /* Wait for the PWS counter. */
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
+      pm4_cmd_add(pm4_cmdbuf, S_580_PWS_STAGE_SEL(V_580_CP_PFP) |
+                              S_580_PWS_COUNTER_SEL(V_580_TS_SELECT) |
+                              S_580_PWS_ENA2(1) |
+                              S_580_PWS_COUNT(0));
+      pm4_cmd_add(pm4_cmdbuf, 0xffffffff); /* GCR_SIZE */
+      pm4_cmd_add(pm4_cmdbuf, 0x01ffffff); /* GCR_SIZE_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* GCR_BASE_LO */
+      pm4_cmd_add(pm4_cmdbuf, 0); /* GCR_BASE_HI */
+      pm4_cmd_add(pm4_cmdbuf, S_585_PWS_ENA(1));
+      pm4_cmd_add(pm4_cmdbuf, gcr_cntl); /* GCR_CNTL */
+   } else if (info->gfx_level >= GFX10) {
+      unsigned gcr_cntl = S_586_GL2_INV(1) | S_586_GL2_WB(1) |
+                          S_586_GLM_INV(1) | S_586_GLM_WB(1) |
+                          S_586_GL1_INV(1) | S_586_GLV_INV(1) |
+                          S_586_GLK_INV(1) | S_586_GLI_INV(V_586_GLI_ALL);
+
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_ACQUIRE_MEM, 6, 0));
+      pm4_cmd_add(pm4_cmdbuf, 0);           /* CP_COHER_CNTL */
+      pm4_cmd_add(pm4_cmdbuf, 0xffffffff);  /* CP_COHER_SIZE */
+      pm4_cmd_add(pm4_cmdbuf, 0xffffff);    /* CP_COHER_SIZE_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0);           /* CP_COHER_BASE */
+      pm4_cmd_add(pm4_cmdbuf, 0);           /* CP_COHER_BASE_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0x0000000A);  /* POLL_INTERVAL */
+      pm4_cmd_add(pm4_cmdbuf, gcr_cntl);    /* GCR_CNTL */
+
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      pm4_cmd_add(pm4_cmdbuf, 0);
+   } else if (info->gfx_level == GFX9) {
+      unsigned cp_coher_cntl = S_0301F0_SH_ICACHE_ACTION_ENA(1) |
+                               S_0301F0_SH_KCACHE_ACTION_ENA(1) |
+                               S_0301F0_TC_ACTION_ENA(1) |
+                               S_0301F0_TCL1_ACTION_ENA(1) |
+                               S_0301F0_TC_WB_ACTION_ENA(1);
+
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_ACQUIRE_MEM, 5, 0));
+      pm4_cmd_add(pm4_cmdbuf, cp_coher_cntl); /* CP_COHER_CNTL */
+      pm4_cmd_add(pm4_cmdbuf, 0xffffffff);    /* CP_COHER_SIZE */
+      pm4_cmd_add(pm4_cmdbuf, 0xffffff);      /* CP_COHER_SIZE_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0);             /* CP_COHER_BASE */
+      pm4_cmd_add(pm4_cmdbuf, 0);             /* CP_COHER_BASE_HI */
+      pm4_cmd_add(pm4_cmdbuf, 0x0000000A);    /* POLL_INTERVAL */
+
+      pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
+      pm4_cmd_add(pm4_cmdbuf, 0);
+   } else {
+      unreachable("invalid chip");
+   }
+
+   pm4_cmd_add(pm4_cmdbuf, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
+   pm4_cmd_add(pm4_cmdbuf,
+               CC0_UPDATE_LOAD_ENABLES(1) |
+               CC0_LOAD_PER_CONTEXT_STATE(1) |
+               CC0_LOAD_CS_SH_REGS(1) |
+               CC0_LOAD_GFX_SH_REGS(1) |
+               CC0_LOAD_GLOBAL_UCONFIG(1));
+   pm4_cmd_add(pm4_cmdbuf,
+               CC1_UPDATE_SHADOW_ENABLES(1) |
+               CC1_SHADOW_PER_CONTEXT_STATE(1) |
+               CC1_SHADOW_CS_SH_REGS(1) |
+               CC1_SHADOW_GFX_SH_REGS(1) |
+               CC1_SHADOW_GLOBAL_UCONFIG(1));
+
+   for (unsigned i = 0; i < SI_NUM_SHADOWED_REG_RANGES; i++)
+      ac_build_load_reg(info, pm4_cmd_add, pm4_cmdbuf, i, gpu_address);
 }

@@ -311,6 +311,114 @@ TEST_F(TestShaderFromNir, fs_shed_tex_coord)
    check(schedule(sh), fs_sched_tex_coord_expect);
 }
 
+TEST_F(TestShaderFromNir, OptimizeAddWChanetoTrans)
+{
+   const char *input =
+R"(VS
+CHIPCLASS CAYMAN
+INPUT LOC:0 NAME:15
+OUTPUT LOC:0 NAME:0 MASK:15
+OUTPUT LOC:1 NAME:5 MASK:15 SID:9 SPI_SID:10
+SHADER
+BLOCK_START
+  ALU MOV S2.x@free{s} : I[0] {WL}
+  ALU MOV S3.y@free{s} : L[0x40c00000] {WL}
+  ALU MOV S4.z@free{s} : L[0xc1140000] {WL}
+  ALU MOV S5.w@free{s} : L[0xbfe00000] {WL}
+  ALU MOV S6.x@free{s} : L[0x3fa00000] {WL}
+  ALU MOV S7.x{s} : KC0[0].x {W}
+  ALU MOV S7.y{s} : KC0[0].y {W}
+  ALU MOV S7.z{s} : KC0[0].z {W}
+  ALU MOV S7.w{s} : KC0[0].w {WL}
+  ALU ADD S8.y@free{s} : S3.y@free{s} -S7.x{s} {WL}
+  ALU ADD S9.z@free{s} : S4.z@free{s} -S7.y{s} {WL}
+  ALU ADD S10.w@free{s} : S5.w@free{s} -S7.z{s} {WL}
+  ALU ADD S11.x@free{s} : S6.x@free{s} -S7.w{s} {WL}
+  ALU EXP_IEEE S12.y@free{s} : S8.y@free{s} + S8.y@free{s} + S8.y@free{s} {WL}
+  ALU EXP_IEEE S13.z@free{s} : S9.z@free{s} + S9.z@free{s} + S9.z@free{s} {WL}
+  ALU EXP_IEEE S14.x@free{s} : S10.w@free{s} + S10.w@free{s} + S10.w@free{s} {WL}
+  ALU EXP_IEEE S15.y@free{s} : S11.x@free{s} + S11.x@free{s} + S11.x@free{s} {WL}
+  ALU MOV S17.x{s} : S12.y@free{s} {W}
+  ALU MOV S17.y{s} : S13.z@free{s} {W}
+  ALU MOV S17.z{s} : S14.x@free{s} {W}
+  ALU MOV S17.w{s} : S15.y@free{s} {WL}
+  ALU MOV S18.x@group{s} : S17.x{s} {W}
+  ALU MOV S18.y@group{s} : S17.y{s} {W}
+  ALU MOV S18.z@group{s} : S17.z{s} {W}
+  ALU MOV S18.w@group{s} : S17.w{s} {WL}
+  EXPORT_DONE PARAM 0 S18.xyzw
+BLOCK_END)";
+
+   const char *expect =
+R"(VS
+CHIPCLASS CAYMAN
+INPUT LOC:0 NAME:15
+OUTPUT LOC:0 NAME:0 MASK:15
+OUTPUT LOC:1 NAME:5 MASK:15 SID:9 SPI_SID:10
+SHADER
+BLOCK_START
+  ALU ADD S8.y@free{s} : L[0x40c00000] -KC0[0].x {WL}
+  ALU ADD S9.z@free{s} : L[0xc1140000] -KC0[0].y {WL}
+  ALU ADD S10.w@free{s} : L[0xbfe00000] -KC0[0].z {WL}
+  ALU ADD S11.x@free{s} : L[0x3fa00000] -KC0[0].w {WL}
+  ALU EXP_IEEE S18.x@group{s} : S8.y@free{s} + S8.y@free{s} + S8.y@free{s} {W}
+  ALU EXP_IEEE S18.y@group{s} : S9.z@free{s} + S9.z@free{s} + S9.z@free{s} {W}
+  ALU EXP_IEEE S18.z@group{s} : S10.w@free{s} + S10.w@free{s} + S10.w@free{s} {W}
+  ALU EXP_IEEE S18.w@group{s} : S11.x@free{s} + S11.x@free{s} + S11.x@free{s} + S11.x@free{s} {WL}
+  EXPORT_DONE PARAM 0 S18.xyzw
+BLOCK_END
+)";
+   auto sh = from_string(input);
+   optimize(*sh);
+   check(sh, expect);
+};
+
+
+TEST_F(TestShaderFromNir, OptimizeIntoGroup)
+{
+   const char *input =
+R"(VS
+CHIPCLASS CAYMAN
+INPUT LOC:0 NAME:15
+OUTPUT LOC:0 NAME:0 MASK:15
+REGISTERS R0.x R1.x R2.x
+SHADER
+BLOCK_START
+  ALU MOV S4.x : R0.x {W}
+  ALU MOV S5.y : R1.x {W}
+  ALU MOV S6.z : R2.x {WL}
+  ALU_GROUP_BEGIN
+    ALU CUBE S7.x@chgr{s} : S6.z S5.y {W}
+    ALU CUBE S7.y@chgr{s} : S6.z S4.x {W}
+    ALU CUBE S7.z@chgr{s} : S4.x S6.z {W}
+    ALU CUBE S7.w@chgr{s} : S5.y S6.z {WL}
+  ALU_GROUP_END
+  EXPORT_DONE PARAM 0 S7.xyzw
+BLOCK_END)";
+
+   const char *expect =
+R"(VS
+CHIPCLASS CAYMAN
+INPUT LOC:0 NAME:15
+OUTPUT LOC:0 NAME:0 MASK:15
+REGISTERS R0.x R1.x R2.x
+SHADER
+BLOCK_START
+  ALU_GROUP_BEGIN
+    ALU CUBE S7.x@chgr{s} : R2.x@chan R1.x@chan {W}
+    ALU CUBE S7.y@chgr{s} : R2.x@chan R0.x@chan {W}
+    ALU CUBE S7.z@chgr{s} : R0.x@chan R2.x@chan {W}
+    ALU CUBE S7.w@chgr{s} : R1.x@chan R2.x@chan {WL}
+  ALU_GROUP_END
+  EXPORT_DONE PARAM 0 S7.xyzw
+BLOCK_END
+)";
+   auto sh = from_string(input);
+   optimize(*sh);
+   check(sh, expect);
+};
+
+
 void
 TestShaderFromNir::check(Shader *s, const char *expect_orig)
 {
@@ -340,3 +448,4 @@ TestShaderFromNir::ra_check(Shader *s, const char *expect_orig)
 
    EXPECT_EQ(test_str.str(), expect_str.str());
 }
+

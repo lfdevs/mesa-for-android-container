@@ -214,6 +214,7 @@ public:
    EMIT1(FBH)
    EMIT1(FBL)
    EMIT1(CBIT)
+   EMIT1(LZD)
    EMIT3(MAD)
    EMIT2(ADDC)
    EMIT2(SUBB)
@@ -274,6 +275,8 @@ public:
                                 vec4_instruction *inst, src_reg src);
 
    void resolve_ud_negate(src_reg *reg);
+
+   void emit_shader_float_controls_execution_mode();
 
    bool lower_minmax();
 

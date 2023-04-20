@@ -259,15 +259,22 @@ enum
  * in the shader via vs_state_bits in LS/HS.
  */
 /* bit gap */
-#define VS_STATE_LS_OUT_PATCH_SIZE__SHIFT    11
-#define VS_STATE_LS_OUT_PATCH_SIZE__MASK     0x1fff
 #define VS_STATE_LS_OUT_VERTEX_SIZE__SHIFT   24
-#define VS_STATE_LS_OUT_VERTEX_SIZE__MASK    0xff
+#define VS_STATE_LS_OUT_VERTEX_SIZE__MASK    0xff /* max 32 * 4 + 1 */
 
 /* These fields are only set in current_gs_state in si_context, and they are accessible
  * in the shader via vs_state_bits in legacy GS, the GS copy shader, and any NGG shader.
  */
 /* bit gap */
+#define GS_STATE_ESGS_VERTEX_STRIDE__SHIFT      10
+#define GS_STATE_ESGS_VERTEX_STRIDE__MASK       0xff /* max 32 * 4 + 1 */
+/* Small prim filter precision = num_samples / quant_mode, which can only be equal to 1/2^n
+ * where n is between 4 and 12. Knowing that, we only need to store 4 bits of the FP32 exponent.
+ * Set it like this: value = (fui(num_samples / quant_mode) >> 23) & 0xf;
+ * Expand to FP32 like this: ((0x70 | value) << 23);
+ * With 0x70 = 112, we get 2^(112 + value - 127) = 2^(value - 15), which is always a negative
+ * exponent and it's equal to 1/2^(15 - value).
+ */
 #define GS_STATE_SMALL_PRIM_PRECISION_NO_AA__SHIFT 18
 #define GS_STATE_SMALL_PRIM_PRECISION_NO_AA__MASK  0xf
 #define GS_STATE_SMALL_PRIM_PRECISION__SHIFT    22
@@ -317,6 +324,16 @@ enum
 #define SI_PROFILE_VS_NO_BINNING             (1 << 3)
 #define SI_PROFILE_PS_NO_BINNING             (1 << 4)
 #define SI_PROFILE_CLAMP_DIV_BY_ZERO         (1 << 5)
+
+enum si_shader_dump_type {
+   SI_DUMP_SHADER_KEY,
+   SI_DUMP_INIT_NIR,       /* initial input NIR when shaders are created (before lowering) */
+   SI_DUMP_NIR,            /* final NIR after lowering when shader variants are created */
+   SI_DUMP_INIT_LLVM_IR,   /* initial LLVM IR before optimizations */
+   SI_DUMP_LLVM_IR,        /* final LLVM IR */
+   SI_DUMP_ASM,            /* final asm shaders */
+   SI_DUMP_ALWAYS,
+};
 
 /**
  * For VS shader keys, describe any fixups required for vertex fetch.
@@ -400,7 +417,7 @@ struct si_shader_info {
    ubyte culldist_mask;
 
    uint16_t lshs_vertex_stride;
-   uint16_t esgs_itemsize; /* vertex stride */
+   uint16_t esgs_vertex_stride;
    uint16_t gsvs_vertex_size;
    ubyte gs_input_verts_per_prim;
    unsigned max_gsvs_emit_size;
@@ -600,6 +617,7 @@ struct si_ps_epilog_bits {
    unsigned alpha_to_coverage_via_mrtz : 1;  /* gfx11+ */
    unsigned clamp_color : 1;
    unsigned dual_src_blend_swizzle : 1;      /* gfx11+ */
+   unsigned rbplus_depth_only_opt:1;
 };
 
 union si_shader_part_key {
@@ -766,7 +784,6 @@ union si_shader_key {
 /* GCN-specific shader info. */
 struct si_shader_binary_info {
    ubyte vs_output_param_offset[NUM_TOTAL_VARYING_SLOTS];
-   uint64_t vs_output_param_mask; /* which params to export, indexed by "base" */
    uint32_t vs_output_ps_input_cntl[NUM_TOTAL_VARYING_SLOTS];
    ubyte num_input_sgprs;
    ubyte num_input_vgprs;
@@ -869,15 +886,6 @@ struct si_shader {
 
    bool uses_base_instance;
 
-   struct {
-      uint16_t ngg_emit_size; /* in dwords */
-      uint16_t hw_max_esverts;
-      uint16_t max_gsprims;
-      uint16_t max_out_verts;
-      uint16_t prim_amp_factor;
-      bool max_vert_out_per_gs_instance;
-   } ngg;
-
    /* Shader key + LLVM IR + disassembly + statistics.
     * Generated for debug contexts only.
     */
@@ -907,12 +915,20 @@ struct si_shader {
       } gs;
 
       struct {
+         /* Computed by gfx10_ngg_calculate_subgroup_info. */
+         uint16_t ngg_emit_size; /* in dwords */
+         uint16_t hw_max_esverts;
+         uint16_t max_gsprims;
+         uint16_t max_out_verts;
+         uint16_t prim_amp_factor;
+         bool max_vert_out_per_gs_instance;
+         /* Register values. */
          unsigned ge_max_output_per_subgroup;
          unsigned ge_ngg_subgrp_cntl;
          unsigned vgt_primitiveid_en;
          unsigned vgt_gs_onchip_cntl;
          unsigned vgt_gs_instance_cnt;
-         unsigned vgt_esgs_ring_itemsize;
+         unsigned esgs_vertex_stride;
          unsigned spi_vs_out_config;
          unsigned spi_shader_idx_format;
          unsigned spi_shader_pos_format;
@@ -946,9 +962,9 @@ struct si_shader {
          unsigned db_shader_control;
          unsigned num_interp;
       } ps;
-   } ctx_reg;
+   };
 
-   /*For save precompute registers value */
+   /* Precomputed register values. */
    unsigned vgt_tf_param;                /* VGT_TF_PARAM */
    unsigned vgt_vertex_reuse_block_cntl; /* VGT_VERTEX_REUSE_BLOCK_CNTL */
    unsigned pa_cl_vs_out_cntl;
@@ -975,6 +991,8 @@ unsigned si_shader_io_get_unique_index_patch(unsigned semantic);
 unsigned si_shader_io_get_unique_index(unsigned semantic, bool is_varying);
 bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader,
                              uint64_t scratch_va);
+bool si_can_dump_shader(struct si_screen *sscreen, gl_shader_stage stage,
+                        enum si_shader_dump_type dump_type);
 void si_shader_dump(struct si_screen *sscreen, struct si_shader *shader,
                     struct util_debug_callback *debug, FILE *f, bool check_debug_option);
 void si_shader_dump_stats_for_shader_db(struct si_screen *screen, struct si_shader *shader,
@@ -992,13 +1010,6 @@ bool si_get_external_symbol(enum amd_gfx_level gfx_level, void *data, const char
 /* si_shader_info.c */
 void si_nir_scan_shader(struct si_screen *sscreen,  const struct nir_shader *nir,
                         struct si_shader_info *info);
-
-/* si_shader_llvm_gs.c */
-struct si_shader *si_generate_gs_copy_shader(struct si_screen *sscreen,
-                                             struct ac_llvm_compiler *compiler,
-                                             struct si_shader_selector *gs_selector,
-                                             const struct pipe_stream_output_info *so,
-                                             struct util_debug_callback *debug);
 
 /* si_shader_nir.c */
 extern const nir_lower_subgroups_options si_nir_subgroups_options;
@@ -1058,7 +1069,7 @@ static inline bool gfx10_ngg_writes_user_edgeflags(struct si_shader *shader)
           shader->selector->info.writes_edgeflag;
 }
 
-static inline bool si_shader_uses_streamout(struct si_shader *shader)
+static inline bool si_shader_uses_streamout(const struct si_shader *shader)
 {
    return shader->selector->stage <= MESA_SHADER_GEOMETRY &&
           shader->selector->info.enabled_streamout_buffer_mask &&

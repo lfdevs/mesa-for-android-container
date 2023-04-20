@@ -273,6 +273,9 @@ void
 spirv_builder_emit_kill(struct spirv_builder *b);
 
 void
+spirv_builder_emit_terminate(struct spirv_builder *b);
+
+void
 spirv_builder_emit_demote(struct spirv_builder *b);
 
 SpvId

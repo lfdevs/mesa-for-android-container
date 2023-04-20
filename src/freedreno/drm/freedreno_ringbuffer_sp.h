@@ -87,6 +87,8 @@ struct fd_submit_sp {
    struct util_queue_fence retire_fence;
 
    flush_submit_list_fn flush_submit_list;
+
+   uint32_t seqno;
 };
 FD_DEFINE_CAST(fd_submit, fd_submit_sp);
 
@@ -112,6 +114,13 @@ struct fd_ringbuffer_sp {
       struct {
          struct fd_pipe *pipe;
          DECLARE_ARRAY(struct fd_bo *, reloc_bos);
+
+         /**
+          * The seqno of the last submit we were emitted to.  For stateobjs
+          * it is common to be re-emitted multiple times to the same submit,
+          * we can use this to detect the case.
+          */
+         uint32_t last_submit_seqno;
       };
       /* for other cases: */
       struct {

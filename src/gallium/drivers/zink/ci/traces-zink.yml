@@ -22,7 +22,7 @@ traces:
       text: "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20319"
   freedoom/freedoom-phase2-gl-high.trace:
     gl-zink-anv-tgl:
-      checksum: fa674cb9aa2fd7f4d6329388478b5519
+      checksum: 288b762ac80ed76e18f848649a618be1
   glxgears/glxgears-2-v2.trace:
     gl-zink-anv-tgl:
       checksum: f53ac20e17da91c0359c31f2fa3f401e
@@ -31,7 +31,7 @@ traces:
       checksum: 433b69bea68cfe81914b857bbdc60ea5
   gputest/pixmark-piano-v2.trace:
     gl-zink-anv-tgl:
-      checksum: 344e133c9faaeb24c6e0ec13d2f905b1
+      checksum: acdfae98a5a31da0a4450af4eea00aa1
   gputest/triangle-v2.trace:
     gl-zink-anv-tgl:
       checksum: 5f694874b15bcd7a3689b387c143590b

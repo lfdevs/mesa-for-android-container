@@ -68,9 +68,6 @@ struct vn_cs_encoder {
    /* the current buffer is buffers[buffer_count - 1].shmem */
    size_t current_buffer_size;
 
-   /* TODO remove when blob_id_0 support gets required */
-   uint32_t current_buffer_roundtrip;
-
    /* cur is the write pointer.  When cur passes end, the slow path is
     * triggered.
     */

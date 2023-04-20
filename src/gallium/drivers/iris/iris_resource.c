@@ -487,6 +487,16 @@ iris_resource_alloc_flags(const struct iris_screen *screen,
    if (templ->bind & PIPE_BIND_PROTECTED)
       flags |= BO_ALLOC_PROTECTED;
 
+   if (templ->bind & PIPE_BIND_SHARED) {
+      flags |= BO_ALLOC_SHARED;
+
+      /* We request that the bufmgr zero because, if a buffer gets re-used
+       * from the pool, we don't want to leak random garbage from our process
+       * to some other.
+       */
+      flags |= BO_ALLOC_ZEROED;
+   }
+
    return flags;
 }
 
@@ -1159,10 +1169,11 @@ iris_resource_create_for_buffer(struct pipe_screen *pscreen,
 }
 
 static struct pipe_resource *
-iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
-                                    const struct pipe_resource *templ,
-                                    const uint64_t *modifiers,
-                                    int modifiers_count)
+iris_resource_create_for_image(struct pipe_screen *pscreen,
+                               const struct pipe_resource *templ,
+                               const uint64_t *modifiers,
+                               int modifiers_count,
+                               unsigned row_pitch_B)
 {
    struct iris_screen *screen = (struct iris_screen *)pscreen;
    const struct intel_device_info *devinfo = screen->devinfo;
@@ -1180,7 +1191,7 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
    }
 
    const bool isl_surf_created_successfully =
-      iris_resource_configure_main(screen, res, templ, modifier, 0);
+      iris_resource_configure_main(screen, res, templ, modifier, row_pitch_B);
    if (!isl_surf_created_successfully)
       goto fail;
 
@@ -1261,6 +1272,16 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
 fail:
    iris_resource_destroy(pscreen, &res->base.b);
    return NULL;
+}
+
+static struct pipe_resource *
+iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
+                                    const struct pipe_resource *templ,
+                                    const uint64_t *modifiers,
+                                    int modifier_count)
+{
+   return iris_resource_create_for_image(pscreen, templ, modifiers,
+                                         modifier_count, 0);
 }
 
 static struct pipe_resource *
@@ -1421,13 +1442,15 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
          modifier = tiling_to_modifier(tiling);
       }
 
-      UNUSED const bool isl_surf_created_successfully =
+      const bool isl_surf_created_successfully =
          iris_resource_configure_main(screen, res, templ, modifier,
                                       whandle->stride);
-      assert(isl_surf_created_successfully);
+      if (!isl_surf_created_successfully)
+         goto fail;
 
-      UNUSED const bool ok = iris_resource_configure_aux(screen, res, true);
-      assert(ok);
+      if (!iris_resource_configure_aux(screen, res, true))
+         goto fail;
+
       /* The gallium dri layer will create a separate plane resource for the
        * aux image. iris_resource_finish_aux_import will merge the separate aux
        * parameters back into a single iris_resource.
@@ -2061,14 +2084,37 @@ iris_map_copy_region(struct iris_transfer *map)
       .format = res->internal_format,
    };
 
-   if (xfer->resource->target == PIPE_BUFFER)
+   if (xfer->resource->target == PIPE_BUFFER) {
       templ.target = PIPE_BUFFER;
-   else if (templ.array_size > 1)
-      templ.target = PIPE_TEXTURE_2D_ARRAY;
-   else
-      templ.target = PIPE_TEXTURE_2D;
+      map->staging = iris_resource_create_for_buffer(pscreen, &templ);
+   } else {
+      templ.target = templ.array_size > 1 ? PIPE_TEXTURE_2D_ARRAY
+                                          : PIPE_TEXTURE_2D;
 
-   map->staging = iris_resource_create(pscreen, &templ);
+      unsigned row_pitch_B = 0;
+
+#ifdef ANDROID
+      /* Staging buffers for stall-avoidance blits don't always have the
+       * same restrictions on stride as the original buffer.  For example,
+       * the original buffer may be used for scanout, while the staging
+       * buffer will not be.  So we may compute a smaller stride for the
+       * staging buffer than the original.
+       *
+       * Normally, this is good, as it saves memory.  Unfortunately, for
+       * Android, gbm_gralloc incorrectly asserts that the stride returned
+       * by gbm_bo_map() must equal the result of gbm_bo_get_stride(),
+       * which simply isn't always the case.
+       *
+       * Because gralloc is unlikely to be fixed, we hack around it in iris
+       * by forcing the staging buffer to have a matching stride.
+       */
+      if (iris_bo_is_external(res->bo))
+         row_pitch_B = res->surf.row_pitch_B;
+#endif
+
+      map->staging =
+         iris_resource_create_for_image(pscreen, &templ, NULL, 0, row_pitch_B);
+   }
 
    /* If we fail to create a staging resource, the caller will fallback
     * to mapping directly on the CPU.

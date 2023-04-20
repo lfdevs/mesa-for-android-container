@@ -1,7 +1,10 @@
 # No GPU hang, looked like cache flushing fail.
-dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_rgb565
-dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_rgba16f
-dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_srgb8_alpha8
+dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_.*
+dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_.*
+dEQP-GLES3.functional.fbo.blit.conversion.r16i_to_.*
+dEQP-GLES3.functional.fbo.blit.conversion.r16ui_to.*
+dEQP-GLES3.functional.fbo.blit.conversion.rgb5_a1_to_.*
+dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_.*
 
 # No GPU hang, looks like one 2x2 quad was colored slightly off?
 dEQP-GLES3.functional.fbo.msaa.4_samples.depth_component16
@@ -31,10 +34,11 @@ dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_srgb8_a
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x5_khr_rgba32i.texture2d_array_to_cubemap
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x6_khr_rgba32ui.cubemap_to_cubemap
 
-# Found when expanding coverage on 2022/11/17
+# Found when expanding coverage on 2022/11/17, or randomly flaking
 dEQP-GLES31.functional.separate_shader.random.79
 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.lines.4
 dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.rgba4_2d_array
+dEQP-GLES3.functional.texture.format.sized.cube.rgba4_npot
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.*cubemap.*
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.*texture2d_array.*
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.*astc.*cubemap.*

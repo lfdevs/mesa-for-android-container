@@ -58,7 +58,7 @@ libgles2 = shared_library(
   soversion : host_machine.system() == 'windows' ? '' : '2',
   version : '2.0.0',
   darwin_versions : '3.0.0',
-  name_prefix : 'lib',
+  name_prefix : host_machine.system() == 'windows' ? 'lib' : [],  # always use lib, but avoid warnings on !windows
   install : true,
 )
 

@@ -243,7 +243,7 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
                         uint32_t src_cpp,
                         uint32_t width,
                         uint32_t height,
-                        const struct v3dv_format *format);
+                        const struct v3dv_format_plane *format_plane);
 
 void
 v3dX(meta_emit_clear_image_rcl)(struct v3dv_job *job,
@@ -318,6 +318,6 @@ uint32_t v3dX(descriptor_bo_size)(VkDescriptorType type);
 
 uint32_t v3dX(max_descriptor_bo_size)(void);
 
-uint32_t v3dX(combined_image_sampler_texture_state_offset)(void);
+uint32_t v3dX(combined_image_sampler_texture_state_offset)(uint8_t plane);
 
-uint32_t v3dX(combined_image_sampler_sampler_state_offset)(void);
+uint32_t v3dX(combined_image_sampler_sampler_state_offset)(uint8_t plane);

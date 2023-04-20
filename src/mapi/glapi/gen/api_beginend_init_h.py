@@ -54,12 +54,12 @@ class PrintCode(gl_XML.gl_print_base):
             if not condition:
                 continue
 
-            if (condition == '_mesa_is_desktop_gl(ctx) || ctx->API == API_OPENGLES2' and
+            if (condition == '_mesa_is_desktop_gl(ctx) || _mesa_is_gles2(ctx)' and
                 re.match('VertexAttrib[1-4].*ARB', f.name)):
                 # These functions should map to an *ES callback for GLES2.
                 settings_by_condition['_mesa_is_desktop_gl(ctx)'].append(
                     'SET_{0}(tab, NAME({0}));'.format(f.name))
-                settings_by_condition['ctx->API == API_OPENGLES2'].append(
+                settings_by_condition['_mesa_is_gles2(ctx)'].append(
                     'SET_{0}(tab, NAME_ES({0}));'.format(f.name))
             else:
                 macro = ('NAME_CALLLIST' if f.name[0:8] == 'CallList' else

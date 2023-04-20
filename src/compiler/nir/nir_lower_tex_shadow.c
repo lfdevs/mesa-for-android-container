@@ -118,11 +118,14 @@ nir_lower_tex_shadow_impl(nir_builder *b, nir_instr *instr, void *options)
    nir_ssa_def *zero = nir_imm_float(b, 0.0);
 
    nir_ssa_def *lookup[6] = {result, NULL, NULL, NULL, zero, one};
-   nir_ssa_def *r[4] = {lookup[state->tex_swizzles[sampler_binding].swizzle_r],
-                        lookup[state->tex_swizzles[sampler_binding].swizzle_g],
-                        lookup[state->tex_swizzles[sampler_binding].swizzle_b],
-                        lookup[state->tex_swizzles[sampler_binding].swizzle_a]
-                       };
+   nir_ssa_def *r[4] = { result, result, result, result };
+
+   if (sampler_binding < state->n_states) {
+      r[0] = lookup[state->tex_swizzles[sampler_binding].swizzle_r];
+      r[1] = lookup[state->tex_swizzles[sampler_binding].swizzle_g];
+      r[2] = lookup[state->tex_swizzles[sampler_binding].swizzle_b];
+      r[3] = lookup[state->tex_swizzles[sampler_binding].swizzle_a];
+   }
 
    result = nir_vec(b, r, num_components);
 

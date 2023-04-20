@@ -449,6 +449,18 @@ print_opc_imm(struct opc_operands *operands)
    printf("label_%04d", operands->imm);
 }
 
+static void
+print_opc_store(struct opc_operands *operands)
+{
+   printf("mem");
+   print_components(operands->dst->write_mask);
+   printf(", ");
+
+   print_src(operands->src0, true);
+   print_src(operands->src1, true);
+   print_src(operands->src2, false);
+}
+
 #define OPC_BITS 7
 
 static const struct opc_info {
@@ -459,6 +471,7 @@ static const struct opc_info {
 #define OPC_MOV(opc) [INST_OPCODE_##opc] = {#opc, print_opc_mov}
 #define OPC_TEX(opc) [INST_OPCODE_##opc] = {#opc, print_opc_tex}
 #define OPC_IMM(opc) [INST_OPCODE_##opc] = {#opc, print_opc_imm}
+#define OPC_STORE(opc) [INST_OPCODE_##opc] = {#opc, print_opc_store}
    OPC(NOP),
    OPC(ADD),
    OPC(MAD),
@@ -501,11 +514,12 @@ static const struct opc_info {
    OPC(FLOOR),
    OPC(CEIL),
    OPC(SIGN),
+   OPC(I2I),
    OPC(I2F),
    OPC(F2I),
    OPC(CMP),
    OPC(LOAD),
-   OPC(STORE),
+   OPC_STORE(STORE),
    OPC(IMULLO0),
    OPC(IMULHI0),
    OPC(IMADLO0),

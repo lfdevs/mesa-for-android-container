@@ -230,8 +230,6 @@ public:
    virtual ir_constant *constant_expression_value(void *mem_ctx,
                                                   struct hash_table *variable_context = NULL);
 
-   ir_rvalue *as_rvalue_to_saturate();
-
    virtual bool is_lvalue(const struct _mesa_glsl_parse_state * = NULL) const
    {
       return false;

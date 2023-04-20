@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2021 Alyssa Rosenzweig <alyssa@rosenzweig.io>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright 2021 Alyssa Rosenzweig
+ * SPDX-License-Identifier: MIT
  */
 
 #include "agx_builder.h"
@@ -43,7 +25,7 @@ struct ra_ctx {
 
 /** Returns number of registers written by an instruction */
 unsigned
-agx_write_registers(agx_instr *I, unsigned d)
+agx_write_registers(const agx_instr *I, unsigned d)
 {
    unsigned size = agx_size_align_16(I->dest[d].size);
 
@@ -58,6 +40,7 @@ agx_write_registers(agx_instr *I, unsigned d)
       return 4 * size;
 
    case AGX_OPCODE_DEVICE_LOAD:
+   case AGX_OPCODE_LOCAL_LOAD:
    case AGX_OPCODE_LD_TILE:
       return util_bitcount(I->mask) * size;
 
@@ -89,7 +72,7 @@ agx_split_width(const agx_instr *I)
 }
 
 unsigned
-agx_read_registers(agx_instr *I, unsigned s)
+agx_read_registers(const agx_instr *I, unsigned s)
 {
    unsigned size = agx_size_align_16(I->src[s].size);
 
@@ -98,6 +81,7 @@ agx_read_registers(agx_instr *I, unsigned s)
       return I->nr_dests * agx_size_align_16(agx_split_width(I));
 
    case AGX_OPCODE_DEVICE_STORE:
+   case AGX_OPCODE_LOCAL_STORE:
    case AGX_OPCODE_ST_TILE:
       if (s == 0)
          return util_bitcount(I->mask) * size;
@@ -117,7 +101,9 @@ agx_read_registers(agx_instr *I, unsigned s)
    case AGX_OPCODE_TEXTURE_LOAD:
    case AGX_OPCODE_TEXTURE_SAMPLE:
       if (s == 0) {
-         /* Coordinates. We internally handle sample index as 32-bit */
+         /* Coordinates. We handle layer + sample index as 32-bit even when only
+          * the lower 16-bits are present.
+          */
          switch (I->dim) {
          case AGX_DIM_1D:
             return 2 * 1;
@@ -136,7 +122,7 @@ agx_read_registers(agx_instr *I, unsigned s)
          case AGX_DIM_CUBE_ARRAY:
             return 2 * 4;
          case AGX_DIM_2D_MS_ARRAY:
-            return 2 * 4;
+            return 2 * 3;
          }
 
          unreachable("Invalid texture dimension");
@@ -169,6 +155,13 @@ agx_read_registers(agx_instr *I, unsigned s)
          return size;
       }
 
+   case AGX_OPCODE_ATOMIC:
+   case AGX_OPCODE_LOCAL_ATOMIC:
+      if (s == 0 && I->atomic_opc == AGX_ATOMIC_OPC_CMPXCHG)
+         return size * 2;
+      else
+         return size;
+
    default:
       return size;
    }
@@ -179,7 +172,7 @@ find_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned max)
 {
    assert(count >= 1);
 
-   for (unsigned reg = 0; reg < max; reg += align) {
+   for (unsigned reg = 0; reg + count <= max; reg += align) {
       if (!BITSET_TEST_RANGE(used_regs, reg, reg + count - 1))
          return reg;
    }
@@ -222,6 +215,7 @@ reserve_live_in(struct ra_ctx *rctx)
 static void
 assign_regs(struct ra_ctx *rctx, agx_index v, unsigned reg)
 {
+   assert(reg < rctx->bound && "must not overflow register file");
    assert(v.type == AGX_INDEX_NORMAL && "only SSA gets registers allocated");
    rctx->ssa_to_reg[v.value] = reg;
 
@@ -316,15 +310,26 @@ pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
             return our_reg;
       }
 
+      unsigned collect_align = agx_size_align_16(collect->dest[0].size);
+      unsigned offset = our_source * align;
+
+      /* Prefer ranges of the register file that leave room for all sources of
+       * the collect contiguously.
+       */
+      for (unsigned base = 0; base + (collect->nr_srcs * align) <= rctx->bound;
+           base += collect_align) {
+         if (!BITSET_TEST_RANGE(rctx->used_regs, base,
+                                base + (collect->nr_srcs * align) - 1))
+            return base + offset;
+      }
+
       /* Try to respect the alignment requirement of the collect destination,
        * which may be greater than the sources (e.g. pack_64_2x32_split). Look
        * for a register for the source such that the collect base is aligned.
        */
-      unsigned collect_align = agx_size_align_16(collect->dest[0].size);
       if (collect_align > align) {
-         unsigned offset = our_source * align;
-
-         for (unsigned reg = offset; reg < rctx->bound; reg += collect_align) {
+         for (unsigned reg = offset; reg + collect_align <= rctx->bound;
+              reg += collect_align) {
             if (!BITSET_TEST_RANGE(rctx->used_regs, reg, reg + count - 1))
                return reg;
          }
@@ -451,7 +456,6 @@ agx_insert_parallel_copies(agx_context *ctx, agx_block *block)
          agx_index src = phi->src[pred_index];
 
          assert(dest.type == AGX_INDEX_REGISTER);
-         assert(src.type == AGX_INDEX_REGISTER);
          assert(dest.size == src.size);
 
          copies[i++] = (struct agx_copy){

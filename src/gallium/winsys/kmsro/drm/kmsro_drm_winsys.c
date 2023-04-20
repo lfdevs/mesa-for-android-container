@@ -64,95 +64,85 @@ struct pipe_screen *kmsro_drm_screen_create(int fd,
    util_sparse_array_init(&ro->bo_map, sizeof(struct renderonly_scanout), 64);
    simple_mtx_init(&ro->bo_map_lock, mtx_plain);
 
+   const struct {
+      const char *name;
+      struct pipe_screen *(*create_screen)(int, struct renderonly *,
+                                           const struct pipe_screen_config *);
+      struct renderonly_scanout *(*create_for_resource)(struct pipe_resource *,
+                                                        struct renderonly *,
+                                                        struct winsys_handle *);
+   } renderonly_drivers[] = {
+#if defined(GALLIUM_ASAHI)
+      {
+         .name = "asahi",
+         .create_screen = asahi_drm_screen_create_renderonly,
+         .create_for_resource = renderonly_create_gpu_import_for_resource,
+      },
+#endif
+
+#if defined(GALLIUM_ETNAVIV)
+      {
+         .name = "etnaviv",
+         .create_screen = etna_drm_screen_create_renderonly,
+         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+      },
+#endif
+
+#if defined(GALLIUM_FREEDRENO)
+      {
+         .name = "msm",
+         .create_screen = fd_drm_screen_create_renderonly,
+         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+      },
+#endif
+
+#if defined(GALLIUM_LIMA)
+      {
+         .name = "lima",
+         .create_screen = lima_drm_screen_create_renderonly,
+         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+      },
+#endif
+
+#if defined(GALLIUM_PANFROST)
+      {
+         .name = "panfrost",
+         .create_screen = panfrost_drm_screen_create_renderonly,
+         .create_for_resource = panfrost_create_kms_dumb_buffer_for_resource,
+      },
+#endif
+
+#if defined(GALLIUM_V3D)
+      {
+         .name = "v3d",
+         .create_screen = v3d_drm_screen_create_renderonly,
+         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+      },
+#endif
+
 #if defined(GALLIUM_VC4)
-   ro->gpu_fd = drmOpenWithType("vc4", NULL, DRM_NODE_RENDER);
-   if (ro->gpu_fd >= 0) {
       /* Passes the vc4-allocated BO through to the KMS-only DRM device using
        * PRIME buffer sharing.  The VC4 BO must be linear, which the SCANOUT
        * flag on allocation will have ensured.
        */
-      ro->create_for_resource = renderonly_create_gpu_import_for_resource;
-      screen = vc4_drm_screen_create_renderonly(ro, config);
-      if (!screen)
-         goto out_free;
-
-      return screen;
-   }
+      {
+         .name = "vc4",
+         .create_screen = vc4_drm_screen_create_renderonly,
+         .create_for_resource = renderonly_create_gpu_import_for_resource,
+      },
 #endif
+   };
 
-#if defined(GALLIUM_ETNAVIV)
-   ro->gpu_fd = drmOpenWithType("etnaviv", NULL, DRM_NODE_RENDER);
-   if (ro->gpu_fd >= 0) {
-      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
-      screen = etna_drm_screen_create_renderonly(ro);
-      if (!screen)
-         goto out_free;
-
-      return screen;
+   for (int i = 0; i < ARRAY_SIZE(renderonly_drivers); i++) {
+      ro->gpu_fd = drmOpenWithType(renderonly_drivers[i].name, NULL, DRM_NODE_RENDER);
+      if (ro->gpu_fd >= 0) {
+         ro->create_for_resource = renderonly_drivers[i].create_for_resource;
+         screen = renderonly_drivers[i].create_screen(ro->gpu_fd, ro, config);
+         if (!screen)
+            goto out_free;
+         return screen;
+      }
    }
-#endif
-
-#if defined(GALLIUM_FREEDRENO)
-   ro->gpu_fd = drmOpenWithType("msm", NULL, DRM_NODE_RENDER);
-   if (ro->gpu_fd >= 0) {
-      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
-      screen = fd_drm_screen_create(ro->gpu_fd, ro, config);
-      if (!screen)
-         goto out_free;
-
-      return screen;
-   }
-#endif
-
-#if defined(GALLIUM_PANFROST)
-   ro->gpu_fd = drmOpenWithType("panfrost", NULL, DRM_NODE_RENDER);
-
-   if (ro->gpu_fd >= 0) {
-      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
-      screen = panfrost_drm_screen_create_renderonly(ro);
-      if (!screen)
-         goto out_free;
-
-      return screen;
-   }
-#endif
-
-#if defined(GALLIUM_LIMA)
-   ro->gpu_fd = drmOpenWithType("lima", NULL, DRM_NODE_RENDER);
-   if (ro->gpu_fd >= 0) {
-      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
-      screen = lima_drm_screen_create_renderonly(ro);
-      if (!screen)
-         goto out_free;
-
-      return screen;
-   }
-#endif
-
-#if defined(GALLIUM_V3D)
-   ro->gpu_fd = drmOpenWithType("v3d", NULL, DRM_NODE_RENDER);
-   if (ro->gpu_fd >= 0) {
-      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
-      screen = v3d_drm_screen_create_renderonly(ro, config);
-      if (!screen)
-         goto out_free;
-
-      return screen;
-   }
-#endif
-
-#if defined(GALLIUM_ASAHI)
-   ro->gpu_fd = drmOpenWithType("asahi", NULL, DRM_NODE_RENDER);
-
-   if (ro->gpu_fd >= 0) {
-      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
-      screen = asahi_drm_screen_create_renderonly(ro);
-      if (!screen)
-         goto out_free;
-
-      return screen;
-   }
-#endif
 
    return screen;
 

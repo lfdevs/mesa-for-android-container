@@ -47,6 +47,7 @@
 #include "util/xmlconfig.h"
 #include "util/timespec.h"
 
+#include "vk_format.h"
 #include "vk_instance.h"
 #include "vk_physical_device.h"
 #include "vk_util.h"
@@ -415,15 +416,11 @@ wsi_x11_get_connection(struct wsi_device *wsi_dev,
    return entry->data;
 }
 
-struct surface_format {
-   VkFormat format;
-   unsigned bits_per_rgb;
-};
-
-static const struct surface_format formats[] = {
-   { VK_FORMAT_B8G8R8A8_SRGB,             8 },
-   { VK_FORMAT_B8G8R8A8_UNORM,            8 },
-   { VK_FORMAT_A2R10G10B10_UNORM_PACK32, 10 },
+static const VkFormat formats[] = {
+   VK_FORMAT_R5G6B5_UNORM_PACK16,
+   VK_FORMAT_B8G8R8A8_SRGB,
+   VK_FORMAT_B8G8R8A8_UNORM,
+   VK_FORMAT_A2R10G10B10_UNORM_PACK32,
 };
 
 static const VkPresentModeKHR present_modes[] = {
@@ -491,7 +488,7 @@ connection_get_visualtype(xcb_connection_t *conn, xcb_visualid_t visual_id)
 
 static xcb_visualtype_t *
 get_visualtype_for_window(xcb_connection_t *conn, xcb_window_t window,
-                          unsigned *depth)
+                          unsigned *depth, xcb_visualtype_t **rootvis)
 {
    xcb_query_tree_cookie_t tree_cookie;
    xcb_get_window_attributes_cookie_t attrib_cookie;
@@ -518,6 +515,8 @@ get_visualtype_for_window(xcb_connection_t *conn, xcb_window_t window,
    if (screen == NULL)
       return NULL;
 
+   if (rootvis)
+      *rootvis = screen_get_visualtype(screen, screen->root_visual, depth);
    return screen_get_visualtype(screen, visual_id, depth);
 }
 
@@ -620,7 +619,7 @@ x11_surface_get_support(VkIcdSurfaceBase *icd_surface,
       }
    }
 
-   if (!visual_supported(get_visualtype_for_window(conn, window, NULL))) {
+   if (!visual_supported(get_visualtype_for_window(conn, window, NULL, NULL))) {
       *pSupported = false;
       return VK_SUCCESS;
    }
@@ -630,7 +629,7 @@ x11_surface_get_support(VkIcdSurfaceBase *icd_surface,
 }
 
 static uint32_t
-x11_get_min_image_count(const struct wsi_device *wsi_device)
+x11_get_min_image_count(const struct wsi_device *wsi_device, bool is_xwayland)
 {
    if (wsi_device->x11.override_minImageCount)
       return wsi_device->x11.override_minImageCount;
@@ -652,17 +651,28 @@ x11_get_min_image_count(const struct wsi_device *wsi_device)
     *
     * This is a tradeoff as it uses more memory than needed for non-fullscreen
     * and non-performance intensive applications.
+    *
+    * For Xwayland Venus reports four images as described in
+    *   wsi_wl_surface_get_capabilities
     */
-   return 3;
+   return is_xwayland && wsi_device->x11.extra_xwayland_image ? 4 : 3;
 }
+
+static unsigned
+x11_get_min_image_count_for_present_mode(struct wsi_device *wsi_device,
+                                         struct wsi_x11_connection *wsi_conn,
+                                         VkPresentModeKHR present_mode);
 
 static VkResult
 x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
                              struct wsi_device *wsi_device,
+                             const VkSurfacePresentModeEXT *present_mode,
                              VkSurfaceCapabilitiesKHR *caps)
 {
    xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
    xcb_window_t window = x11_surface_get_window(icd_surface);
+   struct wsi_x11_connection *wsi_conn =
+      wsi_x11_get_connection(wsi_device, conn);
    xcb_get_geometry_cookie_t geom_cookie;
    xcb_generic_error_t *err;
    xcb_get_geometry_reply_t *geom;
@@ -674,7 +684,7 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
     * wait to read the reply until after we have a visual.
     */
    xcb_visualtype_t *visual =
-      get_visualtype_for_window(conn, window, &visual_depth);
+      get_visualtype_for_window(conn, window, &visual_depth, NULL);
 
    if (!visual)
       return VK_ERROR_SURFACE_LOST_KHR;
@@ -699,7 +709,12 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
                                       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
    }
 
-   caps->minImageCount = x11_get_min_image_count(wsi_device);
+   if (present_mode) {
+      caps->minImageCount = x11_get_min_image_count_for_present_mode(wsi_device, wsi_conn, present_mode->presentMode);
+   } else {
+      caps->minImageCount = x11_get_min_image_count(wsi_device, wsi_conn->is_xwayland);
+   }
+
    /* There is no real maximum */
    caps->maxImageCount = 0;
 
@@ -725,8 +740,10 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
 {
    assert(caps->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR);
 
+   const VkSurfacePresentModeEXT *present_mode = vk_find_struct_const(info_next, SURFACE_PRESENT_MODE_EXT);
+
    VkResult result =
-      x11_surface_get_capabilities(icd_surface, wsi_device,
+      x11_surface_get_capabilities(icd_surface, wsi_device, present_mode,
                                    &caps->surfaceCapabilities);
 
    if (result != VK_SUCCESS)
@@ -740,6 +757,33 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
          break;
       }
 
+      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_EXT: {
+         /* Unsupported. */
+         VkSurfacePresentScalingCapabilitiesEXT *scaling = (void *)ext;
+         scaling->supportedPresentScaling = 0;
+         scaling->supportedPresentGravityX = 0;
+         scaling->supportedPresentGravityY = 0;
+         scaling->minScaledImageExtent = caps->surfaceCapabilities.minImageExtent;
+         scaling->maxScaledImageExtent = caps->surfaceCapabilities.maxImageExtent;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_EXT: {
+         /* To be able to toggle between FIFO and non-FIFO, we would need a rewrite to always use FIFO thread
+          * mechanism. For now, only return the input, making this effectively unsupported. */
+         VkSurfacePresentModeCompatibilityEXT *compat = (void *)ext;
+         if (compat->pPresentModes) {
+            if (compat->presentModeCount) {
+               assert(present_mode);
+               compat->pPresentModes[0] = present_mode->presentMode;
+               compat->presentModeCount = 1;
+            }
+         } else {
+            compat->presentModeCount = 1;
+         }
+         break;
+      }
+
       default:
          /* Ignored */
          break;
@@ -749,22 +793,46 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
    return result;
 }
 
+static int
+format_get_component_bits(VkFormat format, int comp)
+{
+   return vk_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_RGB, comp);
+}
+
+static bool
+rgb_component_bits_are_equal(VkFormat format, const xcb_visualtype_t* type)
+{
+   return format_get_component_bits(format, 0) == util_bitcount(type->red_mask) &&
+          format_get_component_bits(format, 1) == util_bitcount(type->green_mask) &&
+          format_get_component_bits(format, 2) == util_bitcount(type->blue_mask);
+}
+
 static bool
 get_sorted_vk_formats(VkIcdSurfaceBase *surface, struct wsi_device *wsi_device,
                       VkFormat *sorted_formats, unsigned *count)
 {
    xcb_connection_t *conn = x11_surface_get_connection(surface);
    xcb_window_t window = x11_surface_get_window(surface);
-   xcb_visualtype_t *visual = get_visualtype_for_window(conn, window, NULL);
+   xcb_visualtype_t *rootvis = NULL;
+   xcb_visualtype_t *visual = get_visualtype_for_window(conn, window, NULL, &rootvis);
+
    if (!visual)
       return false;
 
+   /* use the root window's visual to set the default */
    *count = 0;
    for (unsigned i = 0; i < ARRAY_SIZE(formats); i++) {
-      if (formats[i].bits_per_rgb == util_bitcount(visual->red_mask) &&
-          formats[i].bits_per_rgb == util_bitcount(visual->green_mask) &&
-          formats[i].bits_per_rgb == util_bitcount(visual->blue_mask))
-         sorted_formats[(*count)++] = formats[i].format;
+      if (rgb_component_bits_are_equal(formats[i], rootvis))
+         sorted_formats[(*count)++] = formats[i];
+   }
+
+   for (unsigned i = 0; i < ARRAY_SIZE(formats); i++) {
+      for (unsigned j = 0; j < *count; j++)
+         if (formats[i] == sorted_formats[j])
+            goto next_format;
+      if (rgb_component_bits_are_equal(formats[i], visual))
+         sorted_formats[(*count)++] = formats[i];
+next_format:;
    }
 
    if (wsi_device->force_bgra8_unorm_first) {
@@ -832,6 +900,7 @@ x11_surface_get_formats2(VkIcdSurfaceBase *surface,
 
 static VkResult
 x11_surface_get_present_modes(VkIcdSurfaceBase *surface,
+                              struct wsi_device *wsi_device,
                               uint32_t *pPresentModeCount,
                               VkPresentModeKHR *pPresentModes)
 {
@@ -1622,6 +1691,34 @@ x11_present_to_x11(struct x11_swapchain *chain, uint32_t image_index,
    return result;
 }
 
+static VkResult
+x11_release_images(struct wsi_swapchain *wsi_chain,
+                   uint32_t count, const uint32_t *indices)
+{
+   struct x11_swapchain *chain = (struct x11_swapchain *)wsi_chain;
+   if (chain->status == VK_ERROR_SURFACE_LOST_KHR)
+      return chain->status;
+
+   for (uint32_t i = 0; i < count; i++) {
+      uint32_t index = indices[i];
+      assert(index < chain->base.image_count);
+
+      if (chain->has_acquire_queue) {
+         wsi_queue_push(&chain->acquire_queue, index);
+      } else {
+         assert(chain->images[index].busy);
+         chain->images[index].busy = false;
+      }
+   }
+
+   if (!chain->has_acquire_queue) {
+      assert(chain->present_poll_acquire_count >= count);
+      chain->present_poll_acquire_count -= count;
+   }
+
+   return VK_SUCCESS;
+}
+
 /**
  * Acquire a ready-to-use image from the swapchain.
  *
@@ -1853,7 +1950,7 @@ x11_manage_fifo_queues(void *state)
          /* Assume this isn't a swapchain where we force 5 images, because those
           * don't end up with an acquire queue at the moment.
           */
-         unsigned min_image_count = x11_get_min_image_count(chain->base.wsi);
+         unsigned min_image_count = x11_get_min_image_count(chain->base.wsi, wsi_conn->is_xwayland);
 
          /* With drirc overrides some games have swapchain with less than
           * minimum number of images. */
@@ -2418,6 +2515,17 @@ static VkResult x11_wait_for_present(struct wsi_swapchain *wsi_chain,
    return result;
 }
 
+static unsigned
+x11_get_min_image_count_for_present_mode(struct wsi_device *wsi_device,
+                                         struct wsi_x11_connection *wsi_conn,
+                                         VkPresentModeKHR present_mode)
+{
+   if (x11_needs_wait_for_fences(wsi_device, wsi_conn, present_mode))
+      return 5;
+   else
+      return x11_get_min_image_count(wsi_device, wsi_conn->is_xwayland);
+}
+
 /**
  * Create the swapchain.
  *
@@ -2459,7 +2567,7 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    else if (x11_needs_wait_for_fences(wsi_device, wsi_conn, present_mode))
       num_images = MAX2(num_images, 5);
    else if (wsi_device->x11.ensure_minImageCount)
-      num_images = MAX2(num_images, x11_get_min_image_count(wsi_device));
+      num_images = MAX2(num_images, x11_get_min_image_count(wsi_device, wsi_conn->is_xwayland));
 
    /* Check that we have a window up-front. It is an error to not have one. */
    xcb_window_t window = x11_surface_get_window(icd_surface);
@@ -2546,6 +2654,7 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.acquire_next_image = x11_acquire_next_image;
    chain->base.queue_present = x11_queue_present;
    chain->base.wait_for_present = x11_wait_for_present;
+   chain->base.release_images = x11_release_images;
    chain->base.present_mode = present_mode;
    chain->base.image_count = num_images;
    chain->conn = conn;

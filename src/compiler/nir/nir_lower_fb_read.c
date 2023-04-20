@@ -56,32 +56,27 @@ nir_lower_fb_read_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
    if (intr->intrinsic != nir_intrinsic_load_output)
       return false;
 
-   /* TODO KHR_blend_equation_advanced is limited to non-MRT
-    * scenarios.. but possible there are other extensions
-    * where this pass would be useful that do support MRT?
-    *
-    * I guess for now I'll leave that as an exercise for the
-    * reader.
-    */
-   if (nir_intrinsic_base(intr) != 0 || nir_src_as_uint(intr->src[0]) != 0)
-      return false;
-
    b->cursor = nir_before_instr(&intr->instr);
 
    nir_ssa_def *fragcoord = nir_load_frag_coord(b);
    nir_ssa_def *sampid = nir_load_sample_id(b);
-
+   nir_ssa_def *layer = nir_load_layer_id(b);
    fragcoord = nir_f2i32(b, fragcoord);
 
-   nir_tex_instr *tex = nir_tex_instr_create(b->shader, 2);
+   nir_tex_instr *tex = nir_tex_instr_create(b->shader, 3);
    tex->op = nir_texop_txf_ms_fb;
    tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
-   tex->coord_components = 2;
+   tex->coord_components = 3;
    tex->dest_type = nir_type_float32;
+   tex->is_array = true;
    tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(nir_channels(b, fragcoord, 0x3));
+   tex->src[0].src =
+      nir_src_for_ssa(nir_vec3(b, nir_channel(b, fragcoord, 0), nir_channel(b, fragcoord, 1), layer));
    tex->src[1].src_type = nir_tex_src_ms_index;
    tex->src[1].src = nir_src_for_ssa(sampid);
+   struct nir_io_semantics io = nir_intrinsic_io_semantics(intr);
+   tex->src[2].src = nir_src_for_ssa(nir_imm_intN_t(b, io.location - FRAG_RESULT_DATA0, 32));
+   tex->src[2].src_type = nir_tex_src_texture_handle;
 
    nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
    nir_builder_instr_insert(b, &tex->instr);

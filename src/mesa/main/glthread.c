@@ -50,13 +50,70 @@ glthread_unmarshal_batch(void *job, void *gdata, int thread_index)
    unsigned pos = 0;
    unsigned used = batch->used;
    uint64_t *buffer = batch->buffer;
+   struct gl_shared_state *shared = ctx->Shared;
 
-   _glapi_set_dispatch(ctx->CurrentServerDispatch);
+   /* Determine if we should lock the global mutexes. */
+   simple_mtx_lock(&shared->Mutex);
+   int64_t current_time = os_time_get_nano();
 
-   _mesa_HashLockMutex(ctx->Shared->BufferObjects);
-   ctx->BufferObjectsLocked = true;
-   simple_mtx_lock(&ctx->Shared->TexMutex);
-   ctx->TexturesLocked = true;
+   /* We can only lock the mutexes after NoLockDuration nanoseconds have
+    * passed since multiple contexts were active.
+    */
+   bool lock_mutexes = shared->GLThread.LastContextSwitchTime +
+                       shared->GLThread.NoLockDuration < current_time;
+
+   /* Check if multiple contexts are active (the last executing context is
+    * different).
+    */
+   if (ctx != shared->GLThread.LastExecutingCtx) {
+      if (lock_mutexes) {
+         /* If we get here, we've been locking the global mutexes for a while
+          * and now we are switching contexts. */
+         if (shared->GLThread.LastContextSwitchTime +
+             120 * ONE_SECOND_IN_NS < current_time) {
+            /* If it's been more than 2 minutes of only one active context,
+             * indicating that there was no other active context for a long
+             * time, reset the no-lock time to its initial state of only 1
+             * second. This is most likely an infrequent situation of
+             * multi-context loading of game content and shaders.
+             * (this is a heuristic)
+             */
+            shared->GLThread.NoLockDuration = ONE_SECOND_IN_NS;
+         } else if (shared->GLThread.NoLockDuration < 32 * ONE_SECOND_IN_NS) {
+            /* Double the no-lock duration if we are transitioning from only
+             * one active context to multiple active contexts after a short
+             * time, up to a maximum of 32 seconds, indicating that multiple
+             * contexts are frequently executing. (this is a heuristic)
+             */
+            shared->GLThread.NoLockDuration *= 2;
+         }
+
+         lock_mutexes = false;
+      }
+
+      /* There are multiple active contexts. Update the last executing context
+       * and the last context switch time. We only start locking global mutexes
+       * after LastContextSwitchTime + NoLockDuration passes, so this
+       * effectively resets the non-locking stopwatch to 0, so that multiple
+       * contexts can execute simultaneously as long as they are not idle.
+       */
+      shared->GLThread.LastExecutingCtx = ctx;
+      shared->GLThread.LastContextSwitchTime = current_time;
+   }
+   simple_mtx_unlock(&shared->Mutex);
+
+   /* Execute the GL calls. */
+   _glapi_set_dispatch(ctx->Dispatch.Current);
+
+   /* Here we lock the mutexes once globally if possible. If not, we just
+    * fallback to the individual API calls doing it.
+    */
+   if (lock_mutexes) {
+      _mesa_HashLockMutex(shared->BufferObjects);
+      ctx->BufferObjectsLocked = true;
+      simple_mtx_lock(&shared->TexMutex);
+      ctx->TexturesLocked = true;
+   }
 
    while (pos < used) {
       const struct marshal_cmd_base *cmd =
@@ -65,10 +122,12 @@ glthread_unmarshal_batch(void *job, void *gdata, int thread_index)
       pos += _mesa_unmarshal_dispatch[cmd->cmd_id](ctx, cmd);
    }
 
-   ctx->TexturesLocked = false;
-   simple_mtx_unlock(&ctx->Shared->TexMutex);
-   ctx->BufferObjectsLocked = false;
-   _mesa_HashUnlockMutex(ctx->Shared->BufferObjects);
+   if (lock_mutexes) {
+      ctx->TexturesLocked = false;
+      simple_mtx_unlock(&shared->TexMutex);
+      ctx->BufferObjectsLocked = false;
+      _mesa_HashUnlockMutex(shared->BufferObjects);
+   }
 
    assert(pos == used);
    batch->used = 0;
@@ -107,9 +166,13 @@ _mesa_glthread_init_dispatch(struct gl_context *ctx,
 void
 _mesa_glthread_init(struct gl_context *ctx)
 {
+   struct pipe_screen *screen = ctx->screen;
    struct glthread_state *glthread = &ctx->GLThread;
-
    assert(!glthread->enabled);
+
+   if (!screen->get_param(screen, PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE) ||
+       !screen->get_param(screen, PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION))
+      return;
 
    if (!util_queue_init(&glthread->queue, "gl", MARSHAL_MAX_BATCHES - 2,
                         1, 0, NULL)) {
@@ -140,20 +203,14 @@ _mesa_glthread_init(struct gl_context *ctx)
    }
    glthread->next_batch = &glthread->batches[glthread->next];
    glthread->used = 0;
-
-   glthread->enabled = true;
    glthread->stats.queue = &glthread->queue;
-
-   glthread->SupportsBufferUploads =
-      ctx->Const.BufferCreateMapUnsynchronizedThreadSafe &&
-      ctx->Const.AllowMappedBuffersDuringExecution;
-
-   ctx->CurrentClientDispatch = ctx->MarshalExec;
 
    glthread->LastDListChangeBatchIndex = -1;
 
    /* glthread takes over all L3 pinning */
    ctx->st->pin_thread_counter = ST_L3_PINNING_DISABLED;
+
+   _mesa_glthread_enable(ctx);
 
    /* Execute the thread initialization function in the thread. */
    struct util_queue_fence fence;
@@ -171,33 +228,60 @@ free_vao(void *data, UNUSED void *userData)
 }
 
 void
-_mesa_glthread_destroy(struct gl_context *ctx, const char *reason)
+_mesa_glthread_destroy(struct gl_context *ctx)
 {
    struct glthread_state *glthread = &ctx->GLThread;
 
-   if (!glthread->enabled)
+   _mesa_glthread_disable(ctx);
+
+   if (util_queue_is_initialized(&glthread->queue)) {
+      util_queue_destroy(&glthread->queue);
+
+      for (unsigned i = 0; i < MARSHAL_MAX_BATCHES; i++)
+         util_queue_fence_destroy(&glthread->batches[i].fence);
+
+      _mesa_HashDeleteAll(glthread->VAOs, free_vao, NULL);
+      _mesa_DeleteHashTable(glthread->VAOs);
+      _mesa_glthread_release_upload_buffer(ctx);
+   }
+}
+
+void _mesa_glthread_enable(struct gl_context *ctx)
+{
+   if (ctx->GLThread.enabled ||
+       ctx->Dispatch.Current == ctx->Dispatch.ContextLost ||
+       ctx->GLThread.DebugOutputSynchronous)
       return;
 
-   if (reason)
-      _mesa_debug(ctx, "glthread destroy reason: %s\n", reason);
+   ctx->GLThread.enabled = true;
+   ctx->GLApi = ctx->MarshalExec;
+
+   /* Update the dispatch only if the dispatch is current. */
+   if (_glapi_get_dispatch() == ctx->Dispatch.Current) {
+       _glapi_set_dispatch(ctx->GLApi);
+   }
+}
+
+void _mesa_glthread_disable(struct gl_context *ctx)
+{
+   if (!ctx->GLThread.enabled)
+      return;
 
    _mesa_glthread_finish(ctx);
-   util_queue_destroy(&glthread->queue);
-
-   for (unsigned i = 0; i < MARSHAL_MAX_BATCHES; i++)
-      util_queue_fence_destroy(&glthread->batches[i].fence);
-
-   _mesa_HashDeleteAll(glthread->VAOs, free_vao, NULL);
-   _mesa_DeleteHashTable(glthread->VAOs);
-   _mesa_glthread_release_upload_buffer(ctx);
 
    ctx->GLThread.enabled = false;
-   ctx->CurrentClientDispatch = ctx->CurrentServerDispatch;
+   ctx->GLApi = ctx->Dispatch.Current;
 
-   /* Update the dispatch only if the context is current. */
+   /* Update the dispatch only if the dispatch is current. */
    if (_glapi_get_dispatch() == ctx->MarshalExec) {
-       _glapi_set_dispatch(ctx->CurrentClientDispatch);
+       _glapi_set_dispatch(ctx->GLApi);
    }
+
+   /* Unbind VBOs in all VAOs that glthread bound for non-VBO vertex uploads
+    * to restore original states.
+    */
+   if (ctx->API != API_OPENGL_CORE)
+      _mesa_glthread_unbind_uploaded_vbos(ctx);
 }
 
 void
@@ -207,8 +291,8 @@ _mesa_glthread_flush_batch(struct gl_context *ctx)
    if (!glthread->enabled)
       return;
 
-   if (ctx->CurrentServerDispatch == ctx->ContextLost) {
-      _mesa_glthread_destroy(ctx, "context lost");
+   if (ctx->Dispatch.Current == ctx->Dispatch.ContextLost) {
+      _mesa_glthread_disable(ctx);
       return;
    }
 
@@ -238,20 +322,6 @@ _mesa_glthread_flush_batch(struct gl_context *ctx)
    }
 
    struct glthread_batch *next = glthread->next_batch;
-
-   /* Debug: execute the batch immediately from this thread.
-    *
-    * Note that glthread_unmarshal_batch() changes the dispatch table so we'll
-    * need to restore it when it returns.
-    */
-   if (false) {
-      glthread_unmarshal_batch(next, NULL, 0);
-      _glapi_set_dispatch(ctx->CurrentClientDispatch);
-
-      glthread->LastCallList = NULL;
-      glthread->LastBindBuffer = NULL;
-      return;
-   }
 
    p_atomic_add(&glthread->stats.num_offloaded_items, glthread->used);
    next->used = glthread->used;
@@ -350,4 +420,14 @@ _mesa_error_glthread_safe(struct gl_context *ctx, GLenum error, bool glthread,
 
       _mesa_error(ctx, error, "%s", s);
    }
+}
+
+bool
+_mesa_glthread_invalidate_zsbuf(struct gl_context *ctx)
+{
+   struct glthread_state *glthread = &ctx->GLThread;
+   if (!glthread->enabled)
+      return false;
+   _mesa_marshal_InternalInvalidateFramebufferAncillaryMESA();
+   return true;
 }

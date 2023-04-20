@@ -33,5 +33,4 @@ profile = "gpu"
 process_isolation = true
 timeout = 180.0
   [piglit.env]
-  PIGLIT_PLATFORM = "mixed_glx_egl"
   PIGLIT_NO_WINDOW = "1"

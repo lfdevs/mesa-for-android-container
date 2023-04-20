@@ -53,9 +53,6 @@ template = """\
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
  */
 
 #include <math.h>
@@ -249,6 +246,15 @@ static uint16_t
 pack_half_1x16(float x)
 {
    return _mesa_float_to_half(x);
+}
+
+/**
+ * Evaluate one component of packHalf2x16, RTZ mode.
+ */
+static uint16_t
+pack_half_1x16_rtz(float x)
+{
+   return _mesa_float_to_float16_rtz(x);
 }
 
 /**

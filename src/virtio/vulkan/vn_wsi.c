@@ -81,7 +81,7 @@ vn_wsi_init(struct vn_physical_device *physical_dev)
    VkResult result = wsi_device_init(
       &physical_dev->wsi_device, vn_physical_device_to_handle(physical_dev),
       vn_wsi_proc_addr, alloc, -1, &physical_dev->instance->dri_options,
-      false);
+      &(struct wsi_device_options){.sw_device = false, .extra_xwayland_image = true});
    if (result != VK_SUCCESS)
       return result;
 
@@ -186,7 +186,8 @@ vn_wsi_create_image_from_swapchain(
    const VkExternalMemoryImageCreateInfo local_external_info = {
       .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
       .pNext = local_create_info.pNext,
-      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+      .handleTypes =
+         dev->physical_device->external_memory.renderer_handle_type,
    };
    local_create_info.pNext = &local_external_info;
 

@@ -17,8 +17,19 @@ agx_create_query(struct pipe_context *ctx, unsigned query_type, unsigned index)
 }
 
 static void
-agx_destroy_query(struct pipe_context *ctx, struct pipe_query *query)
+agx_destroy_query(struct pipe_context *ctx, struct pipe_query *pquery)
 {
+   struct agx_query *query = (struct agx_query *)pquery;
+
+   /* It is legal for the query to be destroyed before its value is read,
+    * particularly during application teardown. In this case, don't leave a
+    * dangling reference to the query.
+    */
+   if (query->writer) {
+      *util_dynarray_element(&query->writer->occlusion_queries,
+                             struct agx_query *, query->writer_index) = NULL;
+   }
+
    free(query);
 }
 
@@ -39,9 +50,10 @@ agx_begin_query(struct pipe_context *pctx, struct pipe_query *pquery)
        * other than piglit) actually hits this, we could shadow the query to
        * avoid the flush.
        */
-      if (query->writer)
+      if (query->writer) {
          agx_flush_batch_for_reason(ctx, query->writer,
                                     "Occlusion overwritten");
+      }
 
       assert(query->writer == NULL);
 
@@ -154,6 +166,11 @@ agx_finish_batch_occlusion_queries(struct agx_batch *batch)
 
    util_dynarray_foreach(&batch->occlusion_queries, struct agx_query *, it) {
       struct agx_query *query = *it;
+
+      /* Skip queries that have since been destroyed */
+      if (query == NULL)
+         continue;
+
       assert(query->writer == batch);
 
       /* Get the result for this batch. If results is NULL, it means that no

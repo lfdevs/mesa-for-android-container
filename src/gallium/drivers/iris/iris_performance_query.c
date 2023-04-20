@@ -180,7 +180,8 @@ iris_get_perf_counter_info(struct pipe_context *pipe,
 
    intel_perf_query_result_clear(&results);
 
-   *name = counter->name;
+   *name = INTEL_DEBUG(DEBUG_PERF_SYMBOL_NAMES) ?
+      counter->symbol_name : counter->name;
    *desc = counter->desc;
    *offset = counter->offset;
    *data_size = intel_perf_query_counter_get_size(counter);

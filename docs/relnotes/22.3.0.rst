@@ -2366,7 +2366,7 @@ Jan Beich (1):
 
 - util: unify FreeBSD futex_wait signature with Linux/OpenBSD/Windows
 
-Jason Ekstrand (115):
+Faith Ekstrand (115):
 
 - nir: Clean up and improve nir_dedup_inline_samplers
 - intel/fs_reg_allocate: Improve compressed instruction self-interference

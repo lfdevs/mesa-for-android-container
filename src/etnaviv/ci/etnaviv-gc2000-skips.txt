@@ -11,3 +11,4 @@ shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges
 spec@arb_internalformat_query2@all internalformat_<x>_type pname checks
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2dshadow
 spec@!opengl 1.1@streaming-texture-leak
+spec@arb_map_buffer_alignment@arb_map_buffer_alignment-map-invalidate-range

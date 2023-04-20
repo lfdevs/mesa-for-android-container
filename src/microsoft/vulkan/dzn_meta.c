@@ -492,7 +492,7 @@ dzn_meta_blits_get_fs(struct dzn_device *device,
             .is_linear_filtering = 0,
             .skip_boundary_conditions = 1,
          };
-         dxil_lower_sample_to_txf_for_integer_tex(nir, &wrap_state, NULL, 0);
+         dxil_lower_sample_to_txf_for_integer_tex(nir, 1, &wrap_state, NULL, 0);
       }
 
       D3D12_SHADER_BYTECODE bc;

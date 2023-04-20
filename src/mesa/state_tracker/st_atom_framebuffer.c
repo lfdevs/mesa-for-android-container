@@ -139,6 +139,7 @@ st_update_framebuffer_state( struct st_context *st )
    framebuffer.height = _mesa_geometric_height(fb);
    framebuffer.samples = _mesa_geometric_samples(fb);
    framebuffer.layers = _mesa_geometric_layers(fb);
+   framebuffer.resolve = fb->resolve;
 
    /* Examine Mesa's ctx->DrawBuffer->_ColorDrawBuffers state
     * to determine which surfaces to draw to

@@ -108,6 +108,12 @@ gl_shader_stage_is_callable(gl_shader_stage stage)
 }
 
 static inline bool
+gl_shader_stage_is_rt(gl_shader_stage stage)
+{
+   return stage == MESA_SHADER_RAYGEN || gl_shader_stage_is_callable(stage);
+}
+
+static inline bool
 gl_shader_stage_can_set_fragment_shading_rate(gl_shader_stage stage)
 {
    /* According to EXT_fragment_shading_rate :
@@ -862,6 +868,19 @@ typedef enum
     * Fragment shading rate used for KHR_fragment_shading_rate (Vulkan).
     */
    SYSTEM_VALUE_FRAG_SHADING_RATE,
+
+   /*
+    * Rasterized fragment is fully covered by the generating primitive
+    * (SPV_EXT_fragment_fully_covered).
+    */
+   SYSTEM_VALUE_FULLY_COVERED,
+
+   /*
+    * Fragment size and invocation count used for
+    * EXT_fragment_invocation_density (Vulkan).
+    */
+   SYSTEM_VALUE_FRAG_SIZE,
+   SYSTEM_VALUE_FRAG_INVOCATION_COUNT,
 
    SYSTEM_VALUE_MAX             /**< Number of values */
 } gl_system_value;

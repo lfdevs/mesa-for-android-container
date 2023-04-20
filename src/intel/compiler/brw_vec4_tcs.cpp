@@ -304,14 +304,14 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
    }
 
-   case nir_intrinsic_control_barrier: {
-      dst_reg header = dst_reg(this, glsl_type::uvec4_type);
-      emit(TCS_OPCODE_CREATE_BARRIER_HEADER, header);
-      emit(SHADER_OPCODE_BARRIER, dst_null_ud(), src_reg(header));
-      break;
-   }
-
-   case nir_intrinsic_memory_barrier_tcs_patch:
+   case nir_intrinsic_scoped_barrier:
+      if (nir_intrinsic_memory_scope(instr) != NIR_SCOPE_NONE)
+         vec4_visitor::nir_emit_intrinsic(instr);
+      if (nir_intrinsic_execution_scope(instr) == NIR_SCOPE_WORKGROUP) {
+         dst_reg header = dst_reg(this, glsl_type::uvec4_type);
+         emit(TCS_OPCODE_CREATE_BARRIER_HEADER, header);
+         emit(SHADER_OPCODE_BARRIER, dst_null_ud(), src_reg(header));
+      }
       break;
 
    default:
@@ -449,7 +449,8 @@ brw_compile_tcs(const struct brw_compiler *compiler,
 
    if (is_scalar) {
       fs_visitor v(compiler, params->log_data, mem_ctx, &key->base,
-                   &prog_data->base.base, nir, 8, debug_enabled);
+                   &prog_data->base.base, nir, 8, params->stats != NULL,
+                   debug_enabled);
       if (!v.run_tcs()) {
          params->error_str = ralloc_strdup(mem_ctx, v.fail_msg);
          return NULL;

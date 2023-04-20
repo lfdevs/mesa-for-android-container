@@ -14,7 +14,6 @@ STABLE_EPHEMERAL=" \
       bzip2 \
       libtool \
       libssl-dev \
-      python3-pip \
       "
 
 apt-get update
@@ -43,8 +42,8 @@ apt-get install -y --no-remove \
       llvm-13-dev \
       llvm-11-dev \
       ocl-icd-opencl-dev \
-      python3-freezegun \
-      python3-pytest \
+      python3-pip \
+      python3-venv \
       procps \
       spirv-tools \
       shellcheck \
@@ -63,7 +62,8 @@ export         XORGMACROS_VERSION=util-macros-1.19.0
 
 . .gitlab-ci/container/build-mold.sh
 
-wget $XORG_RELEASES/util/$XORGMACROS_VERSION.tar.bz2
+curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -O \
+  $XORG_RELEASES/util/$XORGMACROS_VERSION.tar.bz2
 tar -xvf $XORGMACROS_VERSION.tar.bz2 && rm $XORGMACROS_VERSION.tar.bz2
 cd $XORGMACROS_VERSION; ./configure; make install; cd ..
 rm -rf $XORGMACROS_VERSION
@@ -92,7 +92,7 @@ ninja install
 popd
 rm -rf DirectX-Headers
 
-pip3 install lavacli==1.5.2
+python3 -m pip install -r .gitlab-ci/lava/requirements.txt
 
 # install bindgen
 RUSTFLAGS='-L native=/usr/local/lib' cargo install \

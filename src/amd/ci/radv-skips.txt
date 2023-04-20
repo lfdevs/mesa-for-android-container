@@ -5,7 +5,16 @@ dEQP-VK.info.device_extensions
 dEQP-VK.image.swapchain_mutable.*
 dEQP-VK.wsi.*
 
-# Exclude this test which timeout most of the time.
+# Exclude these memory tests that usually take more than 30s to complete.
+dEQP-VK.memory.mapping.dedicated_alloc.image.full.1048577.*
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
+dEQP-VK.memory.pipeline_barrier.all.1048576_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.all.1048576_vertex_buffer_stride_4
+dEQP-VK.memory.pipeline_barrier.all.65536_vertex_buffer_stride_2
+dEQP-VK.memory.pipeline_barrier.all.65536_vertex_buffer_stride_4
+dEQP-VK.memory.pipeline_barrier.host_read_host_write.1048576
+dEQP-VK.memory.pipeline_barrier.host_read_host_write.65536
+dEQP-VK.memory.pipeline_barrier.host_write_transfer_src.1048576
 dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
 
 # Exclude this test which fails on all GPUS except RDNA2+.
@@ -41,7 +50,7 @@ dEQP-VK.ray_tracing_pipeline.misc.recursiveTraces_tri_14
 dEQP-VK.ray_tracing_pipeline.misc.recursiveTraces_tri_15
 
 # Those test either fail or hang so just exclude all of them for now.
-dEQP-VK.ray_tracing_pipeline.pipeline_no_null_shaders_flag.*
+dEQP-VK.pipeline.monolithic.shader_module_identifier.pipeline_from_id.ray_tracing_libs.*
 
 # LLVM (soft hangs)
 dEQP-VK.graphicsfuzz.while-inside-switch
@@ -50,3 +59,6 @@ dEQP-VK.graphicsfuzz.while-inside-switch
 dEQP-VK.graphicsfuzz.spv-stable-maze-O-dead-code
 dEQP-VK.graphicsfuzz.spv-stable-maze-O-memory-accesses
 dEQP-VK.spirv_assembly.instruction.graphics.16bit_storage.uniform_32struct_to_16struct.uniform_buffer_block_geom
+
+# started failing with CTS 1.3.5.0
+dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic

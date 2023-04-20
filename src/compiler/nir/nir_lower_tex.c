@@ -1370,6 +1370,40 @@ nir_lower_lod_zero_width(nir_builder *b, nir_tex_instr *tex)
 }
 
 static bool
+lower_index_to_offset(nir_builder *b, nir_tex_instr *tex)
+{
+   bool progress = false;
+   b->cursor = nir_before_instr(&tex->instr);
+
+   for (unsigned i = 0; i < tex->num_srcs; i++) {
+      unsigned *index;
+      switch (tex->src[i].src_type) {
+      case nir_tex_src_texture_offset:
+         index = &tex->texture_index;
+         break;
+      case nir_tex_src_sampler_offset:
+         index = &tex->sampler_index;
+         break;
+      default:
+         continue;
+      }
+
+      /* If there's no base index, there's nothing to lower */
+      if ((*index) == 0)
+         continue;
+
+      assert(tex->src[i].src.is_ssa);
+      nir_ssa_def *sum = nir_iadd_imm(b, tex->src[i].src.ssa, *index);
+      nir_instr_rewrite_src(&tex->instr, &tex->src[i].src,
+                            nir_src_for_ssa(sum));
+      *index = 0;
+      progress = true;
+   }
+
+   return progress;
+}
+
+static bool
 nir_lower_tex_block(nir_block *block, nir_builder *b,
                     const nir_lower_tex_options *options,
                     const struct nir_shader_compiler_options *compiler_options)
@@ -1392,6 +1426,9 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          sat_mask |= (1 << 1);    /* .y */
       if ((1 << tex->sampler_index) & options->saturate_s)
          sat_mask |= (1 << 0);    /* .x */
+
+      if (options->lower_index_to_offset)
+         progress |= lower_index_to_offset(b, tex);
 
       /* If we are clamping any coords, we must lower projector first
        * as clamping happens *after* projection:

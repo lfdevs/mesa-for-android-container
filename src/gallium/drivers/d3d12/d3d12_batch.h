@@ -46,6 +46,7 @@ struct d3d12_batch {
    struct d3d12_fence *fence;
 
    struct hash_table *bos;
+   struct util_dynarray local_bos;
    struct hash_table *sampler_tables;
    struct set *sampler_views;
    struct set *surfaces;
@@ -60,6 +61,7 @@ struct d3d12_batch {
    bool pending_memory_barrier;
 
    uint64_t submit_id;
+   uint32_t ctx_id, ctx_index;
 };
 
 bool

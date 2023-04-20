@@ -70,8 +70,6 @@ lp_setup_wait_empty_scene(struct lp_setup_context *setup)
 {
    /* just use the first scene if we run out */
    if (setup->scenes[0]->fence) {
-      debug_printf("%s: wait for scene %d\n",
-                   __func__, setup->scenes[0]->fence->id);
       lp_fence_wait(setup->scenes[0]->fence);
       lp_scene_end_rasterization(setup->scenes[0]);
    }

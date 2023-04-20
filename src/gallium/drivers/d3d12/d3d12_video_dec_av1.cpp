@@ -344,13 +344,15 @@ d3d12_video_decoder_prepare_dxva_slices_control_av1(struct d3d12_video_decoder *
       currentTileEntry.DataSize     = picture_av1->slice_parameter.slice_data_size[tileIdx];
       currentTileEntry.row          = picture_av1->slice_parameter.slice_data_row[tileIdx];
       currentTileEntry.column       = picture_av1->slice_parameter.slice_data_col[tileIdx];
-      currentTileEntry.anchor_frame = picture_av1->slice_parameter.slice_data_anchor_frame_idx[tileIdx];
+      // From va_dec_av1.h `anchor_frame_idx` valid only when large_scale_tile equals 1.
+      currentTileEntry.anchor_frame = (picture_av1->picture_parameter.pic_info_fields.large_scale_tile == 1) ? picture_av1->slice_parameter.slice_data_anchor_frame_idx[tileIdx] : 0xFF;
 
       debug_printf("[d3d12_video_decoder_av1] Detected tile index %" PRIu32
                   " with DataOffset %" PRIu32
                   " - DataSize %" PRIu32
                   " - row: %" PRIu16
                   " - col: %" PRIu16
+                  " - large_scale_tile: %" PRIu32
                   " - anchor_frame_idx: %" PRIu8
                   " for frame with "
                   "fenceValue: %d\n",
@@ -359,6 +361,7 @@ d3d12_video_decoder_prepare_dxva_slices_control_av1(struct d3d12_video_decoder *
                   currentTileEntry.DataSize,
                   currentTileEntry.row,
                   currentTileEntry.column,
+                  picture_av1->picture_parameter.pic_info_fields.large_scale_tile,
                   currentTileEntry.anchor_frame,
                   pD3D12Dec->m_fenceValue);
 

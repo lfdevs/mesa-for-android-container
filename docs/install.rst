@@ -35,7 +35,7 @@ you're willing to maintain support for other compiler get in touch.
 Third party/extra tools.
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
--  `Python <https://www.python.org/>`__ - Python 3.7 or newer is required.
+-  `Python <https://www.python.org/>`__ - Python 3.6 or newer is required.
 -  `Python Mako module <https://www.makotemplates.org/>`__ - Python Mako
    module is required. Version 0.8.0 or later should work.
 -  Lex / Yacc - for building the Mesa IR and GLSL compiler.
@@ -86,7 +86,7 @@ The general approach is:
 
 .. code-block:: console
 
-     meson builddir/
+     meson setup builddir/
      ninja -C builddir/
      sudo ninja -C builddir/ install
 
@@ -94,7 +94,7 @@ On Windows you can also use the Visual Studio backend
 
 .. code-block:: console
 
-     meson builddir --backend=vs
+     meson setup builddir --backend=vs
      cd builddir
      msbuild mesa.sln /m
 
@@ -115,7 +115,7 @@ First, configure Mesa and install in the temporary location:
 
 .. code-block:: console
 
-   meson builddir/ -Dprefix="$MESA_INSTALLDIR" OTHER_OPTIONS
+   meson setup builddir/ -Dprefix="$MESA_INSTALLDIR" OTHER_OPTIONS
    ninja -C builddir/ install
 
 where ``OTHER_OPTIONS`` is replaced by any meson configuration options you may
@@ -124,7 +124,7 @@ like this:
 
 .. code-block:: console
 
-   meson builddir/ -Dprefix="$MESA_INSTALLDIR" \
+   meson setup builddir/ -Dprefix="$MESA_INSTALLDIR" \
       -Dgallium-drivers=swrast -Dvulkan-drivers=swrast
    ninja -C builddir/ install
 

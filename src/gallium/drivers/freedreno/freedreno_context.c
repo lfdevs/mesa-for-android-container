@@ -54,7 +54,7 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
     */
    fd_batch_reference(&batch, ctx->batch);
 
-   DBG("%p: flush: flags=%x, fencep=%p", batch, flags, fencep);
+   DBG("%p: %p: flush: flags=%x, fencep=%p", ctx, batch, flags, fencep);
 
    if (fencep && !batch) {
       batch = fd_context_batch(ctx);
@@ -156,15 +156,6 @@ out:
 static void
 fd_texture_barrier(struct pipe_context *pctx, unsigned flags) in_dt
 {
-   if (flags == PIPE_TEXTURE_BARRIER_FRAMEBUFFER) {
-      struct fd_context *ctx = fd_context(pctx);
-
-      if (ctx->framebuffer_barrier) {
-         ctx->framebuffer_barrier(ctx);
-         return;
-      }
-   }
-
    /* On devices that could sample from GMEM we could possibly do better.
     * Or if we knew that we were doing GMEM bypass we could just emit a
     * cache flush, perhaps?  But we don't know if future draws would cause
@@ -238,7 +229,7 @@ fd_emit_string_marker(struct pipe_context *pctx, const char *string,
    if (!ctx->batch)
       return;
 
-   struct fd_batch *batch = fd_context_batch_locked(ctx);
+   struct fd_batch *batch = fd_context_batch(ctx);
 
    fd_batch_needs_flush(batch);
 
@@ -248,8 +239,59 @@ fd_emit_string_marker(struct pipe_context *pctx, const char *string,
       fd_emit_string(batch->draw, string, len);
    }
 
-   fd_batch_unlock_submit(batch);
    fd_batch_reference(&batch, NULL);
+}
+
+static void
+fd_cs_magic_write_string(void *cs, struct u_trace_context *utctx, int magic,
+                         const char *fmt, va_list args)
+{
+   struct fd_context *ctx =
+      container_of(utctx, struct fd_context, trace_context);
+   int fmt_len = vsnprintf(NULL, 0, fmt, args);
+   int len = 4 + fmt_len + 1;
+   char *string = (char *)malloc(len);
+
+   /* format: <magic><formatted string>\0 */
+   *(uint32_t *)string = magic;
+   vsnprintf(string + 4, fmt_len + 1, fmt, args);
+
+   if (ctx->screen->gen >= 5) {
+      fd_emit_string5((struct fd_ringbuffer *)cs, string, len);
+   } else {
+      fd_emit_string((struct fd_ringbuffer *)cs, string, len);
+   }
+   free(string);
+}
+
+void
+fd_cs_trace_msg(struct u_trace_context *utctx, void *cs, const char *fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   int magic = CP_NOP_MESG;
+   fd_cs_magic_write_string(cs, utctx, magic, fmt, args);
+   va_end(args);
+}
+
+void
+fd_cs_trace_start(struct u_trace_context *utctx, void *cs, const char *fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   int magic = CP_NOP_BEGN;
+   fd_cs_magic_write_string(cs, utctx, magic, fmt, args);
+   va_end(args);
+}
+
+void
+fd_cs_trace_end(struct u_trace_context *utctx, void *cs, const char *fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   int magic = CP_NOP_END;
+   fd_cs_magic_write_string(cs, utctx, magic, fmt, args);
+   va_end(args);
 }
 
 /**
@@ -291,6 +333,11 @@ fd_context_batch(struct fd_context *ctx)
 
    tc_assert_driver_thread(ctx->tc);
 
+   if (ctx->batch_nondraw) {
+      fd_batch_reference(&ctx->batch_nondraw, NULL);
+      fd_context_all_dirty(ctx);
+   }
+
    fd_batch_reference(&batch, ctx->batch);
 
    if (unlikely(!batch)) {
@@ -306,22 +353,23 @@ fd_context_batch(struct fd_context *ctx)
 }
 
 /**
- * Return a locked reference to the current batch.  A batch with emit
- * lock held is protected against flushing while the lock is held.
- * The emit-lock should be acquired before screen-lock.  The emit-lock
- * should be held while emitting cmdstream.
+ * Return a reference to the current non-draw (compute/blit) batch.
  */
 struct fd_batch *
-fd_context_batch_locked(struct fd_context *ctx)
+fd_context_batch_nondraw(struct fd_context *ctx)
 {
    struct fd_batch *batch = NULL;
 
-   while (!batch) {
-      batch = fd_context_batch(ctx);
-      if (!fd_batch_lock_submit(batch)) {
-         fd_batch_reference(&batch, NULL);
-      }
+   tc_assert_driver_thread(ctx->tc);
+
+   fd_batch_reference(&batch, ctx->batch_nondraw);
+
+   if (unlikely(!batch)) {
+      batch = fd_bc_alloc_batch(ctx, true);
+      fd_batch_reference(&ctx->batch_nondraw, batch);
+      fd_context_all_dirty(ctx);
    }
+   fd_context_switch_to(ctx, batch);
 
    return batch;
 }
@@ -417,7 +465,7 @@ fd_get_reset_count(struct fd_context *ctx, bool per_context)
 {
    uint64_t val;
    enum fd_param_id param = per_context ? FD_CTX_FAULTS : FD_GLOBAL_FAULTS;
-   int ret = fd_pipe_get_param(ctx->pipe, param, &val);
+   ASSERTED int ret = fd_pipe_get_param(ctx->pipe, param, &val);
    assert(!ret);
    return val;
 }
@@ -657,7 +705,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
    list_inithead(&ctx->acc_active_queries);
 
    fd_screen_lock(ctx->screen);
-   ctx->seqno = ++screen->ctx_seqno;
+   ctx->seqno = seqno_next_u16(&screen->ctx_seqno);
    list_add(&ctx->node, &ctx->screen->context_list);
    fd_screen_unlock(ctx->screen);
 

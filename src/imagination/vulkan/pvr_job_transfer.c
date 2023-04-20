@@ -39,37 +39,18 @@
 VkResult pvr_transfer_job_submit(struct pvr_device *device,
                                  struct pvr_transfer_ctx *ctx,
                                  struct pvr_sub_cmd_transfer *sub_cmd,
-                                 struct vk_sync *barrier,
-                                 struct vk_sync **waits,
-                                 uint32_t wait_count,
-                                 uint32_t *stage_flags,
+                                 struct vk_sync *wait_sync,
                                  struct vk_sync *signal_sync)
 {
-   /* Wait for transfer semaphores here before doing any transfers. */
-   for (uint32_t i = 0U; i < wait_count; i++) {
-      if (stage_flags[i] & PVR_PIPELINE_STAGE_TRANSFER_BIT) {
-         VkResult result = vk_sync_wait(&device->vk,
-                                        waits[i],
-                                        0U,
-                                        VK_SYNC_WAIT_COMPLETE,
-                                        UINT64_MAX);
-         if (result != VK_SUCCESS)
-            return result;
+   VkResult result;
 
-         stage_flags[i] &= ~PVR_PIPELINE_STAGE_TRANSFER_BIT;
-      }
-   }
-
-
-   if (barrier) {
-      VkResult result = vk_sync_wait(&device->vk,
-                                     barrier,
-                                     0U,
-                                     VK_SYNC_WAIT_COMPLETE,
-                                     UINT64_MAX);
-      if (result != VK_SUCCESS)
-         return result;
-   }
+   result = vk_sync_wait(&device->vk,
+                         wait_sync,
+                         0U,
+                         VK_SYNC_WAIT_COMPLETE,
+                         UINT64_MAX);
+   if (result != VK_SUCCESS)
+      return result;
 
    list_for_each_entry_safe (struct pvr_transfer_cmd,
                              transfer_cmd,

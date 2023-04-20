@@ -24,6 +24,10 @@
 
 #include "vk_format.h"
 
+#include "vk_enum_defines.h"
+#include "vk_enum_to_str.h"
+#include "vk_util.h"
+
 /* Note that for packed formats, VK_FORMAT_ lists channels from high to low
  * bits occupied by the channel, while MESA_FORMAT_* and PIPE_FORMAT_* are
  * low-to-high.
@@ -257,6 +261,10 @@ vk_format_to_pipe_format(enum VkFormat vkformat)
 {
    if (vkformat >= ARRAY_SIZE(vk_format_map)) {
       switch (vkformat) {
+      case VK_FORMAT_R10X6_UNORM_PACK16:
+         return PIPE_FORMAT_R16_UNORM;
+      case VK_FORMAT_R10X6G10X6_UNORM_2PACK16:
+         return PIPE_FORMAT_R16G16_UNORM;
       case VK_FORMAT_G8B8G8R8_422_UNORM:
          return PIPE_FORMAT_YUYV;
       case VK_FORMAT_B8G8R8G8_422_UNORM:
@@ -281,6 +289,8 @@ vk_format_to_pipe_format(enum VkFormat vkformat)
          return PIPE_FORMAT_Y16_U16V16_422_UNORM;
       case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
          return PIPE_FORMAT_Y16_U16_V16_444_UNORM;
+      case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+         return PIPE_FORMAT_P010;
       case VK_FORMAT_A4R4G4B4_UNORM_PACK16:
          return PIPE_FORMAT_B4G4R4A4_UNORM;
       case VK_FORMAT_A4B4G4R4_UNORM_PACK16:
@@ -365,6 +375,8 @@ vk_format_get_plane_format(VkFormat format, unsigned plane_id)
    case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
    case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
       return VK_FORMAT_R16_UNORM;
+   case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+      return plane_id ? VK_FORMAT_R10X6G10X6_UNORM_2PACK16 : VK_FORMAT_R10X6_UNORM_PACK16;
    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
       return plane_id ? VK_FORMAT_R16G16_UNORM : VK_FORMAT_R16_UNORM;
@@ -430,4 +442,122 @@ vk_component_mapping_to_pipe_swizzle(VkComponentMapping mapping,
          unreachable("unknown swizzle");
       }
    }
+}
+
+#define fmt_unsupported(__vk_fmt) \
+   [VK_ENUM_OFFSET(__vk_fmt)] = { \
+      .n_planes = 0, \
+   }
+
+#define y_plane(__plane_fmt, __ycbcr_swizzle, dhs, dvs) \
+   { .format = __plane_fmt, \
+     .has_chroma = false, \
+     .denominator_scales = { dhs, dvs, }, \
+     .ycbcr_swizzle = __ycbcr_swizzle, \
+   }
+
+#define c_plane(__plane_fmt, __ycbcr_swizzle, dhs, dvs) \
+   { .format = __plane_fmt, \
+     .has_chroma = true, \
+     .denominator_scales = { dhs, dvs, }, \
+     .ycbcr_swizzle = __ycbcr_swizzle, \
+   }
+
+#define ycbcr_fmt(__vk_fmt, __n_planes, ...) \
+   [VK_ENUM_OFFSET(__vk_fmt)] = { \
+      .n_planes = __n_planes, \
+      .planes = { \
+         __VA_ARGS__, \
+      }, \
+   }
+
+#define YCBCR_SWIZ(x, y, z, w) { \
+      VK_COMPONENT_SWIZZLE_##x, \
+      VK_COMPONENT_SWIZZLE_##y, \
+      VK_COMPONENT_SWIZZLE_##z, \
+      VK_COMPONENT_SWIZZLE_##w, \
+   }
+
+static const struct vk_format_ycbcr_info ycbcr_infos[] = {
+   ycbcr_fmt(VK_FORMAT_G8B8G8R8_422_UNORM, 1,
+             y_plane(VK_FORMAT_G8B8G8R8_422_UNORM, YCBCR_SWIZ(B, G, R, ZERO), 1, 1)),
+   ycbcr_fmt(VK_FORMAT_B8G8R8G8_422_UNORM, 1,
+             y_plane(VK_FORMAT_B8G8R8G8_422_UNORM, YCBCR_SWIZ(B, G, R, ZERO), 1, 1)),
+   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM, 3,
+             y_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(B, ZERO, ZERO, ZERO), 2, 2),
+             c_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(R, ZERO, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, 2,
+             y_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R8G8_UNORM, YCBCR_SWIZ(B, R, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM, 3,
+             y_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(B, ZERO, ZERO, ZERO), 2, 1),
+             c_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(R, ZERO, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G8_B8R8_2PLANE_422_UNORM, 2,
+             y_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R8G8_UNORM, YCBCR_SWIZ(B, R, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM, 3,
+             y_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(B, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R8_UNORM, YCBCR_SWIZ(R, ZERO, ZERO, ZERO), 1, 1)),
+
+   fmt_unsupported(VK_FORMAT_R10X6_UNORM_PACK16),
+   fmt_unsupported(VK_FORMAT_R10X6G10X6_UNORM_2PACK16),
+   fmt_unsupported(VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16),
+   fmt_unsupported(VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16),
+   fmt_unsupported(VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_R12X4_UNORM_PACK16),
+   fmt_unsupported(VK_FORMAT_R12X4G12X4_UNORM_2PACK16),
+   fmt_unsupported(VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16),
+   fmt_unsupported(VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16),
+   fmt_unsupported(VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16),
+   fmt_unsupported(VK_FORMAT_G16B16G16R16_422_UNORM),
+   fmt_unsupported(VK_FORMAT_B16G16R16G16_422_UNORM),
+
+   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, 3,
+             y_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(B, ZERO, ZERO, ZERO), 2, 2),
+             c_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(R, ZERO, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G16_B16R16_2PLANE_420_UNORM, 2,
+             y_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R16G16_UNORM, YCBCR_SWIZ(B, R, ZERO, ZERO), 2, 2)),
+   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM, 3,
+             y_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(B, ZERO, ZERO, ZERO), 2, 1),
+             c_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(R, ZERO, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, 2,
+             y_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R16G16_UNORM, YCBCR_SWIZ(B, R, ZERO, ZERO), 2, 1)),
+   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM, 3,
+             y_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(G, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(B, ZERO, ZERO, ZERO), 1, 1),
+             c_plane(VK_FORMAT_R16_UNORM, YCBCR_SWIZ(R, ZERO, ZERO, ZERO), 1, 1)),
+};
+
+const struct vk_format_ycbcr_info *
+vk_format_get_ycbcr_info(VkFormat format)
+{
+   uint32_t enum_offset = VK_ENUM_OFFSET(format);
+   uint32_t ext_number = VK_ENUM_EXTENSION(format);
+   if (ext_number != _VK_KHR_sampler_ycbcr_conversion_number)
+      return NULL;
+
+   if (enum_offset >= ARRAY_SIZE(ycbcr_infos))
+      return NULL;
+
+   if (ycbcr_infos[enum_offset].n_planes == 0)
+      return NULL;
+
+   return &ycbcr_infos[enum_offset];
 }

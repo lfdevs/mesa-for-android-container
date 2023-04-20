@@ -531,9 +531,30 @@ static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
    else
       desc_type = tex->sampler_dim == GLSL_SAMPLER_DIM_BUF ? AC_DESC_BUFFER : AC_DESC_IMAGE;
 
-   bool is_descriptor_op = tex->op == nir_texop_descriptor_amd;
+   if (tex->op == nir_texop_descriptor_amd) {
+      nir_ssa_def *image;
+      if (texture_deref)
+         image = load_deref_sampler_desc(b, texture_deref, desc_type, s, true);
+      else
+         image = load_bindless_sampler_desc(b, texture_handle, desc_type, s);
+      nir_ssa_def_rewrite_uses(&tex->dest.ssa, image);
+      nir_instr_remove(&tex->instr);
+      return true;
+   }
+
+   if (tex->op == nir_texop_sampler_descriptor_amd) {
+      nir_ssa_def *sampler;
+      if (sampler_deref)
+         sampler = load_deref_sampler_desc(b, sampler_deref, AC_DESC_SAMPLER, s, true);
+      else
+         sampler = load_bindless_sampler_desc(b, sampler_handle, AC_DESC_SAMPLER, s);
+      nir_ssa_def_rewrite_uses(&tex->dest.ssa, sampler);
+      nir_instr_remove(&tex->instr);
+      return true;
+   }
+
    nir_ssa_def *image = texture_deref ?
-      load_deref_sampler_desc(b, texture_deref, desc_type, s, is_descriptor_op) :
+      load_deref_sampler_desc(b, texture_deref, desc_type, s, false) :
       load_bindless_sampler_desc(b, texture_handle, desc_type, s);
 
    nir_ssa_def *sampler = NULL;
@@ -542,27 +563,22 @@ static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
    else if (sampler_handle)
       sampler = load_bindless_sampler_desc(b, sampler_handle, AC_DESC_SAMPLER, s);
 
-   if (is_descriptor_op) {
-      nir_ssa_def_rewrite_uses(&tex->dest.ssa, image);
-      nir_instr_remove(&tex->instr);
-   } else {
-      for (unsigned i = 0; i < tex->num_srcs; i++) {
-         switch (tex->src[i].src_type) {
-         case nir_tex_src_texture_deref:
-            tex->src[i].src_type = nir_tex_src_texture_handle;
-            FALLTHROUGH;
-         case nir_tex_src_texture_handle:
-            nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[i].src, image);
-            break;
-         case nir_tex_src_sampler_deref:
-            tex->src[i].src_type = nir_tex_src_sampler_handle;
-            FALLTHROUGH;
-         case nir_tex_src_sampler_handle:
-            nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[i].src, sampler);
-            break;
-         default:
-            break;
-         }
+   for (unsigned i = 0; i < tex->num_srcs; i++) {
+      switch (tex->src[i].src_type) {
+      case nir_tex_src_texture_deref:
+         tex->src[i].src_type = nir_tex_src_texture_handle;
+         FALLTHROUGH;
+      case nir_tex_src_texture_handle:
+         nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[i].src, image);
+         break;
+      case nir_tex_src_sampler_deref:
+         tex->src[i].src_type = nir_tex_src_sampler_handle;
+         FALLTHROUGH;
+      case nir_tex_src_sampler_handle:
+         nir_instr_rewrite_src_ssa(&tex->instr, &tex->src[i].src, sampler);
+         break;
+      default:
+         break;
       }
    }
 

@@ -110,8 +110,7 @@ KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-std4
 
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
 glx@glx_arb_sync_control@waitformsc
-glx@glx-copy-sub-buffer.*
-glx@glx-swap-copy
+glx@glx-swap-event_async
 glx@glx-swap-event_interval
 glx@glx-visuals-depth
 glx@glx-visuals-stencil
@@ -200,3 +199,7 @@ KHR-GL45.shader_image_load_store.basic-allTargets-store
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-atomicFS
 
 KHR-GL45.shader_image_load_store.basic-allTargets-atomic
+
+# intermittently crashing with a sig11, maybe starting around 2023-01-18.
+# One log had the kernel complaining about allocating memory.
+spec@!opengl 1.1@max-texture-size

@@ -2590,7 +2590,7 @@ Jan Beich (2):
 - ac: prefer system EM_AMDGPU definition
 - ac/rgp: define EM_AMDGPU if missing for compatibility
 
-Jason Ekstrand (195):
+Faith Ekstrand (195):
 
 - intel/tools: Decode COMPUTE_WALKER
 - intel/fs: Allow compute dispatch without a pushed subgroup ID on Gen12-HP

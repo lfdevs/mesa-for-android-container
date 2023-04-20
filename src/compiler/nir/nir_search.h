@@ -19,10 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 #ifndef _NIR_SEARCH_
@@ -123,7 +119,6 @@ enum nir_search_op {
    nir_search_op_i2i,
    nir_search_op_b2f,
    nir_search_op_b2i,
-   nir_search_op_f2b,
    nir_num_search_ops,
 };
 

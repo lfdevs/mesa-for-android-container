@@ -1,24 +1,6 @@
 /*
- * Copyright (C) 2018-2021 Alyssa Rosenzweig <alyssa@rosenzweig.io>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright 2018-2021 Alyssa Rosenzweig
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef __AGX_PUBLIC_H_
@@ -26,66 +8,6 @@
 
 #include "compiler/nir/nir.h"
 #include "util/u_dynarray.h"
-
-enum agx_push_type {
-   /* Array of 64-bit pointers to the base addresses (BASES) and array of
-    * 16-bit sizes for optional bounds checking (SIZES) */
-   AGX_PUSH_UBO_BASES,
-   AGX_PUSH_UBO_SIZES,
-   AGX_PUSH_VBO_SIZES,
-   AGX_PUSH_SSBO_BASES,
-   AGX_PUSH_SSBO_SIZES,
-
-   /* 64-bit VBO base pointer */
-   AGX_PUSH_VBO_BASE,
-
-   /* Push the attached constant memory */
-   AGX_PUSH_CONSTANTS,
-
-   /* Push the content of a UBO */
-   AGX_PUSH_UBO_DATA,
-
-   /* RGBA blend constant (FP32) */
-   AGX_PUSH_BLEND_CONST,
-
-   AGX_PUSH_TEXTURE_BASE,
-
-   /* Keep last */
-   AGX_PUSH_NUM_TYPES
-};
-
-static_assert(AGX_PUSH_NUM_TYPES < (1 << 8), "type overflow");
-
-struct agx_push {
-   /* Contents to push */
-   enum agx_push_type type : 8;
-
-   /* Base of where to push, indexed in 16-bit units. The uniform file contains
-    * 512 = 2^9 such units. */
-   unsigned base : 9;
-
-   /* Number of 16-bit units to push */
-   unsigned length : 9;
-
-   /* If set, rather than pushing the specified data, push a pointer to the
-    * specified data. This is slower to access but enables indirect access, as
-    * the uniform file does not support indirection. */
-   bool indirect : 1;
-
-   union {
-      struct {
-         uint16_t ubo;
-         uint16_t offset;
-      } ubo_data;
-
-      uint32_t vbo;
-   };
-};
-
-/* All possible push types except VBO, plus up to 16 VBOs */
-#define AGX_MAX_PUSH_RANGES (AGX_PUSH_NUM_TYPES - 1 + 16)
-/* Arbitrary */
-#define AGX_MAX_VARYINGS (32)
 
 struct agx_varyings_vs {
    /* The first index used for FP16 varyings. Indices less than this are treated
@@ -109,8 +31,10 @@ struct agx_varyings_vs {
    unsigned slots[VARYING_SLOT_MAX];
 };
 
-/* Conservative bound */
-#define AGX_MAX_CF_BINDINGS (VARYING_SLOT_MAX)
+/* Conservative bound, * 4 due to offsets (TODO: maybe worth eliminating
+ * coefficient register aliasing?)
+ */
+#define AGX_MAX_CF_BINDINGS (VARYING_SLOT_MAX * 4)
 
 struct agx_varyings_fs {
    /* Number of coefficient registers used */
@@ -153,10 +77,10 @@ union agx_varyings {
 };
 
 struct agx_shader_info {
-   unsigned push_count;
-   unsigned push_ranges;
-   struct agx_push push[AGX_MAX_PUSH_RANGES];
    union agx_varyings varyings;
+
+   /* Number of uniforms */
+   unsigned push_count;
 
    /* Does the shader have a preamble? If so, it is at offset preamble_offset.
     * The main shader is at offset main_offset. The preamble is executed first.
@@ -181,6 +105,12 @@ struct agx_shader_info {
 
    /* Shader is incompatible with triangle merging */
    bool disable_tri_merging;
+
+   /* Shader needs a dummy sampler (for txf reads) */
+   bool needs_dummy_sampler;
+
+   /* Number of bindful textures used */
+   unsigned nr_bindful_textures;
 
    /* Number of 16-bit registers used by the main shader and preamble
     * respectively.
@@ -223,12 +153,15 @@ struct agx_fs_shader_key {
 };
 
 struct agx_shader_key {
+   /* Number of reserved preamble slots at the start */
+   unsigned reserved_preamble;
+
    union {
       struct agx_fs_shader_key fs;
    };
 };
 
-void agx_preprocess_nir(nir_shader *nir);
+void agx_preprocess_nir(nir_shader *nir, bool support_lod_bias);
 
 void agx_compile_shader_nir(nir_shader *nir, struct agx_shader_key *key,
                             struct util_debug_callback *debug,
@@ -255,11 +188,11 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_iabs = true,
    .lower_fdph = true,
    .lower_ffract = true,
+   .lower_ldexp = true,
    .lower_pack_half_2x16 = true,
+   .lower_pack_64_2x32 = true,
    .lower_unpack_half_2x16 = true,
-   .lower_pack_split = true,
    .lower_extract_byte = true,
-   .lower_extract_word = true,
    .lower_insert_byte = true,
    .lower_insert_word = true,
    .lower_cs_local_index_to_id = true,
@@ -269,6 +202,7 @@ static const nir_shader_compiler_options agx_nir_options = {
    .lower_rotate = true,
    .has_fsub = true,
    .has_isub = true,
+   .use_scoped_barrier = true,
    .max_unroll_iterations = 32,
    .lower_uniforms_to_ubo = true,
    .force_indirect_unrolling_sampler = true,

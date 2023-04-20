@@ -1,0 +1,45 @@
+BasedOnStyle: LLVM
+AlwaysBreakAfterReturnType: TopLevelDefinitions
+BinPackParameters: false
+BraceWrapping:
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterStruct: false
+  BeforeElse: false
+  SplitEmptyFunction: true
+BreakBeforeBraces: Custom
+ColumnLimit: 78
+ContinuationIndentWidth: 3
+Cpp11BracedListStyle: false
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '^"(c11/|compiler/|main/|nir/|spirv/|util/|vk_|wsi_)'
+    Priority:        3
+  - Regex:           '^"(perfetto)'
+    Priority:        2
+  - Regex:           '.*'
+    Priority:        1
+IndentWidth: 3
+PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyExcessCharacter: 100
+SpaceAfterCStyleCast: true
+SpaceBeforeCpp11BracedList: true
+ForEachMacros:
+  - BITSET_FOREACH_SET
+  - BITSET_FOREACH_RANGE
+  - LIST_FOR_EACH_ENTRY
+  - LIST_FOR_EACH_ENTRY_SAFE
+  - LIST_FOR_EACH_ENTRY_SAFE_REV
+  - list_for_each_entry
+  - list_for_each_entry_safe
+  - list_for_each_entry_rev
+  - list_for_each_entry_rev_safe
+  - list_for_each_entry_from
+  - list_for_each_entry_from_rev
+  - foreach_list_typed
+  - u_foreach_bit
+  - u_vector_foreach
+  - util_dynarray_foreach
+  - rb_tree_foreach
+  - rb_tree_foreach_safe

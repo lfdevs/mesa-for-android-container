@@ -67,7 +67,6 @@ static const struct debug_named_value lp_bld_perf_flags[] = {
    DEBUG_NAMED_VALUE_END
 };
 
-#ifdef DEBUG
 unsigned gallivm_debug = 0;
 
 static const struct debug_named_value lp_bld_debug_flags[] = {
@@ -76,12 +75,14 @@ static const struct debug_named_value lp_bld_debug_flags[] = {
    { "asm",    GALLIVM_DEBUG_ASM, NULL },
    { "perf",   GALLIVM_DEBUG_PERF, NULL },
    { "gc",     GALLIVM_DEBUG_GC, NULL },
+/* Don't allow setting DUMP_BC for release builds, since writing the files may be an issue with setuid. */
+#ifdef DEBUG
    { "dumpbc", GALLIVM_DEBUG_DUMP_BC, NULL },
+#endif
    DEBUG_NAMED_VALUE_END
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(gallivm_debug, "GALLIVM_DEBUG", lp_bld_debug_flags, 0)
-#endif
 
 
 static boolean gallivm_initialized = FALSE;
@@ -433,9 +434,7 @@ lp_build_init(void)
     */
    LLVMLinkInMCJIT();
 
-#ifdef DEBUG
    gallivm_debug = debug_get_option_gallivm_debug();
-#endif
 
    gallivm_perf = debug_get_flags_option("GALLIVM_PERF", lp_bld_perf_flags, 0 );
 

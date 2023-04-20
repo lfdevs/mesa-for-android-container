@@ -151,12 +151,6 @@ resolve_image_views(struct iris_context *ice,
                                                    res->aux.clear_color_unknown))
             clear_supported = false;
 
-         /* Issues with compressed cube array image views, see
-          * https://gitlab.freedesktop.org/mesa/mesa/-/issues/7987
-          */
-         if (pview->resource->target == PIPE_TEXTURE_CUBE_ARRAY)
-            clear_supported = false;
-
          iris_resource_prepare_access(ice, res,
                                       pview->u.tex.level, 1,
                                       pview->u.tex.first_layer, num_layers,

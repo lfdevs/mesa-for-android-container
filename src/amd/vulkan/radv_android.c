@@ -37,6 +37,7 @@
 #include "util/os_file.h"
 
 #include "radv_private.h"
+#include "vk_android.h"
 #include "vk_util.h"
 
 #ifdef ANDROID
@@ -44,11 +45,7 @@
 static int radv_hal_open(const struct hw_module_t *mod, const char *id, struct hw_device_t **dev);
 static int radv_hal_close(struct hw_device_t *dev);
 
-static void UNUSED
-static_asserts(void)
-{
-   STATIC_ASSERT(HWVULKAN_DISPATCH_MAGIC == ICD_LOADER_MAGIC);
-}
+static_assert(HWVULKAN_DISPATCH_MAGIC == ICD_LOADER_MAGIC, "");
 
 PUBLIC struct hwvulkan_module_t HAL_MODULE_INFO_SYM = {
    .common =
@@ -414,8 +411,8 @@ vk_format_from_android(unsigned android_format, unsigned android_usage)
    }
 }
 
-static inline unsigned
-android_format_from_vk(unsigned vk_format)
+unsigned
+radv_ahb_format_for_vk_format(VkFormat vk_format)
 {
    switch (vk_format) {
    case VK_FORMAT_R8G8B8A8_UNORM:
@@ -433,31 +430,6 @@ android_format_from_vk(unsigned vk_format)
    default:
       return AHARDWAREBUFFER_FORMAT_BLOB;
    }
-}
-
-uint64_t
-radv_ahb_usage_from_vk_usage(const VkImageCreateFlags vk_create, const VkImageUsageFlags vk_usage)
-{
-   uint64_t ahb_usage = 0;
-   if (vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT)
-      ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-
-   if (vk_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)
-      ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-
-   if (vk_usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-      ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT;
-
-   if (vk_create & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
-      ahb_usage |= AHARDWAREBUFFER_USAGE_GPU_CUBE_MAP;
-
-   if (vk_create & VK_IMAGE_CREATE_PROTECTED_BIT)
-      ahb_usage |= AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT;
-
-   /* No usage bits set - set at least one GPU usage. */
-   if (ahb_usage == 0)
-      ahb_usage = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
-   return ahb_usage;
 }
 
 static VkResult
@@ -764,47 +736,9 @@ radv_create_ahb_memory(struct radv_device *device, struct radv_device_memory *me
                        unsigned priority, const VkMemoryAllocateInfo *pAllocateInfo)
 {
 #if RADV_SUPPORT_ANDROID_HARDWARE_BUFFER
-   const VkMemoryDedicatedAllocateInfo *dedicated_info =
-      vk_find_struct_const(pAllocateInfo->pNext, MEMORY_DEDICATED_ALLOCATE_INFO);
-
-   uint32_t w = 0;
-   uint32_t h = 1;
-   uint32_t layers = 1;
-   uint32_t format = 0;
-   uint64_t usage = 0;
-
-   /* If caller passed dedicated information. */
-   if (dedicated_info && dedicated_info->image) {
-      RADV_FROM_HANDLE(radv_image, image, dedicated_info->image);
-      w = image->info.width;
-      h = image->info.height;
-      layers = image->info.array_size;
-      format = android_format_from_vk(image->vk.format);
-      usage = radv_ahb_usage_from_vk_usage(image->vk.create_flags, image->vk.usage);
-   } else if (dedicated_info && dedicated_info->buffer) {
-      RADV_FROM_HANDLE(radv_buffer, buffer, dedicated_info->buffer);
-      w = buffer->vk.size;
-      format = AHARDWAREBUFFER_FORMAT_BLOB;
-      usage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN | AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
-   } else {
-      w = pAllocateInfo->allocationSize;
-      format = AHARDWAREBUFFER_FORMAT_BLOB;
-      usage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN | AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
-   }
-
-   struct AHardwareBuffer *android_hardware_buffer = NULL;
-   struct AHardwareBuffer_Desc desc = {
-      .width = w,
-      .height = h,
-      .layers = layers,
-      .format = format,
-      .usage = usage,
-   };
-
-   if (AHardwareBuffer_allocate(&desc, &android_hardware_buffer) != 0)
+   mem->android_hardware_buffer = vk_alloc_ahardware_buffer(pAllocateInfo);
+   if (mem->android_hardware_buffer == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
-
-   mem->android_hardware_buffer = android_hardware_buffer;
 
    const struct VkImportAndroidHardwareBufferInfoANDROID import_info = {
       .buffer = mem->android_hardware_buffer,

@@ -82,7 +82,7 @@ class PrintCode(gl_XML.gl_print_base):
 
     def print_call(self, func, unmarshal=0):
         ret = 'return ' if func.return_type != 'void' and not unmarshal else '';
-        call = 'CALL_{0}(ctx->CurrentServerDispatch, ({1}))'.format(
+        call = 'CALL_{0}(ctx->Dispatch.Current, ({1}))'.format(
             func.name, func.get_called_parameter_string())
         out('{0}{1};'.format(ret, call))
         if func.marshal_call_after and ret == '' and not unmarshal:
@@ -191,7 +191,7 @@ class PrintCode(gl_XML.gl_print_base):
 
         out('uint32_t')
         out(('_mesa_unmarshal_{0}(struct gl_context *ctx, '
-             'const struct marshal_cmd_{0} *cmd)').format(func.name))
+             'const struct marshal_cmd_{0} *restrict cmd)').format(func.name))
         out('{')
         with indent():
             for p in fixed_params:

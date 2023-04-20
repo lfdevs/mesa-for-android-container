@@ -92,6 +92,49 @@ pvr_pdsinst_doutu_sample_rate_from_rogue(enum rogue_msaa_mode msaa_mode)
 }
 
 /******************************************************************************
+   PBESTATE
+ ******************************************************************************/
+
+enum pvr_pbe_source_start_pos {
+   PVR_PBE_STARTPOS_BIT0,
+   PVR_PBE_STARTPOS_BIT32,
+   PVR_PBE_STARTPOS_BIT64,
+   PVR_PBE_STARTPOS_BIT96,
+   /* The below values are available if has_eight_output_registers feature is
+    * enabled.
+    */
+   PVR_PBE_STARTPOS_BIT128,
+   PVR_PBE_STARTPOS_BIT160,
+   PVR_PBE_STARTPOS_BIT192,
+   PVR_PBE_STARTPOS_BIT224,
+};
+
+static inline enum ROGUE_PBESTATE_SOURCE_POS
+pvr_pbestate_source_pos(enum pvr_pbe_source_start_pos pos)
+{
+   switch (pos) {
+   case PVR_PBE_STARTPOS_BIT0:
+   case PVR_PBE_STARTPOS_BIT128:
+      return ROGUE_PBESTATE_SOURCE_POS_START_BIT0;
+
+   case PVR_PBE_STARTPOS_BIT32:
+   case PVR_PBE_STARTPOS_BIT160:
+      return ROGUE_PBESTATE_SOURCE_POS_START_BIT32;
+
+   case PVR_PBE_STARTPOS_BIT64:
+   case PVR_PBE_STARTPOS_BIT192:
+      return ROGUE_PBESTATE_SOURCE_POS_START_BIT64;
+
+   case PVR_PBE_STARTPOS_BIT96:
+   case PVR_PBE_STARTPOS_BIT224:
+      return ROGUE_PBESTATE_SOURCE_POS_START_BIT96;
+
+   default:
+      unreachable("Undefined PBE source pos.");
+   }
+}
+
+/******************************************************************************
    TA
  ******************************************************************************/
 

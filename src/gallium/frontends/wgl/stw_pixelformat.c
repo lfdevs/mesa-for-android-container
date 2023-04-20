@@ -34,6 +34,7 @@
 #include "util/u_memory.h"
 
 #include <GL/gl.h>
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_device.h"
 #include "stw_framebuffer.h"

@@ -91,8 +91,8 @@ build_view_index(struct lower_multiview_state *state)
           * that to an actual view id.
           */
          nir_ssa_def *compacted =
-            nir_umod(b, nir_load_instance_id(b),
-                        nir_imm_int(b, util_bitcount(state->view_mask)));
+            nir_umod_imm(b, nir_load_instance_id(b),
+                            util_bitcount(state->view_mask));
 
          if (util_is_power_of_two_or_zero(state->view_mask + 1)) {
             /* If we have a full view mask, then compacted is what we want */

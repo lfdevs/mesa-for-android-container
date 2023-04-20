@@ -1,10 +1,7 @@
 # ../src/util/simple_mtx.h:108: simple_mtx_lock: Assertion `c != _SIMPLE_MTX_INVALID_VALUE' failed.
-dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.7
 dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.19
-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.programs.link.7
 dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.programs.link.19
 dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_server_sync.programs.link
-dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.programs.link.7
 dEQP-EGL.functional.sharing.gles2.multithread.random_egl_server_sync.programs.link.19
 dEQP-EGL.functional.sharing.gles2.multithread.simple.programs.link
 dEQP-EGL.functional.sharing.gles2.multithread.simple_egl_sync.programs.link
@@ -26,3 +23,6 @@ glx@glx-multi-context-single-window
 
 # unreliable, probably from scheduling.
 spec@arb_timer_query@timestamp-get
+
+# flakes very often
+wayland-dEQP-EGL.functional.wide_color.window_8888_colorspace_srgb

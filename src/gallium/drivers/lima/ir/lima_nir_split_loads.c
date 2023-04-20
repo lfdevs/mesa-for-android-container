@@ -80,13 +80,13 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
          nir_instr_rewrite_src(src->parent_instr, src, nir_src_for_ssa(def));
          continue;
       }
-      b->cursor = nir_before_src(src, false);
+      b->cursor = nir_before_src(src);
       nir_ssa_def *new = clone_intrinsic(b, intrin);
       nir_instr_rewrite_src(src->parent_instr, src, nir_src_for_ssa(new));
       _mesa_hash_table_insert(visited_instrs, src->parent_instr, new);
    }
    nir_foreach_if_use_safe(src, &intrin->dest.ssa) {
-      b->cursor = nir_before_src(src, true);
+      b->cursor = nir_before_src(src);
       nir_if_rewrite_condition(src->parent_if,
                                nir_src_for_ssa(clone_intrinsic(b, intrin)));
    }
@@ -109,7 +109,7 @@ replace_load_const(nir_builder *b, nir_load_const_instr *load_const)
          nir_instr_rewrite_src(src->parent_instr, src, nir_src_for_ssa(def));
          continue;
       }
-      b->cursor = nir_before_src(src, false);
+      b->cursor = nir_before_src(src);
       nir_ssa_def *new = nir_build_imm(b, load_const->def.num_components,
                                        load_const->def.bit_size,
                                        load_const->value);

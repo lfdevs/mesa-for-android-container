@@ -1,99 +1,58 @@
-.vc4-rpi3-test:armhf:
+.broadcom-test:
+  variables:
+    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
+    FLAKES_CHANNEL: "#videocore-ci"
+
+.broadcom-test:arm64:
   extends:
+    - .broadcom-test
+    - .baremetal-test-arm64
+  variables:
+    BM_BOOTFS: /boot/raspberrypi_arm64
+
+.broadcom-test:armhf:
+  extends:
+    - .broadcom-test
     - .baremetal-test-armhf
-    - .vc4-rules
   variables:
     BM_BOOTFS: /boot/raspberrypi_armhf
-    GPU_VERSION: broadcom-rpi3
-    HWCI_KERNEL_MODULES: vc4
-    FLAKES_CHANNEL: "#videocore-ci"
+
+vc4-rpi3-gl:armhf:
+  extends:
+    - .broadcom-test:armhf
+    - .vc4-rules
   script:
     - ./install/bare-metal/poe-powered.sh
   tags:
     - igalia-rpi3
-
-vc4-rpi3:armhf:
-  extends:
-    - .vc4-rpi3-test:armhf
-  parallel: 3
-  variables:
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
-    DEQP_SUITE: broadcom-rpi3
-
-vc4-rpi3-egl:armhf:
-  extends:
-    - .vc4-rpi3-test:armhf
-  variables:
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
-    HWCI_START_XORG: 1
-    HWCI_START_WESTON: 1
-    DEQP_SUITE: broadcom-rpi3-egl
-
-.vc4-rpi3-piglit:armhf:
-  extends:
-    - .piglit-test
-    - .vc4-rpi3-test:armhf
-  variables:
-    HWCI_START_XORG: 1
-    PIGLIT_PLATFORM: mixed_glx_egl
-
-vc4-rpi3-piglit-quick_gl:armhf:
-  extends:
-    - .vc4-rpi3-piglit:armhf
   parallel: 4
   variables:
-    FDO_CI_CONCURRENT: 1
-    PIGLIT_PROFILES: quick_gl
+    GPU_VERSION: broadcom-rpi3
+    HWCI_KERNEL_MODULES: vc4
+    DEQP_SUITE: broadcom-rpi3
+    HWCI_START_WESTON: 1
 
-.v3d-rpi4-test:armhf:
+v3d-rpi4-gl:armhf:
   extends:
-    - .baremetal-test-armhf
+    - .broadcom-test:armhf
     - .v3d-rules
-  variables:
-    HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
-    BM_BOOTFS: /boot/raspberrypi_armhf
-    FLAKES_CHANNEL: "#videocore-ci"
-    GPU_VERSION: broadcom-rpi4
-    HWCI_KERNEL_MODULES: v3d,vc4
   script:
     - ./install/bare-metal/poe-powered.sh
   tags:
     - igalia-rpi4
-
-v3d-rpi4-gles:armhf:
-  extends:
-    - .v3d-rpi4-test:armhf
-  parallel: 8
+  parallel: 12
   variables:
-    DEQP_SUITE: broadcom-rpi4
-
-v3d-rpi4-egl:armhf:
-  extends:
-    - .v3d-rpi4-test:armhf
-  variables:
-    HWCI_START_XORG: 1
+    GPU_VERSION: broadcom-rpi4
+    HWCI_KERNEL_MODULES: v3d,vc4
     HWCI_START_WESTON: 1
-    DEQP_SUITE: broadcom-rpi4-egl
-
-v3d-rpi4-piglit:armhf:
-  extends:
-    - .piglit-test
-    - .v3d-rpi4-test:armhf
-  parallel: 4
-  variables:
-    HWCI_TEST_SCRIPT: "/install/piglit/piglit-runner.sh"
-    HWCI_START_XORG: 1
-    PIGLIT_PLATFORM: mixed_glx_egl
-    PIGLIT_PROFILES: all
+    DEQP_SUITE: broadcom-rpi4
 
 v3d-rpi4-traces:arm64:
   extends:
     - .piglit-traces-test
-    - .baremetal-test-arm64
-    - .v3d-rules
-    - .test-manual-mr
+    - .broadcom-test:arm64
+    - .v3d-manual-rules
   variables:
-    BM_BOOTFS: /boot/raspberrypi_arm64
     GPU_VERSION: broadcom-rpi4
     HWCI_KERNEL_MODULES: v3d,vc4
     HWCI_START_XORG: 1
@@ -109,14 +68,13 @@ v3d-rpi4-traces:arm64:
 
 v3dv-rpi4-vk:arm64:
   extends:
-    - .baremetal-test-arm64
+    - .broadcom-test:arm64
     - .v3dv-rules
-  parallel: 8
+  parallel: 10
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
-    BM_BOOTFS: /boot/raspberrypi_arm64
     DEQP_EXPECTED_RENDERER: "V3D.4.2"
-    DEQP_FRACTION: 10
+    DEQP_FRACTION: 8
     DEQP_VER: vk
     FLAKES_CHANNEL: "#videocore-ci"
     GPU_VERSION: broadcom-rpi4

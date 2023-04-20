@@ -114,12 +114,20 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       if (db.SurfaceType == SURFTYPE_3D)
          db.Depth = info->depth_surf->logical_level0_px.depth - 1;
    } else if (info->stencil_surf) {
+      /* On Gfx12+ 3DSTATE_STENCIL_BUFFER has its own fields for all of
+       * this. No need to replicate it here.
+       */
+#if GFX_VER < 12
       db.SurfaceType = isl_encode_ds_surftype[info->stencil_surf->dim];
       db.SurfaceFormat = D32_FLOAT;
       db.Width = info->stencil_surf->logical_level0_px.width - 1;
       db.Height = info->stencil_surf->logical_level0_px.height - 1;
       if (db.SurfaceType == SURFTYPE_3D)
          db.Depth = info->stencil_surf->logical_level0_px.depth - 1;
+#else
+      db.SurfaceType = SURFTYPE_NULL;
+      db.SurfaceFormat = D32_FLOAT;
+#endif
    } else {
       db.SurfaceType = SURFTYPE_NULL;
       db.SurfaceFormat = D32_FLOAT;

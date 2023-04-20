@@ -68,10 +68,16 @@
 #include "tgsi/tgsi_text.h"
 #include "tgsi/tgsi_dump.h"
 
+#define HUD_DEFAULT_VISIBILITY TRUE
+#define HUD_DEFAULT_SCALE 1
+#define HUD_DEFAULT_ROTATION 0
+#define HUD_DEFAULT_OPACITY 66
+
 /* Control the visibility of all HUD contexts */
-static boolean huds_visible = TRUE;
-static int hud_scale = 1;
-static int hud_rotate = 0;
+static boolean huds_visible = HUD_DEFAULT_VISIBILITY;
+static int hud_scale = HUD_DEFAULT_SCALE;
+static int hud_rotate = HUD_DEFAULT_ROTATION;
+static float hud_opacity = HUD_DEFAULT_OPACITY / 100.0f;
 
 #if DETECT_OS_UNIX
 static void
@@ -550,6 +556,7 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    fb.zsbuf = NULL;
    fb.width = hud->fb_width;
    fb.height = hud->fb_height;
+   fb.resolve = NULL;
 
    viewport.scale[0] = 0.5f * hud->fb_width;
    viewport.scale[1] = 0.5f * hud->fb_height;
@@ -588,7 +595,7 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
       hud->constants.color[0] = 0;
       hud->constants.color[1] = 0;
       hud->constants.color[2] = 0;
-      hud->constants.color[3] = 0.666f;
+      hud->constants.color[3] = hud_opacity;
       hud->constants.translate[0] = 0;
       hud->constants.translate[1] = 0;
       hud->constants.scale[0] = hud_scale;
@@ -1931,8 +1938,9 @@ hud_create(struct cso_context *cso, struct hud_context *share,
    memset(&action, 0, sizeof(action));
 #endif
    huds_visible = debug_get_bool_option("GALLIUM_HUD_VISIBLE", !emulate_libgl_show_fps);
-   hud_scale = debug_get_num_option("GALLIUM_HUD_SCALE", 1);
-   hud_rotate = debug_get_num_option("GALLIUM_HUD_ROTATION", 0) % 360;
+   hud_opacity = debug_get_num_option("GALLIUM_HUD_OPACITY", HUD_DEFAULT_OPACITY) / 100.0f;
+   hud_scale = debug_get_num_option("GALLIUM_HUD_SCALE", HUD_DEFAULT_SCALE);
+   hud_rotate = debug_get_num_option("GALLIUM_HUD_ROTATION", HUD_DEFAULT_ROTATION) % 360;
    if (hud_rotate < 0) {
       hud_rotate += 360;
    }

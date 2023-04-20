@@ -23,11 +23,192 @@
 
 #include "vk_common_entrypoints.h"
 #include "wsi_common_entrypoints.h"
+#include "radv_cs.h"
 #include "radv_private.h"
 #include "radv_shader.h"
 
 #include "ac_rgp.h"
 #include "ac_sqtt.h"
+
+void
+radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer,
+                                 struct radv_graphics_pipeline *pipeline)
+{
+   const enum amd_gfx_level gfx_level = cmd_buffer->device->physical_device->rad_info.gfx_level;
+   struct radv_sqtt_shaders_reloc *reloc = pipeline->sqtt_shaders_reloc;
+   struct radeon_cmdbuf *cs = cmd_buffer->cs;
+   uint64_t va;
+
+   radv_cs_add_buffer(cmd_buffer->device->ws, cs, reloc->bo);
+
+   /* VS */
+   if (pipeline->base.shaders[MESA_SHADER_VERTEX]) {
+      struct radv_shader *vs = pipeline->base.shaders[MESA_SHADER_VERTEX];
+
+      va = reloc->va[MESA_SHADER_VERTEX];
+      if (vs->info.vs.as_ls) {
+         radeon_set_sh_reg(cs, R_00B520_SPI_SHADER_PGM_LO_LS, va >> 8);
+      } else if (vs->info.vs.as_es) {
+         radeon_set_sh_reg_seq(cs, R_00B320_SPI_SHADER_PGM_LO_ES, 2);
+         radeon_emit(cs, va >> 8);
+         radeon_emit(cs, S_00B324_MEM_BASE(va >> 40));
+      } else if (vs->info.is_ngg) {
+         radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
+      } else {
+         radeon_set_sh_reg_seq(cs, R_00B120_SPI_SHADER_PGM_LO_VS, 2);
+         radeon_emit(cs, va >> 8);
+         radeon_emit(cs, S_00B124_MEM_BASE(va >> 40));
+      }
+   }
+
+   /* TCS */
+   if (pipeline->base.shaders[MESA_SHADER_TESS_CTRL]) {
+      va = reloc->va[MESA_SHADER_TESS_CTRL];
+
+      if (gfx_level >= GFX9) {
+         if (gfx_level >= GFX10) {
+            radeon_set_sh_reg(cs, R_00B520_SPI_SHADER_PGM_LO_LS, va >> 8);
+         } else {
+            radeon_set_sh_reg(cs, R_00B410_SPI_SHADER_PGM_LO_LS, va >> 8);
+         }
+      } else {
+         radeon_set_sh_reg_seq(cs, R_00B420_SPI_SHADER_PGM_LO_HS, 2);
+         radeon_emit(cs, va >> 8);
+         radeon_emit(cs, S_00B424_MEM_BASE(va >> 40));
+      }
+   }
+
+   /* TES */
+   if (pipeline->base.shaders[MESA_SHADER_TESS_EVAL]) {
+      struct radv_shader *tes = pipeline->base.shaders[MESA_SHADER_TESS_EVAL];
+
+      va = reloc->va[MESA_SHADER_TESS_EVAL];
+      if (tes->info.is_ngg) {
+         radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
+      } else if (tes->info.tes.as_es) {
+         radeon_set_sh_reg_seq(cs, R_00B320_SPI_SHADER_PGM_LO_ES, 2);
+         radeon_emit(cs, va >> 8);
+         radeon_emit(cs, S_00B324_MEM_BASE(va >> 40));
+      } else {
+         radeon_set_sh_reg_seq(cs, R_00B120_SPI_SHADER_PGM_LO_VS, 2);
+         radeon_emit(cs, va >> 8);
+         radeon_emit(cs, S_00B124_MEM_BASE(va >> 40));
+      }
+   }
+
+   /* GS */
+   if (pipeline->base.shaders[MESA_SHADER_GEOMETRY]) {
+      struct radv_shader *gs = pipeline->base.shaders[MESA_SHADER_GEOMETRY];
+
+      va = reloc->va[MESA_SHADER_GEOMETRY];
+      if (gs->info.is_ngg) {
+         radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
+      } else {
+         if (gfx_level >= GFX9) {
+            if (gfx_level >= GFX10) {
+               radeon_set_sh_reg(cs, R_00B320_SPI_SHADER_PGM_LO_ES, va >> 8);
+            } else {
+               radeon_set_sh_reg(cs, R_00B210_SPI_SHADER_PGM_LO_ES, va >> 8);
+            }
+         } else {
+            radeon_set_sh_reg_seq(cs, R_00B220_SPI_SHADER_PGM_LO_GS, 2);
+            radeon_emit(cs, va >> 8);
+            radeon_emit(cs, S_00B224_MEM_BASE(va >> 40));
+         }
+      }
+   }
+
+   /* FS */
+   if (pipeline->base.shaders[MESA_SHADER_FRAGMENT]) {
+      va = reloc->va[MESA_SHADER_FRAGMENT];
+
+      radeon_set_sh_reg_seq(cs, R_00B020_SPI_SHADER_PGM_LO_PS, 2);
+      radeon_emit(cs, va >> 8);
+      radeon_emit(cs, S_00B024_MEM_BASE(va >> 40));
+   }
+}
+
+static uint64_t
+radv_sqtt_shader_get_va_reloc(struct radv_pipeline *pipeline, gl_shader_stage stage)
+{
+   if (pipeline->type == RADV_PIPELINE_GRAPHICS) {
+      struct radv_graphics_pipeline *graphics_pipeline = radv_pipeline_to_graphics(pipeline);
+      struct radv_sqtt_shaders_reloc *reloc = graphics_pipeline->sqtt_shaders_reloc;
+      return reloc->va[stage];
+   }
+
+   return radv_shader_get_va(pipeline->shaders[stage]);
+}
+
+static VkResult
+radv_sqtt_reloc_graphics_shaders(struct radv_device *device,
+                                 struct radv_graphics_pipeline *pipeline)
+{
+   struct radv_shader_dma_submission *submission = NULL;
+   struct radv_sqtt_shaders_reloc *reloc;
+   uint32_t code_size = 0;
+
+   reloc = calloc(1, sizeof(*reloc));
+   if (!reloc)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   /* Compute the total code size. */
+   for (int i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
+      const struct radv_shader *shader = pipeline->base.shaders[i];
+      if (!shader)
+         continue;
+
+      code_size += align(shader->code_size, RADV_SHADER_ALLOC_ALIGNMENT);
+   }
+
+   /* Allocate memory for all shader binaries. */
+   reloc->alloc = radv_alloc_shader_memory(device, code_size, pipeline);
+   if (!reloc->alloc) {
+      free(reloc);
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+   }
+
+   reloc->bo = reloc->alloc->arena->bo;
+
+   /* Relocate shader binaries to be contiguous in memory as requested by RGP. */
+   uint64_t slab_va = radv_buffer_get_va(reloc->bo) + reloc->alloc->offset;
+   char *slab_ptr = reloc->alloc->arena->ptr + reloc->alloc->offset;
+   uint64_t offset = 0;
+
+   if (device->shader_use_invisible_vram) {
+       submission =
+         radv_shader_dma_get_submission(device, reloc->bo, slab_va, code_size);
+      if (!submission)
+         return VK_ERROR_UNKNOWN;
+   }
+
+   for (int i = 0; i < MESA_VULKAN_SHADER_STAGES; ++i) {
+      const struct radv_shader *shader = pipeline->base.shaders[i];
+      void *dest_ptr;
+      if (!shader)
+         continue;
+
+      reloc->va[i] = slab_va + offset;
+
+      if (device->shader_use_invisible_vram)
+         dest_ptr = submission->ptr + offset;
+      else
+         dest_ptr = slab_ptr + offset;
+
+      memcpy(dest_ptr, shader->code, shader->code_size);
+
+      offset += align(shader->code_size, RADV_SHADER_ALLOC_ALIGNMENT);
+   }
+
+   if (device->shader_use_invisible_vram) {
+      if (!radv_shader_dma_submit(device, submission, &pipeline->base.shader_upload_seq))
+         return VK_ERROR_UNKNOWN;
+   }
+
+   pipeline->sqtt_shaders_reloc = reloc;
+
+   return VK_SUCCESS;
+}
 
 static void
 radv_write_begin_general_api_marker(struct radv_cmd_buffer *cmd_buffer,
@@ -935,6 +1116,12 @@ radv_mesa_to_rgp_shader_stage(struct radv_pipeline *pipeline, gl_shader_stage st
    case MESA_SHADER_FRAGMENT:
       return RGP_HW_STAGE_PS;
    case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_RAYGEN:
+   case MESA_SHADER_CLOSEST_HIT:
+   case MESA_SHADER_ANY_HIT:
+   case MESA_SHADER_INTERSECTION:
+   case MESA_SHADER_MISS:
+   case MESA_SHADER_CALLABLE:
       return RGP_HW_STAGE_CS;
    default:
       unreachable("invalid mesa shader stage");
@@ -959,25 +1146,17 @@ radv_add_code_object(struct radv_device *device, struct radv_pipeline *pipeline)
 
    for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
       struct radv_shader *shader = pipeline->shaders[i];
-      uint8_t *code;
       uint64_t va;
 
       if (!shader)
          continue;
 
-      code = malloc(shader->code_size);
-      if (!code) {
-         free(record);
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
-      }
-      memcpy(code, shader->code_ptr, shader->code_size);
-
-      va = radv_shader_get_va(shader);
+      va = radv_sqtt_shader_get_va_reloc(pipeline, i);
 
       record->shader_data[i].hash[0] = (uint64_t)(uintptr_t)shader;
       record->shader_data[i].hash[1] = (uint64_t)(uintptr_t)shader >> 32;
       record->shader_data[i].code_size = shader->code_size;
-      record->shader_data[i].code = code;
+      record->shader_data[i].code = shader->code;
       record->shader_data[i].vgpr_count = shader->config.num_vgprs;
       record->shader_data[i].sgpr_count = shader->config.num_sgprs;
       record->shader_data[i].scratch_memory_size = shader->config.scratch_bytes_per_wave;
@@ -1017,7 +1196,7 @@ radv_register_pipeline(struct radv_device *device, struct radv_pipeline *pipelin
       if (!shader)
          continue;
 
-      va = radv_shader_get_va(shader);
+      va = radv_sqtt_shader_get_va_reloc(pipeline, i);
       base_va = MIN2(base_va, va);
    }
 
@@ -1073,15 +1252,6 @@ radv_unregister_pipeline(struct radv_device *device, struct radv_pipeline *pipel
    list_for_each_entry_safe(struct rgp_code_object_record, record, &code_object->record, list)
    {
       if (record->pipeline_hash[0] == pipeline->pipeline_hash) {
-         uint32_t mask = record->shader_stages_mask;
-         int i;
-
-         /* Free the disassembly. */
-         while (mask) {
-            i = u_bit_scan(&mask);
-            free(record->shader_data[i].code);
-         }
-
          code_object->record_count--;
          list_del(&record->list);
          free(record);
@@ -1109,6 +1279,13 @@ sqtt_CreateGraphicsPipelines(VkDevice _device, VkPipelineCache pipelineCache, ui
 
       if (!pipeline)
          continue;
+
+      if (pCreateInfos[i].flags & VK_PIPELINE_CREATE_LIBRARY_BIT_KHR)
+         continue;
+
+      result = radv_sqtt_reloc_graphics_shaders(device, radv_pipeline_to_graphics(pipeline));
+      if (result != VK_SUCCESS)
+         goto fail;
 
       result = radv_register_pipeline(device, pipeline);
       if (result != VK_SUCCESS)
@@ -1208,6 +1385,14 @@ sqtt_DestroyPipeline(VkDevice _device, VkPipeline _pipeline,
       return;
 
    radv_unregister_pipeline(device, pipeline);
+
+   if (pipeline->type == RADV_PIPELINE_GRAPHICS) {
+      struct radv_graphics_pipeline *graphics_pipeline = radv_pipeline_to_graphics(pipeline);
+      struct radv_sqtt_shaders_reloc *reloc = graphics_pipeline->sqtt_shaders_reloc;
+
+      radv_free_shader_memory(device, reloc->alloc);
+      free(reloc);
+   }
 
    device->layer_dispatch.rgp.DestroyPipeline(_device, _pipeline, pAllocator);
 }

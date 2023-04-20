@@ -98,14 +98,20 @@ lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
    b->cursor = nir_before_instr(instr);
 
    nir_ssa_def *src;
+   int range_base = 0;
    if (bindless) {
       src = nir_load_deref(b, deref);
+   } else if (b->shader->options->lower_image_offset_to_range_base) {
+      src = nir_build_deref_offset(b, deref, type_size_align_1);
+      range_base = var->data.driver_location;
    } else {
       src = nir_iadd_imm(b,
                          nir_build_deref_offset(b, deref, type_size_align_1),
                          var->data.driver_location);
    }
    nir_rewrite_image_intrinsic(intrinsic, src, bindless);
+   if (!bindless)
+      nir_intrinsic_set_range_base(intrinsic, range_base);
 
    return true;
 }

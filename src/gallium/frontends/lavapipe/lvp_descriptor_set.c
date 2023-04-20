@@ -223,18 +223,13 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDescriptorSetLayout(
    return VK_SUCCESS;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
-    VkDevice                                    _device,
-    const VkPipelineLayoutCreateInfo*           pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkPipelineLayout*                           pPipelineLayout)
+struct lvp_pipeline_layout *
+lvp_pipeline_layout_create(struct lvp_device *device,
+                           const VkPipelineLayoutCreateInfo*           pCreateInfo,
+                           const VkAllocationCallbacks*                pAllocator)
 {
-   LVP_FROM_HANDLE(lvp_device, device, _device);
-   struct lvp_pipeline_layout *layout;
-
-   layout = vk_pipeline_layout_zalloc(&device->vk, sizeof(*layout),
-                                      pCreateInfo);
-
+   struct lvp_pipeline_layout *layout = vk_pipeline_layout_zalloc(&device->vk, sizeof(*layout),
+                                                                  pCreateInfo);
    for (uint32_t set = 0; set < layout->vk.set_count; set++) {
       if (layout->vk.set_layouts[set] == NULL)
          continue;
@@ -299,6 +294,17 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
       layout->push_constant_stages |= (range->stageFlags & BITFIELD_MASK(MESA_SHADER_STAGES));
    }
    layout->push_constant_size = align(layout->push_constant_size, 16);
+   return layout;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePipelineLayout(
+    VkDevice                                    _device,
+    const VkPipelineLayoutCreateInfo*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPipelineLayout*                           pPipelineLayout)
+{
+   LVP_FROM_HANDLE(lvp_device, device, _device);
+   struct lvp_pipeline_layout *layout = lvp_pipeline_layout_create(device, pCreateInfo, pAllocator);
    *pPipelineLayout = lvp_pipeline_layout_to_handle(layout);
 
    return VK_SUCCESS;

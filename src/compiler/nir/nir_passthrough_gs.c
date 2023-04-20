@@ -22,7 +22,105 @@
  */
 
 #include "nir.h"
+#include "nir_xfb_info.h"
 #include "nir_builder.h"
+#include "util/u_memory.h"
+
+static unsigned int
+gs_in_prim_for_topology(enum shader_prim prim)
+{
+   switch (prim) {
+   case SHADER_PRIM_QUADS:
+      return SHADER_PRIM_LINES_ADJACENCY;
+   default:
+      return prim;
+   }
+}
+
+static enum shader_prim
+gs_out_prim_for_topology(enum shader_prim prim)
+{
+   switch (prim) {
+   case SHADER_PRIM_POINTS:
+      return SHADER_PRIM_POINTS;
+   case SHADER_PRIM_LINES:
+   case SHADER_PRIM_LINE_LOOP:
+   case SHADER_PRIM_LINES_ADJACENCY:
+   case SHADER_PRIM_LINE_STRIP_ADJACENCY:
+   case SHADER_PRIM_LINE_STRIP:
+      return SHADER_PRIM_LINE_STRIP;
+   case SHADER_PRIM_TRIANGLES:
+   case SHADER_PRIM_TRIANGLE_STRIP:
+   case SHADER_PRIM_TRIANGLE_FAN:
+   case SHADER_PRIM_TRIANGLES_ADJACENCY:
+   case SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case SHADER_PRIM_POLYGON:
+      return SHADER_PRIM_TRIANGLE_STRIP;
+   case SHADER_PRIM_QUADS:
+   case SHADER_PRIM_QUAD_STRIP:
+   case SHADER_PRIM_PATCHES:
+   default:
+      return SHADER_PRIM_QUADS;
+   }
+}
+
+static unsigned int
+vertices_for_prim(enum shader_prim prim)
+{
+   switch (prim) {
+   case SHADER_PRIM_POINTS:
+      return 1;
+   case SHADER_PRIM_LINES:
+   case SHADER_PRIM_LINE_LOOP:
+   case SHADER_PRIM_LINES_ADJACENCY:
+   case SHADER_PRIM_LINE_STRIP_ADJACENCY:
+   case SHADER_PRIM_LINE_STRIP:
+      return 2;
+   case SHADER_PRIM_TRIANGLES:
+   case SHADER_PRIM_TRIANGLE_STRIP:
+   case SHADER_PRIM_TRIANGLE_FAN:
+   case SHADER_PRIM_TRIANGLES_ADJACENCY:
+   case SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case SHADER_PRIM_POLYGON:
+      return 3;
+   case SHADER_PRIM_QUADS:
+   case SHADER_PRIM_QUAD_STRIP:
+      return 4;
+   case SHADER_PRIM_PATCHES:
+   default:
+      unreachable("unsupported primitive for gs input");
+   }
+}
+
+static unsigned int
+array_size_for_prim(enum shader_prim prim)
+{
+   switch (prim) {
+   case SHADER_PRIM_POINTS:
+      return 1;
+   case SHADER_PRIM_LINES:
+   case SHADER_PRIM_LINE_LOOP:
+   case SHADER_PRIM_LINE_STRIP:
+      return 2;
+   case SHADER_PRIM_LINES_ADJACENCY:
+   case SHADER_PRIM_LINE_STRIP_ADJACENCY:
+      return 4;
+   case SHADER_PRIM_TRIANGLES:
+   case SHADER_PRIM_TRIANGLE_STRIP:
+   case SHADER_PRIM_TRIANGLE_FAN:
+   case SHADER_PRIM_POLYGON:
+      return 3;
+   case SHADER_PRIM_TRIANGLES_ADJACENCY:
+   case SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return 6;
+   case SHADER_PRIM_QUADS:
+   case SHADER_PRIM_QUAD_STRIP:
+      return 4;
+   case SHADER_PRIM_PATCHES:
+   default:
+      unreachable("unsupported primitive for gs input");
+   }
+}
 
 /*
  * A helper to create a passthrough GS shader for drivers that needs to lower
@@ -33,20 +131,36 @@ nir_shader *
 nir_create_passthrough_gs(const nir_shader_compiler_options *options,
                           const nir_shader *prev_stage,
                           enum shader_prim primitive_type,
-                          unsigned vertices)
+                          int flat_interp_mask_offset,
+                          int last_pv_vert_offset,
+                          bool emulate_edgeflags,
+                          bool force_line_strip_out)
 {
+   unsigned int vertices_out = vertices_for_prim(primitive_type);
+   emulate_edgeflags = emulate_edgeflags && (prev_stage->info.outputs_written & VARYING_BIT_EDGE);
+   bool needs_closing = (force_line_strip_out || emulate_edgeflags) && vertices_out >= 3;
+   enum shader_prim original_our_prim = gs_out_prim_for_topology(primitive_type);
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_GEOMETRY,
                                                   options,
                                                   "gs passthrough");
 
    nir_shader *nir = b.shader;
-   nir->info.gs.input_primitive = primitive_type;
-   nir->info.gs.output_primitive = primitive_type;
-   nir->info.gs.vertices_in = vertices;
-   nir->info.gs.vertices_out = vertices;
+   nir->info.gs.input_primitive = gs_in_prim_for_topology(primitive_type);
+   nir->info.gs.output_primitive = (force_line_strip_out || emulate_edgeflags) ?
+      SHADER_PRIM_LINE_STRIP : original_our_prim;
+   nir->info.gs.vertices_in = vertices_out;
+   nir->info.gs.vertices_out = needs_closing ? vertices_out + 1 : vertices_out;
    nir->info.gs.invocations = 1;
    nir->info.gs.active_stream_mask = 1;
 
+   nir->info.has_transform_feedback_varyings = prev_stage->info.has_transform_feedback_varyings;
+   memcpy(nir->info.xfb_stride, prev_stage->info.xfb_stride, sizeof(prev_stage->info.xfb_stride));
+   if (prev_stage->xfb_info) {
+      nir->xfb_info = mem_dup(prev_stage->xfb_info, sizeof(nir_xfb_info));
+   }
+
+   bool handle_flat = nir->info.gs.output_primitive == SHADER_PRIM_LINE_STRIP &&
+                      nir->info.gs.output_primitive != original_our_prim;
    nir_variable *in_vars[VARYING_SLOT_MAX];
    nir_variable *out_vars[VARYING_SLOT_MAX];
    unsigned num_inputs = 0, num_outputs = 0;
@@ -63,7 +177,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
 
       nir_variable *in = nir_variable_create(nir, nir_var_shader_in,
                                              glsl_array_type(var->type,
-                                                             vertices,
+                                                             array_size_for_prim(primitive_type),
                                                              false),
                                              name);
       in->data.location = var->data.location;
@@ -93,12 +207,18 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       out->data.driver_location = var->data.driver_location;
       out->data.interpolation = var->data.interpolation;
       out->data.compact = var->data.compact;
+      out->data.is_xfb = var->data.is_xfb;
+      out->data.is_xfb_only = var->data.is_xfb_only;
+      out->data.explicit_xfb_buffer = var->data.explicit_xfb_buffer;
+      out->data.explicit_xfb_stride = var->data.explicit_xfb_stride;
+      out->data.xfb = var->data.xfb;
+      out->data.offset = var->data.offset;
 
       out_vars[num_outputs++] = out;
    }
 
    unsigned int start_vert = 0;
-   unsigned int end_vert = vertices;
+   unsigned int end_vert = vertices_out;
    unsigned int vert_step = 1;
    switch (primitive_type) {
    case PIPE_PRIM_LINES_ADJACENCY:
@@ -115,19 +235,46 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       break;
    }
 
-   for (unsigned i = start_vert; i < end_vert; i += vert_step) {
+   nir_variable *edge_var = nir_find_variable_with_location(nir, nir_var_shader_in, VARYING_SLOT_EDGE);
+   nir_ssa_def *flat_interp_mask_def = nir_load_ubo(&b, 1, 32,
+                                                    nir_imm_int(&b, 0), nir_imm_int(&b, flat_interp_mask_offset),
+                                                    .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
+   nir_ssa_def *last_pv_vert_def = nir_load_ubo(&b, 1, 32,
+                                                nir_imm_int(&b, 0), nir_imm_int(&b, last_pv_vert_offset),
+                                                .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
+   last_pv_vert_def = nir_ine_imm(&b, last_pv_vert_def, 0);
+   nir_ssa_def *start_vert_index = nir_imm_int(&b, start_vert);
+   nir_ssa_def *end_vert_index = nir_imm_int(&b, end_vert - 1);
+   nir_ssa_def *pv_vert_index = nir_bcsel(&b, last_pv_vert_def, end_vert_index, start_vert_index);
+   for (unsigned i = start_vert; i < end_vert || needs_closing; i += vert_step) {
+      int idx = i < end_vert ? i : start_vert;
       /* Copy inputs to outputs. */
-      for (unsigned j = 0, oj = 0; j < num_inputs; ++j) {
+      for (unsigned j = 0, oj = 0, of = 0; j < num_inputs; ++j) {
          if (in_vars[j]->data.location == VARYING_SLOT_EDGE) {
             continue;
          }
          /* no need to use copy_var to save a lower pass */
-         nir_ssa_def *value = nir_load_array_var_imm(&b, in_vars[j], i);
+         nir_ssa_def *index;
+         if (in_vars[j]->data.location == VARYING_SLOT_POS || !handle_flat)
+            index = nir_imm_int(&b, idx);
+         else {
+            unsigned mask = 1u << (of++);
+            index = nir_bcsel(&b, nir_ieq_imm(&b, nir_iand_imm(&b, flat_interp_mask_def, mask), 0), nir_imm_int(&b, idx), pv_vert_index);
+         }
+         nir_ssa_def *value = nir_load_array_var(&b, in_vars[j], index);
          nir_store_var(&b, out_vars[oj], value,
                        (1u << value->num_components) - 1);
          ++oj;
       }
       nir_emit_vertex(&b, 0);
+      if (emulate_edgeflags) {
+         nir_ssa_def *edge_value = nir_channel(&b, nir_load_array_var_imm(&b, edge_var, idx), 0);
+         nir_if *edge_if = nir_push_if(&b, nir_fneu(&b, edge_value, nir_imm_float(&b, 1.0)));
+         nir_end_primitive(&b, 0);
+         nir_pop_if(&b, edge_if);
+      }
+      if (i >= end_vert)
+         break;
    }
 
    nir_end_primitive(&b, 0);

@@ -4810,23 +4810,23 @@ crocus_populate_fs_key(const struct crocus_context *ice,
    key->stats_wm = ice->state.stats_wm;
 #endif
 
-   uint32_t line_aa = BRW_WM_AA_NEVER;
+   uint32_t line_aa = BRW_NEVER;
    if (rast->cso.line_smooth) {
       int reduced_prim = ice->state.reduced_prim_mode;
       if (reduced_prim == PIPE_PRIM_LINES)
-         line_aa = BRW_WM_AA_ALWAYS;
+         line_aa = BRW_ALWAYS;
       else if (reduced_prim == PIPE_PRIM_TRIANGLES) {
          if (rast->cso.fill_front == PIPE_POLYGON_MODE_LINE) {
-            line_aa = BRW_WM_AA_SOMETIMES;
+            line_aa = BRW_SOMETIMES;
 
             if (rast->cso.fill_back == PIPE_POLYGON_MODE_LINE ||
                 rast->cso.cull_face == PIPE_FACE_BACK)
-               line_aa = BRW_WM_AA_ALWAYS;
+               line_aa = BRW_ALWAYS;
          } else if (rast->cso.fill_back == PIPE_POLYGON_MODE_LINE) {
-            line_aa = BRW_WM_AA_SOMETIMES;
+            line_aa = BRW_SOMETIMES;
 
             if (rast->cso.cull_face == PIPE_FACE_FRONT)
-               line_aa = BRW_WM_AA_ALWAYS;
+               line_aa = BRW_ALWAYS;
          }
       }
    }
@@ -4836,17 +4836,20 @@ crocus_populate_fs_key(const struct crocus_context *ice,
 
    key->clamp_fragment_color = rast->cso.clamp_fragment_color;
 
-   key->alpha_to_coverage = blend->cso.alpha_to_coverage;
+   key->alpha_to_coverage = blend->cso.alpha_to_coverage ?
+      BRW_ALWAYS : BRW_NEVER;
 
    key->alpha_test_replicate_alpha = fb->nr_cbufs > 1 && zsa->cso.alpha_enabled;
 
    key->flat_shade = rast->cso.flatshade &&
       (info->inputs_read & (VARYING_BIT_COL0 | VARYING_BIT_COL1));
 
-   key->persample_interp = rast->cso.force_persample_interp;
-   key->multisample_fbo = rast->cso.multisample && fb->samples > 1;
+   const bool multisample_fbo = rast->cso.multisample && fb->samples > 1;
+   key->multisample_fbo = multisample_fbo ? BRW_ALWAYS : BRW_NEVER;
+   key->persample_interp =
+      rast->cso.force_persample_interp ? BRW_ALWAYS : BRW_NEVER;
 
-   key->ignore_sample_mask_out = !key->multisample_fbo;
+   key->ignore_sample_mask_out = !multisample_fbo;
    key->coherent_fb_fetch = false; // TODO: needed?
 
    key->force_dual_color_blend =
@@ -6449,7 +6452,8 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
 
          intel_set_ps_dispatch_state(&ps, &batch->screen->devinfo,
                                      wm_prog_data,
-                                     ice->state.framebuffer.samples);
+                                     ice->state.framebuffer.samples,
+                                     0 /* msaa_flags */);
 
          ps.DispatchGRFStartRegisterForConstantSetupData0 =
             brw_wm_prog_data_dispatch_grf_start_reg(wm_prog_data, ps, 0);
@@ -6517,7 +6521,8 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
          psx.AttributeEnable = wm_prog_data->num_varying_inputs != 0;
          psx.PixelShaderUsesSourceDepth = wm_prog_data->uses_src_depth;
          psx.PixelShaderUsesSourceW = wm_prog_data->uses_src_w;
-         psx.PixelShaderIsPerSample = wm_prog_data->persample_dispatch;
+         psx.PixelShaderIsPerSample =
+            brw_wm_prog_data_is_persample(wm_prog_data, 0);
 
          /* _NEW_MULTISAMPLE | BRW_NEW_CONSERVATIVE_RASTERIZATION */
          if (wm_prog_data->uses_sample_mask)
@@ -7291,7 +7296,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
             else
                wm.MultisampleRasterizationMode = MSRASTMODE_OFF_PIXEL;
 
-            if (wm_prog_data->persample_dispatch)
+            if (brw_wm_prog_data_is_persample(wm_prog_data, 0))
                wm.MultisampleDispatchMode = MSDISPMODE_PERSAMPLE;
             else
                wm.MultisampleDispatchMode = MSDISPMODE_PERPIXEL;

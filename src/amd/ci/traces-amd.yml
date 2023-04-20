@@ -6,6 +6,7 @@ traces-db:
 traces:
   unigine/heaven-scene1-low-d3d11.trace-dxgi:
     vk-radv-raven:
+      label: [slow, skip]
       checksum: acf06d1e321e1f3f1e2819c25656c6c3
   unigine/heaven-scene1-low-d3d9.trace-dxgi:
     vk-radv-raven:
@@ -13,12 +14,12 @@ traces:
       checksum: 7dd0b49d585d4265b3f044cd47d8cd7e
   unigine/tropics-d3d9.trace-dxgi:
     vk-radv-raven:
-      label: [slow]
+      label: [slow, skip]
       checksum: 7bba090dffafaeac9e2ddbea092b8f6d
   unigine/sanctuary-d3d9.trace-dxgi:
     vk-radv-raven:
       label: [no-perf]
-      checksum: 25ba37c417f13a431707fad51df7e5de
+      checksum: cca548fef1f0ea3f0d0fcc7c18bae9ee
   glxgears/glxgears-2-v2.trace:
     gl-radeonsi-stoney:
       checksum: ef3653f50d4853d3e9cb3244c799565a

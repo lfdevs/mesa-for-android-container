@@ -383,6 +383,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_SHADER_ARRAY_COMPONENTS:
 	case PIPE_CAP_QUERY_BUFFER_OBJECT:
 	case PIPE_CAP_IMAGE_STORE_FORMATTED:
+	case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
 		return family >= CHIP_CEDAR ? 1 : 0;
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 		return family >= CHIP_CEDAR ? 4 : 0;
@@ -522,13 +523,13 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
 		return rscreen->b.gfx_level >= R700;
 	case PIPE_CAP_PCI_GROUP:
-		return rscreen->b.info.pci_domain;
+		return rscreen->b.info.pci.domain;
 	case PIPE_CAP_PCI_BUS:
-		return rscreen->b.info.pci_bus;
+		return rscreen->b.info.pci.bus;
 	case PIPE_CAP_PCI_DEVICE:
-		return rscreen->b.info.pci_dev;
+		return rscreen->b.info.pci.dev;
 	case PIPE_CAP_PCI_FUNCTION:
-		return rscreen->b.info.pci_func;
+		return rscreen->b.info.pci.func;
 
 	case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS:
 		if (rscreen->b.family >= CHIP_CEDAR && rscreen->has_atomics)
@@ -637,8 +638,6 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		return ir;
 	}
 	case PIPE_SHADER_CAP_DROUND_SUPPORTED:
-	case PIPE_SHADER_CAP_DFRACEXP_DLDEXP_SUPPORTED:
-	case PIPE_SHADER_CAP_LDEXP_SUPPORTED:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:

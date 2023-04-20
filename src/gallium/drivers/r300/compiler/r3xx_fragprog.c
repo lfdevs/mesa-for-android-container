@@ -100,9 +100,6 @@ void r3xx_compile_fragment_program(struct r300_fragment_program_compiler* c)
 	struct radeon_compiler_pass fs_list[] = {
 		/* NAME				DUMP PREDICATE	FUNCTION			PARAM */
 		{"rewrite depth out",		1, 1,		rc_rewrite_depth_out,		NULL},
-		/* This transformation needs to be done before any of the IF
-		 * instructions are modified. */
-		{"transform KILP",		1, 1,		rc_transform_KILL,		NULL},
 		{"force alpha to one",		1, alpha2one,	rc_local_transform,		force_alpha_to_one},
 		{"transform TEX",		1, 1,		rc_local_transform,		rewrite_tex},
 		{"transform IF",		1, is_r500,	r500_transform_IF,		NULL},

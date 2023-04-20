@@ -32,6 +32,7 @@
 #include "wrap.h"
 
 extern FILE *pandecode_dump_stream;
+extern unsigned pandecode_indent;
 
 void pandecode_dump_file_open(void);
 
@@ -85,6 +86,8 @@ __pandecode_fetch_gpu_mem(uint64_t gpu_va, size_t size, int line,
 #define PANDECODE_PTR_VAR(name, gpu_va)                                        \
    name = __pandecode_fetch_gpu_mem(gpu_va, sizeof(*name), __LINE__, __FILE__)
 
+void pandecode_validate_buffer(mali_ptr addr, size_t sz);
+
 /* Forward declare for all supported gens to permit thunking */
 void pandecode_jc_v4(mali_ptr jc_gpu_va, unsigned gpu_id);
 void pandecode_jc_v5(mali_ptr jc_gpu_va, unsigned gpu_id);
@@ -97,6 +100,9 @@ void pandecode_abort_on_fault_v5(mali_ptr jc_gpu_va);
 void pandecode_abort_on_fault_v6(mali_ptr jc_gpu_va);
 void pandecode_abort_on_fault_v7(mali_ptr jc_gpu_va);
 void pandecode_abort_on_fault_v9(mali_ptr jc_gpu_va);
+
+void pandecode_cs_v10(mali_ptr queue, uint32_t size, unsigned gpu_id,
+                      uint32_t *regs);
 
 static inline void
 pan_hexdump(FILE *fp, const uint8_t *hex, size_t cnt, bool with_strings)
@@ -140,5 +146,117 @@ pan_hexdump(FILE *fp, const uint8_t *hex, size_t cnt, bool with_strings)
 
    fprintf(fp, "\n");
 }
+
+/* Logging infrastructure */
+static void
+pandecode_make_indent(void)
+{
+   for (unsigned i = 0; i < pandecode_indent; ++i)
+      fprintf(pandecode_dump_stream, "  ");
+}
+
+static void PRINTFLIKE(1, 2) pandecode_log(const char *format, ...)
+{
+   va_list ap;
+
+   pandecode_make_indent();
+   va_start(ap, format);
+   vfprintf(pandecode_dump_stream, format, ap);
+   va_end(ap);
+}
+
+static void
+pandecode_log_cont(const char *format, ...)
+{
+   va_list ap;
+
+   va_start(ap, format);
+   vfprintf(pandecode_dump_stream, format, ap);
+   va_end(ap);
+}
+
+/* Convenience methods */
+#define DUMP_UNPACKED(T, var, ...)                                             \
+   {                                                                           \
+      pandecode_log(__VA_ARGS__);                                              \
+      pan_print(pandecode_dump_stream, T, var, (pandecode_indent + 1) * 2);    \
+   }
+
+#define DUMP_CL(T, cl, ...)                                                    \
+   {                                                                           \
+      pan_unpack(cl, T, temp);                                                 \
+      DUMP_UNPACKED(T, temp, __VA_ARGS__);                                     \
+   }
+
+#define DUMP_SECTION(A, S, cl, ...)                                            \
+   {                                                                           \
+      pan_section_unpack(cl, A, S, temp);                                      \
+      pandecode_log(__VA_ARGS__);                                              \
+      pan_section_print(pandecode_dump_stream, A, S, temp,                     \
+                        (pandecode_indent + 1) * 2);                           \
+   }
+
+#define MAP_ADDR(T, addr, cl)                                                  \
+   const uint8_t *cl = pandecode_fetch_gpu_mem(addr, pan_size(T));
+
+#define DUMP_ADDR(T, addr, ...)                                                \
+   {                                                                           \
+      MAP_ADDR(T, addr, cl)                                                    \
+      DUMP_CL(T, cl, __VA_ARGS__);                                             \
+   }
+
+void pandecode_shader_disassemble(mali_ptr shader_ptr, unsigned gpu_id);
+
+#ifdef PAN_ARCH
+
+/* Information about the framebuffer passed back for additional analysis */
+struct pandecode_fbd {
+   unsigned rt_count;
+   bool has_extra;
+};
+
+struct pandecode_fbd GENX(pandecode_fbd)(uint64_t gpu_va, bool is_fragment,
+                                         unsigned gpu_id);
+
+#if PAN_ARCH >= 9
+void GENX(pandecode_dcd)(const struct MALI_DRAW *p, unsigned unused,
+                         unsigned gpu_id);
+#else
+void GENX(pandecode_dcd)(const struct MALI_DRAW *p, enum mali_job_type job_type,
+                         unsigned gpu_id);
+#endif
+
+#if PAN_ARCH <= 5
+void GENX(pandecode_texture)(mali_ptr u, unsigned tex);
+#else
+void GENX(pandecode_texture)(const void *cl, unsigned tex);
+#endif
+
+#if PAN_ARCH >= 5
+mali_ptr GENX(pandecode_blend)(void *descs, int rt_no, mali_ptr frag_shader);
+#endif
+
+#if PAN_ARCH >= 6
+void GENX(pandecode_tiler)(mali_ptr gpu_va, unsigned gpu_id);
+#endif
+
+#if PAN_ARCH >= 9
+void GENX(pandecode_shader_environment)(const struct MALI_SHADER_ENVIRONMENT *p,
+                                        unsigned gpu_id);
+
+void GENX(pandecode_resource_tables)(mali_ptr addr, const char *label);
+
+void GENX(pandecode_fau)(mali_ptr addr, unsigned count, const char *name);
+
+mali_ptr GENX(pandecode_shader)(mali_ptr addr, const char *label,
+                                unsigned gpu_id);
+
+void GENX(pandecode_blend_descs)(mali_ptr blend, unsigned count,
+                                 mali_ptr frag_shader, unsigned gpu_id);
+
+void GENX(pandecode_depth_stencil)(mali_ptr addr);
+#endif
+
+#endif
 
 #endif /* __MMAP_TRACE_H__ */

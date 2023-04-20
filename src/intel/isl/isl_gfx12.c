@@ -74,6 +74,13 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
    if (info->dim != ISL_SURF_DIM_2D)
       *flags &= ~ISL_TILING_64_BIT;
 
+   /* TILE64 does not work with YCRCB formats, according to bspec 58767:
+    * "Packed YUV surface formats such as YCRCB_NORMAL, YCRCB_SWAPUVY etc.
+    * will not support as Tile64"
+    */
+   if (isl_format_is_yuv(info->format))
+      *flags &= ~ISL_TILING_64_BIT;
+
    /* From RENDER_SURFACE_STATE::NumberofMultisamples,
     *
     *    This field must not be programmed to anything other than

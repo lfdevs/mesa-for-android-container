@@ -20,10 +20,14 @@
 
 # Mesa-local imports in the Python files must be declared here for correct
 # dependency tracking.
-vk_physical_device_features_gen_depend_files = [
-]
 
 vulkan_runtime_files = files(
+  'rmv/vk_rmv_common.c',
+  'rmv/vk_rmv_common.h',
+  'rmv/vk_rmv_exporter.c',
+  'rmv/vk_rmv_tokens.h',
+  'vk_acceleration_structure.c',
+  'vk_acceleration_structure.h',
   'vk_buffer.c',
   'vk_buffer.h',
   'vk_cmd_copy.c',
@@ -46,6 +50,8 @@ vulkan_runtime_files = files(
   'vk_descriptor_update_template.h',
   'vk_device.c',
   'vk_device.h',
+  'vk_device_memory.c',
+  'vk_device_memory.h',
   'vk_fence.c',
   'vk_fence.h',
   'vk_framebuffer.c',
@@ -90,6 +96,10 @@ vulkan_runtime_files = files(
   'vk_sync_timeline.c',
   'vk_sync_timeline.h',
   'vk_synchronization2.c',
+  'vk_video.c',
+  'vk_video.h',
+  'vk_ycbcr_conversion.c',
+  'vk_ycbcr_conversion.h',
 )
 
 vulkan_runtime_deps = [
@@ -105,7 +115,7 @@ if dep_libdrm.found()
 endif
 
 if with_platform_android
-  vulkan_runtime_files += files('vk_android.c')
+  vulkan_runtime_files += files('vk_android.c', 'vk_android.h')
   vulkan_runtime_deps += dep_android
 endif
 
@@ -156,11 +166,11 @@ vk_dispatch_trampolines = custom_target(
 
 vk_physical_device_features = custom_target(
   'vk_physical_device_features',
-  input : ['vk_physical_device_features.py', vk_api_xml],
-  output : ['vk_physical_device_features.c'],
+  input : [vk_physical_device_features_gen, vk_api_xml],
+  output : ['vk_physical_device_features.c', 'vk_physical_device_features.h'],
   command : [
     prog_python, '@INPUT0@', '--xml', '@INPUT1@',
-    '--out-c', '@OUTPUT0@'
+    '--out-c', '@OUTPUT0@', '--out-h', '@OUTPUT1@',
   ],
   depend_files : vk_physical_device_features_gen_depend_files,
 )
@@ -185,14 +195,14 @@ libvulkan_runtime = static_library(
   dependencies : vulkan_runtime_deps,
   # For glsl_type_singleton
   link_with : libcompiler,
-  c_args : [c_msvc_compat_args],
+  c_args : c_msvc_compat_args,
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
 
 idep_vulkan_runtime_headers = declare_dependency(
-  sources : [vk_cmd_queue[1]],
-  include_directories : include_directories('.')
+  sources : [vk_cmd_queue[1], vk_physical_device_features[1]],
+  include_directories : include_directories('.'),
 )
 
 idep_vulkan_common_entrypoints_h = declare_dependency(
@@ -201,7 +211,7 @@ idep_vulkan_common_entrypoints_h = declare_dependency(
 
 # This is likely a bug in the Meson VS backend, as MSVC with ninja works fine.
 # See this discussion here:
-# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/10506 
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/10506
 if get_option('backend').startswith('vs')
   idep_vulkan_runtime = declare_dependency(
     link_with : libvulkan_runtime,

@@ -1551,7 +1551,7 @@ Jan Zielinski (8):
 -  gallium/swr: fix tessellation state save/restore
 -  docs: Update SWR tessellation support
 
-Jason Ekstrand (212):
+Faith Ekstrand (212):
 
 -  util: Add a util_sparse_array data structure
 -  anv: Move refcount to anv_bo

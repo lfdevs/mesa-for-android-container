@@ -38,14 +38,12 @@ traces:
       checksum: 17daf7dc20dd74186d04eb54497a1690
   PenumbraOverture/penumbra-ov-s0-2-864-f1500-v2.trace:
     gl-zink-anv-tgl:
-      checksum: d2f77e1e8ae0c1a55d4c8c1652d88990
-      text: "broken rendering on zink+anv and zink+radv, fine on iris"
+      checksum: 52e0fe3474930b1d0956128559d90c3a
   ShadowWarrior/ShadowWarrior-f3952-v2.trace:
     gl-zink-anv-tgl:
       label: [skip, flakes]
       checksum: 826f966a52bc956644bf41562aa9c686
       text: |-
-        'WARNING: Incorrect rendering will happen because the Vulkan device doesn't support the 'EXT_attachment_feedback_loop_layout' feature.'
         This trace is flaky on freedreno too.
   SirYouAreBeingHunted/sir-f750-v2.trace:
     gl-zink-anv-tgl:

@@ -44,26 +44,6 @@
  *
  * Version 2.1.0
  */
-static bool
-lower_fp16_casts_filter(const nir_instr *instr, const void *data)
-{
-   if (instr->type == nir_instr_type_alu) {
-      nir_alu_instr *alu = nir_instr_as_alu(instr);
-      switch (alu->op) {
-      case nir_op_f2f16:
-      case nir_op_f2f16_rtne:
-      case nir_op_f2f16_rtz:
-         return true;
-      default:
-         return false;
-      }
-   } else if (instr->type == nir_instr_type_intrinsic) {
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      return intrin->intrinsic == nir_intrinsic_convert_alu_types &&
-         nir_intrinsic_dest_type(intrin) == nir_type_float16;
-   }
-   return false;
-}
 
 static nir_ssa_def *
 half_rounded(nir_builder *b, nir_ssa_def *value, nir_ssa_def *guard, nir_ssa_def *sticky,
@@ -188,12 +168,12 @@ float_to_half_impl(nir_builder *b, nir_ssa_def *src, nir_rounding_mode mode)
    return nir_u2u16(b, nir_ior(b, fp16, nir_ushr(b, sign, nir_imm_int(b, 16))));
 }
 
-static nir_ssa_def *
+static bool
 lower_fp16_cast_impl(nir_builder *b, nir_instr *instr, void *data)
 {
    nir_ssa_def *src, *dst;
    uint8_t *swizzle = NULL;
-   nir_rounding_mode mode = nir_rounding_mode_rtne;
+   nir_rounding_mode mode = nir_rounding_mode_undef;
 
    if (instr->type == nir_instr_type_alu) {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
@@ -202,21 +182,62 @@ lower_fp16_cast_impl(nir_builder *b, nir_instr *instr, void *data)
       dst = &alu->dest.dest.ssa;
       switch (alu->op) {
       case nir_op_f2f16:
+         if (b->shader->info.float_controls_execution_mode & FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP16)
+            mode = nir_rounding_mode_rtz;
+         else if (b->shader->info.float_controls_execution_mode & FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP16)
+            mode = nir_rounding_mode_rtne;
+         break;
       case nir_op_f2f16_rtne:
+         mode = nir_rounding_mode_rtne;
          break;
       case nir_op_f2f16_rtz:
          mode = nir_rounding_mode_rtz;
          break;
-      default: unreachable("Should've been filtered");
+      default:
+         return false;
       }
-   } else {
+   } else if (instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-      assert(nir_intrinsic_src_type(intrin) == nir_type_float32);
+      if (intrin->intrinsic != nir_intrinsic_convert_alu_types ||
+          nir_intrinsic_dest_type(intrin) != nir_type_float16)
+         return false;
       src = intrin->src[0].ssa;
       dst = &intrin->dest.ssa;
       mode = nir_intrinsic_rounding_mode(intrin);
+   } else {
+      return false;
    }
 
+   nir_lower_fp16_cast_options options = *(nir_lower_fp16_cast_options *)data;
+   nir_lower_fp16_cast_options req_option = 0;
+   switch (mode) {
+   case nir_rounding_mode_rtz:
+      req_option = nir_lower_fp16_rtz;
+      break;
+   case nir_rounding_mode_rtne:
+      req_option = nir_lower_fp16_rtne;
+      break;
+   case nir_rounding_mode_ru:
+      req_option = nir_lower_fp16_ru;
+      break;
+   case nir_rounding_mode_rd:
+      req_option = nir_lower_fp16_rd;
+      break;
+   case nir_rounding_mode_undef:
+      if (options == nir_lower_fp16_all) {
+         /* Pick one arbitrarily for lowering */
+         mode = nir_rounding_mode_rtne;
+         req_option = nir_lower_fp16_rtne;
+      }
+      /* Otherwise assume the backend can handle f2f16 with undef rounding */
+      break;
+   default:
+      unreachable("Invalid rounding mode");
+   }
+   if (!(options & req_option))
+      return false;
+
+   b->cursor = nir_before_instr(instr);
    nir_ssa_def *rets[NIR_MAX_VEC_COMPONENTS] = { NULL };
 
    for (unsigned i = 0; i < dst->num_components; i++) {
@@ -224,14 +245,16 @@ lower_fp16_cast_impl(nir_builder *b, nir_instr *instr, void *data)
       rets[i] = float_to_half_impl(b, comp, mode);
    }
 
-   return nir_vec(b, rets, dst->num_components);
+   nir_ssa_def *new_val = nir_vec(b, rets, dst->num_components);
+   nir_ssa_def_rewrite_uses(dst, new_val);
+   return true;
 }
 
 bool
-nir_lower_fp16_casts(nir_shader *shader)
+nir_lower_fp16_casts(nir_shader *shader, nir_lower_fp16_cast_options options)
 {
-   return nir_shader_lower_instructions(shader,
-                                        lower_fp16_casts_filter,
-                                        lower_fp16_cast_impl,
-                                        NULL);
+   return nir_shader_instructions_pass(shader,
+                                       lower_fp16_cast_impl,
+                                       nir_metadata_none,
+                                       &options);
 }

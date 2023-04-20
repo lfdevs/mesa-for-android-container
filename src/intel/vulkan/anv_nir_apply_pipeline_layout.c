@@ -820,33 +820,6 @@ lower_direct_buffer_instr(nir_builder *b, nir_instr *instr, void *_state)
    case nir_intrinsic_deref_atomic_fcomp_swap:
       return try_lower_direct_buffer_intrinsic(b, intrin, true, state);
 
-   case nir_intrinsic_get_ssbo_size: {
-      /* The get_ssbo_size intrinsic always just takes a
-       * index/reindex intrinsic.
-       */
-      nir_intrinsic_instr *idx_intrin =
-         find_descriptor_for_index_src(intrin->src[0], state);
-      if (idx_intrin == NULL || !descriptor_has_bti(idx_intrin, state))
-         return false;
-
-      b->cursor = nir_before_instr(&intrin->instr);
-
-      /* We just checked that this is a BTI descriptor */
-      const nir_address_format addr_format =
-         nir_address_format_32bit_index_offset;
-
-      nir_ssa_def *buffer_addr =
-         build_buffer_addr_for_idx_intrin(b, idx_intrin, addr_format, state);
-
-      b->cursor = nir_before_instr(&intrin->instr);
-      nir_ssa_def *bti = nir_channel(b, buffer_addr, 0);
-
-      nir_instr_rewrite_src(&intrin->instr, &intrin->src[0],
-                            nir_src_for_ssa(bti));
-      _mesa_set_add(state->lowered_instrs, intrin);
-      return true;
-   }
-
    case nir_intrinsic_load_vulkan_descriptor:
       if (nir_intrinsic_desc_type(intrin) ==
           VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
@@ -915,31 +888,6 @@ lower_load_vulkan_descriptor(nir_builder *b, nir_intrinsic_instr *intrin,
 
    const VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
    nir_address_format addr_format = addr_format_for_desc_type(desc_type, state);
-
-   assert(intrin->dest.is_ssa);
-   nir_foreach_use(src, &intrin->dest.ssa) {
-      if (src->parent_instr->type != nir_instr_type_deref)
-         continue;
-
-      nir_deref_instr *cast = nir_instr_as_deref(src->parent_instr);
-      assert(cast->deref_type == nir_deref_type_cast);
-      switch (desc_type) {
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-         cast->cast.align_mul = ANV_UBO_ALIGNMENT;
-         cast->cast.align_offset = 0;
-         break;
-
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-         cast->cast.align_mul = ANV_SSBO_ALIGNMENT;
-         cast->cast.align_offset = 0;
-         break;
-
-      default:
-         break;
-      }
-   }
 
    assert(intrin->src[0].is_ssa);
    nir_ssa_def *desc =
@@ -1065,13 +1013,14 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *intrin,
    unsigned max_offset = b->shader->constant_data_size - load_size;
    offset = nir_umin(b, offset, nir_imm_int(b, max_offset));
 
-   nir_ssa_def *const_data_base_addr = nir_pack_64_2x32_split(b,
-      nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW),
-      nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH));
+   nir_ssa_def *const_data_addr = nir_pack_64_2x32_split(b,
+      nir_iadd(b,
+         nir_load_reloc_const_intel(b, BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW),
+         offset),
+      nir_imm_int(b, INSTRUCTION_STATE_POOL_MIN_ADDRESS >> 32));
 
    nir_ssa_def *data =
-      nir_load_global_constant(b, nir_iadd(b, const_data_base_addr,
-                                              nir_u2u64(b, offset)),
+      nir_load_global_constant(b, const_data_addr,
                                load_align,
                                intrin->dest.ssa.num_components,
                                intrin->dest.ssa.bit_size);

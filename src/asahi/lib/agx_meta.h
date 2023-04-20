@@ -39,7 +39,7 @@ struct agx_meta_shader {
 struct agx_meta_shader *agx_get_meta_shader(struct agx_meta_cache *cache,
                                             struct agx_meta_key *key);
 
-void agx_meta_init(struct agx_meta_cache *cache, struct agx_device *dev,
-                   void *memctx);
+void agx_meta_init(struct agx_meta_cache *cache, struct agx_device *dev);
+void agx_meta_cleanup(struct agx_meta_cache *cache);
 
 #endif

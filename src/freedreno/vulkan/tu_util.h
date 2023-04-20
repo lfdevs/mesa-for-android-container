@@ -18,6 +18,42 @@
 
 #include "vk_util.h"
 
+#define TU_DEBUG(name) unlikely(tu_env.debug & TU_DEBUG_##name)
+
+enum tu_debug_flags
+{
+   TU_DEBUG_STARTUP = 1 << 0,
+   TU_DEBUG_NIR = 1 << 1,
+   TU_DEBUG_NOBIN = 1 << 3,
+   TU_DEBUG_SYSMEM = 1 << 4,
+   TU_DEBUG_FORCEBIN = 1 << 5,
+   TU_DEBUG_NOUBWC = 1 << 6,
+   TU_DEBUG_NOMULTIPOS = 1 << 7,
+   TU_DEBUG_NOLRZ = 1 << 8,
+   TU_DEBUG_PERFC = 1 << 9,
+   TU_DEBUG_FLUSHALL = 1 << 10,
+   TU_DEBUG_SYNCDRAW = 1 << 11,
+   /* bit 12 is available */
+   TU_DEBUG_GMEM = 1 << 13,
+   TU_DEBUG_RAST_ORDER = 1 << 14,
+   TU_DEBUG_UNALIGNED_STORE = 1 << 15,
+   TU_DEBUG_LAYOUT = 1 << 16,
+   TU_DEBUG_LOG_SKIP_GMEM_OPS = 1 << 17,
+   TU_DEBUG_PERF = 1 << 18,
+   TU_DEBUG_NOLRZFC = 1 << 19,
+   TU_DEBUG_DYNAMIC = 1 << 20,
+   TU_DEBUG_BOS = 1 << 21,
+};
+
+struct tu_env {
+    uint32_t debug;
+};
+
+extern struct tu_env tu_env;
+
+void
+tu_env_init(void);
+
 /* Whenever we generate an error, pass it through this function. Useful for
  * debugging, where we can break on it. Only call at error site, not when
  * propagating errors. Might be useful to plug in a stack trace here.
@@ -37,7 +73,7 @@ __vk_startup_errorf(struct tu_instance *instance,
  */
 #define vk_startup_errorf(instance, error, format, ...) \
    __vk_startup_errorf(instance, error, \
-                       instance->debug_flags & TU_DEBUG_STARTUP, \
+                       TU_DEBUG(STARTUP), \
                        __FILE__, __LINE__, format, ##__VA_ARGS__)
 
 void
@@ -70,14 +106,15 @@ tu_framebuffer_tiling_config(struct tu_framebuffer *fb,
 
 #define tu_foreach_stage(stage, stage_bits)                                  \
    for (gl_shader_stage stage,                                               \
-        __tmp = (gl_shader_stage)((stage_bits) &TU_STAGE_MASK);              \
-        stage = __builtin_ffs(__tmp) - 1, __tmp; __tmp &= ~(1 << (stage)))
+        __tmp = (gl_shader_stage) ((stage_bits) &TU_STAGE_MASK);             \
+        stage = (gl_shader_stage) (__builtin_ffs(__tmp) - 1), __tmp;         \
+        __tmp = (gl_shader_stage) (__tmp & ~(1 << (stage))))
 
 static inline enum a3xx_msaa_samples
 tu_msaa_samples(uint32_t samples)
 {
    assert(__builtin_popcount(samples) == 1);
-   return util_logbase2(samples);
+   return (enum a3xx_msaa_samples) util_logbase2(samples);
 }
 
 static inline uint32_t
@@ -91,20 +128,20 @@ tu6_stage2opcode(gl_shader_stage stage)
 static inline enum a6xx_state_block
 tu6_stage2texsb(gl_shader_stage stage)
 {
-   return SB6_VS_TEX + stage;
+   return (enum a6xx_state_block) (SB6_VS_TEX + stage);
 }
 
 static inline enum a6xx_state_block
 tu6_stage2shadersb(gl_shader_stage stage)
 {
-   return SB6_VS_SHADER + stage;
+   return (enum a6xx_state_block) (SB6_VS_SHADER + stage);
 }
 
 static inline enum a3xx_rop_code
 tu6_rop(VkLogicOp op)
 {
    /* note: hw enum matches the VK enum, but with the 4 bits reversed */
-   static const uint8_t lookup[] = {
+   static const enum a3xx_rop_code lookup[] = {
       [VK_LOGIC_OP_CLEAR]           = ROP_CLEAR,
       [VK_LOGIC_OP_AND]             = ROP_AND,
       [VK_LOGIC_OP_AND_REVERSE]     = ROP_AND_REVERSE,
@@ -149,7 +186,7 @@ tu6_primtype_patches(enum pc_di_primtype type)
 static inline enum pc_di_primtype
 tu6_primtype(VkPrimitiveTopology topology)
 {
-   static const uint8_t lookup[] = {
+   static const enum pc_di_primtype lookup[] = {
       [VK_PRIMITIVE_TOPOLOGY_POINT_LIST]                    = DI_PT_POINTLIST,
       [VK_PRIMITIVE_TOPOLOGY_LINE_LIST]                     = DI_PT_LINELIST,
       [VK_PRIMITIVE_TOPOLOGY_LINE_STRIP]                    = DI_PT_LINESTRIP,
@@ -182,7 +219,7 @@ tu6_stencil_op(VkStencilOp op)
 static inline enum adreno_rb_blend_factor
 tu6_blend_factor(VkBlendFactor factor)
 {
-   static const uint8_t lookup[] = {
+   static const enum adreno_rb_blend_factor lookup[] = {
       [VK_BLEND_FACTOR_ZERO]                    = FACTOR_ZERO,
       [VK_BLEND_FACTOR_ONE]                     = FACTOR_ONE,
       [VK_BLEND_FACTOR_SRC_COLOR]               = FACTOR_SRC_COLOR,
@@ -249,7 +286,7 @@ tu6_tex_type(VkImageViewType type, bool storage)
 static inline enum a6xx_tex_clamp
 tu6_tex_wrap(VkSamplerAddressMode address_mode)
 {
-   uint8_t lookup[] = {
+   static const enum a6xx_tex_clamp lookup[] = {
       [VK_SAMPLER_ADDRESS_MODE_REPEAT]                = A6XX_TEX_REPEAT,
       [VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT]       = A6XX_TEX_MIRROR_REPEAT,
       [VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE]         = A6XX_TEX_CLAMP_TO_EDGE,
@@ -296,7 +333,7 @@ tu6_pipe2depth(VkFormat format)
    case VK_FORMAT_S8_UINT:
       return DEPTH6_32;
    default:
-      return ~0;
+      return DEPTH6_NONE;
    }
 }
 
@@ -391,8 +428,13 @@ void
 tu_dbg_log_gmem_load_store_skips(struct tu_device *device);
 
 #define perf_debug(device, fmt, ...) do {                               \
-   if (unlikely((device)->instance->debug_flags & TU_DEBUG_PERF))       \
+   if (TU_DEBUG(PERF))                                                  \
       mesa_log(MESA_LOG_WARN, (MESA_LOG_TAG), (fmt), ##__VA_ARGS__);    \
 } while(0)
+
+#define sizeof_field(s, field) sizeof(((s *) NULL)->field)
+
+#define offsetof_arr(s, field, idx)                                          \
+   (offsetof(s, field) + sizeof_field(s, field[0]) * (idx))
 
 #endif /* TU_UTIL_H */

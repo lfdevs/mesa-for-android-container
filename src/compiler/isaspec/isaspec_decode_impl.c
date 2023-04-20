@@ -741,7 +741,11 @@ decode(struct decode_state *state, void *bin, int sz)
 
 		const struct isa_bitset *b = find_bitset(state, __instruction, instr);
 		if (!b) {
-			print(state, "no match: %"BITSET_FORMAT"\n", BITSET_VALUE(instr.bitset));
+			if (state->options->no_match_cb) {
+				state->options->no_match_cb(state->out, instr.bitset, BITMASK_WORDS);
+			} else {
+				print(state, "no match: %"BITSET_FORMAT"\n", BITSET_VALUE(instr.bitset));
+			}
 			errors++;
 			continue;
 		}

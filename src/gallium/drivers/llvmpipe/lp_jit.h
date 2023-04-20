@@ -242,8 +242,8 @@ enum {
 struct lp_jit_thread_data
 {
    struct lp_build_format_cache *cache;
-   uint64_t vis_counter;
-   uint64_t ps_invocations;
+   uint64_t vis_counter;    // for occlusion query
+   uint64_t ps_invocations; // pixel shader invocations
 
    /*
     * Non-interpolated rasterizer state passed through to the fragment shader.
@@ -257,32 +257,32 @@ struct lp_jit_thread_data
 
 enum {
    LP_JIT_THREAD_DATA_CACHE = 0,
-   LP_JIT_THREAD_DATA_COUNTER,
-   LP_JIT_THREAD_DATA_INVOCATIONS,
+   LP_JIT_THREAD_DATA_VIS_COUNTER,
+   LP_JIT_THREAD_DATA_PS_INVOCATIONS,
    LP_JIT_THREAD_DATA_RASTER_STATE_VIEWPORT_INDEX,
    LP_JIT_THREAD_DATA_RASTER_STATE_VIEW_INDEX,
    LP_JIT_THREAD_DATA_COUNT
 };
 
 
-#define lp_jit_thread_data_cache(_gallivm, _type, _ptr)			\
+#define lp_jit_thread_data_cache(_gallivm, _type, _ptr) \
    lp_build_struct_get2(_gallivm, _type, _ptr, LP_JIT_THREAD_DATA_CACHE, "cache")
 
-#define lp_jit_thread_data_counter(_gallivm, _type, _ptr) \
-   lp_build_struct_get_ptr2(_gallivm, _type, _ptr, LP_JIT_THREAD_DATA_COUNTER, "counter")
+#define lp_jit_thread_data_vis_counter(_gallivm, _type, _ptr) \
+   lp_build_struct_get_ptr2(_gallivm, _type, _ptr, LP_JIT_THREAD_DATA_VIS_COUNTER, "viscounter")
 
-#define lp_jit_thread_data_invocations(_gallivm, _type, _ptr) \
-   lp_build_struct_get_ptr2(_gallivm, _type, _ptr, LP_JIT_THREAD_DATA_INVOCATIONS, "invocs")
+#define lp_jit_thread_data_ps_invocations(_gallivm, _type, _ptr) \
+   lp_build_struct_get_ptr2(_gallivm, _type, _ptr, LP_JIT_THREAD_DATA_PS_INVOCATIONS, "psinvocs")
 
 #define lp_jit_thread_data_raster_state_viewport_index(_gallivm, _type, _ptr) \
    lp_build_struct_get2(_gallivm, _type, _ptr, \
-			LP_JIT_THREAD_DATA_RASTER_STATE_VIEWPORT_INDEX, \
-			"raster_state.viewport_index")
+                        LP_JIT_THREAD_DATA_RASTER_STATE_VIEWPORT_INDEX, \
+                        "raster_state.viewport_index")
 
 #define lp_jit_thread_data_raster_state_view_index(_gallivm, _type, _ptr) \
    lp_build_struct_get2(_gallivm, _type, _ptr, \
-			LP_JIT_THREAD_DATA_RASTER_STATE_VIEW_INDEX,	\
-			"raster_state.view_index")
+                        LP_JIT_THREAD_DATA_RASTER_STATE_VIEW_INDEX, \
+                        "raster_state.view_index")
 
 /**
  * typedef for fragment shader function

@@ -160,3 +160,7 @@ dEQP-VK.ycbcr.conversion.g16_b16_r16_3plane_420_unorm.color_conversion.ycbcr_ide
 
 # Causes OOM: https://gitlab.freedesktop.org/mesa/mesa/-/issues/7534
 dEQP-VK.api.buffer.basic.max_size_sparse
+
+# Timeouts in VK-GL-CTS 1.3.5.0
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
+dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic

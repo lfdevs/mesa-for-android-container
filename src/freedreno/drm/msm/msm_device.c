@@ -60,15 +60,6 @@ msm_device_new(int fd, drmVersionPtr version)
    dev->funcs = &funcs;
    dev->version = version->version_minor;
 
-   /* async submit_queue currently only used for msm_submit_sp: */
-   if (version->version_minor >= FD_VERSION_SOFTPIN) {
-      /* Note the name is intentionally short to avoid the queue
-       * thread's comm truncating the interesting part of the
-       * process name.
-       */
-      util_queue_init(&dev->submit_queue, "sq", 8, 1, 0, NULL);
-   }
-
    if (version->version_minor >= FD_VERSION_CACHED_COHERENT) {
       struct drm_msm_gem_new new_req = {
          .size = 0x1000,

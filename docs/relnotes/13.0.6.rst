@@ -157,7 +157,7 @@ Jacob Lifshay (1):
 
 -  vulkan/wsi: Improve the DRI3 error message
 
-Jason Ekstrand (11):
+Faith Ekstrand (11):
 
 -  i965: Use a better guardband calculation.
 -  intel/blorp: Swizzle clear colors on the CPU

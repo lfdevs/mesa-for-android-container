@@ -109,7 +109,7 @@ void si_cp_release_mem(struct si_context *ctx, struct radeon_cmdbuf *cs, unsigne
 
          assert(16 * ctx->screen->info.max_render_backends <= scratch->b.b.width0);
          radeon_emit(PKT3(PKT3_EVENT_WRITE, 2, 0));
-         radeon_emit(EVENT_TYPE(EVENT_TYPE_ZPASS_DONE) | EVENT_INDEX(1));
+         radeon_emit(EVENT_TYPE(V_028A90_ZPASS_DONE) | EVENT_INDEX(1));
          radeon_emit(scratch->gpu_address);
          radeon_emit(scratch->gpu_address >> 32);
 

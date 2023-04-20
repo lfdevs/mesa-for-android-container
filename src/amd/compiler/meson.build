@@ -102,4 +102,5 @@ _libaco = static_library(
 idep_aco = declare_dependency(
   include_directories : include_directories('.'),
   link_with : _libaco,
+  sources : [aco_opcodes_h, aco_builder_h],
 )

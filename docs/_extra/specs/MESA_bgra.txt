@@ -81,7 +81,7 @@ Additions to Chapter 8 of the GLES 3.2 Specification (Textures and Samplers)
       BGRA_EXT               B, G, R, A              Color
 
 
-    Add to table 8.9 (Effective internal format correspondig to
+    Add to table 8.9 (Effective internal format corresponding to
     external format).
 
       Format        Type                          Effective

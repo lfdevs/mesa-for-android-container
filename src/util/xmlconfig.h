@@ -105,7 +105,7 @@ typedef struct driOptionDescription {
 
    driOptionInfo info;
    driOptionValue value;
-   driEnumDescription enums[4];
+   driEnumDescription enums[5];
 } driOptionDescription;
 
 /** Returns an XML string describing the options for the driver. */

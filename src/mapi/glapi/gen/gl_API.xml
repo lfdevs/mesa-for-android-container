@@ -3196,7 +3196,7 @@
 
     <function name="ColorPointer" es1="1.0" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR0, size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR0, MESA_PACK_VFORMAT(type, size, 1, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -3227,7 +3227,7 @@
 
     <function name="EdgeFlagPointer" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_EDGEFLAG, 1, GL_UNSIGNED_BYTE, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_EDGEFLAG, MESA_PACK_VFORMAT(GL_UNSIGNED_BYTE, 1, 0, 0, 0), stride, pointer);">
         <param name="stride" type="GLsizei"/>
         <param name="pointer" type="const GLvoid *"/>
         <glx handcode="true"/>
@@ -3247,7 +3247,7 @@
 
     <function name="IndexPointer" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR_INDEX, 1, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR_INDEX, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, pointer);">
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
         <param name="pointer" type="const GLvoid *"/>
@@ -3264,7 +3264,7 @@
 
     <function name="NormalPointer" es1="1.0" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_NORMAL, 3, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_NORMAL, MESA_PACK_VFORMAT(type, 3, 1, 0, 0), stride, pointer);">
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
         <param name="pointer" type="const GLvoid *"/>
@@ -3273,7 +3273,7 @@
 
     <function name="TexCoordPointer" es1="1.0" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture), size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture), MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -3283,7 +3283,7 @@
 
     <function name="VertexPointer" es1="1.0" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_POS, size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_POS, MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -4789,7 +4789,7 @@
 
     <function name="FogCoordPointer" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_FOG, 1, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_FOG, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, pointer);">
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
         <param name="pointer" type="const GLvoid *"/>
@@ -4929,7 +4929,7 @@
 
     <function name="SecondaryColorPointer" deprecated="3.1" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR1, size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR1, MESA_PACK_VFORMAT(type, size, 1, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -5892,7 +5892,7 @@
 
     <function name="VertexAttribPointer" es2="2.0" marshal="async"
               no_error="true"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_GENERIC(index), size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_GENERIC(index), MESA_PACK_VFORMAT(type, size, normalized, 0, 0), stride, pointer);">
         <param name="index" type="GLuint"/>
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
@@ -8898,7 +8898,7 @@
     </function>
 
     <function name="ColorPointerEXT" deprecated="3.1" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR0, size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR0, MESA_PACK_VFORMAT(type, size, 1, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -8914,7 +8914,7 @@
     </function>
 
     <function name="EdgeFlagPointerEXT" deprecated="3.1" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_EDGEFLAG, 1, GL_UNSIGNED_BYTE, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_EDGEFLAG, MESA_PACK_VFORMAT(GL_UNSIGNED_BYTE, 1, 0, 0, 0), stride, pointer);">
         <param name="stride" type="GLsizei"/>
         <param name="count" type="GLsizei"/>
         <param name="pointer" type="const GLboolean *"/>
@@ -8927,7 +8927,7 @@
     </function>
 
     <function name="IndexPointerEXT" deprecated="3.1" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR_INDEX, 1, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_COLOR_INDEX, MESA_PACK_VFORMAT(type, 1, 0, 0, 0), stride, pointer);">
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
         <param name="count" type="GLsizei"/>
@@ -8936,7 +8936,7 @@
     </function>
 
     <function name="NormalPointerEXT" deprecated="3.1" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_NORMAL, 3, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_NORMAL, MESA_PACK_VFORMAT(type, 3, 1, 0, 0), stride, pointer);">
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
         <param name="count" type="GLsizei"/>
@@ -8945,7 +8945,7 @@
     </function>
 
     <function name="TexCoordPointerEXT" deprecated="3.1" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture), size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_TEX(ctx->GLThread.ClientActiveTexture), MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -8955,7 +8955,7 @@
     </function>
 
     <function name="VertexPointerEXT" deprecated="3.1" marshal="async"
-              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_POS, size, type, stride, pointer);">
+              marshal_call_after="if (COMPAT) _mesa_glthread_AttribPointer(ctx, VERT_ATTRIB_POS, MESA_PACK_VFORMAT(type, size, 0, 0, 0), stride, pointer);">
         <param name="size" type="GLint"/>
         <param name="type" type="GLenum"/>
         <param name="stride" type="GLsizei"/>
@@ -10974,8 +10974,7 @@
 </category>
 
 <category name="GL_IBM_multimode_draw_arrays" number="200">
-    <function name="MultiModeDrawArraysIBM"
-              marshal_sync="_mesa_glthread_has_non_vbo_vertices(ctx)">
+    <function name="MultiModeDrawArraysIBM" marshal="custom">
         <param name="mode" type="const GLenum *" count="primcount"/>
         <param name="first" type="const GLint *" count="primcount"/>
         <param name="count" type="const GLsizei *" count="primcount"/>
@@ -10984,8 +10983,7 @@
         <glx handcode="true" ignore="true"/>
     </function>
 
-    <function name="MultiModeDrawElementsIBM"
-              marshal_sync="_mesa_glthread_has_non_vbo_vertices_or_indices(ctx)">
+    <function name="MultiModeDrawElementsIBM" marshal="custom">
         <param name="mode" type="const GLenum *" count="primcount"/>
         <param name="count" type="const GLsizei *" count="primcount"/>
         <param name="type" type="GLenum"/>
@@ -12944,12 +12942,39 @@
     </function>
 
     <function name="DrawElementsUserBuf" es1="1.0" es2="2.0" marshal="custom">
+        <param name="indexBuf" type="GLintptr"/> <!-- "struct gl_buffer_object *" really -->
+        <param name="mode" type="GLenum"/>
+        <param name="count" type="GLsizei"/>
+        <param name="type" type="GLenum"/>
+        <param name="indices" type="const GLvoid *"/>
+        <param name="instancecount" type="GLsizei"/>
+        <param name="basevertex" type="GLint"/>
+        <param name="baseinstance" type="GLuint"/>
     </function>
 
     <function name="MultiDrawArraysUserBuf" es1="1.0" es2="2.0" marshal="custom">
     </function>
 
     <function name="MultiDrawElementsUserBuf" es1="1.0" es2="2.0" marshal="custom">
+        <param name="indexBuf" type="GLintptr"/> <!-- "struct gl_buffer_object *" really -->
+        <param name="mode" type="GLenum"/>
+        <param name="count" type="const GLsizei *" count="primcount"/>
+        <param name="type" type="GLenum"/>
+        <param name="indices" type="const GLvoid * const *" count="(sizeof(GLvoid *) * primcount)"/>
+        <param name="primcount" type="GLsizei"/>
+        <param name="basevertex" type="const GLint *" count="primcount"/>
+    </function>
+
+    <function name="DrawArraysInstancedBaseInstanceDrawID" es1="1.0" es2="2.0"
+              marshal="custom">
+    </function>
+
+    <function name="DrawElementsInstancedBaseVertexBaseInstanceDrawID"
+              es1="1.0" es2="2.0" marshal="custom">
+    </function>
+
+    <!-- Internal function for glthread to implement ancillary buffer invalidation. -->
+    <function name="InternalInvalidateFramebufferAncillaryMESA" es2="3.0">
     </function>
 </category>
 

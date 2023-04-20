@@ -34,18 +34,56 @@
 #include "freedreno_resource.h"
 
 #include "ir3/ir3_shader.h"
+#include "ir3/ir3_descriptor.h"
 
 #include "a6xx.xml.h"
 
-struct fd6_lrz_state {
-   bool enable : 1;
-   bool write : 1;
-   bool test : 1;
-   enum fd_lrz_direction direction : 2;
+BEGINC;
 
-   /* this comes from the fs program state, rather than zsa: */
-   enum a6xx_ztest_mode z_mode : 2;
+struct fd6_lrz_state {
+   union {
+      struct {
+         bool enable : 1;
+         bool write : 1;
+         bool test : 1;
+         enum fd_lrz_direction direction : 2;
+
+         /* this comes from the fs program state, rather than zsa: */
+         enum a6xx_ztest_mode z_mode : 2;
+      };
+      uint32_t val : 7;
+   };
 };
+
+/**
+ * Bindless descriptor set state for a single descriptor set.
+ */
+struct fd6_descriptor_set {
+   /**
+    * Pre-baked descriptor state, updated when image/SSBO is bound
+    */
+   uint32_t descriptor[IR3_BINDLESS_DESC_COUNT][FDL6_TEX_CONST_DWORDS];
+
+   /**
+    * The current seqn of the backed in resource, for detecting if the
+    * resource has been rebound
+    */
+   uint16_t seqno[IR3_BINDLESS_DESC_COUNT];
+
+   /**
+    * Current GPU copy of the desciptor set
+    */
+   struct fd_bo *bo;
+};
+
+static inline void
+fd6_descriptor_set_invalidate(struct fd6_descriptor_set *set)
+{
+   if (!set->bo)
+      return;
+   fd_bo_del(set->bo);
+   set->bo = NULL;
+}
 
 struct fd6_context {
    struct fd_context base;
@@ -88,8 +126,19 @@ struct fd6_context {
    struct hash_table *bcolor_cache;
    struct fd_bo *bcolor_mem;
 
-   uint16_t tex_seqno;
+   seqno_t tex_seqno;
    struct hash_table *tex_cache;
+   bool tex_cache_needs_invalidate;
+
+   /**
+    * Descriptor sets for 3d shader stages
+    */
+   struct fd6_descriptor_set descriptor_sets[5] dt;
+
+   /**
+    * Descriptor set for compute shaders
+    */
+   struct fd6_descriptor_set cs_descriptor_set dt;
 
    struct {
       /* previous lrz state, which is a function of multiple gallium
@@ -147,5 +196,7 @@ fd6_vertex_stateobj(void *p)
 {
    return (struct fd6_vertex_stateobj *)p;
 }
+
+ENDC;
 
 #endif /* FD6_CONTEXT_H_ */

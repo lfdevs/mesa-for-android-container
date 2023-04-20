@@ -269,7 +269,6 @@ struct pvr_device_features {
    bool has_paired_tiles : 1;
    bool has_pbe2_in_xe : 1;
    bool has_pds_ddmadt : 1;
-   bool has_robust_buffer_access : 1;
    bool has_roguexe : 1;
    bool has_screen_size8K : 1;
    bool has_simple_internal_parameter_format : 1;

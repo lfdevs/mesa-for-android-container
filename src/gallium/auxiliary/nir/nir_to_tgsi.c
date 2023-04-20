@@ -109,6 +109,7 @@ struct ntt_compile {
    uint64_t centroid_inputs;
 
    uint32_t first_ubo;
+   uint32_t first_ssbo;
 
    struct ureg_src images[PIPE_MAX_SHADER_IMAGES];
 };
@@ -721,13 +722,22 @@ ntt_output_decl(struct ntt_compile *c, nir_intrinsic_instr *instr, uint32_t *fra
        */
       bool invariant = semantics.invariant;
 
+      unsigned num_slots = semantics.num_slots;
+      if (semantics.location == VARYING_SLOT_TESS_LEVEL_INNER ||
+          semantics.location == VARYING_SLOT_TESS_LEVEL_OUTER) {
+         /* Compact vars get a num_slots in NIR as number of components, but we
+          * want the number of vec4 slots here.
+          */
+         num_slots = 1;
+      }
+
       out = ureg_DECL_output_layout(c->ureg,
                                     semantic_name, semantic_index,
                                     gs_streams,
                                     base,
                                     usage_mask,
                                     array_id,
-                                    semantics.num_slots,
+                                    num_slots,
                                     invariant);
    }
 
@@ -753,7 +763,7 @@ ntt_output_decl(struct ntt_compile *c, nir_intrinsic_instr *instr, uint32_t *fra
  */
 static bool
 ntt_try_store_in_tgsi_output(struct ntt_compile *c, struct ureg_dst *dst,
-                             struct list_head *uses, struct list_head *if_uses)
+                             struct list_head *uses)
 {
    *dst = ureg_dst_undef();
 
@@ -769,10 +779,12 @@ ntt_try_store_in_tgsi_output(struct ntt_compile *c, struct ureg_dst *dst,
       return false;
    }
 
-   if (!list_is_empty(if_uses) || !list_is_singular(uses))
+   if (!list_is_singular(uses))
       return false;
 
    nir_src *src = list_first_entry(uses, nir_src, use_link);
+   if (src->is_if)
+      return false;
 
    if (src->parent_instr->type != nir_instr_type_intrinsic)
       return false;
@@ -1049,13 +1061,22 @@ ntt_setup_uniforms(struct ntt_compile *c)
          ureg_DECL_constant2D(c->ureg, 0, DIV_ROUND_UP(ubo_sizes[i], 16) - 1, i);
    }
 
-   for (int i = 0; i < c->s->info.num_ssbos; i++) {
-      /* XXX: nv50 uses the atomic flag to set caching for (lowered) atomic
-       * counters
-       */
-      bool atomic = false;
-      ureg_DECL_buffer(c->ureg, i, atomic);
-   }
+   if (c->options->lower_ssbo_bindings) {
+      c->first_ssbo = 255;
+      nir_foreach_variable_with_modes(var, c->s, nir_var_mem_ssbo) {
+         if (c->first_ssbo > var->data.binding)
+            c->first_ssbo = var->data.binding;
+      }
+   } else
+      c->first_ssbo = 0;
+
+   /* XXX: nv50 uses the atomic flag to set caching for (lowered) atomic
+    * counters
+    */
+   bool atomic = false;
+   for (int i = 0; i < c->s->info.num_ssbos; ++i)
+      ureg_DECL_buffer(c->ureg, c->first_ssbo + i, atomic);
+
 }
 
 static void
@@ -1080,7 +1101,7 @@ ntt_setup_registers(struct ntt_compile *c, struct exec_list *list)
       if (nir_reg->num_array_elems == 0) {
          struct ureg_dst decl;
          uint32_t write_mask = BITFIELD_MASK(nir_reg->num_components);
-         if (!ntt_try_store_in_tgsi_output(c, &decl, &nir_reg->uses, &nir_reg->if_uses)) {
+         if (!ntt_try_store_in_tgsi_output(c, &decl, &nir_reg->uses)) {
             if (nir_reg->bit_size == 64) {
                if (nir_reg->num_components > 2) {
                   fprintf(stderr, "NIR-to-TGSI: error: %d-component NIR r%d\n",
@@ -1234,7 +1255,7 @@ ntt_get_ssa_def_decl(struct ntt_compile *c, nir_ssa_def *ssa)
       writemask = ntt_64bit_write_mask(writemask);
 
    struct ureg_dst dst;
-   if (!ntt_try_store_in_tgsi_output(c, &dst, &ssa->uses, &ssa->if_uses))
+   if (!ntt_try_store_in_tgsi_output(c, &dst, &ssa->uses))
       dst = ntt_temp(c);
 
    c->ssa_temp[ssa->index] = ntt_swizzle_for_write_mask(ureg_src(dst), writemask);
@@ -1561,13 +1582,6 @@ ntt_emit_alu(struct ntt_compile *c, nir_alu_instr *instr)
                   ntt_64bit_1f(c));
          break;
 
-      case nir_op_f2b32:
-         if (src_64)
-            ntt_DSNE(c, dst, src[0], ureg_imm1f(c->ureg, 0));
-         else
-            ntt_FSNE(c, dst, src[0], ureg_imm1f(c->ureg, 0));
-         break;
-
       case nir_op_b2i32:
          ntt_AND(c, dst, src[0], ureg_imm1u(c->ureg, 1));
          break;
@@ -1645,62 +1659,38 @@ ntt_emit_alu(struct ntt_compile *c, nir_alu_instr *instr)
          break;
 
       case nir_op_fcsel:
-         /* NIR fcsel is src0 != 0 ? src1 : src2.
-          * TGSI CMP is src0 < 0 ? src1 : src2.
-          *
-          * However, fcsel so far as I can find only appears on bools-as-floats
-          * (1.0 or 0.0), so we can just negate it for the TGSI op.  It's
-          * important to not have an abs here, as i915g has to make extra
-          * instructions to do the abs.
+         /* If CMP isn't supported, then the flags that enable NIR to generate
+          * this opcode should also not be set.
           */
-         if (c->options->lower_cmp) {
-            /* If the HW doesn't support TGSI CMP (r300 VS), then lower it to a
-             * LRP on the boolean 1.0/0.0 value, instead of requiring the
-             * backend to turn the src0 into 1.0/0.0 first.
-             *
-             * We don't use this in general because some hardware (i915 FS) the
-             * LRP gets expanded to MUL/MAD.
-             */
-            ntt_LRP(c, dst, src[0], src[1], src[2]);
-         } else {
-            ntt_CMP(c, dst, ureg_negate(src[0]), src[1], src[2]);
-         }
+         assert(!c->options->lower_cmp);
+
+         /* Implement this as CMP(-abs(src0), src1, src2). */
+         ntt_CMP(c, dst, ureg_negate(ureg_abs(src[0])), src[1], src[2]);
          break;
 
-         /* It would be nice if we could get this left as scalar in NIR, since
-          * the TGSI op is scalar.
+      case nir_op_fcsel_gt:
+         /* If CMP isn't supported, then the flags that enable NIR to generate
+          * these opcodes should also not be set.
           */
+         assert(!c->options->lower_cmp);
+
+         ntt_CMP(c, dst, ureg_negate(src[0]), src[1], src[2]);
+         break;
+
+      case nir_op_fcsel_ge:
+         /* If CMP isn't supported, then the flags that enable NIR to generate
+          * these opcodes should also not be set.
+          */
+         assert(!c->options->lower_cmp);
+
+         /* Implement this as if !(src0 < 0.0) was identical to src0 >= 0.0. */
+         ntt_CMP(c, dst, src[0], src[2], src[1]);
+         break;
+
       case nir_op_frexp_sig:
-      case nir_op_frexp_exp: {
-         assert(src_64);
-         struct ureg_dst temp = ntt_temp(c);
-
-         for (int chan = 0; chan < 2; chan++) {
-            int wm = 1 << chan;
-
-            if (!(instr->dest.write_mask & wm))
-               continue;
-
-            struct ureg_dst dsts[2] = { temp, temp };
-            if (instr->op == nir_op_frexp_sig) {
-               dsts[0] = ureg_writemask(dst, ntt_64bit_write_mask(wm));
-            } else {
-               dsts[1] = ureg_writemask(dst, wm);
-            }
-
-            struct ureg_src chan_src = ureg_swizzle(src[0],
-                                                    chan * 2, chan * 2 + 1,
-                                                    chan * 2, chan * 2 + 1);
-
-            struct ntt_insn *insn = ntt_insn(c, TGSI_OPCODE_DFRACEXP,
-                                             dsts[0], chan_src,
-                                             ureg_src_undef(),
-                                             ureg_src_undef(),
-                                             ureg_src_undef());
-            insn->dst[1] = dsts[1];
-         }
+      case nir_op_frexp_exp:
+         unreachable("covered by nir_lower_frexp()");
          break;
-      }
 
       case nir_op_ldexp:
          assert(dst_64); /* 32bit handled in table. */
@@ -1887,7 +1877,8 @@ ntt_emit_mem(struct ntt_compile *c, nir_intrinsic_instr *instr,
    struct ureg_src memory;
    switch (mode) {
    case nir_var_mem_ssbo:
-      memory = ntt_ureg_src_indirect(c, ureg_src_register(TGSI_FILE_BUFFER, 0),
+      memory = ntt_ureg_src_indirect(c, ureg_src_register(TGSI_FILE_BUFFER,
+                                                          c->first_ssbo),
                                      instr->src[is_store ? 1 : 0], 2);
       next_src = 1;
       break;
@@ -1897,7 +1888,9 @@ ntt_emit_mem(struct ntt_compile *c, nir_intrinsic_instr *instr,
       break;
    case nir_var_uniform: { /* HW atomic buffers */
       nir_src src = instr->src[0];
-      uint32_t offset = ntt_extract_const_src_offset(&src) / 4;
+      uint32_t offset = (ntt_extract_const_src_offset(&src) +
+                         nir_intrinsic_range_base(instr)) / 4;
+
       memory = ureg_src_register(TGSI_FILE_HW_ATOMIC, offset);
       /* ntt_ureg_src_indirect, except dividing by 4 */
       if (nir_src_is_const(src)) {
@@ -2071,6 +2064,7 @@ ntt_emit_image_load_store(struct ntt_compile *c, nir_intrinsic_instr *instr)
    default:
       resource = ntt_ureg_src_indirect(c, ureg_src_register(TGSI_FILE_IMAGE, 0),
                                        instr->src[0], 2);
+      resource.Index += nir_intrinsic_range_base(instr);
    }
 
    struct ureg_dst dst;
@@ -2950,6 +2944,7 @@ ntt_emit_if(struct ntt_compile *c, nir_if *if_stmt)
 static void
 ntt_emit_loop(struct ntt_compile *c, nir_loop *loop)
 {
+   assert(!nir_loop_has_continue_construct(loop));
    ntt_BGNLOOP(c);
    ntt_emit_cf_list(c, &loop->body);
    ntt_ENDLOOP(c);
@@ -3266,7 +3261,8 @@ ntt_no_indirects_mask(nir_shader *s, struct pipe_screen *screen)
 }
 
 static void
-ntt_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
+ntt_optimize_nir(struct nir_shader *s, struct pipe_screen *screen,
+                 const struct nir_to_tgsi_options *options)
 {
    bool progress;
    unsigned pipe_stage = pipe_shader_type_from_mesa(s->info.stage);
@@ -3312,7 +3308,7 @@ ntt_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
       /* Try to fold addressing math into ubo_vec4's base to avoid load_consts
        * and ALU ops for it.
        */
-      static const nir_opt_offsets_options offset_options = {
+      nir_opt_offsets_options offset_options = {
          .ubo_vec4_max = ~0,
 
          /* No const offset in TGSI for shared accesses. */
@@ -3322,6 +3318,10 @@ ntt_optimize_nir(struct nir_shader *s, struct pipe_screen *screen)
          .uniform_max = 0,
          .buffer_max = 0,
       };
+
+      if (options->ubo_vec4_max)
+         offset_options.ubo_vec4_max = options->ubo_vec4_max;
+
       NIR_PASS(progress, s, nir_opt_offsets, &offset_options);
    } while (progress);
 
@@ -3899,12 +3899,14 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
    if (!screen->get_param(screen, PIPE_CAP_LOAD_CONSTBUF))
       NIR_PASS_V(s, nir_lower_ubo_vec4);
 
-   ntt_optimize_nir(s, screen);
+   ntt_optimize_nir(s, screen, options);
 
    NIR_PASS_V(s, nir_lower_indirect_derefs, no_indirects_mask, UINT32_MAX);
 
    /* Lower demote_if to if (cond) { demote } because TGSI doesn't have a DEMOTE_IF. */
    NIR_PASS_V(s, nir_lower_discard_if, nir_lower_demote_if_to_cf);
+
+   NIR_PASS_V(s, nir_lower_frexp);
 
    bool progress;
    do {
@@ -3923,7 +3925,8 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
       NIR_PASS_V(s, nir_lower_bool_to_int32);
    } else {
       NIR_PASS_V(s, nir_lower_int_to_float);
-      NIR_PASS_V(s, nir_lower_bool_to_float);
+      NIR_PASS_V(s, nir_lower_bool_to_float,
+                 !options->lower_cmp && !options->lower_fabs);
       /* bool_to_float generates MOVs for b2f32 that we want to clean up. */
       NIR_PASS_V(s, nir_copy_prop);
       NIR_PASS_V(s, nir_opt_dce);

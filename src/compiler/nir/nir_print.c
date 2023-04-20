@@ -91,11 +91,22 @@ static const char *sizes[] = { "error", "vec1", "vec2", "vec3", "vec4",
                                "error", "error", "error", "error",
                                "error", "error", "error", "vec16"};
 
+static const char *
+divergence_status(print_state *state, bool divergent)
+{
+   if (state->shader->info.divergence_analysis_run)
+      return divergent ? "div " : "con ";
+
+   return "";
+}
+
 static void
 print_register_decl(nir_register *reg, print_state *state)
 {
    FILE *fp = state->fp;
-   fprintf(fp, "decl_reg %s %u ", sizes[reg->num_components], reg->bit_size);
+   fprintf(fp, "decl_reg %s %u %s", sizes[reg->num_components],
+           reg->bit_size, divergence_status(state, reg->divergent));
+
    print_register(reg, state);
    if (reg->num_array_elems != 0)
       fprintf(fp, "[%u]", reg->num_array_elems);
@@ -107,12 +118,8 @@ print_ssa_def(nir_ssa_def *def, print_state *state)
 {
    FILE *fp = state->fp;
 
-   const char *divergence = "";
-   if (state->shader->info.divergence_analysis_run)
-      divergence = def->divergent ? "div " : "con ";
-
    fprintf(fp, "%s %2u %sssa_%u", sizes[def->num_components], def->bit_size,
-           divergence, def->index);
+           divergence_status(state, def->divergent), def->index);
 }
 
 static void
@@ -226,6 +233,7 @@ static void
 print_reg_dest(nir_reg_dest *dest, print_state *state)
 {
    FILE *fp = state->fp;
+   fprintf(fp, "%s", divergence_status(state, dest->reg->divergent));
    print_register(dest->reg, state);
    if (dest->reg->num_array_elems != 0) {
       fprintf(fp, "[%u", dest->base_offset);
@@ -572,6 +580,49 @@ get_variable_mode_str(nir_variable_mode mode, bool want_local_global_mode)
    }
 }
 
+static const char *
+get_location_str(unsigned location, gl_shader_stage stage,
+                 nir_variable_mode mode, char *buf)
+{
+   switch (stage) {
+   case MESA_SHADER_VERTEX:
+      if (mode == nir_var_shader_in)
+         return gl_vert_attrib_name(location);
+      else if (mode == nir_var_shader_out)
+         return gl_varying_slot_name_for_stage(location, stage);
+
+      break;
+   case MESA_SHADER_TASK:
+   case MESA_SHADER_MESH:
+   case MESA_SHADER_GEOMETRY:
+      if (mode == nir_var_shader_in || mode == nir_var_shader_out)
+         return gl_varying_slot_name_for_stage(location, stage);
+
+      break;
+   case MESA_SHADER_FRAGMENT:
+      if (mode == nir_var_shader_in)
+         return gl_varying_slot_name_for_stage(location, stage);
+      else if (mode == nir_var_shader_out)
+         return gl_frag_result_name(location);
+
+      break;
+   case MESA_SHADER_TESS_CTRL:
+   case MESA_SHADER_TESS_EVAL:
+   case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_KERNEL:
+   default:
+      /* TODO */
+      break;
+   }
+
+   if (location == ~0) {
+      return "~0";
+   } else {
+      snprintf(buf, 4, "%u", location);
+      return buf;
+   }
+}
+
 static void
 print_var_decl(nir_variable *var, print_state *state)
 {
@@ -629,51 +680,10 @@ print_var_decl(nir_variable *var, print_state *state)
                          nir_var_mem_ubo |
                          nir_var_mem_ssbo |
                          nir_var_image)) {
-      const char *loc = NULL;
       char buf[4];
-
-      switch (state->shader->info.stage) {
-      case MESA_SHADER_VERTEX:
-         if (var->data.mode == nir_var_shader_in)
-            loc = gl_vert_attrib_name(var->data.location);
-         else if (var->data.mode == nir_var_shader_out)
-            loc = gl_varying_slot_name_for_stage(var->data.location,
-                                                 state->shader->info.stage);
-         break;
-      case MESA_SHADER_TASK:
-      case MESA_SHADER_MESH:
-      case MESA_SHADER_GEOMETRY:
-         if ((var->data.mode == nir_var_shader_in) ||
-             (var->data.mode == nir_var_shader_out)) {
-            loc = gl_varying_slot_name_for_stage(var->data.location,
-                                                 state->shader->info.stage);
-         }
-         break;
-      case MESA_SHADER_FRAGMENT:
-         if (var->data.mode == nir_var_shader_in) {
-            loc = gl_varying_slot_name_for_stage(var->data.location,
-                                                 state->shader->info.stage);
-         } else if (var->data.mode == nir_var_shader_out) {
-            loc = gl_frag_result_name(var->data.location);
-         }
-         break;
-      case MESA_SHADER_TESS_CTRL:
-      case MESA_SHADER_TESS_EVAL:
-      case MESA_SHADER_COMPUTE:
-      case MESA_SHADER_KERNEL:
-      default:
-         /* TODO */
-         break;
-      }
-
-      if (!loc) {
-         if (var->data.location == ~0) {
-            loc = "~0";
-         } else {
-            snprintf(buf, sizeof(buf), "%u", var->data.location);
-            loc = buf;
-         }
-      }
+      const char *loc = get_location_str(var->data.location,
+                                         state->shader->info.stage,
+                                         var->data.mode, buf);
 
       /* For shader I/O vars that have been split to components or packed,
        * print the fractional location within the input/output.
@@ -1051,7 +1061,33 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
 
       case NIR_INTRINSIC_IO_SEMANTICS: {
          struct nir_io_semantics io = nir_intrinsic_io_semantics(instr);
-         fprintf(fp, "io location=%u slots=%u", io.location, io.num_slots);
+
+         /* Try to figure out the mode so we can interpret the location */
+         nir_variable_mode mode = nir_var_mem_generic;
+         switch (instr->intrinsic) {
+         case nir_intrinsic_load_input:
+         case nir_intrinsic_load_interpolated_input:
+            mode = nir_var_shader_in;
+            break;
+
+         case nir_intrinsic_load_output:
+         case nir_intrinsic_store_output:
+         case nir_intrinsic_store_per_primitive_output:
+         case nir_intrinsic_store_per_vertex_output:
+            mode = nir_var_shader_out;
+            break;
+
+         default:
+            break;
+         }
+
+         /* Using that mode, we should be able to name the location */
+         char buf[4];
+         const char *loc = get_location_str(io.location,
+                                            state->shader->info.stage, mode,
+                                            buf);
+
+         fprintf(fp, "io location=%s slots=%u", loc, io.num_slots);
 
          if (io.dual_source_blend_index)
             fprintf(fp, " dualsrc");
@@ -1278,6 +1314,9 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
    case nir_texop_sampler_descriptor_amd:
       fprintf(fp, "sampler_descriptor_amd ");
       break;
+   case nir_texop_lod_bias_agx:
+      fprintf(fp, "lod_bias_agx ");
+      break;
    default:
       unreachable("Invalid texture operation");
       break;
@@ -1374,14 +1413,12 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
       fprintf(fp, " } (offsets)");
    }
 
-   if (instr->op != nir_texop_txf_ms_fb) {
-      if (!has_texture_deref) {
-         fprintf(fp, ", %u (texture)", instr->texture_index);
-      }
+   if (instr->op != nir_texop_txf_ms_fb && !has_texture_deref) {
+      fprintf(fp, ", %u (texture)", instr->texture_index);
+   }
 
-      if (!has_sampler_deref) {
-         fprintf(fp, ", %u (sampler)", instr->sampler_index);
-      }
+   if (nir_tex_instr_need_sampler(instr) && !has_sampler_deref) {
+      fprintf(fp, ", %u (sampler)", instr->sampler_index);
    }
 
    if (instr->texture_non_uniform) {
@@ -1622,6 +1659,15 @@ print_loop(nir_loop *loop, print_state *state, unsigned tabs)
       print_cf_node(node, state, tabs + 1);
    }
    print_tabs(tabs, fp);
+
+   if (nir_loop_has_continue_construct(loop)) {
+      fprintf(fp, "} continue {\n");
+      foreach_list_typed(nir_cf_node, node, node, &loop->continue_list) {
+         print_cf_node(node, state, tabs + 1);
+      }
+      print_tabs(tabs, fp);
+   }
+
    fprintf(fp, "}\n");
 }
 
@@ -1999,11 +2045,17 @@ print_shader_info(const struct shader_info *info, FILE *fp)
 
       print_nz_unsigned(fp, "depth_layout", info->fs.depth_layout);
 
-      fprintf(fp, "color0_interp: %u\n", info->fs.color0_interp);      
+      if (info->fs.color0_interp != INTERP_MODE_NONE) {
+         fprintf(fp, "color0_interp: %s\n",
+                 glsl_interp_mode_name(info->fs.color0_interp));
+      }
       print_nz_bool(fp, "color0_sample", info->fs.color0_sample);
       print_nz_bool(fp, "color0_centroid", info->fs.color0_centroid);
 
-      fprintf(fp, "color1_interp: %u\n", info->fs.color1_interp);
+      if (info->fs.color1_interp != INTERP_MODE_NONE) {
+         fprintf(fp, "color1_interp: %s\n",
+                 glsl_interp_mode_name(info->fs.color1_interp));
+      }
       print_nz_bool(fp, "color1_sample", info->fs.color1_sample);
       print_nz_bool(fp, "color1_centroid", info->fs.color1_centroid);
 

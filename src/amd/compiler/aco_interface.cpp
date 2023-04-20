@@ -26,8 +26,6 @@
 
 #include "aco_ir.h"
 
-#include "vulkan/radv_shader_args.h"
-
 #include "util/memstream.h"
 
 #include <array>
@@ -113,7 +111,7 @@ get_disasm_string(aco::Program* program, std::vector<uint32_t>& code,
 
 static std::string
 aco_postprocess_shader(const struct aco_compiler_options* options,
-                       const struct radv_shader_args *args,
+                       const struct aco_shader_info *info,
                        std::unique_ptr<aco::Program>& program)
 {
    std::string llvm_ir;
@@ -122,14 +120,13 @@ aco_postprocess_shader(const struct aco_compiler_options* options,
       aco_print_program(program.get(), stderr);
 
    aco::live live_vars;
-   if (!args->is_trap_handler_shader) {
-      /* Phi lowering */
-      aco::lower_phis(program.get());
+   if (!info->is_trap_handler_shader) {
       aco::dominator_tree(program.get());
+      aco::lower_phis(program.get());
       validate(program.get());
 
       /* Optimization */
-      if (!options->key.optimisations_disabled) {
+      if (!options->optimisations_disabled) {
          if (!(aco::debug_flags & aco::DEBUG_NO_VN))
             aco::value_numbering(program.get());
          if (!(aco::debug_flags & aco::DEBUG_NO_OPT))
@@ -167,8 +164,8 @@ aco_postprocess_shader(const struct aco_compiler_options* options,
    if ((aco::debug_flags & aco::DEBUG_LIVE_INFO) && options->dump_shader)
       aco_print_program(program.get(), stderr, live_vars, aco::print_live_vars | aco::print_kill);
 
-   if (!args->is_trap_handler_shader) {
-      if (!options->key.optimisations_disabled && !(aco::debug_flags & aco::DEBUG_NO_SCHED))
+   if (!info->is_trap_handler_shader) {
+      if (!options->optimisations_disabled && !(aco::debug_flags & aco::DEBUG_NO_SCHED))
          aco::schedule_program(program.get(), live_vars);
       validate(program.get());
 
@@ -185,7 +182,7 @@ aco_postprocess_shader(const struct aco_compiler_options* options,
       validate(program.get());
 
       /* Optimization */
-      if (!options->key.optimisations_disabled && !(aco::debug_flags & aco::DEBUG_NO_OPT)) {
+      if (!options->optimisations_disabled && !(aco::debug_flags & aco::DEBUG_NO_OPT)) {
          aco::optimize_postRA(program.get());
          validate(program.get());
       }
@@ -213,7 +210,7 @@ void
 aco_compile_shader(const struct aco_compiler_options* options,
                    const struct aco_shader_info* info,
                    unsigned shader_count, struct nir_shader* const* shaders,
-                   const struct radv_shader_args *args,
+                   const struct ac_shader_args *args,
                    aco_callback *build_binary,
                    void **binary)
 {
@@ -230,12 +227,12 @@ aco_compile_shader(const struct aco_compiler_options* options,
    program->debug.private_data = options->debug.private_data;
 
    /* Instruction Selection */
-   if (args->is_trap_handler_shader)
+   if (info->is_trap_handler_shader)
       aco::select_trap_handler_shader(program.get(), shaders[0], &config, options, info, args);
    else
       aco::select_program(program.get(), shader_count, shaders, &config, options, info, args);
 
-   std::string llvm_ir = aco_postprocess_shader(options, args, program);
+   std::string llvm_ir = aco_postprocess_shader(options, info, program);
 
    /* assembly */
    std::vector<uint32_t> code;
@@ -254,27 +251,54 @@ aco_compile_shader(const struct aco_compiler_options* options,
    if (program->collect_statistics)
       stats_size = aco_num_statistics * sizeof(uint32_t);
 
-   (*build_binary)(binary,
-                   shaders[shader_count - 1]->info.stage,
-                   &config,
-                   llvm_ir.c_str(),
-                   llvm_ir.size(),
-                   disasm.c_str(),
-                   disasm.size(),
-                   program->statistics,
-                   stats_size,
-                   exec_size,
-                   code.data(),
-                   code.size());
+   (*build_binary)(binary, &config, llvm_ir.c_str(), llvm_ir.size(), disasm.c_str(), disasm.size(),
+                   program->statistics, stats_size, exec_size, code.data(), code.size());
+}
+
+void
+aco_compile_rt_prolog(const struct aco_compiler_options* options,
+                      const struct aco_shader_info* info, const struct ac_shader_args* in_args,
+                      const struct ac_shader_args* out_args, aco_callback* build_prolog,
+                      void** binary)
+{
+   aco::init();
+
+   /* create program */
+   ac_shader_config config = {0};
+   std::unique_ptr<aco::Program> program{new aco::Program};
+   program->collect_statistics = false;
+   program->debug.func = NULL;
+   program->debug.private_data = NULL;
+
+   aco::select_rt_prolog(program.get(), &config, options, info, in_args, out_args);
+   aco::insert_wait_states(program.get());
+   aco::insert_NOPs(program.get());
+   if (program->gfx_level >= GFX10)
+      aco::form_hard_clauses(program.get());
+
+   if (options->dump_shader)
+      aco_print_program(program.get(), stderr);
+
+   /* assembly */
+   std::vector<uint32_t> code;
+   code.reserve(align(program->blocks[0].instructions.size() * 2, 16));
+   unsigned exec_size = aco::emit_program(program.get(), code);
+
+   bool get_disasm = options->dump_shader || options->record_ir;
+
+   std::string disasm;
+   if (get_disasm)
+      disasm = get_disasm_string(program.get(), code, exec_size);
+
+   (*build_prolog)(binary, &config, NULL, 0, disasm.c_str(), disasm.size(), program->statistics, 0,
+                   exec_size, code.data(), code.size());
 }
 
 void
 aco_compile_vs_prolog(const struct aco_compiler_options* options,
-                      const struct aco_shader_info* info,
-                      const struct aco_vs_prolog_key* key,
-                      const struct radv_shader_args* args,
-                      aco_shader_part_callback *build_prolog,
-                      void **binary)
+                      const struct aco_shader_info* info, const struct aco_vs_prolog_info* pinfo,
+                      const struct ac_shader_args* args, aco_shader_part_callback* build_prolog,
+                      void** binary)
 {
    aco::init();
 
@@ -286,8 +310,7 @@ aco_compile_vs_prolog(const struct aco_compiler_options* options,
    program->debug.private_data = NULL;
 
    /* create IR */
-   unsigned num_preserved_sgprs;
-   aco::select_vs_prolog(program.get(), key, &config, options, info, args, &num_preserved_sgprs);
+   aco::select_vs_prolog(program.get(), pinfo, &config, options, info, args);
    aco::insert_NOPs(program.get());
 
    if (options->dump_shader)
@@ -307,7 +330,6 @@ aco_compile_vs_prolog(const struct aco_compiler_options* options,
    (*build_prolog)(binary,
                    config.num_sgprs,
                    config.num_vgprs,
-                   num_preserved_sgprs,
                    code.data(),
                    code.size(),
                    disasm.data(),
@@ -316,10 +338,8 @@ aco_compile_vs_prolog(const struct aco_compiler_options* options,
 
 void
 aco_compile_ps_epilog(const struct aco_compiler_options* options,
-                      const struct aco_shader_info* info,
-                      const struct aco_ps_epilog_key* key,
-                      const struct radv_shader_args* args,
-                      aco_shader_part_callback* build_epilog,
+                      const struct aco_shader_info* info, const struct aco_ps_epilog_info* pinfo,
+                      const struct ac_shader_args* args, aco_shader_part_callback* build_epilog,
                       void** binary)
 {
    aco::init();
@@ -335,9 +355,9 @@ aco_compile_ps_epilog(const struct aco_compiler_options* options,
    program->debug.private_data = options->debug.private_data;
 
    /* Instruction selection */
-   aco::select_ps_epilog(program.get(), key, &config, options, info, args);
+   aco::select_ps_epilog(program.get(), pinfo, &config, options, info, args);
 
-   aco_postprocess_shader(options, args, program);
+   aco_postprocess_shader(options, info, program);
 
    /* assembly */
    std::vector<uint32_t> code;
@@ -352,7 +372,6 @@ aco_compile_ps_epilog(const struct aco_compiler_options* options,
    (*build_epilog)(binary,
                    config.num_sgprs,
                    config.num_vgprs,
-                   0,
                    code.data(),
                    code.size(),
                    disasm.data(),

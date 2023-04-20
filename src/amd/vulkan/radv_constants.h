@@ -137,6 +137,11 @@
 #define PERF_CTR_BO_LOCK_OFFSET  0
 #define PERF_CTR_BO_FENCE_OFFSET 8
 
+/* The maximum number of in-flight uploads (radv_shader_dma_submission) when asynchronous shader
+ * upload is used.
+ */
+#define RADV_SHADER_UPLOAD_CS_COUNT 32
+
 /* NGG GDS counters:
  *   offset  0| 4| 8|12  - reserved for NGG streamout counters
  *   offset 16           - pipeline statistics counter for all streams

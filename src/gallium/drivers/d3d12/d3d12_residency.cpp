@@ -126,6 +126,31 @@ get_eviction_grace_period(struct d3d12_memory_info *mem_info)
    return INT64_MAX;
 }
 
+static void 
+gather_base_bos(struct d3d12_screen *screen, set *base_bo_set, struct d3d12_bo *bo, uint64_t &size_to_make_resident, uint64_t pending_fence_value, int64_t current_time)
+{
+   uint64_t offset;
+   struct d3d12_bo *base_bo = d3d12_bo_get_base(bo, &offset);
+
+   if (base_bo->residency_status == d3d12_evicted) {
+      bool added = false;
+      _mesa_set_search_or_add(base_bo_set, base_bo, &added);
+      assert(!added);
+
+      base_bo->residency_status = d3d12_resident;
+      size_to_make_resident += base_bo->estimated_size;
+      list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
+   } else if (base_bo->last_used_fence != pending_fence_value &&
+               base_bo->residency_status == d3d12_resident) {
+      /* First time seeing this already-resident base bo in this batch */
+      list_del(&base_bo->residency_list_entry);
+      list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
+   }
+
+   base_bo->last_used_fence = pending_fence_value;
+   base_bo->last_used_timestamp = current_time;
+}
+
 void
 d3d12_process_batch_residency(struct d3d12_screen *screen, struct d3d12_batch *batch)
 {
@@ -140,29 +165,11 @@ d3d12_process_batch_residency(struct d3d12_screen *screen, struct d3d12_batch *b
    /* Gather base bos for the batch */
    uint64_t size_to_make_resident = 0;
    set *base_bo_set = _mesa_pointer_set_create(nullptr);
-   hash_table_foreach(batch->bos, entry) {
-      struct d3d12_bo *bo = (struct d3d12_bo *)entry->key;
-      uint64_t offset;
-      struct d3d12_bo *base_bo = d3d12_bo_get_base(bo, &offset);
 
-      if (base_bo->residency_status == d3d12_evicted) {
-         bool added = false;
-         _mesa_set_search_or_add(base_bo_set, base_bo, &added);
-         assert(!added);
-
-         base_bo->residency_status = d3d12_resident;
-         size_to_make_resident += base_bo->estimated_size;
-         list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
-      } else if (base_bo->last_used_fence != pending_fence_value &&
-                 base_bo->residency_status == d3d12_resident) {
-         /* First time seeing this already-resident base bo in this batch */
-         list_del(&base_bo->residency_list_entry);
-         list_addtail(&base_bo->residency_list_entry, &screen->residency_list);
-      }
-
-      base_bo->last_used_fence = pending_fence_value;
-      base_bo->last_used_timestamp = current_time;
-   }
+   util_dynarray_foreach(&batch->local_bos, d3d12_bo*, bo)
+      gather_base_bos(screen, base_bo_set, *bo, size_to_make_resident, pending_fence_value, current_time);
+   hash_table_foreach(batch->bos, entry) 
+      gather_base_bos(screen, base_bo_set, (struct d3d12_bo *)entry->key, size_to_make_resident, pending_fence_value, current_time);
 
    /* Now that bos referenced by this batch are moved to the end of the LRU, trim it */
    evict_aged_allocations(screen, completed_fence_value, current_time, grace_period);

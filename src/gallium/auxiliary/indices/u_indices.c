@@ -57,6 +57,10 @@ u_index_prim_type_convert(unsigned hw_mask, enum pipe_prim_type prim, bool pv_ma
    case PIPE_PRIM_TRIANGLE_FAN:
    case PIPE_PRIM_QUADS:
    case PIPE_PRIM_QUAD_STRIP:
+      if ((hw_mask & (1<<PIPE_PRIM_QUADS)) && pv_matches)
+         return PIPE_PRIM_QUADS;
+      else
+         return PIPE_PRIM_TRIANGLES;
    case PIPE_PRIM_POLYGON:
       return PIPE_PRIM_TRIANGLES;
    case PIPE_PRIM_LINES_ADJACENCY:
@@ -140,8 +144,9 @@ u_index_translator(unsigned hw_mask,
 
       return U_TRANSLATE_MEMCPY;
    }
-   *out_translate = translate[in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
    *out_prim = u_index_prim_type_convert(hw_mask, prim, in_pv == out_pv);
+   *out_translate = (*out_prim == PIPE_PRIM_QUADS ? translate_quads : translate)
+      [in_idx][out_idx][in_pv][out_pv][prim_restart][prim];
    *out_nr = u_index_count_converted_indices(hw_mask, in_pv == out_pv, prim, nr);
 
    return ret;
@@ -170,9 +175,9 @@ u_index_count_converted_indices(unsigned hw_mask, bool pv_matches, enum pipe_pri
    case PIPE_PRIM_TRIANGLE_FAN:
       return (nr - 2) * 3;
    case PIPE_PRIM_QUADS:
-      return (nr / 4) * 6;
+      return ((hw_mask & (1<<PIPE_PRIM_QUADS)) && pv_matches) ? nr : (nr / 4) * 6;
    case PIPE_PRIM_QUAD_STRIP:
-      return (nr - 2) * 3;
+      return ((hw_mask & (1<<PIPE_PRIM_QUADS)) && pv_matches) ? (nr - 2) * 2 : (nr - 2) * 3;
    case PIPE_PRIM_POLYGON:
       return (nr - 2) * 3;
    case PIPE_PRIM_LINES_ADJACENCY:
@@ -237,9 +242,11 @@ u_index_generator(unsigned hw_mask,
    if ((hw_mask & (1<<prim)) &&
        (in_pv == out_pv)) {
 
-      *out_generate = generate[out_idx][in_pv][out_pv][PIPE_PRIM_POINTS];
+      *out_generate = (*out_prim == PIPE_PRIM_QUADS ? generate_quads : generate)
+         [out_idx][in_pv][out_pv][PIPE_PRIM_POINTS];
       return U_GENERATE_LINEAR;
    }
-   *out_generate = generate[out_idx][in_pv][out_pv][prim];
+   *out_generate = (*out_prim == PIPE_PRIM_QUADS ? generate_quads : generate)
+      [out_idx][in_pv][out_pv][prim];
    return prim == PIPE_PRIM_LINE_LOOP ? U_GENERATE_ONE_OFF : U_GENERATE_REUSABLE;
 }

@@ -39,15 +39,27 @@ lower_point_smooth(nir_builder *b, nir_instr *instr, UNUSED void *_state)
 
    nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
-   if (intr->intrinsic != nir_intrinsic_store_output)
+   if (intr->intrinsic != nir_intrinsic_store_output &&
+       intr->intrinsic != nir_intrinsic_store_deref)
       return false;
 
-   int location = nir_intrinsic_io_semantics(intr).location;
-   if ((location != FRAG_RESULT_COLOR && location < FRAG_RESULT_DATA0) ||
-       nir_intrinsic_src_type(intr) != nir_type_float32)
-      return false;
+   int out_src_idx;
+   if (intr->intrinsic == nir_intrinsic_store_output) {
+      int location = nir_intrinsic_io_semantics(intr).location;
+      if ((location != FRAG_RESULT_COLOR && location < FRAG_RESULT_DATA0) ||
+          nir_intrinsic_src_type(intr) != nir_type_float32)
+         return false;
+      out_src_idx = 0;
+   } else {
+      nir_variable *var = nir_intrinsic_get_var(intr, 0);
+      if ((var->data.location != FRAG_RESULT_COLOR &&
+           var->data.location < FRAG_RESULT_DATA0) ||
+          glsl_get_base_type(var->type) != GLSL_TYPE_FLOAT)
+         return false;
+      out_src_idx = 1;
+   }
 
-   assert(intr->src[0].is_ssa);
+   assert(intr->src[out_src_idx].is_ssa);
    assert(intr->num_components == 4);
 
    b->cursor = nir_before_instr(&intr->instr);
@@ -77,8 +89,8 @@ lower_point_smooth(nir_builder *b, nir_instr *instr, UNUSED void *_state)
    /* Write out the fragment color*vec4(1, 1, 1, coverage)*/
    nir_ssa_def *one = nir_imm_float(b, 1.0f);
    nir_ssa_def *new_val = nir_fmul(b, nir_vec4(b, one, one, one, coverage),
-                                   intr->src[0].ssa);
-   nir_instr_rewrite_src(instr, &intr->src[0], nir_src_for_ssa(new_val));
+                                   intr->src[out_src_idx].ssa);
+   nir_instr_rewrite_src(instr, &intr->src[out_src_idx], nir_src_for_ssa(new_val));
 
    return true;
 }

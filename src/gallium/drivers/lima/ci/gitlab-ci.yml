@@ -1,6 +1,6 @@
 .lava-meson-gxl-s805x-libretech-ac:
   extends:
-    - .lava-test:arm64
+    - .lava-test-deqp:arm64
     - .lima-rules
   variables:
     DEVICE_TYPE: meson-gxl-s805x-libretech-ac
@@ -23,4 +23,5 @@ lima-mali450-piglit:arm64:
     - .lava-meson-gxl-s805x-libretech-ac
   variables:
     DEQP_SUITE: lima-mali450-piglit
+    PIGLIT_PLATFORM: gbm
   parallel: 2

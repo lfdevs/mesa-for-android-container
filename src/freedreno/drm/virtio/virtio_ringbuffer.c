@@ -140,10 +140,12 @@ flush_submit_list(struct list_head *submit_list)
       guest_handles = malloc(fd_submit->nr_bos * sizeof(guest_handles[0]));
    }
 
+   uint32_t nr_guest_handles = 0;
    for (unsigned i = 0; i < fd_submit->nr_bos; i++) {
       struct virtio_bo *virtio_bo = to_virtio_bo(fd_submit->bos[i]);
 
-      guest_handles[i] = virtio_bo->base.handle;
+      if (virtio_bo->base.alloc_flags & FD_BO_SHARED)
+         guest_handles[nr_guest_handles++] = virtio_bo->base.handle;
 
       submit_bos[i].flags = fd_submit->bos[i]->reloc_flags;
       submit_bos[i].handle = virtio_bo->res_id;
@@ -185,9 +187,10 @@ flush_submit_list(struct list_head *submit_list)
 
    if (pipe->no_implicit_sync) {
       req->flags |= MSM_SUBMIT_NO_IMPLICIT;
+      nr_guest_handles = 0;
    }
 
-   virtio_execbuf_fenced(dev, &req->hdr, guest_handles, req->nr_bos,
+   virtio_execbuf_fenced(dev, &req->hdr, guest_handles, nr_guest_handles,
                          fd_submit->in_fence_fd, &out_fence->fence_fd,
                          virtio_pipe->ring_idx);
 

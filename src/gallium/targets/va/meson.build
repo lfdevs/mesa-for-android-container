@@ -107,7 +107,7 @@ else
   endforeach
 
   meson.add_install_script(
-    install_megadrivers_py.path(),
+    install_megadrivers_py.full_path(),
     libva_gallium.full_path(),
     va_drivers_path,
     va_drivers,

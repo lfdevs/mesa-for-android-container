@@ -36,6 +36,9 @@
 #include "fd6_context.h"
 #include "fdl/fd6_format_table.h"
 
+
+BEGINC;
+
 /* Border color layout is diff from a4xx/a5xx.. if it turns out to be
  * the same as a6xx then move this somewhere common ;-)
  *
@@ -86,8 +89,6 @@ struct fd6_pipe_sampler_view {
     * to uncompressed, which means the sampler state needs to be updated
     */
    uint16_t rsc_seqno;
-
-   bool needs_validate;
 };
 
 static inline struct fd6_pipe_sampler_view *
@@ -95,9 +96,6 @@ fd6_pipe_sampler_view(struct pipe_sampler_view *pview)
 {
    return (struct fd6_pipe_sampler_view *)pview;
 }
-
-void fd6_sampler_view_update(struct fd_context *ctx,
-                             struct fd6_pipe_sampler_view *so) assert_dt;
 
 void fd6_texture_init(struct pipe_context *pctx);
 void fd6_texture_fini(struct pipe_context *pctx);
@@ -112,48 +110,26 @@ void fd6_texture_fini(struct pipe_context *pctx);
  */
 
 struct fd6_texture_key {
-   struct {
-      /* We need to track the seqno of the rsc as well as of the
-       * sampler view, because resource shadowing/etc can result
-       * that the underlying bo changes (which means the previous
-       * state was no longer valid.
-       */
-      uint16_t rsc_seqno;
-      uint16_t seqno;
-   } view[16];
-   struct {
-      uint16_t seqno;
-   } samp[16];
+   uint16_t view_seqno[16];
+   uint16_t samp_seqno[16];
    uint8_t type;
 };
 
 struct fd6_texture_state {
-   struct pipe_reference reference;
    struct fd6_texture_key key;
    struct fd_ringbuffer *stateobj;
+   /**
+    * Track the rsc seqno's associated with the texture views so
+    * we know what to invalidate when a rsc is rebound when the
+    * underlying bo changes.  (For example, demotion from UBWC.)
+    */
+   uint16_t view_rsc_seqno[16];
+   bool invalidate;
 };
 
 struct fd6_texture_state *
-fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
-                  struct fd_texture_stateobj *tex) assert_dt;
+fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type) assert_dt;
 
-/* not called directly: */
-void __fd6_texture_state_describe(char *buf,
-                                  const struct fd6_texture_state *tex);
-void __fd6_texture_state_destroy(struct fd6_texture_state *tex);
-
-static inline void
-fd6_texture_state_reference(struct fd6_texture_state **ptr,
-                            struct fd6_texture_state *tex)
-{
-   struct fd6_texture_state *old_tex = *ptr;
-
-   if (pipe_reference_described(
-          &(*ptr)->reference, &tex->reference,
-          (debug_reference_descriptor)__fd6_texture_state_describe))
-      __fd6_texture_state_destroy(old_tex);
-
-   *ptr = tex;
-}
+ENDC;
 
 #endif /* FD6_TEXTURE_H_ */

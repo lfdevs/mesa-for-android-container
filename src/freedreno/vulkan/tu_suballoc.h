@@ -12,7 +12,7 @@
 
 #include "tu_common.h"
 
-#include "tu_drm.h"
+#include "tu_knl.h"
 
 /* externally-synchronized BO suballocator. */
 struct tu_suballocator
@@ -41,7 +41,7 @@ void
 tu_bo_suballocator_init(struct tu_suballocator *suballoc,
                         struct tu_device *dev,
                         uint32_t default_size,
-                        uint32_t flags);
+                        enum tu_bo_alloc_flags flags);
 void
 tu_bo_suballocator_finish(struct tu_suballocator *suballoc);
 

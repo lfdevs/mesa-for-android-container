@@ -803,7 +803,6 @@ bi_block_add_successor(bi_block *block, bi_block *successor)
 struct bi_shader_info {
    struct panfrost_ubo_push *push;
    struct bifrost_shader_info *bifrost;
-   struct panfrost_sysvals *sysvals;
    unsigned tls_size;
    unsigned work_reg_count;
    unsigned push_offset;
@@ -827,7 +826,6 @@ typedef struct {
    struct bi_shader_info info;
    gl_shader_stage stage;
    struct list_head blocks; /* list of bi_block */
-   struct hash_table_u64 *sysval_to_id;
    uint32_t quirks;
    unsigned arch;
    enum bi_idvs_mode idvs;

@@ -284,7 +284,7 @@ static const struct {
 };
 
 /**
- * \param line_aa  BRW_WM_AA_NEVER, BRW_WM_AA_ALWAYS or BRW_WM_AA_SOMETIMES
+ * \param line_aa  BRW_NEVER, BRW_ALWAYS or BRW_SOMETIMES
  * \param lookup  bitmask of BRW_WM_IZ_* flags
  */
 static inline void
@@ -326,10 +326,10 @@ setup_fs_payload_gfx4(fs_thread_payload &payload,
    if (wm_iz_table[lookup].sd_to_rt || kill_stats_promoted_workaround)
       source_depth_to_render_target = true;
 
-   if (wm_iz_table[lookup].ds_present || key->line_aa != BRW_WM_AA_NEVER) {
+   if (wm_iz_table[lookup].ds_present || key->line_aa != BRW_NEVER) {
       payload.aa_dest_stencil_reg[0] = reg;
       runtime_check_aads_emit =
-         !wm_iz_table[lookup].ds_present && key->line_aa == BRW_WM_AA_SOMETIMES;
+         !wm_iz_table[lookup].ds_present && key->line_aa == BRW_SOMETIMES;
       reg++;
    }
 
@@ -356,8 +356,7 @@ fs_thread_payload::fs_thread_payload(const fs_visitor &v,
     sample_pos_reg(),
     sample_mask_in_reg(),
     depth_w_coef_reg(),
-    barycentric_coord_reg(),
-    local_invocation_id_reg()
+    barycentric_coord_reg()
 {
    if (v.devinfo->ver >= 6)
       setup_fs_payload_gfx6(*this, v, source_depth_to_render_target);
@@ -420,10 +419,23 @@ task_mesh_thread_payload::task_mesh_thread_payload(const fs_visitor &v)
    unsigned r = 0;
    assert(subgroup_id_.file != BAD_FILE);
    extended_parameter_0 = retype(brw_vec1_grf(0, 3), BRW_REGISTER_TYPE_UD);
-   urb_output = brw_ud1_grf(0, 6);
 
-   if (v.stage == MESA_SHADER_MESH)
+   urb_output = v.bld.vgrf(BRW_REGISTER_TYPE_UD);
+   /* In both mesh and task shader payload, lower 16 bits of g0.6 is
+    * an offset within Slice's Local URB, which says where shader is
+    * supposed to output its data.
+    */
+   v.bld.AND(urb_output, brw_ud1_grf(0, 6), brw_imm_ud(0xFFFF));
+
+   if (v.stage == MESA_SHADER_MESH) {
+      /* g0.7 is Task Shader URB Entry Offset, which contains both an offset
+       * within Slice's Local USB (bits 0:15) and a slice selector
+       * (bits 16:24). Slice selector can be non zero when mesh shader
+       * is spawned on slice other than the one where task shader was run.
+       * Bit 24 says that Slice ID is present and bits 16:23 is the Slice ID.
+       */
       task_urb_input = brw_ud1_grf(0, 7);
+   }
    r++;
 
    local_index = brw_uw8_grf(1, 0);

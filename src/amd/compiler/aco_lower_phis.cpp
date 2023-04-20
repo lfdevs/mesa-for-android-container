@@ -25,6 +25,8 @@
 #include "aco_builder.h"
 #include "aco_ir.h"
 
+#include "util/enum_operators.h"
+
 #include <algorithm>
 #include <map>
 #include <vector>
@@ -193,6 +195,50 @@ build_merge_code(Program* program, ssa_state* state, Block* block, Operand cur)
 }
 
 void
+build_const_else_merge_code(Program* program, Block& invert_block, aco_ptr<Instruction>& phi)
+{
+   /* When the else-side operand of a binary merge phi is constant,
+    * we can use a simpler way to lower the phi by emitting some
+    * instructions to the invert block instead.
+    * This allows us to actually delete the else block when it's empty.
+    */
+   assert(invert_block.kind & block_kind_invert);
+   Builder bld(program);
+   Operand then = phi->operands[0];
+   const Operand els = phi->operands[1];
+
+   /* Only -1 (all lanes true) and 0 (all lanes false) constants are supported here. */
+   assert(!then.isConstant() || then.constantEquals(0) || then.constantEquals(-1));
+   assert(els.constantEquals(0) || els.constantEquals(-1));
+
+   if (!then.isConstant()) {
+      /* Left-hand operand is not constant, so we need to emit a phi to access it. */
+      bld.reset(&invert_block.instructions, invert_block.instructions.begin());
+      then = bld.pseudo(aco_opcode::p_linear_phi, bld.def(bld.lm), then, Operand(bld.lm));
+   }
+
+   auto after_phis =
+      std::find_if(invert_block.instructions.begin(), invert_block.instructions.end(),
+                   [](const aco_ptr<Instruction>& instr) -> bool { return !is_phi(instr.get()); });
+   bld.reset(&invert_block.instructions, after_phis);
+
+   Temp tmp;
+   if (then.constantEquals(-1) && els.constantEquals(0)) {
+      tmp = bld.copy(bld.def(bld.lm), Operand(exec, bld.lm));
+   } else {
+      Builder::WaveSpecificOpcode opc = els.constantEquals(0) ? Builder::s_and : Builder::s_orn2;
+      tmp = bld.sop2(opc, bld.def(bld.lm), bld.def(s1, scc), then, Operand(exec, bld.lm));
+   }
+
+   /* We can't delete the original phi because that'd invalidate the iterator in lower_phis,
+    * so just make it a trivial phi instead.
+    */
+   phi->opcode = aco_opcode::p_linear_phi;
+   phi->operands[0] = Operand(tmp);
+   phi->operands[1] = Operand(tmp);
+}
+
+void
 init_any_pred_defined(Program* program, ssa_state* state, Block* block, aco_ptr<Instruction>& phi)
 {
    std::fill(state->any_pred_defined.begin(), state->any_pred_defined.end(), pred_defined::undef);
@@ -265,6 +311,12 @@ lower_divergent_bool_phi(Program* program, ssa_state* state, Block* block,
 
    if (state->all_preds_uniform) {
       phi->opcode = aco_opcode::p_linear_phi;
+      return;
+   }
+
+   if (phi->operands.size() == 2 && phi->operands[1].isConstant() &&
+       (block->kind & block_kind_merge)) {
+      build_const_else_merge_code(program, program->blocks[block->linear_idom], phi);
       return;
    }
 

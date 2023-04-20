@@ -121,7 +121,7 @@ set_combiner_mode(struct gl_context *ctx,
       break;
    case GL_DOT3_RGB_EXT:
    case GL_DOT3_RGBA_EXT:
-      legal = (ctx->API == API_OPENGL_COMPAT &&
+      legal = (_mesa_is_desktop_gl_compat(ctx) &&
                ctx->Extensions.EXT_texture_env_dot3 &&
                pname == GL_COMBINE_RGB);
       break;
@@ -132,7 +132,7 @@ set_combiner_mode(struct gl_context *ctx,
    case GL_MODULATE_ADD_ATI:
    case GL_MODULATE_SIGNED_ADD_ATI:
    case GL_MODULATE_SUBTRACT_ATI:
-      legal = (ctx->API == API_OPENGL_COMPAT &&
+      legal = (_mesa_is_desktop_gl_compat(ctx) &&
                ctx->Extensions.ATI_texture_env_combine3);
       break;
    default:
@@ -231,12 +231,12 @@ set_combiner_source(struct gl_context *ctx,
       legal = (param - GL_TEXTURE0 < ctx->Const.MaxTextureUnits);
       break;
    case GL_ZERO:
-      legal = (ctx->API == API_OPENGL_COMPAT &&
+      legal = (_mesa_is_desktop_gl_compat(ctx) &&
                (ctx->Extensions.ATI_texture_env_combine3 ||
                 ctx->Extensions.NV_texture_env_combine4));
       break;
    case GL_ONE:
-      legal = (ctx->API == API_OPENGL_COMPAT &&
+      legal = (_mesa_is_desktop_gl_compat(ctx) &&
                ctx->Extensions.ATI_texture_env_combine3);
       break;
    default:
@@ -627,7 +627,7 @@ get_texenvi(struct gl_context *ctx,
       return texUnit->Combine.SourceRGB[rgb_idx];
    }
    case GL_SOURCE3_RGB_NV:
-      if (ctx->API == API_OPENGL_COMPAT && ctx->Extensions.NV_texture_env_combine4) {
+      if (_mesa_is_desktop_gl_compat(ctx) && ctx->Extensions.NV_texture_env_combine4) {
          return texUnit->Combine.SourceRGB[3];
       }
       else {
@@ -641,7 +641,7 @@ get_texenvi(struct gl_context *ctx,
       return texUnit->Combine.SourceA[alpha_idx];
    }
    case GL_SOURCE3_ALPHA_NV:
-      if (ctx->API == API_OPENGL_COMPAT && ctx->Extensions.NV_texture_env_combine4) {
+      if (_mesa_is_desktop_gl_compat(ctx) && ctx->Extensions.NV_texture_env_combine4) {
          return texUnit->Combine.SourceA[3];
       }
       else {
@@ -655,7 +655,7 @@ get_texenvi(struct gl_context *ctx,
       return texUnit->Combine.OperandRGB[op_rgb];
    }
    case GL_OPERAND3_RGB_NV:
-      if (ctx->API == API_OPENGL_COMPAT && ctx->Extensions.NV_texture_env_combine4) {
+      if (_mesa_is_desktop_gl_compat(ctx) && ctx->Extensions.NV_texture_env_combine4) {
          return texUnit->Combine.OperandRGB[3];
       }
       else {
@@ -669,7 +669,7 @@ get_texenvi(struct gl_context *ctx,
       return texUnit->Combine.OperandA[op_alpha];
    }
    case GL_OPERAND3_ALPHA_NV:
-      if (ctx->API == API_OPENGL_COMPAT && ctx->Extensions.NV_texture_env_combine4) {
+      if (_mesa_is_desktop_gl_compat(ctx) && ctx->Extensions.NV_texture_env_combine4) {
          return texUnit->Combine.OperandA[3];
       }
       else {

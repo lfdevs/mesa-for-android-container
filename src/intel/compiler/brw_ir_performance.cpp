@@ -1001,7 +1001,6 @@ namespace {
             abort();
 
       case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
-      case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GFX7:
          return calculate_desc(info, EU_UNIT_DP_CC, 2, 0, 0, 0, 16 /* XXX */,
                                10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
 
@@ -1036,6 +1035,14 @@ namespace {
 
       case SHADER_OPCODE_SEND:
          switch (info.sfid) {
+         case GFX6_SFID_DATAPORT_CONSTANT_CACHE:
+            if (devinfo->ver >= 7) {
+               /* See FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD */
+               return calculate_desc(info, EU_UNIT_DP_CC, 2, 0, 0, 0, 16 /* XXX */,
+                                     10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
+            } else {
+               abort();
+            }
          case GFX6_SFID_DATAPORT_RENDER_CACHE:
             if (devinfo->ver >= 7) {
                switch (brw_dp_desc_msg_type(devinfo, info.desc)) {
@@ -1099,6 +1106,13 @@ namespace {
             } else {
                abort();
             }
+
+         case GFX7_SFID_PIXEL_INTERPOLATOR:
+            if (devinfo->ver >= 7)
+               return calculate_desc(info, EU_UNIT_PI, 2, 0, 0, 14 /* XXX */, 0,
+                                     0, 90 /* XXX */, 0, 0, 0, 0);
+            else
+               abort();
 
          case GFX12_SFID_UGM:
          case GFX12_SFID_TGM:

@@ -34,43 +34,26 @@
 #define ASSIGN_FIELD(x) aco_info->x = radv->x
 #define ASSIGN_FIELD_CP(x) memcpy(&aco_info->x, &radv->x, sizeof(radv->x))
 
-static inline void
-radv_aco_convert_shader_vp_info(struct aco_vp_output_info *aco_info,
-				const struct radv_vs_output_info *radv)
-{
-   ASSIGN_FIELD_CP(vs_output_param_offset);
-   ASSIGN_FIELD(clip_dist_mask);
-   ASSIGN_FIELD(cull_dist_mask);
-   ASSIGN_FIELD(param_exports);
-   ASSIGN_FIELD(prim_param_exports);
-   ASSIGN_FIELD(writes_pointsize);
-   ASSIGN_FIELD(writes_layer);
-   ASSIGN_FIELD(writes_layer_per_primitive);
-   ASSIGN_FIELD(writes_viewport_index);
-   ASSIGN_FIELD(writes_viewport_index_per_primitive);
-   ASSIGN_FIELD(writes_primitive_shading_rate);
-   ASSIGN_FIELD(writes_primitive_shading_rate_per_primitive);
-   ASSIGN_FIELD(export_prim_id);
-   ASSIGN_FIELD(export_clip_dists);
-   /* don't use export params */
-}
+static inline void radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_info *aco_info,
+                                                  const struct radv_ps_epilog_key *radv,
+                                                  const struct radv_shader_args *radv_args);
 
 static inline void
-radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
-			     const struct radv_shader_info *radv)
+radv_aco_convert_shader_info(struct aco_shader_info *aco_info, const struct radv_shader_info *radv,
+                             const struct radv_shader_args *radv_args,
+                             const struct radv_pipeline_key *radv_key)
 {
+   radv_aco_convert_ps_epilog_key(&aco_info->ps.epilog, &radv_key->ps.epilog, radv_args);
    ASSIGN_FIELD(wave_size);
    ASSIGN_FIELD(is_ngg);
    ASSIGN_FIELD(has_ngg_culling);
    ASSIGN_FIELD(has_ngg_early_prim_export);
    ASSIGN_FIELD(workgroup_size);
-   radv_aco_convert_shader_vp_info(&aco_info->outinfo, &radv->outinfo);
    ASSIGN_FIELD(vs.as_es);
    ASSIGN_FIELD(vs.as_ls);
    ASSIGN_FIELD(vs.tcs_in_out_eq);
    ASSIGN_FIELD(vs.tcs_temp_only_input_mask);
    ASSIGN_FIELD(vs.use_per_attribute_vb_descs);
-   ASSIGN_FIELD(vs.vb_desc_usage_mask);
    ASSIGN_FIELD(vs.input_slot_usage_mask);
    ASSIGN_FIELD(vs.has_prolog);
    ASSIGN_FIELD(vs.dynamic_inputs);
@@ -87,14 +70,20 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info,
    ASSIGN_FIELD(ps.num_interp);
    ASSIGN_FIELD(ps.spi_ps_input);
    ASSIGN_FIELD(cs.subgroup_size);
+   ASSIGN_FIELD(cs.uses_full_subgroups);
    aco_info->gfx9_gs_ring_lds_size = radv->gs_ring_info.lds_size;
+   aco_info->is_trap_handler_shader = radv_args->type == RADV_SHADER_TYPE_TRAP_HANDLER;
+   aco_info->tcs.tess_input_vertices = radv_key->tcs.tess_input_vertices;
+   aco_info->ps.alpha_to_coverage_via_mrtz = radv_key->ps.alpha_to_coverage_via_mrtz;
+   aco_info->image_2d_view_of_3d = radv_key->image_2d_view_of_3d;
 }
 
 #define ASSIGN_VS_STATE_FIELD(x) aco_info->state.x = radv->state->x
 #define ASSIGN_VS_STATE_FIELD_CP(x) memcpy(&aco_info->state.x, &radv->state->x, sizeof(radv->state->x))
 static inline void
-radv_aco_convert_vs_prolog_key(struct aco_vs_prolog_key *aco_info,
-			       const struct radv_vs_prolog_key *radv)
+radv_aco_convert_vs_prolog_key(struct aco_vs_prolog_info *aco_info,
+                               const struct radv_vs_prolog_key *radv,
+                               const struct radv_shader_args *radv_args)
 {
    ASSIGN_VS_STATE_FIELD(instance_rate_inputs);
    ASSIGN_VS_STATE_FIELD(nontrivial_divisors);
@@ -107,42 +96,29 @@ radv_aco_convert_vs_prolog_key(struct aco_vs_prolog_key *aco_info,
    ASSIGN_FIELD(misaligned_mask);
    ASSIGN_FIELD(is_ngg);
    ASSIGN_FIELD(next_stage);
+
+   aco_info->inputs = radv_args->prolog_inputs;
 }
 
 static inline void
-radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_key *aco_info,
-			       const struct radv_ps_epilog_key *radv)
+radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_info *aco_info,
+                               const struct radv_ps_epilog_key *radv,
+                               const struct radv_shader_args *radv_args)
 {
    ASSIGN_FIELD(spi_shader_col_format);
    ASSIGN_FIELD(color_is_int8);
    ASSIGN_FIELD(color_is_int10);
-   ASSIGN_FIELD(enable_mrt_output_nan_fixup);
    ASSIGN_FIELD(mrt0_is_dual_src);
-}
 
-static inline void
-radv_aco_convert_pipe_key(struct aco_stage_input *aco_info,
-                          const struct radv_pipeline_key *radv)
-{
-   radv_aco_convert_ps_epilog_key(&aco_info->ps.epilog, &radv->ps.epilog);
-   ASSIGN_FIELD(optimisations_disabled);
-   ASSIGN_FIELD(image_2d_view_of_3d);
-   ASSIGN_FIELD(vs.instance_rate_inputs);
-   ASSIGN_FIELD_CP(vs.instance_rate_divisors);
-   ASSIGN_FIELD_CP(vs.vertex_attribute_formats);
-   ASSIGN_FIELD_CP(vs.vertex_attribute_bindings);
-   ASSIGN_FIELD_CP(vs.vertex_attribute_offsets);
-   ASSIGN_FIELD_CP(vs.vertex_attribute_strides);
-   ASSIGN_FIELD_CP(vs.vertex_binding_align);
-   ASSIGN_FIELD(tcs.tess_input_vertices);
-   ASSIGN_FIELD(ps.alpha_to_coverage_via_mrtz);
+   memcpy(aco_info->inputs, radv_args->ps_epilog_inputs, sizeof(aco_info->inputs));
+   aco_info->pc = radv_args->ps_epilog_pc;
 }
 
 static inline void
 radv_aco_convert_opts(struct aco_compiler_options *aco_info,
-                      const struct radv_nir_compiler_options *radv)
+                      const struct radv_nir_compiler_options *radv,
+                      const struct radv_shader_args *radv_args)
 {
-   radv_aco_convert_pipe_key(&aco_info->key, &radv->key);
    ASSIGN_FIELD(robust_buffer_access);
    ASSIGN_FIELD(dump_shader);
    ASSIGN_FIELD(dump_preoptir);
@@ -156,6 +132,9 @@ radv_aco_convert_opts(struct aco_compiler_options *aco_info,
    ASSIGN_FIELD(address32_hi);
    ASSIGN_FIELD(debug.func);
    ASSIGN_FIELD(debug.private_data);
+   ASSIGN_FIELD(debug.private_data);
+   aco_info->load_grid_size_from_user_sgpr = radv_args->load_grid_size_from_user_sgpr;
+   aco_info->optimisations_disabled = radv->key.optimisations_disabled;
 }
 #undef ASSIGN_VS_STATE_FIELD
 #undef ASSIGN_VS_STATE_FIELD_CP

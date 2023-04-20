@@ -22,6 +22,8 @@ inc_compiler = include_directories('.')
 inc_glsl = include_directories('glsl')
 inc_spirv = include_directories('spirv')
 
+float64_glsl_file = files('glsl/float64.glsl')
+
 files_libcompiler = files(
   'builtin_type_macros.h',
   'glsl_types.cpp',
@@ -78,6 +80,7 @@ if with_tests
         'spirv/tests/helpers.h',
         'spirv/tests/avail_vis.cpp',
         'spirv/tests/volatile.cpp',
+        'spirv/tests/control_flow_tests.cpp',
       ),
       c_args : [c_msvc_compat_args, no_override_init_args],
       gnu_symbol_visibility : 'hidden',
@@ -85,12 +88,14 @@ if with_tests
       dependencies : [dep_thread, idep_gtest, idep_nir, idep_mesautil],
     ),
     suite : ['compiler', 'spirv'],
-    protocol : gtest_test_protocol,
+    protocol : 'gtest',
   )
 endif
 
 if with_clc
   subdir('clc')
 endif
-subdir('glsl')
+if with_gallium
+  subdir('glsl')
+endif
 subdir('isaspec')

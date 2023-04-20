@@ -560,6 +560,14 @@ tegra_screen_memobj_create_from_handle(struct pipe_screen *pscreen,
                                                  dedicated);
 }
 
+static int
+tegra_screen_get_fd(struct pipe_screen *pscreen)
+{
+   struct tegra_screen *screen = to_tegra_screen(pscreen);
+
+   return screen->fd;
+}
+
 struct pipe_screen *
 tegra_screen_create(int fd)
 {
@@ -592,6 +600,7 @@ tegra_screen_create(int fd)
    screen->base.get_name = tegra_screen_get_name;
    screen->base.get_vendor = tegra_screen_get_vendor;
    screen->base.get_device_vendor = tegra_screen_get_device_vendor;
+   screen->base.get_screen_fd = tegra_screen_get_fd;
    screen->base.get_param = tegra_screen_get_param;
    screen->base.get_paramf = tegra_screen_get_paramf;
    screen->base.get_shader_param = tegra_screen_get_shader_param;

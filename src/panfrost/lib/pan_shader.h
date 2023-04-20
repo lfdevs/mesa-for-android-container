@@ -34,6 +34,20 @@
 
 struct panfrost_device;
 
+void bifrost_preprocess_nir(nir_shader *nir, unsigned gpu_id);
+void midgard_preprocess_nir(nir_shader *nir, unsigned gpu_id);
+
+static inline void
+pan_shader_preprocess(nir_shader *nir, unsigned gpu_id)
+{
+   if (pan_arch(gpu_id) >= 6)
+      bifrost_preprocess_nir(nir, gpu_id);
+   else
+      midgard_preprocess_nir(nir, gpu_id);
+}
+
+uint8_t pan_raw_format_mask_midgard(enum pipe_format *formats);
+
 #ifdef PAN_ARCH
 const nir_shader_compiler_options *GENX(pan_shader_get_compiler_options)(void);
 

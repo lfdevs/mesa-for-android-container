@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "util/half_float.h"
 #include "brw_fs.h"
 #include "brw_cfg.h"
 #include "brw_fs_builder.h"
@@ -33,7 +34,8 @@ fs_visitor::lower_pack()
    bool progress = false;
 
    foreach_block_and_inst_safe(block, fs_inst, inst, cfg) {
-      if (inst->opcode != FS_OPCODE_PACK)
+      if (inst->opcode != FS_OPCODE_PACK &&
+          inst->opcode != FS_OPCODE_PACK_HALF_2x16_SPLIT)
          continue;
 
       assert(inst->dst.file == VGRF);
@@ -48,8 +50,36 @@ fs_visitor::lower_pack()
        */
       if (!inst->is_partial_write())
          ibld.emit_undef_for_dst(inst);
-      for (unsigned i = 0; i < inst->sources; i++)
-         ibld.MOV(subscript(dst, inst->src[i].type, i), inst->src[i]);
+
+      switch (inst->opcode) {
+      case FS_OPCODE_PACK:
+         for (unsigned i = 0; i < inst->sources; i++)
+            ibld.MOV(subscript(dst, inst->src[i].type, i), inst->src[i]);
+         break;
+      case FS_OPCODE_PACK_HALF_2x16_SPLIT:
+         assert(dst.type == BRW_REGISTER_TYPE_UD);
+
+         for (unsigned i = 0; i < inst->sources; i++) {
+            if (inst->src[i].file == IMM) {
+               const uint32_t half = _mesa_float_to_half(inst->src[i].f);
+               ibld.MOV(subscript(dst, BRW_REGISTER_TYPE_UW, i),
+                        brw_imm_uw(half));
+            } else if (i == 1 && devinfo->ver < 9) {
+               /* Pre-Skylake requires DWord aligned destinations */
+               fs_reg tmp = ibld.vgrf(BRW_REGISTER_TYPE_UD);
+               ibld.F32TO16(subscript(tmp, BRW_REGISTER_TYPE_HF, 0),
+                            inst->src[i]);
+               ibld.MOV(subscript(dst, BRW_REGISTER_TYPE_UW, 1),
+                        subscript(tmp, BRW_REGISTER_TYPE_UW, 0));
+            } else {
+               ibld.F32TO16(subscript(dst, BRW_REGISTER_TYPE_HF, i),
+                            inst->src[i]);
+            }
+         }
+         break;
+      default:
+         unreachable("skipped above");
+      }
 
       inst->remove(block);
       progress = true;

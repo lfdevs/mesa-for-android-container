@@ -89,9 +89,10 @@ _mesa_init_program(struct gl_context *ctx)
    ctx->Program.ErrorPos = -1;
    ctx->Program.ErrorString = strdup("");
 
+   ctx->VertexProgram._VaryingInputs = VERT_BIT_ALL;
    ctx->VertexProgram.Enabled = GL_FALSE;
    ctx->VertexProgram.PointSizeEnabled =
-      (ctx->API == API_OPENGLES2) ? GL_TRUE : GL_FALSE;
+      _mesa_is_gles2(ctx) ? GL_TRUE : GL_FALSE;
    ctx->VertexProgram.TwoSideEnabled = GL_FALSE;
    _mesa_reference_program(ctx, &ctx->VertexProgram.Current,
                            ctx->Shared->DefaultVertexProgram);

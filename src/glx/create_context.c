@@ -54,7 +54,7 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
    struct glx_screen *psc;
    xcb_generic_error_t *err;
    xcb_void_cookie_t cookie;
-   unsigned dummy_err = 0;
+   unsigned error = BadImplementation;
    uint32_t xid, share_xid;
    int screen = -1;
 
@@ -100,25 +100,30 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
       direct = true;
    }
 
-
+#ifdef GLX_USE_APPLEGL
+   gc = applegl_create_context(psc, cfg, share, 0);
+#else
    if (direct && psc->vtable->create_context_attribs) {
-      /* GLX drops the error returned by the driver.  The expectation is that
-       * an error will also be returned by the server.  The server's error
-       * will be delivered to the application.
-       */
       gc = psc->vtable->create_context_attribs(psc, cfg, share, num_attribs,
-                                               (const uint32_t *) attrib_list,
-                                               &dummy_err);
+					       (const uint32_t *) attrib_list,
+					       &error);
+   } else if (!direct) {
+      gc = indirect_create_context_attribs(psc, cfg, share, num_attribs,
+                                           (const uint32_t *) attrib_list,
+                                           &error);
    }
+#endif
 
    if (gc == NULL) {
-#ifdef GLX_USE_APPLEGL
-      gc = applegl_create_context(psc, cfg, share, 0);
-#else
-      gc = indirect_create_context_attribs(psc, cfg, share, num_attribs,
-              (const uint32_t *) attrib_list,
-              &dummy_err);
-#endif
+      /* -1 isn't a legal XID, which is sort of the point, we've failed
+       * before we even got to XID allocation.
+       */
+      if (error == GLXBadContext || error == GLXBadFBConfig ||
+          error == GLXBadProfileARB)
+         __glXSendError(dpy, error, -1, 0, False);
+      else
+         __glXSendError(dpy, error, -1, 0, True);
+      return NULL;
    }
 
    xid = xcb_generate_id(c);
@@ -150,15 +155,6 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
 
       __glXSendErrorForXcb(dpy, err);
       free(err);
-   } else if (!gc) {
-      /* the server thought the context description was okay, but we failed
-       * somehow on the client side. clean up the server resource and panic.
-       */
-      xcb_glx_destroy_context(c, xid);
-      /* increment dpy->request in order to give a unique serial number to the
-       * error */
-      XNoOp(dpy);
-      __glXSendError(dpy, GLXBadFBConfig, xid, 0, False);
    } else {
       gc->xid = xid;
       gc->share_xid = share_xid;

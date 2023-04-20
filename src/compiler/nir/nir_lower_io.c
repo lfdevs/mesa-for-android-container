@@ -19,11 +19,6 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
- *
- * Authors:
- *    Connor Abbott (cwabbott0@gmail.com)
- *    Jason Ekstrand (jason@jlekstrand.net)
- *
  */
 
 /*
@@ -314,8 +309,7 @@ emit_load(struct lower_io_state *state,
             assert(array_index == NULL);
 
             nir_intrinsic_op bary_op;
-            if (var->data.sample ||
-                (state->options & nir_lower_io_force_sample_interpolation))
+            if (var->data.sample)
                bary_op = nir_intrinsic_load_barycentric_sample;
             else if (var->data.centroid)
                bary_op = nir_intrinsic_load_barycentric_centroid;
@@ -588,9 +582,7 @@ lower_interpolate_at(nir_intrinsic_instr *intrin, struct lower_io_state *state,
    nir_intrinsic_op bary_op;
    switch (intrin->intrinsic) {
    case nir_intrinsic_interp_deref_at_centroid:
-      bary_op = (state->options & nir_lower_io_force_sample_interpolation) ?
-                nir_intrinsic_load_barycentric_sample :
-                nir_intrinsic_load_barycentric_centroid;
+      bary_op = nir_intrinsic_load_barycentric_centroid;
       break;
    case nir_intrinsic_interp_deref_at_sample:
       bary_op = nir_intrinsic_load_barycentric_at_sample;
@@ -2118,13 +2110,21 @@ static void
 lower_explicit_io_deref(nir_builder *b, nir_deref_instr *deref,
                         nir_address_format addr_format)
 {
+   /* Ignore samplers/textures, because they are handled by other passes like `nir_lower_samplers`.
+    * Also do it only for those being uniforms, otherwise it will break GL bindless textures handles
+    * stored in UBOs.
+    */
+   if (nir_deref_mode_is_in_set(deref, nir_var_uniform) &&
+       (glsl_type_is_sampler(deref->type) ||
+        glsl_type_is_texture(deref->type)))
+      return;
+
    /* Just delete the deref if it's not used.  We can't use
     * nir_deref_instr_remove_if_unused here because it may remove more than
     * one deref which could break our list walking since we walk the list
     * backwards.
     */
-   assert(list_is_empty(&deref->dest.ssa.if_uses));
-   if (list_is_empty(&deref->dest.ssa.uses)) {
+   if (nir_ssa_def_is_unused(&deref->dest.ssa)) {
       nir_instr_remove(&deref->instr);
       return;
    }
@@ -2169,13 +2169,31 @@ lower_explicit_io_array_length(nir_builder *b, nir_intrinsic_instr *intrin,
    assert(stride > 0);
 
    nir_ssa_def *addr = &deref->dest.ssa;
-   nir_ssa_def *index = addr_to_index(b, addr, addr_format);
-   nir_ssa_def *offset = addr_to_offset(b, addr, addr_format);
-   unsigned access = nir_intrinsic_access(intrin);
 
-   nir_ssa_def *arr_size = nir_get_ssbo_size(b, index, .access=access);
-   arr_size = nir_usub_sat(b, arr_size, offset);
-   arr_size = nir_udiv_imm(b, arr_size, stride);
+   nir_ssa_def *offset, *size;
+   switch (addr_format) {
+   case nir_address_format_64bit_global_32bit_offset:
+   case nir_address_format_64bit_bounded_global:
+      offset = nir_channel(b, addr, 3);
+      size = nir_channel(b, addr, 2);
+      break;
+
+   case nir_address_format_32bit_index_offset:
+   case nir_address_format_32bit_index_offset_pack64:
+   case nir_address_format_vec2_index_32bit_offset: {
+      offset = addr_to_offset(b, addr, addr_format);
+      nir_ssa_def *index = addr_to_index(b, addr, addr_format);
+      unsigned access = nir_intrinsic_access(intrin);
+      size = nir_get_ssbo_size(b, index, .access=access);
+      break;
+   }
+
+   default:
+      unreachable("Cannot determine SSBO size");
+   }
+
+   nir_ssa_def *remaining = nir_usub_sat(b, size, offset);
+   nir_ssa_def *arr_size = nir_udiv_imm(b, remaining, stride);
 
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, arr_size);
    nir_instr_remove(&intrin->instr);

@@ -332,7 +332,7 @@ Function::convertToSSA()
    DLList workList;
    LValue *lval;
    BasicBlock *bb;
-   int var;
+   unsigned int var;
    int iterCount = 0;
    int *hasAlready = new int[allBBlocks.getSize() * 2];
    int *work = &hasAlready[allBBlocks.getSize()];

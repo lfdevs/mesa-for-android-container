@@ -92,7 +92,8 @@ combine_and_pin_address(struct blorp_batch *blorp_batch,
    struct iris_batch *batch = blorp_batch->driver_batch;
    struct iris_bo *bo = addr.buffer;
 
-   iris_use_pinned_bo(batch, bo, addr.reloc_flags & RELOC_WRITE,
+   iris_use_pinned_bo(batch, bo,
+                      addr.reloc_flags & IRIS_BLORP_RELOC_FLAGS_EXEC_OBJECT_WRITE,
                       IRIS_DOMAIN_NONE);
 
    /* Assume this is a general address, not relative to a base. */

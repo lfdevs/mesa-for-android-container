@@ -93,7 +93,7 @@ anv_shader_stage_to_nir(struct anv_device *device,
          .physical_storage_buffer_address = pdevice->has_a64_buffer_access,
          .post_depth_coverage = pdevice->info.ver >= 9,
          .runtime_descriptor_array = true,
-         .float_controls = pdevice->info.ver >= 8,
+         .float_controls = true,
          .shader_clock = true,
          .shader_viewport_index_layer = true,
          .stencil_export = pdevice->info.ver >= 9,
@@ -115,9 +115,9 @@ anv_shader_stage_to_nir(struct anv_device *device,
          .workgroup_memory_explicit_layout = true,
       },
       .ubo_addr_format =
-         anv_nir_ubo_addr_format(pdevice, device->robust_buffer_access),
+         anv_nir_ubo_addr_format(pdevice, device->vk.enabled_features.robustBufferAccess),
       .ssbo_addr_format =
-          anv_nir_ssbo_addr_format(pdevice, device->robust_buffer_access),
+          anv_nir_ssbo_addr_format(pdevice, device->vk.enabled_features.robustBufferAccess),
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
       .push_const_addr_format = nir_address_format_logical,
 
@@ -126,6 +126,9 @@ anv_shader_stage_to_nir(struct anv_device *device,
        * with certain code / code generators.
        */
       .shared_addr_format = nir_address_format_32bit_offset,
+
+      .min_ubo_alignment = ANV_UBO_ALIGNMENT,
+      .min_ssbo_alignment = ANV_SSBO_ALIGNMENT,
    };
 
    nir_shader *nir;
@@ -154,8 +157,6 @@ anv_shader_stage_to_nir(struct anv_device *device,
       .is_vulkan = true,
    };
    NIR_PASS(_, nir, nir_opt_access, &opt_access_options);
-
-   NIR_PASS(_, nir, nir_lower_frexp);
 
    /* Vulkan uses the separate-shader linking model */
    nir->info.separate_shader = true;
@@ -360,7 +361,8 @@ populate_wm_prog_key(const struct anv_graphics_pipeline *pipeline,
     * code to workaround the issue that hardware disables alpha to coverage
     * when there is SampleMask output.
     */
-   key->alpha_to_coverage = ms != NULL && ms->alpha_to_coverage_enable;
+   key->alpha_to_coverage = ms != NULL && ms->alpha_to_coverage_enable ?
+      BRW_ALWAYS : BRW_NEVER;
 
    /* Vulkan doesn't support fixed-function alpha test */
    key->alpha_test_replicate_alpha = false;
@@ -370,9 +372,11 @@ populate_wm_prog_key(const struct anv_graphics_pipeline *pipeline,
        * harmless to compute it and then let dead-code take care of it.
        */
       if (ms->rasterization_samples > 1) {
-         key->persample_interp = ms->sample_shading_enable &&
-            (ms->min_sample_shading * ms->rasterization_samples) > 1;
-         key->multisample_fbo = true;
+         key->persample_interp =
+            (ms->sample_shading_enable &&
+             (ms->min_sample_shading * ms->rasterization_samples) > 1) ?
+            BRW_ALWAYS : BRW_NEVER;
+         key->multisample_fbo = BRW_ALWAYS;
       }
 
       if (device->physical->instance->sample_mask_out_opengl_behaviour)
@@ -448,7 +452,7 @@ anv_pipeline_hash_graphics(struct anv_graphics_pipeline *pipeline,
    if (layout)
       _mesa_sha1_update(&ctx, layout->sha1, sizeof(layout->sha1));
 
-   const bool rba = pipeline->base.device->robust_buffer_access;
+   const bool rba = pipeline->base.device->vk.enabled_features.robustBufferAccess;
    _mesa_sha1_update(&ctx, &rba, sizeof(rba));
 
    for (uint32_t s = 0; s < ANV_GRAPHICS_SHADER_STAGE_COUNT; s++) {
@@ -476,7 +480,7 @@ anv_pipeline_hash_compute(struct anv_compute_pipeline *pipeline,
 
    const struct anv_device *device = pipeline->base.device;
 
-   const bool rba = device->robust_buffer_access;
+   const bool rba = device->vk.enabled_features.robustBufferAccess;
    _mesa_sha1_update(&ctx, &rba, sizeof(rba));
 
    const bool afs = device->physical->instance->assume_full_subgroups;
@@ -571,15 +575,15 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
    NIR_PASS_V(nir, anv_nir_apply_pipeline_layout,
-              pdevice, pipeline->device->robust_buffer_access,
+              pdevice, pipeline->device->vk.enabled_features.robustBufferAccess,
               layout, &stage->bind_map);
 
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo,
             anv_nir_ubo_addr_format(pdevice,
-               pipeline->device->robust_buffer_access));
+               pipeline->device->vk.enabled_features.robustBufferAccess));
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ssbo,
             anv_nir_ssbo_addr_format(pdevice,
-               pipeline->device->robust_buffer_access));
+               pipeline->device->vk.enabled_features.robustBufferAccess));
 
    /* First run copy-prop to get rid of all of the vec() that address
     * calculations often create and then constant-fold so that, when we
@@ -612,7 +616,7 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
    }
 
    NIR_PASS_V(nir, anv_nir_compute_push_layout,
-              pdevice, pipeline->device->robust_buffer_access,
+              pdevice, pipeline->device->vk.enabled_features.robustBufferAccess,
               prog_data, &stage->bind_map, mem_ctx);
 
    if (gl_shader_stage_uses_workgroup(nir->info.stage)) {
@@ -1091,28 +1095,28 @@ anv_graphics_pipeline_init_keys(struct anv_graphics_pipeline *pipeline,
       switch (stages[s].stage) {
       case MESA_SHADER_VERTEX:
          populate_vs_prog_key(device,
-                              pipeline->base.device->robust_buffer_access,
+                              pipeline->base.device->vk.enabled_features.robustBufferAccess,
                               &stages[s].key.vs);
          break;
       case MESA_SHADER_TESS_CTRL:
          populate_tcs_prog_key(device,
-                               pipeline->base.device->robust_buffer_access,
+                               pipeline->base.device->vk.enabled_features.robustBufferAccess,
                                state->ts->patch_control_points,
                                &stages[s].key.tcs);
          break;
       case MESA_SHADER_TESS_EVAL:
          populate_tes_prog_key(device,
-                               pipeline->base.device->robust_buffer_access,
+                               pipeline->base.device->vk.enabled_features.robustBufferAccess,
                                &stages[s].key.tes);
          break;
       case MESA_SHADER_GEOMETRY:
          populate_gs_prog_key(device,
-                              pipeline->base.device->robust_buffer_access,
+                              pipeline->base.device->vk.enabled_features.robustBufferAccess,
                               &stages[s].key.gs);
          break;
       case MESA_SHADER_FRAGMENT: {
          populate_wm_prog_key(pipeline,
-                              pipeline->base.device->robust_buffer_access,
+                              pipeline->base.device->vk.enabled_features.robustBufferAccess,
                               state->dynamic, state->ms, state->rp,
                               &stages[s].key.wm);
          break;
@@ -1491,7 +1495,7 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
 
    struct anv_shader_bin *bin = NULL;
 
-   populate_cs_prog_key(device, device->robust_buffer_access, &stage.key.cs);
+   populate_cs_prog_key(device, device->vk.enabled_features.robustBufferAccess, &stage.key.cs);
 
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
 

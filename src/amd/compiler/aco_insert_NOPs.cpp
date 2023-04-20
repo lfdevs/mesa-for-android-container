@@ -25,6 +25,8 @@
 #include "aco_builder.h"
 #include "aco_ir.h"
 
+#include "util/bitset.h"
+
 #include <algorithm>
 #include <bitset>
 #include <set>
@@ -1054,7 +1056,7 @@ handle_lds_direct_valu_hazard_instr(LdsDirectVALUHazardGlobalState& global_state
                                     LdsDirectVALUHazardBlockState& block_state,
                                     aco_ptr<Instruction>& instr)
 {
-   if (instr->isVALU() || instr->isVINTERP_INREG()) {
+   if (instr->isVALU()) {
       block_state.has_trans |= instr->isTrans();
 
       bool uses_vgpr = false;
@@ -1153,7 +1155,7 @@ handle_valu_partial_forwarding_hazard_instr(VALUPartialForwardingHazardGlobalSta
    if (instr->isSALU() && !instr->definitions.empty()) {
       if (block_state.state == written_after_exec_write && instr_writes_exec(instr))
          block_state.state = exec_written;
-   } else if (instr->isVALU() || instr->isVINTERP_INREG()) {
+   } else if (instr->isVALU()) {
       bool vgpr_write = false;
       for (Definition& def : instr->definitions) {
          if (def.physReg().reg() < 256)
@@ -1239,7 +1241,7 @@ handle_valu_partial_forwarding_hazard(State& state, aco_ptr<Instruction>& instr)
     * For the hazard, there must be less than 3 VALU between the first and second VGPR writes.
     * There also must be less than 5 VALU between the second VGPR write and the current instruction.
     */
-   if (state.program->wave_size != 64 || (!instr->isVALU() && !instr->isVINTERP_INREG()))
+   if (state.program->wave_size != 64 || !instr->isVALU())
       return false;
 
    unsigned num_vgprs = 0;
@@ -1319,7 +1321,7 @@ handle_instruction_gfx11(State& state, NOP_ctx_gfx11& ctx, aco_ptr<Instruction>&
     * VALU reads VGPR written by transcendental instruction without 6+ VALU or 2+ transcendental
     * in-between.
     */
-   if (va_vdst > 0 && (instr->isVALU() || instr->isVINTERP_INREG())) {
+   if (va_vdst > 0 && instr->isVALU()) {
       uint8_t num_valu = 15;
       uint8_t num_trans = 15;
       for (Operand& op : instr->operands) {
@@ -1362,7 +1364,7 @@ handle_instruction_gfx11(State& state, NOP_ctx_gfx11& ctx, aco_ptr<Instruction>&
    if (sa_sdst == 0)
       ctx.sgpr_read_by_valu_as_lanemask_then_wr_by_salu.reset();
 
-   if (instr->isVALU() || instr->isVINTERP_INREG()) {
+   if (instr->isVALU()) {
       bool is_trans = instr->isTrans();
 
       ctx.valu_since_wr_by_trans.inc();
@@ -1419,7 +1421,7 @@ handle_instruction_gfx11(State& state, NOP_ctx_gfx11& ctx, aco_ptr<Instruction>&
       for (Operand& op : instr->operands)
          fill_vgpr_bitset(ctx.vgpr_used_by_ds, op.physReg(), op.bytes());
    }
-   if (instr->isVALU() || instr->isVINTERP_INREG() || instr->isEXP() || vm_vsrc == 0) {
+   if (instr->isVALU() || instr->isEXP() || vm_vsrc == 0) {
       ctx.vgpr_used_by_vmem_load.reset();
       ctx.vgpr_used_by_vmem_store.reset();
       ctx.vgpr_used_by_ds.reset();

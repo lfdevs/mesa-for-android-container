@@ -1,2 +1,2 @@
 dEQP-VK.query_pool.concurrent_queries.primary_command_buffer
-.*multiple_interpolation.*
+dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap

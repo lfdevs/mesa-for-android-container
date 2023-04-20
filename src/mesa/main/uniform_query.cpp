@@ -1854,7 +1854,7 @@ _mesa_uniform_matrix(GLint location, GLsizei count,
     * http://www.khronos.org/opengles/sdk/docs/man/xhtml/glUniform.xml
     */
    if (transpose) {
-      if (ctx->API == API_OPENGLES2 && ctx->Version < 30) {
+      if (_mesa_is_gles2(ctx) && ctx->Version < 30) {
          _mesa_error(ctx, GL_INVALID_VALUE,
                      "glUniformMatrix(matrix transpose is not GL_FALSE)");
          return;

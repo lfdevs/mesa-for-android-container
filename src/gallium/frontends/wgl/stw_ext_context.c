@@ -30,6 +30,7 @@
 #include <GL/gl.h>
 #include <GL/wglext.h>
 
+#include "stw_gdishim.h"
 #include "gldrv.h"
 #include "stw_context.h"
 #include "stw_device.h"

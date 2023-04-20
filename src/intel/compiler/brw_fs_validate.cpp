@@ -87,7 +87,8 @@ fs_visitor::validate()
 {
 #ifndef NDEBUG
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
-      if (inst->opcode == SHADER_OPCODE_URB_WRITE_LOGICAL) {
+      switch (inst->opcode) {
+      case SHADER_OPCODE_URB_WRITE_LOGICAL: {
          const unsigned header_size = 1 +
             unsigned(inst->src[URB_LOGICAL_SRC_PER_SLOT_OFFSETS].file != BAD_FILE) +
             unsigned(inst->src[URB_LOGICAL_SRC_CHANNEL_MASK].file != BAD_FILE);
@@ -99,6 +100,19 @@ fs_visitor::validate()
          }
 
          fsv_assert_eq(header_size + data_size, inst->mlen);
+         break;
+      }
+
+      case SHADER_OPCODE_SEND:
+         fsv_assert(is_uniform(inst->src[0]) && is_uniform(inst->src[1]));
+         break;
+
+      case BRW_OPCODE_MOV:
+         fsv_assert(inst->sources == 1);
+         break;
+
+      default:
+         break;
       }
 
       if (inst->is_3src(compiler)) {

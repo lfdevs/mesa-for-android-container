@@ -54,6 +54,12 @@ void vlVaHandlePictureParameterBufferMJPEG(vlVaDriver *drv, vlVaContext *context
    }
 
    context->desc.mjpeg.picture_parameter.num_components = mjpeg->num_components;
+
+   context->desc.mjpeg.picture_parameter.crop_x = mjpeg->va_reserved[0] & 0xffff;
+   context->desc.mjpeg.picture_parameter.crop_y = (mjpeg->va_reserved[0] >> 16) & 0xffff;
+   context->desc.mjpeg.picture_parameter.crop_width = mjpeg->va_reserved[1] & 0xffff;
+   context->desc.mjpeg.picture_parameter.crop_height = (mjpeg->va_reserved[1] >> 16) & 0xffff;
+
 }
 
 void vlVaHandleIQMatrixBufferMJPEG(vlVaContext *context, vlVaBuffer *buf)

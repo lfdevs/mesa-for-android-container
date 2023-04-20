@@ -12,7 +12,7 @@ production.**
 
 .. note::
 
-   Mesa requires Meson >= 0.53.0 to build.
+   Mesa requires Meson >= 0.60.0 to build.
 
    If your distribution doesn't have something recent enough in its
    repositories, you can `try the methods suggested here
@@ -92,11 +92,12 @@ Basic configuration is done with:
 
 .. code-block:: console
 
-   meson build/
+   meson setup build/
 
 This will create the build directory. If any dependencies are missing,
 you can install them, or try to remove the dependency with a Meson
-configuration option (see below).
+configuration option (see below). Meson will print a summary of the
+build options at the end.
 
 To review the options which Meson chose, run:
 
@@ -104,11 +105,9 @@ To review the options which Meson chose, run:
 
    meson configure build/
 
-Meson does not currently support listing configuration options before
-running "meson build/" but this feature is being discussed upstream. For
-now, we have a ``bin/meson-options.py`` script that prints the options
-for you. If that script doesn't work for some reason, you can always
-look in the
+Recent version of Meson can print the available options and their
+default values by running ``meson configure`` in the source directory.
+If your Meson version is too old, you can always look in the
 `meson_options.txt <https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/meson_options.txt>`__
 file at the root of the project.
 
@@ -197,7 +196,7 @@ for C++ sources:
 
 .. code-block:: console
 
-   meson builddir/ -Dc_args=-fmax-errors=10 -Dcpp_args=-DMAGIC=123
+   meson setup builddir/ -Dc_args=-fmax-errors=10 -Dcpp_args=-DMAGIC=123
 
 Compiler Specification
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -212,7 +211,7 @@ build directory before reconfiguring with an extra C option:
 
 .. code-block:: console
 
-   CC=clang CXX=clang++ meson build-clang
+   CC=clang CXX=clang++ meson setup build-clang
    ninja -C build-clang
    ninja -C build-clang clean
    meson configure build -Dc_args="-Wno-typedef-redefinition"
@@ -236,7 +235,7 @@ For example:
 
 .. code-block:: console
 
-   meson builddir -Dcmake_module_path=/home/user/mycmake/prefix
+   meson setup builddir -Dcmake_module_path=/home/user/mycmake/prefix
 
 As of Meson 0.49.0 Meson also has the concept of a `"native
 file" <https://mesonbuild.com/Native-environments.html>`__, these files
@@ -254,7 +253,7 @@ Then configure Meson:
 
 .. code-block:: console
 
-   meson builddir/ --native-file custom-llvm.ini
+   meson setup builddir/ --native-file custom-llvm.ini
 
 For selecting llvm-config for cross compiling a `"cross
 file" <https://mesonbuild.com/Cross-compilation.html#defining-the-environment>`__
@@ -274,7 +273,7 @@ Then configure Meson:
 
 .. code-block:: console
 
-   meson builddir/ --cross-file cross-llvm.ini
+   meson setup builddir/ --cross-file cross-llvm.ini
 
 See the :ref:`Cross Compilation <cross-compilation>` section for more
 information.

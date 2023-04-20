@@ -154,7 +154,8 @@ static bool virgl_res_needs_readback(struct virgl_context *vctx,
 
 static enum virgl_transfer_map_type
 virgl_resource_transfer_prepare(struct virgl_context *vctx,
-                                struct virgl_transfer *xfer)
+                                struct virgl_transfer *xfer,
+                                bool is_blob)
 {
    struct virgl_screen *vs = virgl_screen(vctx->base.screen);
    struct virgl_winsys *vws = vs->vws;
@@ -201,7 +202,7 @@ virgl_resource_transfer_prepare(struct virgl_context *vctx,
    /* When the resource is busy but its content can be discarded, we can
     * replace its HW resource or use a staging buffer to avoid waiting.
     */
-   if (wait &&
+   if (wait && !is_blob &&
        (xfer->base.usage & (PIPE_MAP_DISCARD_RANGE |
                             PIPE_MAP_DISCARD_WHOLE_RESOURCE)) &&
        likely(!(virgl_debug & VIRGL_DEBUG_XFER))) {
@@ -281,9 +282,11 @@ virgl_resource_transfer_prepare(struct virgl_context *vctx,
        * trackers.  It should be waited for in all cases, including when
        * PIPE_MAP_UNSYNCHRONIZED is set.
        */
-      vws->resource_wait(vws, res->hw_res);
-      vws->transfer_get(vws, res->hw_res, &xfer->base.box, xfer->base.stride,
-                        xfer->l_stride, xfer->offset, xfer->base.level);
+      if (!is_blob) {
+         vws->resource_wait(vws, res->hw_res);
+         vws->transfer_get(vws, res->hw_res, &xfer->base.box, xfer->base.stride,
+                           xfer->l_stride, xfer->offset, xfer->base.level);
+      }
       /* transfer_get puts the resource into a maybe_busy state, so we will have
        * to wait another time if we want to use that resource. */
       wait = true;
@@ -509,10 +512,12 @@ virgl_resource_transfer_map(struct pipe_context *ctx,
    if (resource->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT)
       usage |= PIPE_MAP_COHERENT;
 
+   bool is_blob = usage & (PIPE_MAP_COHERENT | PIPE_MAP_PERSISTENT);
+
    trans = virgl_resource_create_transfer(vctx, resource,
                                           &vres->metadata, level, usage, box);
 
-   map_type = virgl_resource_transfer_prepare(vctx, trans);
+   map_type = virgl_resource_transfer_prepare(vctx, trans, is_blob);
    switch (map_type) {
    case VIRGL_TRANSFER_MAP_REALLOC:
       if (!virgl_resource_realloc(vctx, vres)) {

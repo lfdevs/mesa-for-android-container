@@ -725,7 +725,7 @@ static void virgl_video_end_frame(struct pipe_video_codec *codec,
     struct virgl_video_buffer *vbuf = virgl_video_buffer(target);
 
     virgl_encode_end_frame(vctx, vcdc, vbuf);
-    virgl_flush_eq(vctx, vctx, picture->fence);
+    virgl_flush_eq(vctx, vctx, NULL);
 
     switch_buffer(vcdc);
 }
@@ -846,7 +846,6 @@ virgl_video_create_codec(struct pipe_context *ctx,
     vcdc->base.end_frame = virgl_video_end_frame;
     vcdc->base.flush = virgl_video_flush;
     vcdc->base.get_feedback = virgl_video_get_feedback;
-    vcdc->base.get_decoder_fence = virgl_video_get_decoder_fence;
 
     vcdc->bs_size = 0;
     vcdc->cur_buffer = 0;

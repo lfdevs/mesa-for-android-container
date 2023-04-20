@@ -371,7 +371,7 @@ amdgpu_ctx_query_reset_status(struct radeon_winsys_ctx *rwctx, bool full_reset_o
 
       r = amdgpu_cs_query_reset_state2(ctx->ctx, &flags);
       if (r) {
-         fprintf(stderr, "amdgpu: amdgpu_cs_query_reset_state failed. (%i)\n", r);
+         fprintf(stderr, "amdgpu: amdgpu_cs_query_reset_state2 failed. (%i)\n", r);
          return PIPE_NO_RESET;
       }
 

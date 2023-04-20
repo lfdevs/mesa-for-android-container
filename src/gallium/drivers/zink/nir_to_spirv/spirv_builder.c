@@ -767,6 +767,13 @@ spirv_builder_emit_kill(struct spirv_builder *b)
 }
 
 void
+spirv_builder_emit_terminate(struct spirv_builder *b)
+{
+   spirv_buffer_prepare(&b->instructions, b->mem_ctx, 1);
+   spirv_buffer_emit_word(&b->instructions, SpvOpTerminateInvocation | (1 << 16));
+}
+
+void
 spirv_builder_emit_demote(struct spirv_builder *b)
 {
    spirv_buffer_prepare(&b->instructions, b->mem_ctx, 1);

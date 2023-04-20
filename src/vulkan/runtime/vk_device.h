@@ -27,6 +27,7 @@
 #include "vk_dispatch_table.h"
 #include "vk_extensions.h"
 #include "vk_object.h"
+#include "vk_physical_device_features.h"
 
 #include "util/list.h"
 #include "util/u_atomic.h"
@@ -105,12 +106,8 @@ struct vk_device {
    /** Table of enabled extensions */
    struct vk_device_extension_table enabled_extensions;
 
-   struct {
-      bool robustBufferAccess;
-      bool robustBufferAccess2;
-      bool robustImageAccess;
-      bool robustImageAccess2;
-   } enabled_features;
+   /** Table of enabled features */
+   struct vk_features enabled_features;
 
    /** Device-level dispatch table */
    struct vk_device_dispatch_table dispatch_table;

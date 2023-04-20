@@ -36,12 +36,12 @@ TEMPLATE_H = Template(COPYRIGHT + """
 #ifndef GRL_CL_KERNEL_H
 #define GRL_CL_KERNEL_H
 
+#include "genxml/gen_macros.h"
+#include "compiler/brw_kernel.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "genxml/gen_macros.h"
-#include "compiler/brw_kernel.h"
 
 enum grl_cl_kernel {
 % for k in kernels:
@@ -50,7 +50,7 @@ enum grl_cl_kernel {
     GRL_CL_KERNEL_MAX,
 };
 
-const char *grl_cl_kernel_name(enum grl_cl_kernel kernel);
+const char *genX(grl_cl_kernel_name)(enum grl_cl_kernel kernel);
 
 const char *genX(grl_get_cl_kernel_sha1)(enum grl_cl_kernel id);
 
@@ -73,7 +73,7 @@ TEMPLATE_C = Template(COPYRIGHT + """
 % endfor
 
 const char *
-grl_cl_kernel_name(enum grl_cl_kernel kernel)
+genX(grl_cl_kernel_name)(enum grl_cl_kernel kernel)
 {
     switch (kernel) {
 % for k in kernels:

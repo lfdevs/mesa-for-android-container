@@ -1,7 +1,8 @@
 use crate::api::icd::*;
-use crate::api::platform::*;
 use crate::api::util::*;
 use crate::core::device::*;
+use crate::core::platform::*;
+use crate::core::version::*;
 
 use mesa_rust_gen::*;
 use mesa_rust_util::ptr::*;
@@ -12,18 +13,14 @@ use std::ffi::CStr;
 use std::mem::size_of;
 use std::ptr;
 use std::sync::Arc;
-use std::sync::Once;
 
-// TODO spec constants need to be implemented
-const SPIRV_SUPPORT_STRING: &str = "";
-//    "SPIR-V_1.0 SPIR-V_1.1 SPIR-V_1.2 SPIR-V_1.3 SPIR-V_1.4 SPIR-V_1.5";
-const SPIRV_SUPPORT: [cl_name_version; 0] = [
-/*    mk_cl_version_ext(1, 0, 0, b"SPIR-V"),
-    mk_cl_version_ext(1, 1, 0, b"SPIR-V"),
-    mk_cl_version_ext(1, 2, 0, b"SPIR-V"),
-    mk_cl_version_ext(1, 3, 0, b"SPIR-V"),
-    mk_cl_version_ext(1, 4, 0, b"SPIR-V"),
-    mk_cl_version_ext(1, 5, 0, b"SPIR-V"),*/
+const SPIRV_SUPPORT_STRING: &str = "SPIR-V_1.0 SPIR-V_1.1 SPIR-V_1.2 SPIR-V_1.3 SPIR-V_1.4";
+const SPIRV_SUPPORT: [cl_name_version; 5] = [
+    mk_cl_version_ext(1, 0, 0, "SPIR-V"),
+    mk_cl_version_ext(1, 1, 0, "SPIR-V"),
+    mk_cl_version_ext(1, 2, 0, "SPIR-V"),
+    mk_cl_version_ext(1, 3, 0, "SPIR-V"),
+    mk_cl_version_ext(1, 4, 0, "SPIR-V"),
 ];
 
 impl CLInfo<cl_device_info> for cl_device_id {
@@ -82,7 +79,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             }
             CL_DEVICE_IMAGE_MAX_ARRAY_SIZE => cl_prop::<usize>(dev.image_array_size()),
             CL_DEVICE_IMAGE_MAX_BUFFER_SIZE => cl_prop::<usize>(dev.image_buffer_size()),
-            CL_DEVICE_IMAGE_PITCH_ALIGNMENT => cl_prop::<cl_uint>(0),
+            CL_DEVICE_IMAGE_PITCH_ALIGNMENT => cl_prop::<cl_uint>(dev.image_pitch_alignment()),
             CL_DEVICE_IMAGE_SUPPORT => cl_prop::<bool>(dev.image_supported()),
             CL_DEVICE_IMAGE2D_MAX_HEIGHT => cl_prop::<usize>(dev.image_2d_size()),
             CL_DEVICE_IMAGE2D_MAX_WIDTH => cl_prop::<usize>(dev.image_2d_size()),
@@ -99,7 +96,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_MAX_CLOCK_FREQUENCY => cl_prop::<cl_uint>(dev.max_clock_freq()),
             CL_DEVICE_MAX_COMPUTE_UNITS => cl_prop::<cl_uint>(dev.max_compute_units()),
             // TODO atm implemented as mem_const
-            CL_DEVICE_MAX_CONSTANT_ARGS => cl_prop::<cl_uint>(1024),
+            CL_DEVICE_MAX_CONSTANT_ARGS => cl_prop::<cl_uint>(dev.const_max_count()),
             CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE => cl_prop::<cl_ulong>(dev.const_max_size()),
             CL_DEVICE_MAX_GLOBAL_VARIABLE_SIZE => cl_prop::<usize>(0),
             CL_DEVICE_MAX_MEM_ALLOC_SIZE => cl_prop::<cl_ulong>(dev.max_mem_alloc()),
@@ -145,7 +142,7 @@ impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_PIPE_MAX_ACTIVE_RESERVATIONS => cl_prop::<cl_uint>(0),
             CL_DEVICE_PIPE_MAX_PACKET_SIZE => cl_prop::<cl_uint>(0),
             CL_DEVICE_PIPE_SUPPORT => cl_prop::<bool>(false),
-            CL_DEVICE_PLATFORM => cl_prop::<cl_platform_id>(get_platform()),
+            CL_DEVICE_PLATFORM => cl_prop::<cl_platform_id>(Platform::get().as_ptr()),
             CL_DEVICE_PREFERRED_GLOBAL_ATOMIC_ALIGNMENT => cl_prop::<cl_uint>(0),
             CL_DEVICE_PREFERRED_INTEROP_USER_SYNC => cl_prop::<bool>(true),
             CL_DEVICE_PREFERRED_LOCAL_ATOMIC_ALIGNMENT => cl_prop::<cl_uint>(0),
@@ -198,22 +195,8 @@ impl CLInfo<cl_device_info> for cl_device_id {
     }
 }
 
-// TODO replace with const new container
-static mut DEVICES: Vec<Arc<Device>> = Vec::new();
-static INIT: Once = Once::new();
-
-fn load_devices() {
-    unsafe {
-        glsl_type_singleton_init_or_ref();
-    }
-    Device::all()
-        .into_iter()
-        .for_each(|d| unsafe { DEVICES.push(d) });
-}
-
 fn devs() -> &'static Vec<Arc<Device>> {
-    INIT.call_once(load_devices);
-    unsafe { &DEVICES }
+    &Platform::get().devs
 }
 
 pub fn get_devs_for_type(device_type: cl_device_type) -> Vec<&'static Arc<Device>> {
