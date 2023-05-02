@@ -1273,6 +1273,7 @@ struct zink_resource {
       };
    };
 
+   bool copies_warned;
    bool swapchain;
    bool dmabuf;
    unsigned dt_stride;

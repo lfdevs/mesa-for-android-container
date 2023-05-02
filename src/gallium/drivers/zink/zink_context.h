@@ -54,7 +54,7 @@ static inline struct zink_resource *
 zink_descriptor_surface_resource(struct zink_descriptor_surface *ds)
 {
    return ds->is_buffer ?
-          zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB ? (struct zink_resource*)ds->bufferview->pres : zink_resource(ds->db.pres) :
+          zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB ? zink_resource(ds->db.pres) : zink_resource(ds->bufferview->pres) :
           (struct zink_resource*)ds->surface->base.texture;
 }
 

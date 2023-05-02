@@ -1,3 +1,9 @@
+mesa (23.1.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 02 May 2023 14:32:42 +0300
+
 mesa (23.1.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

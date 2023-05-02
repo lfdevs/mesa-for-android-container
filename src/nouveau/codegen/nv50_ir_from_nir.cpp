@@ -2533,7 +2533,7 @@ Converter::visit(nir_load_const_instr *insn)
 }
 
 #define DEFAULT_CHECKS \
-      if (insn->dest.dest.ssa.num_components > 1) { \
+      if (nir_dest_num_components(insn->dest.dest) > 1) { \
          ERROR("nir_alu_instr only supported with 1 component!\n"); \
          return false; \
       } \

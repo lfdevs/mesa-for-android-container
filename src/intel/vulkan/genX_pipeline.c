@@ -1103,17 +1103,6 @@ emit_3dstate_streamout(struct anv_graphics_pipeline *pipeline,
       so.Stream2VertexReadLength = urb_entry_read_length - 1;
       so.Stream3VertexReadOffset = urb_entry_read_offset;
       so.Stream3VertexReadLength = urb_entry_read_length - 1;
-
-#if INTEL_NEEDS_WA_14017076903
-      /* Wa_14017076903 : SOL should be programmed to force the
-       * rendering to be enabled.
-       *
-       * This fixes a rare case where SOL must render to get correct
-       * occlusion query results even when no PS and depth buffers are
-       * bound.
-       */
-      so.ForceRendering = Force_on;
-#endif
    }
 
    GENX(3DSTATE_STREAMOUT_pack)(NULL, pipeline->gfx8.streamout_state, &so);

@@ -1053,7 +1053,8 @@ ValueFactory::get_shader_info(r600_shader *sh_info)
    if (!arrays.empty()) {
 
       sh_info->num_arrays = arrays.size();
-      sh_info->arrays = new r600_shader_array[arrays.size()];
+      sh_info->arrays =
+         (r600_shader_array *)malloc(sizeof(struct r600_shader_array) * arrays.size());
 
       for (auto& arr : arrays) {
          sh_info->arrays->gpr_start = arr->sel();

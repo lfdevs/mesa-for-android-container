@@ -47,6 +47,7 @@
 
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_exec.h"
+#include "tgsi/tgsi_ureg.h"
 
 #include "nir/nir_to_tgsi.h"
 
@@ -65,6 +66,7 @@ draw_create_vertex_shader(struct draw_context *draw,
    }
 
 #ifdef DRAW_LLVM_AVAILABLE
+   bool is_allocated = false;
    if (draw->pt.middle.llvm) {
       struct pipe_screen *screen = draw->pipe->screen;
       if (shader->type == PIPE_SHADER_IR_NIR &&
@@ -75,6 +77,7 @@ draw_create_vertex_shader(struct draw_context *draw,
             PIPE_SHADER_IR_TGSI))) {
         state.type = PIPE_SHADER_IR_TGSI;
         state.tokens = nir_to_tgsi(shader->ir.nir, screen);
+        is_allocated = true;
       }
       vs = draw_create_vs_llvm(draw, &state);
    }
@@ -83,6 +86,12 @@ draw_create_vertex_shader(struct draw_context *draw,
    if (!vs) {
       vs = draw_create_vs_exec(draw, &state);
    }
+
+#ifdef DRAW_LLVM_AVAILABLE
+   if (is_allocated) {
+      ureg_free_tokens(state.tokens);
+   }
+#endif
 
    if (vs) {
       bool found_clipvertex = FALSE;

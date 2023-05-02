@@ -143,7 +143,7 @@ valid_format_cast(struct fd_resource *rsc, enum pipe_format format)
     * permutations of z24s8:
     */
    if (fd_screen(rsc->b.b.screen)->info->a6xx.has_z24uint_s8uint &&
-         (is_z24s8(format) == is_z24s8(rsc->b.b.format)))
+         is_z24s8(format) && is_z24s8(rsc->b.b.format))
       return true;
 
    /* For some color values (just "solid white") compression metadata maps to

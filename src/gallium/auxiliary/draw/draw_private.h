@@ -184,6 +184,7 @@ struct draw_context
       enum pipe_prim_type prim;
       unsigned opt;     /**< bitmask of PT_x flags */
       unsigned eltSize; /* saved eltSize for flushing */
+      unsigned viewid; /* saved viewid for flushing */
       ubyte vertices_per_patch;
       boolean rebind_parameters;
 

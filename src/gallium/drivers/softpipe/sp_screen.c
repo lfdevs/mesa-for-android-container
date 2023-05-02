@@ -490,12 +490,6 @@ softpipe_is_format_supported( struct pipe_screen *screen,
 static void
 softpipe_destroy_screen( struct pipe_screen *screen )
 {
-   struct softpipe_screen *sp_screen = softpipe_screen(screen);
-   struct sw_winsys *winsys = sp_screen->winsys;
-
-   if(winsys->destroy)
-      winsys->destroy(winsys);
-
    FREE(screen);
 }
 

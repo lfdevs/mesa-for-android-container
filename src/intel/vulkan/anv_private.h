@@ -2574,6 +2574,8 @@ struct anv_cmd_graphics_state {
 
    bool object_preemption;
    bool has_uint_rt;
+
+   uint32_t n_occlusion_queries;
 };
 
 enum anv_depth_reg_mode {

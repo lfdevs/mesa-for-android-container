@@ -100,6 +100,15 @@
                 "VkPhysicalDeviceConditionalRenderingFeaturesEXT": {
                     "conditionalRendering": true
                 }
+            },
+            "formats": {
+                "VK_FORMAT_D32_SFLOAT_S8_UINT": {
+                    "VkFormatProperties": {
+                        "optimalTilingFeatures": [
+                            "VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT"
+                        ]
+                    }
+                }
             }
         },
         "gl31_baseline": {

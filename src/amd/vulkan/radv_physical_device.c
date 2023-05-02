@@ -389,20 +389,9 @@ static void
 radv_get_binning_settings(const struct radv_physical_device *pdevice,
                           struct radv_binning_settings *settings)
 {
-   if (pdevice->rad_info.has_dedicated_vram && pdevice->rad_info.max_render_backends > 4) {
-      settings->context_states_per_bin = 1;
-      settings->persistent_states_per_bin = 1;
-   } else {
-      settings->context_states_per_bin = 3;
-      /* 32 causes hangs for RAVEN. */
-      settings->persistent_states_per_bin = 8;
-   }
-
+   settings->context_states_per_bin = 1;
+   settings->persistent_states_per_bin = 1;
    settings->fpovs_per_batch = 63;
-
-   /* The context states are affected by the scissor bug. */
-   if (pdevice->rad_info.has_gfx9_scissor_bug)
-      settings->context_states_per_bin = 1;
 }
 
 static void

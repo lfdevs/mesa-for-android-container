@@ -489,9 +489,12 @@ emit_ps_null_export(nir_builder *b, lower_ps_state *s)
    unsigned target = s->options->gfx_level >= GFX11 ?
       V_008DFC_SQ_EXP_MRT : V_008DFC_SQ_EXP_NULL;
 
-   nir_export_amd(b, nir_ssa_undef(b, 4, 32),
-                  .base = target,
-                  .flags = AC_EXP_FLAG_VALID_MASK | AC_EXP_FLAG_DONE);
+   nir_intrinsic_instr *intrin =
+      nir_export_amd(b, nir_ssa_undef(b, 4, 32),
+                     .base = target,
+                     .flags = AC_EXP_FLAG_VALID_MASK | AC_EXP_FLAG_DONE);
+   /* To avoid builder set write mask to 0xf. */
+   nir_intrinsic_set_write_mask(intrin, 0);
 }
 
 static void

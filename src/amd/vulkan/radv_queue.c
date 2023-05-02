@@ -1482,6 +1482,8 @@ radv_create_perf_counter_lock_cs(struct radv_device *device, unsigned pass, bool
 
    ASSERTED unsigned cdw = radeon_check_space(device->ws, cs, 21);
 
+   radv_cs_add_buffer(device->ws, cs, device->perf_counter_bo);
+
    if (!unlock) {
       uint64_t mutex_va = radv_buffer_get_va(device->perf_counter_bo) + PERF_CTR_BO_LOCK_OFFSET;
       radeon_emit(cs, PKT3(PKT3_ATOMIC_MEM, 7, 0));

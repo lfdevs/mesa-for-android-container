@@ -57,6 +57,7 @@ struct radv_meta_saved_state {
    unsigned active_pipeline_gds_queries;
    unsigned active_prims_gen_gds_queries;
    unsigned active_prims_xfb_gds_queries;
+   unsigned active_occlusion_queries;
 
    bool predicating;
 };

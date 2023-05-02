@@ -68,6 +68,8 @@ struct gallivm_state
    LLVMValueRef get_time_hook;
 };
 
+unsigned
+lp_build_get_native_width(void);
 
 boolean
 lp_build_init(void);

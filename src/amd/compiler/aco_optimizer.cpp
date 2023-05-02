@@ -850,13 +850,12 @@ smem_combine(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
       Temp base;
       uint32_t offset;
-      bool prevent_overflow = smem.operands[0].size() > 2 || smem.prevent_overflow;
       if (info.is_constant_or_literal(32) &&
           ((ctx.program->gfx_level == GFX6 && info.val <= 0x3FF) ||
            (ctx.program->gfx_level == GFX7 && info.val <= 0xFFFFFFFF) ||
            (ctx.program->gfx_level >= GFX8 && info.val <= 0xFFFFF))) {
          instr->operands[1] = Operand::c32(info.val);
-      } else if (parse_base_offset(ctx, instr.get(), 1, &base, &offset, prevent_overflow) &&
+      } else if (parse_base_offset(ctx, instr.get(), 1, &base, &offset, true) &&
                  base.regClass() == s1 && offset <= 0xFFFFF && ctx.program->gfx_level >= GFX9 &&
                  offset % 4u == 0) {
          bool soe = smem.operands.size() >= (!smem.definitions.empty() ? 3 : 4);

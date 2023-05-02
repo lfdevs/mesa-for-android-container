@@ -63,6 +63,26 @@ static uint8_t si_vectorize_callback(const nir_instr *instr, const void *data)
    return 1;
 }
 
+static unsigned si_lower_bit_size_callback(const nir_instr *instr, void *data)
+{
+   if (instr->type != nir_instr_type_alu)
+      return 0;
+
+   nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+   switch (alu->op) {
+   case nir_op_imul_high:
+   case nir_op_umul_high:
+      if (nir_dest_bit_size(alu->dest.dest) < 32)
+         return 32;
+      break;
+   default:
+      break;
+   }
+
+   return 0;
+}
+
 void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
 {
    bool progress;
@@ -105,6 +125,7 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       NIR_PASS(progress, nir, nir_opt_peephole_select, 8, true, true);
 
       /* Needed for algebraic lowering */
+      NIR_PASS(progress, nir, nir_lower_bit_size, si_lower_bit_size_callback, NULL);
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
 

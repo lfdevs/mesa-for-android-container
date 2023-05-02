@@ -103,9 +103,9 @@ draw_pt_arrays(struct draw_context *draw,
           */
          draw_do_flush(draw, DRAW_FLUSH_STATE_CHANGE);
          frontend = NULL;
-      } else if (draw->pt.eltSize != draw->pt.user.eltSize) {
-         /* Flush draw state if eltSize changed.
-          * This could be improved so only the frontend is flushed since it
+      } else if (draw->pt.eltSize != draw->pt.user.eltSize || draw->pt.viewid != draw->pt.user.viewid) {
+         /* Flush draw state if eltSize or viewid changed.
+          * eltSize changes could be improved so only the frontend is flushed since it
           * converts all indices to ushorts and the fetch part of the middle
           * always prepares both linear and indexed.
           */
@@ -121,6 +121,7 @@ draw_pt_arrays(struct draw_context *draw,
 
       draw->pt.frontend = frontend;
       draw->pt.eltSize = draw->pt.user.eltSize;
+      draw->pt.viewid = draw->pt.user.viewid;
       draw->pt.prim = prim;
       draw->pt.opt = opt;
    }

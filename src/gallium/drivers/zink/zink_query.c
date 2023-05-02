@@ -468,20 +468,18 @@ query_pool_get_range(struct zink_context *ctx, struct zink_query *q)
          vkq->pool->refcount++;
       } else {
          struct zink_query_pool *pool = find_or_allocate_qp(ctx, q, pool_idx);
-         pool->refcount++;
-         pool->last_range++;
          if (pool->last_range == NUM_QUERIES) {
             list_del(&pool->list);
             pool = find_or_allocate_qp(ctx, q, pool_idx);
          }
          vkq = CALLOC_STRUCT(zink_vk_query);
 
+         pool->refcount++;
          vkq->refcount = 1;
          vkq->needs_reset = true;
          vkq->pool = pool;
          vkq->started = false;
-         vkq->query_id = pool->last_range;
-
+         vkq->query_id = pool->last_range++;
       }
       unref_vk_query(ctx, start->vkq[i]);
       start->vkq[i] = vkq;

@@ -619,7 +619,7 @@ zink_draw(struct pipe_context *pctx,
       VKCTX(CmdSetCullModeEXT)(batch->state->cmdbuf, ctx->gfx_pipeline_state.dyn_state1.cull_mode);
    }
    if ((BATCH_CHANGED || rast_state_changed) &&
-       (DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3 || (!screen->driver_workarounds.no_linestipple && rast_state->base.line_stipple_enable)))
+       !screen->driver_workarounds.no_linestipple && (DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3 || rast_state->base.line_stipple_enable))
       VKCTX(CmdSetLineStippleEXT)(batch->state->cmdbuf, rast_state->base.line_stipple_factor, rast_state->base.line_stipple_pattern);
 
    if ((BATCH_CHANGED || rast_state_changed) && DYNAMIC_STATE >= ZINK_DYNAMIC_STATE3) {

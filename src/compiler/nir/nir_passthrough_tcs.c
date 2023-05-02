@@ -77,10 +77,9 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
    for (unsigned i = 0; i < num_locations; i++) {
       const struct glsl_type *type;
       unsigned semantic = locations[i];
-      if (semantic < VARYING_SLOT_VAR31 && semantic != VARYING_SLOT_EDGE)
+      if ((semantic <= VARYING_SLOT_VAR31 && semantic != VARYING_SLOT_EDGE) ||
+          semantic >= VARYING_SLOT_VAR0_16BIT)
          type = glsl_array_type(glsl_vec4_type(), 0, 0);
-      else if (semantic >= VARYING_SLOT_VAR0_16BIT)
-         type = glsl_array_type(glsl_vector_type(GLSL_TYPE_FLOAT16, 4), 0, 0);
       else
          continue;
 

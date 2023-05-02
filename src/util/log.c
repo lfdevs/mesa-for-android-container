@@ -148,7 +148,7 @@ logger_vasnprintf(char *buf,
                   enum mesa_log_level level,
                   const char *tag,
                   const char *format,
-                  va_list va)
+                  va_list in_va)
 {
    struct {
       char *cur;
@@ -159,6 +159,9 @@ logger_vasnprintf(char *buf,
       .cur = buf,
       .rem = size,
    };
+
+   va_list va;
+   va_copy(va, in_va);
 
 #define APPEND(state, func, ...)                                     \
    do {                                                              \
@@ -195,13 +198,15 @@ logger_vasnprintf(char *buf,
       void *alloc = malloc(state.total + 1);
       if (alloc) {
          buf = logger_vasnprintf(alloc, state.total + 1, affixes, level, tag,
-               format, va);
+               format, in_va);
          assert(buf == alloc);
       } else {
          /* pretty-truncate the message */
          strncpy(buf + size - 4, "...", 4);
       }
    }
+
+   va_end(va);
 
    return buf;
 }

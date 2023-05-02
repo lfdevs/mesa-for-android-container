@@ -2382,7 +2382,7 @@ radv_create_rt_prolog(struct radv_device *device)
    radv_postprocess_binary_config(device, binary, &in_args);
    prolog = radv_shader_create(device, binary);
    if (!prolog)
-      goto fail;
+      goto done;
 
    if (device->keep_shader_info || options.dump_shader) {
       radv_capture_shader_executable_info(device, prolog, NULL, 0, binary);
@@ -2393,11 +2393,9 @@ radv_create_rt_prolog(struct radv_device *device)
       fprintf(stderr, "\ndisasm:\n%s\n", prolog->disasm_string);
    }
 
-   return prolog;
-
-fail:
+done:
    free(binary);
-   return NULL;
+   return prolog;
 }
 
 struct radv_shader_part *

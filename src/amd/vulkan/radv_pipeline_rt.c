@@ -329,6 +329,7 @@ radv_rt_pipeline_library_create(VkDevice _device, VkPipelineCache _cache,
 {
    RADV_FROM_HANDLE(radv_device, device, _device);
    struct radv_ray_tracing_lib_pipeline *pipeline;
+   VkResult result = VK_SUCCESS;
 
    VkRayTracingPipelineCreateInfoKHR local_create_info =
       radv_create_merged_rt_create_info(pCreateInfo);
@@ -339,22 +340,26 @@ radv_rt_pipeline_library_create(VkDevice _device, VkPipelineCache _cache,
       sizeof(*pipeline) + local_create_info.groupCount * sizeof(struct radv_ray_tracing_module);
    pipeline = vk_zalloc2(&device->vk.alloc, pAllocator, pipeline_size, 8,
                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (pipeline == NULL)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   if (!pipeline) {
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
+      goto fail;
+   }
 
    radv_pipeline_init(device, &pipeline->base, RADV_PIPELINE_RAY_TRACING_LIB);
 
    pipeline->ctx = ralloc_context(NULL);
 
-   VkResult result = radv_create_group_handles(device, &local_create_info, pipeline->groups);
+   result = radv_create_group_handles(device, &local_create_info, pipeline->groups);
    if (result != VK_SUCCESS)
-      goto fail;
+      goto pipeline_fail;
 
    if (local_create_info.stageCount) {
       pipeline->stages = radv_copy_shader_stage_create_info(
          device, local_create_info.stageCount, local_create_info.pStages, pipeline->ctx);
-      if (!pipeline->stages)
-         goto fail;
+      if (!pipeline->stages) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto pipeline_fail;
+      }
 
       pipeline->stage_count = local_create_info.stageCount;
    }
@@ -363,22 +368,22 @@ radv_rt_pipeline_library_create(VkDevice _device, VkPipelineCache _cache,
       size_t size = sizeof(VkRayTracingShaderGroupCreateInfoKHR) * local_create_info.groupCount;
       pipeline->group_count = local_create_info.groupCount;
       pipeline->group_infos = ralloc_size(pipeline->ctx, size);
-      if (!pipeline->group_infos)
-         goto fail;
+      if (!pipeline->group_infos) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto pipeline_fail;
+      }
       memcpy(pipeline->group_infos, local_create_info.pGroups, size);
    }
 
    *pPipeline = radv_pipeline_to_handle(&pipeline->base);
 
-   free((void *)local_create_info.pGroups);
-   free((void *)local_create_info.pStages);
-   return VK_SUCCESS;
+pipeline_fail:
+   if (result != VK_SUCCESS)
+      radv_pipeline_destroy(device, &pipeline->base, pAllocator);
 fail:
-   free(pipeline->group_infos);
-   ralloc_free(pipeline->ctx);
    free((void *)local_create_info.pGroups);
    free((void *)local_create_info.pStages);
-   return VK_ERROR_OUT_OF_HOST_MEMORY;
+   return result;
 }
 
 void
@@ -584,7 +589,7 @@ radv_rt_pipeline_create(VkDevice _device, VkPipelineCache _cache,
          goto shader_fail;
    }
 
-   rt_pipeline->stack_size = compute_rt_stack_size(pCreateInfo, rt_pipeline->groups);
+   rt_pipeline->stack_size = compute_rt_stack_size(&local_create_info, rt_pipeline->groups);
    rt_pipeline->base.base.shaders[MESA_SHADER_COMPUTE] = radv_create_rt_prolog(device);
 
    combine_config(&rt_pipeline->base.base.shaders[MESA_SHADER_COMPUTE]->config,
@@ -595,6 +600,8 @@ radv_rt_pipeline_create(VkDevice _device, VkPipelineCache _cache,
                          device->physical_device->rt_wave_size);
 
    radv_compute_pipeline_init(device, &rt_pipeline->base, pipeline_layout);
+
+   radv_rmv_log_compute_pipeline_create(device, pCreateInfo->flags, &rt_pipeline->base.base, false);
 
    *pPipeline = radv_pipeline_to_handle(&rt_pipeline->base.base);
 shader_fail:
@@ -645,11 +652,6 @@ radv_CreateRayTracingPipelinesKHR(VkDevice _device, VkDeferredOperationKHR defer
 
    if (result != VK_SUCCESS)
       return result;
-
-   RADV_FROM_HANDLE(radv_device, device, _device);
-   for (uint32_t j = 0; j < count; ++j)
-      radv_rmv_log_compute_pipeline_create(device, pCreateInfos[i].flags,
-                                           radv_pipeline_from_handle(pPipelines[j]), false);
 
    /* Work around Portal RTX not handling VK_OPERATION_NOT_DEFERRED_KHR correctly. */
    if (deferredOperation != VK_NULL_HANDLE)

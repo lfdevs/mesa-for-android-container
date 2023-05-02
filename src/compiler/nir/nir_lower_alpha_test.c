@@ -100,7 +100,7 @@ nir_lower_alpha_test(nir_shader *shader, enum compare_func func,
                                                        glsl_float_type(),
                                                        "gl_AlphaRefMESA");
                var->num_state_slots = 1;
-               var->state_slots = ralloc_array(var, nir_state_slot, 1);
+               var->state_slots = rzalloc_array(var, nir_state_slot, 1);
                memcpy(var->state_slots[0].tokens,
                       alpha_ref_state_tokens,
                       sizeof(var->state_slots[0].tokens));

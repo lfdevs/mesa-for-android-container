@@ -580,6 +580,7 @@ void rc_dataflow_swizzles(struct radeon_compiler * c, void *user)
 			}
 			if (!c->is_r500 &&
 			    c->Program.Constants.Count < R300_PFS_NUM_CONST_REGS &&
+			    (!opcode->HasTexture && inst->U.I.Opcode != RC_OPCODE_KIL) &&
 			    try_rewrite_constant(c, reg)) {
 				continue;
 			}

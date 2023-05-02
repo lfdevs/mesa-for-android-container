@@ -1551,7 +1551,18 @@ radv_get_image_format_properties(struct radv_physical_device *physical_device,
        vk_format_get_blocksizebits(format) == 128 && vk_format_is_compressed(format) &&
        (info->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) &&
        ((info->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) ||
-        (info->usage & VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT))) {
+        (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))) {
+      goto unsupported;
+   }
+
+   /* For some reasons, we can't create 1d block-compressed images that can be stored to with a
+    * different format on GFX6.
+    */
+   if (physical_device->rad_info.gfx_level == GFX6 && info->type == VK_IMAGE_TYPE_1D &&
+       vk_format_is_block_compressed(format) &&
+       (info->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) &&
+       ((info->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) ||
+        (info->usage & VK_IMAGE_USAGE_STORAGE_BIT))) {
       goto unsupported;
    }
 

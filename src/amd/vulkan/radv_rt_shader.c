@@ -848,9 +848,6 @@ insert_rt_case(nir_builder *b, nir_shader *shader, struct rt_variables *vars, ni
    nir_inline_function_impl(b, nir_shader_get_entrypoint(shader), NULL, var_remap);
    nir_pop_if(b, NULL);
 
-   /* Adopt the instructions from the source shader, since they are merely moved, not cloned. */
-   ralloc_adopt(ralloc_context(b->shader), ralloc_context(shader));
-
    ralloc_free(var_remap);
 
    /* reserve stack sizes */
@@ -1234,6 +1231,7 @@ visit_any_hit_shaders(struct radv_device *device,
 
       insert_rt_case(b, nir_stage, vars, sbt_idx, 0, data->groups[i].handle.any_hit_index,
                      shader_id, data->groups);
+      ralloc_free(nir_stage);
    }
 
    if (!(vars->create_info->flags & VK_PIPELINE_CREATE_RAY_TRACING_NO_NULL_ANY_HIT_SHADERS_BIT_KHR))
@@ -1379,6 +1377,7 @@ handle_candidate_aabb(nir_builder *b, struct radv_leaf_intersection *intersectio
 
       insert_rt_case(b, nir_stage, &inner_vars, nir_load_var(b, inner_vars.idx), 0,
                      data->groups[i].handle.intersection_index, shader_id, data->groups);
+      ralloc_free(nir_stage);
    }
 
    if (!(data->vars->create_info->flags &
@@ -1640,6 +1639,7 @@ create_rt_shader(struct radv_device *device, const VkRayTracingPipelineCreateInf
    b.shader->info.shared_size = MAX2(b.shader->info.shared_size, traversal->info.shared_size);
    assert(b.shader->info.shared_size <= 32768);
    insert_rt_case(&b, traversal, &vars, idx, 0, 1, -1u, groups);
+   ralloc_free(traversal);
 
    unsigned call_idx_base = 1;
    for (unsigned i = 0; i < pCreateInfo->groupCount; ++i) {
@@ -1689,6 +1689,8 @@ create_rt_shader(struct radv_device *device, const VkRayTracingPipelineCreateInf
          insert_rt_case(&b, resume_shaders[j], &vars, idx, call_idx_base, call_idx_base + 1 + j,
                         stage_idx, groups);
       }
+
+      ralloc_free(nir_stage);
       call_idx_base += num_resume_shaders;
    }
 

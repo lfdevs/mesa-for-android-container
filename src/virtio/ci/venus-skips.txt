@@ -12,3 +12,8 @@ dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_nearest_mipmap_linear_repea
 dEQP-VK.binding_model.buffer_device_address.*
 dEQP-VK.binding_model.shader_access.*
 dEQP-VK.spirv_assembly.instruction.*
+
+
+# unknown lvp issues since !22600
+dEQP-VK.subgroups.*.compute.*
+dEQP-VK.subgroups.builtin_var.graphics.subgroupsize

@@ -420,6 +420,9 @@ void r600_pipe_shader_destroy(struct pipe_context *ctx UNUSED, struct r600_pipe_
 	if (list_is_linked(&shader->shader.bc.cf))
 		r600_bytecode_clear(&shader->shader.bc);
 	r600_release_command_buffer(&shader->command_buffer);
+
+	if (shader->shader.arrays)
+		free(shader->shader.arrays);
 }
 
 /*

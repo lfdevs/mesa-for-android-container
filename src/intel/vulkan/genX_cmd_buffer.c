@@ -3277,6 +3277,39 @@ cmd_buffer_emit_streamout(struct anv_cmd_buffer *cmd_buffer)
       .RenderStreamSelect = dyn->rs.rasterization_stream,
    };
 
+#if INTEL_NEEDS_WA_14017076903
+   /* Wa_14017076903 :
+    *
+    * SKL PRMs, Volume 7: 3D-Media-GPGPU, Stream Output Logic (SOL) Stage:
+    *
+    * SOL_INT::Render_Enable =
+    *   (3DSTATE_STREAMOUT::Force_Rending == Force_On) ||
+    *   (
+    *     (3DSTATE_STREAMOUT::Force_Rending != Force_Off) &&
+    *     !(3DSTATE_GS::Enable && 3DSTATE_GS::Output Vertex Size == 0) &&
+    *     !3DSTATE_STREAMOUT::API_Render_Disable &&
+    *     (
+    *       3DSTATE_DEPTH_STENCIL_STATE::Stencil_TestEnable ||
+    *       3DSTATE_DEPTH_STENCIL_STATE::Depth_TestEnable ||
+    *       3DSTATE_DEPTH_STENCIL_STATE::Depth_WriteEnable ||
+    *       3DSTATE_PS_EXTRA::PS_Valid ||
+    *       3DSTATE_WM::Legacy Depth_Buffer_Clear ||
+    *       3DSTATE_WM::Legacy Depth_Buffer_Resolve_Enable ||
+    *       3DSTATE_WM::Legacy Hierarchical_Depth_Buffer_Resolve_Enable
+    *     )
+    *   )
+    *
+    * If SOL_INT::Render_Enable is false, the SO stage will not forward any
+    * topologies down the pipeline. Which is not what we want for occlusion
+    * queries.
+    *
+    * Here we force rendering to get SOL_INT::Render_Enable when occlusion
+    * queries are active.
+    */
+   if (!so.RenderingDisable && cmd_buffer->state.gfx.n_occlusion_queries > 0)
+      so.ForceRendering = Force_on;
+#endif
+
    switch (dyn->rs.provoking_vertex) {
    case VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT:
       so.ReorderMode = LEADING;
@@ -3739,6 +3772,9 @@ genX(BeginCommandBuffer)(
        */
       cmd_buffer->state.conditional_render_enabled =
          conditional_rendering_info && conditional_rendering_info->conditionalRenderingEnable;
+
+      if (pBeginInfo->pInheritanceInfo->occlusionQueryEnable)
+         cmd_buffer->state.gfx.n_occlusion_queries = 1;
    }
 
    return VK_SUCCESS;
@@ -6564,7 +6600,6 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
       cmd_buffer->state.compute.pipeline_dirty = true;
 #endif
 
-
 #if GFX_VERx10 < 125
    /* We apparently cannot flush the tile cache (color/depth) from the GPGPU
     * pipeline. That means query clears will not be visible to query
@@ -6578,6 +6613,9 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
                                 "query clear flush prior to GPGPU");
    }
 #endif
+
+   /* Flush and invalidate bits done needed prior PIPELINE_SELECT. */
+   enum anv_pipe_bits bits = 0;
 
 #if GFX_VER >= 12
    /* From Tigerlake PRM, Volume 2a, PIPELINE_SELECT:
@@ -6594,8 +6632,7 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
     * Note: Issuing PIPE_CONTROL_MEDIA_STATE_CLEAR causes GPU hangs, probably
     * because PIPE was not in MEDIA mode?!
     */
-   enum anv_pipe_bits bits = ANV_PIPE_CS_STALL_BIT |
-                             ANV_PIPE_HDC_PIPELINE_FLUSH_BIT;
+   bits |= ANV_PIPE_CS_STALL_BIT | ANV_PIPE_HDC_PIPELINE_FLUSH_BIT;
 
    if (cmd_buffer->state.current_pipeline == _3D) {
       bits |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
@@ -6603,7 +6640,6 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
    } else {
       bits |= ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT;
    }
-   anv_add_pending_pipe_bits(cmd_buffer, bits, "flush PIPELINE_SELECT");
 #else
    /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]
     * PIPELINE_SELECT [DevBWR+]":
@@ -6618,18 +6654,29 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
     * Note the cmd_buffer_apply_pipe_flushes will split this into two
     * PIPE_CONTROLs.
     */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
-                             ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
-                             ANV_PIPE_CS_STALL_BIT |
-                             ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT |
-                             ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT |
-                             ANV_PIPE_STATE_CACHE_INVALIDATE_BIT |
-                             ANV_PIPE_INSTRUCTION_CACHE_INVALIDATE_BIT |
-                             ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT,
-                             "flush and invalidate for PIPELINE_SELECT");
+   bits |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+           ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
+           ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
+           ANV_PIPE_CS_STALL_BIT |
+           ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT |
+           ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT |
+           ANV_PIPE_STATE_CACHE_INVALIDATE_BIT |
+           ANV_PIPE_INSTRUCTION_CACHE_INVALIDATE_BIT |
+           ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT;
 #endif
+
+   /* Wa_16013063087 -  State Cache Invalidate must be issued prior to
+    * PIPELINE_SELECT when switching from 3D to Compute.
+    *
+    * SW must do this by programming of PIPECONTROL with “CS Stall” followed by
+    * a PIPECONTROL with State Cache Invalidate bit set.
+    *
+    */
+   if (cmd_buffer->state.current_pipeline == _3D && pipeline == GPGPU &&
+       intel_needs_workaround(cmd_buffer->device->info, 16013063087))
+      bits |= ANV_PIPE_STATE_CACHE_INVALIDATE_BIT;
+
+   anv_add_pending_pipe_bits(cmd_buffer, bits, "flush/invalidate PIPELINE_SELECT");
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
 #if GFX_VER == 9

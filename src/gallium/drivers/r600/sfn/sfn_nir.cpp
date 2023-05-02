@@ -924,6 +924,9 @@ r600_shader_from_nir(struct r600_context *rctx,
    while (optimize_once(sh))
       ;
 
+   if ((sh->info.bit_sizes_float | sh->info.bit_sizes_int) & 64)
+      NIR_PASS_V(sh, r600::r600_split_64bit_alu_and_phi);
+
    bool late_algebraic_progress;
    do {
       late_algebraic_progress = false;

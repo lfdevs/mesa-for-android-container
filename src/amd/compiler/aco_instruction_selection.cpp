@@ -3275,7 +3275,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          mantissa = bld.vop2(aco_opcode::v_or_b32, bld.def(v1), Operand::c32(0x800000u), mantissa);
          Temp exponent_small = bld.vsub32(bld.def(v1), Operand::c32(24u), exponent);
          Temp small = bld.vop2(aco_opcode::v_lshrrev_b32, bld.def(v1), exponent_small, mantissa);
-         mantissa = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), Operand::zero(), mantissa);
+         mantissa = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), mantissa, Operand::zero());
          Temp new_exponent = bld.tmp(v1);
          Temp cond_small =
             bld.vsub32(Definition(new_exponent), exponent, Operand::c32(24u), true).def(1).getTemp();
@@ -3311,7 +3311,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
                                         Operand::c32(24u), exponent);
          Temp small = bld.sop2(aco_opcode::s_lshr_b32, bld.def(s1), bld.def(s1, scc), mantissa,
                                exponent_small);
-         mantissa = bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), Operand::zero(), mantissa);
+         mantissa = bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), mantissa, Operand::zero());
          Temp exponent_large = bld.sop2(aco_opcode::s_sub_u32, bld.def(s1), bld.def(s1, scc),
                                         exponent, Operand::c32(24u));
          mantissa = bld.sop2(aco_opcode::s_lshl_b64, bld.def(s2), bld.def(s1, scc), mantissa,
@@ -3319,7 +3319,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          Temp cond =
             bld.sopc(aco_opcode::s_cmp_ge_i32, bld.def(s1, scc), Operand::c32(64u), exponent);
          mantissa = bld.sop2(aco_opcode::s_cselect_b64, bld.def(s2), mantissa,
-                             Operand::c32(0xffffffffu), cond);
+                             Operand::c64(~0llu), cond);
          Temp lower = bld.tmp(s1), upper = bld.tmp(s1);
          bld.pseudo(aco_opcode::p_split_vector, Definition(lower), Definition(upper), mantissa);
          Temp cond_small =
@@ -5812,7 +5812,7 @@ visit_load_push_constant(isel_context* ctx, nir_intrinsic_instr* instr)
    default: unreachable("unimplemented or forbidden load_push_constant.");
    }
 
-   bld.smem(op, Definition(vec), ptr, index)->smem().prevent_overflow = true;
+   bld.smem(op, Definition(vec), ptr, index);
 
    if (!aligned) {
       Operand byte_offset = index_cv ? Operand::c32((offset + index_cv->u32) % 4) : Operand(index);

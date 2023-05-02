@@ -1022,6 +1022,7 @@ void genX(CmdBeginQueryIndexedEXT)(
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
+      cmd_buffer->state.gfx.n_occlusion_queries++;
       emit_ps_depth_count(cmd_buffer, anv_address_add(query_addr, 8));
       break;
 
@@ -1213,6 +1214,7 @@ void genX(CmdEndQueryIndexedEXT)(
    case VK_QUERY_TYPE_OCCLUSION:
       emit_ps_depth_count(cmd_buffer, anv_address_add(query_addr, 16));
       emit_query_pc_availability(cmd_buffer, query_addr, true);
+      cmd_buffer->state.gfx.n_occlusion_queries--;
       break;
 
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:

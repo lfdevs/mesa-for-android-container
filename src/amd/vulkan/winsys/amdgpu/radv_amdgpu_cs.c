@@ -875,12 +875,24 @@ radv_amdgpu_winsys_cs_submit_internal(
    struct radv_amdgpu_cs *last_cs = radv_amdgpu_cs(cs_array[cs_count - 1]);
    struct radv_amdgpu_winsys *ws = last_cs->ws;
 
-   /* Get the BO list. Assume continue preambles and postambles don't need more. */
    struct drm_amdgpu_bo_list_entry *handles = NULL;
    unsigned num_handles = 0;
+
+   unsigned num_extra_cs = initial_preamble_count + continue_preamble_count + postamble_count;
+   unsigned extra_cs_idx = 0;
+
+   STACK_ARRAY(struct radeon_cmdbuf *, extra_cs, num_extra_cs);
+
+   for (unsigned i = 0; i < initial_preamble_count; i++)
+      extra_cs[extra_cs_idx++] = initial_preamble_cs[i];
+   for (unsigned i = 0; i < continue_preamble_count; i++)
+      extra_cs[extra_cs_idx++] = continue_preamble_cs[i];
+   for (unsigned i = 0; i < postamble_count; i++)
+      extra_cs[extra_cs_idx++] = postamble_cs[i];
+
    u_rwlock_rdlock(&ws->global_bo_list.lock);
-   result = radv_amdgpu_get_bo_list(ws, &cs_array[0], cs_count, NULL, 0, initial_preamble_cs,
-                                    initial_preamble_count, &num_handles, &handles);
+   result = radv_amdgpu_get_bo_list(ws, &cs_array[0], cs_count, NULL, 0, extra_cs, num_extra_cs,
+                                    &num_handles, &handles);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -993,6 +1005,7 @@ radv_amdgpu_winsys_cs_submit_internal(
    radv_assign_last_submit(ctx, &request);
 
 fail:
+   STACK_ARRAY_FINISH(extra_cs);
    u_rwlock_rdunlock(&ws->global_bo_list.lock);
    return result;
 }

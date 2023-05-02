@@ -1641,12 +1641,8 @@ qpu_inst_before_thrsw_valid_in_delay_slot(struct v3d_compile *c,
          * thread.  The simulator complains for safety, though it
          * would only occur for dead code in our case.
          */
-        if (slot > 0 &&
-            qinst->qpu.type == V3D_QPU_INSTR_TYPE_ALU &&
-            (v3d_qpu_magic_waddr_is_sfu(qinst->qpu.alu.add.waddr) ||
-             v3d_qpu_magic_waddr_is_sfu(qinst->qpu.alu.mul.waddr))) {
+        if (slot > 0 && v3d_qpu_instr_is_legacy_sfu(&qinst->qpu))
                 return false;
-        }
 
         if (slot > 0 && qinst->qpu.sig.ldvary)
                 return false;

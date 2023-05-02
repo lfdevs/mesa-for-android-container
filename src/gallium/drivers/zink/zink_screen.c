@@ -2398,6 +2398,7 @@ init_driver_workarounds(struct zink_screen *screen)
       screen->info.have_EXT_extended_dynamic_state3 = false;
    if (!screen->info.dynamic_state3_feats.extendedDynamicState3PolygonMode ||
        !screen->info.dynamic_state3_feats.extendedDynamicState3DepthClampEnable ||
+       !screen->info.dynamic_state3_feats.extendedDynamicState3DepthClipNegativeOneToOne ||
        !screen->info.dynamic_state3_feats.extendedDynamicState3DepthClipEnable ||
        !screen->info.dynamic_state3_feats.extendedDynamicState3ProvokingVertexMode ||
        !screen->info.dynamic_state3_feats.extendedDynamicState3LineRasterizationMode)

@@ -174,10 +174,17 @@ namespace {
           *    integer DWord multiply, indirect addressing must not be
           *    used."
           *
+          * For MTL (verx10 == 125), float64 is supported, but int64 is not.
+          * Therefore we need to lower cluster broadcast using 32-bit int ops.
+          *
+          * For gfx12.5+ platforms that support int64, the register regions
+          * used by cluster broadcast aren't supported by the 64-bit pipeline.
+          *
           * Work around the above and handle platforms that don't
           * support 64-bit types at all.
           */
-         if ((!has_64bit || devinfo->platform == INTEL_PLATFORM_CHV ||
+         if ((!has_64bit || devinfo->verx10 >= 125 ||
+              devinfo->platform == INTEL_PLATFORM_CHV ||
               intel_device_info_is_9lp(devinfo)) && type_sz(t) > 4)
             return BRW_REGISTER_TYPE_UD;
          else

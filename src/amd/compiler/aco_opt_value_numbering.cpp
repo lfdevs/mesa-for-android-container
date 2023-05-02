@@ -220,10 +220,8 @@ struct InstrPred {
       case Format::SMEM: {
          SMEM_instruction& aS = a->smem();
          SMEM_instruction& bS = b->smem();
-         /* isel shouldn't be creating situations where this assertion fails */
-         assert(aS.prevent_overflow == bS.prevent_overflow);
          return aS.sync == bS.sync && aS.glc == bS.glc && aS.dlc == bS.dlc && aS.nv == bS.nv &&
-                aS.disable_wqm == bS.disable_wqm && aS.prevent_overflow == bS.prevent_overflow;
+                aS.disable_wqm == bS.disable_wqm;
       }
       case Format::VINTRP: {
          VINTRP_instruction& aI = a->vintrp();

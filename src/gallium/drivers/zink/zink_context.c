@@ -271,12 +271,14 @@ zink_set_context_param(struct pipe_context *pctx, enum pipe_context_param param,
                        unsigned value)
 {
    struct zink_context *ctx = zink_context(pctx);
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
 
    switch (param) {
    case PIPE_CONTEXT_PARAM_PIN_THREADS_TO_L3_CACHE:
-      util_set_thread_affinity(zink_screen(ctx->base.screen)->flush_queue.threads[0],
-                               util_get_cpu_caps()->L3_affinity_mask[value],
-                               NULL, util_get_cpu_caps()->num_cpu_mask_bits);
+      if (screen->threaded_submit)
+         util_set_thread_affinity(screen->flush_queue.threads[0],
+                                 util_get_cpu_caps()->L3_affinity_mask[value],
+                                 NULL, util_get_cpu_caps()->num_cpu_mask_bits);
       break;
    default:
       break;

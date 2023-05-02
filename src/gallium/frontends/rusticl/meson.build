@@ -93,7 +93,6 @@ rusticl_gen_args = [
 rusticl_bindgen_args = [
   '--no-convert-floats',
   '--use-array-pointers-in-arguments',
-  '--size_t-is-usize',
   '--default-enum-style', 'rust',
   '--with-derive-partialeq',
   '--with-derive-eq',
@@ -103,6 +102,12 @@ rusticl_bindgen_args = [
   '--with-derive-default',
   '--anon-fields-prefix', 'anon_',
 ]
+
+if find_program('bindgen').version().version_compare('< 0.65')
+  rusticl_bindgen_args += [
+    '--size_t-is-usize',
+  ]
+endif
 
 rusticl_bindgen_c_args = [
   '-fno-builtin-malloc',

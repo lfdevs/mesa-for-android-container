@@ -1324,6 +1324,7 @@ enum radv_cmd_dirty_bits {
    RADV_CMD_DIRTY_GUARDBAND = 1ull << 53,
    RADV_CMD_DIRTY_RBPLUS = 1ull << 54,
    RADV_CMD_DIRTY_NGG_QUERY = 1ull << 55,
+   RADV_CMD_DIRTY_OCCLUSION_QUERY = 1ull << 56,
 };
 
 enum radv_cmd_flush_bits {
@@ -1626,6 +1627,8 @@ struct radv_cmd_state {
    uint32_t last_sx_blend_opt_epsilon;
    uint32_t last_sx_blend_opt_control;
 
+   uint32_t last_db_count_control;
+
    /* Whether CP DMA is busy/idle. */
    bool dma_is_busy;
 
@@ -1639,6 +1642,8 @@ struct radv_cmd_state {
 
    /* Inheritance info. */
    VkQueryPipelineStatisticFlags inherited_pipeline_statistics;
+   bool inherited_occlusion_queries;
+   VkQueryControlFlags inherited_query_control_flags;
 
    bool context_roll_without_scissor_emitted;
 
@@ -1901,7 +1906,6 @@ void si_cp_dma_clear_buffer(struct radv_cmd_buffer *cmd_buffer, uint64_t va, uin
                             unsigned value);
 void si_cp_dma_wait_for_idle(struct radv_cmd_buffer *cmd_buffer);
 
-void radv_set_db_count_control(struct radv_cmd_buffer *cmd_buffer, bool enable_occlusion_queries);
 uint32_t radv_get_pa_su_sc_mode_cntl(const struct radv_cmd_buffer *cmd_buffer);
 uint32_t radv_get_vgt_index_size(uint32_t type);
 

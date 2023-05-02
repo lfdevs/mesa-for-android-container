@@ -660,6 +660,16 @@ emit_pipeline_select(struct iris_batch *batch, uint32_t pipeline)
    } else {
       flags |= PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH;
    }
+   /* Wa_16013063087 -  State Cache Invalidate must be issued prior to
+    * PIPELINE_SELECT when switching from 3D to Compute.
+    *
+    * SW must do this by programming of PIPECONTROL with “CS Stall” followed
+    * by a PIPECONTROL with State Cache Invalidate bit set.
+    */
+   if (pipeline == GPGPU &&
+       intel_needs_workaround(batch->screen->devinfo, 16013063087))
+      flags |= PIPE_CONTROL_STATE_CACHE_INVALIDATE;
+
    iris_emit_pipe_control_flush(batch, "PIPELINE_SELECT flush", flags);
 #else
    /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]

@@ -2486,7 +2486,8 @@ emit_load_deref(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       result = spirv_builder_emit_load(&ctx->builder, type, ptr);
    unsigned num_components = nir_dest_num_components(intr->dest);
    unsigned bit_size = nir_dest_bit_size(intr->dest);
-   result = bitcast_to_uvec(ctx, result, bit_size, num_components);
+   if (bit_size > 1)
+      result = bitcast_to_uvec(ctx, result, bit_size, num_components);
    store_dest(ctx, &intr->dest, result, nir_type_uint);
 }
 
@@ -2535,6 +2536,8 @@ emit_store_deref(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       src = emit_bitcast(ctx, type, src);
       /* SampleMask is always an array in spirv, so we need to construct it into one */
       result = spirv_builder_emit_composite_construct(&ctx->builder, ctx->sample_mask_type, &src, 1);
+   } else if (glsl_get_base_type(glsl_without_array(gtype)) == GLSL_TYPE_BOOL) {
+      result = src;
    } else
       result = emit_bitcast(ctx, type, src);
    if (nir_intrinsic_access(intr) & ACCESS_COHERENT)
@@ -3240,6 +3243,7 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
       break;
 
    case nir_intrinsic_demote:
+      spirv_builder_emit_cap(&ctx->builder, SpvCapabilityDemoteToHelperInvocation);
       spirv_builder_emit_demote(&ctx->builder);
       break;
 

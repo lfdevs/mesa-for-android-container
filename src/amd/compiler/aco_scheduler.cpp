@@ -459,6 +459,7 @@ struct hazard_query {
    bool contains_spill;
    bool contains_sendmsg;
    bool uses_exec;
+   bool writes_exec;
    memory_event_set mem_events;
    unsigned aliasing_storage;      /* storage classes which are accessed (non-SMEM) */
    unsigned aliasing_storage_smem; /* storage classes which are accessed (SMEM) */
@@ -471,6 +472,7 @@ init_hazard_query(const sched_ctx& ctx, hazard_query* query)
    query->contains_spill = false;
    query->contains_sendmsg = false;
    query->uses_exec = false;
+   query->writes_exec = false;
    memset(&query->mem_events, 0, sizeof(query->mem_events));
    query->aliasing_storage = 0;
    query->aliasing_storage_smem = 0;
@@ -515,6 +517,10 @@ add_to_hazard_query(hazard_query* query, Instruction* instr)
       query->contains_spill = true;
    query->contains_sendmsg |= instr->opcode == aco_opcode::s_sendmsg;
    query->uses_exec |= needs_exec_mask(instr);
+   for (const Definition& def : instr->definitions) {
+      if (def.isFixed() && def.physReg() == exec)
+         query->writes_exec = true;
+   }
 
    memory_sync_info sync = get_sync_info_with_hack(instr);
 
@@ -560,6 +566,8 @@ perform_hazard_query(hazard_query* query, Instruction* instr, bool upwards)
             return hazard_fail_exec;
       }
    }
+   if (query->writes_exec && needs_exec_mask(instr))
+      return hazard_fail_exec;
 
    /* don't move exports so that they stay closer together */
    if (instr->isEXP())

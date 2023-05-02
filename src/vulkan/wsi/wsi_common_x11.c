@@ -1008,6 +1008,7 @@ struct x11_image {
    int                                       shmid;
    uint8_t *                                 shmaddr;
    uint64_t                                  present_id;
+   uint64_t                                  signal_present_id;
 };
 
 struct x11_swapchain {
@@ -1079,8 +1080,8 @@ static void x11_present_complete(struct x11_swapchain *swapchain,
 {
    if (image->present_id) {
       pthread_mutex_lock(&swapchain->present_progress_mutex);
-      if (image->present_id > swapchain->present_id) {
-         swapchain->present_id = image->present_id;
+      if (image->signal_present_id > swapchain->present_id) {
+         swapchain->present_id = image->signal_present_id;
          pthread_cond_broadcast(&swapchain->present_progress_cond);
       }
       pthread_mutex_unlock(&swapchain->present_progress_mutex);
@@ -1104,6 +1105,11 @@ static void x11_notify_pending_present(struct x11_swapchain *swapchain,
       pthread_cond_broadcast(&swapchain->present_progress_cond);
       pthread_mutex_unlock(&swapchain->present_progress_mutex);
    }
+
+   /* It is possible that an IDLE is observed before PRESENT_COMPLETE when
+    * not flipping. In this case, reading image->present_id might be a race
+    * in the FIFO management thread. */
+   image->signal_present_id = image->present_id;
 }
 
 static void x11_swapchain_notify_error(struct x11_swapchain *swapchain, VkResult result)

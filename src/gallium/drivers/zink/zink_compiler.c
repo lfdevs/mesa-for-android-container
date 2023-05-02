@@ -50,6 +50,26 @@
 bool
 zink_lower_cubemap_to_array(nir_shader *s, uint32_t nonseamless_cube_mask);
 
+
+static void
+copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
+{
+   assert(glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type));
+   if (glsl_type_is_struct(dst->type)) {
+      for (unsigned i = 0; i < glsl_get_length(dst->type); ++i) {
+         copy_vars(b, nir_build_deref_struct(b, dst, i), nir_build_deref_struct(b, src, i));
+      }
+   } else if (glsl_type_is_array_or_matrix(dst->type)) {
+      unsigned count = glsl_type_is_array(dst->type) ? glsl_array_size(dst->type) : glsl_get_matrix_columns(dst->type);
+      for (unsigned i = 0; i < count; i++) {
+         copy_vars(b, nir_build_deref_array_imm(b, dst, i), nir_build_deref_array_imm(b, src, i));
+      }
+   } else {
+      nir_ssa_def *load = nir_load_deref(b, src);
+      nir_store_deref(b, dst, load, BITFIELD_MASK(load->num_components));
+   }
+}
+
 #define SIZEOF_FIELD(type, field) sizeof(((type *)0)->field)
 
 static void
@@ -390,9 +410,46 @@ struct lower_pv_mode_state {
    nir_variable *varyings[VARYING_SLOT_MAX];
    nir_variable *pos_counter;
    nir_variable *out_pos_counter;
+   nir_variable *ring_offset;
+   unsigned ring_size;
    unsigned primitive_vert_count;
    unsigned prim;
 };
+
+static nir_ssa_def*
+lower_pv_mode_gs_ring_index(nir_builder *b,
+                            struct lower_pv_mode_state *state,
+                            nir_ssa_def *index)
+{
+   nir_ssa_def *ring_offset = nir_load_var(b, state->ring_offset);
+   return nir_imod(b, nir_iadd(b, index, ring_offset),
+                      nir_imm_int(b, state->ring_size));
+}
+
+/* Given the final deref of chain of derefs this function will walk up the chain
+ * until it finds a var deref.
+ *
+ * It will then recreate an identical chain that ends with the provided deref.
+ */
+static nir_deref_instr*
+replicate_derefs(nir_builder *b, nir_deref_instr *old, nir_deref_instr *new)
+{
+   nir_deref_instr *parent = nir_src_as_deref(old->parent);
+   switch(old->deref_type) {
+   case nir_deref_type_var:
+      return new;
+   case nir_deref_type_array:
+      assert(old->arr.index.is_ssa);
+      return nir_build_deref_array(b, replicate_derefs(b, parent, new), old->arr.index.ssa);
+   case nir_deref_type_struct:
+      return nir_build_deref_struct(b, replicate_derefs(b, parent, new), old->strct.index);
+   case nir_deref_type_array_wildcard:
+   case nir_deref_type_ptr_as_array:
+   case nir_deref_type_cast:
+      unreachable("unexpected deref type");
+   }
+   unreachable("impossible deref type");
+}
 
 static bool
 lower_pv_mode_gs_store(nir_builder *b,
@@ -408,9 +465,12 @@ lower_pv_mode_gs_store(nir_builder *b,
       assert(state->varyings[location]);
       assert(intrin->src[1].is_ssa);
       nir_ssa_def *pos_counter = nir_load_var(b, state->pos_counter);
-      nir_store_array_var(b, state->varyings[location],
-                             pos_counter, intrin->src[1].ssa,
-                             nir_intrinsic_write_mask(intrin));
+      nir_ssa_def *index = lower_pv_mode_gs_ring_index(b, state, pos_counter);
+      nir_deref_instr *varying_deref = nir_build_deref_var(b, state->varyings[location]);
+      nir_deref_instr *ring_deref = nir_build_deref_array(b, varying_deref, index);
+      // recreate the chain of deref that lead to the store.
+      nir_deref_instr *new_top_deref = replicate_derefs(b, deref, ring_deref);
+      nir_store_deref(b, new_top_deref, intrin->src[1].ssa, nir_intrinsic_write_mask(intrin));
       nir_instr_remove(&intrin->instr);
       return true;
    }
@@ -433,7 +493,7 @@ lower_pv_mode_emit_rotated_prim(nir_builder *b,
     * [lines, tris][even/odd index][vertex mod 3]
     */
    static const unsigned vert_maps[2][2][3] = {
-      {{1, 0, 0}, {0, 1, 0}},
+      {{1, 0, 0}, {1, 0, 0}},
       {{2, 0, 1}, {2, 1, 0}}
    };
    /* When the primive supplied to the gs comes from a strip, the last provoking vertex
@@ -470,11 +530,13 @@ lower_pv_mode_emit_rotated_prim(nir_builder *b,
       else if (state->prim == ZINK_PVE_PRIMITIVE_FAN)
         rotated_i = nir_imod(b, nir_iadd_imm(b, rotated_i, 2),
                                 three);
+      rotated_i = nir_iadd(b, rotated_i, current_vertex);
       nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_out) {
          gl_varying_slot location = var->data.location;
          if (state->varyings[location]) {
-            nir_ssa_def *value = nir_load_array_var(b, state->varyings[location], rotated_i);
-            nir_store_var(b, var, value, (1u << value->num_components) - 1);
+            nir_ssa_def *index = lower_pv_mode_gs_ring_index(b, state, rotated_i);
+            nir_deref_instr *value = nir_build_deref_array(b, nir_build_deref_var(b, state->varyings[location]), index);
+            copy_vars(b, nir_build_deref_var(b, var), value);
          }
       }
       nir_emit_vertex(b);
@@ -508,7 +570,7 @@ lower_pv_mode_gs_end_primitive(nir_builder *b,
    {
       nir_ssa_def *out_pos_counter = nir_load_var(b, state->out_pos_counter);
       nir_push_if(b, nir_ilt(b, nir_isub(b, pos_counter, out_pos_counter),
-                                nir_imm_int(b, state->primitive_vert_count - 1)));
+                                nir_imm_int(b, state->primitive_vert_count)));
       nir_jump(b, nir_jump_break);
       nir_pop_if(b, NULL);
 
@@ -518,6 +580,10 @@ lower_pv_mode_gs_end_primitive(nir_builder *b,
       nir_store_var(b, state->out_pos_counter, nir_iadd_imm(b, out_pos_counter, 1), 1);
    }
    nir_pop_loop(b, NULL);
+   /* Set the ring offset such that when position 0 is
+    * read we get the last value written
+    */
+   nir_store_var(b, state->ring_offset, pos_counter, 1);
    nir_store_var(b, state->pos_counter, nir_imm_int(b, 0), 1);
    nir_store_var(b, state->out_pos_counter, nir_imm_int(b, 0), 1);
 
@@ -578,6 +644,7 @@ lower_pv_mode_gs(nir_shader *shader, unsigned prim)
 
    state.primitive_vert_count =
       lower_pv_mode_vertices_for_prim(shader->info.gs.output_primitive);
+   state.ring_size = shader->info.gs.vertices_out;
 
    nir_foreach_variable_with_modes(var, shader, nir_var_shader_out) {
       gl_varying_slot location = var->data.location;
@@ -587,7 +654,7 @@ lower_pv_mode_gs(nir_shader *shader, unsigned prim)
       state.varyings[location] =
          nir_local_variable_create(entry,
                                    glsl_array_type(var->type,
-                                                   shader->info.gs.vertices_out,
+                                                   state.ring_size,
                                                    false),
                                    name);
    }
@@ -600,11 +667,16 @@ lower_pv_mode_gs(nir_shader *shader, unsigned prim)
                                                      glsl_uint_type(),
                                                      "__out_pos_counter");
 
+   state.ring_offset = nir_local_variable_create(entry,
+                                                 glsl_uint_type(),
+                                                 "__ring_offset");
+
    state.prim = prim;
 
    // initialize pos_counter and out_pos_counter
    nir_store_var(&b, state.pos_counter, nir_imm_int(&b, 0), 1);
    nir_store_var(&b, state.out_pos_counter, nir_imm_int(&b, 0), 1);
+   nir_store_var(&b, state.ring_offset, nir_imm_int(&b, 0), 1);
 
    shader->info.gs.vertices_out = (shader->info.gs.vertices_out -
                                    (state.primitive_vert_count - 1)) *
@@ -805,8 +877,8 @@ struct lower_line_smooth_state {
    nir_variable *line_coord_out;
    nir_variable *prev_pos;
    nir_variable *pos_counter;
-   nir_variable *prev_varyings[VARYING_SLOT_MAX],
-                *varyings[VARYING_SLOT_MAX];
+   nir_variable *prev_varyings[VARYING_SLOT_MAX][4],
+                *varyings[VARYING_SLOT_MAX][4]; // location_frac
 };
 
 static bool
@@ -821,10 +893,11 @@ lower_line_smooth_gs_store(nir_builder *b,
 
       // we take care of position elsewhere
       gl_varying_slot location = var->data.location;
+      unsigned location_frac = var->data.location_frac;
       if (location != VARYING_SLOT_POS) {
          assert(state->varyings[location]);
          assert(intrin->src[1].is_ssa);
-         nir_store_var(b, state->varyings[location],
+         nir_store_var(b, state->varyings[location][location_frac],
                        intrin->src[1].ssa,
                        nir_intrinsic_write_mask(intrin));
          nir_instr_remove(&intrin->instr);
@@ -902,8 +975,9 @@ lower_line_smooth_gs_emit_vertex(nir_builder *b,
    for (int i = 0; i < 4; ++i) {
       nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_out) {
          gl_varying_slot location = var->data.location;
-         if (state->prev_varyings[location])
-            nir_copy_var(b, var, state->prev_varyings[location]);
+         unsigned location_frac = var->data.location_frac;
+         if (state->prev_varyings[location][location_frac])
+            nir_copy_var(b, var, state->prev_varyings[location][location_frac]);
       }
       nir_store_var(b, state->pos_out,
                     nir_fadd(b, prev, nir_fmul(b, line_offets[i],
@@ -916,8 +990,9 @@ lower_line_smooth_gs_emit_vertex(nir_builder *b,
    for (int i = 4; i < 8; ++i) {
       nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_out) {
          gl_varying_slot location = var->data.location;
-         if (state->varyings[location])
-            nir_copy_var(b, var, state->varyings[location]);
+         unsigned location_frac = var->data.location_frac;
+         if (state->varyings[location][location_frac])
+            nir_copy_var(b, var, state->varyings[location][location_frac]);
       }
       nir_store_var(b, state->pos_out,
                     nir_fadd(b, curr, nir_fmul(b, line_offets[i],
@@ -932,8 +1007,9 @@ lower_line_smooth_gs_emit_vertex(nir_builder *b,
    nir_copy_var(b, state->prev_pos, state->pos_out);
    nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_out) {
       gl_varying_slot location = var->data.location;
-      if (state->varyings[location])
-         nir_copy_var(b, state->prev_varyings[location], state->varyings[location]);
+      unsigned location_frac = var->data.location_frac;
+      if (state->varyings[location][location_frac])
+         nir_copy_var(b, state->prev_varyings[location][location_frac], state->varyings[location][location_frac]);
    }
 
    // update prev_pos and pos_counter for next vertex
@@ -995,17 +1071,18 @@ lower_line_smooth_gs(nir_shader *shader)
    memset(state.prev_varyings, 0, sizeof(state.prev_varyings));
    nir_foreach_variable_with_modes(var, shader, nir_var_shader_out) {
       gl_varying_slot location = var->data.location;
+      unsigned location_frac = var->data.location_frac;
       if (location == VARYING_SLOT_POS)
          continue;
 
       char name[100];
-      snprintf(name, sizeof(name), "__tmp_%d", location);
-      state.varyings[location] =
+      snprintf(name, sizeof(name), "__tmp_%d_%d", location, location_frac);
+      state.varyings[location][location_frac] =
          nir_variable_create(shader, nir_var_shader_temp,
                               var->type, name);
 
-      snprintf(name, sizeof(name), "__tmp_prev_%d", location);
-      state.prev_varyings[location] =
+      snprintf(name, sizeof(name), "__tmp_prev_%d_%d", location, location_frac);
+      state.prev_varyings[location][location_frac] =
          nir_variable_create(shader, nir_var_shader_temp,
                               var->type, name);
    }
@@ -1128,25 +1205,6 @@ lower_64bit_pack(nir_shader *shader)
 {
    return nir_shader_instructions_pass(shader, lower_64bit_pack_instr,
                                        nir_metadata_block_index | nir_metadata_dominance, NULL);
-}
-
-static void
-copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
-{
-   assert(glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type));
-   if (glsl_type_is_struct(dst->type)) {
-      for (unsigned i = 0; i < glsl_get_length(dst->type); ++i) {
-         copy_vars(b, nir_build_deref_struct(b, dst, i), nir_build_deref_struct(b, src, i));
-      }
-   } else if (glsl_type_is_array_or_matrix(dst->type)) {
-      unsigned count = glsl_type_is_array(dst->type) ? glsl_array_size(dst->type) : glsl_get_matrix_columns(dst->type);
-      for (unsigned i = 0; i < count; i++) {
-         copy_vars(b, nir_build_deref_array_imm(b, dst, i), nir_build_deref_array_imm(b, src, i));
-      }
-   } else {
-      nir_ssa_def *load = nir_load_deref(b, src);
-      nir_store_deref(b, dst, load, BITFIELD_MASK(load->num_components));
-   }
 }
 
 nir_shader *

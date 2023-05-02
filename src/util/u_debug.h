@@ -262,11 +262,9 @@ debug_get_version_option(const char *name, unsigned *major, unsigned *minor);
  */
 #define util_debug_message(cb, type, fmt, ...) do { \
    static unsigned id = 0; \
-   if ((cb) && (cb)->debug_message) { \
-      _util_debug_message(cb, &id, \
-                          UTIL_DEBUG_TYPE_ ## type, \
-                          fmt, ##__VA_ARGS__); \
-   } \
+   _util_debug_message(cb, &id, \
+                        UTIL_DEBUG_TYPE_ ## type, \
+                        fmt, ##__VA_ARGS__); \
 } while (0)
 
 void

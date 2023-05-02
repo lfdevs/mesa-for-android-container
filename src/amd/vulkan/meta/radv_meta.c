@@ -50,8 +50,10 @@ radv_suspend_queries(struct radv_meta_saved_state *state, struct radv_cmd_buffer
    }
 
    /* Occlusion queries. */
-   if (cmd_buffer->state.active_occlusion_queries > 0) {
-      radv_set_db_count_control(cmd_buffer, false);
+   if (cmd_buffer->state.active_occlusion_queries) {
+      state->active_occlusion_queries = cmd_buffer->state.active_occlusion_queries;
+      cmd_buffer->state.active_occlusion_queries = 0;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_OCCLUSION_QUERY;
    }
 
    /* Primitives generated queries (legacy). */
@@ -88,8 +90,9 @@ radv_resume_queries(const struct radv_meta_saved_state *state, struct radv_cmd_b
    }
 
    /* Occlusion queries. */
-   if (cmd_buffer->state.active_occlusion_queries > 0) {
-      radv_set_db_count_control(cmd_buffer, true);
+   if (state->active_occlusion_queries) {
+      cmd_buffer->state.active_occlusion_queries = state->active_occlusion_queries;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_OCCLUSION_QUERY;
    }
 
    /* Primitives generated queries (legacy). */

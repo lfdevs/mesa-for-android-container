@@ -528,6 +528,26 @@ static LLVMValueRef exit_waterfall(struct ac_nir_context *ctx, struct waterfall_
    return ret;
 }
 
+static LLVMValueRef
+ac_build_const_int_vec(struct ac_llvm_context *ctx, LLVMTypeRef type, long long val, bool sign_extend)
+{
+   unsigned num_components = LLVMGetTypeKind(type) == LLVMVectorTypeKind ? LLVMGetVectorSize(type) : 1;
+
+   if (num_components == 1)
+      return LLVMConstInt(type, val, sign_extend);
+
+   assert(num_components == 2);
+   assert(ac_get_elem_bits(ctx, type) == 16);
+
+   LLVMTypeRef elem_type = LLVMGetElementType(type);
+
+   LLVMValueRef elems[2];
+   for (unsigned i = 0; i < 2; ++i)
+      elems[i] = LLVMConstInt(elem_type, val, sign_extend);
+
+   return LLVMConstVector(elems, 2);
+}
+
 static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
 {
    LLVMValueRef src[16], result = NULL;
@@ -710,9 +730,9 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
       else if (ac_get_elem_bits(&ctx->ac, LLVMTypeOf(src[1])) >
                ac_get_elem_bits(&ctx->ac, LLVMTypeOf(src[0])))
          src[1] = LLVMBuildTrunc(ctx->ac.builder, src[1], LLVMTypeOf(src[0]), "");
-      LLVMTypeRef type = LLVMTypeOf(src[0]);
+      LLVMTypeRef type = LLVMTypeOf(src[1]);
       src[1] = LLVMBuildAnd(ctx->ac.builder, src[1],
-                            LLVMConstInt(type, LLVMGetIntTypeWidth(type) - 1, false), "");
+                            ac_build_const_int_vec(&ctx->ac, type, ac_get_elem_bits(&ctx->ac, type) - 1, false), "");
       switch (instr->op) {
       case nir_op_ishl:
          result = LLVMBuildShl(ctx->ac.builder, src[0], src[1], "");

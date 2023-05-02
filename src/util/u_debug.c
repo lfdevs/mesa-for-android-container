@@ -67,10 +67,11 @@ _util_debug_message(struct util_debug_callback *cb,
                     enum util_debug_type type,
                     const char *fmt, ...)
 {
+   if (!cb || !cb->debug_message)
+      return;
    va_list args;
    va_start(args, fmt);
-   if (cb && cb->debug_message)
-      cb->debug_message(cb->data, id, type, fmt, args);
+   cb->debug_message(cb->data, id, type, fmt, args);
    va_end(args);
 }
 

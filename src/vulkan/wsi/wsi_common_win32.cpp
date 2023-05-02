@@ -755,7 +755,7 @@ wsi_win32_surface_create_swapchain_dxgi(
       DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
       DXGI_ALPHA_MODE_UNSPECIFIED,
       chain->base.present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR ?
-         DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0
+         DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u
    };
 
    if (create_info->imageUsage &
