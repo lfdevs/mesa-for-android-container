@@ -421,7 +421,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
     * of the following logic more complicated.
     */
    if (hq->is64bit)
-      nouveau_fence_emit(hq->fence);
+      nouveau_fence_next_if_current(&nvc0->base, hq->fence);
 
    /* We either need to compute a 32- or 64-bit difference between 2 values,
     * and then store the result as either a 32- or 64-bit value. As such let's
@@ -643,7 +643,7 @@ nvc0_hw_query_fifo_wait(struct nvc0_context *nvc0, struct nvc0_query *q)
 
    /* ensure the query's fence has been emitted */
    if (hq->is64bit)
-      nouveau_fence_emit(hq->fence);
+      nouveau_fence_next_if_current(&nvc0->base, hq->fence);
 
    PUSH_SPACE(push, 5);
    PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);

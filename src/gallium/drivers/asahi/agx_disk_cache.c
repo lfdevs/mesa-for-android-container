@@ -134,7 +134,7 @@ void
 agx_disk_cache_init(struct agx_screen *screen)
 {
 #ifdef ENABLE_SHADER_CACHE
-   if (agx_compiler_debug || screen->dev.debug)
+   if (agx_get_compiler_debug() || screen->dev.debug)
       return;
 
    const char *renderer = screen->pscreen.get_name(&screen->pscreen);

@@ -152,10 +152,7 @@ i915_destroy(struct pipe_context *pipe)
       i915->iws->batchbuffer_destroy(i915->batch);
 
    /* unbind framebuffer */
-   for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
-      pipe_surface_reference(&i915->framebuffer.cbufs[i], NULL);
-   }
-   pipe_surface_reference(&i915->framebuffer.zsbuf, NULL);
+   util_unreference_framebuffer_state(&i915->framebuffer);
 
    /* unbind constant buffers */
    for (i = 0; i < PIPE_SHADER_TYPES; i++) {

@@ -204,13 +204,6 @@ spec@arb_gpu_shader_fp64@uniform_buffers@fs-ubo-load.indirect.3,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 
-# failing since at least e82369d0 (2023-02-03)
-spec@arb_query_buffer_object@qbo,Fail
-spec@arb_query_buffer_object@qbo@query-GL_CLIPPING_INPUT_PRIMITIVES-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
-spec@arb_query_buffer_object@qbo@query-GL_PRIMITIVES_SUBMITTED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
-spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
-spec@arb_query_buffer_object@qbo@query-GL_SAMPLES_PASSED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB,Fail
-
 spec@arb_sample_locations@test,Fail
 spec@arb_sample_locations@test@MSAA: 1- X: 0- Y: 0- Grid: false,Fail
 spec@arb_sample_locations@test@MSAA: 1- X: 0- Y: 0- Grid: true,Fail

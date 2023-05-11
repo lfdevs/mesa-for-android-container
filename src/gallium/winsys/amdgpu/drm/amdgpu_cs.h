@@ -131,8 +131,12 @@ struct amdgpu_cs {
    struct amdgpu_ib main; /* must be first because this is inherited */
    struct amdgpu_winsys *ws;
    struct amdgpu_ctx *ctx;
-   enum amd_ip_type ip_type;
+
+   /*
+    * Ensure a 64-bit alignment for drm_amdgpu_cs_chunk_fence.
+    */
    struct drm_amdgpu_cs_chunk_fence fence_chunk;
+   enum amd_ip_type ip_type;
 
    /* We flip between these two CS. While one is being consumed
     * by the kernel in another thread, the other one is being filled

@@ -1778,6 +1778,7 @@ resolve_color(struct rendering_state *state, bool multi)
       info.src.box.depth = state->framebuffer.layers;
 
       info.dst.box = info.src.box;
+      info.dst.box.z = dst_imgv->vk.base_array_layer;
 
       info.src.level = src_imgv->vk.base_mip_level;
       info.dst.level = dst_imgv->vk.base_mip_level;

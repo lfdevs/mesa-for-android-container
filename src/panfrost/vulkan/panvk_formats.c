@@ -462,7 +462,7 @@ fail:
 void
 panvk_GetPhysicalDeviceSparseImageFormatProperties(
    VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type,
-   uint32_t samples, VkImageUsageFlags usage, VkImageTiling tiling,
+   VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling,
    uint32_t *pNumProperties, VkSparseImageFormatProperties *pProperties)
 {
    /* Sparse images are not yet supported. */

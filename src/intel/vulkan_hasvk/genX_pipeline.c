@@ -1695,8 +1695,10 @@ emit_3dstate_ps(struct anv_graphics_pipeline *pipeline,
       ps.BindingTableEntryCount     = fs_bin->bind_map.surface_count;
       ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0 ||
                                       wm_prog_data->base.ubo_ranges[0].length;
-      ps.PositionXYOffsetSelect     = wm_prog_data->uses_pos_offset ?
-                                      POSOFFSET_SAMPLE: POSOFFSET_NONE;
+      ps.PositionXYOffsetSelect     =
+         brw_wm_prog_data_uses_position_xy_offset(wm_prog_data,
+                                                  0 /* msaa_flags */) ?
+         POSOFFSET_SAMPLE : POSOFFSET_NONE;
 #if GFX_VER < 8
       ps.AttributeEnable            = wm_prog_data->num_varying_inputs > 0;
       ps.oMaskPresenttoRenderTarget = wm_prog_data->uses_omask;

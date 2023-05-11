@@ -1006,8 +1006,7 @@ radv_pipeline_init_dynamic_state(struct radv_graphics_pipeline *pipeline,
    }
 
    if (states & RADV_DYNAMIC_DEPTH_CLIP_ENABLE) {
-      dynamic->vk.rs.depth_clip_enable =
-         state->rs->depth_clip_enable == VK_MESA_DEPTH_CLIP_ENABLE_TRUE;
+      dynamic->vk.rs.depth_clip_enable = state->rs->depth_clip_enable;
    }
 
    if (states & RADV_DYNAMIC_CONSERVATIVE_RAST_MODE) {

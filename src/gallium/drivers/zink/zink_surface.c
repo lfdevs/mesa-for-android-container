@@ -141,6 +141,29 @@ init_pipe_surface_info(struct pipe_context *pctx, struct pipe_surface *psurf, co
    psurf->u.tex.last_layer = templ->u.tex.last_layer;
 }
 
+static void
+apply_view_usage_for_format(struct zink_screen *screen, struct zink_resource *res, struct zink_surface *surface, enum pipe_format format, VkImageViewCreateInfo *ivci)
+{
+   VkFormatFeatureFlags feats = res->linear ?
+                                screen->format_props[format].linearTilingFeatures :
+                                screen->format_props[format].optimalTilingFeatures;
+   VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+   surface->usage_info.usage = res->obj->vkusage & ~attachment;
+   if (res->obj->modifier_aspect) {
+      feats = res->obj->vkfeats;
+      /* intersect format features for current modifier */
+      for (unsigned i = 0; i < screen->modifier_props[format].drmFormatModifierCount; i++) {
+         if (res->obj->modifier == screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifier)
+            feats &= screen->modifier_props[format].pDrmFormatModifierProperties[i].drmFormatModifierTilingFeatures;
+      }
+   }
+   /* if the format features don't support framebuffer attachment, use VkImageViewUsageCreateInfo to remove it */
+   if ((res->obj->vkusage & attachment) &&
+       !(feats & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
+      ivci->pNext = &surface->usage_info;
+   }
+}
+
 static struct zink_surface *
 create_surface(struct pipe_context *pctx,
                struct pipe_resource *pres,
@@ -157,24 +180,7 @@ create_surface(struct pipe_context *pctx,
 
    surface->usage_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
    surface->usage_info.pNext = NULL;
-   VkFormatFeatureFlags feats = res->linear ?
-                                screen->format_props[templ->format].linearTilingFeatures :
-                                screen->format_props[templ->format].optimalTilingFeatures;
-   VkImageUsageFlags attachment = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-   surface->usage_info.usage = res->obj->vkusage & ~attachment;
-   if (res->obj->modifier_aspect) {
-      feats = res->obj->vkfeats;
-      /* intersect format features for current modifier */
-      for (unsigned i = 0; i < screen->modifier_props[templ->format].drmFormatModifierCount; i++) {
-         if (res->obj->modifier == screen->modifier_props[templ->format].pDrmFormatModifierProperties[i].drmFormatModifier)
-            feats &= screen->modifier_props[templ->format].pDrmFormatModifierProperties[i].drmFormatModifierTilingFeatures;
-      }
-   }
-   /* if the format features don't support framebuffer attachment, use VkImageViewUsageCreateInfo to remove it */
-   if ((res->obj->vkusage & attachment) &&
-       !(feats & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))) {
-      ivci->pNext = &surface->usage_info;
-   }
+   apply_view_usage_for_format(screen, res, surface, templ->format, ivci);
 
    pipe_resource_reference(&surface->base.texture, pres);
    pipe_reference_init(&surface->base.reference, 1);
@@ -415,6 +421,7 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
    assert(entry);
    _mesa_hash_table_remove(&res->surface_cache, entry);
    VkImageView image_view;
+   apply_view_usage_for_format(screen, res, surface, surface->base.format, &ivci);
    VkResult result = VKSCR(CreateImageView)(screen->dev, &ivci, NULL, &image_view);
    if (result != VK_SUCCESS) {
       mesa_loge("ZINK: failed to create new imageview (%s)", vk_Result_to_str(result));

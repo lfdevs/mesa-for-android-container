@@ -1820,7 +1820,7 @@ zink_bind_tes_state(struct pipe_context *pctx,
    if (!!ctx->gfx_stages[MESA_SHADER_TESS_EVAL] != !!cso) {
       if (!cso) {
          /* if unsetting a TESS that uses a generated TCS, ensure the TCS is unset */
-         if (ctx->gfx_stages[MESA_SHADER_TESS_EVAL]->non_fs.generated_tcs)
+         if (ctx->gfx_stages[MESA_SHADER_TESS_CTRL] == ctx->gfx_stages[MESA_SHADER_TESS_EVAL]->non_fs.generated_tcs)
             ctx->gfx_stages[MESA_SHADER_TESS_CTRL] = NULL;
       }
    }

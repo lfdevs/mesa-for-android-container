@@ -586,7 +586,8 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
 
                 if (!rsc->tiled) {
                         slice->tiling = V3D_TILING_RASTER;
-                        if (prsc->target == PIPE_TEXTURE_1D)
+                        if (prsc->target == PIPE_TEXTURE_1D ||
+                            prsc->target == PIPE_TEXTURE_1D_ARRAY)
                                 level_width = align(level_width, 64 / rsc->cpp);
                 } else {
                         if ((i != 0 || !uif_top) &&

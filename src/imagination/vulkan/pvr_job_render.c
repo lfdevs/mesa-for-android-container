@@ -1443,12 +1443,11 @@ static void pvr_frag_state_stream_init(struct pvr_render_ctx *ctx,
       if (job->has_stencil_attachment) {
          value.addr = job->ds.addr;
 
-         /* Enable separate stencil. This should be enabled iff the buffer set
-          * in CR_ISP_STENCIL_LOAD_BASE does not contain a depth component.
+         /* This should be set if we only have a stencil attachment; all
+          * currently supported formats with a stencil component also contain
+          * depth.
           */
-         assert(job->has_depth_attachment ||
-                job->ds.vk_format == VK_FORMAT_S8_UINT);
-         value.enable = !job->has_depth_attachment;
+         value.enable = false;
       }
    }
    stream_ptr += pvr_cmd_length(CR_ISP_STENCIL_LOAD_BASE);

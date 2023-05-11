@@ -1113,7 +1113,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
 
    snprintf(screen->renderer_string, sizeof(screen->renderer_string),
             "llvmpipe (LLVM " MESA_LLVM_VERSION_STRING ", %u bits)",
-            lp_build_get_native_width() );
+            lp_build_init_native_width() );
 
    list_inithead(&screen->ctx_list);
    (void) mtx_init(&screen->ctx_mutex, mtx_plain);

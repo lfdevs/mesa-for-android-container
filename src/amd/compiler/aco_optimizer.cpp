@@ -640,9 +640,20 @@ is_operand_vgpr(Operand op)
 
 /* only covers special cases */
 bool
-alu_can_accept_constant(aco_opcode opcode, unsigned operand)
+alu_can_accept_constant(const aco_ptr<Instruction>& instr, unsigned operand)
 {
-   switch (opcode) {
+   /* Fixed operands can't accept constants because we need them
+    * to be in their fixed register.
+    */
+   assert(instr->operands.size() > operand);
+   if (instr->operands[operand].isFixed())
+      return false;
+
+   /* SOPP instructions can't use constants. */
+   if (instr->isSOPP())
+      return false;
+
+   switch (instr->opcode) {
    case aco_opcode::v_mac_f32:
    case aco_opcode::v_writelane_b32:
    case aco_opcode::v_writelane_b32_e64:
@@ -1344,7 +1355,7 @@ label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
       if (instr->isSALU() || instr->isPseudo()) {
          unsigned bits = get_operand_size(instr, i);
          if ((info.is_constant(bits) || (info.is_literal(bits) && instr->isPseudo())) &&
-             !instr->operands[i].isFixed() && alu_can_accept_constant(instr->opcode, i)) {
+              alu_can_accept_constant(instr, i)) {
             instr->operands[i] = get_constant_op(ctx, info, bits);
             continue;
          }
@@ -1407,7 +1418,7 @@ label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
             continue;
          }
 
-         if (info.is_constant(bits) && alu_can_accept_constant(instr->opcode, i) &&
+         if (info.is_constant(bits) && alu_can_accept_constant(instr, i) &&
              (!instr->isSDWA() || ctx.program->gfx_level >= GFX9)) {
             Operand op = get_constant_op(ctx, info, bits);
             perfwarn(ctx.program, instr->opcode == aco_opcode::v_cndmask_b32 && i == 2,
@@ -4874,7 +4885,7 @@ select_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
          continue;
       }
 
-      if (!alu_can_accept_constant(instr->opcode, i))
+      if (!alu_can_accept_constant(instr, i))
          continue;
 
       if (ctx.uses[op.tempId()] < literal_uses) {

@@ -146,13 +146,16 @@ destroy_swapchain(struct zink_screen *screen, struct kopper_swapchain *cswap)
    if (!cswap)
       return;
    for (unsigned i = 0; i < cswap->num_images; i++) {
-      VKSCR(DestroySemaphore)(screen->dev, cswap->images[i].acquire, NULL);
+      simple_mtx_lock(&screen->semaphores_lock);
+      util_dynarray_append(&screen->semaphores, VkSemaphore, cswap->images[i].acquire);
+      simple_mtx_unlock(&screen->semaphores_lock);
    }
    free(cswap->images);
    hash_table_foreach(cswap->presents, he) {
       struct util_dynarray *arr = he->data;
-      while (util_dynarray_contains(arr, VkSemaphore))
-         VKSCR(DestroySemaphore)(screen->dev, util_dynarray_pop(arr, VkSemaphore), NULL);
+      simple_mtx_lock(&screen->semaphores_lock);
+      util_dynarray_append_dynarray(&screen->semaphores, arr);
+      simple_mtx_unlock(&screen->semaphores_lock);
       util_dynarray_fini(arr);
       free(arr);
    }

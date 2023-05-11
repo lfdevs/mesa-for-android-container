@@ -489,10 +489,7 @@ pipeline_access_stage(VkAccessFlags flags)
    if (flags & (VK_ACCESS_UNIFORM_READ_BIT |
                 VK_ACCESS_SHADER_READ_BIT |
                 VK_ACCESS_SHADER_WRITE_BIT))
-      return VK_PIPELINE_STAGE_TASK_SHADER_BIT_NV |
-             VK_PIPELINE_STAGE_MESH_SHADER_BIT_NV |
-             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR |
-             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+      return VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
              VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
              VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
              VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
@@ -545,16 +542,18 @@ zink_resource_buffer_barrier(struct zink_context *ctx, struct zink_resource *res
       res->obj->unordered_access_stage = VK_PIPELINE_STAGE_NONE;
       res->obj->ordered_access_is_copied = false;
    }
-   /* unordered barriers can be skipped if either:
-    * - there is no current-batch unordered access
-    * - the unordered access is not write access
+   /* unordered barriers can be skipped when:
+    * - there is no current-batch unordered access AND previous batch usage is not write access
+    * - there is current-batch unordered access AND the unordered access is not write access
     */
-   bool can_skip_unordered = !unordered ? false : (!unordered_usage_matches || !zink_resource_access_is_write(res->obj->unordered_access));
+   bool can_skip_unordered = !unordered ? false : !zink_resource_access_is_write(!unordered_usage_matches ? res->obj->access : res->obj->unordered_access);
    /* ordered barriers can be skipped if both:
     * - there is no current access
     * - there is no current-batch unordered access
     */
    bool can_skip_ordered = unordered ? false : (!res->obj->access && !unordered_usage_matches);
+   if (zink_debug & ZINK_DEBUG_NOREORDER)
+      can_skip_unordered = can_skip_ordered = false;
 
    if (!can_skip_unordered && !can_skip_ordered) {
       VkCommandBuffer cmdbuf = is_write ? zink_get_cmdbuf(ctx, NULL, res) : zink_get_cmdbuf(ctx, res, NULL);

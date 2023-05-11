@@ -440,6 +440,8 @@ panvk_meta_clear_zs_img(struct panvk_cmd_buffer *cmdbuf,
          panvk_per_arch(cmd_close_batch)(cmdbuf);
       }
    }
+
+   memset(fbinfo, 0, sizeof(*fbinfo));
 }
 
 void

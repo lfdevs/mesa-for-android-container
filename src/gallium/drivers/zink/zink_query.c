@@ -1102,8 +1102,10 @@ zink_get_query_result(struct pipe_context *pctx,
       return result->b;
    }
 
-   if (query->needs_update)
+   if (query->needs_update) {
+      assert(!ctx->tc || !threaded_query(q)->flushed);
       update_qbo(ctx, query);
+   }
 
    if (zink_batch_usage_is_unflushed(query->batch_uses)) {
       if (!threaded_query(q)->flushed)
@@ -1245,6 +1247,13 @@ zink_set_active_query_state(struct pipe_context *pctx, bool enable)
       zink_suspend_queries(ctx, batch);
    else if (ctx->batch.in_rp)
       zink_resume_queries(ctx, batch);
+}
+
+void
+zink_query_sync(struct zink_context *ctx, struct zink_query *query)
+{
+   if (query->needs_update)
+      update_qbo(ctx, query);
 }
 
 void

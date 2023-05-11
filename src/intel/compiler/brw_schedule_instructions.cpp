@@ -659,6 +659,7 @@ public:
       ralloc_free(this->mem_ctx);
    }
    void add_barrier_deps(schedule_node *n);
+   void add_cross_lane_deps(schedule_node *n);
    void add_dep(schedule_node *before, schedule_node *after, int latency);
    void add_dep(schedule_node *before, schedule_node *after);
 
@@ -1106,6 +1107,33 @@ is_scheduling_barrier(const backend_instruction *inst)
           inst->has_side_effects();
 }
 
+static bool
+has_cross_lane_access(const fs_inst *inst)
+{
+   /* FINISHME:
+    *
+    * This function is likely incomplete in terms of identify cross lane
+    * accesses.
+    */
+   if (inst->opcode == SHADER_OPCODE_BROADCAST ||
+       inst->opcode == SHADER_OPCODE_READ_SR_REG ||
+       inst->opcode == SHADER_OPCODE_CLUSTER_BROADCAST ||
+       inst->opcode == SHADER_OPCODE_SHUFFLE ||
+       inst->opcode == FS_OPCODE_LOAD_LIVE_CHANNELS ||
+       inst->opcode == SHADER_OPCODE_FIND_LAST_LIVE_CHANNEL ||
+       inst->opcode == SHADER_OPCODE_FIND_LIVE_CHANNEL)
+      return true;
+
+   for (unsigned s = 0; s < inst->sources; s++) {
+      if (inst->src[s].file == VGRF) {
+         if (inst->src[s].stride == 0)
+            return true;
+      }
+   }
+
+   return false;
+}
+
 /**
  * Sometimes we really want this node to execute after everything that
  * was before it and before everything that followed it.  This adds
@@ -1132,6 +1160,25 @@ instruction_scheduler::add_barrier_deps(schedule_node *n)
          if (is_scheduling_barrier(next->inst))
             break;
          next = (schedule_node *)next->next;
+      }
+   }
+}
+
+/**
+ * Because some instructions like HALT can disable lanes, scheduling prior to
+ * a cross lane access should not be allowed, otherwise we could end up with
+ * later instructions accessing uninitialized data.
+ */
+void
+instruction_scheduler::add_cross_lane_deps(schedule_node *n)
+{
+   schedule_node *prev = (schedule_node *)n->prev;
+
+   if (prev) {
+      while (!prev->is_head_sentinel()) {
+         if (has_cross_lane_access((fs_inst *)prev->inst))
+            add_dep(prev, n, 0);
+         prev = (schedule_node *)prev->prev;
       }
    }
 }
@@ -1172,6 +1219,10 @@ fs_instruction_scheduler::calculate_deps()
 
       if (is_scheduling_barrier(inst))
          add_barrier_deps(n);
+
+      if (inst->opcode == BRW_OPCODE_HALT ||
+          inst->opcode == SHADER_OPCODE_HALT_TARGET)
+          add_cross_lane_deps(n);
 
       /* read-after-write deps. */
       for (int i = 0; i < inst->sources; i++) {

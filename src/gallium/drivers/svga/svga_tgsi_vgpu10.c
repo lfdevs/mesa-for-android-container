@@ -514,11 +514,15 @@ emit_vgpu10_instruction(struct svga_shader_emitter_v10 *emit,
 
 static void
 emit_input_declaration(struct svga_shader_emitter_v10 *emit,
-                       unsigned opcodeType, unsigned operandType,
-                       unsigned dim, unsigned index, unsigned size,
-                       unsigned name, unsigned numComp,
-                       unsigned selMode, unsigned usageMask,
-                       unsigned interpMode,
+                       VGPU10_OPCODE_TYPE opcodeType,
+                       VGPU10_OPERAND_TYPE operandType,
+                       VGPU10_OPERAND_INDEX_DIMENSION dim,
+                       unsigned index, unsigned size,
+                       VGPU10_SYSTEM_NAME name,
+                       VGPU10_OPERAND_NUM_COMPONENTS numComp,
+                       VGPU10_OPERAND_4_COMPONENT_SELECTION_MODE selMode,
+                       unsigned usageMask,
+                       VGPU10_INTERPOLATION_MODE interpMode,
                        boolean addSignature,
                        SVGA3dDXSignatureSemanticName sgnName);
 

@@ -438,6 +438,9 @@ cso_unbind_context(struct cso_context *ctx)
 
       if (ctx->has_streamout)
          ctx->base.pipe->set_stream_output_targets(ctx->base.pipe, 0, NULL, NULL);
+
+      struct pipe_framebuffer_state fb = {0};
+      ctx->base.pipe->set_framebuffer_state(ctx->base.pipe, &fb);
    }
 
    util_unreference_framebuffer_state(&ctx->fb);

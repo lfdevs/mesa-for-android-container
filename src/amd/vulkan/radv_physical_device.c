@@ -1240,7 +1240,7 @@ radv_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
          features->extendedDynamicState3LineStippleEnable = true;
          features->extendedDynamicState3ColorBlendEnable = true;
          features->extendedDynamicState3DepthClipEnable = true;
-         features->extendedDynamicState3ConservativeRasterizationMode = true;
+         features->extendedDynamicState3ConservativeRasterizationMode = pdevice->rad_info.gfx_level >= GFX9;
          features->extendedDynamicState3DepthClipNegativeOneToOne = true;
          features->extendedDynamicState3ProvokingVertexMode = true;
          features->extendedDynamicState3DepthClampEnable = true;

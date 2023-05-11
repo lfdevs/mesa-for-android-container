@@ -69,7 +69,7 @@ struct gallivm_state
 };
 
 unsigned
-lp_build_get_native_width(void);
+lp_build_init_native_width(void);
 
 boolean
 lp_build_init(void);

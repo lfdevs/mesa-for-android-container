@@ -274,7 +274,7 @@ r600_nir_lower_cube_to_2darray_impl(nir_builder *b, nir_instr *instr, void *_opt
                       nir_imm_float(b, 1.5));
 
    nir_ssa_def *z = nir_channel(b, cubed, 3);
-   if (tex->is_array) {
+   if (tex->is_array && tex->op != nir_texop_lod) {
       auto slice = nir_fround_even(b, nir_channel(b, tex->src[coord_idx].src.ssa, 3));
       z =
          nir_fmad(b, nir_fmax(b, slice, nir_imm_float(b, 0.0)), nir_imm_float(b, 8.0), z);

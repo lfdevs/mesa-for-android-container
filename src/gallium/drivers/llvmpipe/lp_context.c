@@ -76,11 +76,7 @@ llvmpipe_destroy(struct pipe_context *pipe)
    if (llvmpipe->draw)
       draw_destroy(llvmpipe->draw);
 
-   for (i = 0; i < PIPE_MAX_COLOR_BUFS; i++) {
-      pipe_surface_reference(&llvmpipe->framebuffer.cbufs[i], NULL);
-   }
-
-   pipe_surface_reference(&llvmpipe->framebuffer.zsbuf, NULL);
+   util_unreference_framebuffer_state(&llvmpipe->framebuffer);
 
    for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_TYPES; s++) {
       for (i = 0; i < ARRAY_SIZE(llvmpipe->sampler_views[0]); i++) {

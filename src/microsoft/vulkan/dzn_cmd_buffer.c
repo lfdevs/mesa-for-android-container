@@ -414,7 +414,6 @@ dzn_cmd_buffer_destroy(struct vk_command_buffer *cbuf)
    dzn_descriptor_heap_pool_finish(&cmdbuf->sampler_pool);
    dzn_descriptor_heap_pool_finish(&cmdbuf->rtvs.pool);
    dzn_descriptor_heap_pool_finish(&cmdbuf->dsvs.pool);
-   util_dynarray_fini(&cmdbuf->events.wait);
    util_dynarray_fini(&cmdbuf->events.signal);
    util_dynarray_fini(&cmdbuf->queries.reset);
    util_dynarray_fini(&cmdbuf->queries.signal);
@@ -476,7 +475,6 @@ dzn_cmd_buffer_reset(struct vk_command_buffer *cbuf, VkCommandBufferResetFlags f
    }
    cmdbuf->cur_upload_buf = NULL;
 
-   util_dynarray_clear(&cmdbuf->events.wait);
    util_dynarray_clear(&cmdbuf->events.signal);
    util_dynarray_clear(&cmdbuf->queries.reset);
    util_dynarray_clear(&cmdbuf->queries.signal);
@@ -610,7 +608,6 @@ dzn_cmd_buffer_create(const VkCommandBufferAllocateInfo *info,
    cmdbuf->state.multiview.view_mask = 1;
    for (uint32_t bucket = 0; bucket < DZN_INTERNAL_BUF_BUCKET_COUNT; ++bucket)
       list_inithead(&cmdbuf->internal_bufs[bucket]);
-   util_dynarray_init(&cmdbuf->events.wait, NULL);
    util_dynarray_init(&cmdbuf->events.signal, NULL);
    util_dynarray_init(&cmdbuf->queries.reset, NULL);
    util_dynarray_init(&cmdbuf->queries.signal, NULL);
@@ -724,18 +721,16 @@ dzn_cmd_buffer_gather_events(struct dzn_cmd_buffer *cmdbuf)
    hash_table_foreach(cmdbuf->events.ht, he) {
       enum dzn_event_state state = (uintptr_t)he->data;
 
-      if (state != DZN_EVENT_STATE_EXTERNAL_WAIT) {
-         struct dzn_cmd_event_signal signal = { (struct dzn_event *)he->key, state  == DZN_EVENT_STATE_SET };
-         struct dzn_cmd_event_signal *entry =
-            util_dynarray_grow(&cmdbuf->events.signal, struct dzn_cmd_event_signal, 1);
+      struct dzn_cmd_event_signal signal = { (struct dzn_event *)he->key, state == DZN_EVENT_STATE_SET };
+      struct dzn_cmd_event_signal *entry =
+         util_dynarray_grow(&cmdbuf->events.signal, struct dzn_cmd_event_signal, 1);
 
-         if (!entry) {
-            vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
-            break;
-         }
-
-         *entry = signal;
+      if (!entry) {
+         vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+         break;
       }
+
+      *entry = signal;
    }
 
 out:
@@ -5324,22 +5319,6 @@ dzn_CmdWaitEvents(VkCommandBuffer commandBuffer,
          enum dzn_event_state state = (uintptr_t)he->data;
          assert(state != DZN_EVENT_STATE_RESET);
          flush_pipeline = state == DZN_EVENT_STATE_SET;
-      } else {
-         if (!_mesa_hash_table_insert(cmdbuf->events.ht, event,
-                                      (void *)(uintptr_t)DZN_EVENT_STATE_EXTERNAL_WAIT)) {
-            vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
-            return;
-         }
-
-         struct dzn_event **entry =
-            util_dynarray_grow(&cmdbuf->events.wait, struct dzn_event *, 1);
-
-         if (!entry) {
-            vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
-            return;
-         }
-
-         *entry = event;
       }
    }
 

@@ -34,6 +34,7 @@
 #include <llvm/Support/Allocator.h>
 
 #include "llvm/codegen.hpp"
+#include "llvm/compat.hpp"
 #include "llvm/metadata.hpp"
 
 #include "CL/cl.h"
@@ -197,6 +198,7 @@ namespace {
       ::llvm::DataLayout dl(&mod);
       const auto size_type =
          dl.getSmallestLegalIntType(mod.getContext(), sizeof(cl_uint) * 8);
+      const unsigned size_align = compat::get_abi_type_alignment(dl, size_type);
 
       for (const auto &arg : f.args()) {
          const auto arg_type = arg.getType();
@@ -208,7 +210,7 @@ namespace {
          const unsigned arg_api_size = dl.getTypeAllocSize(arg_type);
 
          const unsigned target_size = dl.getTypeStoreSize(arg_type);
-         const unsigned target_align = dl.getABITypeAlignment(arg_type);
+         const unsigned target_align = compat::get_abi_type_alignment(dl, arg_type);
 
          const auto type_name = get_str_argument_metadata(f, arg,
                                                           "kernel_arg_type");
@@ -229,7 +231,7 @@ namespace {
             // Image size implicit argument.
             args.emplace_back(binary::argument::scalar, sizeof(cl_uint),
                               dl.getTypeStoreSize(size_type),
-                              dl.getABITypeAlignment(size_type),
+                              size_align,
                               binary::argument::zero_ext,
                               binary::argument::image_size);
 
@@ -237,7 +239,7 @@ namespace {
             // Image format implicit argument.
             args.emplace_back(binary::argument::scalar, sizeof(cl_uint),
                               dl.getTypeStoreSize(size_type),
-                              dl.getABITypeAlignment(size_type),
+                              size_align,
                               binary::argument::zero_ext,
                               binary::argument::image_format);
 
@@ -259,7 +261,8 @@ namespace {
 
                   args.emplace_back(binary::argument::local, arg_api_size,
                                     target_size,
-                                    (pointee_type->isVoidTy()) ? 8 : dl.getABITypeAlignment(pointee_type),
+                                    (pointee_type->isVoidTy()) ? 8 :
+                                    compat::get_abi_type_alignment(dl, pointee_type),
                                     binary::argument::zero_ext);
                } else {
                   // XXX: Correctly handle constant address space.  There is no
@@ -301,13 +304,13 @@ namespace {
       // target according to the selected calling convention.
       args.emplace_back(binary::argument::scalar, sizeof(cl_uint),
                         dl.getTypeStoreSize(size_type),
-                        dl.getABITypeAlignment(size_type),
+                        size_align,
                         binary::argument::zero_ext,
                         binary::argument::grid_dimension);
 
       args.emplace_back(binary::argument::scalar, sizeof(cl_uint),
                         dl.getTypeStoreSize(size_type),
-                        dl.getABITypeAlignment(size_type),
+                        size_align,
                         binary::argument::zero_ext,
                         binary::argument::grid_offset);
 

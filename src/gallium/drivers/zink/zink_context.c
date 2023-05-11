@@ -1586,20 +1586,21 @@ zink_set_shader_buffers(struct pipe_context *pctx,
    ctx->writable_ssbos[p_stage] |= writable_bitmask << start_slot;
 
    for (unsigned i = 0; i < count; i++) {
-      struct pipe_shader_buffer *ssbo = &ctx->ssbos[p_stage][start_slot + i];
+      unsigned slot = start_slot + i;
+      struct pipe_shader_buffer *ssbo = &ctx->ssbos[p_stage][slot];
       struct zink_resource *res = ssbo->buffer ? zink_resource(ssbo->buffer) : NULL;
-      bool was_writable = old_writable_mask & BITFIELD64_BIT(start_slot + i);
+      bool was_writable = old_writable_mask & BITFIELD64_BIT(slot);
       if (buffers && buffers[i].buffer) {
          struct zink_resource *new_res = zink_resource(buffers[i].buffer);
          if (new_res != res) {
-            unbind_ssbo(ctx, res, p_stage, i, was_writable);
-            new_res->ssbo_bind_mask[p_stage] |= BITFIELD_BIT(i);
+            unbind_ssbo(ctx, res, p_stage, slot, was_writable);
+            new_res->ssbo_bind_mask[p_stage] |= BITFIELD_BIT(slot);
             new_res->ssbo_bind_count[p_stage == MESA_SHADER_COMPUTE]++;
             new_res->gfx_barrier |= zink_pipeline_flags_from_pipe_stage(p_stage);
             update_res_bind_count(ctx, new_res, p_stage == MESA_SHADER_COMPUTE, false);
          }
          VkAccessFlags access = VK_ACCESS_SHADER_READ_BIT;
-         if (ctx->writable_ssbos[p_stage] & BITFIELD64_BIT(start_slot + i)) {
+         if (ctx->writable_ssbos[p_stage] & BITFIELD64_BIT(slot)) {
             new_res->write_bind_count[p_stage == MESA_SHADER_COMPUTE]++;
             access |= VK_ACCESS_SHADER_WRITE_BIT;
          }
@@ -1613,8 +1614,8 @@ zink_set_shader_buffers(struct pipe_context *pctx,
                                       new_res->gfx_barrier);
          zink_batch_resource_usage_set(&ctx->batch, new_res, access & VK_ACCESS_SHADER_WRITE_BIT, true);
          update = true;
-         max_slot = MAX2(max_slot, start_slot + i);
-         update_descriptor_state_ssbo(ctx, p_stage, start_slot + i, new_res);
+         max_slot = MAX2(max_slot, slot);
+         update_descriptor_state_ssbo(ctx, p_stage, slot, new_res);
          if (zink_resource_access_is_write(access))
             new_res->obj->unordered_write = false;
          new_res->obj->unordered_read = false;
@@ -1624,8 +1625,8 @@ zink_set_shader_buffers(struct pipe_context *pctx,
          ssbo->buffer_offset = 0;
          ssbo->buffer_size = 0;
          if (res) {
-            unbind_ssbo(ctx, res, p_stage, i, was_writable);
-            update_descriptor_state_ssbo(ctx, p_stage, start_slot + i, NULL);
+            unbind_ssbo(ctx, res, p_stage, slot, was_writable);
+            update_descriptor_state_ssbo(ctx, p_stage, slot, NULL);
          }
          pipe_resource_reference(&ssbo->buffer, NULL);
       }
@@ -2042,7 +2043,7 @@ zink_set_sampler_views(struct pipe_context *pctx,
             if (!ctx->unordered_blitting)
                res->obj->unordered_read = false;
          } else if (!res->obj->is_buffer) {
-            if (res->base.b.format != b->image_view->base.format)
+            if (!res->obj->dt && res->base.b.format != b->image_view->base.format)
                /* mutable not set by default */
                zink_resource_object_init_mutable(ctx, res);
             if (res->obj != b->image_view->obj) {
@@ -3843,11 +3844,11 @@ zink_flush_memory_barrier(struct zink_context *ctx, bool is_compute)
                   VK_ACCESS_SHADER_WRITE_BIT,
                   VK_ACCESS_UNIFORM_READ_BIT);
 
+   if (ctx->memory_barrier & PIPE_BARRIER_INDIRECT_BUFFER)
+      mem_barrier(ctx, src, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                  VK_ACCESS_SHADER_WRITE_BIT,
+                  VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
    if (!is_compute) {
-      if (ctx->memory_barrier & PIPE_BARRIER_INDIRECT_BUFFER)
-         mem_barrier(ctx, src, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
-                     VK_ACCESS_SHADER_WRITE_BIT,
-                     VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
       if (ctx->memory_barrier & PIPE_BARRIER_VERTEX_BUFFER)
          mem_barrier(ctx, gfx_flags, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
                      VK_ACCESS_SHADER_WRITE_BIT,
@@ -4410,7 +4411,7 @@ zink_copy_image_buffer(struct zink_context *ctx, struct zink_resource *dst, stru
    if (needs_present_readback)
       zink_kopper_present_readback(ctx, img);
 
-   if (ctx->oom_flush && !ctx->batch.in_rp)
+   if (ctx->oom_flush && !ctx->batch.in_rp && !ctx->unordered_blitting)
       flush_batch(ctx, false);
 }
 
@@ -4540,7 +4541,7 @@ zink_resource_copy_region(struct pipe_context *pctx,
       zink_copy_buffer(ctx, dst, src, dstx, src_box->x, src_box->width);
    } else
       zink_copy_image_buffer(ctx, dst, src, dst_level, dstx, dsty, dstz, src_level, src_box, 0);
-   if (ctx->oom_flush && !ctx->batch.in_rp)
+   if (ctx->oom_flush && !ctx->batch.in_rp && !ctx->unordered_blitting)
       flush_batch(ctx, false);
 }
 

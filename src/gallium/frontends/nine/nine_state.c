@@ -999,7 +999,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
     commit_samplers = FALSE;
     const uint16_t ps_mask = sampler_mask | context->enabled_samplers_mask_ps;
     context->bound_samplers_mask_ps = ps_mask;
-    num_textures = util_last_bit(ps_mask) + 1;
+    num_textures = util_last_bit(ps_mask);
     /* iterate over the enabled samplers */
     u_foreach_bit(i, context->enabled_samplers_mask_ps) {
         const unsigned s = NINE_SAMPLER_PS(i);
@@ -1046,7 +1046,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
     sampler_mask = context->programmable_vs ? context->vs->sampler_mask : 0;
     const uint16_t vs_mask = sampler_mask | context->enabled_samplers_mask_vs;
     context->bound_samplers_mask_vs = vs_mask;
-    num_textures = util_last_bit(vs_mask) + 1;
+    num_textures = util_last_bit(vs_mask);
     u_foreach_bit(i, context->enabled_samplers_mask_vs) {
         const unsigned s = NINE_SAMPLER_VS(i);
         int sRGB = context->samp[s][D3DSAMP_SRGBTEXTURE] ? 1 : 0;

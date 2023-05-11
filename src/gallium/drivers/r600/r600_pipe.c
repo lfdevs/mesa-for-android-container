@@ -130,6 +130,16 @@ static void r600_destroy_context(struct pipe_context *context)
 	r600_resource_reference(&rctx->last_trace_buf, NULL);
 	radeon_clear_saved_cs(&rctx->last_gfx);
 
+	switch (rctx->b.gfx_level) {
+	case EVERGREEN:
+	case CAYMAN:
+		for (i = 0; i < EG_MAX_ATOMIC_BUFFERS; ++i)
+			pipe_resource_reference(&rctx->atomic_buffer_state.buffer[i].buffer, NULL);
+		break;
+	default:
+		break;
+	}
+
 	FREE(rctx);
 }
 

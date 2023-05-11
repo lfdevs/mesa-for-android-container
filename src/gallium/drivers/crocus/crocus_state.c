@@ -2866,7 +2866,6 @@ crocus_create_surface(struct pipe_context *ctx,
    psurf->format = tmpl->format;
    psurf->width = tex->width0;
    psurf->height = tex->height0;
-   psurf->texture = tex;
    psurf->u.tex.first_layer = tmpl->u.tex.first_layer;
    psurf->u.tex.last_layer = tmpl->u.tex.last_layer;
    psurf->u.tex.level = tmpl->u.tex.level;
@@ -2954,6 +2953,7 @@ crocus_create_surface(struct pipe_context *ctx,
    assert(view->levels == 1);
 
    /* TODO: compressed pbo uploads aren't working here */
+   pipe_surface_reference(&psurf, NULL);
    return NULL;
 
    uint64_t offset_B = 0;
@@ -2974,8 +2974,10 @@ crocus_create_surface(struct pipe_context *ctx,
        * Return NULL to force the state tracker to take fallback paths.
        */
       // TODO: check if the gen7 check is right, originally gen8
-      if (view->array_len > 1 || GFX_VER == 7)
+      if (view->array_len > 1 || GFX_VER == 7) {
+         pipe_surface_reference(&psurf, NULL);
          return NULL;
+      }
 
       const bool is_3d = res->surf.dim == ISL_SURF_DIM_3D;
       isl_surf_get_image_surf(&screen->isl_dev, &res->surf,
@@ -6503,7 +6505,9 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
           * look useful at the moment.  We might need this in future.
           */
          ps.PositionXYOffsetSelect =
-            wm_prog_data->uses_pos_offset ? POSOFFSET_SAMPLE : POSOFFSET_NONE;
+            brw_wm_prog_data_uses_position_xy_offset(wm_prog_data,
+                                                     0 /* msaa_flags */) ?
+            POSOFFSET_SAMPLE : POSOFFSET_NONE;
 
          if (wm_prog_data->base.total_scratch) {
             struct crocus_bo *bo = crocus_get_scratch_space(ice, wm_prog_data->base.total_scratch, MESA_SHADER_FRAGMENT);
@@ -7270,10 +7274,10 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
        * We only require XY sample offsets. So, this recommendation doesn't
        * look useful at the moment. We might need this in future.
        */
-      if (wm_prog_data->uses_pos_offset)
-         wm.PositionXYOffsetSelect = POSOFFSET_SAMPLE;
-      else
-         wm.PositionXYOffsetSelect = POSOFFSET_NONE;
+      wm.PositionXYOffsetSelect =
+         brw_wm_prog_data_uses_position_xy_offset(wm_prog_data,
+                                                  0 /* msaa_flags */) ?
+         POSOFFSET_SAMPLE : POSOFFSET_NONE;
 #endif
          wm.LineStippleEnable = cso->cso.line_stipple_enable;
          wm.PolygonStippleEnable = cso->cso.poly_stipple_enable;
@@ -8285,6 +8289,8 @@ crocus_upload_compute_state(struct crocus_context *ice,
 static void
 crocus_destroy_state(struct crocus_context *ice)
 {
+   struct pipe_framebuffer_state *cso = &ice->state.framebuffer;
+
    pipe_resource_reference(&ice->draw.draw_params.res, NULL);
    pipe_resource_reference(&ice->draw.derived_draw_params.res, NULL);
 
@@ -8294,10 +8300,7 @@ crocus_destroy_state(struct crocus_context *ice)
       pipe_so_target_reference(&ice->state.so_target[i], NULL);
    }
 
-   for (unsigned i = 0; i < ice->state.framebuffer.nr_cbufs; i++) {
-      pipe_surface_reference(&ice->state.framebuffer.cbufs[i], NULL);
-   }
-   pipe_surface_reference(&ice->state.framebuffer.zsbuf, NULL);
+   util_unreference_framebuffer_state(cso);
 
    for (int stage = 0; stage < MESA_SHADER_STAGES; stage++) {
       struct crocus_shader_state *shs = &ice->state.shaders[stage];

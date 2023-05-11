@@ -4,3 +4,6 @@ spec@arb_shader_image_load_store@host-mem-barrier@Vertex array/RaW/one bit barri
 # 2022-11-23 The following two case are xfails, but sometimes pass.
 spec@egl_chromium_sync_control@conformance
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+
+# Flaky with a Fail result since the piglit fix made it stop crashing.
+glx@glx-make-current

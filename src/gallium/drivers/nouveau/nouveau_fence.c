@@ -374,10 +374,11 @@ nouveau_fence_wait(struct nouveau_fence *fence, struct util_debug_callback *debu
 }
 
 void
-nouveau_fence_emit(struct nouveau_fence *fence)
+nouveau_fence_next_if_current(struct nouveau_context *nv, struct nouveau_fence *fence)
 {
    simple_mtx_lock(&fence->screen->fence.lock);
-   _nouveau_fence_emit(fence);
+   if (nv->fence == fence)
+      _nouveau_fence_next(nv);
    simple_mtx_unlock(&fence->screen->fence.lock);
 }
 

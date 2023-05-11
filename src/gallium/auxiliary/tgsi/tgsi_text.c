@@ -30,6 +30,7 @@
 #include "util/u_prim.h"
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
+#include "util/strtod.h"
 #include "tgsi_text.h"
 #include "tgsi_build.h"
 #include "tgsi_info.h"
@@ -231,52 +232,9 @@ static boolean parse_identifier( const char **pcur, char *ret, size_t len )
 static boolean parse_float( const char **pcur, float *val )
 {
    const char *cur = *pcur;
-   boolean integral_part = FALSE;
-   boolean fractional_part = FALSE;
-
-   if (*cur == '0' && *(cur + 1) == 'x') {
-      union fi fi;
-      fi.ui = strtoul(cur, NULL, 16);
-      *val = fi.f;
-      cur += 10;
-      goto out;
-   }
-
-   *val = (float) atof( cur );
-   if (*cur == '-' || *cur == '+')
-      cur++;
-   if (is_digit( cur )) {
-      cur++;
-      integral_part = TRUE;
-      while (is_digit( cur ))
-         cur++;
-   }
-   if (*cur == '.') {
-      cur++;
-      if (is_digit( cur )) {
-         cur++;
-         fractional_part = TRUE;
-         while (is_digit( cur ))
-            cur++;
-      }
-   }
-   if (!integral_part && !fractional_part)
+   *val = _mesa_strtof(cur, (char**)pcur);
+   if (*pcur == cur)
       return FALSE;
-   if (uprcase( *cur ) == 'E') {
-      cur++;
-      if (*cur == '-' || *cur == '+')
-         cur++;
-      if (is_digit( cur )) {
-         cur++;
-         while (is_digit( cur ))
-            cur++;
-      }
-      else
-         return FALSE;
-   }
-
-out:
-   *pcur = cur;
    return TRUE;
 }
 
@@ -288,7 +246,7 @@ static boolean parse_double( const char **pcur, uint32_t *val0, uint32_t *val1)
       uint32_t uval[2];
    } v;
 
-   v.dval = strtod(cur, (char**)pcur);
+   v.dval = _mesa_strtod(cur, (char**)pcur);
    if (*pcur == cur)
       return FALSE;
 

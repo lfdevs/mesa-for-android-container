@@ -4936,7 +4936,9 @@ iris_store_fs_state(const struct intel_device_info *devinfo,
        * look useful at the moment.  We might need this in future.
        */
       ps.PositionXYOffsetSelect =
-         wm_prog_data->uses_pos_offset ? POSOFFSET_SAMPLE : POSOFFSET_NONE;
+         brw_wm_prog_data_uses_position_xy_offset(wm_prog_data,
+                                                  0 /* msaa_flags */) ?
+         POSOFFSET_SAMPLE : POSOFFSET_NONE;
 
       if (prog_data->total_scratch) {
          INIT_THREAD_SCRATCH_SIZE(ps);
@@ -7884,10 +7886,7 @@ iris_destroy_state(struct iris_context *ice)
       pipe_so_target_reference(&ice->state.so_target[i], NULL);
    }
 
-   for (unsigned i = 0; i < ice->state.framebuffer.nr_cbufs; i++) {
-      pipe_surface_reference(&ice->state.framebuffer.cbufs[i], NULL);
-   }
-   pipe_surface_reference(&ice->state.framebuffer.zsbuf, NULL);
+   util_unreference_framebuffer_state(&ice->state.framebuffer);
 
    for (int stage = 0; stage < MESA_SHADER_STAGES; stage++) {
       struct iris_shader_state *shs = &ice->state.shaders[stage];

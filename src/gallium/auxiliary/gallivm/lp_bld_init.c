@@ -421,18 +421,22 @@ fail:
 }
 
 unsigned
-lp_build_get_native_width(void)
+lp_build_init_native_width(void)
 {
    // Default to 256 until we're confident llvmpipe with 512 is as correct and not slower than 256
-   unsigned vector_width = MIN2(util_get_cpu_caps()->max_vector_bits, 256);
+   lp_native_vector_width = MIN2(util_get_cpu_caps()->max_vector_bits, 256);
+   assert(lp_native_vector_width);
 
-   vector_width = debug_get_num_option("LP_NATIVE_VECTOR_WIDTH", vector_width);
-   return vector_width;
+   lp_native_vector_width = debug_get_num_option("LP_NATIVE_VECTOR_WIDTH", lp_native_vector_width);
+   assert(lp_native_vector_width);
+
+   return lp_native_vector_width;
 }
 
 boolean
 lp_build_init(void)
 {
+   lp_build_init_native_width();
    if (gallivm_initialized)
       return TRUE;
 
@@ -448,8 +452,6 @@ lp_build_init(void)
    gallivm_perf = debug_get_flags_option("GALLIVM_PERF", lp_bld_perf_flags, 0 );
 
    lp_set_target_options();
-
-   lp_native_vector_width = lp_build_get_native_width();
 
 #if DETECT_ARCH_PPC_64
    /* Set the NJ bit in VSCR to 0 so denormalized values are handled as

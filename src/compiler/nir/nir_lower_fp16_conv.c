@@ -106,10 +106,11 @@ float_to_half_impl(nir_builder *b, nir_ssa_def *src, nir_rounding_mode mode)
       nir_push_else(b, NULL);
    }
 
+   nir_ssa_def *zero = nir_imm_int(b, 0);
+
    nir_push_if(b, nir_ige(b, abs, nir_imm_int(b, 113 << 23)));
 
    /* FP16 will be normal */
-   nir_ssa_def *zero = nir_imm_int(b, 0);
    nir_ssa_def *value = nir_ior(b,
                                 nir_ishl(b,
                                          nir_isub(b,

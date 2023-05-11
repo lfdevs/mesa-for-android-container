@@ -599,7 +599,7 @@ lp_setup_bind_rasterizer(struct lp_setup_context *setup,
    setup->point_size = rast->point_size;
    setup->sprite_coord_enable = rast->sprite_coord_enable;
    setup->sprite_coord_origin = rast->sprite_coord_mode;
-   setup->point_tri_clip = rast->point_size_per_vertex;
+   setup->point_tri_clip = rast->point_tri_clip;
    setup->point_size_per_vertex = rast->point_size_per_vertex;
    setup->legacy_points = !rast->point_quad_rasterization && !setup->multisample;
 }

@@ -27,7 +27,7 @@ enum agx_compiler_dbg {
 };
 /* clang-format on */
 
-extern int agx_compiler_debug;
+uint64_t agx_get_compiler_debug(void);
 
 #ifdef __cplusplus
 } /* extern C */

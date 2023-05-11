@@ -430,13 +430,15 @@ notify_before_flush_cb(void* _args)
 
    if (args->drawable->stvis.samples > 1 &&
        (args->reason == __DRI2_THROTTLE_SWAPBUFFER ||
+        args->reason == __DRI2_NOTHROTTLE_SWAPBUFFER ||
         args->reason == __DRI2_THROTTLE_COPYSUBBUFFER)) {
       /* Resolve the MSAA back buffer. */
       dri_pipe_blit(st->pipe,
                     args->drawable->textures[ST_ATTACHMENT_BACK_LEFT],
                     args->drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]);
 
-      if (args->reason == __DRI2_THROTTLE_SWAPBUFFER &&
+      if ((args->reason == __DRI2_THROTTLE_SWAPBUFFER ||
+           args->reason == __DRI2_NOTHROTTLE_SWAPBUFFER) &&
           args->drawable->msaa_textures[ST_ATTACHMENT_FRONT_LEFT] &&
           args->drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]) {
          args->swap_msaa_buffers = true;
@@ -519,7 +521,8 @@ dri_flush(__DRIcontext *cPriv,
    flush_flags = 0;
    if (flags & __DRI2_FLUSH_CONTEXT)
       flush_flags |= ST_FLUSH_FRONT;
-   if (reason == __DRI2_THROTTLE_SWAPBUFFER)
+   if (reason == __DRI2_THROTTLE_SWAPBUFFER ||
+       reason == __DRI2_NOTHROTTLE_SWAPBUFFER)
       flush_flags |= ST_FLUSH_END_OF_FRAME;
 
    /* Flush the context and throttle if needed. */

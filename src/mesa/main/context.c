@@ -184,7 +184,6 @@ static void
 one_time_fini(void)
 {
    glsl_type_singleton_decref();
-   _mesa_locale_fini();
 }
 
 /**

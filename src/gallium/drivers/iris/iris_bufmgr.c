@@ -776,11 +776,13 @@ fail:
 static enum iris_heap
 flags_to_heap(struct iris_bufmgr *bufmgr, unsigned flags)
 {
-   if (bufmgr->vram.size > 0 &&
-       !(flags & BO_ALLOC_SMEM) &&
-       !(flags & BO_ALLOC_COHERENT)) {
-      return flags & BO_ALLOC_LMEM ? IRIS_HEAP_DEVICE_LOCAL :
-                                     IRIS_HEAP_DEVICE_LOCAL_PREFERRED;
+   if (bufmgr->vram.size > 0) {
+      if ((flags & BO_ALLOC_SMEM) || (flags & BO_ALLOC_COHERENT))
+         return IRIS_HEAP_SYSTEM_MEMORY;
+      if ((flags & BO_ALLOC_LMEM) ||
+          ((flags & BO_ALLOC_SCANOUT) && !(flags & BO_ALLOC_SHARED)))
+         return IRIS_HEAP_DEVICE_LOCAL;
+      return IRIS_HEAP_DEVICE_LOCAL_PREFERRED;
    } else {
       assert(!(flags & BO_ALLOC_LMEM));
       return IRIS_HEAP_SYSTEM_MEMORY;
@@ -1016,8 +1018,7 @@ alloc_fresh_bo(struct iris_bufmgr *bufmgr, uint64_t bo_size, unsigned flags)
       case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
          /* For vram allocations, still use system memory as a fallback. */
          regions[num_regions++] = bufmgr->vram.region;
-         if (!(flags & BO_ALLOC_SCANOUT))
-            regions[num_regions++] = bufmgr->sys.region;
+         regions[num_regions++] = bufmgr->sys.region;
          break;
       case IRIS_HEAP_DEVICE_LOCAL:
          regions[num_regions++] = bufmgr->vram.region;

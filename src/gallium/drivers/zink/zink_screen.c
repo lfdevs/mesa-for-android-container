@@ -2766,7 +2766,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
    }
 
    zink_internal_setup_moltenvk(screen);
-   if (!screen->info.have_KHR_timeline_semaphore) {
+   if (!screen->info.have_KHR_timeline_semaphore && !screen->info.feats12.timelineSemaphore) {
       mesa_loge("zink: KHR_timeline_semaphore is required");
       goto fail;
    }

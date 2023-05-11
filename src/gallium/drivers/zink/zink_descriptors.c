@@ -1251,6 +1251,22 @@ zink_descriptors_update_masked(struct zink_context *ctx, bool is_compute, uint8_
    }
 }
 
+static void
+bind_bindless_db(struct zink_context *ctx, struct zink_program *pg)
+{
+   struct zink_batch_state *bs = ctx->batch.state;
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
+   unsigned index = 1;
+   VkDeviceSize offset = 0;
+   VKCTX(CmdSetDescriptorBufferOffsetsEXT)(bs->cmdbuf,
+                                           pg->is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                           pg->layout,
+                                           screen->desc_set_id[ZINK_DESCRIPTOR_BINDLESS], 1,
+                                           &index,
+                                           &offset);
+   ctx->dd.bindless_bound = true;
+}
+
 /* entrypoint for all descriptor updating:
  * - update push set
  * - generate masks for updating other sets
@@ -1278,6 +1294,8 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
          ctx->dd.state_changed[is_compute] = BITFIELD_MASK(ZINK_DESCRIPTOR_TYPE_UNIFORMS);
          ctx->dd.push_state_changed[is_compute] = true;
          update_separable(ctx, pg);
+         if (pg->dd.bindless)
+            bind_bindless_db(ctx, pg);
          return;
       }
    }
@@ -1398,14 +1416,7 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute)
    /* bindless descriptors are context-based and get updated elsewhere */
    if (pg->dd.bindless && unlikely(!ctx->dd.bindless_bound)) {
       if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {
-         unsigned index = 1;
-         VkDeviceSize offset = 0;
-         VKCTX(CmdSetDescriptorBufferOffsetsEXT)(bs->cmdbuf,
-                                                 is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                 pg->layout,
-                                                 screen->desc_set_id[ZINK_DESCRIPTOR_BINDLESS], 1,
-                                                 &index,
-                                                 &offset);
+         bind_bindless_db(ctx, pg);
       } else {
          VKCTX(CmdBindDescriptorSets)(ctx->batch.state->cmdbuf, is_compute ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS,
                                     pg->layout, screen->desc_set_id[ZINK_DESCRIPTOR_BINDLESS], 1, &ctx->dd.t.bindless_set,
@@ -1463,8 +1474,10 @@ zink_batch_descriptor_deinit(struct zink_screen *screen, struct zink_batch_state
 
    if (bs->dd.db_xfer)
       pipe_buffer_unmap(&bs->ctx->base, bs->dd.db_xfer);
+   bs->dd.db_xfer = NULL;
    if (bs->dd.db)
       screen->base.resource_destroy(&screen->base, &bs->dd.db->base.b);
+   bs->dd.db = NULL;
    bs->dd.db_bound = false;
    bs->dd.db_offset = 0;
    memset(bs->dd.cur_db_offset, 0, sizeof(bs->dd.cur_db_offset));
@@ -1552,7 +1565,7 @@ zink_batch_descriptor_init(struct zink_screen *screen, struct zink_batch_state *
       if (!pres)
          return false;
       bs->dd.db = zink_resource(pres);
-      bs->dd.db_map = pipe_buffer_map(&bs->ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE, &bs->dd.db_xfer);
+      bs->dd.db_map = pipe_buffer_map(&bs->ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE | PIPE_MAP_PERSISTENT, &bs->dd.db_xfer);
    }
    return true;
 }
@@ -1694,7 +1707,7 @@ zink_descriptors_init_bindless(struct zink_context *ctx)
       VKSCR(GetDescriptorSetLayoutSizeEXT)(screen->dev, screen->bindless_layout, &size);
       struct pipe_resource *pres = pipe_buffer_create(&screen->base, bind, 0, size);
       ctx->dd.db.bindless_db = zink_resource(pres);
-      ctx->dd.db.bindless_db_map = pipe_buffer_map(&ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE, &ctx->dd.db.bindless_db_xfer);
+      ctx->dd.db.bindless_db_map = pipe_buffer_map(&ctx->base, pres, PIPE_MAP_READ | PIPE_MAP_WRITE | PIPE_MAP_PERSISTENT, &ctx->dd.db.bindless_db_xfer);
       zink_batch_bind_db(ctx);
       for (unsigned i = 0; i < 4; i++) {
          VkDeviceSize offset;
@@ -1762,7 +1775,7 @@ zink_descriptors_update_bindless(struct zink_context *ctx)
             if (is_buffer) {
                size_t size = i ? screen->info.db_props.robustStorageTexelBufferDescriptorSize : screen->info.db_props.robustUniformTexelBufferDescriptorSize;
                info.type = i ? VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER : VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-               info.data.pSampler = (void*)&ctx->di.bindless[i].db.buffer_infos[handle];
+               info.data.pSampler = (void*)&ctx->di.bindless[i].db.buffer_infos[handle - ZINK_MAX_BINDLESS_HANDLES];
                VKSCR(GetDescriptorEXT)(screen->dev, &info, size, ctx->dd.db.bindless_db_map + ctx->dd.db.bindless_db_offsets[binding] + handle * size);
             } else {
                info.type = i ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

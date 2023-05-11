@@ -809,6 +809,8 @@ struct agx_occupancy {
 
 struct agx_occupancy agx_occupancy_for_register_count(unsigned halfregs);
 
+extern int agx_compiler_debug;
+
 #ifdef __cplusplus
 } /* extern C */
 #endif

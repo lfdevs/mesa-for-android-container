@@ -2032,11 +2032,6 @@ dzn_queue_submit(struct vk_queue *q,
 
       cmdlists[i] = (ID3D12CommandList *)cmd_buffer->cmdlist;
 
-      util_dynarray_foreach(&cmd_buffer->events.wait, struct dzn_event *, evt) {
-         if (FAILED(ID3D12CommandQueue_Wait(queue->cmdqueue, (*evt)->fence, 1)))
-            return vk_error(device, VK_ERROR_UNKNOWN);
-      }
-
       util_dynarray_foreach(&cmd_buffer->queries.reset, struct dzn_cmd_buffer_query_range, range) {
          mtx_lock(&range->qpool->queries_lock);
          for (uint32_t q = range->start; q < range->start + range->count; q++) {

@@ -26,10 +26,14 @@
 
 #include "sfn_instr_mem.h"
 
+#include "nir_intrinsics.h"
 #include "nir_intrinsics_indices.h"
+#include "sfn_alu_defines.h"
+#include "sfn_instr_alu.h"
 #include "sfn_instr_fetch.h"
 #include "sfn_instr_tex.h"
 #include "sfn_shader.h"
+#include "sfn_virtualvalues.h"
 
 namespace r600 {
 
@@ -559,6 +563,8 @@ RatInstr::emit(nir_intrinsic_instr *intr, Shader& shader)
       return emit_image_load_or_atomic(intr, shader);
    case nir_intrinsic_image_size:
       return emit_image_size(intr, shader);
+   case nir_intrinsic_image_samples:
+      return emit_image_samples(intr, shader);
    case nir_intrinsic_get_ssbo_size:
       return emit_ssbo_size(intr, shader);
    default:
@@ -977,6 +983,37 @@ RatInstr::emit_image_size(nir_intrinsic_instr *intrin, Shader& shader)
                                               dyn_offset));
       }
    }
+   return true;
+}
+
+bool
+RatInstr::emit_image_samples(nir_intrinsic_instr *intrin, Shader& shader)
+{
+   auto& vf = shader.value_factory();
+
+   auto src = RegisterVec4(0, true, {4, 4, 4, 4});
+
+   auto tmp =  shader.value_factory().temp_vec4(pin_group);
+   auto dest =  shader.value_factory().dest(intrin->dest, 0, pin_free);
+
+   auto const_offset = nir_src_as_const_value(intrin->src[0]);
+   PRegister dyn_offset = nullptr;
+
+   int res_id = R600_IMAGE_REAL_RESOURCE_OFFSET + nir_intrinsic_range_base(intrin);
+   if (const_offset)
+      res_id += const_offset[0].u32;
+   else
+      dyn_offset = shader.emit_load_to_register(vf.src(intrin->src[0], 0));
+
+   shader.emit_instruction(new TexInstr(TexInstr::get_resinfo,
+                                        tmp,
+                                        {3, 7, 7, 7},
+                                        src,
+                                        0 /* ?? */,
+                                        res_id,
+                                        dyn_offset));
+
+   shader.emit_instruction(new AluInstr(op1_mov, dest, tmp[0], AluInstr::last_write));
    return true;
 }
 

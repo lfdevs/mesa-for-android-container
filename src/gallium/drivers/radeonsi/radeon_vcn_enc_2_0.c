@@ -285,12 +285,12 @@ static void radeon_enc_nalu_sps_hevc(struct radeon_encoder *enc)
    } else if (pic->session_init.padding_width  != 0 ||
               pic->session_init.padding_height != 0) {
       radeon_enc_code_fixed_bits(enc, 0x1, 1);
+      radeon_enc_code_ue(enc, 0);
       radeon_enc_code_ue(enc, pic->session_init.padding_width / 2);
-      radeon_enc_code_ue(enc, pic->session_init.padding_width / 2);
-      radeon_enc_code_ue(enc, pic->session_init.padding_height / 2);
+      radeon_enc_code_ue(enc, 0);
       radeon_enc_code_ue(enc, pic->session_init.padding_height / 2);
    } else
-   radeon_enc_code_fixed_bits(enc, 0x0, 1);
+      radeon_enc_code_fixed_bits(enc, 0x0, 1);
 
    radeon_enc_code_ue(enc, pic->bit_depth_luma_minus8);
    radeon_enc_code_ue(enc, pic->bit_depth_chroma_minus8);

@@ -326,7 +326,6 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
 
    default: {
       nir_op pack_op = nir_op_pack_32_2x16;
-      bool need_clamp = false;
 
       switch (spi_shader_col_format) {
       case V_028714_SPI_SHADER_FP16_ABGR:
@@ -336,13 +335,39 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
       case V_028714_SPI_SHADER_UINT16_ABGR:
          if (type_size == 32) {
             pack_op = nir_op_pack_uint_2x16;
-            need_clamp = is_int8 || is_int10;
+            if (is_int8 || is_int10) {
+               /* clamp 32bit output for 8/10 bit color component */
+               uint32_t max_rgb = is_int8 ? 255 : 1023;
+
+               for (int i = 0; i < 4; i++) {
+                  if (!data[i])
+                     continue;
+
+                  uint32_t max_value = i == 3 && is_int10 ? 3 : max_rgb;
+                  data[i] = nir_umin(b, data[i], nir_imm_int(b, max_value));
+               }
+            }
          }
          break;
       case V_028714_SPI_SHADER_SINT16_ABGR:
          if (type_size == 32) {
             pack_op = nir_op_pack_sint_2x16;
-            need_clamp = is_int8 || is_int10;
+            if (is_int8 || is_int10) {
+               /* clamp 32bit output for 8/10 bit color component */
+               uint32_t max_rgb = is_int8 ? 127 : 511;
+               uint32_t min_rgb = is_int8 ? -128 : -512;
+
+               for (int i = 0; i < 4; i++) {
+                  if (!data[i])
+                     continue;
+
+                  uint32_t max_value = i == 3 && is_int10 ? 1 : max_rgb;
+                  uint32_t min_value = i == 3 && is_int10 ? -2u : min_rgb;
+
+                  data[i] = nir_imin(b, data[i], nir_imm_int(b, max_value));
+                  data[i] = nir_imax(b, data[i], nir_imm_int(b, min_value));
+               }
+            }
          }
          break;
       case V_028714_SPI_SHADER_UNORM16_ABGR:
@@ -354,14 +379,6 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
       default:
          unreachable("unsupport color export format");
          break;
-      }
-
-      /* clamp 32bit output for 8/10 bit color component */
-      for (int i = 0; i < 4; i++) {
-         if (need_clamp && data[i]) {
-            int max_value = is_int10 ? (i == 3 ? 3 : 1023) : 255;
-            data[i] = nir_umin(b, data[i], nir_imm_int(b, max_value));
-         }
       }
 
       for (int i = 0; i < 2; i++) {

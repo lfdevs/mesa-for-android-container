@@ -1617,9 +1617,10 @@ if with_gallium_opencl
 endif
 if with_clc
   llvm_modules += ['coverage', 'target', 'linker', 'irreader', 'option', 'libdriver', 'lto']
-  # all-targets is needed to support static linking LLVM build with multiple targets
-  # windowsdriver is needded with LLVM>=15, but we don't know what LLVM verrsion we are using yet
-  llvm_optional_modules += ['all-targets', 'windowsdriver']
+  # all-targets is needed to support static linking LLVM build with multiple targets.
+  # windowsdriver is needded with LLVM>=15 and frontendhlsl is needed with LLVM>=16,
+  # but we don't know what LLVM version we are using yet
+  llvm_optional_modules += ['all-targets', 'windowsdriver', 'frontendhlsl']
 endif
 draw_with_llvm = get_option('draw-use-llvm')
 if draw_with_llvm
@@ -1757,6 +1758,9 @@ if with_clc
     ]
     if dep_llvm.version().version_compare('>= 15.0')
       clang_modules += 'clangSupport'
+    endif
+    if dep_llvm.version().version_compare('>= 16.0')
+      clang_modules += 'clangASTMatchers'
     endif
 
     dep_clang = []

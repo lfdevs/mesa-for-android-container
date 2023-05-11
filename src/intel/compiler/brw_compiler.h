@@ -923,7 +923,8 @@ struct brw_wm_prog_data {
    bool dispatch_16;
    bool dispatch_32;
    bool dual_src_blend;
-   bool uses_pos_offset;
+   enum brw_sometimes uses_pos_offset;
+   bool read_pos_offset_input;
    bool uses_omask;
    bool uses_kill;
    bool uses_src_depth;
@@ -1184,6 +1185,25 @@ brw_wm_prog_data_is_coarse(const struct brw_wm_prog_data *prog_data,
           prog_data->coarse_pixel_dispatch == BRW_NEVER);
 
    return prog_data->coarse_pixel_dispatch;
+}
+
+static inline bool
+brw_wm_prog_data_uses_position_xy_offset(const struct brw_wm_prog_data *prog_data,
+                                         enum brw_wm_msaa_flags pushed_msaa_flags)
+{
+   bool per_sample;
+   if (pushed_msaa_flags & BRW_WM_MSAA_FLAG_ENABLE_DYNAMIC) {
+      per_sample = (pushed_msaa_flags & BRW_WM_MSAA_FLAG_PERSAMPLE_INTERP) != 0;
+   } else {
+      assert(prog_data->persample_dispatch == BRW_ALWAYS ||
+             prog_data->persample_dispatch == BRW_NEVER);
+      per_sample = prog_data->persample_dispatch == BRW_ALWAYS;
+   }
+
+   if (!per_sample)
+      return false;
+
+   return prog_data->read_pos_offset_input;
 }
 
 struct brw_push_const_block {

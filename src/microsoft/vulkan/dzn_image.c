@@ -915,7 +915,8 @@ dzn_GetImageMemoryRequirements2(VkDevice _device,
       memcpy(&desc1, &image->desc, sizeof(image->desc));
       memset(&desc1.SamplerFeedbackMipRegion, 0, sizeof(desc1.SamplerFeedbackMipRegion));
       info = dzn_ID3D12Device12_GetResourceAllocationInfo3(device->dev12, 0, 1, &desc1,
-                                                           &image->castable_format_count, &image->castable_formats,
+                                                           &image->castable_format_count,
+                                                           (const DXGI_FORMAT *const *) &image->castable_formats,
                                                            NULL);
    } else
 #endif

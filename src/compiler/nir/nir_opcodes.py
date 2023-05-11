@@ -907,7 +907,7 @@ binop("fmax", tfloat, _2src_commutative + associative, "fmax(src0, src1)")
 binop("imax", tint, _2src_commutative + associative, "src1 > src0 ? src1 : src0")
 binop("umax", tuint, _2src_commutative + associative, "src1 > src0 ? src1 : src0")
 
-binop("fpow", tfloat, "", "bit_size == 64 ? powf(src0, src1) : pow(src0, src1)")
+binop("fpow", tfloat, "", "bit_size == 64 ? pow(src0, src1) : powf(src0, src1)")
 
 binop_horiz("pack_half_2x16_split", 1, tuint32, 1, tfloat32, 1, tfloat32,
             "pack_half_1x16(src0.x) | (pack_half_1x16(src1.x) << 16)")

@@ -31,7 +31,7 @@
 #define agx_msg(fmt, ...)                                                      \
    fprintf(stderr, "[%s] " fmt, program_invocation_short_name, ##__VA_ARGS__)
 #else
-#define agx_msg(...) fprintf(stderr, __VA_ARGS)
+#define agx_msg(...) fprintf(stderr, __VA_ARGS__)
 #endif
 
 struct agx_streamout_target {

@@ -199,8 +199,6 @@ static const struct pvr_format pvr_format_table[] = {
    FORMAT_DEPTH_STENCIL(D16_UNORM, U16, U16, INVALID),
    /* VK_FORMAT_D32_SFLOAT = 126. */
    FORMAT_DEPTH_STENCIL(D32_SFLOAT, F32, F32, INVALID),
-   /* VK_FORMAT_S8_UINT = 127. */
-   FORMAT_DEPTH_STENCIL(S8_UINT, U8, INVALID, U8),
    /* VK_FORMAT_D24_UNORM_S8_UINT = 129. */
    FORMAT_DEPTH_STENCIL(D24_UNORM_S8_UINT, ST8U24, X8U24, U8X24),
    /* VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK = 147. */
@@ -917,7 +915,7 @@ void pvr_GetPhysicalDeviceSparseImageFormatProperties(
    VkPhysicalDevice physicalDevice,
    VkFormat format,
    VkImageType type,
-   uint32_t samples,
+   VkSampleCountFlagBits samples,
    VkImageUsageFlags usage,
    VkImageTiling tiling,
    uint32_t *pNumProperties,

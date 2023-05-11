@@ -971,7 +971,10 @@ isl_formats_have_same_bits_per_channel(enum isl_format format1,
    return fmtl1->channels.r.bits == fmtl2->channels.r.bits &&
           fmtl1->channels.g.bits == fmtl2->channels.g.bits &&
           fmtl1->channels.b.bits == fmtl2->channels.b.bits &&
-          fmtl1->channels.a.bits == fmtl2->channels.a.bits;
+          fmtl1->channels.a.bits == fmtl2->channels.a.bits &&
+          fmtl1->channels.l.bits == fmtl2->channels.l.bits &&
+          fmtl1->channels.i.bits == fmtl2->channels.i.bits &&
+          fmtl1->channels.p.bits == fmtl2->channels.p.bits;
 }
 
 /**

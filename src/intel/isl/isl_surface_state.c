@@ -206,10 +206,17 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       ASSERTED const struct isl_format_layout *surf_fmtl =
          isl_format_get_layout(info->surf->format);
       ASSERTED const struct isl_format_layout *view_fmtl =
-         isl_format_get_layout(info->surf->format);
+         isl_format_get_layout(info->view->format);
+
       assert(surf_fmtl->bpb == view_fmtl->bpb);
-      assert(surf_fmtl->bw == view_fmtl->bw);
-      assert(surf_fmtl->bh == view_fmtl->bh);
+
+      /* We could be attempting to upload blocks of compressed data via an
+       * uncompressed view, blocksize will not match there.
+       */
+      if (isl_format_is_compressed(info->view->format)) {
+         assert(surf_fmtl->bw == view_fmtl->bw);
+         assert(surf_fmtl->bh == view_fmtl->bh);
+      }
    }
 
    s.SurfaceFormat = info->view->format;

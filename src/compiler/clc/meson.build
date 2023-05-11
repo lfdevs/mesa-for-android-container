@@ -29,7 +29,17 @@ _libclc_cpp_args = ['-DLLVM_LIB_DIR="@0@"'.format(llvm_libdir)]
 _libclc_sources = []
 
 if with_microsoft_clc
-  clang_resource_dir = join_paths(llvm_libdir, 'clang', dep_llvm.version(), 'include')
+
+  # LLVM 16 moved clang header path from using full version to only major version
+  if dep_llvm.version().version_compare('< 16')
+    # Prior to LLVM 16, this path used a full version
+    clang_version_dir = dep_llvm.version()
+  else
+    # LLVM 16 changed to only using a major version
+    clang_version_dir = dep_llvm.version().split('.')[0]
+  endif
+  clang_resource_dir = join_paths(llvm_libdir, 'clang', clang_version_dir, 'include')
+
   if dep_llvm.version().version_compare('< 15.0')
     opencl_c_h = custom_target(
       'opencl-c.h',

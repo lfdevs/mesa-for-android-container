@@ -407,7 +407,7 @@ lower_gl_point_gs(nir_shader *shader)
 }
 
 struct lower_pv_mode_state {
-   nir_variable *varyings[VARYING_SLOT_MAX];
+   nir_variable *varyings[VARYING_SLOT_MAX][4];
    nir_variable *pos_counter;
    nir_variable *out_pos_counter;
    nir_variable *ring_offset;
@@ -462,11 +462,12 @@ lower_pv_mode_gs_store(nir_builder *b,
       nir_variable *var = nir_deref_instr_get_variable(deref);
 
       gl_varying_slot location = var->data.location;
-      assert(state->varyings[location]);
+      unsigned location_frac = var->data.location_frac;
+      assert(state->varyings[location][location_frac]);
       assert(intrin->src[1].is_ssa);
       nir_ssa_def *pos_counter = nir_load_var(b, state->pos_counter);
       nir_ssa_def *index = lower_pv_mode_gs_ring_index(b, state, pos_counter);
-      nir_deref_instr *varying_deref = nir_build_deref_var(b, state->varyings[location]);
+      nir_deref_instr *varying_deref = nir_build_deref_var(b, state->varyings[location][location_frac]);
       nir_deref_instr *ring_deref = nir_build_deref_array(b, varying_deref, index);
       // recreate the chain of deref that lead to the store.
       nir_deref_instr *new_top_deref = replicate_derefs(b, deref, ring_deref);
@@ -533,9 +534,10 @@ lower_pv_mode_emit_rotated_prim(nir_builder *b,
       rotated_i = nir_iadd(b, rotated_i, current_vertex);
       nir_foreach_variable_with_modes(var, b->shader, nir_var_shader_out) {
          gl_varying_slot location = var->data.location;
-         if (state->varyings[location]) {
+         unsigned location_frac = var->data.location_frac;
+         if (state->varyings[location][location_frac]) {
             nir_ssa_def *index = lower_pv_mode_gs_ring_index(b, state, rotated_i);
-            nir_deref_instr *value = nir_build_deref_array(b, nir_build_deref_var(b, state->varyings[location]), index);
+            nir_deref_instr *value = nir_build_deref_array(b, nir_build_deref_var(b, state->varyings[location][location_frac]), index);
             copy_vars(b, nir_build_deref_var(b, var), value);
          }
       }
@@ -648,10 +650,11 @@ lower_pv_mode_gs(nir_shader *shader, unsigned prim)
 
    nir_foreach_variable_with_modes(var, shader, nir_var_shader_out) {
       gl_varying_slot location = var->data.location;
+      unsigned location_frac = var->data.location_frac;
 
       char name[100];
-      snprintf(name, sizeof(name), "__tmp_primverts_%d", location);
-      state.varyings[location] =
+      snprintf(name, sizeof(name), "__tmp_primverts_%d_%d", location, location_frac);
+      state.varyings[location][location_frac] =
          nir_local_variable_create(entry,
                                    glsl_array_type(var->type,
                                                    state.ring_size,
@@ -3690,7 +3693,7 @@ zink_shader_compile_separate(struct zink_screen *screen, struct zink_shader *zs)
    unsigned offsets[4];
    zink_descriptor_shader_get_binding_offsets(zs, offsets);
    nir_foreach_variable_with_modes(var, nir, nir_var_mem_ubo | nir_var_mem_ssbo | nir_var_uniform | nir_var_image) {
-      if (var->data.bindless)
+      if (var->data.descriptor_set == screen->desc_set_id[ZINK_DESCRIPTOR_BINDLESS])
          continue;
       var->data.descriptor_set = set;
       switch (var->data.mode) {

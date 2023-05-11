@@ -1954,10 +1954,21 @@ radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.dirty &= ~RADV_CMD_DIRTY_PIPELINE;
 }
 
+static bool
+radv_get_depth_clip_enable(struct radv_cmd_buffer *cmd_buffer)
+{
+   const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
+
+   return d->vk.rs.depth_clip_enable == VK_MESA_DEPTH_CLIP_ENABLE_TRUE ||
+          (d->vk.rs.depth_clip_enable == VK_MESA_DEPTH_CLIP_ENABLE_NOT_CLAMP &&
+           !d->vk.rs.depth_clamp_enable);
+}
+
 static enum radv_depth_clamp_mode
 radv_get_depth_clamp_mode(struct radv_cmd_buffer *cmd_buffer)
 {
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
+   bool depth_clip_enable = radv_get_depth_clip_enable(cmd_buffer);
    const struct radv_device *device = cmd_buffer->device;
    enum radv_depth_clamp_mode mode;
 
@@ -1966,7 +1977,7 @@ radv_get_depth_clamp_mode(struct radv_cmd_buffer *cmd_buffer)
       /* For optimal performance, depth clamping should always be enabled except if the application
        * disables clamping explicitly or uses depth values outside of the [0.0, 1.0] range.
        */
-      if (!d->vk.rs.depth_clip_enable ||
+      if (!depth_clip_enable ||
           device->vk.enabled_extensions.EXT_depth_range_unrestricted) {
          mode = RADV_DEPTH_CLAMP_MODE_DISABLED;
       } else {
@@ -2363,11 +2374,12 @@ static void
 radv_emit_clipping(struct radv_cmd_buffer *cmd_buffer)
 {
    const struct radv_dynamic_state *d = &cmd_buffer->state.dynamic;
+   bool depth_clip_enable = radv_get_depth_clip_enable(cmd_buffer);
 
    radeon_set_context_reg(cmd_buffer->cs, R_028810_PA_CL_CLIP_CNTL,
                           S_028810_DX_RASTERIZATION_KILL(d->vk.rs.rasterizer_discard_enable) |
-                             S_028810_ZCLIP_NEAR_DISABLE(!d->vk.rs.depth_clip_enable) |
-                             S_028810_ZCLIP_FAR_DISABLE(!d->vk.rs.depth_clip_enable) |
+                             S_028810_ZCLIP_NEAR_DISABLE(!depth_clip_enable) |
+                             S_028810_ZCLIP_FAR_DISABLE(!depth_clip_enable) |
                              S_028810_DX_CLIP_SPACE_DEF(!d->vk.vp.depth_clip_negative_one_to_one) |
                              S_028810_DX_LINEAR_ATTR_CLIP_ENA(1));
 }
@@ -4229,6 +4241,12 @@ radv_emit_color_blend(struct radv_cmd_buffer *cmd_buffer)
                                   S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_NONE);
          }
       }
+
+      /* Disable RB+ blend optimizations on GFX11 when alpha-to-coverage is enabled. */
+      if (gfx_level >= GFX11 && d->vk.ms.alpha_to_coverage_enable) {
+         sx_mrt_blend_opt[0] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_NONE) |
+                               S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_NONE);
+      }
    }
 
    radeon_set_context_reg_seq(cmd_buffer->cs, R_028780_CB_BLEND0_CONTROL, MAX_RTS);
@@ -4510,7 +4528,8 @@ radv_cmd_buffer_flush_dynamic_state(struct radv_cmd_buffer *cmd_buffer, bool pip
 
    if (states & (RADV_CMD_DIRTY_DYNAMIC_RASTERIZER_DISCARD_ENABLE |
                  RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLIP_ENABLE |
-                 RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE))
+                 RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE |
+                 RADV_CMD_DIRTY_DYNAMIC_DEPTH_CLAMP_ENABLE))
       radv_emit_clipping(cmd_buffer);
 
    if (states & (RADV_CMD_DIRTY_DYNAMIC_LOGIC_OP | RADV_CMD_DIRTY_DYNAMIC_LOGIC_OP_ENABLE |
@@ -4544,7 +4563,8 @@ radv_cmd_buffer_flush_dynamic_state(struct radv_cmd_buffer *cmd_buffer, bool pip
 
    if (states & (RADV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_ENABLE |
                  RADV_CMD_DIRTY_DYNAMIC_COLOR_WRITE_MASK |
-                 RADV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_EQUATION))
+                 RADV_CMD_DIRTY_DYNAMIC_COLOR_BLEND_EQUATION |
+                 RADV_CMD_DIRTY_DYNAMIC_ALPHA_TO_COVERAGE_ENABLE))
       radv_emit_color_blend(cmd_buffer);
 
    if (states & RADV_CMD_DIRTY_DYNAMIC_LINE_RASTERIZATION_MODE)
@@ -4606,6 +4626,9 @@ radv_flush_indirect_descriptor_sets(struct radv_cmd_buffer *cmd_buffer,
    uint64_t va = radv_buffer_get_va(cmd_buffer->upload.upload_bo);
    va += offset;
 
+   ASSERTED unsigned cdw_max =
+      radeon_check_space(device->ws, cs, MESA_VULKAN_SHADER_STAGES * 3);
+
    if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
       for (unsigned s = MESA_SHADER_VERTEX; s <= MESA_SHADER_FRAGMENT; s++)
          if (radv_cmdbuf_has_stage(cmd_buffer, s))
@@ -4618,11 +4641,13 @@ radv_flush_indirect_descriptor_sets(struct radv_cmd_buffer *cmd_buffer,
                                     cmd_buffer->state.shaders[MESA_SHADER_MESH]->info.user_data_0,
                                     AC_UD_INDIRECT_DESCRIPTOR_SETS, va);
 
-      if (radv_cmdbuf_has_stage(cmd_buffer, MESA_SHADER_TASK))
+      if (radv_cmdbuf_has_stage(cmd_buffer, MESA_SHADER_TASK)) {
+         radeon_check_space(device->ws, cmd_buffer->ace_internal.cs, 3);
          radv_emit_userdata_address(device, cmd_buffer->ace_internal.cs,
                                     cmd_buffer->state.shaders[MESA_SHADER_TASK],
                                     cmd_buffer->state.shaders[MESA_SHADER_TASK]->info.user_data_0,
                                     AC_UD_INDIRECT_DESCRIPTOR_SETS, va);
+      }
    } else {
       struct radv_shader *compute_shader = bind_point == VK_PIPELINE_BIND_POINT_COMPUTE
                                               ? cmd_buffer->state.shaders[MESA_SHADER_COMPUTE]
@@ -4631,6 +4656,8 @@ radv_flush_indirect_descriptor_sets(struct radv_cmd_buffer *cmd_buffer,
       radv_emit_userdata_address(device, cs, compute_shader, compute_shader->info.user_data_0,
                                  AC_UD_INDIRECT_DESCRIPTOR_SETS, va);
    }
+
+   assert(cmd_buffer->cs->cdw <= cdw_max);
 }
 
 ALWAYS_INLINE static void
@@ -6479,6 +6506,8 @@ static void
 radv_bind_vertex_shader(struct radv_cmd_buffer *cmd_buffer, const struct radv_shader *vs)
 {
    radv_bind_pre_rast_shader(cmd_buffer, vs);
+
+   /* Can't put anything else here due to merged shaders */
 }
 
 static void
@@ -6488,10 +6517,11 @@ radv_bind_tess_ctrl_shader(struct radv_cmd_buffer *cmd_buffer, const struct radv
 
    cmd_buffer->tess_rings_needed = true;
 
-   /* Always re-emit patch control points when a new pipeline with tessellation is bound because a
-    * bunch of parameters (user SGPRs, TCS vertices out, ccw, etc) can be different.
+   /* Always re-emit patch control points/domain origin when a new pipeline with tessellation is
+    * bound because a bunch of parameters (user SGPRs, TCS vertices out, ccw, etc) can be different.
     */
-   cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_PATCH_CONTROL_POINTS;
+   cmd_buffer->state.dirty |=
+      RADV_CMD_DIRTY_DYNAMIC_PATCH_CONTROL_POINTS | RADV_CMD_DIRTY_DYNAMIC_TESS_DOMAIN_ORIGIN;
 }
 
 static void
@@ -6499,13 +6529,7 @@ radv_bind_tess_eval_shader(struct radv_cmd_buffer *cmd_buffer, const struct radv
 {
    radv_bind_pre_rast_shader(cmd_buffer, tes);
 
-   cmd_buffer->tess_rings_needed = true;
-
-   /* Always re-emit patch control points/domain origin when a new pipeline with tessellation is
-    * bound because a bunch of parameters (user SGPRs, TCS vertices out, ccw, etc) can be different.
-    */
-   cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_PATCH_CONTROL_POINTS |
-                              RADV_CMD_DIRTY_DYNAMIC_TESS_DOMAIN_ORIGIN;
+   /* Can't put anything else here due to merged shaders */
 }
 
 static void

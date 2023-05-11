@@ -382,11 +382,32 @@ gl_nir_lower_samplers_as_deref(nir_shader *shader,
                                                 nir_metadata_dominance,
                                                 &state);
 
+   if (progress) {
+      nir_remove_dead_derefs(shader);
+      if (!shader->info.internal && shader_program) {
+         /* try to apply bindings for unused samplers to avoid index zero clobbering in backends */
+         nir_foreach_uniform_variable(var, shader) {
+            /* ignore hidden variables */
+            if (!glsl_type_is_sampler(glsl_without_array(var->type)) ||
+                var->data.how_declared == nir_var_hidden)
+               continue;
+            bool found = false;
+            hash_table_foreach(state.remap_table, entry) {
+               if (var == entry->data) {
+                  found = true;
+                  break;
+               }
+            }
+            if (!found) {
+               /* same as lower_deref() */
+               var->data.binding = shader_program->data->UniformStorage[var->data.location].opaque[shader->info.stage].index;
+            }
+         }
+      }
+   }
+
    /* keys are freed automatically by ralloc */
    _mesa_hash_table_destroy(state.remap_table, NULL);
-
-   if (progress)
-      nir_remove_dead_derefs(shader);
 
    return progress;
 }

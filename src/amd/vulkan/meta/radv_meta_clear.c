@@ -2113,9 +2113,9 @@ radv_fast_clear_range(struct radv_cmd_buffer *cmd_buffer, struct radv_image *ima
                               {
                                  .aspectMask = range->aspectMask,
                                  .baseMipLevel = range->baseMipLevel,
-                                 .levelCount = range->levelCount,
+                                 .levelCount = radv_get_levelCount(image, range),
                                  .baseArrayLayer = range->baseArrayLayer,
-                                 .layerCount = range->layerCount,
+                                 .layerCount = radv_get_layerCount(image, range),
                               },
                         },
                         0, NULL);
@@ -2131,7 +2131,7 @@ radv_fast_clear_range(struct radv_cmd_buffer *cmd_buffer, struct radv_image *ima
                },
          },
       .baseArrayLayer = range->baseArrayLayer,
-      .layerCount = range->layerCount,
+      .layerCount = radv_get_layerCount(image, range),
    };
 
    VkClearAttachment clear_att = {

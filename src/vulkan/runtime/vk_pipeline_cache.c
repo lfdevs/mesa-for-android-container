@@ -319,6 +319,15 @@ vk_pipeline_cache_insert_object(struct vk_pipeline_cache *cache,
    struct vk_pipeline_cache_object *result = NULL;
    /* add reference to either the found or inserted object */
    if (found) {
+       struct vk_pipeline_cache_object *found_object = (void *)entry->key;
+       if (found_object->ops != object->ops) {
+          /* The found object in the cache isn't fully formed. Replace it. */
+          assert(found_object->ops == &raw_data_object_ops);
+          assert(found_object->ref_cnt == 1 && object->ref_cnt == 1);
+          entry->key = object;
+          object = found_object;
+       }
+
       result = vk_pipeline_cache_object_ref((void *)entry->key);
    } else {
       result = vk_pipeline_cache_object_ref(object);
@@ -751,7 +760,10 @@ vk_common_GetPipelineCacheData(VkDevice _device,
          intptr_t data_size_resv = blob_reserve_uint32(&blob);
          blob_write_bytes(&blob, object->key_data, object->key_size);
 
-         blob_align(&blob, VK_PIPELINE_CACHE_BLOB_ALIGN);
+         if (!blob_align(&blob, VK_PIPELINE_CACHE_BLOB_ALIGN)) {
+            result = VK_INCOMPLETE;
+            break;
+         }
 
          uint32_t data_size;
          if (!vk_pipeline_cache_object_serialize(cache, object,
@@ -771,6 +783,8 @@ vk_common_GetPipelineCacheData(VkDevice _device,
 
          assert(data_size_resv >= 0);
          blob_overwrite_uint32(&blob, data_size_resv, data_size);
+
+         count++;
       }
    }
 

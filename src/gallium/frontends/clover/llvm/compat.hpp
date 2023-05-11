@@ -101,6 +101,16 @@ namespace clover {
                                                d);
          }
 
+         static inline unsigned
+         get_abi_type_alignment(::llvm::DataLayout dl, ::llvm::Type *type)
+         {
+#if LLVM_VERSION_MAJOR >= 16
+            return dl.getABITypeAlign(type).value();
+#else
+            return dl.getABITypeAlignment(type);
+#endif
+         }
+
          static inline bool
          is_scalable_vector(const ::llvm::Type *type)
          {

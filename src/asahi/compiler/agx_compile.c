@@ -39,6 +39,12 @@ DEBUG_GET_ONCE_FLAGS_OPTION(agx_compiler_debug, "AGX_MESA_DEBUG",
 
 int agx_compiler_debug = 0;
 
+uint64_t
+agx_get_compiler_debug(void)
+{
+   return debug_get_option_agx_compiler_debug();
+}
+
 #define DBG(fmt, ...)                                                          \
    do {                                                                        \
       if (agx_compiler_debug & AGX_DBG_MSGS)                                   \
@@ -2360,7 +2366,7 @@ agx_compile_shader_nir(nir_shader *nir, struct agx_shader_key *key,
                        struct util_dynarray *binary,
                        struct agx_shader_info *out)
 {
-   agx_compiler_debug = debug_get_option_agx_compiler_debug();
+   agx_compiler_debug = agx_get_compiler_debug();
 
    memset(out, 0, sizeof *out);
 

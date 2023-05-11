@@ -409,6 +409,7 @@ struct radv_instance {
    bool flush_before_query_copy;
    bool enable_unified_heap_on_apu;
    bool tex_non_uniform;
+   bool flush_before_timestamp_write;
    char *app_layer;
 };
 

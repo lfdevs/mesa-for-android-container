@@ -7365,12 +7365,16 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
        * per-sample dispatch.  If we need gl_SamplePosition and we don't have
        * persample dispatch, we hard-code it to 0.5.
        */
-      prog_data->uses_pos_offset =
-         prog_data->persample_dispatch != BRW_NEVER &&
-         (BITSET_TEST(shader->info.system_values_read,
-                      SYSTEM_VALUE_SAMPLE_POS) ||
-          BITSET_TEST(shader->info.system_values_read,
-                      SYSTEM_VALUE_SAMPLE_POS_OR_CENTER));
+      prog_data->read_pos_offset_input =
+         BITSET_TEST(shader->info.system_values_read,
+                     SYSTEM_VALUE_SAMPLE_POS) ||
+         BITSET_TEST(shader->info.system_values_read,
+                     SYSTEM_VALUE_SAMPLE_POS_OR_CENTER);
+
+      if (prog_data->read_pos_offset_input)
+         prog_data->uses_pos_offset = prog_data->persample_dispatch;
+      else
+         prog_data->uses_pos_offset = BRW_NEVER;
    }
 
    prog_data->has_render_target_reads = shader->info.outputs_read != 0ull;

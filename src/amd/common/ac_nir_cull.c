@@ -314,7 +314,7 @@ ac_nir_cull_line(nir_builder *b,
                  void *state)
 {
    nir_ssa_def *accepted = initially_accepted;
-   accepted = nir_iand(b, accepted, nir_inot(b, w_info->any_w_negative));
+   accepted = nir_iand(b, accepted, nir_inot(b, w_info->all_w_negative));
 
    nir_ssa_def *bbox_accepted = NULL;
 
@@ -328,7 +328,7 @@ ac_nir_cull_line(nir_builder *b,
       nir_ssa_def *prim_invisible =
          cull_small_primitive_line(b, pos, bbox_min, bbox_max, prim_outside_view);
 
-      bbox_accepted = nir_inot(b, prim_invisible);
+      bbox_accepted = nir_ior(b, nir_inot(b, prim_invisible), w_info->any_w_negative);
 
       /* for caller which need to react when primitive is accepted */
       if (accept_func) {

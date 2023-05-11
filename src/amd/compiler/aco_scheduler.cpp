@@ -560,7 +560,7 @@ perform_hazard_query(hazard_query* query, Instruction* instr, bool upwards)
    if (!upwards && instr->opcode == aco_opcode::p_exit_early_if)
       return hazard_fail_unreorderable;
 
-   if (query->uses_exec) {
+   if (query->uses_exec || query->writes_exec) {
       for (const Definition& def : instr->definitions) {
          if (def.isFixed() && def.physReg() == exec)
             return hazard_fail_exec;

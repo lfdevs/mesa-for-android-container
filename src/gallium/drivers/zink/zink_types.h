@@ -591,7 +591,6 @@ struct zink_batch_state {
    struct util_dynarray unref_resources;
    struct util_dynarray bindless_releases[2];
 
-   struct util_dynarray persistent_resources;
    struct util_dynarray zombie_samplers;
    struct util_dynarray dead_framebuffers;
 
@@ -1161,7 +1160,6 @@ struct zink_resource_object {
    bool copies_valid;
    bool copies_need_reset; //for use with batch state resets
 
-   unsigned persistent_maps; //if nonzero, requires vkFlushMappedMemoryRanges during batch use
    struct util_dynarray copies[16]; //regions being copied to; for barrier omission
 
    VkBuffer storage_buffer;

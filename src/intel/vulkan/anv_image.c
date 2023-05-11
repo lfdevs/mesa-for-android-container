@@ -364,6 +364,9 @@ can_fast_clear_with_non_zero_color(const struct intel_device_info *devinfo,
 
    /* Check bit compatibility for clear color components */
    for (uint32_t i = 0; i < fmt_list->viewFormatCount; i++) {
+      if (fmt_list->pViewFormats[i] == VK_FORMAT_UNDEFINED)
+         continue;
+
       struct anv_format_plane view_format_plane =
          anv_get_format_plane(devinfo, fmt_list->pViewFormats[i],
                               plane, image->vk.tiling);
@@ -401,6 +404,9 @@ storage_image_format_supports_atomic(const struct intel_device_info *devinfo,
 
    if (fmt_list) {
       for (uint32_t i = 0; i < fmt_list->viewFormatCount; i++) {
+         if (fmt_list->pViewFormats[i] == VK_FORMAT_UNDEFINED)
+            continue;
+
          enum isl_format view_format =
             anv_get_isl_format(devinfo, fmt_list->pViewFormats[i],
                                VK_IMAGE_ASPECT_COLOR_BIT, vk_tiling);
@@ -469,6 +475,9 @@ formats_ccs_e_compatible(const struct intel_device_info *devinfo,
       return false;
 
    for (uint32_t i = 0; i < fmt_list->viewFormatCount; i++) {
+      if (fmt_list->pViewFormats[i] == VK_FORMAT_UNDEFINED)
+         continue;
+
       enum isl_format view_format =
          anv_get_isl_format_with_usage(devinfo, fmt_list->pViewFormats[i],
                                        VK_IMAGE_ASPECT_COLOR_BIT, vk_usage,

@@ -58,12 +58,11 @@ void _nouveau_fence_update(struct nouveau_screen *, bool flushed);
 void _nouveau_fence_next(struct nouveau_context *);
 void _nouveau_fence_ref(struct nouveau_fence *, struct nouveau_fence **);
 
-void nouveau_fence_emit(struct nouveau_fence *);
 bool nouveau_fence_new(struct nouveau_context *, struct nouveau_fence **);
 void nouveau_fence_cleanup(struct nouveau_context *);
 bool nouveau_fence_work(struct nouveau_fence *, void (*)(void *), void *);
 void nouveau_fence_update(struct nouveau_screen *, bool flushed);
-void nouveau_fence_next(struct nouveau_context *);
+void nouveau_fence_next_if_current(struct nouveau_context *, struct nouveau_fence *);
 bool nouveau_fence_wait(struct nouveau_fence *, struct util_debug_callback *);
 bool nouveau_fence_signalled(struct nouveau_fence *);
 void nouveau_fence_ref(struct nouveau_fence *, struct nouveau_fence **);

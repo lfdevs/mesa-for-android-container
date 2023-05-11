@@ -409,7 +409,8 @@
                     "extendedDynamicState3DepthClampEnable": true,
                     "extendedDynamicState3DepthClipEnable": true,
                     "extendedDynamicState3ProvokingVertexMode": true,
-                    "extendedDynamicState3LineRasterizationMode": true
+                    "extendedDynamicState3LineRasterizationMode": true,
+                    "extendedDynamicState3DepthClipNegativeOneToOne": true
                 },
                 "VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT": {
                     "graphicsPipelineLibrary": true

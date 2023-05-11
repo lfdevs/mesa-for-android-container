@@ -405,7 +405,7 @@ zink_blit(struct pipe_context *pctx,
       zink_select_draw_vbo(ctx);
    }
    zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
-   if (!needs_present_readback && info->src.format != info->src.resource->format)
+   if (!zink_is_swapchain(src) && info->src.format != info->src.resource->format)
       zink_resource_object_init_mutable(ctx, src);
    if (!zink_is_swapchain(dst) && info->dst.format != info->dst.resource->format)
       zink_resource_object_init_mutable(ctx, dst);
