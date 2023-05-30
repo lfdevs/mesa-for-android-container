@@ -1134,6 +1134,9 @@ struct anv_device {
     /** List of all anv_device_memory objects */
     struct list_head                            memory_objects;
 
+    /** List of anv_image objects with a private binding for implicit CCS */
+    struct list_head                            image_private_objects;
+
     struct anv_bo_pool                          batch_bo_pool;
     struct anv_bo_pool                          utrace_bo_pool;
 
@@ -3641,6 +3644,9 @@ struct anv_image {
    } planes[3];
 
    struct anv_image_memory_range vid_dmv_top_surface;
+
+   /* Link in the anv_device.image_private_objects list */
+   struct list_head link;
 };
 
 static inline bool
@@ -3940,6 +3946,12 @@ anv_layout_to_fast_clear_type(const struct intel_device_info * const devinfo,
                               const struct anv_image * const image,
                               const VkImageAspectFlagBits aspect,
                               const VkImageLayout layout);
+
+bool ATTRIBUTE_PURE
+anv_layout_has_untracked_aux_writes(const struct intel_device_info * const devinfo,
+                                    const struct anv_image * const image,
+                                    const VkImageAspectFlagBits aspect,
+                                    const VkImageLayout layout);
 
 static inline bool
 anv_image_aspects_compatible(VkImageAspectFlags aspects1,

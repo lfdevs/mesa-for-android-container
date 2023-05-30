@@ -207,7 +207,7 @@ upload_vertices(struct gl_context *ctx, unsigned user_buffer_mask,
                                &upload_buffer, NULL, ctx->Const.VertexBufferOffsetIsInt32 ? 0 : start);
          if (!upload_buffer) {
             for (unsigned i = 0; i < num_buffers; i++)
-               _mesa_reference_buffer_object(ctx, &buffers->buffer, NULL);
+               _mesa_reference_buffer_object(ctx, &buffers[i].buffer, NULL);
 
             _mesa_marshal_InternalSetError(GL_OUT_OF_MEMORY);
             return false;
@@ -267,7 +267,7 @@ upload_vertices(struct gl_context *ctx, unsigned user_buffer_mask,
                             ctx->Const.VertexBufferOffsetIsInt32 ? 0 : offset);
       if (!upload_buffer) {
          for (unsigned i = 0; i < num_buffers; i++)
-            _mesa_reference_buffer_object(ctx, &buffers->buffer, NULL);
+            _mesa_reference_buffer_object(ctx, &buffers[i].buffer, NULL);
 
          _mesa_marshal_InternalSetError(GL_OUT_OF_MEMORY);
          return false;

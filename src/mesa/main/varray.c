@@ -304,6 +304,12 @@ _mesa_bind_vertex_buffer(struct gl_context *ctx,
       }
 
       vao->NonDefaultStateMask |= BITFIELD_BIT(index);
+   } else {
+      /* Since this function owns the vbo reference, it must release it if it
+       * doesn't use it.
+       */
+      if (take_vbo_ownership)
+         _mesa_reference_buffer_object(ctx, &vbo, NULL);
    }
 }
 

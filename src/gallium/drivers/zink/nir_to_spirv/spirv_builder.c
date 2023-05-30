@@ -1294,6 +1294,12 @@ SpvId
 spirv_builder_type_int(struct spirv_builder *b, unsigned width)
 {
    uint32_t args[] = { width, 1 };
+   if (width == 8)
+      spirv_builder_emit_cap(b, SpvCapabilityInt8);
+   else if (width == 16)
+      spirv_builder_emit_cap(b, SpvCapabilityInt16);
+   else if (width == 64)
+      spirv_builder_emit_cap(b, SpvCapabilityInt64);
    return get_type_def(b, SpvOpTypeInt, args, ARRAY_SIZE(args));
 }
 

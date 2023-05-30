@@ -585,7 +585,7 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
 
             /* clamp legacy color output */
             if (i == VARYING_SLOT_COL0 || i == VARYING_SLOT_COL1 ||
-                i == VARYING_SLOT_BFC0 || i == VARYING_SLOT_BFC0) {
+                i == VARYING_SLOT_BFC0 || i == VARYING_SLOT_BFC1) {
                nir_ssa_def *color = outputs.data[i][j];
                nir_ssa_def *clamp = nir_load_clamp_vertex_color_amd(&b);
                outputs.data[i][j] = nir_bcsel(&b, clamp, nir_fsat(&b, color), color);

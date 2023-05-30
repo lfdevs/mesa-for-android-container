@@ -4286,7 +4286,8 @@ void ac_create_shadowing_ib_preamble(const struct radeon_info *info,
                CC1_SHADOW_PER_CONTEXT_STATE(1) |
                CC1_SHADOW_CS_SH_REGS(1) |
                CC1_SHADOW_GFX_SH_REGS(1) |
-               CC1_SHADOW_GLOBAL_UCONFIG(1));
+               CC1_SHADOW_GLOBAL_UCONFIG(1) |
+               CC1_SHADOW_GLOBAL_CONFIG(1));
 
    for (unsigned i = 0; i < SI_NUM_SHADOWED_REG_RANGES; i++)
       ac_build_load_reg(info, pm4_cmd_add, pm4_cmdbuf, i, gpu_address);

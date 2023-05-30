@@ -30,23 +30,9 @@
 #include "util/u_handle_table.h"
 #include "va_private.h"
 
-static void vlVaGetPastReferenceFrame(vlVaDriver *drv, VASurfaceID surface_id,
-                      struct pipe_video_buffer **ref_frame)
-{
-   vlVaSurface *surf = handle_table_get(drv->htab, surface_id);
-   if (surf) {
-      *ref_frame = surf->obsolete_buf;
-      surf->obsolete_buf = NULL;
-   }
-   else
-      *ref_frame = NULL;
-}
-
 static void resetReferencePictureDesc(struct pipe_h264_picture_desc *h264,
                                       unsigned int i)
 {
-   struct h264_private *private = h264->priv;
-
    h264->ref[i] = NULL;
    h264->frame_num_list[i] = 0;
    h264->is_long_term[i] = 0;
@@ -54,21 +40,17 @@ static void resetReferencePictureDesc(struct pipe_h264_picture_desc *h264,
    h264->bottom_is_reference[i] = 0;
    h264->field_order_cnt_list[i][0] = 0;
    h264->field_order_cnt_list[i][1] = 0;
-
-   private->past_ref[i] = NULL;
 }
 
 void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VAPictureParameterBufferH264 *h264 = buf->data;
-   struct h264_private *private = &context->h264;
    unsigned int top_or_bottom_field;
    bool is_ref;
    unsigned i;
 
    assert(buf->size >= sizeof(VAPictureParameterBufferH264) && buf->num_elements == 1);
    context->desc.h264.slice_count = 0;
-   context->desc.h264.priv = private;
    /*CurrPic*/
    context->desc.h264.field_order_cnt[0] = h264->CurrPic.TopFieldOrderCnt;
    context->desc.h264.field_order_cnt[1] = h264->CurrPic.BottomFieldOrderCnt;
@@ -148,7 +130,6 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
       }
 
       vlVaGetReferenceFrame(drv, h264->ReferenceFrames[i].picture_id, &context->desc.h264.ref[i]);
-      vlVaGetPastReferenceFrame(drv, h264->ReferenceFrames[i].picture_id, &private->past_ref[i]);
       context->desc.h264.frame_num_list[i] = h264->ReferenceFrames[i].frame_idx;
 
       top_or_bottom_field = h264->ReferenceFrames[i].flags &

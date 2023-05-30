@@ -224,14 +224,15 @@ struct wait_entry {
    bool join(const wait_entry& other)
    {
       bool changed = (other.events & ~events) || (other.counters & ~counters) ||
-                     (other.wait_on_read && !wait_on_read) || (other.vmem_types & !vmem_types);
+                     (other.wait_on_read && !wait_on_read) || (other.vmem_types & !vmem_types) ||
+                     (!other.logical && logical);
       events |= other.events;
       counters |= other.counters;
       changed |= imm.combine(other.imm);
       changed |= delay.combine(other.delay);
       wait_on_read |= other.wait_on_read;
       vmem_types |= other.vmem_types;
-      assert(logical == other.logical);
+      logical &= other.logical;
       return changed;
    }
 
@@ -736,7 +737,7 @@ update_counters_for_flat_load(wait_ctx& ctx, memory_sync_info sync = memory_sync
 
 void
 insert_wait_entry(wait_ctx& ctx, PhysReg reg, RegClass rc, wait_event event, bool wait_on_read,
-                  uint8_t vmem_types = 0, unsigned cycles = 0)
+                  uint8_t vmem_types = 0, unsigned cycles = 0, bool force_linear = false)
 {
    uint16_t counters = get_counters_for_event(event);
    wait_imm imm;
@@ -760,7 +761,7 @@ insert_wait_entry(wait_ctx& ctx, PhysReg reg, RegClass rc, wait_event event, boo
       delay.salu_cycles = cycles;
    }
 
-   wait_entry new_entry(event, imm, delay, !rc.is_linear(), wait_on_read);
+   wait_entry new_entry(event, imm, delay, !rc.is_linear() && !force_linear, wait_on_read);
    new_entry.vmem_types |= vmem_types;
 
    for (unsigned i = 0; i < rc.size(); i++) {
@@ -781,7 +782,14 @@ void
 insert_wait_entry(wait_ctx& ctx, Definition def, wait_event event, uint8_t vmem_types = 0,
                   unsigned cycles = 0)
 {
-   insert_wait_entry(ctx, def.physReg(), def.regClass(), event, true, vmem_types, cycles);
+   /* We can't safely write to unwritten destination VGPR lanes on GFX11 without waiting for
+    * the load to finish.
+    */
+   bool force_linear =
+      ctx.gfx_level >= GFX11 && (event & (event_lds | event_gds | event_vmem | event_flat));
+
+   insert_wait_entry(ctx, def.physReg(), def.regClass(), event, true, vmem_types, cycles,
+                     force_linear);
 }
 
 void

@@ -247,6 +247,7 @@ virgl_get_query_result_resource(struct pipe_context *ctx,
    struct virgl_query *query = virgl_query(q);
    struct virgl_resource *qbo = (struct virgl_resource *)resource;
 
+   virgl_resource_dirty(qbo, 0);
    virgl_encode_get_query_result_qbo(vctx, query->handle, qbo, (flags & PIPE_QUERY_WAIT), result_type, offset, index);
 }
 

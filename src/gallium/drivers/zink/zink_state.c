@@ -522,10 +522,10 @@ zink_bind_depth_stencil_alpha_state(struct pipe_context *pctx, void *cso)
          state->dirty |= !zink_screen(pctx->screen)->info.have_EXT_extended_dynamic_state;
          ctx->dsa_state_changed = true;
       }
-      if (!zink_screen(ctx->base.screen)->driver_workarounds.track_renderpasses && !ctx->blitting)
+      if (!ctx->track_renderpasses && !ctx->blitting)
          zink_parse_tc_info(ctx);
    }
-   if (!zink_screen(ctx->base.screen)->driver_workarounds.track_renderpasses && !ctx->blitting) {
+   if (!ctx->track_renderpasses && !ctx->blitting) {
       bool zs_write = ctx->dsa_state ? ctx->dsa_state->hw_state.depth_write || ctx->dsa_state->hw_state.stencil_test : false;
       if (prev_zswrite != zs_write) {
          /* flag renderpass for re-check on next draw */

@@ -1328,9 +1328,16 @@ alloc_private_binding(struct anv_device *device,
       return VK_SUCCESS;
    }
 
-   return anv_device_alloc_bo(device, "image-binding-private",
-                              binding->memory_range.size, 0, 0,
-                              &binding->address.bo);
+   VkResult result = anv_device_alloc_bo(device, "image-binding-private",
+                                         binding->memory_range.size, 0, 0,
+                                         &binding->address.bo);
+   if (result == VK_SUCCESS) {
+      pthread_mutex_lock(&device->mutex);
+      list_addtail(&image->link, &device->image_private_objects);
+      pthread_mutex_unlock(&device->mutex);
+   }
+
+   return result;
 }
 
 VkResult
@@ -1470,8 +1477,12 @@ anv_image_finish(struct anv_image *image)
    }
 
    struct anv_bo *private_bo = image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].address.bo;
-   if (private_bo)
+   if (private_bo) {
+      pthread_mutex_lock(&device->mutex);
+      list_del(&image->link);
+      pthread_mutex_unlock(&device->mutex);
       anv_device_release_bo(device, private_bo);
+   }
 
    vk_image_finish(&image->vk);
 }
@@ -2370,6 +2381,48 @@ anv_layout_to_fast_clear_type(const struct intel_device_info * const devinfo,
    unreachable("Invalid isl_aux_state");
 }
 
+
+/**
+ * This function determines if the layout & usage of an image can have
+ * untracked aux writes. When we see a transition that matches this criteria,
+ * we need to mark the image as compressed written so that our predicated
+ * resolves work properly.
+ *
+ * @param devinfo The device information of the Intel GPU.
+ * @param image The image that may contain a collection of buffers.
+ * @param aspect The aspect of the image to be accessed.
+ * @param layout The current layout of the image aspect(s).
+ */
+bool
+anv_layout_has_untracked_aux_writes(const struct intel_device_info * const devinfo,
+                                    const struct anv_image * const image,
+                                    const VkImageAspectFlagBits aspect,
+                                    const VkImageLayout layout)
+{
+   const VkImageUsageFlags image_aspect_usage =
+      vk_image_usage(&image->vk, aspect);
+   const VkImageUsageFlags usage =
+      vk_image_layout_to_usage_flags(layout, aspect) & image_aspect_usage;
+
+   /* Storage is the only usage where we do not write the image through a
+    * render target but through a descriptor. Since VK_EXT_descriptor_indexing
+    * and the update-after-bind feature, it has become impossible to track
+    * writes to images in descriptor at the command buffer build time. So it's
+    * not possible to mark an image as compressed like we do in
+    * genX_cmd_buffer.c(EndRendering) or anv_blorp.c for all transfer
+    * operations.
+    */
+   if (!(usage & VK_IMAGE_USAGE_STORAGE_BIT))
+      return false;
+
+   /* No AUX, no writes to the AUX surface :) */
+   const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
+   const enum isl_aux_usage aux_usage = image->planes[plane].aux_usage;
+   if (aux_usage == ISL_AUX_USAGE_NONE)
+      return false;
+
+   return true;
+}
 
 static struct anv_state
 alloc_bindless_surface_state(struct anv_device *device)

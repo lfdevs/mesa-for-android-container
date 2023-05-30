@@ -702,6 +702,20 @@ lower_ufind_msb64(nir_builder *b, nir_ssa_def *x)
 }
 
 static nir_ssa_def *
+lower_find_lsb64(nir_builder *b, nir_ssa_def *x)
+{
+   nir_ssa_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
+   nir_ssa_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
+   nir_ssa_def *lo_lsb = nir_find_lsb(b, x_lo);
+   nir_ssa_def *hi_lsb = nir_find_lsb(b, x_hi);
+
+   /* Use umin so that -1 (no bits found) becomes larger (0xFFFFFFFF)
+    * than any actual bit position, so we return a found bit instead.
+    */
+   return nir_umin(b, lo_lsb, nir_iadd(b, hi_lsb, nir_imm_int(b, 32)));
+}
+
+static nir_ssa_def *
 lower_2f(nir_builder *b, nir_ssa_def *x, unsigned dest_bit_size,
          bool src_is_signed)
 {
@@ -932,6 +946,8 @@ nir_lower_int64_op_to_options_mask(nir_op opcode)
       return nir_lower_extract64;
    case nir_op_ufind_msb:
       return nir_lower_ufind_msb64;
+   case nir_op_find_lsb:
+      return nir_lower_find_lsb64;
    case nir_op_bit_count:
       return nir_lower_bit_count64;
    default:
@@ -1034,6 +1050,8 @@ lower_int64_alu_instr(nir_builder *b, nir_alu_instr *alu)
       return lower_extract(b, alu->op, src[0], src[1]);
    case nir_op_ufind_msb:
       return lower_ufind_msb64(b, src[0]);
+   case nir_op_find_lsb:
+      return lower_find_lsb64(b, src[0]);
    case nir_op_bit_count:
       return lower_bit_count64(b, src[0]);
    case nir_op_i2f64:
@@ -1089,6 +1107,7 @@ should_lower_int64_alu_instr(const nir_alu_instr *alu,
          return false;
       break;
    case nir_op_ufind_msb:
+   case nir_op_find_lsb:
    case nir_op_bit_count:
       assert(alu->src[0].src.is_ssa);
       if (alu->src[0].src.ssa->bit_size != 64)

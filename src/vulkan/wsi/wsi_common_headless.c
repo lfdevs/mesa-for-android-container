@@ -31,6 +31,7 @@
 #include "vk_util.h"
 #include "vk_enum_to_str.h"
 #include "vk_instance.h"
+#include "vk_physical_device.h"
 #include "wsi_common_entrypoints.h"
 #include "wsi_common_private.h"
 #include "wsi_common_queue.h"
@@ -103,6 +104,10 @@ wsi_headless_surface_get_capabilities(VkIcdSurfaceBase *surface,
       VK_IMAGE_USAGE_TRANSFER_DST_BIT |
       VK_IMAGE_USAGE_STORAGE_BIT |
       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+   VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
+   if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
+      caps->supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
    return VK_SUCCESS;
 }

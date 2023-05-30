@@ -167,6 +167,17 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
       });
 
 
+   /* Wa_16011411144:
+    *
+    * SW must insert a PIPE_CONTROL cmd before and after the
+    * 3dstate_so_buffer_index_0/1/2/3 states to ensure so_buffer_index_*
+    * state is not combined with other state changes.
+    */
+   if (intel_needs_workaround(device->info, 16011411144)) {
+      anv_batch_emit(batch, GENX(PIPE_CONTROL), pc)
+         pc.CommandStreamerStallEnable = true;
+   }
+
    anv_batch_emit(batch, GENX(3DSTATE_SO_BUFFER), sob) {
 #if GFX_VER < 12
       sob.SOBufferIndex = 0;
@@ -187,6 +198,12 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
        */
       sob.StreamOffsetWriteEnable = true;
       sob.StreamOffset = 0;
+   }
+
+   if (intel_needs_workaround(device->info, 16011411144)) {
+      /* Wa_16011411144: also CS_STALL after touching SO_BUFFER change */
+      anv_batch_emit(batch, GENX(PIPE_CONTROL), pc)
+         pc.CommandStreamerStallEnable = true;
    }
 
    dw = anv_batch_emitn(batch, 5, GENX(3DSTATE_SO_DECL_LIST),

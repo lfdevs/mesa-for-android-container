@@ -142,6 +142,7 @@ foreach t : [['125', 'gfx125', 'dg2']]
                                    # without modifying grl source code, remove
                                    # if fixed there
       ],
+      env: ['MESA_SHADER_CACHE_DISABLE=true'],
       depends : [prog_intel_clc]
     )
   endforeach

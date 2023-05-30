@@ -3473,7 +3473,7 @@ genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
        * 3dstate_so_buffer_index_0/1/2/3 states to ensure so_buffer_index_*
        * state is not combined with other state changes.
        */
-      if (intel_device_info_is_dg2(cmd_buffer->device->info)) {
+      if (intel_needs_workaround(cmd_buffer->device->info, 16011411144)) {
          anv_add_pending_pipe_bits(cmd_buffer,
                                    ANV_PIPE_CS_STALL_BIT,
                                    "before SO_BUFFER change WA");
@@ -3507,7 +3507,7 @@ genX(cmd_buffer_flush_gfx_state)(struct anv_cmd_buffer *cmd_buffer)
          }
       }
 
-      if (intel_device_info_is_dg2(cmd_buffer->device->info)) {
+      if (intel_needs_workaround(cmd_buffer->device->info, 16011411144)) {
          /* Wa_16011411144: also CS_STALL after touching SO_BUFFER change */
          anv_add_pending_pipe_bits(cmd_buffer,
                                    ANV_PIPE_CS_STALL_BIT,
@@ -4132,6 +4132,26 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
                                     img_barrier->srcQueueFamilyIndex,
                                     img_barrier->dstQueueFamilyIndex,
                                     false /* will_full_fast_clear */);
+         }
+      }
+
+      /* Mark image as compressed if the destination layout has untracked
+       * writes to the aux surface.
+       */
+      VkImageAspectFlags aspects =
+         vk_image_expand_aspect_mask(&image->vk, range->aspectMask);
+      anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
+         VkImageAspectFlagBits aspect = 1UL << aspect_bit;
+         if (anv_layout_has_untracked_aux_writes(
+                cmd_buffer->device->info,
+                image, aspect,
+                img_barrier->newLayout)) {
+            for (uint32_t l = 0; l < level_count; l++) {
+               set_image_compressed_bit(cmd_buffer, image, aspect,
+                                        range->baseMipLevel + l,
+                                        base_layer, layer_count,
+                                        true);
+            }
          }
       }
    }

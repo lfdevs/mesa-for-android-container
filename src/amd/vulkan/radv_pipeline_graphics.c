@@ -569,13 +569,17 @@ radv_pipeline_is_blend_enabled(const struct radv_graphics_pipeline *pipeline,
 }
 
 static uint64_t
-radv_pipeline_needed_dynamic_state(const struct radv_graphics_pipeline *pipeline,
+radv_pipeline_needed_dynamic_state(const struct radv_device *device,
+                                   const struct radv_graphics_pipeline *pipeline,
                                    const struct vk_graphics_pipeline_state *state)
 {
    bool has_color_att = radv_pipeline_has_color_attachments(state->rp);
    bool raster_enabled = !state->rs->rasterizer_discard_enable ||
                          (pipeline->dynamic_states & RADV_DYNAMIC_RASTERIZER_DISCARD_ENABLE);
    uint64_t states = RADV_DYNAMIC_ALL;
+
+   if (device->physical_device->rad_info.gfx_level < GFX10_3)
+      states &= ~RADV_DYNAMIC_FRAGMENT_SHADING_RATE;
 
    /* Disable dynamic states that are useless to mesh shading. */
    if (radv_pipeline_has_stage(pipeline, MESA_SHADER_MESH)) {
@@ -621,9 +625,6 @@ radv_pipeline_needed_dynamic_state(const struct radv_graphics_pipeline *pipeline
    if (!(pipeline->dynamic_states & RADV_DYNAMIC_LINE_STIPPLE_ENABLE) &&
        !state->rs->line.stipple.enable)
       states &= ~RADV_DYNAMIC_LINE_STIPPLE;
-
-   if (!radv_is_vrs_enabled(pipeline, state))
-      states &= ~RADV_DYNAMIC_FRAGMENT_SHADING_RATE;
 
    if (!has_color_att || !radv_pipeline_is_blend_enabled(pipeline, state->cb))
       states &= ~RADV_DYNAMIC_BLEND_CONSTANTS;
@@ -895,10 +896,11 @@ radv_pipeline_init_input_assembly_state(const struct radv_device *device,
 }
 
 static void
-radv_pipeline_init_dynamic_state(struct radv_graphics_pipeline *pipeline,
+radv_pipeline_init_dynamic_state(const struct radv_device *device,
+                                 struct radv_graphics_pipeline *pipeline,
                                  const struct vk_graphics_pipeline_state *state)
 {
-   uint64_t needed_states = radv_pipeline_needed_dynamic_state(pipeline, state);
+   uint64_t needed_states = radv_pipeline_needed_dynamic_state(device, pipeline, state);
    struct radv_dynamic_state *dynamic = &pipeline->dynamic_state;
    uint64_t states = needed_states;
 
@@ -4087,7 +4089,7 @@ radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv
 
    if (!radv_pipeline_has_stage(pipeline, MESA_SHADER_MESH))
       radv_pipeline_init_input_assembly_state(device, pipeline);
-   radv_pipeline_init_dynamic_state(pipeline, &state);
+   radv_pipeline_init_dynamic_state(device, pipeline, &state);
 
    struct radv_depth_stencil_state ds_state =
       radv_pipeline_init_depth_stencil_state(device, pipeline, &state, pCreateInfo);

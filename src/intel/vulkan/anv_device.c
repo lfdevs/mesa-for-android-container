@@ -3005,6 +3005,10 @@ VkResult anv_CreateDevice(
       vk_device_dispatch_table_from_entrypoints(&dispatch_table, &doom64_device_entrypoints, true);
       override_initial_entrypoints = false;
    }
+#ifdef ANDROID
+   vk_device_dispatch_table_from_entrypoints(&dispatch_table, &android_device_entrypoints, true);
+   override_initial_entrypoints = false;
+#endif
    vk_device_dispatch_table_from_entrypoints(&dispatch_table,
       anv_genX(&physical_device->info, device_entrypoints),
       override_initial_entrypoints);
@@ -3127,6 +3131,7 @@ VkResult anv_CreateDevice(
                       HIGH_HEAP_MIN_ADDRESS);
 
    list_inithead(&device->memory_objects);
+   list_inithead(&device->image_private_objects);
 
    if (pthread_mutex_init(&device->mutex, NULL) != 0) {
       result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
@@ -3749,13 +3754,13 @@ VkResult anv_AllocateMemory(
        (mem_type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
       alloc_flags |= ANV_BO_ALLOC_LOCAL_MEM_CPU_VISIBLE;
 
-   if (!(mem_type->propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+   if (!mem_heap->is_local_mem)
       alloc_flags |= ANV_BO_ALLOC_NO_LOCAL_MEM;
 
    /* If the allocated buffer might end up in local memory and it's host
     * visible and uncached, enable CPU write-combining. It should be faster.
     */
-   if (!(alloc_flags & ANV_BO_ALLOC_NO_LOCAL_MEM) &&
+   if (mem_heap->is_local_mem &&
        (mem_type->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0 &&
        (mem_type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
       alloc_flags |= ANV_BO_ALLOC_WRITE_COMBINE;

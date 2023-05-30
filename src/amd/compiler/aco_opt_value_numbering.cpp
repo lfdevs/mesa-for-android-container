@@ -169,23 +169,19 @@ struct InstrPred {
       if (a->opcode == aco_opcode::v_readfirstlane_b32)
          return a->pass_flags == b->pass_flags;
 
-      if (a->isVOP3()) {
-         VALU_instruction& a3 = a->valu();
-         VALU_instruction& b3 = b->valu();
-         for (unsigned i = 0; i < 3; i++) {
-            if (a3.abs[i] != b3.abs[i] || a3.neg[i] != b3.neg[i])
-               return false;
-         }
-         return a3.clamp == b3.clamp && a3.omod == b3.omod && a3.opsel == b3.opsel;
+      if (a->isVALU()) {
+         VALU_instruction& aV = a->valu();
+         VALU_instruction& bV = b->valu();
+         if (aV.abs != bV.abs || aV.neg != bV.neg || aV.clamp != bV.clamp || aV.omod != bV.omod ||
+             aV.opsel != bV.opsel || aV.opsel_lo != bV.opsel_lo || aV.opsel_hi != bV.opsel_hi)
+            return false;
       }
       if (a->isDPP16()) {
          DPP16_instruction& aDPP = a->dpp16();
          DPP16_instruction& bDPP = b->dpp16();
          return aDPP.pass_flags == bDPP.pass_flags && aDPP.dpp_ctrl == bDPP.dpp_ctrl &&
                 aDPP.bank_mask == bDPP.bank_mask && aDPP.row_mask == bDPP.row_mask &&
-                aDPP.bound_ctrl == bDPP.bound_ctrl && aDPP.abs[0] == bDPP.abs[0] &&
-                aDPP.abs[1] == bDPP.abs[1] && aDPP.neg[0] == bDPP.neg[0] &&
-                aDPP.neg[1] == bDPP.neg[1];
+                aDPP.bound_ctrl == bDPP.bound_ctrl;
       }
       if (a->isDPP8()) {
          DPP8_instruction& aDPP = a->dpp8();
@@ -197,10 +193,7 @@ struct InstrPred {
          SDWA_instruction& aSDWA = a->sdwa();
          SDWA_instruction& bSDWA = b->sdwa();
          return aSDWA.sel[0] == bSDWA.sel[0] && aSDWA.sel[1] == bSDWA.sel[1] &&
-                aSDWA.dst_sel == bSDWA.dst_sel && aSDWA.abs[0] == bSDWA.abs[0] &&
-                aSDWA.abs[1] == bSDWA.abs[1] && aSDWA.neg[0] == bSDWA.neg[0] &&
-                aSDWA.neg[1] == bSDWA.neg[1] && aSDWA.clamp == bSDWA.clamp &&
-                aSDWA.omod == bSDWA.omod;
+                aSDWA.dst_sel == bSDWA.dst_sel;
       }
 
       switch (a->format) {
@@ -232,21 +225,10 @@ struct InstrPred {
             return false;
          return true;
       }
-      case Format::VOP3P: {
-         VALU_instruction& a3P = a->valu();
-         VALU_instruction& b3P = b->valu();
-         for (unsigned i = 0; i < 3; i++) {
-            if (a3P.neg_lo[i] != b3P.neg_lo[i] || a3P.neg_hi[i] != b3P.neg_hi[i])
-               return false;
-         }
-         return a3P.opsel_lo == b3P.opsel_lo && a3P.opsel_hi == b3P.opsel_hi &&
-                a3P.clamp == b3P.clamp;
-      }
       case Format::VINTERP_INREG: {
          VINTERP_inreg_instruction& aI = a->vinterp_inreg();
          VINTERP_inreg_instruction& bI = b->vinterp_inreg();
-         return aI.wait_exp == bI.wait_exp && aI.clamp == bI.clamp && aI.opsel == bI.opsel &&
-                aI.neg[0] == bI.neg[0] && aI.neg[1] == bI.neg[1] && aI.neg[2] == bI.neg[2];
+         return aI.wait_exp == bI.wait_exp;
       }
       case Format::PSEUDO_REDUCTION: {
          Pseudo_reduction_instruction& aR = a->reduction();

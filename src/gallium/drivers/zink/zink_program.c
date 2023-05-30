@@ -2326,8 +2326,8 @@ zink_set_primitive_emulation_keys(struct zink_context *ctx)
       //when using transform feedback primitives must be tessellated
       lower_filled_quad |= lower_quad_prim && ctx->gfx_stages[prev_vertex_stage]->info.has_transform_feedback_varyings;
 
-      if (!ctx->gfx_stages[MESA_SHADER_GEOMETRY] ||
-          (ctx->gfx_stages[MESA_SHADER_GEOMETRY]->info.gs.input_primitive != ctx->gfx_pipeline_state.gfx_prim_mode)) {
+      if (!ctx->gfx_stages[MESA_SHADER_GEOMETRY] || (ctx->gfx_stages[MESA_SHADER_GEOMETRY]->non_fs.is_generated &&
+          ctx->gfx_stages[MESA_SHADER_GEOMETRY]->info.gs.input_primitive != ctx->gfx_pipeline_state.gfx_prim_mode)) {
 
          if (!ctx->gfx_stages[prev_vertex_stage]->non_fs.generated_gs[ctx->gfx_pipeline_state.gfx_prim_mode][zink_prim_type]) {
             nir_shader *prev_stage = zink_shader_deserialize(screen, ctx->gfx_stages[prev_vertex_stage]);

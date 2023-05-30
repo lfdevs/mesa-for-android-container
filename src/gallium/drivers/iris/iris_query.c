@@ -540,6 +540,11 @@ iris_begin_query(struct pipe_context *ctx, struct pipe_query *query)
       ice->state.dirty |= IRIS_DIRTY_STREAMOUT | IRIS_DIRTY_CLIP;
    }
 
+   if (q->type == PIPE_QUERY_OCCLUSION_COUNTER && q->index == 0) {
+      ice->state.occlusion_query_active = true;
+      ice->state.dirty |= IRIS_DIRTY_STREAMOUT;
+   }
+
    if (q->type == PIPE_QUERY_SO_OVERFLOW_PREDICATE ||
        q->type == PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE)
       write_overflow_values(ice, q, false);
@@ -577,6 +582,11 @@ iris_end_query(struct pipe_context *ctx, struct pipe_query *query)
    if (q->type == PIPE_QUERY_PRIMITIVES_GENERATED && q->index == 0) {
       ice->state.prims_generated_query_active = false;
       ice->state.dirty |= IRIS_DIRTY_STREAMOUT | IRIS_DIRTY_CLIP;
+   }
+
+   if (q->type == PIPE_QUERY_OCCLUSION_COUNTER && q->index == 0) {
+      ice->state.occlusion_query_active = false;
+      ice->state.dirty |= IRIS_DIRTY_STREAMOUT;
    }
 
    if (q->type == PIPE_QUERY_SO_OVERFLOW_PREDICATE ||

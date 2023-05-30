@@ -772,7 +772,7 @@ lower_bit_size_callback(const nir_instr *instr, UNUSED void *data)
           * source.
           */
          assert(alu->src[0].src.is_ssa);
-         return alu->src[0].src.ssa->bit_size == 32 ? 0 : 32;
+         return alu->src[0].src.ssa->bit_size >= 32 ? 0 : 32;
       default:
          break;
       }

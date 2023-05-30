@@ -135,7 +135,10 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       nir_lower_imul64 |
       nir_lower_isign64 |
       nir_lower_divmod64 |
-      nir_lower_imul_high64;
+      nir_lower_imul_high64 |
+      nir_lower_find_lsb64 |
+      nir_lower_ufind_msb64 |
+      nir_lower_bit_count64;
    nir_lower_doubles_options fp64_options =
       nir_lower_drcp |
       nir_lower_dsqrt |

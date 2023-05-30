@@ -3562,6 +3562,7 @@ egl_image_target_texture(struct gl_context *ctx,
              !(target == GL_TEXTURE_2D || target == GL_TEXTURE_EXTERNAL_OES)) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
                         "%s(texture is imported from dmabuf)", caller);
+            pipe_resource_reference(&stimg.texture, NULL);
             _mesa_unlock_texture(ctx, texObj);
             return;
          }

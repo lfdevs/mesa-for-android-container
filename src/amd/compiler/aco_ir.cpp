@@ -760,6 +760,7 @@ get_cmp_info(aco_opcode op, CmpInfo* info)
    info->swapped = aco_opcode::num_opcodes;
    info->inverse = aco_opcode::num_opcodes;
    info->f32 = aco_opcode::num_opcodes;
+   info->vcmpx = aco_opcode::num_opcodes;
    switch (op) {
       // clang-format off
 #define CMP2(ord, unord, ord_swap, unord_swap, sz)                                                 \

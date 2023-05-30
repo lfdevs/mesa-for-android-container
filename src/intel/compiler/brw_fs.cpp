@@ -877,7 +877,7 @@ fs_inst::size_read(int arg) const
 
    case SHADER_OPCODE_LOAD_PAYLOAD:
       if (arg < this->header_size)
-         return REG_SIZE;
+         return retype(src[arg], BRW_REGISTER_TYPE_UD).component_size(8);
       break;
 
    case CS_OPCODE_CS_TERMINATE:

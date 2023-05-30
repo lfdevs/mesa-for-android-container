@@ -174,6 +174,15 @@ prune_old_swapchains(struct zink_screen *screen, struct kopper_displaytarget *cd
             continue;
          return;
       }
+      struct zink_batch_usage *u = cswap->batch_uses;
+      if (!zink_screen_usage_check_completion(screen, u)) {
+         /* these can't ever be pruned */
+         if (!wait || zink_batch_usage_is_unflushed(u))
+            return;
+
+         zink_screen_timeline_wait(screen, u->usage, UINT64_MAX);
+         cswap->batch_uses = NULL;
+      }
       cdt->old_swapchain = cswap->next;
       destroy_swapchain(screen, cswap);
    }
@@ -257,6 +266,8 @@ kopper_CreateSwapchain(struct zink_screen *screen, struct kopper_displaytarget *
                                VK_IMAGE_USAGE_SAMPLED_BIT |
                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+      if (cdt->caps.supportedUsageFlags & VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT)
+         cswap->scci.imageUsage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
       cswap->scci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
       cswap->scci.queueFamilyIndexCount = 0;
       cswap->scci.pQueueFamilyIndices = NULL;
@@ -597,7 +608,9 @@ zink_kopper_acquire(struct zink_context *ctx, struct zink_resource *res, uint64_
    } else if (is_swapchain_kill(ret)) {
       kill_swapchain(ctx, res);
    }
-   return !is_swapchain_kill(ret);
+   bool is_kill = is_swapchain_kill(ret);
+   zink_batch_usage_set(&cdt->swapchain->batch_uses, ctx->batch.state);
+   return !is_kill;
 }
 
 VkSemaphore
@@ -822,6 +835,7 @@ zink_kopper_acquire_readback(struct zink_context *ctx, struct zink_resource *res
       res->base.b.width0 = ctx->swapchain_size.width;
       res->base.b.height0 = ctx->swapchain_size.height;
    }
+   zink_batch_usage_set(&cdt->swapchain->batch_uses, ctx->batch.state);
    return true;
 }
 
@@ -853,6 +867,9 @@ zink_kopper_present_readback(struct zink_context *ctx, struct zink_resource *res
 
    zink_kopper_present_queue(screen, res);
    error = VKSCR(QueueWaitIdle)(screen->queue);
+   simple_mtx_lock(&screen->semaphores_lock);
+   util_dynarray_append(&screen->semaphores, VkSemaphore, acquire);
+   simple_mtx_unlock(&screen->semaphores_lock);
    return zink_screen_handle_vkresult(screen, error);
 }
 
@@ -968,4 +985,20 @@ zink_kopper_query_buffer_age(struct pipe_context *pctx, struct pipe_resource *pr
          return 0;
 
    return cdt->swapchain->images[res->obj->dt_idx].age;
+}
+
+static void
+swapchain_prune_batch_usage(struct kopper_swapchain *cswap, const struct zink_batch_usage *u)
+{
+   if (cswap->batch_uses == u)
+      cswap->batch_uses = NULL;
+}
+
+void
+zink_kopper_prune_batch_usage(struct kopper_displaytarget *cdt, const struct zink_batch_usage *u)
+{
+   struct kopper_swapchain *cswap = cdt->swapchain;
+   swapchain_prune_batch_usage(cswap, u);
+   for (cswap = cdt->old_swapchain; cswap; cswap = cswap->next)
+      swapchain_prune_batch_usage(cswap, u);
 }

@@ -1634,7 +1634,7 @@ zink_flush_frontbuffer(struct pipe_screen *pscreen,
    if (ctx->batch.swapchain || ctx->needs_present) {
       ctx->batch.has_work = true;
       pctx->flush(pctx, NULL, PIPE_FLUSH_END_OF_FRAME);
-      if (ctx->last_fence && screen->threaded) {
+      if (ctx->last_fence && screen->threaded_submit) {
          struct zink_batch_state *bs = zink_batch_state(ctx->last_fence);
          util_queue_fence_wait(&bs->flush_completed);
       }
@@ -2391,6 +2391,18 @@ init_driver_workarounds(struct zink_screen *screen)
    default:
       break;
    }
+   /* EDS2 is only used with EDS1 */
+   if (!screen->info.have_EXT_extended_dynamic_state)
+      screen->info.have_EXT_extended_dynamic_state2 = false;
+   if (screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
+      /* this completely breaks xfb somehow */
+      screen->info.have_EXT_extended_dynamic_state2 = false;
+   /* EDS3 is only used with EDS2 */
+   if (!screen->info.have_EXT_extended_dynamic_state2)
+      screen->info.have_EXT_extended_dynamic_state3 = false;
+   /* EXT_vertex_input_dynamic_state is only used with EDS2 and above */
+   if (!screen->info.have_EXT_extended_dynamic_state2)
+      screen->info.have_EXT_vertex_input_dynamic_state = false;
    if (screen->info.line_rast_feats.stippledRectangularLines &&
        screen->info.line_rast_feats.stippledBresenhamLines &&
        screen->info.line_rast_feats.stippledSmoothLines &&
@@ -2425,9 +2437,6 @@ init_driver_workarounds(struct zink_screen *screen)
                                                          screen->info.gpl_props.graphicsPipelineLibraryFastLinking ||
                                                          screen->is_cpu);
    screen->driver_workarounds.broken_l4a4 = screen->info.driver_props.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY;
-   if (screen->info.driver_props.driverID == VK_DRIVER_ID_AMD_PROPRIETARY)
-      /* this completely breaks xfb somehow */
-      screen->info.have_EXT_extended_dynamic_state2 = false;
    if (screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_TURNIP) {
       /* performance */
       screen->info.border_color_feats.customBorderColorWithoutFormat = VK_FALSE;
@@ -2490,7 +2499,6 @@ init_driver_workarounds(struct zink_screen *screen)
    }
    /* these drivers don't use VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT, so it can always be set */
    switch (screen->info.driver_props.driverID) {
-   case VK_DRIVER_ID_MESA_RADV:
    case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_VENUS:
    case VK_DRIVER_ID_NVIDIA_PROPRIETARY:

@@ -63,12 +63,6 @@ KHR-Single-GL43.arrays_of_arrays_gl.SubroutineFunctionCalls2,Fail
 
 KHR-GL43.shading_language_420pack.binding_images,Fail
 KHR-GL43.texture_view.view_sampling,Fail
-KHR-GL43.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
-KHR-GL43.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
-KHR-GL43.transform_feedback_overflow_query_ARB.basic-single-stream-interleaved-attribs,Fail
-KHR-GL43.transform_feedback_overflow_query_ARB.basic-single-stream-separate-attribs,Fail
-KHR-GL43.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
-KHR-GL43.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail
 
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail

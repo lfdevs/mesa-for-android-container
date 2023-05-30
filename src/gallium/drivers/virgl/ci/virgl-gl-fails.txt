@@ -40,9 +40,3 @@ dEQP-GLES31.functional.ssbo.layout.random.all_shared_buffer.36,Fail
 dEQP-GLES31.functional.ssbo.layout.random.nested_structs_arrays_instance_arrays.22,Fail
 
 KHR-GL30.transform_feedback.api_errors_test,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.basic-single-stream-interleaved-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.basic-single-stream-separate-attribs,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
-KHR-GL32.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail

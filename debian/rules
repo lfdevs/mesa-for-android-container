@@ -204,6 +204,7 @@ confflags += \
 	$(confflags_VALGRIND)
 
 override_dh_clean: regen_control
+	sed -i 's/-.*//' VERSION
 	rm -rf .pc
 	rm -rf build
 	rm -rf configure bin/config.guess bin/config.sub config.h.in
@@ -215,6 +216,7 @@ override_dh_clean: regen_control
 	dh_clean
 
 override_dh_auto_configure:
+	dpkg-parsechangelog | awk '/^Version:/ {print $$2}' > VERSION
 	$(buildflags) dh_auto_configure -- \
 		$(confflags)
 

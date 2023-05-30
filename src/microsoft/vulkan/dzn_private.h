@@ -794,6 +794,7 @@ struct dzn_descriptor_set_layout {
    struct {
       uint32_t bindings[MAX_DYNAMIC_BUFFERS];
       uint32_t count;
+      uint32_t desc_count;
       uint32_t range_offset;
    } dynamic_buffers;
    uint32_t buffer_count;

@@ -1620,6 +1620,7 @@ struct radv_cmd_state {
 
    uint32_t last_num_instances;
    uint32_t last_first_instance;
+   bool last_vertex_offset_valid;
    uint32_t last_vertex_offset;
    uint32_t last_drawid;
    uint32_t last_subpass_color_count;

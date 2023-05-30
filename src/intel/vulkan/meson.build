@@ -41,7 +41,8 @@ anv_entrypoints = custom_target(
     '--device-prefix', 'gfx12',
     '--device-prefix', 'gfx125',
     '--device-prefix', 'doom64',
-    '--device-prefix', 'hitman3'
+    '--device-prefix', 'hitman3',
+    '--device-prefix', 'android'
   ],
   depend_files : vk_entrypoints_gen_depend_files,
 )
@@ -137,6 +138,7 @@ libanv_files = files(
   'i915/anv_kmd_backend.c',
   'layers/anv_doom64.c',
   'layers/anv_hitman3.c',
+  'layers/anv_android_layer.c',
   'xe/anv_batch_chain.c',
   'xe/anv_batch_chain.h',
   'xe/anv_kmd_backend.c',

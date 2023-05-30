@@ -28,7 +28,7 @@ if with_platform_x11 and with_dri3
     include_directories : [inc_include, inc_src],
     dependencies : [
       dep_libdrm, dep_xcb_dri3, dep_xcb_present, dep_xcb_sync, dep_xshmfence,
-      dep_xcb_xfixes, dep_xcb_xrandr,
+      dep_xcb_xfixes,
     ],
     build_by_default : false,
   )
@@ -46,6 +46,6 @@ libloader = static_library(
   c_args : loader_c_args,
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_util],
-  dependencies : [dep_libdrm, dep_thread],
+  dependencies : [dep_libdrm, dep_thread, dep_xcb_xrandr],
   build_by_default : false,
 )

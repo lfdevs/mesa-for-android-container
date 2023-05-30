@@ -4276,17 +4276,6 @@ iris_create_so_decl_list(const struct pipe_stream_output_info *info,
       sol.Buffer1SurfacePitch = 4 * info->stride[1];
       sol.Buffer2SurfacePitch = 4 * info->stride[2];
       sol.Buffer3SurfacePitch = 4 * info->stride[3];
-
-#if INTEL_NEEDS_WA_14017076903
-      /* Wa_14017076903 : SOL should be programmed to force the
-       * rendering to be enabled.
-       *
-       * This fixes a rare case where SOL must render to get correct
-       * occlusion query results even when no PS and depth buffers are
-       * bound.
-       */
-      sol.ForceRendering = Force_on;
-#endif
    }
 
    iris_pack_command(GENX(3DSTATE_SO_DECL_LIST), so_decl_map, list) {
@@ -6708,6 +6697,41 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             sol.RenderingDisable = cso_rast->rasterizer_discard &&
                                    !ice->state.prims_generated_query_active;
             sol.ReorderMode = cso_rast->flatshade_first ? LEADING : TRAILING;
+
+
+#if INTEL_NEEDS_WA_14017076903
+            /* Wa_14017076903 :
+             *
+             * SKL PRMs, Volume 7: 3D-Media-GPGPU, Stream Output Logic (SOL) Stage:
+             *
+             * SOL_INT::Render_Enable =
+             *   (3DSTATE_STREAMOUT::Force_Rending == Force_On) ||
+             *   (
+             *     (3DSTATE_STREAMOUT::Force_Rending != Force_Off) &&
+             *     !(3DSTATE_GS::Enable && 3DSTATE_GS::Output Vertex Size == 0) &&
+             *     !3DSTATE_STREAMOUT::API_Render_Disable &&
+             *     (
+             *       3DSTATE_DEPTH_STENCIL_STATE::Stencil_TestEnable ||
+             *       3DSTATE_DEPTH_STENCIL_STATE::Depth_TestEnable ||
+             *       3DSTATE_DEPTH_STENCIL_STATE::Depth_WriteEnable ||
+             *       3DSTATE_PS_EXTRA::PS_Valid ||
+             *       3DSTATE_WM::Legacy Depth_Buffer_Clear ||
+             *       3DSTATE_WM::Legacy Depth_Buffer_Resolve_Enable ||
+             *       3DSTATE_WM::Legacy Hierarchical_Depth_Buffer_Resolve_Enable
+             *     )
+             *   )
+             *
+             * If SOL_INT::Render_Enable is false, the SO stage will not forward any
+             * topologies down the pipeline. Which is not what we want for occlusion
+             * queries.
+             *
+             * Here we force rendering to get SOL_INT::Render_Enable when occlusion
+             * queries are active.
+             */
+            const struct iris_rasterizer_state *cso_rast = ice->state.cso_rast;
+            if (!cso_rast->rasterizer_discard && ice->state.occlusion_query_active)
+               sol.ForceRendering = Force_on;
+#endif
          }
 
          assert(ice->state.streamout);

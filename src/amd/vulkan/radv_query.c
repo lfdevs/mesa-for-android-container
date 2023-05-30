@@ -1913,8 +1913,6 @@ emit_begin_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *poo
             cmd_buffer->state.active_prims_gen_queries++;
          }
 
-         emit_sample_streamout(cmd_buffer, va, index);
-
          if (pool->uses_gds) {
             /* generated prim counter */
             gfx10_copy_gds_query(cmd_buffer, RADV_NGG_QUERY_PRIM_GEN_OFFSET(index), va + 32);
@@ -1927,6 +1925,8 @@ emit_begin_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *poo
 
             cmd_buffer->state.active_prims_gen_gds_queries++;
          }
+
+         emit_sample_streamout(cmd_buffer, va, index);
       }
       break;
    }
@@ -2049,8 +2049,6 @@ emit_end_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *pool,
             cmd_buffer->state.active_prims_gen_queries--;
          }
 
-         emit_sample_streamout(cmd_buffer, va + 16, index);
-
          if (pool->uses_gds) {
             /* generated prim counter */
             gfx10_copy_gds_query(cmd_buffer, RADV_NGG_QUERY_PRIM_GEN_OFFSET(index), va + 36);
@@ -2060,6 +2058,8 @@ emit_end_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *pool,
             if (!cmd_buffer->state.active_prims_gen_gds_queries)
                cmd_buffer->state.dirty |= RADV_CMD_DIRTY_NGG_QUERY;
          }
+
+         emit_sample_streamout(cmd_buffer, va + 16, index);
       }
       break;
    }

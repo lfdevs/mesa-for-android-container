@@ -846,6 +846,9 @@ struct iris_context {
       /** Is a PIPE_QUERY_PRIMITIVES_GENERATED query active? */
       bool prims_generated_query_active;
 
+      /** Is a PIPE_QUERY_OCCLUSION_COUNTER query active? */
+      bool occlusion_query_active;
+
       /** 3DSTATE_STREAMOUT and 3DSTATE_SO_DECL_LIST packets */
       uint32_t *streamout;
 

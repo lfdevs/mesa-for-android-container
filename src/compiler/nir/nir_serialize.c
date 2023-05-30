@@ -330,7 +330,8 @@ write_variable(write_ctx *ctx, const nir_variable *var)
    if (var->constant_initializer)
       write_constant(ctx, var->constant_initializer);
    if (var->pointer_initializer)
-      write_lookup_object(ctx, var->pointer_initializer);
+      blob_write_uint32(ctx->blob,
+                        write_lookup_object(ctx, var->pointer_initializer));
    if (var->num_members > 0) {
       blob_write_bytes(ctx->blob, (uint8_t *) var->members,
                        var->num_members * sizeof(*var->members));

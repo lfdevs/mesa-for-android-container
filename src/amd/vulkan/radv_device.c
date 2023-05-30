@@ -296,10 +296,6 @@ radv_device_finish_ps_epilogs(struct radv_device *device)
 VkResult
 radv_device_init_vrs_state(struct radv_device *device)
 {
-   /* FIXME: 4k depth buffers should be large enough for now but we might want to adjust this
-    * dynamically at some point.
-    */
-   uint32_t width = 4096, height = 4096;
    VkDeviceMemory mem;
    VkBuffer buffer;
    VkResult result;
@@ -309,7 +305,7 @@ radv_device_init_vrs_state(struct radv_device *device)
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = VK_FORMAT_D16_UNORM,
-      .extent = {width, height, 1},
+      .extent = {MAX_FRAMEBUFFER_WIDTH, MAX_FRAMEBUFFER_HEIGHT, 1},
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,

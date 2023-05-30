@@ -206,6 +206,11 @@ Currently, we don't do this.
 
 This leads to wrong bounds checking, using a VGPR offset fixes it.
 
+## unused VMEM/DS destination lanes can't be used without waiting
+
+On GFX11, we can't safely read/write unused lanes of VMEM/DS destination
+VGPRs without waiting for the load to finish.
+
 ## GCN / GFX6 hazards
 
 ### VINTRP followed by a read with `v_readfirstlane` or `v_readlane`

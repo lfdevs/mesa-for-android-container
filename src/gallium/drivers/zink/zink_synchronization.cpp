@@ -280,6 +280,7 @@ zink_get_cmdbuf(struct zink_context *ctx, struct zink_resource *src, struct zink
       zink_batch_no_rp(ctx);
    if (unordered_exec) {
       ctx->batch.state->has_barriers = true;
+      ctx->batch.has_work = true;
       return ctx->batch.state->barrier_cmdbuf;
    }
    return ctx->batch.state->cmdbuf;
@@ -324,7 +325,28 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
    if (!res->obj->needs_zs_evaluate && !zink_resource_image_needs_barrier(res, new_layout, flags, pipeline))
       return;
    bool is_write = zink_resource_access_is_write(flags);
-   VkCommandBuffer cmdbuf = is_write ? zink_get_cmdbuf(ctx, NULL, res) : zink_get_cmdbuf(ctx, res, NULL);
+   VkCommandBuffer cmdbuf;
+   /* if current batch usage exists with ordered non-transfer access, never promote
+    * this avoids layout dsync
+    * TODO: figure out how to link up unordered layout -> ordered layout and delete
+    */
+   if (zink_resource_usage_matches(res, ctx->batch.state) && !ctx->unordered_blitting &&
+       (!res->obj->unordered_read || !res->obj->unordered_write)) {
+      cmdbuf = ctx->batch.state->cmdbuf;
+      res->obj->unordered_write = false;
+      res->obj->unordered_read = false;
+      /* it's impossible to detect this from the caller
+       * there should be no valid case where this barrier can occur inside a renderpass
+       */
+      zink_batch_no_rp(ctx);
+   } else {
+      cmdbuf = is_write ? zink_get_cmdbuf(ctx, NULL, res) : zink_get_cmdbuf(ctx, res, NULL);
+      /* force subsequent barriers to be ordered to avoid layout desync */
+      if (cmdbuf != ctx->batch.state->barrier_cmdbuf) {
+         res->obj->unordered_write = false;
+         res->obj->unordered_read = false;
+      }
+   }
    assert(new_layout);
    bool marker = zink_cmd_debug_marker_begin(ctx, cmdbuf, "image_barrier(%s->%s)", vk_ImageLayout_to_str(res->layout), vk_ImageLayout_to_str(new_layout));
    enum zink_resource_access rw = is_write ? ZINK_RESOURCE_ACCESS_RW : ZINK_RESOURCE_ACCESS_WRITE;

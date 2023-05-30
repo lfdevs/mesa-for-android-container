@@ -591,6 +591,15 @@ static void rvcn_dec_message_feedback(void *ptr)
    header->num_buffers = 0;
 }
 
+static const uint8_t h264_levels[] = { 10, 11, 12, 13, 20, 21, 22,
+                                       30, 31, 32, 40, 41, 42,
+                                       50, 51, 52, 60, 61, 62 };
+static uint8_t get_h264_level(StdVideoH264LevelIdc level)
+{
+   assert (level <= STD_VIDEO_H264_LEVEL_IDC_6_2);
+   return h264_levels[level];
+}
+
 static rvcn_dec_message_avc_t get_h264_msg(struct radv_video_session *vid,
                                            struct radv_video_session_params *params,
                                            const struct VkVideoDecodeInfoKHR *frame_info,
@@ -629,7 +638,7 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radv_video_session *vid,
    *height_in_samples = (sps->pic_height_in_map_units_minus1 + 1) * 16;
    if (!sps->flags.frame_mbs_only_flag)
       *height_in_samples *= 2;
-   result.level = sps->level_idc;
+   result.level = get_h264_level(sps->level_idc);
 
    result.sps_info_flags = 0;
 
@@ -1094,7 +1103,7 @@ static struct ruvd_h264 get_uvd_h264_msg(struct radv_video_session *vid,
    *height_in_samples = (sps->pic_height_in_map_units_minus1 + 1) * 16;
    if (!sps->flags.frame_mbs_only_flag)
       *height_in_samples *= 2;
-   result.level = sps->level_idc;
+   result.level = get_h264_level(sps->level_idc);
 
    result.sps_info_flags = 0;
 

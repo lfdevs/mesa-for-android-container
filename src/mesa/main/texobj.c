@@ -1071,7 +1071,7 @@ _mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex, bool is
       if (is_depth)
          texFormat = st_ChooseTextureFormat(ctx, target,
                                             GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT,
-                                            GL_NONE);
+                                            GL_UNSIGNED_INT);
       else
          texFormat = st_ChooseTextureFormat(ctx, target,
                                             GL_RGBA, GL_RGBA,

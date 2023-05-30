@@ -149,10 +149,6 @@ zink_context_destroy(struct pipe_context *pctx)
 
    zink_descriptors_deinit_bindless(ctx);
 
-   if (ctx->batch.state) {
-      zink_clear_batch_state(ctx, ctx->batch.state);
-      zink_batch_state_destroy(screen, ctx->batch.state);
-   }
    struct zink_batch_state *bs = ctx->batch_states;
    while (bs) {
       struct zink_batch_state *bs_next = bs->next;
@@ -166,6 +162,10 @@ zink_context_destroy(struct pipe_context *pctx)
       zink_clear_batch_state(ctx, bs);
       zink_batch_state_destroy(screen, bs);
       bs = bs_next;
+   }
+   if (ctx->batch.state) {
+      zink_clear_batch_state(ctx, ctx->batch.state);
+      zink_batch_state_destroy(screen, ctx->batch.state);
    }
 
    for (unsigned i = 0; i < 2; i++) {
@@ -2860,6 +2860,14 @@ zink_batch_rp(struct zink_context *ctx)
       if (ctx->render_condition.query)
          zink_start_conditional_render(ctx);
       zink_clear_framebuffer(ctx, clear_buffers);
+      if (ctx->pipeline_changed[0]) {
+         for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++) {
+            if (ctx->fb_state.cbufs[i])
+               zink_batch_reference_resource(&ctx->batch, zink_resource(ctx->fb_state.cbufs[i]->texture));
+         }
+         if (ctx->fb_state.zsbuf)
+            zink_batch_reference_resource(&ctx->batch, zink_resource(ctx->fb_state.zsbuf->texture));
+      }
    }
    /* unable to previously determine that queries didn't split renderpasses: ensure queries start inside renderpass */
    if (!ctx->queries_disabled && maybe_has_query_ends) {
@@ -3061,7 +3069,7 @@ zink_evaluate_depth_buffer(struct pipe_context *pctx)
 static void
 sync_flush(struct zink_context *ctx, struct zink_batch_state *bs)
 {
-   if (zink_screen(ctx->base.screen)->threaded)
+   if (zink_screen(ctx->base.screen)->threaded_submit)
       util_queue_fence_wait(&bs->flush_completed);
 }
 
@@ -3132,12 +3140,6 @@ zink_update_descriptor_refs(struct zink_context *ctx, bool compute)
       if (ctx->curr_compute)
          zink_batch_reference_program(batch, &ctx->curr_compute->base);
    } else {
-      for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++) {
-         if (ctx->fb_state.cbufs[i])
-            zink_batch_reference_resource(&ctx->batch, zink_resource(ctx->fb_state.cbufs[i]->texture));
-      }
-      if (ctx->fb_state.zsbuf)
-         zink_batch_reference_resource(&ctx->batch, zink_resource(ctx->fb_state.zsbuf->texture));
       for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++)
          update_resource_refs_for_stage(ctx, i);
       unsigned vertex_buffers_enabled_mask = ctx->gfx_pipeline_state.vertex_buffers_enabled_mask;
@@ -3657,7 +3659,7 @@ zink_flush(struct pipe_context *pctx,
                 check_device_lost(ctx);
           }
        }
-       if (ctx->tc && !screen->driver_workarounds.track_renderpasses)
+       if (ctx->tc && !ctx->track_renderpasses)
          tc_driver_internal_flush_notify(ctx->tc);
    } else {
       fence = &batch->state->fence;
@@ -4408,8 +4410,16 @@ zink_copy_image_buffer(struct zink_context *ctx, struct zink_resource *dst, stru
       }
       zink_cmd_debug_marker_end(ctx, cmdbuf, marker);
    }
-   if (needs_present_readback)
+   if (needs_present_readback) {
+      if (buf2img) {
+         img->obj->unordered_write = false;
+         buf->obj->unordered_read = false;
+      } else {
+         img->obj->unordered_read = false;
+         buf->obj->unordered_write = false;
+      }
       zink_kopper_present_readback(ctx, img);
+   }
 
    if (ctx->oom_flush && !ctx->batch.in_rp && !ctx->unordered_blitting)
       flush_batch(ctx, false);

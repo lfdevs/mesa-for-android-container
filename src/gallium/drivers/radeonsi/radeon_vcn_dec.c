@@ -92,7 +92,6 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
                                            struct pipe_h264_picture_desc *pic)
 {
    rvcn_dec_message_avc_t result;
-   struct h264_private *private;
    unsigned i, j, k;
 
    memset(&result, 0, sizeof(result));
@@ -187,25 +186,6 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
    if (dec->dpb_type != DPB_DYNAMIC_TIER_2) {
       result.decoded_pic_idx = pic->frame_num;
       goto end;
-   }
-
-   private = pic->priv;
-   for (i = 0; i < ARRAY_SIZE(private->past_ref); i++) {
-      for (k = 0; private->past_ref[i] && (k < ARRAY_SIZE(pic->ref)); k++)
-         if (pic->ref[k] && (private->past_ref[i] == pic->ref[k]))
-            break;
-
-      for (j = 0; private->past_ref[i]
-                     && (k == ARRAY_SIZE(pic->ref))
-                     && (j < ARRAY_SIZE(dec->render_pic_list)); j++) {
-         if (dec->render_pic_list[j]
-                  && (dec->render_pic_list[j] == private->past_ref[i])) {
-            dec->render_pic_list[j] = pic->ref[i];
-            vl_video_buffer_set_associated_data(pic->ref[i], &dec->base,
-                   (void *)(uintptr_t)j, &radeon_dec_destroy_associated_data);
-            break;
-         }
-      }
    }
 
    for (i = 0; i < ARRAY_SIZE(dec->render_pic_list); i++) {
@@ -3001,6 +2981,26 @@ static int radeon_dec_get_decoder_fence(struct pipe_video_codec *decoder,
 }
 
 /**
+ * update render list when target buffer got updated, use the existing
+ * index and update the new buffer to associate with it.
+ */
+static void radeon_dec_update_render_list(struct pipe_video_codec *decoder,
+                                          struct pipe_video_buffer *old,
+                                          struct pipe_video_buffer *updated)
+{
+   struct radeon_decoder *dec = (struct radeon_decoder *)decoder;
+   void *index = vl_video_buffer_get_associated_data(old, decoder);
+
+   vl_video_buffer_set_associated_data(updated, decoder, index,
+                                       old->destroy_associated_data);
+   for (int i = 0; i < ARRAY_SIZE(dec->render_pic_list); ++i) {
+      if (dec->render_pic_list[i] == old) {
+         dec->render_pic_list[i] = updated;
+         break;
+      }
+   }
+}
+/**
  * create and HW decoder
  */
 struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
@@ -3068,6 +3068,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
    dec->base.end_frame = radeon_dec_end_frame;
    dec->base.flush = radeon_dec_flush;
    dec->base.get_decoder_fence = radeon_dec_get_decoder_fence;
+   dec->base.update_decoder_target =  radeon_dec_update_render_list;
 
    dec->stream_type = stream_type;
    dec->stream_handle = si_vid_alloc_stream_handle();

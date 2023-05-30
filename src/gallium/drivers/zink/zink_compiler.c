@@ -55,7 +55,7 @@ static void
 copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
 {
    assert(glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type));
-   if (glsl_type_is_struct(dst->type)) {
+   if (glsl_type_is_struct_or_ifc(dst->type)) {
       for (unsigned i = 0; i < glsl_get_length(dst->type); ++i) {
          copy_vars(b, nir_build_deref_struct(b, dst, i), nir_build_deref_struct(b, src, i));
       }
@@ -1240,6 +1240,11 @@ zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
    /* Create input/output variables. */
    nir_foreach_shader_out_variable(var, prev_stage) {
       assert(!var->data.patch);
+
+      /* input vars can't be created for those */
+      if (var->data.location == VARYING_SLOT_LAYER ||
+          var->data.location == VARYING_SLOT_VIEW_INDEX)
+         continue;
 
       char name[100];
       if (var->name)

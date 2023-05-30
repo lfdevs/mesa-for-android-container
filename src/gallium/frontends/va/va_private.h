@@ -346,7 +346,6 @@ typedef struct {
       unsigned int slice_header_size;
    } mjpeg;
 
-   struct h264_private h264;
    struct vl_deint_filter *deint;
    vlVaBuffer *coded_buf;
    int target_id;

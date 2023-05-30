@@ -38,6 +38,7 @@
 #include <xcb/xfixes.h>
 #include <X11/Xlib-xcb.h>
 
+#include "loader_dri_helper.h"
 #ifdef HAVE_DRI3
 #include "loader_dri3_helper.h"
 #endif
@@ -287,7 +288,7 @@ struct dri2_egl_display
    int present_major_version;
    int present_minor_version;
    struct loader_dri3_extensions loader_dri3_ext;
-   struct loader_dri3_screen_resources screen_resources;
+   struct loader_screen_resources screen_resources;
 #endif
 #endif
 

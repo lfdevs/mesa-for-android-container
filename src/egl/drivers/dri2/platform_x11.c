@@ -1226,7 +1226,7 @@ dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(display);
 
-   loader_dri3_update_screen_resources(&dri2_dpy->screen_resources);
+   loader_update_screen_resources(&dri2_dpy->screen_resources);
 
    if (dri2_dpy->screen_resources.num_crtcs == 0) {
       /* If there's no CRTC active, use the present fake vblank of 1Hz */
@@ -1267,7 +1267,7 @@ dri2_x11_get_msc_rate(_EGLDisplay *display, _EGLSurface *surface,
    int area = 0;
 
    for (unsigned c = 0; c < dri2_dpy->screen_resources.num_crtcs; c++) {
-      struct loader_dri3_crtc_info *crtc =
+      struct loader_crtc_info *crtc =
          &dri2_dpy->screen_resources.crtcs[c];
 
       int c_area = box_intersection_area(reply->dst_x, reply->dst_y,
@@ -1663,8 +1663,8 @@ dri2_initialize_x11_dri3(_EGLDisplay *disp)
    if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, false))
       goto cleanup;
 
-   loader_dri3_init_screen_resources(&dri2_dpy->screen_resources,
-                                     dri2_dpy->conn, dri2_dpy->screen);
+   loader_init_screen_resources(&dri2_dpy->screen_resources,
+                                dri2_dpy->conn, dri2_dpy->screen);
 
    dri2_dpy->loader_dri3_ext.core = dri2_dpy->core;
    dri2_dpy->loader_dri3_ext.image_driver = dri2_dpy->image_driver;
@@ -1815,7 +1815,7 @@ void
 dri2_teardown_x11(struct dri2_egl_display *dri2_dpy)
 {
    if (dri2_dpy->dri2_major >= 3)
-      loader_dri3_destroy_screen_resources(&dri2_dpy->screen_resources);
+      loader_destroy_screen_resources(&dri2_dpy->screen_resources);
 
    if (dri2_dpy->own_device)
       xcb_disconnect(dri2_dpy->conn);

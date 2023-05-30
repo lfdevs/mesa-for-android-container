@@ -864,6 +864,7 @@ anv_cmd_buffer_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
          anv_descriptor_set_layout_unref(cmd_buffer->device, set->layout);
       anv_descriptor_set_layout_ref(layout);
       set->layout = layout;
+      set->generate_surface_states = 0;
    }
    set->is_push = true;
    set->size = anv_descriptor_set_layout_size(layout, false /* host_only */, 0);

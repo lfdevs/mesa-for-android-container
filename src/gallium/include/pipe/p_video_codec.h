@@ -133,6 +133,19 @@ struct pipe_video_codec
    int (*get_decoder_fence)(struct pipe_video_codec *codec,
                             struct pipe_fence_handle *fence,
                             uint64_t timeout);
+   /**
+    * Update target buffer address.
+    *
+    * Due to reallocation, target buffer address has changed, and the
+    * changed buffer will need to update to decoder so that when this buffer
+    * used as a reference frame, decoder can obtain its recorded information.
+    * Failed updating this buffer will miss reference frames and
+    * cause image corruption in the sebsequent output.
+    * If no target buffer change, this call is not necessary.
+    */
+   void (*update_decoder_target)(struct pipe_video_codec *codec,
+                                 struct pipe_video_buffer *old,
+                                 struct pipe_video_buffer *updated);
 };
 
 /**

@@ -136,6 +136,8 @@ mmap_calc_flags(struct anv_device *device, struct anv_bo *bo,
       flags |= I915_MMAP_WC;
    if (bo->map_wc)
       flags |= I915_MMAP_WC;
+   if (!(property_flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
+      flags |= I915_MMAP_WC;
 
    if (likely(device->physical->info.has_mmap_offset))
       flags = (flags & I915_MMAP_WC) ? I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB;

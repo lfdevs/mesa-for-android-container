@@ -378,6 +378,18 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
          return result;
    }
 
+   /* Add all the private BOs from images because we can't track after binding
+    * updates of VK_EXT_descriptor_indexing.
+    */
+   list_for_each_entry(struct anv_image, image,
+                       &device->image_private_objects, link) {
+      struct anv_bo *private_bo =
+         image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].address.bo;
+      result = anv_execbuf_add_bo(device, execbuf, private_bo, NULL, 0);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
    struct anv_batch_bo *first_batch_bo =
       list_first_entry(&cmd_buffers[0]->batch_bos, struct anv_batch_bo, link);
 

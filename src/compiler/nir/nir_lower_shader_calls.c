@@ -1184,13 +1184,6 @@ lower_resume(nir_shader *shader, int call_idx)
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    nir_instr *resume_instr = find_resume_instr(impl, call_idx);
 
-   /* Deref chains contain metadata information that is needed by other passes
-    * after this one. If we don't rematerialize the derefs in the blocks where
-    * they're used here, the following lowerings will insert phis which can
-    * prevent other passes from chasing deref chains.
-    */
-   nir_rematerialize_derefs_in_use_blocks_impl(impl);
-
    if (duplicate_loop_bodies(impl, resume_instr)) {
       nir_validate_shader(shader, "after duplicate_loop_bodies in "
                                   "nir_lower_shader_calls");
@@ -1945,6 +1938,13 @@ nir_lower_shader_calls(nir_shader *shader,
       if (progress)
          NIR_PASS(progress, shader, nir_opt_cse);
    }
+
+   /* Deref chains contain metadata information that is needed by other passes
+    * after this one. If we don't rematerialize the derefs in the blocks where
+    * they're used here, the following lowerings will insert phis which can
+    * prevent other passes from chasing deref chains.
+    */
+   nir_rematerialize_derefs_in_use_blocks_impl(impl);
 
    /* Save the start point of the call stack in scratch */
    unsigned start_call_scratch = shader->scratch_size;

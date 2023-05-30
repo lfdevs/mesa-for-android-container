@@ -48,6 +48,8 @@ reset_obj(struct zink_screen *screen, struct zink_batch_state *bs, struct zink_r
       obj->view_prune_count = 0;
       obj->view_prune_timeline = 0;
       simple_mtx_unlock(&obj->view_lock);
+      if (obj->dt)
+         zink_kopper_prune_batch_usage(obj->dt, &bs->usage);
    } else if (util_dynarray_num_elements(&obj->views, VkBufferView) > MAX_VIEW_COUNT && !zink_bo_has_unflushed_usage(obj->bo)) {
       /* avoid ballooning from too many views on always-used resources: */
       simple_mtx_lock(&obj->view_lock);

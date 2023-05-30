@@ -1,3 +1,11 @@
+mesa (23.1.1-1) experimental; urgency=medium
+
+  * New upstream release.
+  * rules: Set VERSION so that it also includes the packaging
+    revision. (LP: #2020604)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 30 May 2023 11:27:24 +0300
+
 mesa (23.1.0-1) experimental; urgency=medium
 
   * New upstream release.
