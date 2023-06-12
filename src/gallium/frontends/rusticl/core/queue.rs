@@ -7,6 +7,7 @@ use crate::impl_cl_type_trait;
 use mesa_rust_util::properties::*;
 use rusticl_opencl_gen::*;
 
+use std::collections::HashSet;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -92,6 +93,14 @@ impl Queue {
             }
         }
         Ok(())
+    }
+
+    pub fn dependencies_for_pending_events(&self) -> HashSet<Arc<Queue>> {
+        let p = self.pending.lock().unwrap();
+
+        let mut queues = Event::deep_unflushed_queues(&p);
+        queues.remove(self);
+        queues
     }
 }
 

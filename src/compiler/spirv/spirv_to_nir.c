@@ -4452,28 +4452,13 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
                                 const uint32_t *w, unsigned count)
 {
    switch (opcode) {
-   case SpvOpSource: {
-      const char *lang;
-      switch (w[1]) {
-      default:
-      case SpvSourceLanguageUnknown:      lang = "unknown";    break;
-      case SpvSourceLanguageESSL:         lang = "ESSL";       break;
-      case SpvSourceLanguageGLSL:         lang = "GLSL";       break;
-      case SpvSourceLanguageOpenCL_C:     lang = "OpenCL C";   break;
-      case SpvSourceLanguageOpenCL_CPP:   lang = "OpenCL C++"; break;
-      case SpvSourceLanguageHLSL:         lang = "HLSL";       break;
-      }
-
-      uint32_t version = w[2];
-
-      const char *file =
-         (count > 3) ? vtn_value(b, w[3], vtn_value_type_string)->str : "";
-
-      vtn_info("Parsing SPIR-V from %s %u source file %s", lang, version, file);
-
-      b->source_lang = w[1];
+   case SpvOpString:
+   case SpvOpSource:
+   case SpvOpSourceExtension:
+   case SpvOpSourceContinued:
+   case SpvOpModuleProcessed:
+      vtn_handle_debug_text(b, opcode, w, count);
       break;
-   }
 
    case SpvOpExtension: {
       /* Implementing both NV_mesh_shader and EXT_mesh_shader
@@ -4485,11 +4470,6 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
          b->shader->info.mesh.nv = true;
       break;
    }
-   case SpvOpSourceExtension:
-   case SpvOpSourceContinued:
-   case SpvOpModuleProcessed:
-      /* Unhandled, but these are for debug so that's ok. */
-      break;
 
    case SpvOpCapability: {
       SpvCapability cap = w[1];
@@ -4971,11 +4951,6 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
       vtn_handle_entry_point(b, w, count);
       break;
 
-   case SpvOpString:
-      vtn_push_value(b, w[1], vtn_value_type_string)->str =
-         vtn_string_literal(b, &w[2], count - 2, NULL);
-      break;
-
    case SpvOpName:
       b->values[w[1]].name = vtn_string_literal(b, &w[2], count - 2, NULL);
       break;
@@ -5010,6 +4985,50 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
    }
 
    return true;
+}
+
+void
+vtn_handle_debug_text(struct vtn_builder *b, SpvOp opcode,
+                      const uint32_t *w, unsigned count)
+{
+   switch (opcode) {
+   case SpvOpString:
+      vtn_push_value(b, w[1], vtn_value_type_string)->str =
+         vtn_string_literal(b, &w[2], count - 2, NULL);
+      break;
+
+   case SpvOpSource: {
+      const char *lang;
+      switch (w[1]) {
+      default:
+      case SpvSourceLanguageUnknown:      lang = "unknown";    break;
+      case SpvSourceLanguageESSL:         lang = "ESSL";       break;
+      case SpvSourceLanguageGLSL:         lang = "GLSL";       break;
+      case SpvSourceLanguageOpenCL_C:     lang = "OpenCL C";   break;
+      case SpvSourceLanguageOpenCL_CPP:   lang = "OpenCL C++"; break;
+      case SpvSourceLanguageHLSL:         lang = "HLSL";       break;
+      }
+
+      uint32_t version = w[2];
+
+      const char *file =
+         (count > 3) ? vtn_value(b, w[3], vtn_value_type_string)->str : "";
+
+      vtn_info("Parsing SPIR-V from %s %u source file %s", lang, version, file);
+
+      b->source_lang = w[1];
+      break;
+   }
+
+   case SpvOpSourceExtension:
+   case SpvOpSourceContinued:
+   case SpvOpModuleProcessed:
+      /* Unhandled, but these are for debug so that's ok. */
+      break;
+
+   default:
+      unreachable("Unhandled opcode");
+   }
 }
 
 static void

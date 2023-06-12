@@ -1098,13 +1098,20 @@ lower_line_smooth_gs(nir_shader *shader)
    if (!state.pos_out)
       return false;
 
+   unsigned location = 0;
+   nir_foreach_shader_in_variable(var, shader) {
+     if (var->data.driver_location >= location)
+         location = var->data.driver_location + 1;
+   }
+
    state.line_coord_out =
       nir_variable_create(shader, nir_var_shader_out, glsl_vec4_type(),
                           "__line_coord");
    state.line_coord_out->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
-   state.line_coord_out->data.driver_location = shader->num_outputs++;
+   state.line_coord_out->data.driver_location = location;
    state.line_coord_out->data.location = MAX2(util_last_bit64(shader->info.outputs_written), VARYING_SLOT_VAR0);
    shader->info.outputs_written |= BITFIELD64_BIT(state.line_coord_out->data.location);
+   shader->num_outputs++;
 
    // create temp variables
    state.prev_pos = nir_variable_create(shader, nir_var_shader_temp,
@@ -1243,7 +1250,9 @@ zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
 
       /* input vars can't be created for those */
       if (var->data.location == VARYING_SLOT_LAYER ||
-          var->data.location == VARYING_SLOT_VIEW_INDEX)
+          var->data.location == VARYING_SLOT_VIEW_INDEX ||
+          /* psiz not needed for quads */
+          var->data.location == VARYING_SLOT_PSIZ)
          continue;
 
       char name[100];
@@ -2707,7 +2716,7 @@ zink_compiler_assign_io(struct zink_screen *screen, nir_shader *producer, nir_sh
    if (consumer->info.stage != MESA_SHADER_FRAGMENT) {
       /* remove injected pointsize from all but the last vertex stage */
       nir_variable *var = nir_find_variable_with_location(producer, nir_var_shader_out, VARYING_SLOT_PSIZ);
-      if (var && !var->data.explicit_location) {
+      if (var && !var->data.explicit_location && !nir_find_variable_with_location(consumer, nir_var_shader_in, VARYING_SLOT_PSIZ)) {
          var->data.mode = nir_var_shader_temp;
          nir_fixup_deref_modes(producer);
          NIR_PASS_V(producer, nir_remove_dead_variables, nir_var_shader_temp, NULL);

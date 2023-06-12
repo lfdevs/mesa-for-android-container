@@ -1015,6 +1015,9 @@ struct vtn_builder* vtn_create_builder(const uint32_t *words, size_t word_count,
 void vtn_handle_entry_point(struct vtn_builder *b, const uint32_t *w,
                             unsigned count);
 
+void vtn_handle_debug_text(struct vtn_builder *b, SpvOp opcode,
+                           const uint32_t *w, unsigned count);
+
 void vtn_handle_decoration(struct vtn_builder *b, SpvOp opcode,
                            const uint32_t *w, unsigned count);
 

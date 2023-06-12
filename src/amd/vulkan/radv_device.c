@@ -1166,6 +1166,12 @@ radv_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
 
    _mesa_hash_table_destroy(device->rt_handles, NULL);
 
+   radv_device_finish_meta(device);
+
+   vk_pipeline_cache_destroy(device->mem_cache, NULL);
+
+   radv_destroy_shader_upload_queue(device);
+
    for (unsigned i = 0; i < RADV_NUM_HW_CTX; i++) {
       if (device->hw_ctx[i])
          device->ws->ctx_destroy(device->hw_ctx[i]);
@@ -1175,12 +1181,6 @@ radv_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    simple_mtx_destroy(&device->pstate_mtx);
    simple_mtx_destroy(&device->trace_mtx);
    simple_mtx_destroy(&device->rt_handles_mtx);
-
-   radv_device_finish_meta(device);
-
-   vk_pipeline_cache_destroy(device->mem_cache, NULL);
-
-   radv_destroy_shader_upload_queue(device);
 
    radv_trap_handler_finish(device);
    radv_finish_trace(device);

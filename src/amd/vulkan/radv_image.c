@@ -1967,7 +1967,8 @@ radv_image_create(VkDevice _device, const struct radv_image_create_info *create_
 
    image->shareable = external_info;
    if (!vk_format_is_depth_or_stencil(format) && !image->shareable &&
-       !(image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) &&
+       !(image->vk.create_flags & (VK_IMAGE_CREATE_SPARSE_ALIASED_BIT |
+                                   VK_IMAGE_CREATE_ALIAS_BIT)) &&
        pCreateInfo->tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       image->info.surf_index = &device->image_mrt_offset_counter;
    }
@@ -2475,15 +2476,23 @@ radv_layout_fmask_compression(const struct radv_device *device, const struct rad
    if (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && (queue_mask & (1u << RADV_QUEUE_COMPUTE)))
       return RADV_FMASK_COMPRESSION_NONE;
 
-   if (layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL ||
-       layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-      return radv_image_is_tc_compat_cmask(image) ? RADV_FMASK_COMPRESSION_FULL :
-         RADV_FMASK_COMPRESSION_PARTIAL;
-   }
+   /* Compress images if TC-compat CMASK is enabled. */
+   if (radv_image_is_tc_compat_cmask(image))
+      return RADV_FMASK_COMPRESSION_FULL;
 
-   /* Only compress concurrent images if TC-compat CMASK is enabled (no FMASK decompression). */
-   return (queue_mask == (1u << RADV_QUEUE_GENERAL) || radv_image_is_tc_compat_cmask(image)) ?
-      RADV_FMASK_COMPRESSION_FULL : RADV_FMASK_COMPRESSION_NONE;
+   switch (layout) {
+   case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+   case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+      /* Don't compress images but no need to expand FMASK. */
+      return RADV_FMASK_COMPRESSION_PARTIAL;
+   case VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+      /* Don't compress images that are in feedback loops. */
+      return RADV_FMASK_COMPRESSION_NONE;
+   default:
+      /* Don't compress images that are concurrent. */
+      return queue_mask == (1u << RADV_QUEUE_GENERAL) ?
+         RADV_FMASK_COMPRESSION_FULL : RADV_FMASK_COMPRESSION_NONE;
+   }
 }
 
 unsigned

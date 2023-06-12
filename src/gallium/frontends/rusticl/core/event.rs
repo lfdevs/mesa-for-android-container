@@ -9,6 +9,7 @@ use mesa_rust::pipe::fence::*;
 use mesa_rust_util::static_assert;
 use rusticl_opencl_gen::*;
 
+use std::collections::HashSet;
 use std::os::raw::c_void;
 use std::slice;
 use std::sync::Arc;
@@ -184,6 +185,39 @@ impl Event {
         } else {
             status
         }
+    }
+
+    fn deep_unflushed_deps_impl<'a>(&'a self, result: &mut HashSet<&'a Event>) {
+        if self.status() <= CL_SUBMITTED as i32 {
+            return;
+        }
+
+        // only scan dependencies if it's a new one
+        if result.insert(self) {
+            for e in &self.deps {
+                e.deep_unflushed_deps_impl(result);
+            }
+        }
+    }
+
+    /// does a deep search and returns a list of all dependencies including `events` which haven't
+    /// been flushed out yet
+    pub fn deep_unflushed_deps(events: &[Arc<Event>]) -> HashSet<&Event> {
+        let mut result = HashSet::new();
+
+        for e in events {
+            e.deep_unflushed_deps_impl(&mut result);
+        }
+
+        result
+    }
+
+    /// does a deep search and returns a list of all queues which haven't been flushed yet
+    pub fn deep_unflushed_queues(events: &[Arc<Event>]) -> HashSet<Arc<Queue>> {
+        Event::deep_unflushed_deps(events)
+            .iter()
+            .filter_map(|e| e.queue.clone())
+            .collect()
     }
 }
 

@@ -7,6 +7,3 @@ dEQP-VK.rasterization.provoking_vertex.transform_feedback.first.line_strip_with_
 dEQP-VK.rasterization.provoking_vertex.transform_feedback.per_pipeline.triangle_strip_with_adjacency
 dEQP-VK.rasterization.provoking_vertex.transform_feedback.last.triangle_list_with_adjacency
 
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/8441
-dEQP-VK.memory_model.transitive.coherent.fence_fence.payload_local.image.guard_local.physbuffer.nontransvis
-nir-stress=dEQP-VK.memory_model.transitive.coherent.fence_atomic.payload_local.image.guard_local.physbuffer.nontransvis

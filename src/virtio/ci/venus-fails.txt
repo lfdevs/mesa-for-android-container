@@ -13,4 +13,3 @@ dEQP-VK.pipeline.extended_dynamic_state.before_draw.enable_raster,Fail
 dEQP-VK.pipeline.extended_dynamic_state.between_pipelines.enable_raster,Fail
 dEQP-VK.pipeline.extended_dynamic_state.cmd_buffer_start.enable_raster,Fail
 dEQP-VK.pipeline.extended_dynamic_state.two_draws_dynamic.enable_raster,Fail
-dEQP-VK.memory_model.message_passing.ext.u64.noncoherent.atomic_atomic.atomicwrite.device.payload_local.physbuffer.guard_local.image.comp,Fail

@@ -240,7 +240,7 @@ dzn_ResetQueryPool(VkDevice device,
          query->fence = NULL;
       }
    }
-   mtx_lock(&qpool->queries_lock);
+   mtx_unlock(&qpool->queries_lock);
 
    memset((uint8_t *)qpool->collect_map + dzn_query_pool_get_result_offset(qpool, firstQuery),
           0, queryCount * qpool->query_size);

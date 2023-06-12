@@ -174,6 +174,18 @@ spirv_builder_emit_exec_mode_literal3(struct spirv_builder *b, SpvId entry_point
 }
 
 void
+spirv_builder_emit_exec_mode_id3(struct spirv_builder *b, SpvId entry_point,
+                                SpvExecutionMode exec_mode, SpvId param[3])
+{
+   spirv_buffer_prepare(&b->exec_modes, b->mem_ctx, 6);
+   spirv_buffer_emit_word(&b->exec_modes, SpvOpExecutionModeId | (6 << 16));
+   spirv_buffer_emit_word(&b->exec_modes, entry_point);
+   spirv_buffer_emit_word(&b->exec_modes, exec_mode);
+   for (unsigned i = 0; i < 3; i++)
+      spirv_buffer_emit_word(&b->exec_modes, param[i]);
+}
+
+void
 spirv_builder_emit_exec_mode(struct spirv_builder *b, SpvId entry_point,
                              SpvExecutionMode exec_mode)
 {

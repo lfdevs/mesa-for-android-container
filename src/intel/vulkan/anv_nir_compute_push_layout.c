@@ -67,12 +67,13 @@ anv_nir_compute_push_layout(nir_shader *nir,
                break;
             }
 
-            case nir_intrinsic_load_desc_set_address_intel:
-               push_start = MIN2(push_start,
-                  offsetof(struct anv_push_constants, desc_sets));
-               push_end = MAX2(push_end, push_start +
+            case nir_intrinsic_load_desc_set_address_intel: {
+               unsigned base = offsetof(struct anv_push_constants, desc_sets);
+               push_start = MIN2(push_start, base);
+               push_end = MAX2(push_end, base +
                   sizeof_field(struct anv_push_constants, desc_sets));
                break;
+            }
 
             default:
                break;

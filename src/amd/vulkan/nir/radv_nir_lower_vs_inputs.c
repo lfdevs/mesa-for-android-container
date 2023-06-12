@@ -287,7 +287,7 @@ lower_load_vs_input(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs
       first_used_swizzled_channel(f, dest_use_mask, true) + 1;
    const unsigned max_loaded_channels = MIN2(first_trailing_unused_channel, f->nr_channels);
    const unsigned fetch_num_channels =
-      skipped_start >= max_loaded_channels ? 0 : max_loaded_channels - skipped_start;
+      first_used_channel >= max_loaded_channels ? 0 : max_loaded_channels - skipped_start;
 
    /* Load VS inputs from VRAM.
     *

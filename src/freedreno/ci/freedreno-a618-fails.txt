@@ -434,14 +434,6 @@ dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers1_sets3,Cr
 dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers1_sets3_imm_samplers,Crash
 dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers3_sets1,Crash
 dEQP-VK.pipeline.fast_linked_library.misc.interpolate_at_sample_no_sample_shading,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_geom,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_tess,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_tess_include_geom,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages_include_geom,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages_include_tess,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages_include_tess_include_geom,Crash
 dEQP-VK.transform_feedback.simple.lines_or_triangles_line_strip_1,Fail
 dEQP-VK.transform_feedback.simple.lines_or_triangles_line_strip_3,Fail
 dEQP-VK.transform_feedback.simple.lines_or_triangles_triangle_strip_1,Fail

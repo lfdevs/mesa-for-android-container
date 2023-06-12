@@ -399,7 +399,7 @@ radv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
        (VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR | VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR))
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-   *pVideoFormatPropertyCount = 1;
+   *pVideoFormatPropertyCount = 0;
 
    bool need_10bit = false;
    const struct VkVideoProfileListInfoKHR *prof_list = (struct VkVideoProfileListInfoKHR *)
@@ -708,25 +708,25 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radv_video_session *vid,
       const struct VkVideoDecodeH264DpbSlotInfoKHR *dpb_slot =
          vk_find_struct_const(frame_info->pReferenceSlots[i].pNext, VIDEO_DECODE_H264_DPB_SLOT_INFO_KHR);
 
-      result.frame_num_list[idx] = idx;
-      result.field_order_cnt_list[idx][0] = dpb_slot->pStdReferenceInfo->PicOrderCnt[0];
-      result.field_order_cnt_list[idx][1] = dpb_slot->pStdReferenceInfo->PicOrderCnt[1];
+      result.frame_num_list[i] = idx;
+      result.field_order_cnt_list[i][0] = dpb_slot->pStdReferenceInfo->PicOrderCnt[0];
+      result.field_order_cnt_list[i][1] = dpb_slot->pStdReferenceInfo->PicOrderCnt[1];
 
-      result.ref_frame_list[idx] = idx;
+      result.ref_frame_list[i] = idx;
 
       if (dpb_slot->pStdReferenceInfo->flags.top_field_flag)
-         result.used_for_reference_flags |= (1 << (2 * idx));
+         result.used_for_reference_flags |= (1 << (2 * i));
       if (dpb_slot->pStdReferenceInfo->flags.bottom_field_flag)
-         result.used_for_reference_flags |= (1 << (2 * idx + 1));
+         result.used_for_reference_flags |= (1 << (2 * i + 1));
 
       if (!dpb_slot->pStdReferenceInfo->flags.top_field_flag &&
           !dpb_slot->pStdReferenceInfo->flags.bottom_field_flag)
-         result.used_for_reference_flags |= (3 << (2 * idx));
+         result.used_for_reference_flags |= (3 << (2 * i));
 
       if (dpb_slot->pStdReferenceInfo->flags.used_for_long_term_reference)
-        result.ref_frame_list[idx] |= 0x80;
+        result.ref_frame_list[i] |= 0x80;
       if (dpb_slot->pStdReferenceInfo->flags.is_non_existing)
-         result.non_existing_frame_flags |= 1 << idx;
+         result.non_existing_frame_flags |= 1 << i;
 
    }
    result.curr_pic_ref_frame_num = frame_info->referenceSlotCount;
@@ -1011,6 +1011,7 @@ static bool rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer,
    }
 
    *slice_offset = 0;
+   bool tier_2_use_slot = false;
    switch (vid->vk.op) {
    case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR: {
       rvcn_dec_message_avc_t avc = get_h264_msg(vid, params, frame_info, slice_offset, &decode->width_in_samples, &decode->height_in_samples, it_ptr);
@@ -1022,6 +1023,7 @@ static bool rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer,
       rvcn_dec_message_hevc_t hevc = get_h265_msg(device, vid, params, frame_info, it_ptr);
       memcpy(codec, (void *)&hevc, sizeof(rvcn_dec_message_hevc_t));
       index_codec->message_id = RDECODE_MESSAGE_HEVC;
+      tier_2_use_slot = true;
       break;
    }
    default:
@@ -1037,7 +1039,7 @@ static bool rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer,
    for (int i = 0; i < frame_info->referenceSlotCount; i++) {
       struct radv_image_view *f_dpb_iv = radv_image_view_from_handle(frame_info->pReferenceSlots[i].pPictureResource->imageViewBinding);
       struct radv_image *dpb_img = f_dpb_iv->image;
-      int idx = frame_info->pReferenceSlots[i].slotIndex;
+      int idx = tier_2_use_slot ? frame_info->pReferenceSlots[i].slotIndex : i;
 
       radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dpb_img->bindings[0].bo);
       addr = radv_buffer_get_va(dpb_img->bindings[0].bo) + dpb_img->bindings[0].offset;
@@ -1048,7 +1050,7 @@ static bool rvcn_dec_message_decode(struct radv_cmd_buffer *cmd_buffer,
    }
 
    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dpb->bindings[0].bo);
-   addr = radv_buffer_get_va(dpb->bindings[0].bo);
+   addr = radv_buffer_get_va(dpb->bindings[0].bo) + dpb->bindings[0].offset;
 
    dynamic_dpb_t2->dpbCurrLo = addr;
    dynamic_dpb_t2->dpbCurrHi = addr >> 32;
@@ -1149,6 +1151,7 @@ static struct ruvd_h264 get_uvd_h264_msg(struct radv_video_session *vid,
       memset(result.scaling_list_8x8, 0x10, 2*64);
    }
 
+   memset(it_ptr, 0, IT_SCALING_TABLE_SIZE);
    memcpy(it_ptr, result.scaling_list_4x4, 6 * 16);
    memcpy((char *)it_ptr + 96, result.scaling_list_8x8, 2 * 64);
 
@@ -1161,15 +1164,23 @@ static struct ruvd_h264 get_uvd_h264_msg(struct radv_video_session *vid,
    result.frame_num = h264_pic_info->pStdPictureInfo->frame_num;
 
    result.num_ref_frames = sps->max_num_ref_frames;
+   memset(result.ref_frame_list, 0xff, sizeof(unsigned char) * 16);
+   memset(result.frame_num_list, 0, sizeof(unsigned int) * 16);
    for (unsigned i = 0; i < frame_info->referenceSlotCount; i++) {
       int idx = frame_info->pReferenceSlots[i].slotIndex;
       const struct VkVideoDecodeH264DpbSlotInfoKHR *dpb_slot =
          vk_find_struct_const(frame_info->pReferenceSlots[i].pNext, VIDEO_DECODE_H264_DPB_SLOT_INFO_KHR);
 
-      result.frame_num_list[idx] = dpb_slot->pStdReferenceInfo->FrameNum;
-      result.field_order_cnt_list[idx][0] = dpb_slot->pStdReferenceInfo->PicOrderCnt[0];
-      result.field_order_cnt_list[idx][1] = dpb_slot->pStdReferenceInfo->PicOrderCnt[1];
+      result.frame_num_list[i] = dpb_slot->pStdReferenceInfo->FrameNum;
+      result.field_order_cnt_list[i][0] = dpb_slot->pStdReferenceInfo->PicOrderCnt[0];
+      result.field_order_cnt_list[i][1] = dpb_slot->pStdReferenceInfo->PicOrderCnt[1];
+
+      result.ref_frame_list[i] = idx;
+
+      if (dpb_slot->pStdReferenceInfo->flags.used_for_long_term_reference)
+        result.ref_frame_list[i] |= 0x80;
    }
+   result.curr_pic_ref_frame_num = frame_info->referenceSlotCount;
    result.decoded_pic_idx = frame_info->pSetupReferenceSlot->slotIndex;
 
    return result;
@@ -1220,12 +1231,14 @@ static struct ruvd_h265 get_uvd_h265_msg(struct radv_device *device,
       sps->log2_diff_max_min_luma_transform_block_size;
    result.max_transform_hierarchy_depth_inter = sps->max_transform_hierarchy_depth_inter;
    result.max_transform_hierarchy_depth_intra = sps->max_transform_hierarchy_depth_intra;
-   result.pcm_sample_bit_depth_luma_minus1 = sps->pcm_sample_bit_depth_luma_minus1;
-   result.pcm_sample_bit_depth_chroma_minus1 = sps->pcm_sample_bit_depth_chroma_minus1;
-   result.log2_min_pcm_luma_coding_block_size_minus3 =
-      sps->log2_min_pcm_luma_coding_block_size_minus3;
-   result.log2_diff_max_min_pcm_luma_coding_block_size =
-      sps->log2_diff_max_min_pcm_luma_coding_block_size;
+   if (sps->flags.pcm_enabled_flag) {
+      result.pcm_sample_bit_depth_luma_minus1 = sps->pcm_sample_bit_depth_luma_minus1;
+      result.pcm_sample_bit_depth_chroma_minus1 = sps->pcm_sample_bit_depth_chroma_minus1;
+      result.log2_min_pcm_luma_coding_block_size_minus3 =
+         sps->log2_min_pcm_luma_coding_block_size_minus3;
+      result.log2_diff_max_min_pcm_luma_coding_block_size =
+         sps->log2_diff_max_min_pcm_luma_coding_block_size;
+   }
    result.num_short_term_ref_pic_sets = sps->num_short_term_ref_pic_sets;
 
    result.pps_info_flags = 0;

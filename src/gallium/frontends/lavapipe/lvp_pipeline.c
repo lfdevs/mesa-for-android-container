@@ -244,7 +244,8 @@ remove_scoped_barriers_impl(nir_builder *b, nir_instr *instr, void *data)
       return false;
    if (data) {
       if (nir_intrinsic_memory_scope(intr) == NIR_SCOPE_WORKGROUP ||
-          nir_intrinsic_memory_scope(intr) == NIR_SCOPE_DEVICE)
+          nir_intrinsic_memory_scope(intr) == NIR_SCOPE_DEVICE ||
+          nir_intrinsic_memory_scope(intr) == NIR_SCOPE_QUEUE_FAMILY)
          return false;
    }
    nir_instr_remove(instr);
@@ -857,6 +858,8 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
             pipeline->line_rectangular = p->line_rectangular;
             memcpy(pipeline->shaders, p->shaders, sizeof(struct lvp_shader) * 4);
             for (unsigned i = 0; i < MESA_SHADER_COMPUTE; i++) {
+               if (i == MESA_SHADER_FRAGMENT)
+                  continue;
                copy_shader_sanitized(&pipeline->shaders[i], &p->shaders[i]);
             }
          }

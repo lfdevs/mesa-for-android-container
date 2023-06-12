@@ -1274,7 +1274,7 @@ fixup_gfx9_cs_copy(struct radv_cmd_buffer *cmd_buffer,
          RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_L2 | RADV_CMD_FLAG_INV_VCACHE;
    }
 
-   for (uint32_t y = 0; y < mip_extent.width; y++) {
+   for (uint32_t y = 0; y < mip_extent.height; y++) {
       uint32_t coordY = y + mip_offset.y;
       /* If the default copy algorithm (done previously) has already seen this
        * scanline, then we can bias the starting X coordinate over to skip the

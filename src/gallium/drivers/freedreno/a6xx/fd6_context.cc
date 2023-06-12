@@ -263,8 +263,10 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    setup_state_map(&fd6_ctx->base);
 
    pctx = fd_context_init(&fd6_ctx->base, pscreen, priv, flags);
-   if (!pctx)
+   if (!pctx) {
+      free(fd6_ctx);
       return NULL;
+   }
 
    pctx->set_framebuffer_state = fd6_set_framebuffer_state;
 

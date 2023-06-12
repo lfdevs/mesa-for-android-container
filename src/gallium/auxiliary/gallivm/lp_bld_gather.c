@@ -611,8 +611,14 @@ lp_build_masked_gather(struct gallivm_state *gallivm,
    LLVMValueRef args[4];
    char intrin_name[64];
 
+#if LLVM_VERSION_MAJOR >= 16
+   snprintf(intrin_name, 64, "llvm.masked.gather.v%ui%u.v%up0",
+            length, bit_size, length);
+#else
    snprintf(intrin_name, 64, "llvm.masked.gather.v%ui%u.v%up0i%u",
             length, bit_size, length, bit_size);
+#endif
+
    args[0] = offset_ptr;
    args[1] = lp_build_const_int32(gallivm, bit_size / 8);
    args[2] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
@@ -635,8 +641,14 @@ lp_build_masked_scatter(struct gallivm_state *gallivm,
    LLVMValueRef args[4];
    char intrin_name[64];
 
+#if LLVM_VERSION_MAJOR >= 16
+   snprintf(intrin_name, 64, "llvm.masked.scatter.v%ui%u.v%up0",
+            length, bit_size, length);
+#else
    snprintf(intrin_name, 64, "llvm.masked.scatter.v%ui%u.v%up0i%u",
             length, bit_size, length, bit_size);
+#endif
+
    args[0] = value_vec;
    args[1] = offset_ptr;
    args[2] = lp_build_const_int32(gallivm, bit_size / 8);

@@ -981,13 +981,13 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
 
            if (ib.user_buffer) {
                    unsigned start_offset = draws[0].start * ib.index_size;
-                   u_upload_data(vctx->uploader, start_offset,
+                   u_upload_data(vctx->uploader, 0,
                                  draws[0].count * ib.index_size, 4,
                                  (char*)ib.user_buffer + start_offset,
                                  &ib.offset, &ib.buffer);
-                   ib.offset -= start_offset;
                    ib.user_buffer = NULL;
            }
+           virgl_hw_set_index_buffer(vctx, &ib);
    }
 
    if (!vctx->num_draws)
@@ -995,8 +995,6 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
    vctx->num_draws++;
 
    virgl_hw_set_vertex_buffers(vctx);
-   if (info.index_size)
-      virgl_hw_set_index_buffer(vctx, &ib);
 
    virgl_encoder_draw_vbo(vctx, &info, drawid_offset, indirect, &draws[0]);
 

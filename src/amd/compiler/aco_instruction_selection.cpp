@@ -4063,7 +4063,7 @@ emit_load(isel_context* ctx, Builder& bld, const LoadEmitInfo& info,
    unsigned const_offset = info.const_offset;
 
    const unsigned align_mul = info.align_mul ? info.align_mul : component_size;
-   unsigned align_offset = (info.align_offset + const_offset) % align_mul;
+   unsigned align_offset = info.align_offset % align_mul;
 
    unsigned bytes_read = 0;
    while (bytes_read < load_size) {

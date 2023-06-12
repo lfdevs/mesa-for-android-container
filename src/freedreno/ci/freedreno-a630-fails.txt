@@ -449,14 +449,6 @@ dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers1_sets3_im
 dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers1_sets3,Crash
 dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers3_sets1,Crash
 dEQP-VK.pipeline.fast_linked_library.misc.interpolate_at_sample_no_sample_shading,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_geom,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_tess_include_geom,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_tess,Crash
-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages_include_geom,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages_include_tess_include_geom,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages_include_tess,Crash
-dEQP-VK.pipeline.pipeline_library.misc.unused_shader_stages,Crash
 dEQP-VK.transform_feedback.simple.lines_or_triangles_line_strip_1,Fail
 dEQP-VK.transform_feedback.simple.lines_or_triangles_line_strip_3,Fail
 dEQP-VK.transform_feedback.simple.lines_or_triangles_triangle_strip_1,Fail
@@ -466,7 +458,6 @@ gmem-dEQP-VK.binding_model.descriptor_buffer.multiple.compute_comp_buffers1_sets
 gmem-dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_geom_buffers3_sets1,Crash
 gmem-dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_miss_buffers1_sets1,Crash
 gmem-dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_tese_buffers1_sets3,Crash
-gmem-dEQP-VK.pipeline.fast_linked_library.misc.unused_shader_stages_include_geom,Crash
 gmem-dEQP-VK.transform_feedback.simple.lines_or_triangles_triangle_strip_1,Fail
 spec@arb_vertex_attrib_64bit@execution@unused-sub-dvec4-01,Crash
 spec@arb_vertex_attrib_64bit@execution@unused-sub-dvec4-02,Crash

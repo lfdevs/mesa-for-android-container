@@ -33,14 +33,22 @@ vtn_validate_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
                                   const uint32_t *w, unsigned count)
 {
    switch (opcode) {
+   case SpvOpString:
    case SpvOpSource:
    case SpvOpSourceExtension:
    case SpvOpSourceContinued:
+   case SpvOpModuleProcessed:
+      /* We need this since vtn_foreach_instruction automatically handles
+       * OpLine / OpNoLine and relies on the SpvOpString from preamble being
+       * handled.
+       */
+      vtn_handle_debug_text(b, opcode, w, count);
+      break;
+
    case SpvOpExtension:
    case SpvOpCapability:
    case SpvOpExtInstImport:
    case SpvOpMemoryModel:
-   case SpvOpString:
    case SpvOpName:
    case SpvOpMemberName:
    case SpvOpExecutionMode:

@@ -4697,17 +4697,17 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
             spirv_builder_emit_specid(&ctx.builder, sizes[i], ids[i]);
             spirv_builder_emit_name(&ctx.builder, sizes[i], names[i]);
          }
+         SpvId var_type = get_uvec_type(&ctx, 32, 3);
+         // Even when using LocalSizeId this need to be initialized for nir_intrinsic_load_workgroup_size
+         ctx.local_group_size_var = spirv_builder_spec_const_composite(&ctx.builder, var_type, sizes, 3);
+         spirv_builder_emit_name(&ctx.builder, ctx.local_group_size_var, "gl_LocalGroupSizeARB");
 
          /* WorkgroupSize is deprecated in SPIR-V 1.6 */
          if (spirv_version >= SPIRV_VERSION(1, 6)) {
-            uint32_t sizes32[] = { sizes[0], sizes[1], sizes[2] };
-            spirv_builder_emit_exec_mode_literal3(&ctx.builder, entry_point,
+            spirv_builder_emit_exec_mode_id3(&ctx.builder, entry_point,
                                                   SpvExecutionModeLocalSizeId,
-                                                  sizes32);
+                                                  sizes);
          } else {
-            SpvId var_type = get_uvec_type(&ctx, 32, 3);
-            ctx.local_group_size_var = spirv_builder_spec_const_composite(&ctx.builder, var_type, sizes, 3);
-            spirv_builder_emit_name(&ctx.builder, ctx.local_group_size_var, "gl_LocalGroupSize");
             spirv_builder_emit_builtin(&ctx.builder, ctx.local_group_size_var, SpvBuiltInWorkgroupSize);
          }
       }

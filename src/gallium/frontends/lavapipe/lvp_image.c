@@ -174,14 +174,17 @@ lvp_DestroyImage(VkDevice _device, VkImage _image,
 #include "util/u_sampler.h"
 #include "util/u_inlines.h"
 
-#define fix_depth_swizzle(x) do { \
-  if (x > PIPE_SWIZZLE_X && x < PIPE_SWIZZLE_0) \
-    x = PIPE_SWIZZLE_0;				\
-  } while (0)
-#define fix_depth_swizzle_a(x) do { \
-  if (x > PIPE_SWIZZLE_X && x < PIPE_SWIZZLE_0) \
-    x = PIPE_SWIZZLE_1;				\
-  } while (0)
+static inline char conv_depth_swiz(char swiz) {
+   switch (swiz) {
+   case PIPE_SWIZZLE_Y:
+   case PIPE_SWIZZLE_Z:
+      return PIPE_SWIZZLE_0;
+   case PIPE_SWIZZLE_W:
+      return PIPE_SWIZZLE_1;
+   default:
+      return swiz;
+   }
+}
 
 static struct pipe_sampler_view *
 lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv)
@@ -225,10 +228,10 @@ lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv)
    */
    if (iv->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT ||
        iv->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT) {
-      fix_depth_swizzle(templ.swizzle_r);
-      fix_depth_swizzle(templ.swizzle_g);
-      fix_depth_swizzle(templ.swizzle_b);
-      fix_depth_swizzle_a(templ.swizzle_a);
+      templ.swizzle_r = conv_depth_swiz(templ.swizzle_r);
+      templ.swizzle_g = conv_depth_swiz(templ.swizzle_g);
+      templ.swizzle_b = conv_depth_swiz(templ.swizzle_b);
+      templ.swizzle_a = conv_depth_swiz(templ.swizzle_a);
    }
 
    return pctx->create_sampler_view(pctx, iv->image->bo, &templ);

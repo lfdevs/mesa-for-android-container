@@ -2040,7 +2040,7 @@ anv_get_physical_device_properties_1_3(struct anv_physical_device *pdevice,
     * experience demonstrate that this is true.
     */
    p->uniformTexelBufferOffsetAlignmentBytes = 1;
-   p->uniformTexelBufferOffsetSingleTexelAlignment = false;
+   p->uniformTexelBufferOffsetSingleTexelAlignment = true;
 
    p->maxBufferSize = pdevice->isl_dev.max_buffer_size;
 }

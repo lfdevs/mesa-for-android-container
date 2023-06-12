@@ -995,7 +995,8 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    device->master_fd = master_fd;
 
    device->engine_info = intel_engine_get_info(fd, device->info.kmd_type);
-   device->info.has_compute_engine = intel_engines_count(device->engine_info,
+   device->info.has_compute_engine = device->engine_info &&
+                                     intel_engines_count(device->engine_info,
                                                          INTEL_ENGINE_CLASS_COMPUTE);
    anv_physical_device_init_queue_families(device);
 
@@ -2031,7 +2032,7 @@ anv_get_physical_device_properties_1_3(struct anv_physical_device *pdevice,
     * experience demonstrate that this is true.
     */
    p->uniformTexelBufferOffsetAlignmentBytes = 1;
-   p->uniformTexelBufferOffsetSingleTexelAlignment = false;
+   p->uniformTexelBufferOffsetSingleTexelAlignment = true;
 
    p->maxBufferSize = pdevice->isl_dev.max_buffer_size;
 }
@@ -3387,6 +3388,10 @@ VkResult anv_CreateDevice(
       goto fail_internal_cache;
    }
 
+   device->robust_buffer_access =
+      device->vk.enabled_features.robustBufferAccess ||
+      device->vk.enabled_features.nullDescriptor;
+
    anv_device_init_blorp(device);
 
    anv_device_init_border_colors(device);
@@ -4312,7 +4317,7 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
     * This would ensure that not internal padding would be needed for
     * 16-bit types.
     */
-   if (device->vk.enabled_features.robustBufferAccess &&
+   if (device->robust_buffer_access &&
        (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ||
         usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT))
       pMemoryRequirements->memoryRequirements.size = align64(size, 4);

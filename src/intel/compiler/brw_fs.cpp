@@ -819,6 +819,8 @@ fs_inst::components_read(unsigned i) const
       /* Surface operation source. */
       else if (i == SURFACE_LOGICAL_SRC_DATA)
          return lsc_op_num_data_values(op);
+      else
+         return 1;
    }
    case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
       return (i == 0 ? 2 : 1);
@@ -7403,8 +7405,15 @@ brw_nir_populate_wm_prog_data(const nir_shader *shader,
       (prog_data->barycentric_interp_modes &
       BRW_BARYCENTRIC_NONPERSPECTIVE_BITS) != 0;
 
-   /* You can't be coarse and per-sample */
-   assert(!key->coarse_pixel || !key->persample_interp);
+   /* The current VK_EXT_graphics_pipeline_library specification requires
+    * coarse to specified at compile time. But per sample interpolation can be
+    * dynamic. So we should never be in a situation where coarse &
+    * persample_interp are both respectively true & BRW_ALWAYS.
+    *
+    * Coarse will dynamically turned off when persample_interp is active.
+    */
+   assert(!key->coarse_pixel || key->persample_interp != BRW_ALWAYS);
+
    prog_data->coarse_pixel_dispatch =
       brw_sometimes_invert(prog_data->persample_dispatch);
    if (!key->coarse_pixel ||

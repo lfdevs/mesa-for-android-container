@@ -1159,14 +1159,15 @@ bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info,
                              options.last_src_channel < options.last_dst_channel &&
                              options.last_dst_channel == 3;
 
-   /* WARNING: We only use this codepath for AMD_TEST to get results identical with the gfx blit,
+   /* WARNING: We need this option for AMD_TEST to get results identical with the gfx blit,
     * otherwise we wouldn't be able to fully validate whether everything else works.
     * The test expects that the behavior is identical to u_blitter.
+    *
+    * Additionally, we need to keep this enabled even when not testing because not doing fp16_rtz
+    * breaks "piglit/bin/texsubimage -auto pbo".
     */
-   if (testing) {
-      options.fp16_rtz = !util_format_is_pure_integer(info->dst.format) &&
-                         dst_desc->channel[i].size <= 10;
-   }
+   options.fp16_rtz = !util_format_is_pure_integer(info->dst.format) &&
+                      dst_desc->channel[i].size <= 10;
 
    struct hash_entry *entry = _mesa_hash_table_search(sctx->cs_blit_shaders,
                                                       (void*)(uintptr_t)options.key);

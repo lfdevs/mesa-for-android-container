@@ -2283,9 +2283,10 @@ zink_set_primitive_emulation_keys(struct zink_context *ctx)
          zink_set_gs_key(ctx)->lower_line_stipple = lower_line_stipple;
       }
 
-      lower_line_smooth = screen->driver_workarounds.no_linesmooth &&
-                               ctx->rast_state->base.line_smooth &&
-                               !ctx->num_so_targets;
+      lower_line_smooth = ctx->gfx_pipeline_state.rast_prim == PIPE_PRIM_LINES &&
+                          screen->driver_workarounds.no_linesmooth &&
+                          ctx->rast_state->base.line_smooth &&
+                          !ctx->num_so_targets;
 
       if (zink_get_fs_key(ctx)->lower_line_smooth != lower_line_smooth) {
          assert(zink_get_gs_key(ctx)->lower_line_smooth ==

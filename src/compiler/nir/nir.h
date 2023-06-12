@@ -4142,7 +4142,6 @@ nir_before_src(nir_src *src)
    if (src->is_if) {
       nir_block *prev_block =
          nir_cf_node_as_block(nir_cf_node_prev(&src->parent_if->cf_node));
-      assert(!nir_block_ends_in_jump(prev_block));
       return nir_after_block(prev_block);
    } else if (src->parent_instr->type == nir_instr_type_phi) {
 #ifndef NDEBUG

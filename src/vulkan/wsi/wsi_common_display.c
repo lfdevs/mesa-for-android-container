@@ -305,9 +305,6 @@ wsi_display_alloc_connector(struct wsi_display *wsi,
    if (!connector)
       return NULL;
 
-   if (!connector)
-      return NULL;
-
    connector->id = connector_id;
    connector->wsi = wsi;
    connector->active = false;

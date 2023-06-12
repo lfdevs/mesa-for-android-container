@@ -577,10 +577,8 @@ fs_visitor::emit_interpolation_setup_gfx6()
       abld.MAD(coarse_z, coarse_z, z_cy, float_pixel_y);
    }
 
-   if (wm_prog_data->uses_src_depth) {
-      assert(!wm_prog_data->uses_depth_w_coefficients);
+   if (wm_prog_data->uses_src_depth)
       this->pixel_z = fetch_payload_reg(bld, fs_payload().source_depth_reg);
-   }
 
    if (wm_prog_data->uses_depth_w_coefficients ||
        wm_prog_data->uses_src_depth) {

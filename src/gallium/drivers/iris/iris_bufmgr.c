@@ -2240,9 +2240,8 @@ iris_bufmgr_create(struct intel_device_info *devinfo, int fd, bool bo_reuse)
 
    struct intel_query_engine_info *engine_info;
    engine_info = intel_engine_get_info(bufmgr->fd, bufmgr->devinfo.kmd_type);
-   if (!engine_info)
-      goto error_engine_info;
-   bufmgr->devinfo.has_compute_engine = intel_engines_count(engine_info,
+   bufmgr->devinfo.has_compute_engine = engine_info &&
+                                        intel_engines_count(engine_info,
                                                             INTEL_ENGINE_CLASS_COMPUTE);
    free(engine_info);
 
@@ -2338,7 +2337,6 @@ error_slabs_init:
    }
    iris_bufmgr_destroy_global_vm(bufmgr);
 error_init_vm:
-error_engine_info:
    close(bufmgr->fd);
 error_dup:
    free(bufmgr);

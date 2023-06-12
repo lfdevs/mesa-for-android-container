@@ -109,7 +109,7 @@ nv50_memobj_create_from_handle(struct pipe_screen *screen,
 
    memobj->bo = nouveau_screen_bo_from_handle(screen, handle, &memobj->stride);
    if (memobj->bo == NULL) {
-      FREE(memobj->bo);
+      FREE(memobj);
       return NULL;
    }
    memobj->handle = handle;

@@ -128,8 +128,13 @@
 #define radeon_set_sh_reg_idx3_seq(sctx, reg, num) do { \
    SI_CHECK_SHADOWED_REGS(reg, num); \
    assert((reg) >= SI_SH_REG_OFFSET && (reg) < SI_SH_REG_END); \
-   radeon_emit(PKT3(PKT3_SET_SH_REG_INDEX, num, 0)); \
-   radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | ((sctx)->gfx_level >= GFX10 ? 3 << 28 : 0)); \
+   if ((sctx)->gfx_level >= GFX10) { \
+      radeon_emit(PKT3(PKT3_SET_SH_REG_INDEX, num, 0)); \
+      radeon_emit((((reg) - SI_SH_REG_OFFSET) >> 2) | (3 << 28)); \
+   } else { \
+      radeon_emit(PKT3(PKT3_SET_SH_REG, num, 0)); \
+      radeon_emit(((reg) - SI_SH_REG_OFFSET) >> 2); \
+   } \
 } while (0)
 
 #define radeon_set_sh_reg(reg, value) do { \

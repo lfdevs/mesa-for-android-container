@@ -119,7 +119,7 @@ static int virgl_vtest_send_init(struct virgl_vtest_winsys *vws)
 {
    uint32_t buf[VTEST_HDR_SIZE];
    const char *nstr = "virtest";
-   char cmdline[64];
+   char cmdline[64] = { 0 };
    int ret;
 
    ret = os_get_process_name(cmdline, 63);

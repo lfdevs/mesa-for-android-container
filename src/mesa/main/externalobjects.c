@@ -754,8 +754,11 @@ void
 _mesa_delete_semaphore_object(struct gl_context *ctx,
                               struct gl_semaphore_object *semObj)
 {
-   if (semObj != &DummySemaphoreObject)
+   if (semObj != &DummySemaphoreObject) {
+      struct pipe_context *pipe = ctx->pipe;
+      pipe->screen->fence_reference(ctx->screen, &semObj->fence, NULL);
       FREE(semObj);
+   }
 }
 
 void GLAPIENTRY

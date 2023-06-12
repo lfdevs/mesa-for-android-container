@@ -2456,7 +2456,9 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 			radeon_emit(cs, PKT3(PKT3_DRAW_INDEX_IMMD, 1 + size_dw, render_cond_bit));
 			radeon_emit(cs, draws[0].count);
 			radeon_emit(cs, V_0287F0_DI_SRC_SEL_IMMEDIATE);
-			radeon_emit_array(cs, info->index.user + draws[0].start * index_size, size_dw);
+			memcpy(cs->current.buf + cs->current.cdw,
+			       info->index.user + draws[0].start * index_size, size_bytes);
+			cs->current.cdw += size_dw;
 		} else {
 			uint64_t va = r600_resource(indexbuf)->gpu_address + index_offset;
 

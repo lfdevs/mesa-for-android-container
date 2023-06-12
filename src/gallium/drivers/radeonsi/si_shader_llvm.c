@@ -1139,7 +1139,8 @@ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *
             si_llvm_dispose(&ctx);
             return false;
          }
-         shader->info.uses_instanceid |= ls->info.uses_instanceid;
+         shader->info.uses_instanceid |=
+            ls->info.uses_instanceid || shader_ls.info.uses_instanceid;
          parts[0] = ctx.main_fn;
 
          for (int i = 0; i < ctx.args->ac.arg_count; i++)
@@ -1184,7 +1185,8 @@ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *
             si_llvm_dispose(&ctx);
             return false;
          }
-         shader->info.uses_instanceid |= es->info.uses_instanceid;
+         shader->info.uses_instanceid |=
+            es->info.uses_instanceid || shader_es.info.uses_instanceid;
          es_main = ctx.main_fn;
 
          /* Preserve main (= es_main) arguments. */

@@ -497,19 +497,17 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
          .height = img_extent_el.height,
       };
 
-      if (src_image->vk.image_type == VK_IMAGE_TYPE_3D)
+      unsigned num_slices = region->srcSubresource.layerCount;
+
+      if (src_image->vk.image_type == VK_IMAGE_TYPE_3D) {
          b_src.layer = src_offset_el.z;
+         num_slices = img_extent_el.depth;
+      }
 
       if (dst_image->vk.image_type == VK_IMAGE_TYPE_3D)
          b_dst.layer = dst_offset_el.z;
 
-      /* Loop through each 3D or array slice */
-      unsigned num_slices_3d = img_extent_el.depth;
-      unsigned num_slices_array = region->dstSubresource.layerCount;
-      unsigned slice_3d = 0;
-      unsigned slice_array = 0;
-      while (slice_3d < num_slices_3d && slice_array < num_slices_array) {
-
+      for (unsigned slice = 0; slice < num_slices; slice++) {
          /* Finish creating blit rect */
          rect.dst_x = dst_offset_el.x;
          rect.dst_y = dst_offset_el.y;
@@ -529,10 +527,6 @@ copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
 
          b_src.layer++;
          b_dst.layer++;
-         if (dst_image->vk.image_type == VK_IMAGE_TYPE_3D)
-            slice_3d++;
-         else
-            slice_array++;
       }
    }
 

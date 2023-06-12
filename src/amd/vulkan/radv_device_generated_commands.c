@@ -347,13 +347,23 @@ build_dgc_prepare_shader(struct radv_device *dev)
    nir_ssa_def *sequence_count = load_param32(&b, sequence_count);
    nir_ssa_def *stream_stride = load_param32(&b, stream_stride);
 
+   nir_ssa_def *use_count = nir_iand_imm(&b, sequence_count, 1u << 31);
+   sequence_count = nir_iand_imm(&b, sequence_count, UINT32_MAX >> 1);
+
+   /* The effective number of draws is
+    * min(sequencesCount, sequencesCountBuffer[sequencesCountOffset]) when
+    * using sequencesCountBuffer. Otherwise it is sequencesCount. */
    nir_variable *count_var = nir_variable_create(b.shader, nir_var_shader_temp, glsl_uint_type(), "sequence_count");
    nir_store_var(&b, count_var, sequence_count, 0x1);
 
-   nir_push_if(&b, nir_ieq_imm(&b, sequence_count, UINT32_MAX));
+   nir_push_if(&b, nir_ine_imm(&b, use_count, 0));
    {
       nir_ssa_def *count_buf = radv_meta_load_descriptor(&b, 0, DGC_DESC_COUNT);
       nir_ssa_def *cnt = nir_load_ssbo(&b, 1, 32, count_buf, nir_imm_int(&b, 0));
+      /* Must clamp count against the API count explicitly.
+       * The workgroup potentially contains more threads than maxSequencesCount from API,
+       * and we have to ensure these threads write NOP packets to pad out the IB. */
+      cnt = nir_umin(&b, cnt, sequence_count);
       nir_store_var(&b, count_var, cnt, 0x1);
    }
    nir_pop_if(&b, NULL);
@@ -1332,7 +1342,7 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer,
                                 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                 .pBufferInfo = &buf_info[ds_cnt]};
       ++ds_cnt;
-      params.sequence_count = UINT32_MAX;
+      params.sequence_count |= 1u << 31;
    }
 
    radv_meta_save(

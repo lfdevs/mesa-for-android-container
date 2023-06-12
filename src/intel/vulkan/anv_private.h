@@ -1206,6 +1206,8 @@ struct anv_device {
      */
     uint32_t                                    empty_vs_input[2];
 
+    bool                                        robust_buffer_access;
+
     /** Shadow ray query BO
      *
      * The ray_query_bo only holds the current ray being traced. When using

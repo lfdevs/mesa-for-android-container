@@ -1,6 +1,6 @@
 variables:
    DEBIAN_X86_BUILD_BASE_IMAGE: "debian/x86_build-base"
-   DEBIAN_BASE_TAG: "2023-03-27-virglrenderer-crosvm"
+   DEBIAN_BASE_TAG: "2023-06-07-rust-bump"
 
    DEBIAN_X86_BUILD_IMAGE_PATH: "debian/x86_build"
    DEBIAN_BUILD_TAG: "2023-04-03-android-meson-aarch64"

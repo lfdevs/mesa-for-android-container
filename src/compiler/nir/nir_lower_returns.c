@@ -287,6 +287,7 @@ nir_lower_returns_impl(nir_function_impl *impl)
 
    if (progress) {
       nir_metadata_preserve(impl, nir_metadata_none);
+      nir_rematerialize_derefs_in_use_blocks_impl(impl);
       nir_repair_ssa_impl(impl);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);

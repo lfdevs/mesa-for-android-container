@@ -210,7 +210,6 @@ spec@!opengl 1.2@texwrap 3d bordercolor@GL_RGBA8- border color only,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor@GL_RGBA8- projected- border color only,Fail
 spec@!opengl 1.5@depth-tex-compare,Fail
-spec@!opengl 1.5@draw-elements-user,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@!opengl 3.2@layered-rendering@clear-color-mismatched-layer-count,Fail

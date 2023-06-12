@@ -1631,9 +1631,12 @@ anv_image_hiz_clear(struct anv_cmd_buffer *cmd_buffer,
        *
        * There may have been a write to this depth buffer. Flush it from the
        * tile cache just in case.
+       * Set CS stall bit to guarantee that the fast clear starts the execution
+       * after the tile cache flush completed.
        */
       anv_add_pending_pipe_bits(cmd_buffer,
                                 ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
+                                ANV_PIPE_CS_STALL_BIT |
                                 ANV_PIPE_TILE_CACHE_FLUSH_BIT,
                                 "before clear hiz_ccs_wt");
    }

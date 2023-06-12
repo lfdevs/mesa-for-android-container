@@ -74,13 +74,14 @@ pub fn wait_for_events(num_events: cl_uint, event_list: *const cl_event) -> CLRe
         return Err(CL_INVALID_CONTEXT);
     }
 
-    // TODO better impl
+    // find all queues we have to flush
+    for q in Event::deep_unflushed_queues(&evs) {
+        q.flush(false)?;
+    }
+
+    // now wait on all events and check if we got any errors
     let mut err = false;
     for e in evs {
-        if let Some(q) = &e.queue {
-            q.flush(false)?;
-        }
-
         err |= e.wait() < 0;
     }
 

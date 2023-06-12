@@ -350,6 +350,8 @@ batch_flush(struct fd_batch *batch) assert_dt
    if (batch->flushed)
       return;
 
+   tc_assert_driver_thread(batch->ctx->tc);
+
    batch->needs_flush = false;
 
    /* close out the draw cmds by making sure any active queries are

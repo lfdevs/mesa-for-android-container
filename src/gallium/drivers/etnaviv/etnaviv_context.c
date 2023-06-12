@@ -547,6 +547,8 @@ etna_context_force_flush(struct etna_cmd_stream *stream, void *priv)
 
    pctx->flush(pctx, NULL, 0);
 
+   /* update derived states as the context is now fully dirty */
+   etna_state_update(etna_context(pctx));
 }
 
 void
