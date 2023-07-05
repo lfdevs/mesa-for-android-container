@@ -2634,7 +2634,10 @@ void util_blitter_clear_buffer(struct blitter_context *blitter,
    blitter_check_saved_vertex_states(ctx);
    blitter_disable_render_cond(ctx);
 
-   pipe->set_vertex_buffers(pipe, ctx->base.vb_slot, 1, 0, false, &vb);
+   if (ctx->base.saved_vertex_buffer.buffer.resource) {
+      pipe->set_vertex_buffers(pipe, ctx->base.vb_slot, 1, 0, false, &vb);
+   }
+
    pipe->bind_vertex_elements_state(pipe,
                                     ctx->velem_state_readbuf[num_channels-1]);
    bind_vs_pos_only(ctx, num_channels);

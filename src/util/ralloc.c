@@ -553,6 +553,7 @@ ralloc_vasprintf_rewrite_tail(char **str, size_t *start, const char *fmt,
 enum gc_flags {
    IS_USED = (1 << 0),
    CURRENT_GENERATION = (1 << 1),
+   IS_PADDING = (1 << 7),
 };
 
 typedef struct
@@ -565,6 +566,12 @@ typedef struct
    uint16_t slab_offset;
    uint8_t bucket;
    uint8_t flags;
+
+   /* The last padding byte must have IS_PADDING set and is used to store the amount of padding. If
+    * there is no padding, the IS_PADDING bit of "flags" is unset and "flags" is checked instead.
+    * Because of this, "flags" must be the last member of this struct.
+    */
+   uint8_t padding[];
 } gc_block_header;
 
 /* This structure is at the start of the slab. Objects inside a slab are
@@ -618,8 +625,17 @@ struct gc_ctx {
 static gc_block_header *
 get_gc_header(const void *ptr)
 {
-   gc_block_header *info = (gc_block_header *) (((char *) ptr) -
-					    sizeof(gc_block_header));
+   uint8_t *c_ptr = (uint8_t *)ptr;
+
+   /* Adjust for padding added to ensure alignment of the allocation. There might also be padding
+    * added by the compiler into gc_block_header, but that isn't counted in the IS_PADDING byte.
+    */
+   if (c_ptr[-1] & IS_PADDING)
+      c_ptr -= c_ptr[-1] & ~IS_PADDING;
+
+   c_ptr -= sizeof(gc_block_header);
+
+   gc_block_header *info = (gc_block_header *)c_ptr;
    assert(info->canary == GC_CANARY);
    return info;
 }
@@ -780,8 +796,14 @@ gc_alloc_size(gc_ctx *ctx, size_t size, size_t align)
 
    align = MAX2(align, alignof(gc_block_header));
 
+   /* Alignment will add at most align-alignof(gc_block_header) bytes of padding to the header, and
+    * the IS_PADDING byte can only encode up to 127.
+    */
+   assert((align - alignof(gc_block_header)) <= 127);
+
+   size_t header_size = align64(sizeof(gc_block_header), align);
    size = align64(size, align);
-   size += align64(sizeof(gc_block_header), align);
+   size += header_size;
 
    gc_block_header *header = NULL;
    if (size <= MAX_FREELIST_SIZE) {
@@ -803,7 +825,10 @@ gc_alloc_size(gc_ctx *ctx, size_t size, size_t align)
    header->canary = GC_CANARY;
 #endif
 
-   void *ptr = (char *)header + sizeof(gc_block_header);
+   uint8_t *ptr = (uint8_t *)header + header_size;
+   if ((header_size - 1) != offsetof(gc_block_header, flags))
+      ptr[-1] = IS_PADDING | (header_size - sizeof(gc_block_header));
+
    assert(((uintptr_t)ptr & (align - 1)) == 0);
    return ptr;
 }

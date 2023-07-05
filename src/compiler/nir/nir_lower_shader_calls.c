@@ -1115,6 +1115,21 @@ found_resume:
                                nir_after_cf_list(child_list));
    }
 
+   /* If the resume instruction is in the first block of the child_list,
+    * and the cursor is still before that block, the nir_cf_extract() may
+    * extract the block object pointed by the cursor, and instead create
+    * a new one for the code before the resume. In such case the cursor
+    * will be broken, as it will point to a block which is no longer
+    * in a function.
+    *
+    * Luckily, in both cases when this is possible, the intended cursor
+    * position is right before the child_list, so we can fix the cursor here.
+    */
+   if (child_list_contains_cursor &&
+       b->cursor.option == nir_cursor_before_block &&
+       b->cursor.block->cf_node.parent == NULL)
+      b->cursor = nir_before_cf_list(child_list);
+
    if (cursor_is_after_jump(b->cursor)) {
       /* If the resume instruction is in a loop, it's possible cf_list ends
        * in a break or continue instruction, in which case we don't want to

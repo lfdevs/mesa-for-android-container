@@ -714,7 +714,7 @@ add_branch_code(exec_ctx& ctx, Block* block)
    /* try to disable wqm handling */
    if (ctx.handle_wqm && block->kind & block_kind_top_level) {
       if (ctx.info[idx].exec.size() == 3) {
-         assert(ctx.info[idx].exec[1].second == mask_type_wqm);
+         assert(ctx.info[idx].exec[1].second & mask_type_wqm);
          ctx.info[idx].exec.pop_back();
       }
       assert(ctx.info[idx].exec.size() <= 2);

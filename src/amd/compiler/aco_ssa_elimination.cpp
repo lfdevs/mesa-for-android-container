@@ -604,9 +604,10 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
          bool writes_other = std::any_of(instr->definitions.begin(), instr->definitions.end(),
                                          [](const Definition& def) -> bool
                                          { return def.physReg() != exec && def.physReg() != scc; });
-         if (!writes_other)
+         if (!writes_other) {
             instr.reset();
-         continue;
+            continue;
+         }
       }
 
       /* For a newly encountered exec write, clear the used flag. */

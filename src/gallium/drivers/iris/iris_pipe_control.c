@@ -411,8 +411,7 @@ iris_memory_barrier(struct pipe_context *ctx, unsigned flags)
 
    if (flags & (PIPE_BARRIER_TEXTURE | PIPE_BARRIER_FRAMEBUFFER)) {
       bits |= PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
-              PIPE_CONTROL_RENDER_TARGET_FLUSH |
-              PIPE_CONTROL_TILE_CACHE_FLUSH;
+              PIPE_CONTROL_RENDER_TARGET_FLUSH;
    }
 
    iris_foreach_batch(ice, batch) {

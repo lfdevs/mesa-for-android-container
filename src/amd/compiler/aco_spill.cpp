@@ -1747,6 +1747,11 @@ assign_spill_slots(spill_ctx& ctx, unsigned spills_to_vgpr)
          last_top_level_block_idx = block.index;
 
          end_unused_spill_vgprs(ctx, block, vgpr_spill_temps, slots, ctx.spills_entry[block.index]);
+
+         /* If the block has no predecessors (for example in RT resume shaders),
+          * we cannot reuse the current scratch_rsrc temp because its definition is unreachable */
+         if (block.linear_preds.empty())
+            ctx.scratch_rsrc = Temp();
       }
 
       std::vector<aco_ptr<Instruction>>::iterator it;

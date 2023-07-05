@@ -143,6 +143,14 @@ genX(cmd_buffer_emit_generate_draws_pipeline)(struct anv_cmd_buffer *cmd_buffer)
    anv_batch_emit(batch, GENX(3DSTATE_TE), te);
    anv_batch_emit(batch, GENX(3DSTATE_DS), DS);
 
+#if GFX_VERx10 >= 125
+   if (device->vk.enabled_extensions.NV_mesh_shader ||
+       device->vk.enabled_extensions.EXT_mesh_shader) {
+      anv_batch_emit(batch, GENX(3DSTATE_MESH_CONTROL), mesh);
+      anv_batch_emit(batch, GENX(3DSTATE_TASK_CONTROL), task);
+   }
+#endif
+
    anv_batch_emit(batch, GENX(3DSTATE_STREAMOUT), so);
 
    anv_batch_emit(batch, GENX(3DSTATE_GS), gs);
@@ -245,7 +253,7 @@ genX(cmd_buffer_emit_generate_draws_pipeline)(struct anv_cmd_buffer *cmd_buffer)
     *
     * Note that Wa_16011448509 isn't needed here as all address bits are zero.
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_ALL), c) {
+   anv_batch_emit(batch, GENX(3DSTATE_CONSTANT_ALL), c) {
       /* Update empty push constants for all stages (bitmask = 11111b) */
       c.ShaderUpdateEnable = 0x1f;
       c.MOCS = anv_mocs(cmd_buffer->device, NULL, 0);
@@ -716,7 +724,8 @@ genX(cmd_buffer_flush_generated_draws)(struct anv_cmd_buffer *cmd_buffer)
                                  ANV_PIPE_VF_CACHE_INVALIDATE_BIT |
 #endif
                                  ANV_PIPE_DATA_CACHE_FLUSH_BIT |
-                                 ANV_PIPE_CS_STALL_BIT);
+                                 ANV_PIPE_CS_STALL_BIT,
+                                 NULL /* query_bits */);
 
 #if GFX_VER >= 12
    anv_batch_emit(batch, GENX(MI_ARB_CHECK), arb) {

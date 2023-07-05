@@ -2080,31 +2080,53 @@ enum anv_pipe_bits {
     */
    ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT       = (1 << 22),
 
-   /* This bit does not exist directly in PIPE_CONTROL. It means that render
-    * target operations related to transfer commands with VkBuffer as
-    * destination are ongoing. Some operations like copies on the command
-    * streamer might need to be aware of this to trigger the appropriate stall
-    * before they can proceed with the copy.
-    */
-   ANV_PIPE_RENDER_TARGET_BUFFER_WRITES      = (1 << 23),
-
    /* This bit does not exist directly in PIPE_CONTROL. It means that Gfx12
     * AUX-TT data has changed and we need to invalidate AUX-TT data.  This is
     * done by writing the AUX-TT register.
     */
-   ANV_PIPE_AUX_TABLE_INVALIDATE_BIT         = (1 << 24),
+   ANV_PIPE_AUX_TABLE_INVALIDATE_BIT         = (1 << 23),
 
    /* This bit does not exist directly in PIPE_CONTROL. It means that a
     * PIPE_CONTROL with a post-sync operation will follow. This is used to
     * implement a workaround for Gfx9.
     */
-   ANV_PIPE_POST_SYNC_BIT                    = (1 << 25),
-
-   /* This bit does not exist directly in PIPE_CONTROL. It means that render
-    * target operations related to clearing of queries are ongoing.
-    */
-   ANV_PIPE_QUERY_CLEARS_BIT                 = (1 << 26),
+   ANV_PIPE_POST_SYNC_BIT                    = (1 << 24),
 };
+
+/* These bits track the state of buffer writes for queries. They get cleared
+ * based on PIPE_CONTROL emissions.
+ */
+enum anv_query_bits {
+   ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH      = (1 << 0),
+
+   ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH    = (1 << 1),
+
+   ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL      = (1 << 2),
+};
+
+/* Things we need to flush before accessing query data using the command
+ * streamer.
+ *
+ * Prior to DG2 experiments show that the command streamer is not coherent
+ * with the tile cache so we need to flush it to make any data visible to CS.
+ *
+ * Otherwise we want to flush the RT cache which is where blorp writes, either
+ * for clearing the query buffer or for clearing the destination buffer in
+ * vkCopyQueryPoolResults().
+ */
+#define ANV_QUERY_RENDER_TARGET_WRITES_PENDING_BITS(devinfo) \
+   (((devinfo->verx10 >= 120 && \
+      devinfo->verx10 < 125) ? ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH : 0) | \
+   ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH | \
+   ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL)
+
+#define ANV_PIPE_QUERY_BITS(pending_query_bits) ( \
+   ((pending_query_bits & ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH) ?   \
+    ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT : 0) | \
+   ((pending_query_bits & ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH) ?   \
+    ANV_PIPE_TILE_CACHE_FLUSH_BIT : 0) | \
+   ((pending_query_bits & ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL) ?   \
+    ANV_PIPE_CS_STALL_BIT : 0))
 
 #define ANV_PIPE_FLUSH_BITS ( \
    ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | \
@@ -2145,20 +2167,6 @@ enum anv_pipe_bits {
  */
 #define ANV_PIPE_GPGPU_BITS ( \
    (GFX_VERx10 >= 125 ? ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT : 0))
-
-/* Things we need to flush before accessing query data using the command
- * streamer.
- *
- * Prior to DG2 experiments show that the command streamer is not coherent
- * with the tile cache so we need to flush it to make any data visible to CS.
- *
- * Otherwise we want to flush the RT cache which is where blorp writes, either
- * for clearing the query buffer or for clearing the destination buffer in
- * vkCopyQueryPoolResults().
- */
-#define ANV_PIPE_QUERY_FLUSH_BITS ( \
-   (GFX_VERx10 < 125 ? ANV_PIPE_TILE_CACHE_FLUSH_BIT : 0) | \
-   ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
 
 enum intel_ds_stall_flag
 anv_pipe_flush_bit_to_ds_stall_flag(enum anv_pipe_bits bits);
@@ -2636,6 +2644,14 @@ struct anv_cmd_state {
    struct anv_cmd_ray_tracing_state             rt;
 
    enum anv_pipe_bits                           pending_pipe_bits;
+
+   /**
+    * Tracks operations susceptible to interfere with queries, either blorp
+    * clears of the query buffer or the destination buffer of
+    * vkCmdCopyQueryResults, we need those operations to have completed before
+    * we do the work of vkCmdCopyQueryResults.
+    */
+   enum anv_query_bits                          pending_query_bits;
    VkShaderStageFlags                           descriptors_dirty;
    VkShaderStageFlags                           push_descriptors_dirty;
    VkShaderStageFlags                           push_constants_dirty;
@@ -4041,6 +4057,9 @@ struct anv_image_create_info {
 
    /** An opt-in stride, should be 0 for implicit layouts */
    uint32_t stride;
+
+   /** Whether to allocate private binding */
+   bool no_private_binding_alloc;
 };
 
 VkResult anv_image_init(struct anv_device *device, struct anv_image *image,

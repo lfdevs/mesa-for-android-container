@@ -476,8 +476,18 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
       ctx->framebuffer.dirty_zsbuf = true;
    }
 
+   /* RB+ depth-only rendering needs to set CB_COLOR0_INFO differently from CLEAR_STATE. */
+   if (ctx->screen->info.rbplus_allowed)
+      ctx->framebuffer.dirty_cbufs |= 0x1;
+
+   /* GFX11+ needs to set NUM_SAMPLES differently from CLEAR_STATE. */
+   if (ctx->gfx_level >= GFX11)
+      ctx->framebuffer.dirty_zsbuf = true;
+
    /* Even with shadowed registers, we have to add buffers to the buffer list.
     * These atoms are the only ones that add buffers.
+    *
+    * The framebuffer state also needs to set PA_SC_WINDOW_SCISSOR_BR differently from CLEAR_STATE.
     */
    si_mark_atom_dirty(ctx, &ctx->atoms.s.framebuffer);
    si_mark_atom_dirty(ctx, &ctx->atoms.s.render_cond);

@@ -137,11 +137,8 @@ KHR-Single-GL46.enhanced_layouts.xfb_capture_inactive_output_component,Fail
 # gfx11-only failures
 
 spec@!opengl 1.1@line-smooth-stipple,Fail
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-atomic,Fail
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-atomic@Per-sample,Fail
 spec@egl 1.4@egl-ext_egl_image_storage,Crash
 
-KHR-GL46.gl_spirv.spirv_validation_builtin_variable_decorations_test,Fail
 KHR-GL46.packed_pixels.pbo_rectangle.r11f_g11f_b10f,Fail
 KHR-GL46.packed_pixels.pbo_rectangle.r16,Fail
 KHR-GL46.packed_pixels.pbo_rectangle.r16_snorm,Fail
@@ -182,7 +179,6 @@ KHR-GL46.packed_pixels.pbo_rectangle.rgba8,Fail
 KHR-GL46.packed_pixels.pbo_rectangle.rgba8_snorm,Fail
 KHR-GL46.packed_pixels.pbo_rectangle.srgb8,Fail
 KHR-GL46.packed_pixels.pbo_rectangle.srgb8_alpha8,Fail
-KHR-GL46.texture_view.view_sampling,Fail
 KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
 KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
 KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Crash
@@ -215,48 +211,10 @@ dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.rgb5_a1_2d_array,F
 dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.rgb5_a1_3d,Fail
 dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.rgba4_2d_array,Fail
 dEQP-GLES3.functional.texture.specification.texsubimage3d_pbo.rgba4_3d,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_2_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_2_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_4_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_4_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_8_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_renderbuffer_samples_8_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_2_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_2_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_4_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_4_discard,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_8_color,Fail
-dEQP-GLES31.functional.sample_shading.min_sample_shading.multisample_texture_samples_8_discard,Fail
 dEQP-GLES31.functional.separate_shader.random.113,Fail
 dEQP-GLES31.functional.separate_shader.random.82,Fail
 dEQP-GLES31.functional.separate_shader.random.17,Fail
 dEQP-GLES31.functional.separate_shader.random.45,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_rbo_1,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_rbo_2,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_rbo_4,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_rbo_8,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_texture_1,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_texture_2,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_texture_4,Fail
-dEQP-GLES31.functional.shaders.multisample_interpolation.sample_qualifier.multisample_texture_8,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_id.multisample_rbo_1,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_id.multisample_rbo_2,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_id.multisample_rbo_4,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_id.multisample_texture_2,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_id.multisample_texture_4,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_sample.multisample_rbo_4,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_sample.multisample_rbo_8,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_sample.multisample_texture_4,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bit_count_per_sample.multisample_texture_8,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bits_unique_per_sample.multisample_texture_1,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bits_unique_per_sample.multisample_texture_2,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bits_unique_per_sample.multisample_texture_8,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bits_unique_per_two_samples.multisample_texture_4,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_mask_in.bits_unique_per_two_samples.multisample_texture_8,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_pos.distribution.multisample_texture_1,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_pos.distribution.multisample_texture_2,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_pos.distribution.multisample_texture_4,Fail
-dEQP-GLES31.functional.shaders.sample_variables.sample_pos.distribution.multisample_texture_8,Fail
 dEQP-GLES31.functional.texture.specification.teximage3d_pbo.rgb565_cube_array,Fail
 dEQP-GLES31.functional.texture.specification.teximage3d_pbo.rgb5_a1_cube_array,Fail
 dEQP-GLES31.functional.texture.specification.teximage3d_pbo.rgba4_cube_array,Fail

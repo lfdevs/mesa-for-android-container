@@ -27,6 +27,10 @@
  **************************************************************************/
 #include "radv_private.h"
 
+#ifndef _WIN32
+#include "drm-uapi/amdgpu_drm.h"
+#endif
+
 #include "vk_video/vulkan_video_codecs_common.h"
 #include "ac_vcn_dec.h"
 #include "ac_uvd_dec.h"
@@ -305,12 +309,14 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice,
    struct video_codec_cap *cap = NULL;
 
    switch (pVideoProfile->videoCodecOperation) {
+#ifndef _WIN32
    case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR:
-      cap = &pdevice->rad_info.dec_caps.codec_info[RADV_VIDEO_FORMAT_MPEG4_AVC];
+      cap = &pdevice->rad_info.dec_caps.codec_info[AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_MPEG4_AVC];
       break;
    case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR:
-      cap = &pdevice->rad_info.dec_caps.codec_info[RADV_VIDEO_FORMAT_HEVC];
+      cap = &pdevice->rad_info.dec_caps.codec_info[AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_HEVC];
       break;
+#endif
    default:
       unreachable("unsupported operation");
    }

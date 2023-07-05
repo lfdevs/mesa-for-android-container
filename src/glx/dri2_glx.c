@@ -652,7 +652,7 @@ unsigned dri2GetSwapEventType(Display* dpy, XID drawable)
       struct glx_display *glx_dpy = __glXInitialize(dpy);
       __GLXDRIdrawable *pdraw;
       pdraw = dri2GetGlxDrawableFromXDrawableId(dpy, drawable);
-      if (!pdraw)
+      if (!pdraw || !(pdraw->eventMask & GLX_BUFFER_SWAP_COMPLETE_INTEL_MASK))
          return 0;
       return glx_dpy->codes.first_event + GLX_BufferSwapComplete;
 }

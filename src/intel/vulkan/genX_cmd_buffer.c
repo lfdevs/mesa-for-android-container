@@ -1507,7 +1507,8 @@ ALWAYS_INLINE enum anv_pipe_bits
 genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
                               struct anv_device *device,
                               uint32_t current_pipeline,
-                              enum anv_pipe_bits bits)
+                              enum anv_pipe_bits bits,
+                              enum anv_query_bits *query_bits)
 {
 #if GFX_VER >= 12
    /* From the TGL PRM, Volume 2a, "PIPE_CONTROL":
@@ -1748,19 +1749,21 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
          anv_debug_dump_pc(pipe);
       }
 
-      /* If a render target flush was emitted, then we can toggle off the bit
-       * saying that render target writes are ongoing.
+      /* Based on emitted flushes, clear the associated buffer write tracking
+       * bits of buffer writes.
        */
-      if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
-         bits &= ~ANV_PIPE_RENDER_TARGET_BUFFER_WRITES;
+      if (query_bits != NULL) {
+         if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
+            *query_bits &= ~ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH;
 
-      /* If the conditions for flushing the query clears are met, we can
-       * toggle the bit off.
-       */
-      if ((bits & ANV_PIPE_QUERY_FLUSH_BITS) == ANV_PIPE_QUERY_FLUSH_BITS &&
-          (bits & (ANV_PIPE_END_OF_PIPE_SYNC_BIT |
-                   ANV_PIPE_CS_STALL_BIT))) {
-         bits &= ~ANV_PIPE_QUERY_CLEARS_BIT;
+         if (bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT)
+            *query_bits &= ~ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH;
+
+         /* Once RT/TILE have been flushed, we can consider the CS_STALL flush */
+         if ((*query_bits & (ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH |
+                             ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH)) == 0 &&
+             (bits & (ANV_PIPE_END_OF_PIPE_SYNC_BIT | ANV_PIPE_CS_STALL_BIT)))
+            *query_bits &= ~ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL;
       }
 
       bits &= ~(ANV_PIPE_FLUSH_BITS | ANV_PIPE_STALL_BITS |
@@ -1907,7 +1910,8 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
       genX(emit_apply_pipe_flushes)(&cmd_buffer->batch,
                                     cmd_buffer->device,
                                     cmd_buffer->state.current_pipeline,
-                                    bits);
+                                    bits,
+                                    &cmd_buffer->state.pending_query_bits);
 
 #if GFX_VERx10 == 120
    /* Wa_1508744258 handling */
@@ -3851,10 +3855,9 @@ genX(EndCommandBuffer)(
    /* Flush query clears using blorp so that secondary query writes do not
     * race with the clear.
     */
-   if (cmd_buffer->state.pending_pipe_bits & ANV_PIPE_QUERY_CLEARS_BIT) {
+   if (cmd_buffer->state.pending_query_bits) {
       anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_QUERY_FLUSH_BITS |
-                                ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT,
+                                ANV_PIPE_QUERY_BITS(cmd_buffer->state.pending_query_bits),
                                 "query clear flush prior command buffer end");
    }
 
@@ -3936,10 +3939,9 @@ genX(CmdExecuteCommands)(
    /* Flush query clears using blorp so that secondary query writes do not
     * race with the clear.
     */
-   if (primary->state.pending_pipe_bits & ANV_PIPE_QUERY_CLEARS_BIT) {
+   if (primary->state.pending_query_bits) {
       anv_add_pending_pipe_bits(primary,
-                                ANV_PIPE_QUERY_FLUSH_BITS |
-                                ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT,
+                                ANV_PIPE_QUERY_BITS(primary->state.pending_query_bits),
                                 "query clear flush prior to secondary buffer");
    }
 
@@ -6626,10 +6628,9 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
     * copy/write. So we need to flush it before going to GPGPU mode.
     */
    if (cmd_buffer->state.current_pipeline == _3D &&
-       (cmd_buffer->state.pending_pipe_bits & ANV_PIPE_QUERY_CLEARS_BIT)) {
+       cmd_buffer->state.pending_query_bits) {
       anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_QUERY_FLUSH_BITS |
-                                ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                                ANV_PIPE_QUERY_BITS(cmd_buffer->state.pending_query_bits),
                                 "query clear flush prior to GPGPU");
    }
 #endif

@@ -585,7 +585,7 @@ static void si_launch_grid_internal_images(struct si_context *sctx,
       /* Simplify the format according to what image stores support. */
       if (images[i].access & PIPE_IMAGE_ACCESS_WRITE) {
          images[i].format = util_format_linear(images[i].format); /* SRGB not supported */
-         images[i].format = util_format_luminance_to_red(images[i].format);
+         /* Keep L8A8 formats as-is because GFX7 is unable to store into R8A8 for some reason. */
          images[i].format = util_format_intensity_to_red(images[i].format);
          images[i].format = util_format_rgbx_to_rgba(images[i].format); /* prevent partial writes */
       }

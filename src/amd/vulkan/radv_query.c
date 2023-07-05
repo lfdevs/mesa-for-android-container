@@ -2213,7 +2213,7 @@ radv_CmdWriteAccelerationStructuresPropertiesKHR(
 
    radv_cs_add_buffer(cmd_buffer->device->ws, cs, pool->bo);
 
-   emit_query_flush(cmd_buffer, pool);
+   si_emit_cache_flush(cmd_buffer);
 
    ASSERTED unsigned cdw_max =
       radeon_check_space(cmd_buffer->device->ws, cs, 6 * accelerationStructureCount);

@@ -1210,21 +1210,25 @@ create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCr
          goto fail;
    } else {
       assert(pCreateInfo->codeType == VK_SHADER_CODE_TYPE_BINARY_EXT);
-      if (pCreateInfo->codeSize < SHA1_DIGEST_LENGTH + 1)
+      if (pCreateInfo->codeSize < SHA1_DIGEST_LENGTH + VK_UUID_SIZE + 1)
          return VK_NULL_HANDLE;
       struct blob_reader blob;
       const uint8_t *data = pCreateInfo->pCode;
-      size_t size = pCreateInfo->codeSize - SHA1_DIGEST_LENGTH;
+      uint8_t uuid[VK_UUID_SIZE];
+      lvp_device_get_cache_uuid(uuid);
+      if (memcmp(uuid, data, VK_UUID_SIZE))
+         return VK_NULL_HANDLE;
+      size_t size = pCreateInfo->codeSize - SHA1_DIGEST_LENGTH - VK_UUID_SIZE;
       unsigned char sha1[20];
 
       struct mesa_sha1 sctx;
       _mesa_sha1_init(&sctx);
-      _mesa_sha1_update(&sctx, data + SHA1_DIGEST_LENGTH, size);
+      _mesa_sha1_update(&sctx, data + SHA1_DIGEST_LENGTH + VK_UUID_SIZE, size);
       _mesa_sha1_final(&sctx, sha1);
-      if (memcmp(sha1, data, SHA1_DIGEST_LENGTH))
+      if (memcmp(sha1, data + VK_UUID_SIZE, SHA1_DIGEST_LENGTH))
          return VK_NULL_HANDLE;
 
-      blob_reader_init(&blob, data + SHA1_DIGEST_LENGTH, size);
+      blob_reader_init(&blob, data + SHA1_DIGEST_LENGTH + VK_UUID_SIZE, size);
       nir = nir_deserialize(NULL, device->pscreen->get_compiler_options(device->pscreen, PIPE_SHADER_IR_NIR, stage), &blob);
       if (!nir)
          goto fail;
@@ -1303,20 +1307,21 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_GetShaderBinaryDataEXT(
    LVP_FROM_HANDLE(lvp_shader, shader, _shader);
    VkResult ret = VK_SUCCESS;
    if (pData) {
-      if (*pDataSize < shader->blob.size + SHA1_DIGEST_LENGTH) {
+      if (*pDataSize < shader->blob.size + SHA1_DIGEST_LENGTH + VK_UUID_SIZE) {
          ret = VK_INCOMPLETE;
          *pDataSize = 0;
       } else {
-         *pDataSize = MIN2(*pDataSize, shader->blob.size + SHA1_DIGEST_LENGTH);
+         *pDataSize = MIN2(*pDataSize, shader->blob.size + SHA1_DIGEST_LENGTH + VK_UUID_SIZE);
+         uint8_t *data = pData;
+         lvp_device_get_cache_uuid(data);
          struct mesa_sha1 sctx;
          _mesa_sha1_init(&sctx);
          _mesa_sha1_update(&sctx, shader->blob.data, shader->blob.size);
-         _mesa_sha1_final(&sctx, pData);
-         uint8_t *data = pData;
-         memcpy(data + SHA1_DIGEST_LENGTH, shader->blob.data, shader->blob.size);
+         _mesa_sha1_final(&sctx, data + VK_UUID_SIZE);
+         memcpy(data + SHA1_DIGEST_LENGTH + VK_UUID_SIZE, shader->blob.data, shader->blob.size);
       }
    } else {
-      *pDataSize = shader->blob.size + SHA1_DIGEST_LENGTH;
+      *pDataSize = shader->blob.size + SHA1_DIGEST_LENGTH + VK_UUID_SIZE;
    }
    return ret;
 }

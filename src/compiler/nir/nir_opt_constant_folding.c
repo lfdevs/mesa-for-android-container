@@ -167,6 +167,7 @@ const_value_for_deref(nir_deref_instr *deref)
 
    /* We have to have ended at a vector */
    assert(c->num_elements == 0);
+   nir_deref_path_finish(&path);
    return v ? v : c->values;
 
 fail:

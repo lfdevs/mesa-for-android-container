@@ -2435,15 +2435,19 @@ static void cayman_convert_border_color(union pipe_color_union *in,
        (util_format_is_srgb(format) ||
         util_format_is_s3tc(format))
        ) {
+                const float values[PIPE_SWIZZLE_MAX] = {
+                   in->f[0], in->f[1], in->f[2], in->f[3], 0.0f, 1.0f, 0.0f /* none */
+                };
 
-      for (int i = 0; i < 4; ++i) {
-         switch (i) {
-         case 0: out->f[0] = in->f[view->swizzle_r];break;
-         case 1: out->f[1] = in->f[view->swizzle_g];break;
-         case 2: out->f[2] = in->f[view->swizzle_b];break;
-         case 3: out->f[3] = in->f[view->swizzle_a];break;
-         }
-      }
+                STATIC_ASSERT(PIPE_SWIZZLE_0 == 4);
+                STATIC_ASSERT(PIPE_SWIZZLE_1 == 5);
+                STATIC_ASSERT(PIPE_SWIZZLE_NONE == 6);
+                STATIC_ASSERT(PIPE_SWIZZLE_MAX == 7);
+
+                out->f[0] = values[view->swizzle_r];
+                out->f[1] = values[view->swizzle_g];
+                out->f[2] = values[view->swizzle_b];
+                out->f[3] = values[view->swizzle_a];
    } else {
       memcpy(out->f, in->f, 4 * sizeof(float));
    }

@@ -1539,12 +1539,21 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
 	if (bc->cf_last != NULL &&
 		bc->cf_last->op == CF_OP_TEX) {
 		struct r600_bytecode_tex *ttex;
+                uint8_t use_mask = ((1 << ntex->src_sel_x) |
+                                    (1 << ntex->src_sel_y) |
+                                    (1 << ntex->src_sel_z) |
+                                    (1 << ntex->src_sel_w)) & 0xf;
+
 		LIST_FOR_EACH_ENTRY(ttex, &bc->cf_last->tex, list) {
-			if (ttex->dst_gpr == ntex->src_gpr &&
-                            (ttex->dst_sel_x < 4 || ttex->dst_sel_y < 4 ||
-                             ttex->dst_sel_z < 4 || ttex->dst_sel_w < 4)) {
-				bc->force_add_cf = 1;
-				break;
+			if (ttex->dst_gpr == ntex->src_gpr) {
+                           uint8_t write_mask = (ttex->dst_sel_x < 6 ? 1 : 0) |
+                                                (ttex->dst_sel_y < 6 ? 2 : 0) |
+                                                (ttex->dst_sel_z < 6 ? 4 : 0) |
+                                                (ttex->dst_sel_w < 6 ? 8 : 0);
+                           if (use_mask & write_mask) {
+                              bc->force_add_cf = 1;
+                              break;
+                           }
 			}
 		}
 		/* vtx instrs get inserted after tex, so make sure we aren't moving the tex

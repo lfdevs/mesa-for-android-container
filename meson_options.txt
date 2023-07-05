@@ -59,6 +59,14 @@ option(
 )
 
 option(
+  'expat',
+  type : 'feature',
+  value : 'auto',
+  description : 'Controls the use of expat. ' +
+                'Cannot be disabled if xmlconfig is enabled.'
+)
+
+option(
   'gallium-drivers',
   type : 'array',
   value : ['auto'],
@@ -654,6 +662,7 @@ option(
                 'the default driconf file is hardcoded into Mesa. ' +
                 'Requires expat.'
 )
+
 option (
   'intel-xe-kmd',
   type : 'feature',

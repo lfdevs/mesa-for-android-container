@@ -1485,18 +1485,28 @@ if dep_thread.found()
   endif
 endif
 
-# We don't have expat on Android or Windows, which is a needed dep for xmlconfig
-opt_xmlconfig = get_option('xmlconfig') \
-  .require(not (with_platform_android or with_platform_windows),
-           error_message : 'xmlconfig not available on Android or Windows')
+with_expat = get_option('expat') \
+  .disable_auto_if(with_platform_android or with_platform_windows)
 
 if host_machine.system() == 'darwin'
-  dep_expat = meson.get_compiler('c').find_library('expat', required : opt_xmlconfig)
+  dep_expat = meson.get_compiler('c').find_library('expat', required : with_expat)
 else
   dep_expat = dependency('expat', fallback : ['expat', 'expat_dep'],
-                         required : opt_xmlconfig)
+                         required : with_expat)
 endif
-use_xmlconfig = dep_expat.found()
+
+# TODO: with Meson 1.1.0 this can be replaced with with_expat.enable_if(with_intel_tools)
+if with_intel_tools and not dep_expat.found()
+  error('Intel tools require expat')
+endif
+
+# We don't require expat on Android or Windows
+use_xmlconfig = get_option('xmlconfig') \
+  .require(not (with_platform_android or with_platform_windows),
+           error_message : 'xmlconfig not available on Android or Windows') \
+  .require(dep_expat.found(),
+           error_message : 'requires expat') \
+  .allowed()
   
 # Predefined macros for windows
 if host_machine.system() == 'windows'
@@ -1703,7 +1713,7 @@ if with_llvm
 elif with_amd_vk and with_aco_tests
   error('ACO tests require LLVM, but LLVM is disabled.')
 elif with_gallium_radeonsi or with_swrast_vk
-  error('The following drivers require LLVM: RadeonSI, SWR, Lavapipe. One of these is enabled, but LLVM is disabled.')
+  error('The following drivers require LLVM: RadeonSI, Lavapipe. One of these is enabled, but LLVM is disabled.')
 elif with_gallium_opencl
   error('The OpenCL "Clover" state tracker requires LLVM, but LLVM is disabled.')
 elif with_clc

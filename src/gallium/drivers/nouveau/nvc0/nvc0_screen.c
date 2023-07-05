@@ -632,7 +632,7 @@ nvc0_screen_destroy(struct pipe_screen *pscreen)
    nouveau_bo_ref(NULL, &screen->fence.bo);
    nouveau_bo_ref(NULL, &screen->poly_cache);
 
-   nouveau_heap_destroy(&screen->lib_code);
+   nouveau_heap_free(&screen->lib_code);
    nouveau_heap_destroy(&screen->text_heap);
 
    FREE(screen->tic.entries);
@@ -883,7 +883,7 @@ nvc0_screen_resize_text_area(struct nvc0_screen *screen, struct nouveau_pushbuf 
    nouveau_bo_ref(NULL, &screen->text);
    screen->text = bo;
 
-   nouveau_heap_destroy(&screen->lib_code);
+   nouveau_heap_free(&screen->lib_code);
    nouveau_heap_destroy(&screen->text_heap);
 
    /* XXX: getting a page fault at the end of the code buffer every few

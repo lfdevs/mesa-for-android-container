@@ -44,9 +44,14 @@ nouveau_heap_init(struct nouveau_heap **heap,
 void
 nouveau_heap_destroy(struct nouveau_heap **heap)
 {
-   if (!*heap)
-      return;
-   free(*heap);
+   struct nouveau_heap *current = *heap;
+
+   while (current) {
+      struct nouveau_heap *const next = current->next;
+      free(current);
+      current = next;
+   }
+
    *heap = NULL;
 }
 

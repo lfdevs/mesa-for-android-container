@@ -292,7 +292,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
       phi_idx--;
    }
 
-   assert(block->index != 0 || (new_demand == RegisterDemand() && live.empty()));
+   assert(!block->linear_preds.empty() || (new_demand == RegisterDemand() && live.empty()));
 }
 
 unsigned

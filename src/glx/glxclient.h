@@ -127,6 +127,7 @@ struct __GLXDRIdrawableRec
    struct glx_screen *psc;
    GLenum textureTarget;
    GLenum textureFormat;        /* EXT_texture_from_pixmap support */
+   unsigned long eventMask;
    int refcount;
 };
 

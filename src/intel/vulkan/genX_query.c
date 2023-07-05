@@ -794,9 +794,9 @@ void genX(CmdResetQueryPool)(
                                queryCount * pool->stride,
                                0);
 
-      anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_QUERY_CLEARS_BIT,
-                                "vkCmdResetQueryPool of timestamps");
+      cmd_buffer->state.pending_query_bits =
+         ANV_QUERY_RENDER_TARGET_WRITES_PENDING_BITS(cmd_buffer->device->info);
+
       return;
    }
 
@@ -984,12 +984,12 @@ emit_query_clear_flush(struct anv_cmd_buffer *cmd_buffer,
                        struct anv_query_pool *pool,
                        const char *reason)
 {
-   if ((cmd_buffer->state.pending_pipe_bits & ANV_PIPE_QUERY_CLEARS_BIT) == 0)
+   if (cmd_buffer->state.pending_query_bits == 0)
       return;
 
    anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_QUERY_FLUSH_BITS |
-                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                             ANV_PIPE_QUERY_BITS(
+                                cmd_buffer->state.pending_query_bits),
                              reason);
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 }
@@ -1507,45 +1507,45 @@ void genX(CmdCopyQueryPoolResults)(
    mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
    struct mi_value result;
 
+   enum anv_pipe_bits needed_flushes = 0;
+
    /* If render target writes are ongoing, request a render target cache flush
     * to ensure proper ordering of the commands from the 3d pipe and the
     * command streamer.
     */
-   const bool need_flushes =
-      (cmd_buffer->state.pending_pipe_bits &
-       (ANV_PIPE_RENDER_TARGET_BUFFER_WRITES |
-        ANV_PIPE_QUERY_CLEARS_BIT));
+   if (cmd_buffer->state.pending_query_bits &
+       ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH)
+      needed_flushes |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
 
-   if (need_flushes) {
+   if (cmd_buffer->state.pending_query_bits &
+       ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH)
+      needed_flushes |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
+
+   if (cmd_buffer->state.pending_query_bits &
+       ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL)
+      needed_flushes |= ANV_PIPE_CS_STALL_BIT;
+
+   /* Occlusion & timestamp queries are written using a PIPE_CONTROL and
+    * because we're about to copy values from MI commands, we need to stall
+    * the command streamer to make sure the PIPE_CONTROL values have
+    * landed, otherwise we could see inconsistent values & availability.
+    *
+    *  From the vulkan spec:
+    *
+    *     "vkCmdCopyQueryPoolResults is guaranteed to see the effect of
+    *     previous uses of vkCmdResetQueryPool in the same queue, without any
+    *     additional synchronization."
+    */
+   if (pool->type == VK_QUERY_TYPE_OCCLUSION ||
+       pool->type == VK_QUERY_TYPE_TIMESTAMP)
+      needed_flushes |= ANV_PIPE_CS_STALL_BIT;
+
+   if (needed_flushes) {
       anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_QUERY_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT,
+                                needed_flushes,
                                 "CopyQueryPoolResults");
-   }
-
-   bool need_cs_stall =
-      (cmd_buffer->state.pending_pipe_bits & ANV_PIPE_FLUSH_BITS) ||
-      /* Occlusion & timestamp queries are written using a PIPE_CONTROL and
-       * because we're about to copy values from MI commands, we need to stall
-       * the command streamer to make sure the PIPE_CONTROL values have
-       * landed, otherwise we could see inconsistent values & availability.
-       *
-       *  From the vulkan spec:
-       *
-       *     "vkCmdCopyQueryPoolResults is guaranteed to see the effect of
-       *     previous uses of vkCmdResetQueryPool in the same queue, without
-       *     any additional synchronization."
-       */
-      pool->type == VK_QUERY_TYPE_OCCLUSION ||
-      pool->type == VK_QUERY_TYPE_TIMESTAMP;
-
-   if (need_cs_stall) {
-      anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_CS_STALL_BIT,
-                                "CopyQueryPoolResults stall");
-   }
-
-   if (need_cs_stall || need_flushes)
       genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+   }
 
    struct anv_address dest_addr = anv_address_add(buffer->address, destOffset);
    for (uint32_t i = 0; i < queryCount; i++) {

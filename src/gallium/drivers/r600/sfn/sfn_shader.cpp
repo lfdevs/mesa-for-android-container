@@ -931,6 +931,14 @@ Shader::emit_atomic_local_shared(nir_intrinsic_instr *instr)
 
    auto op = lds_op_from_intrinsic(instr->intrinsic, uses_retval);
 
+   /* For these two instructions we don't have opcodes that don't read back
+    * the result, so we have to add a dummy-readback to remove the the return
+    * value from read queue. */
+   if (!uses_retval &&
+       (op == LDS_XCHG_RET || op == LDS_CMP_XCHG_RET)) {
+      dest_value = vf.dest(instr->dest, 0, pin_free);
+   }
+
    auto address = vf.src(instr->src[0], 0);
 
    AluInstr::SrcValues src;

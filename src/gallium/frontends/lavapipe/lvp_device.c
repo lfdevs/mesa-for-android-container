@@ -1076,8 +1076,13 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceFeatures2(
 void
 lvp_device_get_cache_uuid(void *uuid)
 {
-   memset(uuid, 0, VK_UUID_SIZE);
-   snprintf(uuid, VK_UUID_SIZE, "val-%s", &MESA_GIT_SHA1[4]);
+   memset(uuid, 'a', VK_UUID_SIZE);
+   if (MESA_GIT_SHA1[0])
+      /* debug build */
+      memcpy(uuid, &MESA_GIT_SHA1[4], strlen(MESA_GIT_SHA1) - 4);
+   else
+      /* release build */
+      memcpy(uuid, PACKAGE_VERSION, strlen(PACKAGE_VERSION));
 }
 
 VKAPI_ATTR void VKAPI_CALL lvp_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,

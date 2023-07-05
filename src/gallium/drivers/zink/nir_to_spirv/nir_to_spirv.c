@@ -54,8 +54,8 @@ struct ntv_context {
    gl_shader_stage stage;
    const struct zink_shader_info *sinfo;
 
-   SpvId ubos[2][5]; //8, 16, 32, unused, 64
-   nir_variable *ubo_vars[2];
+   SpvId ubos[PIPE_MAX_CONSTANT_BUFFERS][5]; //8, 16, 32, unused, 64
+   nir_variable *ubo_vars[PIPE_MAX_CONSTANT_BUFFERS];
 
    SpvId ssbos[5]; //8, 16, 32, unused, 64
    nir_variable *ssbo_vars;

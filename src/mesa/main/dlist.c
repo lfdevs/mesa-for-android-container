@@ -1345,12 +1345,15 @@ save_Bitmap(GLsizei width, GLsizei height,
    GET_CURRENT_CONTEXT(ctx);
    Node *n;
    ASSERT_OUTSIDE_SAVE_BEGIN_END_AND_FLUSH(ctx);
-   struct pipe_resource *tex =
-      st_make_bitmap_texture(ctx, width, height, &ctx->Unpack, pixels);
+   struct pipe_resource *tex = NULL;
 
-   if (!tex) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glNewList -> glBitmap");
-      return;
+   if (width > 0 && height > 0) {
+      tex = st_make_bitmap_texture(ctx, width, height, &ctx->Unpack, pixels);
+
+      if (!tex) {
+         _mesa_error(ctx, GL_OUT_OF_MEMORY, "glNewList -> glBitmap");
+         return;
+      }
    }
 
    n = alloc_instruction(ctx, OPCODE_BITMAP, 6 + POINTER_DWORDS);

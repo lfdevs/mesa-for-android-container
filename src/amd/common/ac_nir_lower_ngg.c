@@ -114,7 +114,6 @@ typedef struct
    const ac_nir_lower_ngg_options *options;
 
    nir_function_impl *impl;
-   nir_variable *current_clear_primflag_idx_var;
    int const_out_vtxcnt[4];
    int const_out_prmcnt[4];
    unsigned max_num_waves;
@@ -2611,21 +2610,26 @@ ngg_gs_emit_vertex_addr(nir_builder *b, nir_ssa_def *gs_vtx_idx, lower_ngg_gs_st
 static void
 ngg_gs_clear_primflags(nir_builder *b, nir_ssa_def *num_vertices, unsigned stream, lower_ngg_gs_state *s)
 {
+   char name[32];
+   snprintf(name, sizeof(name), "clear_primflag_idx_%u", stream);
+   nir_variable *clear_primflag_idx_var = nir_local_variable_create(b->impl, glsl_uint_type(), name);
+
    nir_ssa_def *zero_u8 = nir_imm_zero(b, 1, 8);
-   nir_store_var(b, s->current_clear_primflag_idx_var, num_vertices, 0x1u);
+   nir_store_var(b, clear_primflag_idx_var, num_vertices, 0x1u);
 
    nir_loop *loop = nir_push_loop(b);
    {
-      nir_ssa_def *current_clear_primflag_idx = nir_load_var(b, s->current_clear_primflag_idx_var);
-      nir_if *if_break = nir_push_if(b, nir_uge(b, current_clear_primflag_idx, nir_imm_int(b, b->shader->info.gs.vertices_out)));
+      nir_ssa_def *clear_primflag_idx = nir_load_var(b, clear_primflag_idx_var);
+      nir_if *if_break = nir_push_if(
+         b, nir_uge(b, clear_primflag_idx, nir_imm_int(b, b->shader->info.gs.vertices_out)));
       {
          nir_jump(b, nir_jump_break);
       }
       nir_push_else(b, if_break);
       {
-         nir_ssa_def *emit_vtx_addr = ngg_gs_emit_vertex_addr(b, current_clear_primflag_idx, s);
+         nir_ssa_def *emit_vtx_addr = ngg_gs_emit_vertex_addr(b, clear_primflag_idx, s);
          nir_store_shared(b, zero_u8, emit_vtx_addr, .base = s->lds_offs_primflags + stream);
-         nir_store_var(b, s->current_clear_primflag_idx_var, nir_iadd_imm_nuw(b, current_clear_primflag_idx, 1), 0x1u);
+         nir_store_var(b, clear_primflag_idx_var, nir_iadd_imm_nuw(b, clear_primflag_idx, 1), 0x1u);
       }
       nir_pop_if(b, if_break);
    }
@@ -3400,9 +3404,6 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options)
          state.const_out_vtxcnt[0] == shader->info.gs.vertices_out &&
          state.const_out_prmcnt[0] != -1;
    }
-
-   if (!state.output_compile_time_known)
-      state.current_clear_primflag_idx_var = nir_local_variable_create(impl, glsl_uint_type(), "current_clear_primflag_idx");
 
    if (shader->info.gs.output_primitive == SHADER_PRIM_POINTS)
       state.num_vertices_per_primitive = 1;

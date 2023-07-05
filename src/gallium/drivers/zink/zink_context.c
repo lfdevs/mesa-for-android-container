@@ -3121,6 +3121,11 @@ update_resource_refs_for_stage(struct zink_context *ctx, gl_shader_stage stage)
                continue;
             bool is_buffer = res->obj->is_buffer;
             bool is_write = zink_resource_access_is_write(get_access_flags_for_binding(ctx, i, stage, j));
+            if (zink_is_swapchain(res)) {
+               if (!zink_kopper_acquire(ctx, res, UINT64_MAX))
+                  /* technically this is a failure condition, but there's no safe way out */
+                  continue;
+            }
             zink_batch_resource_usage_set(batch, res, is_write, is_buffer);
             if (is_write || !res->obj->is_buffer)
                res->obj->unordered_read = res->obj->unordered_write = false;
@@ -3201,8 +3206,6 @@ flush_batch(struct zink_context *ctx, bool sync)
    if (ctx->clears_enabled)
       /* start rp to do all the clears */
       zink_batch_rp(ctx);
-   bool conditional_render_active = ctx->render_condition.active;
-   zink_stop_conditional_render(ctx);
    zink_batch_no_rp_safe(ctx);
    zink_end_batch(ctx, batch);
    ctx->deferred_fence = NULL;
@@ -3231,8 +3234,6 @@ flush_batch(struct zink_context *ctx, bool sync)
          VKCTX(CmdSetPatchControlPointsEXT)(ctx->batch.state->cmdbuf, ctx->gfx_pipeline_state.dyn_state2.vertices_per_patch);
          VKCTX(CmdSetPatchControlPointsEXT)(ctx->batch.state->barrier_cmdbuf, 1);
       }
-      if (conditional_render_active)
-         zink_start_conditional_render(ctx);
       reapply_color_write(ctx);
       update_layered_rendering_state(ctx);
       tc_renderpass_info_reset(&ctx->dynamic_fb.tc_info);

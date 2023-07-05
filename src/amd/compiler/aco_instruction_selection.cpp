@@ -3722,15 +3722,19 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          aco_opcode opcode =
             instr->op == nir_op_ubfe ? aco_opcode::s_bfe_u32 : aco_opcode::s_bfe_i32;
          if (const_offset && const_bits) {
-            uint32_t extract = (const_bits->u32 << 16) | (const_offset->u32 & 0x1f);
+            uint32_t extract = ((const_bits->u32 & 0x1f) << 16) | (const_offset->u32 & 0x1f);
             bld.sop2(opcode, Definition(dst), bld.def(s1, scc), base, Operand::c32(extract));
             break;
          }
 
          Temp offset = get_alu_src(ctx, instr->src[1]);
          Temp bits = get_alu_src(ctx, instr->src[2]);
+
          if (ctx->program->gfx_level >= GFX9) {
-            Temp extract = bld.sop2(aco_opcode::s_pack_ll_b32_b16, bld.def(s1), offset, bits);
+            Operand bits_op = const_bits ? Operand::c32(const_bits->u32 & 0x1f)
+                                         : bld.sop2(aco_opcode::s_and_b32, bld.def(s1),
+                                                    bld.def(s1, scc), bits, Operand::c32(0x1fu));
+            Temp extract = bld.sop2(aco_opcode::s_pack_ll_b32_b16, bld.def(s1), offset, bits_op);
             bld.sop2(opcode, Definition(dst), bld.def(s1, scc), base, extract);
          } else if (instr->op == nir_op_ubfe) {
             Temp mask = bld.sop2(aco_opcode::s_bfm_b32, bld.def(s1), bits, offset);
@@ -3738,9 +3742,12 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
                bld.sop2(aco_opcode::s_and_b32, bld.def(s1), bld.def(s1, scc), base, mask);
             bld.sop2(aco_opcode::s_lshr_b32, Definition(dst), bld.def(s1, scc), masked, offset);
          } else {
-            Operand bits_op = const_bits ? Operand::c32(const_bits->u32 << 16)
-                                         : bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1),
-                                                    bld.def(s1, scc), bits, Operand::c32(16u));
+            Operand bits_op = const_bits
+                                 ? Operand::c32((const_bits->u32 & 0x1f) << 16)
+                                 : bld.sop2(aco_opcode::s_lshl_b32, bld.def(s1), bld.def(s1, scc),
+                                            bld.sop2(aco_opcode::s_and_b32, bld.def(s1),
+                                                     bld.def(s1, scc), bits, Operand::c32(0x1fu)),
+                                            Operand::c32(16u));
             Operand offset_op = const_offset
                                    ? Operand::c32(const_offset->u32 & 0x1fu)
                                    : bld.sop2(aco_opcode::s_and_b32, bld.def(s1), bld.def(s1, scc),

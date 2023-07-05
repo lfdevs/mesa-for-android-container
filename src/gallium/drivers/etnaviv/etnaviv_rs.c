@@ -731,24 +731,12 @@ etna_try_rs_blit(struct pipe_context *pctx,
        width & (w_align - 1) || height & (h_align - 1))
       goto manual;
 
-   /* Always flush color and depth cache together before resolving. This works
-    * around artifacts that appear in some cases when scanning out a texture
-    * directly after it has been rendered to, such as rendering an animated web
-    * page in a QtWebEngine based WebView on GC2000. The artifacts look like
-    * the texture sampler samples zeroes instead of texture data in a small,
-    * irregular triangle in the lower right of each browser tile quad. Other
-    * attempts to avoid these artifacts, including a pipeline stall before the
-    * color flush or a TS cache flush afterwards, or flushing multiple times,
-    * with stalls before and after each flush, have shown no effect. */
-   if (src->base.bind & PIPE_BIND_RENDER_TARGET ||
-       src->base.bind & PIPE_BIND_DEPTH_STENCIL) {
-      etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE,
-		     VIVS_GL_FLUSH_CACHE_COLOR | VIVS_GL_FLUSH_CACHE_DEPTH);
-      etna_stall(ctx->stream, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_PE);
-
-      if (src_lev->ts_size && src_lev->ts_valid)
-         etna_set_state(ctx->stream, VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH);
-   }
+   /* Always flush color and depth cache together before resolving. This makes
+    * sure that all previous cache content written by the PE is flushed out
+    * before RS uses the pixel pipes, which invalidates those caches. */
+   etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE,
+                  VIVS_GL_FLUSH_CACHE_COLOR | VIVS_GL_FLUSH_CACHE_DEPTH);
+   etna_stall(ctx->stream, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_PE);
 
    /* Set up color TS to source surface before blit, if needed */
    bool source_ts_valid = false;
@@ -757,6 +745,9 @@ etna_try_rs_blit(struct pipe_context *pctx,
       unsigned ts_offset =
          src_lev->ts_offset + blit_info->src.box.z * src_lev->ts_layer_stride;
       uint32_t ts_mem_config = 0;
+
+      /* flush TS cache before changing to another TS configuration */
+      etna_set_state(ctx->stream, VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH);
 
       if (src_lev->ts_compress_fmt >= 0) {
          ts_mem_config |= VIVS_TS_MEM_CONFIG_COLOR_COMPRESSION |

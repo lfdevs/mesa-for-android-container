@@ -86,6 +86,7 @@ etna_acc_begin_query(struct etna_context *ctx, struct etna_query *q)
 
    /* ->begin_query() discards previous results, so realloc bo */
    realloc_query_bo(ctx, aq);
+   aq->samples = 0;
 
    p->resume(aq, ctx);
    aq->samples++;
@@ -145,9 +146,6 @@ etna_acc_get_query_result(struct etna_context *ctx, struct etna_query *q,
 
    void *ptr = etna_bo_map(rsc->bo);
    bool success = p->result(aq, ptr, result);
-
-   if (success)
-      aq->samples = 0;
 
    etna_bo_cpu_fini(rsc->bo);
 

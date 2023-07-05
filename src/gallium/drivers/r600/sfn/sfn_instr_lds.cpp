@@ -142,6 +142,7 @@ LDSReadInstr::split(std::vector<AluInstr *>& out_block, AluInstr *last_lds_instr
                                 AluInstr::last_write);
       instr->add_required_instr(last_lds_instr);
       instr->set_blockid(block_id(), index());
+      instr->set_always_keep();
       out_block.push_back(instr);
       last_lds_instr = instr;
    }

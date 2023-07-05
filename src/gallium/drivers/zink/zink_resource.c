@@ -363,11 +363,26 @@ double_check_ici(struct zink_screen *screen, VkImageCreateInfo *ici, VkImageUsag
     if (check_ici(screen, ici, *mod))
        return true;
     if (pNext) {
-       ici->pNext = NULL;
+       VkBaseOutStructure *prev = NULL;
+       VkBaseOutStructure *fmt_list = NULL;
+       vk_foreach_struct(strct, (void*)ici->pNext) {
+          if (strct->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO) {
+             fmt_list = strct;
+             if (prev) {
+                prev->pNext = strct->pNext;
+             } else {
+                ici->pNext = strct->pNext;
+             }
+             fmt_list->pNext = NULL;
+             break;
+          }
+          prev = strct;
+       }
        ici->flags &= ~VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
        if (check_ici(screen, ici, *mod))
           return true;
-       ici->pNext = pNext;
+       fmt_list->pNext = (void*)ici->pNext;
+       ici->pNext = fmt_list;
        ici->flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
     }
     return false;
@@ -692,7 +707,7 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
 
       VKSCR(GetBufferMemoryRequirements)(screen->dev, obj->buffer, &reqs);
       if (templ->usage == PIPE_USAGE_STAGING)
-         flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+         flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
       else if (templ->usage == PIPE_USAGE_STREAM)
          flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
       else if (templ->usage == PIPE_USAGE_IMMUTABLE)
@@ -736,14 +751,19 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
       VkFormat formats[2];
       VkImageFormatListCreateInfo format_list;
       if (srgb) {
-         format_list.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
-         format_list.pNext = NULL;
-         format_list.viewFormatCount = 2;
-         format_list.pViewFormats = formats;
-
          formats[0] = zink_get_format(screen, templ->format);
          formats[1] = zink_get_format(screen, srgb);
-         ici.pNext = &format_list;
+         /* only use format list if both formats have supported vk equivalents */
+         if (formats[0] && formats[1]) {
+            format_list.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO;
+            format_list.pNext = NULL;
+            format_list.viewFormatCount = 2;
+            format_list.pViewFormats = formats;
+
+            ici.pNext = &format_list;
+         } else {
+            ici.pNext = NULL;
+         }
       } else {
          ici.pNext = NULL;
       }
@@ -975,7 +995,7 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
       flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
    else if (!(flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) &&
             templ->usage == PIPE_USAGE_STAGING)
-      flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+      flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 
    if (templ->bind & ZINK_BIND_TRANSIENT)
       flags |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
@@ -1930,7 +1950,7 @@ zink_buffer_map(struct pipe_context *pctx,
       usage |= PIPE_MAP_UNSYNCHRONIZED;
    } else if (!(usage & PIPE_MAP_UNSYNCHRONIZED) &&
               (((usage & PIPE_MAP_READ) && !(usage & PIPE_MAP_PERSISTENT) &&
-               ((res->obj->bo->base.placement & VK_STAGING_RAM) != VK_STAGING_RAM)) ||
+               ((screen->info.mem_props.memoryTypes[res->obj->bo->base.placement].propertyFlags & VK_STAGING_RAM) != VK_STAGING_RAM)) ||
               !res->obj->host_visible)) {
       /* the above conditional catches uncached reads and non-HV writes */
       assert(!(usage & (TC_TRANSFER_MAP_THREADED_UNSYNC)));

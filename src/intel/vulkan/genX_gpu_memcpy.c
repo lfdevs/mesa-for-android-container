@@ -269,7 +269,8 @@ void
 genX(emit_so_memcpy_fini)(struct anv_memcpy_state *state)
 {
    genX(emit_apply_pipe_flushes)(state->batch, state->device, _3D,
-                                 ANV_PIPE_END_OF_PIPE_SYNC_BIT);
+                                 ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                                 NULL);
 }
 
 void
@@ -295,7 +296,8 @@ genX(emit_so_memcpy)(struct anv_memcpy_state *state,
                                                   src, size)) {
       genX(emit_apply_pipe_flushes)(state->batch, state->device, _3D,
                                     ANV_PIPE_CS_STALL_BIT |
-                                    ANV_PIPE_VF_CACHE_INVALIDATE_BIT);
+                                    ANV_PIPE_VF_CACHE_INVALIDATE_BIT,
+                                    NULL);
       memset(&state->vb_dirty, 0, sizeof(state->vb_dirty));
    }
 

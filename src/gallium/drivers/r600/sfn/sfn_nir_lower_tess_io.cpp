@@ -456,7 +456,7 @@ r600_lower_tess_io_impl(nir_builder *b, nir_instr *instr, enum pipe_prim_type pr
       tf->src[0] = nir_src_for_ssa(addr_outer);
       nir_ssa_dest_init(&tf->instr, &tf->dest, tf->num_components, 32, NULL);
       nir_builder_instr_insert(b, &tf->instr);
-      if (ncomps < 4) {
+      if (ncomps < 4 && b->shader->info.stage != MESA_SHADER_TESS_EVAL) {
          auto undef = nir_ssa_undef(b, 1, 32);
          nir_ssa_def *srcs[4] = {undef, undef, undef, undef};
          for (unsigned i = 0; i < ncomps; ++i)

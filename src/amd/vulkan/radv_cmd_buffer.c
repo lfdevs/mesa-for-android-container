@@ -6577,11 +6577,11 @@ radv_bind_fragment_shader(struct radv_cmd_buffer *cmd_buffer, const struct radv_
    }
 
    /* Re-emit the conservative rasterization mode because inner coverage is different. */
-   if (previous_ps && previous_ps->info.ps.reads_fully_covered != ps->info.ps.reads_fully_covered)
+   if (!previous_ps || previous_ps->info.ps.reads_fully_covered != ps->info.ps.reads_fully_covered)
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_CONSERVATIVE_RAST_MODE;
 
    if (gfx_level >= GFX10_3 &&
-       previous_ps && previous_ps->info.ps.reads_sample_mask_in != ps->info.ps.reads_sample_mask_in)
+       (!previous_ps || previous_ps->info.ps.reads_sample_mask_in != ps->info.ps.reads_sample_mask_in))
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES;
 
    if (cmd_buffer->state.ms.sample_shading_enable != ps->info.ps.uses_sample_shading ||
@@ -6612,6 +6612,17 @@ radv_bind_shader(struct radv_cmd_buffer *cmd_buffer, struct radv_shader *shader,
    if (!shader) {
       cmd_buffer->state.shaders[stage] = NULL;
       cmd_buffer->state.active_stages &= ~mesa_to_vk_shader_stage(stage);
+
+      /* Reset some dynamic states when a shader stage is unbound. */
+      switch (stage) {
+      case MESA_SHADER_FRAGMENT:
+         cmd_buffer->state.dirty |= RADV_CMD_DIRTY_DYNAMIC_CONSERVATIVE_RAST_MODE |
+                                    RADV_CMD_DIRTY_DYNAMIC_RASTERIZATION_SAMPLES |
+                                    RADV_CMD_DIRTY_DYNAMIC_FRAGMENT_SHADING_RATE;
+         break;
+      default:
+         break;
+      }
       return;
    }
 
