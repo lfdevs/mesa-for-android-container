@@ -274,6 +274,8 @@ st_RasterPos(struct gl_context *ctx, const GLfloat v[4])
 
    _mesa_save_and_set_draw_vao(ctx, rs->VAO, VERT_BIT_POS,
                                &old_vao, &old_vp_input_filter);
+   _mesa_set_varying_vp_inputs(ctx, VERT_BIT_POS &
+                               ctx->Array._DrawVAO->_EnabledWithMapMode);
 
    st_feedback_draw_vbo(ctx, &rs->info, 0, &rs->draw, 1);
 

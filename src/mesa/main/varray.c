@@ -2159,9 +2159,6 @@ _mesa_enable_vertex_array_attribs(struct gl_context *ctx,
 
       vao->_EnabledWithMapMode =
          _mesa_vao_enable_to_vp_inputs(vao->_AttributeMapMode, vao->Enabled);
-
-      _mesa_set_varying_vp_inputs(ctx, ctx->VertexProgram._VPModeInputFilter &
-                                  vao->_EnabledWithMapMode);
    }
 }
 
@@ -2265,9 +2262,6 @@ _mesa_disable_vertex_array_attribs(struct gl_context *ctx,
 
       vao->_EnabledWithMapMode =
          _mesa_vao_enable_to_vp_inputs(vao->_AttributeMapMode, vao->Enabled);
-
-      _mesa_set_varying_vp_inputs(ctx, ctx->VertexProgram._VPModeInputFilter &
-                                  vao->_EnabledWithMapMode);
    }
 }
 

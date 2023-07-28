@@ -19,6 +19,8 @@ struct vn_feedback_pool {
    uint32_t size;
    /* size in bytes used of the active feedback buffer */
    uint32_t used;
+   /* alignment in bytes for slot suballocation from the feedback buffer */
+   uint32_t alignment;
 
    /* first entry is the active feedback buffer */
    struct list_head feedback_buffers;

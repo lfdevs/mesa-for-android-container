@@ -281,7 +281,7 @@ d3d12_batch_get_reference(struct d3d12_batch *batch,
 {
    if (batch->ctx_id != D3D12_CONTEXT_NO_ID) {
       if ((bo->local_reference_mask[batch->ctx_id] & (1 << batch->ctx_index)) != 0) {
-         return &bo->local_reference_state[(batch->ctx_id * 16) + batch->ctx_index];
+         return &bo->local_reference_state[batch->ctx_id][batch->ctx_index];
       }
       else
          return NULL;
@@ -304,9 +304,9 @@ d3d12_batch_acquire_reference(struct d3d12_batch *batch,
          d3d12_bo_reference(bo);
          util_dynarray_append(&batch->local_bos, d3d12_bo*, bo);
          bo->local_reference_mask[batch->ctx_id] |= (1 << batch->ctx_index);
-         bo->local_reference_state[(batch->ctx_id * 16) + batch->ctx_index] = batch_bo_reference_none;
+         bo->local_reference_state[batch->ctx_id][batch->ctx_index] = batch_bo_reference_none;
       }
-      return &bo->local_reference_state[(batch->ctx_id * 16) + batch->ctx_index];
+      return &bo->local_reference_state[batch->ctx_id][batch->ctx_index];
    }
    else {
       hash_entry* entry = _mesa_hash_table_search(batch->bos, bo);

@@ -170,6 +170,9 @@ struct fd_screen {
     */
    const enum pc_di_primtype *primtypes;
    uint32_t primtypes_mask;
+
+   simple_mtx_t aux_ctx_lock;
+   struct pipe_context *aux_ctx;
 };
 
 static inline struct fd_screen *
@@ -177,6 +180,10 @@ fd_screen(struct pipe_screen *pscreen)
 {
    return (struct fd_screen *)pscreen;
 }
+
+struct fd_context;
+struct fd_context * fd_screen_aux_context_get(struct pipe_screen *pscreen);
+void fd_screen_aux_context_put(struct pipe_screen *pscreen);
 
 static inline void
 fd_screen_lock(struct fd_screen *screen)

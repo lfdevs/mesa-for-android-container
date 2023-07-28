@@ -8354,9 +8354,10 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
    }
    case nir_intrinsic_load_subgroup_id: {
       if (ctx->stage.hw == HWStage::CS) {
+         const unsigned bfe_const =
+            ctx->program->gfx_level >= GFX10_3 ? (0x14u | 0x5u << 16) : (0x6u | (0x6u << 16));
          bld.sop2(aco_opcode::s_bfe_u32, Definition(get_ssa_temp(ctx, &instr->dest.ssa)),
-                  bld.def(s1, scc), get_arg(ctx, ctx->args->tg_size),
-                  Operand::c32(0x6u | (0x6u << 16)));
+                  bld.def(s1, scc), get_arg(ctx, ctx->args->tg_size), Operand::c32(bfe_const));
       } else if (ctx->stage.hw == HWStage::NGG) {
          /* Get the id of the current wave within the threadgroup (workgroup) */
          bld.sop2(aco_opcode::s_bfe_u32, Definition(get_ssa_temp(ctx, &instr->dest.ssa)),

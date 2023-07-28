@@ -1754,16 +1754,22 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
        */
       if (query_bits != NULL) {
          if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
-            *query_bits &= ~ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH;
+            *query_bits &= ~ANV_QUERY_WRITES_RT_FLUSH;
 
          if (bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT)
-            *query_bits &= ~ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH;
+            *query_bits &= ~ANV_QUERY_WRITES_TILE_FLUSH;
+
+         if ((bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT) &&
+             (bits & ANV_PIPE_HDC_PIPELINE_FLUSH_BIT) &&
+             (bits & ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT))
+            *query_bits &= ~ANV_QUERY_WRITES_TILE_FLUSH;
 
          /* Once RT/TILE have been flushed, we can consider the CS_STALL flush */
-         if ((*query_bits & (ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH |
-                             ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH)) == 0 &&
+         if ((*query_bits & (ANV_QUERY_WRITES_TILE_FLUSH |
+                             ANV_QUERY_WRITES_RT_FLUSH |
+                             ANV_QUERY_WRITES_DATA_FLUSH)) == 0 &&
              (bits & (ANV_PIPE_END_OF_PIPE_SYNC_BIT | ANV_PIPE_CS_STALL_BIT)))
-            *query_bits &= ~ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL;
+            *query_bits &= ~ANV_QUERY_WRITES_CS_STALL;
       }
 
       bits &= ~(ANV_PIPE_FLUSH_BITS | ANV_PIPE_STALL_BITS |
@@ -4059,6 +4065,37 @@ genX(CmdExecuteCommands)(
    }
 }
 
+static inline bool
+stage_is_shader(const VkPipelineStageFlags2 stage)
+{
+   return (stage & (VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT |
+                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT |
+                    VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR |
+                    VK_PIPELINE_STAGE_2_TASK_SHADER_BIT_EXT |
+                    VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT));
+}
+
+static inline bool
+stage_is_transfer(const VkPipelineStageFlags2 stage)
+{
+   return (stage & (VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT |
+                    VK_PIPELINE_STAGE_2_TRANSFER_BIT));
+}
+
+static inline bool
+mask_is_shader_write(const VkAccessFlags2 access)
+{
+   return (access & (VK_ACCESS_2_SHADER_WRITE_BIT |
+                     VK_ACCESS_2_MEMORY_WRITE_BIT |
+                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT));
+}
+
 static void
 cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
                    const VkDependencyInfo *dep_info,
@@ -4077,11 +4114,31 @@ cmd_buffer_barrier(struct anv_cmd_buffer *cmd_buffer,
    for (uint32_t i = 0; i < dep_info->memoryBarrierCount; i++) {
       src_flags |= dep_info->pMemoryBarriers[i].srcAccessMask;
       dst_flags |= dep_info->pMemoryBarriers[i].dstAccessMask;
+
+      /* Shader writes to buffers that could then be written by a transfer
+       * command (including queries).
+       */
+      if (stage_is_shader(dep_info->pMemoryBarriers[i].srcStageMask) &&
+          mask_is_shader_write(dep_info->pMemoryBarriers[i].srcAccessMask) &&
+          stage_is_transfer(dep_info->pMemoryBarriers[i].dstStageMask)) {
+         cmd_buffer->state.pending_query_bits |=
+            ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+      }
    }
 
    for (uint32_t i = 0; i < dep_info->bufferMemoryBarrierCount; i++) {
       src_flags |= dep_info->pBufferMemoryBarriers[i].srcAccessMask;
       dst_flags |= dep_info->pBufferMemoryBarriers[i].dstAccessMask;
+
+      /* Shader writes to buffers that could then be written by a transfer
+       * command (including queries).
+       */
+      if (stage_is_shader(dep_info->pBufferMemoryBarriers[i].srcStageMask) &&
+          mask_is_shader_write(dep_info->pBufferMemoryBarriers[i].srcAccessMask) &&
+          stage_is_transfer(dep_info->pBufferMemoryBarriers[i].dstStageMask)) {
+         cmd_buffer->state.pending_query_bits |=
+            ANV_QUERY_COMPUTE_WRITES_PENDING_BITS;
+      }
    }
 
    for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
@@ -5595,9 +5652,7 @@ genX(cmd_buffer_ensure_cfe_state)(struct anv_cmd_buffer *cmd_buffer,
 
    const struct intel_device_info *devinfo = cmd_buffer->device->info;
    anv_batch_emit(&cmd_buffer->batch, GENX(CFE_STATE), cfe) {
-      const uint32_t subslices = MAX2(devinfo->subslice_total, 1);
-      cfe.MaximumNumberofThreads =
-         devinfo->max_cs_threads * subslices - 1;
+      cfe.MaximumNumberofThreads = devinfo->max_cs_threads * devinfo->subslice_total;
 
       uint32_t scratch_surf = 0xffffffff;
       if (total_scratch > 0) {
@@ -6447,6 +6502,8 @@ cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
          btd.ScratchSpaceBuffer = scratch_surf >> 4;
       }
    }
+
+   genX(cmd_buffer_ensure_cfe_state)(cmd_buffer, pipeline->scratch_size);
 
    const struct brw_cs_prog_data *cs_prog_data =
       brw_cs_prog_data_const(device->rt_trampoline->prog_data);

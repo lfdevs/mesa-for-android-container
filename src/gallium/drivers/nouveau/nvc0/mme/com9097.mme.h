@@ -395,6 +395,39 @@ const uint32_t mme9097_conservative_raster_state[] = {
 	0x00004041,
 };
 
+const uint32_t mme9097_set_priv_reg[] = {
+	0x04110021,
+	0x00000041,
+	0x00000201,
+/* 0x000f: spr_wait_loop */
+	0x00000301,
+	0x07400021,
+/* 0x0014: spr_unk_else */
+/* 0x0015: spr_unk_else_loop */
+	0x00000041,
+/* 0x0018: spr_exit */
+	0x00001041,
+	0x00001841,
+	0x03468215,
+	0x06310021,
+	0x00000841,
+	0x02008112,
+	0xffff8911,
+	0x00100021,
+	0x00018837,
+	0x03400115,
+	0x00000041,
+	0xffffc911,
+	0xffff4837,
+	0x00014027,
+	0x00028111,
+	0x00000041,
+	0xffffc911,
+	0xffff88b7,
+	0x00000991,
+	0x00000911,
+};
+
 const uint32_t mme9097_compute_counter[] = {
 /* 0x0003: iic_loop_start */
 	0x00000f11,

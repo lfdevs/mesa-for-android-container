@@ -581,6 +581,47 @@ crs_loop:
    exit maddr 0x1452 /* CONSERVATIVE_RASTER */
    send 0x1
 
+/* NVC0_3D_MACRO_SET_PRIV_REG
+ *
+ * Requests the GR Falcon to set a MMIO register.
+ *
+ * arg      = register
+ * param[0] = value
+ * param[1] = mask
+ */
+.section #mme9097_set_priv_reg
+   maddr 0x1044 /* WAIT_FOR_IDLE */
+   send 0x0
+   parm $r2 /* value */
+   parm $r3 /* mask */
+   maddr 0x1d00 /* SCRATCH[0] */
+   send 0x0
+   send $r2
+   send $r3
+   read $r2 0xd1a /* SCRATCH[26] */
+   maddr 0x18c4 /* FIRMWARE[4] */
+   send $r1
+   mov $r1 (extrinsrt 0x0 $r2 0 8 0)
+   mov $r1 (add $r1 -2)
+   /* Set it to 0 increment for later sends */
+   maddr 0x0040 /* NO_OPERATION */
+   branz annul $r1 #spr_unk_else
+spr_wait_loop:
+   read $r1 0xd00 /* SCRATCH(0) */
+   send 0x0
+   mov $r1 (add $r1 -1)
+   branz annul $r1 #spr_wait_loop
+   bra annul #spr_exit
+spr_unk_else:
+   mov $r1 10
+spr_unk_else_loop:
+   send 0x0
+   mov $r1 (add $r1 -1)
+   branz annul $r1 #spr_unk_else_loop
+spr_exit:
+   exit mov $r1 $r1
+   mov $r1 $r1
+
 /* NVC0_3D_MACRO_COMPUTE_COUNTER
  *
  * This macro takes 6 values, num_groups_* and group_size_*, and adds their

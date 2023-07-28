@@ -190,7 +190,7 @@ static void
 zink_set_max_shader_compiler_threads(struct pipe_screen *pscreen, unsigned max_threads)
 {
    struct zink_screen *screen = zink_screen(pscreen);
-   util_queue_adjust_num_threads(&screen->cache_get_thread, max_threads);
+   util_queue_adjust_num_threads(&screen->cache_get_thread, max_threads, false);
 }
 
 static bool

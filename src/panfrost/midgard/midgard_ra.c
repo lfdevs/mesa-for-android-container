@@ -519,7 +519,7 @@ allocate_registers(compiler_context *ctx, bool *spilled)
    int work_count = max_work_registers(ctx);
 
    /* No register allocation to do with no SSA */
-
+   mir_compute_temp_count(ctx);
    if (!ctx->temp_count)
       return NULL;
 

@@ -76,7 +76,7 @@ panfrost_clear(struct pipe_context *pipe, unsigned buffers,
    }
 
    /* Once there is content, clear with a fullscreen quad */
-   panfrost_blitter_save(ctx, false /* render condition */);
+   panfrost_blitter_save(ctx, PAN_RENDER_CLEAR);
 
    perf_debug_ctx(ctx, "Clearing with quad");
    util_blitter_clear(

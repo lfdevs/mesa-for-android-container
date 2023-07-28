@@ -517,7 +517,8 @@ ir3_set_max_shader_compiler_threads(struct pipe_screen *pscreen,
    /* This function doesn't allow a greater number of threads than
     * the queue had at its creation.
     */
-   util_queue_adjust_num_threads(&screen->compile_queue, max_threads);
+   util_queue_adjust_num_threads(&screen->compile_queue, max_threads,
+                                 false);
 }
 
 static bool

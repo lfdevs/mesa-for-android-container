@@ -40,12 +40,6 @@
 #include "agx_state.h"
 
 /* Fake values, pending UAPI upstreaming */
-#ifndef DRM_FORMAT_MOD_LINEAR
-#define DRM_FORMAT_MOD_LINEAR 1
-#endif
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
-#endif
 #ifndef DRM_FORMAT_MOD_APPLE_TWIDDLED
 #define DRM_FORMAT_MOD_APPLE_TWIDDLED (2)
 #endif

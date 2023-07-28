@@ -2181,9 +2181,7 @@ static uint64_t trace_context_create_texture_handle(struct pipe_context *_pipe,
    trace_dump_call_begin("pipe_context", "create_texture_handle");
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(ptr, view);
-   trace_dump_arg_begin("state");
    trace_dump_arg(sampler_state, state);
-   trace_dump_arg_end();
 
    handle = pipe->create_texture_handle(pipe, view, state);
 

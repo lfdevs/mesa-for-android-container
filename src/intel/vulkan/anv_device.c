@@ -4303,11 +4303,11 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
     */
    uint32_t memory_types = (1ull << device->physical->memory.type_count) - 1;
 
-   /* Base alignment requirement of a cache line */
-   uint32_t alignment = 16;
-
-   if (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
-      alignment = MAX2(alignment, ANV_UBO_ALIGNMENT);
+   /* The GPU appears to write back to main memory in cachelines. Writes to a
+    * buffers should not clobber with writes to another buffers so make sure
+    * those are in different cachelines.
+    */
+   uint32_t alignment = 64;
 
    pMemoryRequirements->memoryRequirements.size = size;
    pMemoryRequirements->memoryRequirements.alignment = alignment;

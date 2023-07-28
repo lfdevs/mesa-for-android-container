@@ -113,6 +113,7 @@ static int
 radv_device_get_cache_uuid(struct radv_physical_device *pdevice, void *uuid)
 {
    enum radeon_family family = pdevice->rad_info.family;
+   bool conformant_trunc_coord = pdevice->rad_info.conformant_trunc_coord;
    struct mesa_sha1 ctx;
    unsigned char sha1[20];
    unsigned ptr_size = sizeof(void *);
@@ -139,6 +140,7 @@ radv_device_get_cache_uuid(struct radv_physical_device *pdevice, void *uuid)
 #endif
 
    _mesa_sha1_update(&ctx, &family, sizeof(family));
+   _mesa_sha1_update(&ctx, &conformant_trunc_coord, sizeof(conformant_trunc_coord));
    _mesa_sha1_update(&ctx, &ptr_size, sizeof(ptr_size));
    _mesa_sha1_final(&ctx, sha1);
 

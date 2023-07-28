@@ -3464,6 +3464,10 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
    batch->rsd[PIPE_SHADER_VERTEX] =
       panfrost_emit_compute_shader_meta(batch, PIPE_SHADER_VERTEX);
 
+   batch->uniform_buffers[PIPE_SHADER_VERTEX] =
+      panfrost_emit_const_buf(batch, PIPE_SHADER_VERTEX, NULL,
+                              &batch->push_uniforms[PIPE_SHADER_VERTEX], NULL);
+
 #if PAN_ARCH >= 9
    pan_section_pack(t.cpu, COMPUTE_JOB, PAYLOAD, cfg) {
       cfg.workgroup_size_x = 1;
@@ -3493,10 +3497,6 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
    panfrost_pack_work_groups_compute(&invocation, 1, count,
                                      info->instance_count, 1, 1, 1,
                                      PAN_ARCH <= 5, false);
-
-   batch->uniform_buffers[PIPE_SHADER_VERTEX] =
-      panfrost_emit_const_buf(batch, PIPE_SHADER_VERTEX, NULL,
-                              &batch->push_uniforms[PIPE_SHADER_VERTEX], NULL);
 
    panfrost_draw_emit_vertex(batch, info, &invocation, 0, 0, attribs,
                              attrib_bufs, t.cpu);

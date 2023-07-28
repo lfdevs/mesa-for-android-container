@@ -129,9 +129,18 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
       if (result != VK_SUCCESS)
          goto error_trace_buf;
 
+      uint32_t batch_size = 512; /* 128 dwords of setup */
+      if (device->info->verx10 == 120 || intel_device_info_is_dg2(device->info)) {
+         /* Enable/Disable preemption at the begin/end */
+         batch_size += 2 * (250 /* 250 MI_NOOPs*/ +
+                            6   /* PIPE_CONTROL */ +
+                            3   /* MI_LRI */) * 4 /* dwords */;
+      }
+      batch_size += 256 * utrace_copies; /* 64 dwords per copy */
+      batch_size = align(batch_size + 4, 8); /* MI_BATCH_BUFFER_END */
+
       result = anv_bo_pool_alloc(&device->utrace_bo_pool,
-                                 /* 128 dwords of setup + 64 dwords per copy */
-                                 align(512 + 64 * utrace_copies, 4096),
+                                 align(batch_size, 4096),
                                  &submit->batch_bo);
       if (result != VK_SUCCESS)
          goto error_batch_buf;

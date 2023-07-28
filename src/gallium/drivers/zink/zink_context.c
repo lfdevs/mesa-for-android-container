@@ -1454,7 +1454,7 @@ invalidate_inlined_uniforms(struct zink_context *ctx, gl_shader_stage pstage)
       ctx->compute_dirty = true;
       return;
    }
-   assert(!zink_screen(ctx->base.screen)->optimal_keys);
+   assert(!zink_screen(ctx->base.screen)->optimal_keys || (pstage == MESA_SHADER_GEOMETRY && ctx->is_generated_gs_bound));
    ctx->dirty_gfx_stages |= bit;
    struct zink_shader_key *key = &ctx->gfx_pipeline_state.shader_keys.key[pstage];
    key->inline_uniforms = false;

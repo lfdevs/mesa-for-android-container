@@ -638,6 +638,13 @@ vn_DestroyCommandPool(VkDevice device,
                             &pool->command_buffers, head) {
       vn_cs_encoder_fini(&cmd->cs);
       vn_object_base_fini(&cmd->base);
+
+      if (cmd->builder.present_src_images)
+         vk_free(&cmd->allocator, cmd->builder.present_src_images);
+
+      if (cmd->builder.tmp.data)
+         vk_free(&cmd->allocator, cmd->builder.tmp.data);
+
       vk_free(alloc, cmd);
    }
 
@@ -649,6 +656,11 @@ static void
 vn_cmd_reset(struct vn_command_buffer *cmd)
 {
    vn_cs_encoder_reset(&cmd->cs);
+   if (cmd->builder.present_src_images) {
+      vk_free(&cmd->allocator, cmd->builder.present_src_images);
+      cmd->builder.present_src_images = NULL;
+   }
+
    cmd->state = VN_COMMAND_BUFFER_STATE_INITIAL;
    cmd->draw_cmd_batched = 0;
 }
@@ -759,6 +771,9 @@ vn_FreeCommandBuffers(VkDevice device,
 
       if (cmd->builder.tmp.data)
          vk_free(alloc, cmd->builder.tmp.data);
+
+      if (cmd->builder.present_src_images)
+         vk_free(&cmd->allocator, cmd->builder.present_src_images);
 
       vn_cs_encoder_fini(&cmd->cs);
       list_del(&cmd->head);

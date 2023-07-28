@@ -484,15 +484,18 @@ mir_flip(midgard_instruction *ins)
 void
 mir_compute_temp_count(compiler_context *ctx)
 {
-   if (ctx->temp_count)
-      return;
-
-   unsigned max_dest = 0;
+   unsigned max_index = 0;
 
    mir_foreach_instr_global(ctx, ins) {
       if (ins->dest < SSA_FIXED_MINIMUM)
-         max_dest = MAX2(max_dest, ins->dest + 1);
+         max_index = MAX2(max_index, ins->dest + 1);
    }
 
-   ctx->temp_count = max_dest;
+   if (ctx->blend_input != ~0)
+      max_index = MAX2(max_index, ctx->blend_input + 1);
+
+   if (ctx->blend_src1 != ~0)
+      max_index = MAX2(max_index, ctx->blend_src1 + 1);
+
+   ctx->temp_count = max_index;
 }

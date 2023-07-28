@@ -204,7 +204,8 @@ stw_pixelformat_add(struct stw_device *stw_dev,
 
    /*
     * since gallium frontend can allocate depth/stencil/accum buffers, we provide
-    * only color buffers here
+    * only color buffers here in the non-zink case, however in the zink case
+    * kopper requires that we allocate depth/stencil through the winsys
     */
    pfi->stvis.buffer_mask = ST_ATTACHMENT_FRONT_LEFT_MASK;
    if (doublebuffer)
@@ -212,6 +213,11 @@ stw_pixelformat_add(struct stw_device *stw_dev,
 
    pfi->stvis.color_format = color->format;
    pfi->stvis.depth_stencil_format = depth->format;
+
+#ifdef GALLIUM_ZINK
+   if (stw_dev->zink && (depth->bits.depth > 0 || depth->bits.stencil > 0))
+      pfi->stvis.buffer_mask |= ST_ATTACHMENT_DEPTH_STENCIL_MASK;
+#endif
 
    pfi->stvis.accum_format = (accum) ?
       PIPE_FORMAT_R16G16B16A16_SNORM : PIPE_FORMAT_NONE;

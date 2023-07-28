@@ -43,13 +43,8 @@
 #include "state_tracker/st_context.h"
 
 static void
-glthread_unmarshal_batch(void *job, void *gdata, int thread_index)
+glthread_update_global_locking(struct gl_context *ctx)
 {
-   struct glthread_batch *batch = (struct glthread_batch*)job;
-   struct gl_context *ctx = batch->ctx;
-   unsigned pos = 0;
-   unsigned used = batch->used;
-   uint64_t *buffer = batch->buffer;
    struct gl_shared_state *shared = ctx->Shared;
 
    /* Determine if we should lock the global mutexes. */
@@ -102,12 +97,34 @@ glthread_unmarshal_batch(void *job, void *gdata, int thread_index)
    }
    simple_mtx_unlock(&shared->Mutex);
 
+   ctx->GLThread.LockGlobalMutexes = lock_mutexes;
+}
+
+static void
+glthread_unmarshal_batch(void *job, void *gdata, int thread_index)
+{
+   struct glthread_batch *batch = (struct glthread_batch*)job;
+   struct gl_context *ctx = batch->ctx;
+   unsigned pos = 0;
+   unsigned used = batch->used;
+   uint64_t *buffer = batch->buffer;
+   struct gl_shared_state *shared = ctx->Shared;
+
+   /* Determine once every 64 batches whether shared mutexes should be locked.
+    * We have to do this less frequently because os_time_get_nano() is very
+    * expensive if the clock source is not TSC. See:
+    *    https://gitlab.freedesktop.org/mesa/mesa/-/issues/8910
+    */
+   if (ctx->GLThread.GlobalLockUpdateBatchCounter++ % 64 == 0)
+      glthread_update_global_locking(ctx);
+
    /* Execute the GL calls. */
    _glapi_set_dispatch(ctx->Dispatch.Current);
 
    /* Here we lock the mutexes once globally if possible. If not, we just
     * fallback to the individual API calls doing it.
     */
+   bool lock_mutexes = ctx->GLThread.LockGlobalMutexes;
    if (lock_mutexes) {
       _mesa_HashLockMutex(shared->BufferObjects);
       ctx->BufferObjectsLocked = true;

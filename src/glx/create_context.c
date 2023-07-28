@@ -115,6 +115,11 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
 #endif
 
    if (gc == NULL) {
+      /* Increment dpy->request in order to give a unique serial number to the error.
+       * This may break creating contexts on some video cards, if libx11 <1.7.4 is used.
+       * However, this fixes creating contexts (on some video cards) if libx11 >=1.7.4 is used.
+       */
+      XNoOp(dpy);
       /* -1 isn't a legal XID, which is sort of the point, we've failed
        * before we even got to XID allocation.
        */

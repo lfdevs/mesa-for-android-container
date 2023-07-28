@@ -47,6 +47,8 @@
 extern "C" {
 #endif
 
+#define LP_MAX_TEXEL_BUFFER_ELEMENTS 134217728
+
 struct util_format_description;
 struct lp_type;
 struct lp_build_context;

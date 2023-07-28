@@ -205,7 +205,7 @@ get_ahw_buffer_format_properties2(
       tiling = VK_IMAGE_TILING_LINEAR;
 
    p->formatFeatures =
-      anv_get_image_format_features2(device->info, p->format, anv_format,
+      anv_get_image_format_features2(device->physical, p->format, anv_format,
                                      tiling, NULL);
 
    /* "Images can be created with an external format even if the Android hardware

@@ -336,7 +336,6 @@ spill-dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_bool_required
 
 # Failing (Color test failed) since wayland platform was enabled in arm builds
 wayland-dEQP-EGL.functional.wide_color.window_888_colorspace_default,Fail
-wayland-dEQP-EGL.functional.wide_color.window_fp16_default_colorspace,Fail
 
 # skqp failure:
 # SRGBReadWritePixels FAILED (7 errors)

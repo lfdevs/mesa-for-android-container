@@ -662,7 +662,7 @@ build_pg_query_shader(struct radv_device *device)
     *	        }
     *		available = true;
     *	}
-    * 	uint32_t result_size = flags & VK_QUERY_RESULT_64_BIT ? 16 : 8;
+    * 	uint32_t result_size = flags & VK_QUERY_RESULT_64_BIT ? 8 : 4;
     * 	if ((flags & VK_QUERY_RESULT_PARTIAL_BIT) || available) {
     *		if (flags & VK_QUERY_RESULT_64_BIT) {
     *			dst_buf[dst_offset] = result;
@@ -752,7 +752,7 @@ build_pg_query_shader(struct radv_device *device)
    /* Determine if result is 64 or 32 bit. */
    nir_ssa_def *result_is_64bit = nir_test_mask(&b, flags, VK_QUERY_RESULT_64_BIT);
    nir_ssa_def *result_size =
-      nir_bcsel(&b, result_is_64bit, nir_imm_int(&b, 16), nir_imm_int(&b, 8));
+      nir_bcsel(&b, result_is_64bit, nir_imm_int(&b, 8), nir_imm_int(&b, 4));
 
    /* Store the result if complete or partial results have been requested. */
    nir_push_if(&b, nir_ior(&b, nir_test_mask(&b, flags, VK_QUERY_RESULT_PARTIAL_BIT),

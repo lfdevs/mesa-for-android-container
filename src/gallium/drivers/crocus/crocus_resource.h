@@ -526,6 +526,9 @@ bool crocus_has_color_unresolved(const struct crocus_resource *res,
                                  unsigned start_level, unsigned num_levels,
                                  unsigned start_layer, unsigned num_layers);
 
+bool crocus_render_formats_color_compatible(enum isl_format a,
+                                          enum isl_format b,
+                                          union isl_color_value color);
 enum isl_aux_usage crocus_resource_render_aux_usage(struct crocus_context *ice,
                                                     struct crocus_resource *res,
                                                     uint32_t level,

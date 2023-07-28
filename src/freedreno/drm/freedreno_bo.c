@@ -490,6 +490,9 @@ bo_flush(struct fd_bo *bo)
 int
 fd_bo_get_name(struct fd_bo *bo, uint32_t *name)
 {
+   if (suballoc_bo(bo))
+      return -1;
+
    if (!bo->name) {
       struct drm_gem_flink req = {
          .handle = bo->handle,
@@ -517,6 +520,8 @@ fd_bo_get_name(struct fd_bo *bo, uint32_t *name)
 uint32_t
 fd_bo_handle(struct fd_bo *bo)
 {
+   if (suballoc_bo(bo))
+      return 0;
    bo->bo_reuse = NO_CACHE;
    bo->alloc_flags |= FD_BO_SHARED;
    bo_flush(bo);
@@ -527,6 +532,9 @@ int
 fd_bo_dmabuf(struct fd_bo *bo)
 {
    int ret, prime_fd;
+
+   if (suballoc_bo(bo))
+      return -1;
 
    ret = drmPrimeHandleToFD(bo->dev->fd, bo->handle, DRM_CLOEXEC | DRM_RDWR,
                             &prime_fd);

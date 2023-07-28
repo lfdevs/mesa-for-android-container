@@ -1514,15 +1514,22 @@ void genX(CmdCopyQueryPoolResults)(
     * command streamer.
     */
    if (cmd_buffer->state.pending_query_bits &
-       ANV_QUERY_RENDER_TARGET_WRITES_RT_FLUSH)
+       ANV_QUERY_WRITES_RT_FLUSH)
       needed_flushes |= ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
 
    if (cmd_buffer->state.pending_query_bits &
-       ANV_QUERY_RENDER_TARGET_WRITES_TILE_FLUSH)
+       ANV_QUERY_WRITES_TILE_FLUSH)
       needed_flushes |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
 
    if (cmd_buffer->state.pending_query_bits &
-       ANV_QUERY_RENDER_TARGET_WRITES_CS_STALL)
+       ANV_QUERY_WRITES_DATA_FLUSH) {
+      needed_flushes |= (ANV_PIPE_DATA_CACHE_FLUSH_BIT |
+                         ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
+                         ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT);
+   }
+
+   if (cmd_buffer->state.pending_query_bits &
+       ANV_QUERY_WRITES_CS_STALL)
       needed_flushes |= ANV_PIPE_CS_STALL_BIT;
 
    /* Occlusion & timestamp queries are written using a PIPE_CONTROL and

@@ -291,7 +291,7 @@ vbo_save_playback_vertex_list_gallium(struct gl_context *ctx,
                                          NULL, 1);
    }
 
-   /* Restore edge flag state. */
+   /* Restore edge flag state and ctx->VertexProgram._VaryingInputs. */
    _mesa_update_edgeflag_state_vao(ctx);
 
    if (copy_to_current)
@@ -332,6 +332,8 @@ vbo_save_playback_vertex_list(struct gl_context *ctx, void *data, bool copy_to_c
 
    _mesa_save_and_set_draw_vao(ctx, node->cold->VAO[mode], vao_filter,
                                &old_vao, &old_vp_input_filter);
+   _mesa_set_varying_vp_inputs(ctx, vao_filter &
+                               ctx->Array._DrawVAO->_EnabledWithMapMode);
 
    /* Need that at least one time. */
    if (ctx->NewState)

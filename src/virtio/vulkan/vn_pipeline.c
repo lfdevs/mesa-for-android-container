@@ -126,11 +126,22 @@ vn_CreatePipelineLayout(VkDevice device,
    for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; i++) {
       struct vn_descriptor_set_layout *descriptor_set_layout =
          vn_descriptor_set_layout_from_handle(pCreateInfo->pSetLayouts[i]);
-      if (descriptor_set_layout->is_push_descriptor) {
+
+      /* Avoid null derefs. pSetLayouts may contain VK_NULL_HANDLE.
+       *
+       * From the Vulkan 1.3.254 spec:
+       *    VUID-VkPipelineLayoutCreateInfo-pSetLayouts-parameter
+       *
+       *    If setLayoutCount is not 0, pSetLayouts must be a valid pointer to
+       *    an array of setLayoutCount valid or VK_NULL_HANDLE
+       *    VkDescriptorSetLayout handles
+       */
+      if (descriptor_set_layout &&
+          descriptor_set_layout->is_push_descriptor) {
          layout->push_descriptor_set_layout =
             vn_descriptor_set_layout_ref(dev, descriptor_set_layout);
+         break;
       }
-      break;
    }
 
    layout->has_push_constant_ranges = pCreateInfo->pPushConstantRanges > 0;

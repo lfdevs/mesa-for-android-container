@@ -3442,8 +3442,10 @@ static bool visit_intrinsic(struct ac_nir_context *ctx, nir_intrinsic_instr *ins
    switch (instr->intrinsic) {
    case nir_intrinsic_ballot:
       result = ac_build_ballot(&ctx->ac, get_src(ctx, instr->src[0]));
-      if (ctx->ac.ballot_mask_bits > ctx->ac.wave_size)
-         result = LLVMBuildZExt(ctx->ac.builder, result, ctx->ac.iN_ballotmask, "");
+      if (instr->dest.ssa.bit_size > ctx->ac.wave_size) {
+         LLVMTypeRef dest_type = LLVMIntTypeInContext(ctx->ac.context, instr->dest.ssa.bit_size);
+         result = LLVMBuildZExt(ctx->ac.builder, result, dest_type, "");
+      }
       break;
    case nir_intrinsic_read_invocation:
       result =

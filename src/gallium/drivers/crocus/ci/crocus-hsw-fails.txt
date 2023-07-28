@@ -2,8 +2,6 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth16,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
-fast_color_clear@fcc-write-after-clear,Fail
-
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 
 # Compat mode failure

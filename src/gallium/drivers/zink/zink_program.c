@@ -437,7 +437,6 @@ generate_gfx_program_modules(struct zink_context *ctx, struct zink_screen *scree
       variant_hash ^= prog->module_hash[i];
    }
 
-   p_atomic_dec(&prog->base.reference.count);
    state->modules_changed = true;
 
    prog->last_variant_hash = variant_hash;
@@ -459,7 +458,6 @@ generate_gfx_program_modules_optimal(struct zink_context *ctx, struct zink_scree
       prog->modules[i] = zm->shader;
    }
 
-   p_atomic_dec(&prog->base.reference.count);
    state->modules_changed = true;
    prog->last_variant_hash = state->shader_keys_optimal.key.val;
 }
@@ -712,7 +710,6 @@ zink_gfx_program_update_optimal(struct zink_context *ctx)
                real->base.removed = false;
                prog->full_prog = NULL;
                prog->base.removed = true;
-               zink_gfx_program_reference(zink_screen(ctx->base.screen), &prog, NULL);
                prog = real;
             }
          }
@@ -751,7 +748,6 @@ zink_gfx_program_update_optimal(struct zink_context *ctx)
             real->base.removed = false;
             prog->full_prog = NULL;
             prog->base.removed = true;
-            zink_gfx_program_reference(zink_screen(ctx->base.screen), &prog, NULL);
             ctx->curr_program = real;
             simple_mtx_unlock(&ctx->program_lock[zink_program_cache_stages(ctx->shader_stages)]);
          }
@@ -1095,6 +1091,7 @@ zink_create_gfx_program(struct zink_context *ctx,
       }
    }
    _mesa_sha1_final(&sctx, prog->base.sha1);
+   p_atomic_dec(&prog->base.reference.count);
 
    if (!zink_descriptor_program_init(ctx, &prog->base))
       goto fail;
@@ -1115,6 +1112,8 @@ create_linked_separable_job(void *data, void *gdata, int thread_index)
 {
    struct zink_gfx_program *prog = data;
    prog->full_prog = zink_create_gfx_program(prog->ctx, prog->shaders, 0, prog->gfx_hash);
+   /* add an ownership ref */
+   zink_gfx_program_reference(zink_screen(prog->ctx->base.screen), NULL, prog->full_prog);
    precompile_job(prog->full_prog, gdata, thread_index);
 }
 
@@ -1162,7 +1161,7 @@ create_gfx_program_separable(struct zink_context *ctx, struct zink_shader **stag
    /* We can do this add after the _mesa_set_adds above because we know the prog->shaders[] are 
    * referenced by the draw state and zink_shader_free() can't be called on them while we're in here.
    */
-   p_atomic_add(&prog->base.reference.count, refs);
+   p_atomic_add(&prog->base.reference.count, refs - 1);
 
    for (int r = 0; r < ARRAY_SIZE(prog->pipelines); ++r) {
       for (int i = 0; i < ARRAY_SIZE(prog->pipelines[0]); ++i) {
@@ -1580,7 +1579,7 @@ bind_gfx_stage(struct zink_context *ctx, gl_shader_stage stage, struct zink_shad
    if (ctx->gfx_stages[stage])
       ctx->gfx_hash ^= ctx->gfx_stages[stage]->hash;
 
-   if (!shader && stage == MESA_SHADER_GEOMETRY) {
+   if (stage == MESA_SHADER_GEOMETRY && ctx->is_generated_gs_bound && (!shader || !shader->non_fs.parent)) {
       ctx->inlinable_uniforms_valid_mask &= ~BITFIELD64_BIT(MESA_SHADER_GEOMETRY);
       ctx->is_generated_gs_bound = false;
    }

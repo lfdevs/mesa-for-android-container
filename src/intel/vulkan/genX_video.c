@@ -110,8 +110,8 @@ anv_h264_decode_video(struct anv_cmd_buffer *cmd_buffer,
       ss.TiledSurface = img->planes[0].primary_surface.isl.tiling != ISL_TILING_LINEAR;
       ss.TileWalk = TW_YMAJOR;
 
-      ss.YOffsetforUCb = align(img->vk.extent.height, 32);
-      ss.YOffsetforVCr = align(img->vk.extent.height, 32);
+      ss.YOffsetforUCb = ss.YOffsetforVCr =
+         img->planes[1].primary_surface.memory_range.offset / img->planes[0].primary_surface.isl.row_pitch_B;
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(MFX_PIPE_BUF_ADDR_STATE), buf) {

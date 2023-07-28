@@ -141,6 +141,13 @@ vn_feedback_buffer_destroy(struct vn_device *dev,
    vk_free(alloc, feedback_buf);
 }
 
+static inline uint32_t
+vn_get_feedback_buffer_alignment(struct vn_feedback_buffer *feedback_buf)
+{
+   struct vn_buffer *buf = vn_buffer_from_handle(feedback_buf->buffer);
+   return buf->requirements.memory.memoryRequirements.alignment;
+}
+
 static VkResult
 vn_feedback_pool_grow_locked(struct vn_feedback_pool *pool)
 {
@@ -154,6 +161,7 @@ vn_feedback_pool_grow_locked(struct vn_feedback_pool *pool)
       return result;
 
    pool->used = 0;
+   pool->alignment = vn_get_feedback_buffer_alignment(feedback_buf);
 
    list_add(&feedback_buf->head, &pool->feedback_buffers);
 
@@ -172,6 +180,7 @@ vn_feedback_pool_init(struct vn_device *dev,
    pool->alloc = alloc;
    pool->size = size;
    pool->used = size;
+   pool->alignment = 1;
    list_inithead(&pool->feedback_buffers);
    list_inithead(&pool->free_slots);
 
@@ -198,18 +207,20 @@ vn_feedback_pool_alloc_locked(struct vn_feedback_pool *pool,
                               uint32_t *out_offset)
 {
    VN_TRACE_FUNC();
-   const uint32_t aligned_size = align(size, 4);
 
-   if (unlikely(aligned_size > pool->size - pool->used)) {
+   /* Default values of pool->used and pool->alignment are used to trigger the
+    * initial pool grow, and will be properly initialized after that.
+    */
+   if (unlikely(align(size, pool->alignment) > pool->size - pool->used)) {
       VkResult result = vn_feedback_pool_grow_locked(pool);
       if (result != VK_SUCCESS)
          return NULL;
 
-      assert(aligned_size <= pool->size - pool->used);
+      assert(align(size, pool->alignment) <= pool->size - pool->used);
    }
 
    *out_offset = pool->used;
-   pool->used += aligned_size;
+   pool->used += align(size, pool->alignment);
 
    return list_first_entry(&pool->feedback_buffers, struct vn_feedback_buffer,
                            head);

@@ -16,9 +16,9 @@ debian/patches and add the name of the patch to debian/patches/series.
 
 
 The X Strike Force team maintains X packages in git repositories on
-git.debian.org in the pkg-xorg subdirectory. Most upstream packages
+salsa.debian.org in the xorg-team subdirectory. Most upstream packages
 are actually maintained in git repositories as well, so they often
-just need to be pulled into git.debian.org in a "upstream-*" branch.
+just need to be pulled into salsa.debian.org in a "upstream-*" branch.
 
 The .orig.tar.gz is upstream's mesa tarball.
 

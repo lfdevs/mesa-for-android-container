@@ -267,6 +267,7 @@ tu_allocate_userspace_iova(struct tu_device *dev,
                                       size)) {
             *iova = client_iova;
          } else {
+            mtx_unlock(&dev->physical_device->vma_mutex);
             return VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS;
          }
       } else {

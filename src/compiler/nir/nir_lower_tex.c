@@ -1419,13 +1419,15 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
 
       /* mask of src coords to saturate (clamp): */
       unsigned sat_mask = 0;
-
-      if ((1 << tex->sampler_index) & options->saturate_r)
-         sat_mask |= (1 << 2);    /* .z */
-      if ((1 << tex->sampler_index) & options->saturate_t)
-         sat_mask |= (1 << 1);    /* .y */
-      if ((1 << tex->sampler_index) & options->saturate_s)
-         sat_mask |= (1 << 0);    /* .x */
+      /* ignore saturate for txf ops: these don't use samplers and can't GL_CLAMP */
+      if (nir_tex_instr_need_sampler(tex)) {
+         if ((1 << tex->sampler_index) & options->saturate_r)
+            sat_mask |= (1 << 2);    /* .z */
+         if ((1 << tex->sampler_index) & options->saturate_t)
+            sat_mask |= (1 << 1);    /* .y */
+         if ((1 << tex->sampler_index) & options->saturate_s)
+            sat_mask |= (1 << 0);    /* .x */
+      }
 
       if (options->lower_index_to_offset)
          progress |= lower_index_to_offset(b, tex);

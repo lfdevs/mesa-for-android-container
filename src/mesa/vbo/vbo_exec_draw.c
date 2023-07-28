@@ -151,6 +151,8 @@ vbo_exec_bind_arrays(struct gl_context *ctx,
 
    _mesa_save_and_set_draw_vao(ctx, vao, vao_filter,
                                old_vao, old_vp_input_filter);
+   _mesa_set_varying_vp_inputs(ctx, vao_filter &
+                               ctx->Array._DrawVAO->_EnabledWithMapMode);
 }
 
 

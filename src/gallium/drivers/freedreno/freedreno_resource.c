@@ -1103,6 +1103,7 @@ static bool
 fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
                        struct pipe_resource *prsc, struct winsys_handle *handle,
                        unsigned usage)
+   assert_dt
 {
    struct fd_resource *rsc = fd_resource(prsc);
 
@@ -1115,8 +1116,38 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
 
    DBG("%" PRSC_FMT ", modifier=%" PRIx64, PRSC_ARGS(prsc), handle->modifier);
 
-   return fd_screen_bo_get_handle(pscreen, rsc->bo, rsc->scanout,
-                                  fd_resource_pitch(rsc, 0), handle);
+   bool ret = fd_screen_bo_get_handle(pscreen, rsc->bo, rsc->scanout,
+                                      fd_resource_pitch(rsc, 0), handle);
+
+   if (!ret && !(prsc->bind & PIPE_BIND_SHARED)) {
+
+      pctx = threaded_context_unwrap_sync(pctx);
+
+      struct fd_context *ctx = pctx ?
+            fd_context(pctx) : fd_screen_aux_context_get(pscreen);
+
+      /* Since gl is horrible, we can end up getting asked to export a handle
+       * for a rsc which was not originally allocated in a way that can be
+       * exported (for ex, sub-allocation or in the case of virtgpu we need
+       * to tell the kernel at allocation time that the buffer can be shared)
+       *
+       * If we get into this scenario we can try to reallocate.
+       */
+
+      prsc->bind |= PIPE_BIND_SHARED;
+
+      ret = fd_try_shadow_resource(ctx, rsc, 0, NULL, handle->modifier);
+
+      if (!pctx)
+         fd_screen_aux_context_put(pscreen);
+
+      if (!ret)
+         return false;
+
+      return fd_resource_get_handle(pscreen, pctx, prsc, handle, usage);
+   }
+
+   return ret;
 }
 
 /* special case to resize query buf after allocated.. */

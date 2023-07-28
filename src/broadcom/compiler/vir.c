@@ -1776,6 +1776,15 @@ skip_compile_strategy(struct v3d_compile *c, uint32_t idx)
            return false;
    };
 }
+
+static inline void
+set_best_compile(struct v3d_compile **best, struct v3d_compile *c)
+{
+   if (*best)
+      vir_compile_destroy(*best);
+   *best = c;
+}
+
 uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                       struct v3d_key *key,
                       struct v3d_prog_data **out_prog_data,
@@ -1840,11 +1849,11 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                         if (c->spills == 0 ||
                             strategies[strat].min_threads == 4 ||
                             V3D_DBG(OPT_COMPILE_TIME)) {
-                                best_c = c;
+                                set_best_compile(&best_c, c);
                                 break;
                         } else if (c->spills + c->fills <
                                    best_spill_fill_count) {
-                                best_c = c;
+                                set_best_compile(&best_c, c);
                                 best_spill_fill_count = c->spills + c->fills;
                         }
 
@@ -1874,10 +1883,8 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
         }
 
         /* If the best strategy was not the last, choose that */
-        if (best_c && c != best_c) {
-                vir_compile_destroy(c);
-                c = best_c;
-        }
+        if (best_c && c != best_c)
+                set_best_compile(&c, best_c);
 
         if (V3D_DBG(PERF) &&
             c->compilation_result !=

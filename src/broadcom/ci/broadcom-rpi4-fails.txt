@@ -338,7 +338,6 @@ spec@!opengl 2.0@max-samplers,Fail
 spec@!opengl 2.0@max-samplers border,Fail
 
 wayland-dEQP-EGL.functional.wide_color.window_888_colorspace_default,Fail
-wayland-dEQP-EGL.functional.wide_color.window_fp16_default_colorspace,Fail
 
 spec@!opengl 1.1@line-smooth-stipple,Fail
 

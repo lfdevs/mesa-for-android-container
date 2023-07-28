@@ -95,6 +95,9 @@ intersect_ray_amd_software_box(struct radv_device *device, nir_builder *b, nir_s
    const struct glsl_type *vec4_type = glsl_vector_type(GLSL_TYPE_FLOAT, 4);
    const struct glsl_type *uvec4_type = glsl_vector_type(GLSL_TYPE_UINT, 4);
 
+   bool old_exact = b->exact;
+   b->exact = true;
+
    nir_ssa_def *node_addr = build_node_to_addr(device, b, bvh_node, false);
 
    /* vec4 distances = vec4(INF, INF, INF, INF); */
@@ -186,6 +189,7 @@ intersect_ray_amd_software_box(struct radv_device *device, nir_builder *b, nir_s
    nir_sort_hit_pair(b, distances, child_indices, 1, 3);
    nir_sort_hit_pair(b, distances, child_indices, 1, 2);
 
+   b->exact = old_exact;
    return nir_load_var(b, child_indices);
 }
 
@@ -195,6 +199,9 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_s
                                nir_ssa_def *inv_dir)
 {
    const struct glsl_type *vec4_type = glsl_vector_type(GLSL_TYPE_FLOAT, 4);
+
+   bool old_exact = b->exact;
+   b->exact = true;
 
    nir_ssa_def *node_addr = build_node_to_addr(device, b, bvh_node, false);
 
@@ -275,47 +282,6 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_s
    nir_ssa_def *v = nir_fsub(b, nir_fmul(b, ax, cy), nir_fmul(b, ay, cx));
    nir_ssa_def *w = nir_fsub(b, nir_fmul(b, bx, ay), nir_fmul(b, by, ax));
 
-   nir_variable *u_var =
-      nir_variable_create(b->shader, nir_var_shader_temp, glsl_float_type(), "u");
-   nir_variable *v_var =
-      nir_variable_create(b->shader, nir_var_shader_temp, glsl_float_type(), "v");
-   nir_variable *w_var =
-      nir_variable_create(b->shader, nir_var_shader_temp, glsl_float_type(), "w");
-   nir_store_var(b, u_var, u, 0x1);
-   nir_store_var(b, v_var, v, 0x1);
-   nir_store_var(b, w_var, w, 0x1);
-
-   /* Fallback to testing edges with double precision...
-    *
-    * The Vulkan spec states it only needs single precision watertightness
-    * but we fail dEQP-VK.ray_tracing_pipeline.watertightness.closedFan2.1024 with
-    * failures = 1 without doing this. :( */
-   nir_ssa_def *cond_retest = nir_ior(
-      b, nir_ior(b, nir_feq(b, u, nir_imm_float(b, 0.0f)), nir_feq(b, v, nir_imm_float(b, 0.0f))),
-      nir_feq(b, w, nir_imm_float(b, 0.0f)));
-
-   nir_push_if(b, cond_retest);
-   {
-      ax = nir_f2f64(b, ax);
-      ay = nir_f2f64(b, ay);
-      bx = nir_f2f64(b, bx);
-      by = nir_f2f64(b, by);
-      cx = nir_f2f64(b, cx);
-      cy = nir_f2f64(b, cy);
-
-      nir_store_var(b, u_var, nir_f2f32(b, nir_fsub(b, nir_fmul(b, cx, by), nir_fmul(b, cy, bx))),
-                    0x1);
-      nir_store_var(b, v_var, nir_f2f32(b, nir_fsub(b, nir_fmul(b, ax, cy), nir_fmul(b, ay, cx))),
-                    0x1);
-      nir_store_var(b, w_var, nir_f2f32(b, nir_fsub(b, nir_fmul(b, bx, ay), nir_fmul(b, by, ax))),
-                    0x1);
-   }
-   nir_pop_if(b, NULL);
-
-   u = nir_load_var(b, u_var);
-   v = nir_load_var(b, v_var);
-   w = nir_load_var(b, w_var);
-
    /* Perform edge tests. */
    nir_ssa_def *cond_back = nir_ior(
       b, nir_ior(b, nir_flt(b, u, nir_imm_float(b, 0.0f)), nir_flt(b, v, nir_imm_float(b, 0.0f))),
@@ -326,6 +292,13 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_s
       nir_flt(b, nir_imm_float(b, 0.0f), w));
 
    nir_ssa_def *cond = nir_inot(b, nir_iand(b, cond_back, cond_front));
+
+   /* If the ray is exactly on the edge where v is 0, consider it a miss.
+    * This seems to correspond to what the hardware is doing.
+    * Also, it avoids invoking hit shaders twice on a shared edge, which is
+    * discouraged by the spec.
+    */
+   cond = nir_iand(b, cond, nir_fneu(b, v, nir_imm_float(b, 0.0f)));
 
    nir_push_if(b, cond);
    {
@@ -351,6 +324,7 @@ intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_s
    }
    nir_pop_if(b, NULL);
 
+   b->exact = old_exact;
    return nir_load_var(b, result);
 }
 

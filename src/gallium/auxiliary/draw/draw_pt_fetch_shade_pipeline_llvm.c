@@ -120,7 +120,7 @@ llvm_middle_end_prepare_gs(struct llvm_middle_end *fpme)
          }
       }
 
-      variant = draw_gs_llvm_create_variant(llvm, gs->info.num_outputs, key);
+      variant = draw_gs_llvm_create_variant(llvm, draw_total_gs_outputs(draw), key);
 
       if (variant) {
          list_add(&variant->list_item_local.list, &shader->variants.list);

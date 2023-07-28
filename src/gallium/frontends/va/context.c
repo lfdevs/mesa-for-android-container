@@ -411,6 +411,7 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       vl_deint_filter_cleanup(context->deint);
       FREE(context->deint);
    }
+   FREE(context->desc.base.decrypt_key);
    FREE(context);
    handle_table_remove(drv->htab, context_id);
    mtx_unlock(&drv->mutex);

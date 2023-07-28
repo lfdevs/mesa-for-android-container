@@ -160,6 +160,9 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
    bs->unordered_write_access = 0;
    bs->unordered_write_stages = 0;
 
+   /* only increment batch generation if previously in-use to avoid false detection of batch completion */
+   if (bs->fence.submitted)
+      bs->submit_count++;
    /* only reset submitted here so that tc fence desync can pick up the 'completed' flag
     * before the state is reused
     */
@@ -167,7 +170,6 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
    bs->has_barriers = false;
    if (bs->fence.batch_id)
       zink_screen_update_last_finished(screen, bs->fence.batch_id);
-   bs->submit_count++;
    bs->fence.batch_id = 0;
    bs->usage.usage = 0;
    bs->next = NULL;

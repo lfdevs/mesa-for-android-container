@@ -369,8 +369,15 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
          switch (instr->type) {
-         case nir_instr_type_deref:
+         case nir_instr_type_deref: {
+            nir_deref_instr *deref = nir_instr_as_deref(instr);
+            if (deref->deref_type != nir_deref_type_var)
+               return false;
+            if (deref->var->data.mode == nir_var_shader_out &&
+                deref->var->data.location_frac != 0)
+               return false;
             break;
+         }
          case nir_instr_type_load_const: {
             nir_load_const_instr *load = nir_instr_as_load_const(instr);
             if (!check_load_const_in_zero_one(load)) {

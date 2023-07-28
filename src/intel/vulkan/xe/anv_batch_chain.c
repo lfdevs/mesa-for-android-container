@@ -119,7 +119,10 @@ xe_exec_process_syncs(struct anv_queue *queue,
 
    uint32_t count = 0;
 
-   if (utrace_submit) {
+   /* Signal the utrace sync only if it doesn't have a batch. Otherwise the
+    * it's the utrace batch that should signal its own sync.
+    */
+   if (utrace_submit && !utrace_submit->batch_bo) {
       struct drm_xe_sync *xe_sync = &xe_syncs[count++];
 
       xe_exec_fill_sync(xe_sync, utrace_submit->sync, 0, TYPE_SIGNAL);
@@ -217,9 +220,6 @@ xe_queue_exec_locked(struct anv_queue *queue,
    if (result != VK_SUCCESS)
       return result;
 
-   if (utrace_submit && !utrace_submit->batch_bo)
-      utrace_submit = NULL;
-
    struct drm_xe_sync *xe_syncs = NULL;
    uint32_t xe_syncs_count = 0;
    result = xe_exec_process_syncs(queue, wait_count, waits,
@@ -228,6 +228,10 @@ xe_queue_exec_locked(struct anv_queue *queue,
                                   &xe_syncs, &xe_syncs_count);
    if (result != VK_SUCCESS)
       return result;
+
+   /* If we have no batch for utrace, just forget about it now. */
+   if (utrace_submit && !utrace_submit->batch_bo)
+      utrace_submit = NULL;
 
    struct drm_xe_exec exec = {
       .engine_id = queue->engine_id,

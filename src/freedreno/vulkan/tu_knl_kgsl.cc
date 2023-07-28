@@ -230,7 +230,7 @@ kgsl_sync_cache(VkDevice _device,
 
    struct kgsl_gpuobj_sync_obj *sync_list =
       (struct kgsl_gpuobj_sync_obj *) vk_zalloc(
-         &device->vk.alloc, sizeof(*sync_list), 8,
+         &device->vk.alloc, sizeof(*sync_list)*count, 8,
          VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
    struct kgsl_gpuobj_sync gpuobj_sync = {

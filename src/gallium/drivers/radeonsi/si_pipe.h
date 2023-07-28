@@ -1328,7 +1328,8 @@ enum si_blitter_op /* bitmask */
    SI_SAVE_TEXTURES = 1,
    SI_SAVE_FRAMEBUFFER = 2,
    SI_SAVE_FRAGMENT_STATE = 4,
-   SI_DISABLE_RENDER_COND = 8,
+   SI_SAVE_FRAGMENT_CONSTANT = 8,
+   SI_DISABLE_RENDER_COND = 16,
 };
 
 void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op);

@@ -28,9 +28,8 @@
 #include "util/u_pack_color.h"
 #include "util/u_surface.h"
 
-enum
-{
-   SI_CLEAR = SI_SAVE_FRAGMENT_STATE,
+enum {
+   SI_CLEAR = SI_SAVE_FRAGMENT_STATE | SI_SAVE_FRAGMENT_CONSTANT,
    SI_CLEAR_SURFACE = SI_SAVE_FRAMEBUFFER | SI_SAVE_FRAGMENT_STATE,
 };
 

@@ -2987,6 +2987,9 @@ LLVMValueRef ac_build_mbcnt_add(struct ac_llvm_context *ctx, LLVMValueRef mask, 
    LLVMValueRef val;
 
    if (ctx->wave_size == 32) {
+      if (LLVMTypeOf(mask) == ctx->i64)
+         mask = LLVMBuildTrunc(ctx->builder, mask, ctx->i32, "");
+
       val = ac_build_intrinsic(ctx, "llvm.amdgcn.mbcnt.lo", ctx->i32,
                                (LLVMValueRef[]){mask, add}, 2, 0);
    } else {

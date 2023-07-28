@@ -6940,6 +6940,12 @@
   <register name="DS_INVOCATION_COUNT" length="2" num="0x2308">
     <field name="DS Invocation Count Report" start="0" end="63" type="uint" />
   </register>
+  <register name="FF_MODE2" length="1" num="0x6604">
+    <field name="VS Timer Value" start="0" end="7" type="uint" />
+    <field name="HS Timer Value" start="8" end="15" type="uint" />
+    <field name="TDS Timer Value" start="16" end="23" type="uint" />
+    <field name="GS Timer Value" start="24" end="31" type="uint" />
+  </register>
   <register name="GFX_AUX_TABLE_BASE_ADDR" length="2" num="0x4200">
     <field name="Address" start="0" end="63" type="uint" />
   </register>

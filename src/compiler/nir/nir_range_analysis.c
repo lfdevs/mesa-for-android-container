@@ -1418,12 +1418,12 @@ search_phi_bcsel(nir_ssa_scalar scalar, nir_ssa_scalar *buf, unsigned buf_size, 
       nir_op op = nir_ssa_scalar_alu_op(scalar);
 
       if ((op == nir_op_bcsel || op == nir_op_b32csel) && buf_size >= 2) {
-         nir_ssa_scalar src0 = nir_ssa_scalar_chase_alu_src(scalar, 0);
          nir_ssa_scalar src1 = nir_ssa_scalar_chase_alu_src(scalar, 1);
+         nir_ssa_scalar src2 = nir_ssa_scalar_chase_alu_src(scalar, 2);
 
-         unsigned added = search_phi_bcsel(src0, buf, buf_size - 1, visited);
+         unsigned added = search_phi_bcsel(src1, buf, buf_size - 1, visited);
          buf_size -= added;
-         added += search_phi_bcsel(src1, buf + added, buf_size, visited);
+         added += search_phi_bcsel(src2, buf + added, buf_size, visited);
          return added;
       }
    }

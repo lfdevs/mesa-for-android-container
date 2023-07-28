@@ -273,6 +273,10 @@ struct glthread_state
    /** The last added call of the given function. */
    struct marshal_cmd_CallList *LastCallList;
    struct marshal_cmd_BindBuffer *LastBindBuffer;
+
+   /** Global mutex update info. */
+   unsigned GlobalLockUpdateBatchCounter;
+   bool LockGlobalMutexes;
 };
 
 void _mesa_glthread_init(struct gl_context *ctx);

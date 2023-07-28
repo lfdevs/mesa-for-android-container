@@ -124,7 +124,7 @@ mkdir_if_needed(const char *path)
       }
    }
 
-   int ret = mkdir(path, 0755);
+   int ret = mkdir(path, 0700);
    if (ret == 0 || (ret == -1 && errno == EEXIST))
      return 0;
 

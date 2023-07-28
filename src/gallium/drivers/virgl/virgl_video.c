@@ -551,7 +551,7 @@ static int fill_mpeg4_picture_desc(const struct pipe_picture_desc *desc,
     ITEM_SET(vmpeg4, mpeg4, top_field_first);
     ITEM_CPY(vmpeg4, mpeg4, intra_matrix);
     ITEM_CPY(vmpeg4, mpeg4, non_intra_matrix);
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < ARRAY_SIZE(mpeg4->ref); i++) {
         vbuf = virgl_video_buffer(mpeg4->ref[i]);
         vmpeg4->ref[i] = vbuf ? vbuf->handle : 0;
     }

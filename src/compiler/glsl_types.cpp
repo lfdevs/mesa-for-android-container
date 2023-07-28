@@ -2495,7 +2495,7 @@ glsl_type::explicit_size(bool align_to_stride) const
 
       assert(this->length > 0);
       unsigned elem_size = align_to_stride ? this->explicit_stride : this->fields.array->explicit_size();
-      assert(this->explicit_stride >= elem_size);
+      assert(this->explicit_stride == 0 || this->explicit_stride >= elem_size);
 
       return this->explicit_stride * (this->length - 1) + elem_size;
    } else if (this->is_matrix()) {

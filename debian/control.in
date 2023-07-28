@@ -169,16 +169,6 @@ Description: free implementation of the EGL API -- Mesa vendor library
  .
  This package contains the Mesa vendor library for EGL.
 
-Package: libegl1-mesa
-Section: oldlibs
-Architecture: any
-Depends:
- libegl1,
- ${misc:Depends},
-Multi-Arch: same
-Description: transitional dummy package
- This is a transitional dummy package, it can be safely removed.
-
 Package: libegl1-mesa-dev
 Section: libdevel
 Architecture: any
@@ -195,28 +185,6 @@ Description: free implementation of the EGL API -- development files
  .
  This package provides the development environment for compiling programs
  against the EGL library.
-
-Package: libwayland-egl1-mesa
-Section: oldlibs
-Architecture: linux-any
-Depends:
- ${misc:Depends},
- libegl1,
- libwayland-egl1,
-Pre-Depends: ${misc:Pre-Depends}
-Multi-Arch: same
-Description: transitional dummy package
- This is a transitional dummy package, it can be safely removed.
-
-Package: libgles2-mesa
-Section: oldlibs
-Architecture: any
-Depends:
- libgles2,
- ${misc:Depends},
-Multi-Arch: same
-Description: transitional dummy package
- This is a transitional dummy package, it can be safely removed.
 
 Package: libgles2-mesa-dev
 Section: oldlibs
@@ -269,17 +237,6 @@ Description: free implementation of the OpenGL API -- GLX vendor library
  .
  This package does not include the modules themselves: these can be found
  in the libgl1-mesa-dri package.
-
-Package: libgl1-mesa-glx
-Section: oldlibs
-Architecture: any
-Depends:
- libgl1,
- libglx-mesa0,
- ${misc:Depends},
-Multi-Arch: same
-Description: transitional dummy package
- This is a transitional dummy package, it can be safely removed.
 
 Package: libgl1-mesa-dri
 Section: libs

@@ -227,6 +227,12 @@ stw_st_framebuffer_validate_locked(struct st_context *st,
       case ST_ATTACHMENT_DEPTH_STENCIL:
          format = stwfb->stvis.depth_stencil_format;
          bind = PIPE_BIND_DEPTH_STENCIL;
+
+#ifdef GALLIUM_ZINK
+         if (stw_dev->zink)
+            bind |= PIPE_BIND_DISPLAY_TARGET;
+#endif
+
          break;
       default:
          format = PIPE_FORMAT_NONE;

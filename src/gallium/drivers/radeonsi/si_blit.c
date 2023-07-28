@@ -54,7 +54,10 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
    if (op & SI_SAVE_FRAGMENT_STATE) {
       struct pipe_constant_buffer fs_cb = {};
       si_get_pipe_constant_buffer(sctx, PIPE_SHADER_FRAGMENT, 0, &fs_cb);
-      util_blitter_save_fragment_constant_buffer_slot(sctx->blitter, &fs_cb);
+
+      if (op & SI_SAVE_FRAGMENT_CONSTANT)
+         util_blitter_save_fragment_constant_buffer_slot(sctx->blitter, &fs_cb);
+
       pipe_resource_reference(&fs_cb.buffer, NULL);
       util_blitter_save_blend(sctx->blitter, sctx->queued.named.blend);
       util_blitter_save_depth_stencil_alpha(sctx->blitter, sctx->queued.named.dsa);

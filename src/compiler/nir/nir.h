@@ -3911,6 +3911,50 @@ typedef struct nir_shader {
 #define nir_foreach_function(func, shader) \
    foreach_list_typed(nir_function, func, node, &(shader)->functions)
 
+static inline nir_function *
+nir_first_function_with_impl(const nir_shader *shader)
+{
+   foreach_list_typed(nir_function, func, node, &shader->functions) {
+      if (func->impl != NULL)
+         return func;
+   }
+
+   return NULL;
+}
+
+static inline nir_function_impl *
+_nir_foreach_function_impl_next(const nir_function **it)
+{
+   foreach_list_typed_from(nir_function, func, node, _, (*it)->node.next) {
+      if (func->impl != NULL) {
+         *it = func;
+         return func->impl;
+      }
+   }
+
+   return NULL;
+}
+
+/* Equivalent to
+ *
+ *    nir_foreach_function(func, shader) {
+ *       if (func->impl != NULL) {
+ *             ...
+ *       }
+ *    }
+ *
+ * Carefully written to ensure break/continue work in the user code.
+ */
+
+#define nir_foreach_function_impl(it, shader)                                  \
+   for (const nir_function *_func_##it = nir_first_function_with_impl(shader); \
+        _func_##it != NULL;                                                    \
+        _func_##it = NULL)                                                     \
+                                                                               \
+      for (nir_function_impl *it = (_func_##it)->impl;                         \
+           it != NULL;                                                         \
+           it = _nir_foreach_function_impl_next(&_func_##it))                  \
+
 static inline nir_function_impl *
 nir_shader_get_entrypoint(const nir_shader *shader)
 {

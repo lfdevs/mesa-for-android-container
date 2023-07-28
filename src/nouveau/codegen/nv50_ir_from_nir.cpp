@@ -2723,7 +2723,13 @@ Converter::visit(nir_alu_instr *insn)
       i->sType = sTypes[0];
       break;
    }
-   case nir_op_mov:
+   case nir_op_mov: {
+      LValues &newDefs = convert(&insn->dest);
+      for (LValues::size_type c = 0u; c < newDefs.size(); ++c) {
+         mkMov(newDefs[c], getSrc(&insn->src[0], c), dType);
+      }
+      break;
+   }
    case nir_op_vec2:
    case nir_op_vec3:
    case nir_op_vec4:

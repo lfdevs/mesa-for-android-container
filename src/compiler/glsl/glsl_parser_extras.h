@@ -998,6 +998,7 @@ do {                                                            \
       (Current).last_line    = YYRHSLOC(Rhs, N).last_line;      \
       (Current).last_column  = YYRHSLOC(Rhs, N).last_column;    \
       (Current).path         = YYRHSLOC(Rhs, N).path;           \
+      (Current).source       = YYRHSLOC(Rhs, N).source;         \
    }                                                            \
    else                                                         \
    {                                                            \
@@ -1005,9 +1006,9 @@ do {                                                            \
          YYRHSLOC(Rhs, 0).last_line;                            \
       (Current).first_column = (Current).last_column =          \
          YYRHSLOC(Rhs, 0).last_column;                          \
-      (Current).path = YYRHSLOC(Rhs, 0).path;                   \
+      (Current).path         = YYRHSLOC(Rhs, 0).path;           \
+      (Current).source       = YYRHSLOC(Rhs, 0).source;         \
    }                                                            \
-   (Current).source = 0;                                        \
 } while (0)
 
 /**

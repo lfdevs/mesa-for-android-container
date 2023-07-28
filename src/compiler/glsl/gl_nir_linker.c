@@ -56,6 +56,7 @@ gl_nir_opts(nir_shader *nir)
                nir_var_mem_shared,
                NULL);
 
+      NIR_PASS(progress, nir, nir_opt_find_array_copies);
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
       NIR_PASS(progress, nir, nir_opt_dead_write_vars);
 
@@ -117,6 +118,8 @@ gl_nir_opts(nir_shader *nir)
          NIR_PASS(progress, nir, nir_opt_loop_unroll);
       }
    } while (progress);
+
+   NIR_PASS_V(nir, nir_lower_var_copies);
 }
 
 static void

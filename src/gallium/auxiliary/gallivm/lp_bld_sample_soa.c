@@ -4631,6 +4631,14 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
                             lp_build_vec_type(gallivm, params->int_type),
                             num_levels);
    }
+
+   if (target == PIPE_BUFFER) {
+      struct lp_build_context bld_int;
+      lp_build_context_init(&bld_int, gallivm, params->int_type);
+
+      params->sizes_out[0] = lp_build_min(&bld_int, params->sizes_out[0],
+         lp_build_const_int_vec(gallivm, params->int_type, LP_MAX_TEXEL_BUFFER_ELEMENTS));
+   }
 }
 
 
