@@ -1048,6 +1048,10 @@ zink_end_query(struct pipe_context *pctx,
    /* FIXME: this can be called from a thread, but it needs to write to the cmdbuf */
    threaded_context_unwrap_sync(pctx);
 
+   bool unset_null_fs = query->type == PIPE_QUERY_PRIMITIVES_GENERATED && (ctx->primitives_generated_suspended || ctx->primitives_generated_active);
+   if (query->type == PIPE_QUERY_PRIMITIVES_GENERATED)
+      ctx->primitives_generated_suspended = false;
+
    if (list_is_linked(&query->stats_list))
       list_delinit(&query->stats_list);
    if (query->suspended) {
@@ -1071,6 +1075,9 @@ zink_end_query(struct pipe_context *pctx,
          zink_batch_no_rp(ctx);
       end_query(ctx, batch, query);
    }
+
+   if (unset_null_fs)
+      zink_set_color_write_enables(ctx);
 
    return true;
 }

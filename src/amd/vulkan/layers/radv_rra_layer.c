@@ -93,7 +93,7 @@ rra_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
 {
    RADV_FROM_HANDLE(radv_queue, queue, _queue);
    VkResult result = queue->device->layer_dispatch.rra.QueuePresentKHR(_queue, pPresentInfo);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
       return result;
 
    radv_rra_handle_trace(_queue);

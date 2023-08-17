@@ -1526,11 +1526,11 @@ dri2_validate_usage(__DRIimage *image, unsigned int use)
 }
 
 static __DRIimage *
-dri2_from_names(__DRIscreen *screen, int width, int height, int format,
+dri2_from_names(__DRIscreen *screen, int width, int height, int fourcc,
                 int *names, int num_names, int *strides, int *offsets,
                 void *loaderPrivate)
 {
-   const struct dri2_format_mapping *map = dri2_get_mapping_by_format(format);
+   const struct dri2_format_mapping *map = dri2_get_mapping_by_fourcc(fourcc);
    __DRIimage *img;
    struct winsys_handle whandle;
 

@@ -31,6 +31,7 @@
 #include "pipe/p_state.h"
 #include "pipe/p_shader_tokens.h"
 
+struct winsys_handle;
 
 void trace_dump_resource_template(const struct pipe_resource *templat);
 
@@ -101,4 +102,6 @@ void trace_dump_grid_info(const struct pipe_grid_info *state);
 void trace_dump_image_view(const struct pipe_image_view *view);
 
 void trace_dump_memory_info(const struct pipe_memory_info *state);
+
+void trace_dump_winsys_handle(const struct winsys_handle *whandle);
 #endif /* TR_STATE_H */

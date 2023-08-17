@@ -738,15 +738,14 @@ registry_handle_global(void *data, struct wl_registry *registry,
          display->wl_shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
          wl_shm_add_listener(display->wl_shm, &shm_listener, display);
       }
-      return;
-   }
-
-   if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0 && version >= 3) {
-      display->wl_dmabuf =
-         wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface,
-                          MIN2(version, ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION));
-      zwp_linux_dmabuf_v1_add_listener(display->wl_dmabuf,
-                                       &dmabuf_listener, display);
+   } else {
+      if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0 && version >= 3) {
+         display->wl_dmabuf =
+            wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface,
+                             MIN2(version, ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION));
+         zwp_linux_dmabuf_v1_add_listener(display->wl_dmabuf,
+                                          &dmabuf_listener, display);
+      }
    }
 }
 

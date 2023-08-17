@@ -65,6 +65,20 @@ lower_xfb(nir_builder *b, nir_instr *instr, UNUSED void *data)
       return false;
 
    nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+   /* In transform feedback programs, vertex ID becomes zero-based, so apply
+    * that lowering even on Valhall.
+    */
+   if (intr->intrinsic == nir_intrinsic_load_vertex_id) {
+      b->cursor = nir_instr_remove(instr);
+
+      nir_ssa_def *repl =
+         nir_iadd(b, nir_load_vertex_id_zero_base(b), nir_load_first_vertex(b));
+
+      nir_ssa_def_rewrite_uses(&intr->dest.ssa, repl);
+      return true;
+   }
+
    if (intr->intrinsic != nir_intrinsic_store_output)
       return false;
 

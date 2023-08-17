@@ -329,7 +329,7 @@ nir_blend_logicop(
 
    nir_const_value mask[4];
    for (int i = 0; i < 4; ++i)
-      mask[i] = nir_const_value_for_int(BITFIELD_MASK(bits[i]), 32);
+      mask[i] = nir_const_value_for_uint(BITFIELD_MASK(bits[i]), 32);
 
    nir_ssa_def *out = nir_logicop_func(b, options->logicop_func, src, dst,
                                        nir_build_imm(b, 4, 32, mask));

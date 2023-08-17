@@ -935,7 +935,7 @@ vk_color_blend_state_init(struct vk_color_blend_state *cb,
 
    const VkPipelineColorWriteCreateInfoEXT *cw_info =
       vk_find_struct_const(cb_info->pNext, PIPELINE_COLOR_WRITE_CREATE_INFO_EXT);
-   if (cw_info != NULL) {
+   if (!IS_DYNAMIC(CB_COLOR_WRITE_ENABLES) && cw_info != NULL) {
       assert(cb_info->attachmentCount == cw_info->attachmentCount);
       for (uint32_t a = 0; a < cw_info->attachmentCount; a++) {
          if (cw_info->pColorWriteEnables[a])

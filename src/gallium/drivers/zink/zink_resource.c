@@ -321,7 +321,7 @@ get_image_usage_for_feats(struct zink_screen *screen, VkFormatFeatureFlags feats
          usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
       else
          return 0;
-      if (screen->info.have_EXT_attachment_feedback_loop_layout)
+      if (screen->info.have_EXT_attachment_feedback_loop_layout && !(bind & ZINK_BIND_TRANSIENT))
          usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
    /* this is unlikely to occur and has been included for completeness */
    } else if (bind & PIPE_BIND_SAMPLER_VIEW && !(usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
@@ -1316,8 +1316,10 @@ resource_create(struct pipe_screen *pscreen,
       res->swapchain = true;
    }
 
-   if (!res->obj->host_visible)
+   if (!res->obj->host_visible) {
       res->base.b.flags |= PIPE_RESOURCE_FLAG_DONT_MAP_DIRECTLY;
+      res->base.allow_cpu_storage = false;
+   }
    if (res->obj->is_buffer) {
       res->base.buffer_id_unique = util_idalloc_mt_alloc(&screen->buffer_ids);
       _mesa_hash_table_init(&res->bufferview_cache, NULL, NULL, equals_bvci);

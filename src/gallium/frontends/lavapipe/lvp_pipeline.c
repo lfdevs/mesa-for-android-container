@@ -614,7 +614,7 @@ lvp_shader_xfb_init(struct lvp_shader *shader)
       memset(output_mapping, 0, sizeof(output_mapping));
 
       nir_foreach_shader_out_variable(var, shader->pipeline_nir->nir) {
-         unsigned slots = var->data.compact ? DIV_ROUND_UP(glsl_get_length(var->type), 4)
+         unsigned slots = var->data.compact ? DIV_ROUND_UP(var->data.location_frac + glsl_get_length(var->type), 4)
                                             : glsl_count_attribute_slots(var->type, false);
          for (unsigned i = 0; i < slots; i++)
             output_mapping[var->data.location + i] = var->data.driver_location + i;
@@ -631,7 +631,7 @@ lvp_shader_xfb_init(struct lvp_shader *shader)
          shader->stream_output.output[i].dst_offset = xfb_info->outputs[i].offset / 4;
          shader->stream_output.output[i].register_index = output_mapping[xfb_info->outputs[i].location];
          shader->stream_output.output[i].num_components = util_bitcount(xfb_info->outputs[i].component_mask);
-         shader->stream_output.output[i].start_component = ffs(xfb_info->outputs[i].component_mask) - 1;
+         shader->stream_output.output[i].start_component = xfb_info->outputs[i].component_offset;
          shader->stream_output.output[i].stream = xfb_info->buffer_to_stream[xfb_info->outputs[i].buffer];
       }
 

@@ -1,3 +1,10 @@
+mesa (23.1.6-1) unstable; urgency=medium
+
+  * New upstream release.
+  * fix-gtk4-autpkgtest.diff: Dropped, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Aug 2023 13:24:03 +0300
+
 mesa (23.1.4-1) unstable; urgency=medium
 
   [ Diederik de Haas ]

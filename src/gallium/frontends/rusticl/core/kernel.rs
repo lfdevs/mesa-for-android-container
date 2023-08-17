@@ -444,12 +444,7 @@ fn lower_and_optimize_nir_pre_inputs(dev: &Device, nir: &mut NirShader, lib_clc:
     nir.pass0(nir_dedup_inline_samplers);
     nir.pass2(
         nir_lower_vars_to_explicit_types,
-        nir_variable_mode::nir_var_uniform
-            | nir_variable_mode::nir_var_function_temp
-            | nir_variable_mode::nir_var_shader_temp
-            | nir_variable_mode::nir_var_mem_shared
-            | nir_variable_mode::nir_var_mem_generic
-            | nir_variable_mode::nir_var_mem_global,
+        nir_variable_mode::nir_var_function_temp,
         Some(glsl_get_cl_type_size_align),
     );
 
@@ -647,8 +642,10 @@ fn lower_and_optimize_nir_late(
         nir_lower_vars_to_explicit_types,
         nir_variable_mode::nir_var_mem_shared
             | nir_variable_mode::nir_var_function_temp
+            | nir_variable_mode::nir_var_shader_temp
             | nir_variable_mode::nir_var_uniform
-            | nir_variable_mode::nir_var_mem_global,
+            | nir_variable_mode::nir_var_mem_global
+            | nir_variable_mode::nir_var_mem_generic,
         Some(glsl_get_cl_type_size_align),
     );
 

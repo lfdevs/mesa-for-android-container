@@ -940,6 +940,12 @@ generate_fs_loop(struct gallivm_state *gallivm,
          lp_build_pointer_set(builder, z_fb_store, sample_loop_state.counter, z_fb);
          lp_build_pointer_set(builder, s_fb_store, sample_loop_state.counter, s_fb);
       }
+      if (key->occlusion_count && !(depth_mode & EARLY_DEPTH_TEST_INFERRED)) {
+         LLVMValueRef counter = lp_jit_thread_data_vis_counter(gallivm, thread_data_type, thread_data_ptr);
+         lp_build_name(counter, "counter");
+         lp_build_occlusion_count(gallivm, type,
+                                 key->multisample ? s_mask : lp_build_mask_value(&mask), counter);
+      }
    }
 
    if (key->multisample) {
@@ -1181,8 +1187,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
       if ((shader->info.base.output_semantic_name[attrib]
            == TGSI_SEMANTIC_COLOR) &&
            ((cbuf < key->nr_cbufs) || (cbuf == 1 && dual_source_blend))) {
-         if (cbuf == 0 &&
-             shader->info.base.properties[TGSI_PROPERTY_FS_COLOR0_WRITES_ALL_CBUFS]) {
+         if (cbuf == 0) {
             /* XXX: there is an edge case with FB fetch where gl_FragColor and
              * gl_LastFragData[0] are used together. This creates both
              * FRAG_RESULT_COLOR and FRAG_RESULT_DATA* output variables. This
@@ -1346,7 +1351,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
                                             z_value, s_value);
    }
 
-   if (key->occlusion_count) {
+   if (key->occlusion_count && (!(depth_mode & EARLY_DEPTH_TEST) || (depth_mode & EARLY_DEPTH_TEST_INFERRED))) {
       LLVMValueRef counter = lp_jit_thread_data_vis_counter(gallivm, thread_data_type, thread_data_ptr);
       lp_build_name(counter, "counter");
 

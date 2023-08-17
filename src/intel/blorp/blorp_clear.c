@@ -1306,6 +1306,19 @@ blorp_ccs_resolve(struct blorp_batch *batch,
       return;
 
    batch->blorp->exec(batch, &params);
+
+   if (batch->blorp->isl_dev->info->ver <= 8) {
+      assert(surf->aux_usage == ISL_AUX_USAGE_CCS_D);
+      assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE);
+      /* ISL's state-machine of CCS_D describes full resolves as leaving the
+       * aux buffer in the pass-through state. Hardware doesn't behave this
+       * way on Broadwell however. On that platform, full resolves transition
+       * the aux buffer to the resolved state. We assume that gfx7 behaves the
+       * same. Use an ambiguate to match driver expectations.
+       */
+      for (int l = 0; l < num_layers; l++)
+         blorp_ccs_ambiguate(batch, surf, level, start_layer + l);
+   }
 }
 
 static nir_ssa_def *

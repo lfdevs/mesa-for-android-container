@@ -895,7 +895,7 @@ setup_stateobj(struct fd_ringbuffer *ring, struct fd_context *ctx,
       ring,
       A6XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
          COND(enable_varyings, A6XX_SP_FS_CTRL_REG0_VARYING) | 0x1000000 |
-         COND(fs->need_fine_derivatives, A6XX_SP_FS_CTRL_REG0_DIFF_FINE) |
+         COND(fs->need_full_quad, A6XX_SP_FS_CTRL_REG0_LODPIXMASK) |
          A6XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(fs->info.max_reg + 1) |
          A6XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(fs->info.max_half_reg + 1) |
          COND(fs->mergedregs, A6XX_SP_FS_CTRL_REG0_MERGEDREGS) |

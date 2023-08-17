@@ -211,7 +211,7 @@ mark_whole_variable(nir_shader *shader, nir_variable *var,
    }
 
    const unsigned slots =
-      var->data.compact ? DIV_ROUND_UP(glsl_get_length(type), 4)
+      var->data.compact ? DIV_ROUND_UP(var->data.location_frac + glsl_get_length(type), 4)
                         : glsl_count_attribute_slots(type, false);
 
    set_io_mask(shader, var, 0, slots, deref, is_output_read);
@@ -288,7 +288,7 @@ try_mask_partial_io(nir_shader *shader, nir_variable *var,
       return false;
 
    const unsigned slots =
-      var->data.compact ? DIV_ROUND_UP(glsl_get_length(type), 4)
+      var->data.compact ? DIV_ROUND_UP(var->data.location_frac + glsl_get_length(type), 4)
                         : glsl_count_attribute_slots(type, false);
 
    if (offset >= slots) {

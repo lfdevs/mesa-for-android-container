@@ -34,7 +34,7 @@ rmv_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
    struct radv_device *device = queue->device;
 
    VkResult res = queue->device->layer_dispatch.rmv.QueuePresentKHR(_queue, pPresentInfo);
-   if (res != VK_SUCCESS || !device->vk.memory_trace_data.is_enabled)
+   if ((res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) || !device->vk.memory_trace_data.is_enabled)
       return res;
 
    vk_rmv_log_misc_token(&device->vk, VK_RMV_MISC_EVENT_TYPE_PRESENT);

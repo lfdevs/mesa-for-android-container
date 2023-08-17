@@ -1513,9 +1513,7 @@ static void add_img_view_surface(struct rendering_state *state,
                                  int layer_count)
 {
    if (imgv->surface) {
-      if (imgv->surface->width != width ||
-          imgv->surface->height != height ||
-          (imgv->surface->u.tex.last_layer - imgv->surface->u.tex.first_layer) != (layer_count - 1))
+      if ((imgv->surface->u.tex.last_layer - imgv->surface->u.tex.first_layer) != (layer_count - 1))
          pipe_surface_reference(&imgv->surface, NULL);
    }
 
@@ -1812,6 +1810,7 @@ resolve_color(struct rendering_state *state, bool multi)
       info.src.box.depth = state->framebuffer.layers;
 
       info.dst.box = info.src.box;
+      info.src.box.z = src_imgv->vk.base_array_layer;
       info.dst.box.z = dst_imgv->vk.base_array_layer;
 
       info.src.level = src_imgv->vk.base_mip_level;

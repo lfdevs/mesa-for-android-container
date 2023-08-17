@@ -1442,6 +1442,8 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
                else if (packed[i * 2].id())
                   packed[i] = bld.sop2(aco_opcode::s_pack_ll_b32_b16, bld.def(s1), packed[i * 2],
                                        Operand::c32(const_vals[i * 2 + 1]));
+               else
+                  packed[i] = Temp(); /* Both constants, so reset the entry */
 
                if (same)
                   const_vals[i] = const_vals[i * 2] | (const_vals[i * 2 + 1] << 16);
@@ -1460,11 +1462,14 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
 
          if (dst.size() == 1)
             bld.copy(Definition(dst), packed[0]);
-         else if (dst.size() == 2)
-            bld.pseudo(aco_opcode::p_create_vector, Definition(dst), packed[0], packed[1]);
-         else
-            bld.pseudo(aco_opcode::p_create_vector, Definition(dst), packed[0], packed[1],
-                       packed[2]);
+         else {
+            aco_ptr<Pseudo_instruction> vec{create_instruction<Pseudo_instruction>(
+               aco_opcode::p_create_vector, Format::PSEUDO, dst.size(), 1)};
+            vec->definitions[0] = Definition(dst);
+            for (unsigned i = 0; i < dst.size(); ++i)
+               vec->operands[i] = Operand(packed[i]);
+            bld.insert(std::move(vec));
+         }
       }
       break;
    }

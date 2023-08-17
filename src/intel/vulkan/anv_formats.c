@@ -577,11 +577,16 @@ anv_get_image_format_features2(const struct anv_physical_device *physical_device
    enum isl_format base_isl_format = base_plane_format.isl_format;
 
    if (isl_format_supports_sampling(devinfo, plane_format.isl_format)) {
-      /* ASTC textures must be in Y-tiled memory, and we reject compressed
-       * formats with modifiers. We do however interpret ASTC textures with
-       * uncompressed formats during data transfers.
+
+      /* Unlike other surface formats, our sampler requires that the ASTC
+       * format only be used on surfaces in non-linearly-tiled memory.
+       * Thankfully, we can make an exception for linearly-tiled images that
+       * are only used for transfers. blorp_copy will reinterpret any
+       * compressed format to an uncompressed one.
+       *
+       * We handle modifier tilings further down in this function.
        */
-      if (vk_tiling != VK_IMAGE_TILING_OPTIMAL &&
+      if (vk_tiling == VK_IMAGE_TILING_LINEAR &&
           isl_format_get_layout(plane_format.isl_format)->txc == ISL_TXC_ASTC)
          return VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                 VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;

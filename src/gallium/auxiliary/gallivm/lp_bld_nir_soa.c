@@ -1027,13 +1027,14 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
       val = LLVMBuildBitCast(builder, val, atom_bld->vec_type, "");
 
    LLVMValueRef atom_res = lp_build_alloca(gallivm,
-                                           LLVMTypeOf(val), "");
+                                           atom_bld->vec_type, "");
    LLVMValueRef exec_mask = mask_vec(bld_base);
    struct lp_build_loop_state loop_state;
    lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
 
    LLVMValueRef value_ptr = LLVMBuildExtractElement(gallivm->builder, val,
                                                     loop_state.counter, "");
+   value_ptr = LLVMBuildBitCast(gallivm->builder, value_ptr, atom_bld->elem_type, "");
 
    LLVMValueRef addr_ptr = LLVMBuildExtractElement(gallivm->builder, addr,
                                                    loop_state.counter, "");
@@ -1107,25 +1108,12 @@ static void emit_atomic_global(struct lp_build_nir_context *bld_base,
                                   LLVMAtomicOrderingSequentiallyConsistent,
                                   false);
    }
-   temp_res = LLVMBuildLoad2(builder, LLVMTypeOf(val), atom_res, "");
+   temp_res = LLVMBuildLoad2(builder, atom_bld->vec_type, atom_res, "");
    temp_res = LLVMBuildInsertElement(builder, temp_res, scalar, loop_state.counter, "");
    LLVMBuildStore(builder, temp_res, atom_res);
    lp_build_else(&ifthen);
-   temp_res = LLVMBuildLoad2(builder, LLVMTypeOf(val), atom_res, "");
-   bool is_float = LLVMTypeOf(val) == bld_base->base.vec_type;
-   LLVMValueRef zero_val;
-   if (is_float) {
-      if (val_bit_size == 64)
-         zero_val = lp_build_const_double(gallivm, 0);
-      else
-         zero_val = lp_build_const_float(gallivm, 0);
-   } else {
-      if (val_bit_size == 64)
-         zero_val = lp_build_const_int64(gallivm, 0);
-      else
-         zero_val = lp_build_const_int32(gallivm, 0);
-   }
-
+   temp_res = LLVMBuildLoad2(builder, atom_bld->vec_type, atom_res, "");
+   LLVMValueRef zero_val = lp_build_zero_bits(gallivm, val_bit_size, is_flt);
    temp_res = LLVMBuildInsertElement(builder, temp_res, zero_val, loop_state.counter, "");
    LLVMBuildStore(builder, temp_res, atom_res);
    lp_build_endif(&ifthen);

@@ -152,8 +152,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
 spec@arb_post_depth_coverage@arb_post_depth_coverage-multisampling,Fail
-spec@arb_shader_image_load_store@early-z,Fail
-spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-load,Crash
 spec@arb_shader_image_load_store@execution@image-array-out-of-bounds-access-store,Crash

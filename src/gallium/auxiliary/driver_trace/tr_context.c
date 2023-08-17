@@ -2306,7 +2306,7 @@ trace_context_set_hw_atomic_buffers(struct pipe_context *_pipe,
    struct trace_context *tr_ctx = trace_context(_pipe);
    struct pipe_context *pipe = tr_ctx->pipe;
 
-   trace_dump_call_begin("pipe_context", "set_global_binding");
+   trace_dump_call_begin("pipe_context", "set_hw_atomic_buffers");
    trace_dump_arg(ptr, pipe);
    trace_dump_arg(uint, start_slot);
    trace_dump_arg(uint, count);

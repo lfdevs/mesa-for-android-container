@@ -4415,9 +4415,6 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
 
    switch (s->info.stage) {
    case MESA_SHADER_FRAGMENT:
-      if (s->info.fs.post_depth_coverage &&
-          BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN))
-         spirv_builder_emit_cap(&ctx.builder, SpvCapabilitySampleMaskPostDepthCoverage);
       if (s->info.fs.uses_sample_shading)
          spirv_builder_emit_cap(&ctx.builder, SpvCapabilitySampleRateShading);
       if (s->info.fs.uses_demote && spirv_version < SPIRV_VERSION(1, 6))
@@ -4634,6 +4631,7 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
                                       SpvExecutionModeEarlyFragmentTests);
       if (s->info.fs.post_depth_coverage) {
          spirv_builder_emit_extension(&ctx.builder, "SPV_KHR_post_depth_coverage");
+         spirv_builder_emit_cap(&ctx.builder, SpvCapabilitySampleMaskPostDepthCoverage);
          spirv_builder_emit_exec_mode(&ctx.builder, entry_point,
                                       SpvExecutionModePostDepthCoverage);
       }

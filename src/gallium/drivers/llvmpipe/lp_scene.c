@@ -219,6 +219,8 @@ lp_scene_begin_rasterization(struct lp_scene *scene)
 void
 lp_scene_end_rasterization(struct lp_scene *scene)
 {
+   mtx_lock(&scene->mutex);
+
    /* Unmap color buffers */
    for (unsigned i = 0; i < scene->fb.nr_cbufs; i++) {
       if (scene->cbufs[i].map) {
@@ -324,6 +326,8 @@ lp_scene_end_rasterization(struct lp_scene *scene)
    scene->alloc_failed = FALSE;
 
    util_unreference_framebuffer_state(&scene->fb);
+
+   mtx_unlock(&scene->mutex);
 }
 
 
@@ -402,6 +406,8 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
    struct resource_ref **list = writeable ? &scene->writeable_resources : &scene->resources;
    struct resource_ref **last = list;
 
+   mtx_lock(&scene->mutex);
+
    /* Look at existing resource blocks:
     */
    for (ref = *list; ref; ref = ref->next) {
@@ -410,8 +416,10 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
       /* Search for this resource:
        */
       for (i = 0; i < ref->count; i++)
-         if (ref->resource[i] == resource)
+         if (ref->resource[i] == resource) {
+            mtx_unlock(&scene->mutex);
             return TRUE;
+      }
 
       if (ref->count < RESOURCE_REF_SZ) {
          /* If the block is half-empty, then append the reference here.
@@ -425,8 +433,10 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
    if (!ref) {
       assert(*last == NULL);
       *last = lp_scene_alloc(scene, sizeof *ref);
-      if (*last == NULL)
+      if (*last == NULL) {
+          mtx_unlock(&scene->mutex);
           return FALSE;
+      }
 
       ref = *last;
       memset(ref, 0, sizeof *ref);
@@ -448,13 +458,10 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
     * next resource added which exceeds 64MB in referenced texture
     * data.
     */
-   if (!initializing_scene &&
-       scene->resource_reference_size >= LP_SCENE_MAX_RESOURCE_SIZE)
-      return FALSE;
-
-   return TRUE;
+   int flush = (initializing_scene || scene->resource_reference_size < LP_SCENE_MAX_RESOURCE_SIZE);
+   mtx_unlock(&scene->mutex);
+   return flush;
 }
-
 
 /**
  * Add a reference to a fragment shader variant
@@ -514,6 +521,15 @@ lp_scene_is_resource_referenced(const struct lp_scene *scene,
                                 const struct pipe_resource *resource)
 {
    const struct resource_ref *ref;
+
+   /* check the render targets */
+   for (unsigned j = 0; j < scene->fb.nr_cbufs; j++) {
+     if (scene->fb.cbufs[j] && scene->fb.cbufs[j]->texture == resource)
+       return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
+   }
+   if (scene->fb.zsbuf && scene->fb.zsbuf->texture == resource) {
+     return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
+   }
 
    for (ref = scene->resources; ref; ref = ref->next) {
       for (int i = 0; i < ref->count; i++)

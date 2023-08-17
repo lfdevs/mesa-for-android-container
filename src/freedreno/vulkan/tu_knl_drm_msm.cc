@@ -353,6 +353,8 @@ tu_bo_init(struct tu_device *dev,
          vk_realloc(&dev->vk.alloc, dev->bo_list, new_len * sizeof(*dev->bo_list),
                     8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
       if (!new_ptr) {
+         dev->bo_count--;
+         mtx_unlock(&dev->bo_mutex);
          tu_gem_close(dev, gem_handle);
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }

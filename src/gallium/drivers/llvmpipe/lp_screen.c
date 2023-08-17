@@ -822,6 +822,9 @@ llvmpipe_is_format_supported(struct pipe_screen *_screen,
        format != PIPE_FORMAT_ETC1_RGB8)
       return false;
 
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED && target == PIPE_BUFFER)
+      return false;
+
    /*
     * Everything can be supported by u_format
     * (those without fetch_rgba_float might be not but shouldn't hit that)

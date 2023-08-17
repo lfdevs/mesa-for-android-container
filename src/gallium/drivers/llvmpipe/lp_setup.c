@@ -1115,17 +1115,10 @@ lp_setup_is_resource_referenced(const struct lp_setup_context *setup,
    /* check resources referenced by active scenes */
    for (unsigned i = 0; i < setup->num_active_scenes; i++) {
       struct lp_scene *scene = setup->scenes[i];
-      /* check the render targets */
-      for (unsigned j = 0; j < scene->fb.nr_cbufs; j++) {
-         if (scene->fb.cbufs[j] && scene->fb.cbufs[j]->texture == texture)
-            return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
-      }
-      if (scene->fb.zsbuf && scene->fb.zsbuf->texture == texture) {
-         return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
-      }
 
-      /* check resources referenced by the scene */
+      mtx_lock(&scene->mutex);
       unsigned ref = lp_scene_is_resource_referenced(scene, texture);
+      mtx_unlock(&scene->mutex);
       if (ref)
          return ref;
    }

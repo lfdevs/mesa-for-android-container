@@ -607,8 +607,6 @@ VkResult pvr_EnumeratePhysicalDevices(VkInstance _instance,
 void pvr_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
                                     VkPhysicalDeviceFeatures2 *pFeatures)
 {
-   PVR_FROM_HANDLE(pvr_physical_device, pdevice, physicalDevice);
-
    pFeatures->features = (VkPhysicalDeviceFeatures){
       .robustBufferAccess = true,
       .fullDrawIndexUint32 = true,
@@ -631,7 +629,7 @@ void pvr_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       .multiViewport = false,
       .samplerAnisotropy = false,
       .textureCompressionETC2 = true,
-      .textureCompressionASTC_LDR = PVR_HAS_FEATURE(&pdevice->dev_info, astc),
+      .textureCompressionASTC_LDR = false,
       .textureCompressionBC = false,
       .occlusionQueryPrecise = false,
       .pipelineStatisticsQuery = false,

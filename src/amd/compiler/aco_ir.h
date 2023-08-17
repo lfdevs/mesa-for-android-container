@@ -2298,6 +2298,8 @@ uint16_t get_vgpr_alloc(Program* program, uint16_t addressable_vgprs);
 uint16_t get_addr_sgpr_from_waves(Program* program, uint16_t max_waves);
 uint16_t get_addr_vgpr_from_waves(Program* program, uint16_t max_waves);
 
+bool uses_scratch(Program* program);
+
 typedef struct {
    const int16_t opcode_gfx7[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx9[static_cast<int>(aco_opcode::num_opcodes)];

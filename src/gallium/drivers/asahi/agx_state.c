@@ -35,6 +35,7 @@
 #include "util/u_prim.h"
 #include "util/u_resource.h"
 #include "util/u_transfer.h"
+#include "util/u_upload_mgr.h"
 #include "agx_disk_cache.h"
 
 static struct pipe_stream_output_target *
@@ -1143,8 +1144,16 @@ agx_set_constant_buffer(struct pipe_context *pctx, enum pipe_shader_type shader,
 {
    struct agx_context *ctx = agx_context(pctx);
    struct agx_stage *s = &ctx->stage[shader];
+   struct pipe_constant_buffer *constants = &s->cb[index];
 
    util_copy_constant_buffer(&s->cb[index], cb, take_ownership);
+
+   /* Upload user buffer immediately */
+   if (constants->user_buffer && !constants->buffer) {
+      u_upload_data(ctx->base.const_uploader, 0, constants->buffer_size, 64,
+                    constants->user_buffer, &constants->buffer_offset,
+                    &constants->buffer);
+   }
 
    unsigned mask = (1 << index);
 
@@ -1367,8 +1376,8 @@ agx_link_varyings_vs_fs(struct agx_pool *pool, struct agx_varyings_vs *vs,
 
    /* I don't understand why the data structures are repeated thrice */
    for (unsigned i = 0; i < 3; ++i) {
-      memcpy(((uint8_t *)ptr.cpu) + (i * linkage_size),
-             ((uint8_t *)tmp) + (i * linkage_size), linkage_size);
+      memcpy(((uint8_t *)ptr.cpu) + (i * linkage_size), (uint8_t *)tmp,
+             linkage_size);
    }
 
    return ptr.gpu;

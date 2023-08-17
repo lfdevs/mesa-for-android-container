@@ -580,11 +580,10 @@ get_gfx11_true16_mask(aco_opcode op)
    case aco_opcode::v_and_b16:
    case aco_opcode::v_or_b16:
    case aco_opcode::v_xor_b16: return 0x3 | 0x8;
-   case aco_opcode::v_cmp_class_f16:
-   case aco_opcode::v_cmpx_class_f16:
    case aco_opcode::v_cvt_f32_f16:
    case aco_opcode::v_cvt_i32_i16:
    case aco_opcode::v_cvt_u32_u16: return 0x1;
+   case aco_opcode::v_cmp_class_f16:
    case aco_opcode::v_cmp_eq_f16:
    case aco_opcode::v_cmp_eq_i16:
    case aco_opcode::v_cmp_eq_u16:
@@ -611,6 +610,7 @@ get_gfx11_true16_mask(aco_opcode op)
    case aco_opcode::v_cmp_nlt_f16:
    case aco_opcode::v_cmp_o_f16:
    case aco_opcode::v_cmp_u_f16:
+   case aco_opcode::v_cmpx_class_f16:
    case aco_opcode::v_cmpx_eq_f16:
    case aco_opcode::v_cmpx_eq_i16:
    case aco_opcode::v_cmpx_eq_u16:
@@ -1082,12 +1082,19 @@ dealloc_vgprs(Program* program)
    if (program->max_reg_demand.vgpr <= get_addr_vgpr_from_waves(program, max_waves))
       return false;
 
+   /* sendmsg(dealloc_vgprs) releases scratch, so this isn't safe if there is a in-progress scratch
+    * store. */
+   if (uses_scratch(program))
+      return false;
+
    Block& block = program->blocks.back();
 
    /* don't bother checking if there is a pending VMEM store or export: there almost always is */
    Builder bld(program);
    if (!block.instructions.empty() && block.instructions.back()->opcode == aco_opcode::s_endpgm) {
       bld.reset(&block.instructions, block.instructions.begin() + (block.instructions.size() - 1));
+      /* Due to a hazard, an s_nop is needed before "s_sendmsg sendmsg_dealloc_vgprs". */
+      bld.sopp(aco_opcode::s_nop, -1, 0);
       bld.sopp(aco_opcode::s_sendmsg, -1, sendmsg_dealloc_vgprs);
    }
 

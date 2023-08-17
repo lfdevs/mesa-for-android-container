@@ -182,7 +182,7 @@ tu6_emit_flushes(struct tu_cmd_buffer *cmd_buffer,
 }
 
 /* "Normal" cache flushes outside the renderpass, that don't require any special handling */
-static void
+void
 tu_emit_cache_flush(struct tu_cmd_buffer *cmd_buffer)
 {
    tu6_emit_flushes(cmd_buffer, &cmd_buffer->cs, &cmd_buffer->state.cache);
@@ -3922,10 +3922,10 @@ vk2tu_single_stage(VkPipelineStageFlags2 vk_stage, bool dst)
 }
 
 static enum tu_stage
-vk2tu_src_stage(VkPipelineStageFlags vk_stages)
+vk2tu_src_stage(VkPipelineStageFlags2 vk_stages)
 {
    enum tu_stage stage = TU_STAGE_CP;
-   u_foreach_bit (bit, vk_stages) {
+   u_foreach_bit64 (bit, vk_stages) {
       enum tu_stage new_stage = vk2tu_single_stage(1ull << bit, false);
       stage = MAX2(stage, new_stage);
    }
@@ -3934,10 +3934,10 @@ vk2tu_src_stage(VkPipelineStageFlags vk_stages)
 }
 
 static enum tu_stage
-vk2tu_dst_stage(VkPipelineStageFlags vk_stages)
+vk2tu_dst_stage(VkPipelineStageFlags2 vk_stages)
 {
    enum tu_stage stage = TU_STAGE_PS;
-   u_foreach_bit (bit, vk_stages) {
+   u_foreach_bit64 (bit, vk_stages) {
       enum tu_stage new_stage = vk2tu_single_stage(1ull << bit, true);
       stage = MIN2(stage, new_stage);
    }

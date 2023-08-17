@@ -279,47 +279,56 @@ nv50_sifc_linear_u8(struct nouveau_context *nv,
    struct nv50_context *nv50 = nv50_context(&nv->pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    uint32_t *src = (uint32_t *)data;
-   unsigned count = (size + 3) / 4;
-   unsigned xcoord = offset & 0xff;
+   unsigned count = DIV_ROUND_UP(size, 4);
+   unsigned max_size = 0x10000;
 
    nouveau_bufctx_refn(nv50->bufctx, 0, dst, domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, nv50->bufctx);
+
    PUSH_VAL(push);
 
-   offset &= ~0xff;
-
-   BEGIN_NV04(push, NV50_2D(DST_FORMAT), 2);
-   PUSH_DATA (push, G80_SURFACE_FORMAT_R8_UNORM);
-   PUSH_DATA (push, 1);
-   BEGIN_NV04(push, NV50_2D(DST_PITCH), 5);
-   PUSH_DATA (push, 262144);
-   PUSH_DATA (push, 65536);
-   PUSH_DATA (push, 1);
-   PUSH_DATAh(push, dst->offset + offset);
-   PUSH_DATA (push, dst->offset + offset);
-   BEGIN_NV04(push, NV50_2D(SIFC_BITMAP_ENABLE), 2);
-   PUSH_DATA (push, 0);
-   PUSH_DATA (push, G80_SURFACE_FORMAT_R8_UNORM);
-   BEGIN_NV04(push, NV50_2D(SIFC_WIDTH), 10);
-   PUSH_DATA (push, size);
-   PUSH_DATA (push, 1);
-   PUSH_DATA (push, 0);
-   PUSH_DATA (push, 1);
-   PUSH_DATA (push, 0);
-   PUSH_DATA (push, 1);
-   PUSH_DATA (push, 0);
-   PUSH_DATA (push, xcoord);
-   PUSH_DATA (push, 0);
-   PUSH_DATA (push, 0);
-
    while (count) {
-      unsigned nr = MIN2(count, NV04_PFIFO_MAX_PACKET_LEN);
+      unsigned xcoord = offset & 0xff;
+      offset &= ~0xff;
 
-      BEGIN_NI04(push, NV50_2D(SIFC_DATA), nr);
-      PUSH_DATAp(push, src, nr);
+      BEGIN_NV04(push, NV50_2D(DST_FORMAT), 2);
+      PUSH_DATA (push, G80_SURFACE_FORMAT_R8_UNORM);
+      PUSH_DATA (push, 1);
+      BEGIN_NV04(push, NV50_2D(DST_PITCH), 5);
+      PUSH_DATA (push, 262144);
+      PUSH_DATA (push, 65536);
+      PUSH_DATA (push, 1);
+      PUSH_DATAh(push, dst->offset + offset);
+      PUSH_DATA (push, dst->offset + offset);
+      BEGIN_NV04(push, NV50_2D(SIFC_BITMAP_ENABLE), 2);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, G80_SURFACE_FORMAT_R8_UNORM);
+      BEGIN_NV04(push, NV50_2D(SIFC_WIDTH), 10);
+      PUSH_DATA (push, MIN2(size, max_size));
+      PUSH_DATA (push, 1);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, 1);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, 1);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, xcoord);
+      PUSH_DATA (push, 0);
+      PUSH_DATA (push, 0);
 
-      src += nr;
-      count -= nr;
+      unsigned iter_count = MIN2(count, max_size / 4);
+      count -= iter_count;
+      offset += max_size;
+      size -= max_size;
+
+      while (iter_count) {
+         unsigned nr = MIN2(iter_count, NV04_PFIFO_MAX_PACKET_LEN);
+
+         BEGIN_NI04(push, NV50_2D(SIFC_DATA), nr);
+         PUSH_DATAp(push, src, nr);
+
+         src += nr;
+         iter_count -= nr;
+      }
    }
 
    nouveau_bufctx_reset(nv50->bufctx, 0);

@@ -1076,6 +1076,8 @@ struct anv_device {
 
     struct anv_scratch_pool                     scratch_pool;
 
+    bool                                        robust_buffer_access;
+
     pthread_mutex_t                             mutex;
     pthread_cond_t                              queue_submit;
 

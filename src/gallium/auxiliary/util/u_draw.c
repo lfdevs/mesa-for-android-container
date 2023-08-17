@@ -223,6 +223,9 @@ util_draw_indirect(struct pipe_context *pipe,
       pipe_buffer_unmap(pipe, dc_transfer);
    }
 
+   if (!draw_count)
+      return;
+
    if (indirect->stride)
       num_params = MIN2(indirect->stride / 4, num_params);
    params = (uint32_t *)

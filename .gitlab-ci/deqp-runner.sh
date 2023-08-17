@@ -229,7 +229,7 @@ fi
 # Compress results.csv to save on bandwidth during the upload of artifacts to
 # GitLab. This reduces the size in a VKCTS run from 135 to 7.6MB, and takes
 # 0.17s on a Ryzen 5950X (16 threads, 0.95s when limited to 1 thread).
-zstd --rm -T0 -8qc $RESULTS/results.csv -o $RESULTS/results.csv.zst
+zstd --rm -T0 -8q "$RESULTS/results.csv" -o "$RESULTS/results.csv.zst"
 
 section_end test_post_process
 

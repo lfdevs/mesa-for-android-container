@@ -787,7 +787,6 @@ emit_rs_state(struct anv_graphics_pipeline *pipeline,
 
    raster.ConservativeRasterizationEnable =
       rs->conservative_mode != VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
-   raster.APIMode = DX101;
 
    GENX(3DSTATE_SF_pack)(NULL, pipeline->gfx8.sf, &sf);
    GENX(3DSTATE_RASTER_pack)(NULL, pipeline->gfx8.raster, &raster);

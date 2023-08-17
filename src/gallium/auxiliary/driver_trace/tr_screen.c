@@ -783,7 +783,7 @@ trace_screen_resource_from_handle(struct pipe_screen *_screen,
 
    trace_dump_arg(ptr, screen);
    trace_dump_arg(resource_template, templ);
-   trace_dump_arg(ptr, handle);
+   trace_dump_arg(winsys_handle, handle);
    trace_dump_arg(uint, usage);
 
    result = screen->resource_from_handle(screen, templ, handle, usage);
@@ -823,11 +823,11 @@ trace_screen_resource_get_handle(struct pipe_screen *_screen,
 
    trace_dump_arg(ptr, screen);
    trace_dump_arg(ptr, resource);
-   trace_dump_arg(ptr, handle);
    trace_dump_arg(uint, usage);
 
    result = screen->resource_get_handle(screen, pipe, resource, handle, usage);
 
+   trace_dump_arg(winsys_handle, handle);
    trace_dump_ret(bool, result);
 
    trace_dump_call_end();

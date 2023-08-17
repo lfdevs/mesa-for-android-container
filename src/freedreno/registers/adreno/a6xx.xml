@@ -3365,11 +3365,22 @@ to upconvert to 32b float internally?
 		<bitfield name="THREADSIZE" pos="20" type="a6xx_threadsize"/>
 		<bitfield name="UNK21" pos="21" type="boolean"/>
 		<bitfield name="VARYING" pos="22" type="boolean"/>
-		<bitfield name="DIFF_FINE" pos="23" type="boolean"/>
+		<bitfield name="LODPIXMASK" pos="23" type="boolean">
+			<doc>
+				Enable ALL helper invocations in a quad. Necessary for
+				fine derivatives and quad subgroup ops.
+			</doc>
+		</bitfield>
 		<!-- note: vk blob uses bit24 -->
 		<bitfield name="UNK24" pos="24" type="boolean"/>
 		<bitfield name="UNK25" pos="25" type="boolean"/>
-		<bitfield name="PIXLODENABLE" pos="26" type="boolean"/>
+		<bitfield name="PIXLODENABLE" pos="26" type="boolean">
+			<doc>
+				Enable helper invocations. Enables 3 out of 4 fragments,
+				because the coarse derivatives only use half of the quad
+				and so one pixel's value is always unused.
+			</doc>
+		</bitfield>
 		<bitfield name="UNK27" pos="27" type="boolean"/>
 		<bitfield name="EARLYPREAMBLE" pos="28" type="boolean"/>
 		<bitfield name="MERGEDREGS" pos="31" type="boolean"/>

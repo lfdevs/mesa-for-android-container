@@ -3095,14 +3095,14 @@ Converter::visit(nir_tex_instr *insn)
             srcs.push_back(getSSA());
       }
 
-      if (insn->op == nir_texop_texture_samples)
-         srcs.push_back(zero);
-      else if (!insn->num_srcs)
-         srcs.push_back(loadImm(NULL, 0));
       if (biasIdx != -1)
          srcs.push_back(getSrc(&insn->src[biasIdx].src, 0));
-      if (lodIdx != -1)
+      // TXQ requires a lod argument for all queries we care about here.
+      // For other ops on MS textures we skip it.
+      if (lodIdx != -1 && !target.isMS())
          srcs.push_back(getSrc(&insn->src[lodIdx].src, 0));
+      else if (op == OP_TXQ)
+         srcs.push_back(zero); // TXQ always needs an LOD
       else if (op == OP_TXF)
          lz = true;
       if (msIdx != -1)
@@ -3143,6 +3143,10 @@ Converter::visit(nir_tex_instr *insn)
       if (target.isMS() || (op == OP_TEX && prog->getType() != Program::TYPE_FRAGMENT))
          lz = true;
 
+      // TODO figure out which instructions still need this.
+      if (srcs.empty())
+         srcs.push_back(loadImm(NULL, 0));
+
       TexInstruction *texi = mkTex(op, target.getEnum(), r, s, defs, srcs);
       texi->tex.levelZero = lz;
       texi->tex.mask = mask;
@@ -3169,6 +3173,7 @@ Converter::visit(nir_tex_instr *insn)
          texi->tex.mask = 0x8;
          texi->tex.query = TXQ_DIMS;
          break;
+      // TODO: TXQ_SAMPLE_POSITION needs the sample id instead of the LOD emited further up.
       default:
          break;
       }

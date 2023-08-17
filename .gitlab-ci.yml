@@ -214,6 +214,8 @@ make git archive:
   script:
     # Compactify the .git directory
     - git gc --aggressive
+    # Download & cache the perfetto subproject as well.
+    - rm -rf subprojects/perfetto ; mkdir -p subprojects/perfetto && curl https://android.googlesource.com/platform/external/perfetto/+archive/$(grep 'revision =' subprojects/perfetto.wrap | cut -d ' ' -f3).tar.gz | tar zxf - -C subprojects/perfetto
     # compress the current folder
     - tar -cvzf ../$CI_PROJECT_NAME.tar.gz .
 

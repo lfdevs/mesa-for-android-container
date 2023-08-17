@@ -614,6 +614,9 @@ emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
                              VkDeviceSize stride,
                              VkQueryResultFlags flags)
 {
+   /* Flush cache for the buffer to copy to. */
+   tu_emit_cache_flush(cmdbuf);
+
    /* From the Vulkan 1.1.130 spec:
     *
     *    vkCmdCopyQueryPoolResults is guaranteed to see the effect of previous

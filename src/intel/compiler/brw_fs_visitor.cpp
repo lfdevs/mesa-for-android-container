@@ -597,7 +597,8 @@ fs_visitor::emit_interpolation_setup_gfx6()
          this->pixel_z = abld.vgrf(BRW_REGISTER_TYPE_F);
 
          /* We re-use the check_dynamic_msaa_flag() call from above */
-         abld.SEL(this->pixel_z, coarse_z, sample_z);
+         set_predicate(BRW_PREDICATE_NORMAL,
+                       abld.SEL(this->pixel_z, coarse_z, sample_z));
          break;
 
       case BRW_ALWAYS:

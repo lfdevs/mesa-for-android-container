@@ -1320,6 +1320,7 @@ blit_can_resolve(enum pipe_format format)
    case PIPE_FORMAT_R8G8_UNORM:
    case PIPE_FORMAT_R8G8_UINT:
    case PIPE_FORMAT_R8G8_SINT:
+   case PIPE_FORMAT_R8G8_SRGB:
    /* TODO: this one should be able to work? */
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
       return false;

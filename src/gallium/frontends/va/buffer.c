@@ -57,7 +57,11 @@ vlVaCreateBuffer(VADriverContextP ctx, VAContextID context, VABufferType type,
    buf->type = type;
    buf->size = size;
    buf->num_elements = num_elements;
-   buf->data = MALLOC(size * num_elements);
+
+   if (buf->type == VAEncCodedBufferType)
+      buf->data = CALLOC(1, sizeof(VACodedBufferSegment));
+   else
+      buf->data = MALLOC(size * num_elements);
 
    if (!buf->data) {
       FREE(buf);
@@ -161,7 +165,6 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
       if (buf->type == VAEncCodedBufferType) {
          ((VACodedBufferSegment*)buf->data)->buf = *pbuff;
          ((VACodedBufferSegment*)buf->data)->size = buf->coded_size;
-         ((VACodedBufferSegment*)buf->data)->next = NULL;
          *pbuff = buf->data;
       }
    } else {

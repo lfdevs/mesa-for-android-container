@@ -434,7 +434,9 @@ lower_pv_mode_gs_ring_index(nir_builder *b,
 static nir_deref_instr*
 replicate_derefs(nir_builder *b, nir_deref_instr *old, nir_deref_instr *new)
 {
-   nir_deref_instr *parent = nir_src_as_deref(old->parent);
+   nir_deref_instr *parent = nir_deref_instr_parent(old);
+   if (!parent)
+      return new;
    switch(old->deref_type) {
    case nir_deref_type_var:
       return new;
@@ -1237,7 +1239,7 @@ zink_create_quads_emulation_gs(const nir_shader_compiler_options *options,
    nir->info.has_transform_feedback_varyings = prev_stage->info.has_transform_feedback_varyings;
    memcpy(nir->info.xfb_stride, prev_stage->info.xfb_stride, sizeof(prev_stage->info.xfb_stride));
    if (prev_stage->xfb_info) {
-      nir->xfb_info = mem_dup(prev_stage->xfb_info, sizeof(nir_xfb_info));
+      nir->xfb_info = mem_dup(prev_stage->xfb_info, nir_xfb_info_size(prev_stage->xfb_info->output_count));
    }
 
    nir_variable *in_vars[VARYING_SLOT_MAX];
@@ -2659,11 +2661,18 @@ assign_consumer_var_io(gl_shader_stage stage, nir_variable *var, unsigned *reser
             var->data.driver_location = -1;
             return true;
          }
+         /* patch variables may be read in the workgroup */
          if (stage != MESA_SHADER_TESS_CTRL)
             /* dead io */
             return false;
-         /* patch variables may be read in the workgroup */
-         slot_map[slot] = (*reserved)++;
+         unsigned num_slots;
+         if (nir_is_arrayed_io(var, stage))
+            num_slots = glsl_count_vec4_slots(glsl_get_array_element(var->type), false, false);
+         else
+            num_slots = glsl_count_vec4_slots(var->type, false, false);
+         assert(*reserved + num_slots <= MAX_VARYING);
+         for (unsigned i = 0; i < num_slots; i++)
+            slot_map[slot + i] = (*reserved)++;
       }
       var->data.driver_location = slot_map[slot];
    }

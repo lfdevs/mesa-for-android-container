@@ -675,10 +675,21 @@ driswCreateDrawable(struct glx_screen *base, XID xDrawable,
 {
    struct drisw_drawable *pdp;
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) modes;
+   unsigned depth;
    struct drisw_screen *psc = (struct drisw_screen *) base;
    const __DRIswrastExtension *swrast = psc->swrast;
    const __DRIkopperExtension *kopper = psc->kopper;
    Display *dpy = psc->base.dpy;
+
+   xcb_connection_t *conn = XGetXCBConnection(dpy);
+   xcb_generic_error_t *error;
+   xcb_get_geometry_cookie_t cookie = xcb_get_geometry(conn, xDrawable);
+   xcb_get_geometry_reply_t *reply = xcb_get_geometry_reply(conn, cookie, &error);
+   if (reply)
+      depth = reply->depth;
+   free(reply);
+   if (!reply || error)
+      return NULL;
 
    pdp = calloc(1, sizeof(*pdp));
    if (!pdp)
@@ -709,11 +720,6 @@ driswCreateDrawable(struct glx_screen *base, XID xDrawable,
 
    /* Otherwise, or if XGetVisualInfo failed, ask the server */
    if (pdp->xDepth == 0) {
-      Window root;
-      int x, y;
-      unsigned uw, uh, bw, depth;
-
-      XGetGeometry(dpy, xDrawable, &root, &x, &y, &uw, &uh, &bw, &depth);
       pdp->xDepth = depth;
    }
 

@@ -358,9 +358,7 @@ static uint8_t
 radv_get_ballot_bit_size(struct radv_device *device, gl_shader_stage stage,
                          const struct radv_shader_info *info)
 {
-   if (stage == MESA_SHADER_COMPUTE && info->cs.subgroup_size)
-      return info->cs.subgroup_size;
-   else if (gl_shader_stage_is_rt(stage))
+   if (gl_shader_stage_is_rt(stage))
       return device->physical_device->rt_wave_size;
    return 64;
 }

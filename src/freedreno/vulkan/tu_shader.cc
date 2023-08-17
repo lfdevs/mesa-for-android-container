@@ -873,7 +873,7 @@ tu_gather_xfb_info(nir_shader *nir, struct ir3_stream_output_info *info)
 
    nir_foreach_shader_out_variable(var, nir) {
       unsigned slots =
-         var->data.compact ? DIV_ROUND_UP(glsl_get_length(var->type), 4)
+         var->data.compact ? DIV_ROUND_UP(var->data.location_frac + glsl_get_length(var->type), 4)
                            : glsl_count_attribute_slots(var->type, false);
       for (unsigned i = 0; i < slots; i++)
          output_map[var->data.location + i] = var->data.driver_location + i;

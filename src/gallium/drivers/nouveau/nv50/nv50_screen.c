@@ -787,8 +787,6 @@ nv50_screen_init_hwctx(struct nv50_screen *screen)
    PUSH_DATA (push, 1);
    BEGIN_NV04(push, NV50_3D(UNK19C0), 1);
    PUSH_DATA (push, 1);
-
-   PUSH_KICK (push);
 }
 
 static int nv50_tls_alloc(struct nv50_screen *screen, unsigned tls_space,
@@ -1071,6 +1069,9 @@ nv50_screen_create(struct nouveau_device *dev)
       NOUVEAU_ERR("Failed to init compute context: %d\n", ret);
       goto fail;
    }
+
+   // submit all initial state
+   PUSH_KICK(screen->base.pushbuf);
 
    return &screen->base;
 

@@ -486,6 +486,7 @@ add_vars_with_modes(const struct gl_constants *consts,
          resource_name_updated(&sh_var->name);
          sh_var->type = var->type;
          sh_var->location = var->data.location - loc_bias;
+         sh_var->explicit_location = var->data.explicit_location;
          sh_var->index = var->data.index;
 
          if (!link_util_add_program_resource(prog, resource_set,

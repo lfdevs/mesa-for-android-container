@@ -400,7 +400,7 @@ apply_fine_deriv_macro(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
          struct ir3_instruction *op_p = ir3_instr_clone(n);
          op_p->flags = IR3_INSTR_P;
 
-         ctx->so->need_fine_derivatives = true;
+         ctx->so->need_full_quad = true;
       }
    }
 

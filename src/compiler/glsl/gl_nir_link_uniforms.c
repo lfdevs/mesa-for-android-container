@@ -1535,7 +1535,7 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
    /* Iterate through all linked shaders */
    struct nir_link_uniforms_state state = {0,};
 
-   if (!prog->data->spirv && !consts->DisableUniformArrayResize) {
+   if (!prog->data->spirv) {
       /* Gather information on uniform use */
       for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
          struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
@@ -1550,14 +1550,16 @@ gl_nir_link_uniforms(const struct gl_constants *consts,
          add_var_use_shader(nir, state.referenced_uniforms[stage]);
       }
 
-      /* Resize uniform arrays based on the maximum array index */
-      for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
-         struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
-         if (!sh)
-            continue;
+      if(!consts->DisableUniformArrayResize) {
+         /* Resize uniform arrays based on the maximum array index */
+         for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+            struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
+            if (!sh)
+               continue;
 
-         nir_foreach_gl_uniform_variable(var, sh->Program->nir)
-            update_array_sizes(prog, var, state.referenced_uniforms, stage);
+            nir_foreach_gl_uniform_variable(var, sh->Program->nir)
+               update_array_sizes(prog, var, state.referenced_uniforms, stage);
+         }
       }
    }
 

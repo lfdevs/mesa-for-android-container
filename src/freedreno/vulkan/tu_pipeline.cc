@@ -504,7 +504,7 @@ tu6_emit_xs(struct tu_cs *cs,
                .branchstack = ir3_shader_branchstack_hw(xs),
                .threadsize = thrsz,
                .varying = xs->total_in != 0,
-               .diff_fine = xs->need_fine_derivatives,
+               .lodpixmask = xs->need_full_quad,
                /* unknown bit, seems unnecessary */
                .unk24 = true,
                .pixlodenable = xs->need_pixlod,

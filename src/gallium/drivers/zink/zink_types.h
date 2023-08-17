@@ -42,6 +42,7 @@
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/log.h"
+#include "util/rwlock.h"
 #include "util/set.h"
 #include "util/simple_mtx.h"
 #include "util/slab.h"
@@ -939,6 +940,7 @@ struct zink_program {
    struct zink_context *ctx;
    unsigned char sha1[20];
    struct util_queue_fence cache_fence;
+   struct u_rwlock pipeline_cache_lock;
    VkPipelineCache pipeline_cache;
    size_t pipeline_cache_size;
    struct zink_batch_usage *batch_uses;

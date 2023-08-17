@@ -189,6 +189,7 @@ int draw_tess_ctrl_shader_run(struct draw_tess_ctrl_shader *shader,
       shader->draw->statistics.hs_invocations += num_patches;
    }
 #ifdef DRAW_LLVM_AVAILABLE
+   unsigned first_patch = input_prim->start / shader->draw->pt.vertices_per_patch;
    for (unsigned i = 0; i < num_patches; i++) {
       uint32_t vert_start = output_verts->count;
 
@@ -196,7 +197,7 @@ int draw_tess_ctrl_shader_run(struct draw_tess_ctrl_shader *shader,
 
       llvm_fetch_tcs_input(shader, input_prim, i, shader->draw->pt.vertices_per_patch);
 
-      llvm_tcs_run(shader, i);
+      llvm_tcs_run(shader, first_patch + i);
 
       uint32_t old_verts = util_align_npot(vert_start, 16);
       uint32_t new_verts = util_align_npot(output_verts->count, 16);

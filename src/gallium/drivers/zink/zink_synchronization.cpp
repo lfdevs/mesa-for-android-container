@@ -322,7 +322,8 @@ zink_resource_image_barrier(struct zink_context *ctx, struct zink_resource *res,
    if (!flags)
       flags = access_dst_flags(new_layout);
 
-   if (!res->obj->needs_zs_evaluate && !zink_resource_image_needs_barrier(res, new_layout, flags, pipeline))
+   if (!res->obj->needs_zs_evaluate && !zink_resource_image_needs_barrier(res, new_layout, flags, pipeline) &&
+       (res->queue == zink_screen(ctx->base.screen)->gfx_queue || res->queue == VK_QUEUE_FAMILY_IGNORED))
       return;
    bool is_write = zink_resource_access_is_write(flags);
    VkCommandBuffer cmdbuf;

@@ -682,7 +682,7 @@ struct ir3_shader_variant {
    /* do we need derivatives: */
    bool need_pixlod;
 
-   bool need_fine_derivatives;
+   bool need_full_quad;
 
    /* do we need VS driver params? */
    bool need_driver_params;

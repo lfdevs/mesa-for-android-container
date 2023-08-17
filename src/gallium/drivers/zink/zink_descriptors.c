@@ -676,9 +676,15 @@ void
 zink_descriptor_shader_get_binding_offsets(const struct zink_shader *shader, unsigned *offsets)
 {
    offsets[ZINK_DESCRIPTOR_TYPE_UBO] = 0;
-   offsets[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] = shader->bindings[ZINK_DESCRIPTOR_TYPE_UBO][shader->num_bindings[ZINK_DESCRIPTOR_TYPE_UBO] - 1].binding + 1;
-   offsets[ZINK_DESCRIPTOR_TYPE_SSBO] = offsets[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] + shader->bindings[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW][shader->num_bindings[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] - 1].binding + 1;
-   offsets[ZINK_DESCRIPTOR_TYPE_IMAGE] = offsets[ZINK_DESCRIPTOR_TYPE_SSBO] + shader->bindings[ZINK_DESCRIPTOR_TYPE_SSBO][shader->num_bindings[ZINK_DESCRIPTOR_TYPE_SSBO] - 1].binding + 1;
+   offsets[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] = (shader->num_bindings[ZINK_DESCRIPTOR_TYPE_UBO] ?
+                                                shader->bindings[ZINK_DESCRIPTOR_TYPE_UBO][shader->num_bindings[ZINK_DESCRIPTOR_TYPE_UBO] - 1].binding + 1 :
+                                                1);
+   offsets[ZINK_DESCRIPTOR_TYPE_SSBO] = offsets[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] + (shader->num_bindings[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] ?
+                                                                                     shader->bindings[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW][shader->num_bindings[ZINK_DESCRIPTOR_TYPE_SAMPLER_VIEW] - 1].binding + 1 :
+                                                                                     1);
+   offsets[ZINK_DESCRIPTOR_TYPE_IMAGE] = offsets[ZINK_DESCRIPTOR_TYPE_SSBO] + (shader->num_bindings[ZINK_DESCRIPTOR_TYPE_SSBO] ?
+                                                                              shader->bindings[ZINK_DESCRIPTOR_TYPE_SSBO][shader->num_bindings[ZINK_DESCRIPTOR_TYPE_SSBO] - 1].binding + 1 :
+                                                                              1);
 }
 
 void

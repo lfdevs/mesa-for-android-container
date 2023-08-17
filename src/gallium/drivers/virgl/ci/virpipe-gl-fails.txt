@@ -291,8 +291,6 @@ spec@arb_program_interface_query@arb_program_interface_query-getprogramresourcei
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 
 spec@arb_sample_shading@builtin-gl-sample-position 2,Fail
-spec@arb_shader_image_load_store@early-z,Fail
-spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 
 spec@arb_shader_image_load_store@layer,Fail
 spec@arb_shader_image_load_store@layer@image2DMS/layered binding test,Fail

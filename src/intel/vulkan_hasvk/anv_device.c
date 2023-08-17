@@ -2977,6 +2977,10 @@ VkResult anv_CreateDevice(
       goto fail_default_pipeline_cache;
    }
 
+   device->robust_buffer_access =
+      device->vk.enabled_features.robustBufferAccess ||
+      device->vk.enabled_features.nullDescriptor;
+
    anv_device_init_blorp(device);
 
    anv_device_init_border_colors(device);

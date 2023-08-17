@@ -279,6 +279,13 @@ node_is_dead(nir_cf_node *node)
 static bool
 dead_cf_block(nir_block *block)
 {
+   /* opt_constant_if() doesn't handle this case. */
+   if (nir_block_ends_in_jump(block) &&
+       !exec_node_is_tail_sentinel(block->cf_node.node.next)) {
+      remove_after_cf_node(&block->cf_node);
+      return true;
+   }
+
    nir_if *following_if = nir_block_get_following_if(block);
    if (following_if) {
       if (nir_src_is_const(following_if->condition)) {
@@ -335,12 +342,8 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
          }
 
          if (nir_block_ends_in_jump(block)) {
+            assert(exec_node_is_tail_sentinel(cur->node.next));
             *list_ends_in_jump = true;
-
-            if (!exec_node_is_tail_sentinel(cur->node.next)) {
-               remove_after_cf_node(cur);
-               return true;
-            }
          }
 
          break;

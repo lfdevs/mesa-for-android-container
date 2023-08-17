@@ -656,6 +656,8 @@ static void
 vn_cmd_reset(struct vn_command_buffer *cmd)
 {
    vn_cs_encoder_reset(&cmd->cs);
+
+   cmd->builder.render_pass = NULL;
    if (cmd->builder.present_src_images) {
       vk_free(&cmd->allocator, cmd->builder.present_src_images);
       cmd->builder.present_src_images = NULL;
@@ -896,8 +898,8 @@ vn_BeginCommandBuffer(VkCommandBuffer commandBuffer,
    struct vn_instance *instance = cmd->device->instance;
    size_t cmd_size;
 
-   vn_cs_encoder_reset(&cmd->cs);
-   cmd->draw_cmd_batched = 0;
+   /* reset regardless of VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT */
+   vn_cmd_reset(cmd);
 
    struct vn_command_buffer_begin_info local_begin_info;
    pBeginInfo =

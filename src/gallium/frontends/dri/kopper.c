@@ -413,6 +413,8 @@ kopper_get_pixmap_buffer(struct dri_drawable *drawable,
          dri3_create_image_from_buffers(conn, bps_reply, format,
                                         screen, &driVkImageExtension,
                                         drawable);
+      if (!drawable->image)
+         return NULL;
       width = bps_reply->width;
       height = bps_reply->height;
       free(bps_reply);
@@ -433,6 +435,8 @@ kopper_get_pixmap_buffer(struct dri_drawable *drawable,
       drawable->image = dri3_create_image(conn, bp_reply, format,
                                        screen, &driVkImageExtension,
                                        drawable);
+      if (!drawable->image)
+         return NULL;
       width = bp_reply->width;
       height = bp_reply->height;
       free(bp_reply);
@@ -597,13 +601,13 @@ XXX do this once swapinterval is hooked up
 #ifdef VK_USE_PLATFORM_XCB_KHR
          else if (is_pixmap && statts[i] == ST_ATTACHMENT_FRONT_LEFT && !screen->is_sw) {
             drawable->textures[statts[i]] = kopper_get_pixmap_buffer(drawable, format);
-            handle_in_fence(ctx, drawable->image);
+            if (drawable->textures[statts[i]])
+               handle_in_fence(ctx, drawable->image);
          }
 #endif
-         else {
+         if (!drawable->textures[statts[i]])
             drawable->textures[statts[i]] =
                screen->base.screen->resource_create(screen->base.screen, &templ);
-         }
       }
       if (drawable->stvis.samples > 1 && !drawable->msaa_textures[statts[i]]) {
          templ.bind = bind &

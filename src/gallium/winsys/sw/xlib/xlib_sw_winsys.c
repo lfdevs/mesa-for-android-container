@@ -138,6 +138,7 @@ alloc_shm(struct xlib_displaytarget *buf, unsigned size)
       return NULL;
    }
 
+   shmctl(shminfo->shmid, IPC_RMID, 0);
    shminfo->readOnly = False;
    return shminfo->shmaddr;
 }

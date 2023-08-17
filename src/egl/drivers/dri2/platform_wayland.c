@@ -2436,7 +2436,7 @@ swrast_update_buffers(struct dri2_egl_surface *dri2_surf)
    }
 
    /* else choose any another free location */
-   if (!dri2_surf->back) {
+   while (!dri2_surf->back) {
       for (int i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
          if (!dri2_surf->color_buffers[i].locked) {
              dri2_surf->back = &dri2_surf->color_buffers[i];
@@ -2457,11 +2457,15 @@ swrast_update_buffers(struct dri2_egl_surface *dri2_surf)
              break;
          }
       }
-   }
 
-   if (!dri2_surf->back) {
-      _eglError(EGL_BAD_ALLOC, "failed to find free buffer");
-      return -1;
+      /* wait for the compositor to release a buffer */
+      if (!dri2_surf->back) {
+         if (wl_display_dispatch_queue(dri2_dpy->wl_dpy, dri2_surf->wl_queue) ==
+             -1) {
+            _eglError(EGL_BAD_ALLOC, "waiting for a free buffer failed");
+            return -1;
+         }
+      }
    }
 
    dri2_surf->back->locked = true;
@@ -2768,6 +2772,7 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
    dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    disp->DriverData = (void *) dri2_dpy;
 
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)

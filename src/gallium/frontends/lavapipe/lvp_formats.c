@@ -162,8 +162,8 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
    if (pformat == PIPE_FORMAT_B5G6R5_UNORM)
      features |= VK_FORMAT_FEATURE_2_BLIT_SRC_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
    if ((pformat != PIPE_FORMAT_R9G9B9E5_FLOAT) && util_format_get_nr_components(pformat) != 3 &&
-       pformat != PIPE_FORMAT_R10G10B10A2_SNORM && pformat != PIPE_FORMAT_B10G10R10A2_SNORM &&
-       pformat != PIPE_FORMAT_B10G10R10A2_UNORM) {
+       !util_format_is_yuv(pformat) && pformat != PIPE_FORMAT_R10G10B10A2_SNORM &&
+       pformat != PIPE_FORMAT_B10G10R10A2_SNORM && pformat != PIPE_FORMAT_B10G10R10A2_UNORM) {
       features |= VK_FORMAT_FEATURE_2_BLIT_SRC_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
    }
 

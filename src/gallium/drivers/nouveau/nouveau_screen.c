@@ -144,6 +144,21 @@ nouveau_screen_bo_get_handle(struct pipe_screen *pscreen,
    if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       return nouveau_bo_name_get(bo, &whandle->handle) == 0;
    } else if (whandle->type == WINSYS_HANDLE_TYPE_KMS) {
+      int fd;
+      int ret;
+
+      /* The handle is exported in this case, but the global list of
+       * handles is in libdrm and there is no libdrm API to add
+       * handles to the list without additional side effects. The
+       * closest API available also gets a fd for the handle, which
+       * is not necessary in this case. Call it and close the fd.
+       */
+      ret = nouveau_bo_set_prime(bo, &fd);
+      if (ret != 0)
+        return false;
+
+      close(fd);
+
       whandle->handle = bo->handle;
       return true;
    } else if (whandle->type == WINSYS_HANDLE_TYPE_FD) {

@@ -3458,6 +3458,8 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
    mali_ptr saved_rsd = batch->rsd[PIPE_SHADER_VERTEX];
    mali_ptr saved_ubo = batch->uniform_buffers[PIPE_SHADER_VERTEX];
    mali_ptr saved_push = batch->push_uniforms[PIPE_SHADER_VERTEX];
+   unsigned saved_nr_push_uniforms =
+      batch->nr_push_uniforms[PIPE_SHADER_VERTEX];
 
    ctx->uncompiled[PIPE_SHADER_VERTEX] = NULL; /* should not be read */
    ctx->prog[PIPE_SHADER_VERTEX] = vs_uncompiled->xfb;
@@ -3466,7 +3468,8 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
 
    batch->uniform_buffers[PIPE_SHADER_VERTEX] =
       panfrost_emit_const_buf(batch, PIPE_SHADER_VERTEX, NULL,
-                              &batch->push_uniforms[PIPE_SHADER_VERTEX], NULL);
+                              &batch->push_uniforms[PIPE_SHADER_VERTEX],
+                              &batch->nr_push_uniforms[PIPE_SHADER_VERTEX]);
 
 #if PAN_ARCH >= 9
    pan_section_pack(t.cpu, COMPUTE_JOB, PAYLOAD, cfg) {
@@ -3513,6 +3516,7 @@ panfrost_launch_xfb(struct panfrost_batch *batch,
    batch->rsd[PIPE_SHADER_VERTEX] = saved_rsd;
    batch->uniform_buffers[PIPE_SHADER_VERTEX] = saved_ubo;
    batch->push_uniforms[PIPE_SHADER_VERTEX] = saved_push;
+   batch->nr_push_uniforms[PIPE_SHADER_VERTEX] = saved_nr_push_uniforms;
 }
 
 /*

@@ -111,7 +111,6 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
    RegisterDemand new_demand;
 
    register_demand.resize(block->instructions.size());
-   RegisterDemand block_register_demand;
    IDSet live = lives.live_out[block->index];
 
    /* initialize register demand */
@@ -182,14 +181,7 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
             }
          }
       }
-
-      block_register_demand.update(register_demand[idx]);
    }
-
-   /* update block's register demand for a last time */
-   block_register_demand.update(new_demand);
-   if (program->progress < CompilationProgress::after_ra)
-      block->register_demand = block_register_demand;
 
    /* handle phi definitions */
    uint16_t linear_phi_defs = 0;
@@ -306,15 +298,18 @@ calc_waves_per_workgroup(Program* program)
 }
 } /* end namespace */
 
+bool
+uses_scratch(Program* program)
+{
+   /* RT uses scratch but we don't yet know how much. */
+   return program->config->scratch_bytes_per_wave || program->stage == raytracing_cs;
+}
+
 uint16_t
 get_extra_sgprs(Program* program)
 {
-   /* We don't use this register on GFX6-8 and it's removed on GFX10+. RT uses scratch but we don't
-    * yet know how much.
-    */
-   bool needs_flat_scr =
-      (program->config->scratch_bytes_per_wave || program->stage == raytracing_cs) &&
-      program->gfx_level == GFX9;
+   /* We don't use this register on GFX6-8 and it's removed on GFX10+. */
+   bool needs_flat_scr = uses_scratch(program) && program->gfx_level == GFX9;
 
    if (program->gfx_level >= GFX10) {
       assert(!program->dev.xnack_enabled);
@@ -470,13 +465,21 @@ live_var_analysis(Program* program)
       unsigned block_idx = --worklist;
       process_live_temps_per_block(program, result, &program->blocks[block_idx], worklist,
                                    phi_info);
-      new_demand.update(program->blocks[block_idx].register_demand);
    }
 
    /* Handle branches: we will insert copies created for linear phis just before the branch. */
    for (Block& block : program->blocks) {
       result.register_demand[block.index].back().sgpr += phi_info[block.index].linear_phi_defs;
       result.register_demand[block.index].back().sgpr -= phi_info[block.index].linear_phi_ops;
+
+      /* update block's register demand */
+      if (program->progress < CompilationProgress::after_ra) {
+         block.register_demand = RegisterDemand();
+         for (RegisterDemand& demand : result.register_demand[block.index])
+            block.register_demand.update(demand);
+      }
+
+      new_demand.update(block.register_demand);
    }
 
    /* calculate the program's register demand and number of waves */

@@ -27,6 +27,7 @@
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/MC/MCSubtargetInfo.h>
 #include <llvm/Support/CommandLine.h>
@@ -307,7 +308,7 @@ LLVMPassManagerRef ac_create_passmgr(LLVMTargetLibraryInfoRef target_library_inf
       LLVMAddTargetLibraryInfo(target_library_info, passmgr);
 
    if (check_ir)
-      unwrap(passmgr)->add(createMachineVerifierPass("mesa ir"));
+      unwrap(passmgr)->add(createVerifierPass());
 
    unwrap(passmgr)->add(createAlwaysInlinerLegacyPass());
 
