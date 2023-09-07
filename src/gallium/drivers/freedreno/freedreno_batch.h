@@ -45,7 +45,53 @@ struct fd_resource;
 struct fd_batch_key;
 struct fd_batch_result;
 
-/* A batch tracks everything about a cmdstream batch/submit, including the
+/**
+ * A subpass is a fragment of a batch potentially starting with a clear.
+ * If the app does a mid-batch clear, that clear and subsequent draws
+ * can be split out into another sub-pass.  At gmem time, the appropriate
+ * sysmem or gmem clears can be interleaved with the CP_INDIRECT_BUFFER
+ * to the subpass's draw cmdstream.
+ *
+ * For depth clears, a replacement LRZ buffer can be allocated (clear
+ * still inserted into the prologue cmdstream since it needs be executed
+ * even in sysmem or if we aren't binning, since later batches could
+ * depend in the LRZ state).  The alternative would be to invalidate
+ * LRZ for draws after the start of the new subpass.
+ */
+struct fd_batch_subpass {
+   struct list_head node;
+
+   /** draw pass cmdstream: */
+   struct fd_ringbuffer *draw;
+
+   /** for the gmem code to stash per tile per subpass clears */
+   struct fd_ringbuffer *subpass_clears;
+
+   BITMASK_ENUM(fd_buffer_mask) fast_cleared;
+
+   union pipe_color_union clear_color[MAX_RENDER_TARGETS];
+   double clear_depth;
+   unsigned clear_stencil;
+
+   /**
+    * The number of draws emitted to this subpass.  If it is greater than
+    * zero, a clear triggers creating a new subpass (because clears must
+    * always come at the start of a subpass).
+    */
+   unsigned num_draws;
+
+   /**
+    * If a subpass starts with a LRZ clear, it gets a new LRZ buffer.
+    * The fd_resource::lrz always tracks the current lrz buffer, but at
+    * binning/gmem time we need to know what was the current lrz buffer
+    * at the time draws were emitted to the subpass.  Which is tracked
+    * here.
+    */
+   struct fd_bo *lrz;
+};
+
+/**
+ * A batch tracks everything about a cmdstream batch/submit, including the
  * ringbuffers used for binning, draw, and gmem cmds, list of associated
  * fd_resource-s, etc.
  */
@@ -76,7 +122,7 @@ struct fd_batch {
     * where the contents are undefined, ie. what we don't need to restore
     * to gmem.
     */
-   BITMASK_ENUM(fd_buffer_mask) invalidated, cleared, fast_cleared, restore, resolve;
+   BITMASK_ENUM(fd_buffer_mask) invalidated, cleared, restore, resolve;
 
    /* is this a non-draw batch (ie compute/blit which has no pfb state)? */
    bool nondraw : 1;
@@ -190,7 +236,24 @@ struct fd_batch {
 
    struct fd_submit *submit;
 
-   /** draw pass cmdstream: */
+   /**
+    * List of fd_batch_subpass.
+    */
+   struct list_head subpasses;
+
+#define foreach_subpass(subpass, batch) \
+   list_for_each_entry (struct fd_batch_subpass, subpass, &batch->subpasses, node)
+#define foreach_subpass_safe(subpass, batch) \
+   list_for_each_entry_safe (struct fd_batch_subpass, subpass, &batch->subpasses, node)
+
+   /**
+    * The current subpass.
+    */
+   struct fd_batch_subpass *subpass;
+
+   /**
+    * just a reference to the current subpass's draw cmds for backwards compat.
+    */
    struct fd_ringbuffer *draw;
    /** binning pass cmdstream: */
    struct fd_ringbuffer *binning;
@@ -206,12 +269,8 @@ struct fd_batch {
    /** epilogue cmdstream (executed after all tiles): */
    struct fd_ringbuffer *epilogue;
 
-   struct fd_ringbuffer *tile_setup;
-   struct fd_ringbuffer *tile_fini;
-
-   union pipe_color_union clear_color[MAX_RENDER_TARGETS];
-   double clear_depth;
-   unsigned clear_stencil;
+   struct fd_ringbuffer *tile_loads;
+   struct fd_ringbuffer *tile_store;
 
    /**
     * hw query related state:
@@ -221,6 +280,13 @@ struct fd_batch {
     * submit, reset to zero on next submit.
     */
    uint32_t next_sample_offset;
+
+   /* The # of pipeline-stats queries running.  In case of nested
+    * queries using {START/STOP}_{PRIMITIVE,FRAGMENT,COMPUTE}_CNTRS,
+    * we need to start only on the first one and stop only on the
+    * last one.
+    */
+   uint8_t pipeline_stats_queries_active[3];
 
    /* cached samples (in case multiple queries need to reference
     * the same sample snapshot)
@@ -256,7 +322,10 @@ struct fd_batch {
 
 struct fd_batch *fd_batch_create(struct fd_context *ctx, bool nondraw);
 
-void fd_batch_reset(struct fd_batch *batch) assert_dt;
+struct fd_batch_subpass *fd_batch_create_subpass(struct fd_batch *batch) assert_dt;
+
+void fd_batch_set_fb(struct fd_batch *batch, const struct pipe_framebuffer_state *pfb) assert_dt;
+
 void fd_batch_flush(struct fd_batch *batch) assert_dt;
 bool fd_batch_has_dep(struct fd_batch *batch, struct fd_batch *dep) assert_dt;
 void fd_batch_add_dep(struct fd_batch *batch, struct fd_batch *dep) assert_dt;

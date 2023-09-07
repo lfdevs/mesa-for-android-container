@@ -54,7 +54,6 @@ static unsigned translate_opcode(unsigned opcode)
         case TGSI_OPCODE_MAD: return RC_OPCODE_MAD;
         case TGSI_OPCODE_LRP: return RC_OPCODE_LRP;
         case TGSI_OPCODE_FRC: return RC_OPCODE_FRC;
-        case TGSI_OPCODE_FLR: return RC_OPCODE_FLR;
         case TGSI_OPCODE_ROUND: return RC_OPCODE_ROUND;
         case TGSI_OPCODE_EX2: return RC_OPCODE_EX2;
         case TGSI_OPCODE_LG2: return RC_OPCODE_LG2;
@@ -63,10 +62,6 @@ static unsigned translate_opcode(unsigned opcode)
         case TGSI_OPCODE_DDX: return RC_OPCODE_DDX;
         case TGSI_OPCODE_DDY: return RC_OPCODE_DDY;
         case TGSI_OPCODE_KILL: return RC_OPCODE_KILP;
-     /* case TGSI_OPCODE_PK2H: return RC_OPCODE_PK2H; */
-     /* case TGSI_OPCODE_PK2US: return RC_OPCODE_PK2US; */
-     /* case TGSI_OPCODE_PK4B: return RC_OPCODE_PK4B; */
-     /* case TGSI_OPCODE_PK4UB: return RC_OPCODE_PK4UB; */
         case TGSI_OPCODE_SEQ: return RC_OPCODE_SEQ;
         case TGSI_OPCODE_SGT: return RC_OPCODE_SGT;
         case TGSI_OPCODE_SIN: return RC_OPCODE_SIN;
@@ -75,17 +70,9 @@ static unsigned translate_opcode(unsigned opcode)
         case TGSI_OPCODE_TEX: return RC_OPCODE_TEX;
         case TGSI_OPCODE_TXD: return RC_OPCODE_TXD;
         case TGSI_OPCODE_TXP: return RC_OPCODE_TXP;
-     /* case TGSI_OPCODE_UP2H: return RC_OPCODE_UP2H; */
-     /* case TGSI_OPCODE_UP2US: return RC_OPCODE_UP2US; */
-     /* case TGSI_OPCODE_UP4B: return RC_OPCODE_UP4B; */
-     /* case TGSI_OPCODE_UP4UB: return RC_OPCODE_UP4UB; */
         case TGSI_OPCODE_ARR: return RC_OPCODE_ARR;
-     /* case TGSI_OPCODE_CAL: return RC_OPCODE_CAL; */
-     /* case TGSI_OPCODE_RET: return RC_OPCODE_RET; */
-        case TGSI_OPCODE_SSG: return RC_OPCODE_SSG;
         case TGSI_OPCODE_CMP: return RC_OPCODE_CMP;
         case TGSI_OPCODE_TXB: return RC_OPCODE_TXB;
-     /* case TGSI_OPCODE_DIV: return RC_OPCODE_DIV; */
         case TGSI_OPCODE_DP2: return RC_OPCODE_DP2;
         case TGSI_OPCODE_TXL: return RC_OPCODE_TXL;
         case TGSI_OPCODE_BRK: return RC_OPCODE_BRK;
@@ -94,27 +81,8 @@ static unsigned translate_opcode(unsigned opcode)
         case TGSI_OPCODE_ELSE: return RC_OPCODE_ELSE;
         case TGSI_OPCODE_ENDIF: return RC_OPCODE_ENDIF;
         case TGSI_OPCODE_ENDLOOP: return RC_OPCODE_ENDLOOP;
-     /* case TGSI_OPCODE_PUSHA: return RC_OPCODE_PUSHA; */
-     /* case TGSI_OPCODE_POPA: return RC_OPCODE_POPA; */
-        case TGSI_OPCODE_CEIL: return RC_OPCODE_CEIL;
-     /* case TGSI_OPCODE_I2F: return RC_OPCODE_I2F; */
-     /* case TGSI_OPCODE_NOT: return RC_OPCODE_NOT; */
         case TGSI_OPCODE_TRUNC: return RC_OPCODE_TRUNC;
-     /* case TGSI_OPCODE_SHL: return RC_OPCODE_SHL; */
-     /* case TGSI_OPCODE_ISHR: return RC_OPCODE_SHR; */
-     /* case TGSI_OPCODE_AND: return RC_OPCODE_AND; */
-     /* case TGSI_OPCODE_OR: return RC_OPCODE_OR; */
-     /* case TGSI_OPCODE_MOD: return RC_OPCODE_MOD; */
-     /* case TGSI_OPCODE_XOR: return RC_OPCODE_XOR; */
-     /* case TGSI_OPCODE_TXF: return RC_OPCODE_TXF; */
-     /* case TGSI_OPCODE_TXQ: return RC_OPCODE_TXQ; */
         case TGSI_OPCODE_CONT: return RC_OPCODE_CONT;
-     /* case TGSI_OPCODE_EMIT: return RC_OPCODE_EMIT; */
-     /* case TGSI_OPCODE_ENDPRIM: return RC_OPCODE_ENDPRIM; */
-     /* case TGSI_OPCODE_BGNLOOP2: return RC_OPCODE_BGNLOOP2; */
-     /* case TGSI_OPCODE_BGNSUB: return RC_OPCODE_BGNSUB; */
-     /* case TGSI_OPCODE_ENDLOOP2: return RC_OPCODE_ENDLOOP2; */
-     /* case TGSI_OPCODE_ENDSUB: return RC_OPCODE_ENDSUB; */
         case TGSI_OPCODE_NOP: return RC_OPCODE_NOP;
         case TGSI_OPCODE_KILL_IF: return RC_OPCODE_KIL;
     }
@@ -164,7 +132,7 @@ static void transform_dstreg(
     dst->WriteMask = src->Register.WriteMask;
 
     if (src->Register.Indirect) {
-        ttr->error = TRUE;
+        ttr->error = true;
         fprintf(stderr, "r300: Relative addressing of destination operands "
                 "is unsupported.\n");
     }
@@ -254,12 +222,12 @@ static void transform_instruction(struct tgsi_to_rc * ttr, struct tgsi_full_inst
 
     dst = rc_insert_new_instruction(ttr->compiler, ttr->compiler->Program.Instructions.Prev);
     dst->U.I.Opcode = translate_opcode(src->Instruction.Opcode);
-    if (!ttr->compiler->is_r500 && dst->U.I.Opcode == RC_OPCODE_BGNLOOP && ttr->error == FALSE) {
-        ttr->error = TRUE;
+    if (!ttr->compiler->is_r500 && dst->U.I.Opcode == RC_OPCODE_BGNLOOP && ttr->error == false) {
+        ttr->error = true;
         fprintf(stderr, "r300: Dynamic loops are not supported on R3xx/R4xx.\n");
     }
-    if (!ttr->compiler->is_r500 && dst->U.I.Opcode == RC_OPCODE_IF && ttr->error == FALSE) {
-        ttr->error = TRUE;
+    if (!ttr->compiler->is_r500 && dst->U.I.Opcode == RC_OPCODE_IF && ttr->error == false) {
+        ttr->error = true;
         fprintf(stderr, "r300: Branches are not supported on R3xx/R4xx.\n");
     }
 
@@ -302,7 +270,7 @@ void r300_tgsi_to_rc(struct tgsi_to_rc * ttr,
     unsigned imm_index = 0;
     int i;
 
-    ttr->error = FALSE;
+    ttr->error = false;
 
     /* Allocate constants placeholders.
      *

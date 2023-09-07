@@ -95,7 +95,7 @@ lp_scene_queue_destroy(struct lp_scene_queue *queue)
 
 /** Remove first lp_scene from head of queue */
 struct lp_scene *
-lp_scene_dequeue(struct lp_scene_queue *queue, boolean wait)
+lp_scene_dequeue(struct lp_scene_queue *queue, bool wait)
 {
    mtx_lock(&queue->mutex);
 

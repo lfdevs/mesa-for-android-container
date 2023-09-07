@@ -74,6 +74,7 @@ struct zink_zs_swizzle {
 };
 
 struct zink_zs_swizzle_key {
+   /* Mask of sampler views with zs_view, i.e. have swizzles other than GL_RED for depth */
    uint32_t mask;
    struct zink_zs_swizzle swizzle[32];
 };

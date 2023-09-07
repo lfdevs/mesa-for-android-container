@@ -90,6 +90,7 @@
 #include "gallivm/lp_bld_format.h"
 #include "gallivm/lp_bld_quad.h"
 #include "gallivm/lp_bld_gather.h"
+#include "gallivm/lp_bld_jit_sample.h"
 
 #include "lp_bld_alpha.h"
 #include "lp_bld_blend.h"
@@ -131,10 +132,10 @@ load_unswizzled_block(struct gallivm_state *gallivm,
  *
  * A format which has irregular channel sizes such as R3_G3_B2 or R5_G6_B5.
  */
-static inline boolean
+static inline bool
 is_arithmetic_format(const struct util_format_description *format_desc)
 {
-   boolean arith = false;
+   bool arith = false;
 
    for (unsigned i = 0; i < format_desc->nr_channels; ++i) {
       arith |= format_desc->channel[i].size != format_desc->channel[0].size;
@@ -150,7 +151,7 @@ is_arithmetic_format(const struct util_format_description *format_desc)
  * to floats for blending, and furthermore has "natural" packed AoS ->
  * unpacked SoA conversion.
  */
-static inline boolean
+static inline bool
 format_expands_to_float_soa(const struct util_format_description *format_desc)
 {
    if (format_desc->format == PIPE_FORMAT_R11G11B10_FLOAT ||
@@ -637,6 +638,8 @@ generate_fs_loop(struct gallivm_state *gallivm,
                  struct lp_type type,
                  LLVMTypeRef context_type,
                  LLVMValueRef context_ptr,
+                 LLVMTypeRef resources_type,
+                 LLVMValueRef resources_ptr,
                  LLVMTypeRef sample_pos_type,
                  LLVMValueRef sample_pos_array,
                  LLVMValueRef num_loop,
@@ -671,11 +674,11 @@ generate_fs_loop(struct gallivm_state *gallivm,
     * keep. Disabled because it may hide some real bugs in the (depth/stencil)
     * code since tests tend to take another codepath than real shaders.
     */
-   boolean simple_shader = (shader->info.base.file_count[TGSI_FILE_SAMPLER] == 0 &&
-                            shader->info.base.num_inputs < 3 &&
-                            shader->info.base.num_instructions < 8) && 0;
-   const boolean dual_source_blend = key->blend.rt[0].blend_enable &&
-                                     util_blend_state_is_dual(&key->blend, 0);
+   bool simple_shader = (shader->info.base.file_count[TGSI_FILE_SAMPLER] == 0 &&
+                         shader->info.base.num_inputs < 3 &&
+                         shader->info.base.num_instructions < 8) && 0;
+   const bool dual_source_blend = key->blend.rt[0].blend_enable &&
+                                  util_blend_state_is_dual(&key->blend, 0);
    const bool post_depth_coverage = shader->info.base.properties[TGSI_PROPERTY_FS_POST_DEPTH_COVERAGE];
 
    struct lp_bld_tgsi_system_values system_values;
@@ -746,9 +749,9 @@ generate_fs_loop(struct gallivm_state *gallivm,
    stencil_refs[0] = lp_build_broadcast(gallivm, int_vec_type, stencil_refs[0]);
    stencil_refs[1] = lp_build_broadcast(gallivm, int_vec_type, stencil_refs[1]);
 
-   LLVMValueRef consts_ptr = lp_jit_context_constants(gallivm, context_type, context_ptr);
+   LLVMValueRef consts_ptr = lp_jit_resources_constants(gallivm, resources_type, resources_ptr);
 
-   LLVMValueRef ssbo_ptr = lp_jit_context_ssbos(gallivm, context_type, context_ptr);
+   LLVMValueRef ssbo_ptr = lp_jit_resources_ssbos(gallivm, resources_type, resources_ptr);
 
    LLVMValueRef outputs[PIPE_MAX_SHADER_OUTPUTS][TGSI_NUM_CHANNELS];
    memset(outputs, 0, sizeof outputs);
@@ -1054,13 +1057,15 @@ generate_fs_loop(struct gallivm_state *gallivm,
    params.inputs = interp->inputs;
    params.context_type = context_type;
    params.context_ptr = context_ptr;
+   params.resources_type = resources_type;
+   params.resources_ptr = resources_ptr;
    params.thread_data_type = thread_data_type;
    params.thread_data_ptr = thread_data_ptr;
    params.sampler = sampler;
    params.info = &shader->info.base;
    params.ssbo_ptr = ssbo_ptr;
    params.image = image;
-   params.aniso_filter_table = lp_jit_context_aniso_filter_table(gallivm, context_type, context_ptr);
+   params.aniso_filter_table = lp_jit_resources_aniso_filter_table(gallivm, resources_type, resources_ptr);
 
    /* Build the actual shader */
    if (shader->base.type == PIPE_SHADER_IR_TGSI)
@@ -2397,7 +2402,7 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
                           LLVMValueRef color_ptr,
                           LLVMValueRef stride,
                           unsigned partial_mask,
-                          boolean do_branch)
+                          bool do_branch)
 {
    const unsigned alpha_channel = 3;
    const unsigned block_width = LP_RASTER_BLOCK_SIZE;
@@ -2424,11 +2429,11 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
       util_format_description(out_format);
 
    bool pad_inline = is_arithmetic_format(out_format_desc);
-   const boolean dual_source_blend =
+   const bool dual_source_blend =
       variant->key.blend.rt[0].blend_enable &&
       util_blend_state_is_dual(&variant->key.blend, 0);
 
-   const boolean is_1d = variant->key.resource_1d;
+   const bool is_1d = variant->key.resource_1d;
    const unsigned num_fullblock_fs = is_1d ? 2 * num_fs : num_fs;
    LLVMValueRef fpstate = NULL;
 
@@ -2453,7 +2458,7 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
       /* We need to make sure that denorms are ok for half float
          conversions */
       fpstate = lp_build_fpstate_get(gallivm);
-      lp_build_fpstate_set_denorms_zero(gallivm, FALSE);
+      lp_build_fpstate_set_denorms_zero(gallivm, false);
    }
 
    struct lp_type mask_type = lp_int32_vec4_type();
@@ -2664,9 +2669,9 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
     * unpack only with 128bit vectors).
     * Note: for 16bit sizes really need matching pack conversion code
     */
-   boolean twiddle_after_convert = FALSE;
+   bool twiddle_after_convert = false;
    if (!is_1d && dst_channels != 3 && dst_type.width == 8) {
-      twiddle_after_convert = TRUE;
+      twiddle_after_convert = true;
    }
 
    /*
@@ -3105,13 +3110,14 @@ generate_fragment(struct llvmpipe_context *lp,
    struct lp_shader_input inputs[PIPE_MAX_SHADER_INPUTS];
    LLVMTypeRef fs_elem_type;
    LLVMTypeRef blend_vec_type;
-   LLVMTypeRef arg_types[15];
+   LLVMTypeRef arg_types[16];
    LLVMTypeRef func_type;
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(gallivm->context);
    LLVMTypeRef int32p_type = LLVMPointerType(int32_type, 0);
    LLVMTypeRef int8_type = LLVMInt8TypeInContext(gallivm->context);
    LLVMTypeRef int8p_type = LLVMPointerType(int8_type, 0);
    LLVMValueRef context_ptr;
+   LLVMValueRef resources_ptr;
    LLVMValueRef x;
    LLVMValueRef y;
    LLVMValueRef a0_ptr;
@@ -3132,9 +3138,9 @@ generate_fragment(struct llvmpipe_context *lp,
    LLVMValueRef fs_out_color[LP_MAX_SAMPLES][PIPE_MAX_COLOR_BUFS][TGSI_NUM_CHANNELS][16 / 4];
    LLVMValueRef function;
    LLVMValueRef facing;
-   boolean cbuf0_write_all;
-   const boolean dual_source_blend = key->blend.rt[0].blend_enable &&
-                                     util_blend_state_is_dual(&key->blend, 0);
+   bool cbuf0_write_all;
+   const bool dual_source_blend = key->blend.rt[0].blend_enable &&
+                                  util_blend_state_is_dual(&key->blend, 0);
 
    assert(lp_native_vector_width / 32 >= 4);
 
@@ -3160,17 +3166,17 @@ generate_fragment(struct llvmpipe_context *lp,
 
    struct lp_type fs_type;
    memset(&fs_type, 0, sizeof fs_type);
-   fs_type.floating = TRUE;      /* floating point values */
-   fs_type.sign = TRUE;          /* values are signed */
-   fs_type.norm = FALSE;         /* values are not limited to [0,1] or [-1,1] */
+   fs_type.floating = true;      /* floating point values */
+   fs_type.sign = true;          /* values are signed */
+   fs_type.norm = false;         /* values are not limited to [0,1] or [-1,1] */
    fs_type.width = 32;           /* 32-bit float */
    fs_type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
    struct lp_type blend_type;
    memset(&blend_type, 0, sizeof blend_type);
-   blend_type.floating = FALSE; /* values are integers */
-   blend_type.sign = FALSE;     /* values are unsigned */
-   blend_type.norm = TRUE;      /* values are in [0,1] or [-1,1] */
+   blend_type.floating = false; /* values are integers */
+   blend_type.sign = false;     /* values are unsigned */
+   blend_type.norm = true;      /* values are in [0,1] or [-1,1] */
    blend_type.width = 8;        /* 8-bit ubyte values */
    blend_type.length = 16;      /* 16 elements per vector */
 
@@ -3188,20 +3194,21 @@ generate_fragment(struct llvmpipe_context *lp,
             partial_mask ? "partial" : "whole");
 
    arg_types[0] = variant->jit_context_ptr_type;       /* context */
-   arg_types[1] = int32_type;                          /* x */
-   arg_types[2] = int32_type;                          /* y */
-   arg_types[3] = int32_type;                          /* facing */
-   arg_types[4] = LLVMPointerType(fs_elem_type, 0);    /* a0 */
-   arg_types[5] = LLVMPointerType(fs_elem_type, 0);    /* dadx */
-   arg_types[6] = LLVMPointerType(fs_elem_type, 0);    /* dady */
-   arg_types[7] = LLVMPointerType(int8p_type, 0);  /* color */
-   arg_types[8] = int8p_type;       /* depth */
-   arg_types[9] = LLVMInt64TypeInContext(gallivm->context);  /* mask_input */
-   arg_types[10] = variant->jit_thread_data_ptr_type;  /* per thread data */
-   arg_types[11] = int32p_type;     /* stride */
-   arg_types[12] = int32_type;                         /* depth_stride */
-   arg_types[13] = int32p_type;     /* color sample strides */
-   arg_types[14] = int32_type;                         /* depth sample stride */
+   arg_types[1] = variant->jit_resources_ptr_type;       /* context */
+   arg_types[2] = int32_type;                          /* x */
+   arg_types[3] = int32_type;                          /* y */
+   arg_types[4] = int32_type;                          /* facing */
+   arg_types[5] = LLVMPointerType(fs_elem_type, 0);    /* a0 */
+   arg_types[6] = LLVMPointerType(fs_elem_type, 0);    /* dadx */
+   arg_types[7] = LLVMPointerType(fs_elem_type, 0);    /* dady */
+   arg_types[8] = LLVMPointerType(int8p_type, 0);  /* color */
+   arg_types[9] = int8p_type;       /* depth */
+   arg_types[10] = LLVMInt64TypeInContext(gallivm->context);  /* mask_input */
+   arg_types[11] = variant->jit_thread_data_ptr_type;  /* per thread data */
+   arg_types[12] = int32p_type;     /* stride */
+   arg_types[13] = int32_type;                         /* depth_stride */
+   arg_types[14] = int32p_type;     /* color sample strides */
+   arg_types[15] = int32_type;                         /* depth sample stride */
 
    func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context),
                                 arg_types, ARRAY_SIZE(arg_types), 0);
@@ -3222,22 +3229,24 @@ generate_fragment(struct llvmpipe_context *lp,
       return;
 
    context_ptr  = LLVMGetParam(function, 0);
-   x            = LLVMGetParam(function, 1);
-   y            = LLVMGetParam(function, 2);
-   facing       = LLVMGetParam(function, 3);
-   a0_ptr       = LLVMGetParam(function, 4);
-   dadx_ptr     = LLVMGetParam(function, 5);
-   dady_ptr     = LLVMGetParam(function, 6);
-   color_ptr_ptr = LLVMGetParam(function, 7);
-   depth_ptr    = LLVMGetParam(function, 8);
-   mask_input   = LLVMGetParam(function, 9);
-   thread_data_ptr  = LLVMGetParam(function, 10);
-   stride_ptr   = LLVMGetParam(function, 11);
-   depth_stride = LLVMGetParam(function, 12);
-   color_sample_stride_ptr = LLVMGetParam(function, 13);
-   depth_sample_stride = LLVMGetParam(function, 14);
+   resources_ptr  = LLVMGetParam(function, 1);
+   x            = LLVMGetParam(function, 2);
+   y            = LLVMGetParam(function, 3);
+   facing       = LLVMGetParam(function, 4);
+   a0_ptr       = LLVMGetParam(function, 5);
+   dadx_ptr     = LLVMGetParam(function, 6);
+   dady_ptr     = LLVMGetParam(function, 7);
+   color_ptr_ptr = LLVMGetParam(function, 8);
+   depth_ptr    = LLVMGetParam(function, 9);
+   mask_input   = LLVMGetParam(function, 10);
+   thread_data_ptr  = LLVMGetParam(function, 11);
+   stride_ptr   = LLVMGetParam(function, 12);
+   depth_stride = LLVMGetParam(function, 13);
+   color_sample_stride_ptr = LLVMGetParam(function, 14);
+   depth_sample_stride = LLVMGetParam(function, 15);
 
    lp_build_name(context_ptr, "context");
+   lp_build_name(resources_ptr, "resources");
    lp_build_name(x, "x");
    lp_build_name(y, "y");
    lp_build_name(a0_ptr, "a0");
@@ -3288,7 +3297,7 @@ generate_fragment(struct llvmpipe_context *lp,
                                  MAX2(key->nr_samplers,
                                       key->nr_sampler_views));
    struct lp_build_image_soa *image =
-      lp_llvm_image_soa_create(lp_fs_variant_key_images(key), key->nr_images);
+      lp_bld_llvm_image_soa_create(lp_fs_variant_key_images(key), key->nr_images);
 
    unsigned num_fs = 16 / fs_type.length; /* number of loops per 4x4 stamp */
    /* for 1d resources only run "upper half" of stamp */
@@ -3331,7 +3340,7 @@ generate_fragment(struct llvmpipe_context *lp,
       LLVMSetInitializer(glob_sample_pos, sample_pos_array);
 
       LLVMValueRef color_store[PIPE_MAX_COLOR_BUFS][TGSI_NUM_CHANNELS];
-      boolean pixel_center_integer =
+      bool pixel_center_integer =
          shader->info.base.properties[TGSI_PROPERTY_FS_COORD_PIXEL_CENTER];
 
       /*
@@ -3409,6 +3418,8 @@ generate_fragment(struct llvmpipe_context *lp,
                        fs_type,
                        variant->jit_context_type,
                        context_ptr,
+                       variant->jit_resources_type,
+                       resources_ptr,
                        LLVMTypeOf(sample_pos_array),
                        glob_sample_pos,
                        num_loop,
@@ -3466,8 +3477,8 @@ generate_fragment(struct llvmpipe_context *lp,
       }
    }
 
-   lp_llvm_sampler_soa_destroy(sampler);
-   lp_llvm_image_soa_destroy(image);
+   lp_bld_llvm_sampler_soa_destroy(sampler);
+   lp_bld_llvm_image_soa_destroy(image);
 
    /* Loop over color outputs / color buffers to do blending */
    for (unsigned cbuf = 0; cbuf < key->nr_cbufs; cbuf++) {
@@ -3479,10 +3490,10 @@ generate_fragment(struct llvmpipe_context *lp,
          LLVMValueRef sample_stride = NULL;
          LLVMValueRef index = lp_build_const_int32(gallivm, cbuf);
 
-         boolean do_branch = ((key->depth.enabled
-                               || key->stencil[0].enabled
-                               || key->alpha.enabled)
-                              && !shader->info.base.uses_kill);
+         bool do_branch = ((key->depth.enabled
+                            || key->stencil[0].enabled
+                            || key->alpha.enabled)
+                           && !shader->info.base.uses_kill);
 
          color_ptr = LLVMBuildLoad2(builder, int8p_type,
                                     LLVMBuildGEP2(builder, int8p_type, color_ptr_ptr,
@@ -3562,23 +3573,23 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
       debug_printf("depth nr_samples = %d\n", key->zsbuf_nr_samples);
    }
    if (key->depth.enabled) {
-      debug_printf("depth.func = %s\n", util_str_func(key->depth.func, TRUE));
+      debug_printf("depth.func = %s\n", util_str_func(key->depth.func, true));
       debug_printf("depth.writemask = %u\n", key->depth.writemask);
    }
 
    for (unsigned i = 0; i < 2; ++i) {
       if (key->stencil[i].enabled) {
-         debug_printf("stencil[%u].func = %s\n", i, util_str_func(key->stencil[i].func, TRUE));
-         debug_printf("stencil[%u].fail_op = %s\n", i, util_str_stencil_op(key->stencil[i].fail_op, TRUE));
-         debug_printf("stencil[%u].zpass_op = %s\n", i, util_str_stencil_op(key->stencil[i].zpass_op, TRUE));
-         debug_printf("stencil[%u].zfail_op = %s\n", i, util_str_stencil_op(key->stencil[i].zfail_op, TRUE));
+         debug_printf("stencil[%u].func = %s\n", i, util_str_func(key->stencil[i].func, true));
+         debug_printf("stencil[%u].fail_op = %s\n", i, util_str_stencil_op(key->stencil[i].fail_op, true));
+         debug_printf("stencil[%u].zpass_op = %s\n", i, util_str_stencil_op(key->stencil[i].zpass_op, true));
+         debug_printf("stencil[%u].zfail_op = %s\n", i, util_str_stencil_op(key->stencil[i].zfail_op, true));
          debug_printf("stencil[%u].valuemask = 0x%x\n", i, key->stencil[i].valuemask);
          debug_printf("stencil[%u].writemask = 0x%x\n", i, key->stencil[i].writemask);
       }
    }
 
    if (key->alpha.enabled) {
-      debug_printf("alpha.func = %s\n", util_str_func(key->alpha.func, TRUE));
+      debug_printf("alpha.func = %s\n", util_str_func(key->alpha.func, true));
    }
 
    if (key->occlusion_count) {
@@ -3586,14 +3597,14 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
    }
 
    if (key->blend.logicop_enable) {
-      debug_printf("blend.logicop_func = %s\n", util_str_logicop(key->blend.logicop_func, TRUE));
+      debug_printf("blend.logicop_func = %s\n", util_str_logicop(key->blend.logicop_func, true));
    } else if (key->blend.rt[0].blend_enable) {
-      debug_printf("blend.rgb_func = %s\n",   util_str_blend_func  (key->blend.rt[0].rgb_func, TRUE));
-      debug_printf("blend.rgb_src_factor = %s\n",   util_str_blend_factor(key->blend.rt[0].rgb_src_factor, TRUE));
-      debug_printf("blend.rgb_dst_factor = %s\n",   util_str_blend_factor(key->blend.rt[0].rgb_dst_factor, TRUE));
-      debug_printf("blend.alpha_func = %s\n",       util_str_blend_func  (key->blend.rt[0].alpha_func, TRUE));
-      debug_printf("blend.alpha_src_factor = %s\n", util_str_blend_factor(key->blend.rt[0].alpha_src_factor, TRUE));
-      debug_printf("blend.alpha_dst_factor = %s\n", util_str_blend_factor(key->blend.rt[0].alpha_dst_factor, TRUE));
+      debug_printf("blend.rgb_func = %s\n",   util_str_blend_func  (key->blend.rt[0].rgb_func, true));
+      debug_printf("blend.rgb_src_factor = %s\n",   util_str_blend_factor(key->blend.rt[0].rgb_src_factor, true));
+      debug_printf("blend.rgb_dst_factor = %s\n",   util_str_blend_factor(key->blend.rt[0].rgb_dst_factor, true));
+      debug_printf("blend.alpha_func = %s\n",       util_str_blend_func  (key->blend.rt[0].alpha_func, true));
+      debug_printf("blend.alpha_src_factor = %s\n", util_str_blend_factor(key->blend.rt[0].alpha_src_factor, true));
+      debug_printf("blend.alpha_dst_factor = %s\n", util_str_blend_factor(key->blend.rt[0].alpha_dst_factor, true));
    }
    debug_printf("blend.colormask = 0x%x\n", key->blend.rt[0].colormask);
    if (key->blend.alpha_to_coverage) {
@@ -3604,17 +3615,17 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
       const struct lp_static_sampler_state *sampler = &samplers[i].sampler_state;
       debug_printf("sampler[%u] = \n", i);
       debug_printf("  .wrap = %s %s %s\n",
-                   util_str_tex_wrap(sampler->wrap_s, TRUE),
-                   util_str_tex_wrap(sampler->wrap_t, TRUE),
-                   util_str_tex_wrap(sampler->wrap_r, TRUE));
+                   util_str_tex_wrap(sampler->wrap_s, true),
+                   util_str_tex_wrap(sampler->wrap_t, true),
+                   util_str_tex_wrap(sampler->wrap_r, true));
       debug_printf("  .min_img_filter = %s\n",
-                   util_str_tex_filter(sampler->min_img_filter, TRUE));
+                   util_str_tex_filter(sampler->min_img_filter, true));
       debug_printf("  .min_mip_filter = %s\n",
-                   util_str_tex_mipfilter(sampler->min_mip_filter, TRUE));
+                   util_str_tex_mipfilter(sampler->min_mip_filter, true));
       debug_printf("  .mag_img_filter = %s\n",
-                   util_str_tex_filter(sampler->mag_img_filter, TRUE));
+                   util_str_tex_filter(sampler->mag_img_filter, true));
       if (sampler->compare_mode != PIPE_TEX_COMPARE_NONE)
-         debug_printf("  .compare_func = %s\n", util_str_func(sampler->compare_func, TRUE));
+         debug_printf("  .compare_func = %s\n", util_str_func(sampler->compare_func, true));
       debug_printf("  .normalized_coords = %u\n", sampler->normalized_coords);
       debug_printf("  .min_max_lod_equal = %u\n", sampler->min_max_lod_equal);
       debug_printf("  .lod_bias_non_zero = %u\n", sampler->lod_bias_non_zero);
@@ -3630,7 +3641,7 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
       debug_printf("  .format = %s\n",
                    util_format_name(texture->format));
       debug_printf("  .target = %s\n",
-                   util_str_tex_target(texture->target, TRUE));
+                   util_str_tex_target(texture->target, true));
       debug_printf("  .level_zero_only = %u\n",
                    texture->level_zero_only);
       debug_printf("  .pot = %u %u %u\n",
@@ -3645,7 +3656,7 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
       debug_printf("  .format = %s\n",
                    util_format_name(image->format));
       debug_printf("  .target = %s\n",
-                   util_str_tex_target(image->target, TRUE));
+                   util_str_tex_target(image->target, true));
       debug_printf("  .level_zero_only = %u\n",
                    image->level_zero_only);
       debug_printf("  .pot = %u %u %u\n",
@@ -3767,7 +3778,7 @@ generate_variant(struct llvmpipe_context *lp,
     * Determine whether we are touching all channels in the color buffer.
     */
    const struct util_format_description *cbuf0_format_desc = NULL;
-   boolean fullcolormask = FALSE;
+   bool fullcolormask = false;
    if (key->nr_cbufs == 1) {
       cbuf0_format_desc = util_format_description(key->cbuf_format[0]);
       fullcolormask = util_format_colormask_full(cbuf0_format_desc,
@@ -3777,7 +3788,7 @@ generate_variant(struct llvmpipe_context *lp,
    /* The scissor is ignored here as only tiles inside the scissoring
     * rectangle will refer to this.
     */
-   const boolean no_kill =
+   const bool no_kill =
          fullcolormask &&
          !key->stencil[0].enabled &&
          !key->alpha.enabled &&
@@ -3792,7 +3803,7 @@ generate_variant(struct llvmpipe_context *lp,
          no_kill &&
          !key->blend.logicop_enable &&
          !key->blend.rt[0].blend_enable
-         ? TRUE : FALSE;
+         ? true : false;
 
    variant->potentially_opaque =
          no_kill &&
@@ -3810,7 +3821,7 @@ generate_variant(struct llvmpipe_context *lp,
           * field, hence causing a crash).
           */
          shader->info.cbuf[0][3].file != TGSI_FILE_NULL
-         ? TRUE : FALSE;
+         ? true : false;
 
    /* We only care about opaque blits for now */
    if (variant->opaque &&
@@ -3851,13 +3862,15 @@ generate_variant(struct llvmpipe_context *lp,
    /* Determine whether this shader + pipeline state is a candidate for
     * the linear path.
     */
-   const boolean linear_pipeline =
+   const bool linear_pipeline =
          !key->stencil[0].enabled &&
          !key->depth.enabled &&
          !shader->info.base.uses_kill &&
          !key->blend.logicop_enable &&
          (key->cbuf_format[0] == PIPE_FORMAT_B8G8R8A8_UNORM ||
-          key->cbuf_format[0] == PIPE_FORMAT_B8G8R8X8_UNORM);
+          key->cbuf_format[0] == PIPE_FORMAT_B8G8R8X8_UNORM ||
+          key->cbuf_format[0] == PIPE_FORMAT_R8G8B8A8_UNORM ||
+          key->cbuf_format[0] == PIPE_FORMAT_R8G8B8X8_UNORM);
 
    memcpy(&variant->key, key, sizeof *key);
 
@@ -3959,6 +3972,8 @@ static void *
 llvmpipe_create_fs_state(struct pipe_context *pipe,
                          const struct pipe_shader_state *templ)
 {
+   llvmpipe_register_shader(pipe, templ, false);
+
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
 
    struct lp_fragment_shader *shader = CALLOC_STRUCT(lp_fragment_shader);
@@ -3984,6 +3999,7 @@ llvmpipe_create_fs_state(struct pipe_context *pipe,
       NIR_PASS_V(nir, nir_lower_fragcolor, nir->info.fs.color_is_dual_source ? 1 : 8);
 
       nir_tgsi_scan_shader(nir, &shader->info.base, true);
+      shader->info.num_texs = shader->info.base.opcode_count[TGSI_OPCODE_TEX];
    }
 
    shader->draw_data = draw_create_fragment_shader(llvmpipe->draw, templ);
@@ -4131,6 +4147,8 @@ llvmpipe_destroy_fs(struct llvmpipe_context *llvmpipe,
    /* Delete draw module's data */
    draw_delete_fragment_shader(llvmpipe->draw, shader->draw_data);
 
+   llvmpipe_register_shader(&llvmpipe->pipe, &shader->base, true);
+
    if (shader->base.ir.nir)
       ralloc_free(shader->base.ir.nir);
    assert(shader->variants_cached == 0);
@@ -4167,7 +4185,7 @@ llvmpipe_set_constant_buffer(struct pipe_context *pipe,
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
    struct pipe_constant_buffer *constants = &llvmpipe->constants[shader][index];
 
-   assert(shader < PIPE_SHADER_TYPES);
+   assert(shader < PIPE_SHADER_MESH_TYPES);
    assert(index < ARRAY_SIZE(llvmpipe->constants[shader]));
 
    /* note: reference counting */
@@ -4188,27 +4206,41 @@ llvmpipe_set_constant_buffer(struct pipe_context *pipe,
          debug_printf("Illegal set constant without bind flag\n");
          constants->buffer->bind |= PIPE_BIND_CONSTANT_BUFFER;
       }
+      llvmpipe_flush_resource(pipe, constants->buffer, 0, true, true, false, "set_constant_buffer");
    }
 
-   if (shader == PIPE_SHADER_VERTEX ||
-       shader == PIPE_SHADER_GEOMETRY ||
-       shader == PIPE_SHADER_TESS_CTRL ||
-       shader == PIPE_SHADER_TESS_EVAL) {
-      /* Pass the constants to the 'draw' module */
+   switch (shader) {
+   case PIPE_SHADER_VERTEX:
+   case PIPE_SHADER_GEOMETRY:
+   case PIPE_SHADER_TESS_CTRL:
+   case PIPE_SHADER_TESS_EVAL: {
       const unsigned size = cb ? cb->buffer_size : 0;
 
-      const ubyte *data = NULL;
+      const uint8_t *data = NULL;
       if (constants->buffer) {
-         data = (ubyte *) llvmpipe_resource_data(constants->buffer)
+         data = (uint8_t *) llvmpipe_resource_data(constants->buffer)
             + constants->buffer_offset;
       }
 
       draw_set_mapped_constant_buffer(llvmpipe->draw, shader,
                                       index, data, size);
-   } else if (shader == PIPE_SHADER_COMPUTE) {
+      break;
+   }
+   case PIPE_SHADER_COMPUTE:
       llvmpipe->cs_dirty |= LP_CSNEW_CONSTANTS;
-   } else {
+      break;
+   case PIPE_SHADER_FRAGMENT:
       llvmpipe->dirty |= LP_NEW_FS_CONSTANTS;
+      break;
+   case PIPE_SHADER_TASK:
+      llvmpipe->dirty |= LP_NEW_TASK_CONSTANTS;
+      break;
+   case PIPE_SHADER_MESH:
+      llvmpipe->dirty |= LP_NEW_MESH_CONSTANTS;
+      break;
+   default:
+      unreachable("Illegal shader type");
+      break;
    }
 }
 
@@ -4229,29 +4261,43 @@ llvmpipe_set_shader_buffers(struct pipe_context *pipe,
       util_copy_shader_buffer(&llvmpipe->ssbos[shader][i], buffer);
 
       if (buffer && buffer->buffer) {
-         boolean read_only = !(writable_bitmask & (1 << idx));
+         bool read_only = !(writable_bitmask & (1 << idx));
          llvmpipe_flush_resource(pipe, buffer->buffer, 0, read_only, false,
                                  false, "buffer");
       }
 
-      if (shader == PIPE_SHADER_VERTEX ||
-          shader == PIPE_SHADER_GEOMETRY ||
-          shader == PIPE_SHADER_TESS_CTRL ||
-          shader == PIPE_SHADER_TESS_EVAL) {
+      switch (shader) {
+      case PIPE_SHADER_VERTEX:
+      case PIPE_SHADER_GEOMETRY:
+      case PIPE_SHADER_TESS_CTRL:
+      case PIPE_SHADER_TESS_EVAL: {
          const unsigned size = buffer ? buffer->buffer_size : 0;
-         const ubyte *data = NULL;
+         const uint8_t *data = NULL;
          if (buffer && buffer->buffer)
-            data = (ubyte *) llvmpipe_resource_data(buffer->buffer);
+            data = (uint8_t *) llvmpipe_resource_data(buffer->buffer);
          if (data)
             data += buffer->buffer_offset;
          draw_set_mapped_shader_buffer(llvmpipe->draw, shader,
                                        i, data, size);
-      } else if (shader == PIPE_SHADER_COMPUTE) {
+         break;
+      }
+      case PIPE_SHADER_COMPUTE:
          llvmpipe->cs_dirty |= LP_CSNEW_SSBOS;
-      } else if (shader == PIPE_SHADER_FRAGMENT) {
+         break;
+      case PIPE_SHADER_TASK:
+         llvmpipe->dirty |= LP_NEW_TASK_SSBOS;
+         break;
+      case PIPE_SHADER_MESH:
+         llvmpipe->dirty |= LP_NEW_MESH_SSBOS;
+         break;
+      case PIPE_SHADER_FRAGMENT:
          llvmpipe->fs_ssbo_write_mask &= ~(((1 << count) - 1) << start_slot);
          llvmpipe->fs_ssbo_write_mask |= writable_bitmask << start_slot;
          llvmpipe->dirty |= LP_NEW_FS_SSBOS;
+         break;
+      default:
+         unreachable("Illegal shader type");
+         break;
       }
    }
 }
@@ -4280,16 +4326,29 @@ llvmpipe_set_shader_images(struct pipe_context *pipe,
    }
 
    llvmpipe->num_images[shader] = start_slot + count;
-   if (shader == PIPE_SHADER_VERTEX ||
-       shader == PIPE_SHADER_GEOMETRY ||
-       shader == PIPE_SHADER_TESS_CTRL ||
-       shader == PIPE_SHADER_TESS_EVAL) {
+   switch (shader) {
+   case PIPE_SHADER_VERTEX:
+   case PIPE_SHADER_GEOMETRY:
+   case PIPE_SHADER_TESS_CTRL:
+   case PIPE_SHADER_TESS_EVAL:
       draw_set_images(llvmpipe->draw, shader, llvmpipe->images[shader],
                       start_slot + count);
-   } else if (shader == PIPE_SHADER_COMPUTE) {
+      break;
+   case PIPE_SHADER_COMPUTE:
       llvmpipe->cs_dirty |= LP_CSNEW_IMAGES;
-   } else {
+      break;
+   case PIPE_SHADER_FRAGMENT:
       llvmpipe->dirty |= LP_NEW_FS_IMAGES;
+      break;
+   case PIPE_SHADER_TASK:
+      llvmpipe->dirty |= LP_NEW_TASK_IMAGES;
+      break;
+   case PIPE_SHADER_MESH:
+      llvmpipe->dirty |= LP_NEW_MESH_IMAGES;
+      break;
+   default:
+      unreachable("Illegal shader type");
+      break;
    }
 
    if (unbind_num_trailing_slots) {
@@ -4303,7 +4362,7 @@ llvmpipe_set_shader_images(struct pipe_context *pipe,
  * Return the blend factor equivalent to a destination alpha of one.
  */
 static inline enum pipe_blendfactor
-force_dst_alpha_one(enum pipe_blendfactor factor, boolean clamped_zero)
+force_dst_alpha_one(enum pipe_blendfactor factor, bool clamped_zero)
 {
    switch (factor) {
    case PIPE_BLENDFACTOR_DST_ALPHA:
@@ -4357,7 +4416,7 @@ make_variant_key(struct llvmpipe_context *lp,
                 sizeof key->stencil);
       }
       if (llvmpipe_resource_is_1d(lp->framebuffer.zsbuf->texture)) {
-         key->resource_1d = TRUE;
+         key->resource_1d = true;
       }
       key->zsbuf_nr_samples =
          util_res_sample_count(lp->framebuffer.zsbuf->texture);
@@ -4393,7 +4452,7 @@ make_variant_key(struct llvmpipe_context *lp,
    key->multisample = lp->rasterizer->multisample;
    key->no_ms_sample_mask_out = lp->rasterizer->no_ms_sample_mask_out;
    if (lp->active_occlusion_queries && !lp->queries_disabled) {
-      key->occlusion_count = TRUE;
+      key->occlusion_count = true;
    }
 
    memcpy(&key->blend, lp->blend, sizeof key->blend);
@@ -4457,7 +4516,7 @@ make_variant_key(struct llvmpipe_context *lp,
           * we pick 1d if any cbuf or zsbuf is 1d.
           */
          if (llvmpipe_resource_is_1d(lp->framebuffer.cbufs[i]->texture)) {
-            key->resource_1d = TRUE;
+            key->resource_1d = true;
          }
 
          const struct util_format_description *format_desc =
@@ -4496,8 +4555,8 @@ make_variant_key(struct llvmpipe_context *lp,
          if (format_desc->swizzle[3] > PIPE_SWIZZLE_W ||
              format_desc->swizzle[3] == format_desc->swizzle[0]) {
             // Doesn't cover mixed snorm/unorm but can't render to them anyway
-            boolean clamped_zero = !util_format_is_float(format) &&
-                                   !util_format_is_snorm(format);
+            bool clamped_zero = !util_format_is_float(format) &&
+                                !util_format_is_snorm(format);
             blend_rt->rgb_src_factor =
                force_dst_alpha_one(blend_rt->rgb_src_factor, clamped_zero);
             blend_rt->rgb_dst_factor =

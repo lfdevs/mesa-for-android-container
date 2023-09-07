@@ -36,7 +36,7 @@ BEGIN_TEST_FAIL(expect_fail)
    fprintf(output, "woops!\n");
 END_TEST
 
-BEGIN_TEST(simple.1)
+BEGIN_TEST(simple._1)
    //! s_buffer_load_dwordx2 @s64(a)
    fprintf(output, "s_buffer_load_dwordx2 s[6:7]\n");
    //! s_add_u32 s#b0, s#a, 1
@@ -48,7 +48,7 @@ BEGIN_TEST(simple.1)
    fprintf(output, "s_buffer_store_dwordx2 s[8:9]\n");
 END_TEST
 
-BEGIN_TEST(simple.2)
+BEGIN_TEST(simple._2)
    //~gfx[67]! test gfx67
    //~gfx8! test gfx8
    //~gfx9! test gfx9
@@ -71,7 +71,7 @@ BEGIN_TEST(simple.2)
    }
 END_TEST
 
-BEGIN_TEST(simple.3)
+BEGIN_TEST(simple._3)
    //; funcs['test'] = lambda a: a
    //! @test(s_buffer_load_dwordx2) @s64(a)
    fprintf(output, "s_buffer_load_dwordx2 s[6:7]\n");

@@ -90,7 +90,7 @@ feedback_vertex(struct gl_context *ctx, const struct draw_context *draw,
       (struct gl_vertex_program *)ctx->VertexProgram._Current;
    GLfloat win[4];
    const GLfloat *color, *texcoord;
-   ubyte slot;
+   uint8_t slot;
 
    win[0] = v->data[0][0];
    if (_mesa_fb_orientation(ctx->DrawBuffer) == Y_0_TOP)

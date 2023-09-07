@@ -191,7 +191,7 @@ example, if the ``find`` command listed ``/usr/lib64/dri``, then set
 After determining the correct values for the install location, configure
 Mesa with
 ``meson configure --prefix=/usr --libdir=xxx -D dri-drivers-path=xxx``
-and then install with ``sudo ninja install``.
+and then install with ``sudo meson install``.
 
 3. Runtime / Rendering Problems
 -------------------------------

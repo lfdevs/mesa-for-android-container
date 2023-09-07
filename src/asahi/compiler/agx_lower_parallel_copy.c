@@ -99,11 +99,34 @@ void
 agx_emit_parallel_copies(agx_builder *b, struct agx_copy *copies,
                          unsigned num_copies)
 {
-   struct copy_ctx _ctx = {.entry_count = num_copies};
+   /* First, lower away 64-bit copies to smaller chunks, since we don't have
+    * 64-bit ALU so we always want to split.
+    */
+   struct agx_copy *copies2 = calloc(sizeof(copies[0]), num_copies * 2);
+   unsigned num_copies2 = 0;
 
-   struct copy_ctx *ctx = &_ctx;
+   for (unsigned i = 0; i < num_copies; ++i) {
+      struct agx_copy copy = copies[i];
+
+      if (copy.src.size == AGX_SIZE_64) {
+         copy.src.size = AGX_SIZE_32;
+         copies2[num_copies2++] = copy;
+
+         copy.src.value += 2;
+         copy.dest += 2;
+         copies2[num_copies2++] = copy;
+      } else {
+         copies2[num_copies2++] = copy;
+      }
+   }
+
+   copies = copies2;
+   num_copies = num_copies2;
 
    /* Set up the bookkeeping */
+   struct copy_ctx _ctx = {.entry_count = num_copies};
+   struct copy_ctx *ctx = &_ctx;
+
    memset(ctx->physreg_dest, 0, sizeof(ctx->physreg_dest));
    memset(ctx->physreg_use_count, 0, sizeof(ctx->physreg_use_count));
 
@@ -262,4 +285,6 @@ agx_emit_parallel_copies(agx_builder *b, struct agx_copy *copies,
 
       entry->done = true;
    }
+
+   free(copies2);
 }

@@ -55,8 +55,8 @@
 
 #define NUM_DEPTH_CLEAR_PIPELINES      2
 #define NUM_DEPTH_DECOMPRESS_PIPELINES 3
-#define MAX_FRAMEBUFFER_WIDTH (1u << 14)
-#define MAX_FRAMEBUFFER_HEIGHT (1u << 14)
+#define MAX_FRAMEBUFFER_WIDTH          (1u << 14)
+#define MAX_FRAMEBUFFER_HEIGHT         (1u << 14)
 
 /*
  * This is the point we switch from using CP to compute shader
@@ -127,10 +127,9 @@
 #define RADV_SHADER_ALLOC_MIN_ARENA_SIZE (256 * 1024)
 /* 256 KiB << 5 = 8 MiB */
 #define RADV_SHADER_ALLOC_MAX_ARENA_SIZE_SHIFT 5u
-#define RADV_SHADER_ALLOC_MIN_SIZE_CLASS 8
-#define RADV_SHADER_ALLOC_MAX_SIZE_CLASS 15
-#define RADV_SHADER_ALLOC_NUM_FREE_LISTS                                                           \
-   (RADV_SHADER_ALLOC_MAX_SIZE_CLASS - RADV_SHADER_ALLOC_MIN_SIZE_CLASS + 1)
+#define RADV_SHADER_ALLOC_MIN_SIZE_CLASS       8
+#define RADV_SHADER_ALLOC_MAX_SIZE_CLASS       15
+#define RADV_SHADER_ALLOC_NUM_FREE_LISTS       (RADV_SHADER_ALLOC_MAX_SIZE_CLASS - RADV_SHADER_ALLOC_MIN_SIZE_CLASS + 1)
 
 #define PERF_CTR_MAX_PASSES      512
 #define PERF_CTR_BO_PASS_OFFSET  16
@@ -148,8 +147,11 @@
  *   offset 20|24|28|32  - generated primitive counter for stream 0|1|2|3
  *   offset 36|40|44|48  - written primitive counter for stream 0|1|2|3
  */
-#define RADV_NGG_QUERY_PIPELINE_STAT_OFFSET 16
+#define RADV_NGG_QUERY_PIPELINE_STAT_OFFSET    16
 #define RADV_NGG_QUERY_PRIM_GEN_OFFSET(stream) (20 + stream * 4)
 #define RADV_NGG_QUERY_PRIM_XFB_OFFSET(stream) (36 + stream * 4)
+
+/* Number of samples for line smooth lowering (hw requirement). */
+#define RADV_NUM_SMOOTH_AA_SAMPLES 4
 
 #endif /* RADV_CONSTANTS_H */

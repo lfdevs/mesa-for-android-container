@@ -27,7 +27,6 @@
  *
  **************************************************************************/
 
-
 /**
  * Functions related to EGLDisplay.
  */
@@ -48,13 +47,13 @@
 
 #include "eglcontext.h"
 #include "eglcurrent.h"
-#include "eglsurface.h"
 #include "egldevice.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "eglglobals.h"
-#include "egllog.h"
 #include "eglimage.h"
+#include "egllog.h"
+#include "eglsurface.h"
 #include "eglsync.h"
 
 /* Includes for _eglNativePlatformDetectNativeDisplay */
@@ -68,7 +67,6 @@
 #include <windows.h>
 #endif
 
-
 /**
  * Map build-system platform names to platform types.
  */
@@ -76,17 +74,16 @@ static const struct {
    _EGLPlatformType platform;
    const char *name;
 } egl_platforms[] = {
-   { _EGL_PLATFORM_X11, "x11" },
-   { _EGL_PLATFORM_XCB, "xcb" },
-   { _EGL_PLATFORM_WAYLAND, "wayland" },
-   { _EGL_PLATFORM_DRM, "drm" },
-   { _EGL_PLATFORM_ANDROID, "android" },
-   { _EGL_PLATFORM_HAIKU, "haiku" },
-   { _EGL_PLATFORM_SURFACELESS, "surfaceless" },
-   { _EGL_PLATFORM_DEVICE, "device" },
-   { _EGL_PLATFORM_WINDOWS, "windows" },
+   {_EGL_PLATFORM_X11, "x11"},
+   {_EGL_PLATFORM_XCB, "xcb"},
+   {_EGL_PLATFORM_WAYLAND, "wayland"},
+   {_EGL_PLATFORM_DRM, "drm"},
+   {_EGL_PLATFORM_ANDROID, "android"},
+   {_EGL_PLATFORM_HAIKU, "haiku"},
+   {_EGL_PLATFORM_SURFACELESS, "surfaceless"},
+   {_EGL_PLATFORM_DEVICE, "device"},
+   {_EGL_PLATFORM_WINDOWS, "windows"},
 };
-
 
 /**
  * Return the native platform by parsing EGL_PLATFORM.
@@ -121,9 +118,8 @@ _eglGetNativePlatformFromEnv(void)
    return plat;
 }
 
-
 /**
- * Try detecting native platform with the help of native display characteristcs.
+ * Try detecting native platform with the help of native display characteristics.
  */
 static _EGLPlatformType
 _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
@@ -137,8 +133,8 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
 #endif
 
 #if defined(HAVE_WAYLAND_PLATFORM) || defined(HAVE_DRM_PLATFORM)
-   if (_eglPointerIsDereferencable(nativeDisplay)) {
-      void *first_pointer = *(void **) nativeDisplay;
+   if (_eglPointerIsDereferenceable(nativeDisplay)) {
+      void *first_pointer = *(void **)nativeDisplay;
 
 #ifdef HAVE_WAYLAND_PLATFORM
       /* wl_display is a wl_proxy, which is a wl_object.
@@ -157,7 +153,6 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
 
    return _EGL_INVALID_PLATFORM;
 }
-
 
 /**
  * Return the native platform.  It is the platform of the EGL native types.
@@ -184,7 +179,6 @@ _eglGetNativePlatform(void *nativeDisplay)
    return detected_platform;
 }
 
-
 /**
  * Finish display management.
  */
@@ -208,7 +202,6 @@ _eglFiniDisplay(void)
             break;
          }
       }
-
 
       /* The fcntl() code in _eglGetDeviceDisplay() ensures that valid fd >= 3,
        * and invalid one is 0.
@@ -304,7 +297,6 @@ out:
    return disp;
 }
 
-
 /**
  * Destroy the contexts and surfaces that are linked to the display.
  */
@@ -318,7 +310,7 @@ _eglReleaseDisplayResources(_EGLDisplay *display)
 
    list = display->ResourceLists[_EGL_RESOURCE_CONTEXT];
    while (list) {
-      _EGLContext *ctx = (_EGLContext *) list;
+      _EGLContext *ctx = (_EGLContext *)list;
       list = list->Next;
 
       _eglUnlinkContext(ctx);
@@ -328,7 +320,7 @@ _eglReleaseDisplayResources(_EGLDisplay *display)
 
    list = display->ResourceLists[_EGL_RESOURCE_SURFACE];
    while (list) {
-      _EGLSurface *surf = (_EGLSurface *) list;
+      _EGLSurface *surf = (_EGLSurface *)list;
       list = list->Next;
 
       _eglUnlinkSurface(surf);
@@ -338,7 +330,7 @@ _eglReleaseDisplayResources(_EGLDisplay *display)
 
    list = display->ResourceLists[_EGL_RESOURCE_IMAGE];
    while (list) {
-      _EGLImage *image = (_EGLImage *) list;
+      _EGLImage *image = (_EGLImage *)list;
       list = list->Next;
 
       _eglUnlinkImage(image);
@@ -348,7 +340,7 @@ _eglReleaseDisplayResources(_EGLDisplay *display)
 
    list = display->ResourceLists[_EGL_RESOURCE_SYNC];
    while (list) {
-      _EGLSync *sync = (_EGLSync *) list;
+      _EGLSync *sync = (_EGLSync *)list;
       list = list->Next;
 
       _eglUnlinkSync(sync);
@@ -356,7 +348,6 @@ _eglReleaseDisplayResources(_EGLDisplay *display)
    }
    assert(!display->ResourceLists[_EGL_RESOURCE_SYNC]);
 }
-
 
 /**
  * Free all the data hanging of an _EGLDisplay object, but not
@@ -373,7 +364,6 @@ _eglCleanupDisplay(_EGLDisplay *disp)
    /* XXX incomplete */
 }
 
-
 /**
  * Return EGL_TRUE if the given resource is valid.  That is, the display does
  * own the resource.
@@ -382,14 +372,14 @@ EGLBoolean
 _eglCheckResource(void *res, _EGLResourceType type, _EGLDisplay *disp)
 {
    _EGLResource *list = disp->ResourceLists[type];
-   
+
    simple_mtx_assert_locked(&disp->Mutex);
 
    if (!res)
       return EGL_FALSE;
 
    while (list) {
-      if (res == (void *) list) {
+      if (res == (void *)list) {
          assert(list->Display == disp);
          break;
       }
@@ -398,7 +388,6 @@ _eglCheckResource(void *res, _EGLResourceType type, _EGLDisplay *disp)
 
    return (list != NULL);
 }
-
 
 /**
  * Initialize a display resource.  The size of the subclass object is
@@ -415,7 +404,6 @@ _eglInitResource(_EGLResource *res, EGLint size, _EGLDisplay *disp)
    res->RefCount = 1;
 }
 
-
 /**
  * Increment reference count for the resource.
  */
@@ -426,7 +414,6 @@ _eglGetResource(_EGLResource *res)
    p_atomic_inc(&res->RefCount);
 }
 
-
 /**
  * Decrement reference count for the resource.
  */
@@ -436,7 +423,6 @@ _eglPutResource(_EGLResource *res)
    assert(res && res->RefCount > 0);
    return p_atomic_dec_zero(&res->RefCount);
 }
-
 
 /**
  * Link a resource to its display.
@@ -452,7 +438,6 @@ _eglLinkResource(_EGLResource *res, _EGLResourceType type)
    res->Display->ResourceLists[type] = res;
    _eglGetResource(res);
 }
-
 
 /**
  * Unlink a linked resource from its display.
@@ -473,8 +458,7 @@ _eglUnlinkResource(_EGLResource *res, _EGLResourceType type)
       }
       assert(prev);
       prev->Next = res->Next;
-   }
-   else {
+   } else {
       res->Display->ResourceLists[type] = res->Next;
    }
 
@@ -487,9 +471,8 @@ _eglUnlinkResource(_EGLResource *res, _EGLResourceType type)
 }
 
 #ifdef HAVE_X11_PLATFORM
-_EGLDisplay*
-_eglGetX11Display(Display *native_display,
-                  const EGLAttrib *attrib_list)
+_EGLDisplay *
+_eglGetX11Display(Display *native_display, const EGLAttrib *attrib_list)
 {
    /* EGL_EXT_platform_x11 recognizes exactly one attribute,
     * EGL_PLATFORM_X11_SCREEN_EXT, which is optional.
@@ -507,7 +490,7 @@ _eglGetX11Display(Display *native_display,
 #endif /* HAVE_X11_PLATFORM */
 
 #ifdef HAVE_XCB_PLATFORM
-_EGLDisplay*
+_EGLDisplay *
 _eglGetXcbDisplay(xcb_connection_t *native_display,
                   const EGLAttrib *attrib_list)
 {
@@ -528,7 +511,7 @@ _eglGetXcbDisplay(xcb_connection_t *native_display,
 #endif /* HAVE_XCB_PLATFORM */
 
 #ifdef HAVE_DRM_PLATFORM
-_EGLDisplay*
+_EGLDisplay *
 _eglGetGbmDisplay(struct gbm_device *native_display,
                   const EGLAttrib *attrib_list)
 {
@@ -543,7 +526,7 @@ _eglGetGbmDisplay(struct gbm_device *native_display,
 #endif /* HAVE_DRM_PLATFORM */
 
 #ifdef HAVE_WAYLAND_PLATFORM
-_EGLDisplay*
+_EGLDisplay *
 _eglGetWaylandDisplay(struct wl_display *native_display,
                       const EGLAttrib *attrib_list)
 {
@@ -557,9 +540,8 @@ _eglGetWaylandDisplay(struct wl_display *native_display,
 }
 #endif /* HAVE_WAYLAND_PLATFORM */
 
-_EGLDisplay*
-_eglGetSurfacelessDisplay(void *native_display,
-                          const EGLAttrib *attrib_list)
+_EGLDisplay *
+_eglGetSurfacelessDisplay(void *native_display, const EGLAttrib *attrib_list)
 {
    /* This platform has no native display. */
    if (native_display != NULL) {
@@ -578,9 +560,8 @@ _eglGetSurfacelessDisplay(void *native_display,
 }
 
 #ifdef HAVE_ANDROID_PLATFORM
-_EGLDisplay*
-_eglGetAndroidDisplay(void *native_display,
-                          const EGLAttrib *attrib_list)
+_EGLDisplay *
+_eglGetAndroidDisplay(void *native_display, const EGLAttrib *attrib_list)
 {
 
    /* This platform recognizes no display attributes. */
@@ -589,14 +570,12 @@ _eglGetAndroidDisplay(void *native_display,
       return NULL;
    }
 
-   return _eglFindDisplay(_EGL_PLATFORM_ANDROID, native_display,
-                          attrib_list);
+   return _eglFindDisplay(_EGL_PLATFORM_ANDROID, native_display, attrib_list);
 }
 #endif /* HAVE_ANDROID_PLATFORM */
 
-_EGLDisplay*
-_eglGetDeviceDisplay(void *native_display,
-                     const EGLAttrib *attrib_list)
+_EGLDisplay *
+_eglGetDeviceDisplay(void *native_display, const EGLAttrib *attrib_list)
 {
    _EGLDevice *dev;
    _EGLDisplay *display;
@@ -623,7 +602,7 @@ _eglGetDeviceDisplay(void *native_display,
             return NULL;
          }
 
-         fd = (int) value;
+         fd = (int)value;
       }
    }
 
@@ -635,7 +614,7 @@ _eglGetDeviceDisplay(void *native_display,
 
    /* If the fd is explicitly provided and we did not dup() it yet, do so.
     * The spec mandates that we do so, since we'll need it past the
-    * eglGetPlatformDispay call.
+    * eglGetPlatformDisplay call.
     *
     * The new fd is guaranteed to be 3 or greater.
     */

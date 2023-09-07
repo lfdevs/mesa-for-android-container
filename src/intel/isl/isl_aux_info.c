@@ -92,7 +92,7 @@ static const struct aux_usage_info info[] = {
    AUX(         COMPRESS, Y, Y, Y, x, MCS)
    AUX(         COMPRESS, Y, Y, Y, x, MCS_CCS)
    AUX(         COMPRESS, Y, Y, Y, Y, CCS_E)
-   AUX(   COMPRESS_CLEAR, Y, Y, Y, Y, GFX12_CCS_E)
+   AUX(   COMPRESS_CLEAR, Y, Y, Y, Y, FCV_CCS_E)
    AUX(RESOLVE_AMBIGUATE, x, Y, x, Y, CCS_D)
    AUX(RESOLVE_AMBIGUATE, Y, x, x, Y, MC)
    AUX(         COMPRESS, Y, x, x, Y, STC_CCS)

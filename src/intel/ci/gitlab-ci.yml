@@ -1,6 +1,6 @@
 .intel-common-test:
   extends:
-    - .lava-test-deqp:amd64
+    - .lava-test-deqp:x86_64
   variables:
     DTB: ""
     BOOT_METHOD: depthcharge
@@ -65,6 +65,26 @@ hasvk-hsw:
     - hasvk-hsw-full
   variables:
     DEQP_FRACTION: 10
+
+anv-tgl-angle:
+  extends:
+    - .anv-tgl-test
+    - .intel-rules # Note: Xorg uses iris, so depend on both GL and vulkan
+  variables:
+    DEQP_SUITE: anv-tgl-angle
+    GPU_VERSION: angle-anv-tgl
+    VK_DRIVER: intel
+    USE_ANGLE: 1
+    # ANGLE requires X11 running for some reason.
+    HWCI_START_XORG: 1
+
+anv-tgl-angle-full:
+  extends:
+    - anv-tgl-angle
+    - .intel-manual-rules
+  variables:
+    DEQP_SUITE: anv-tgl-angle-full
+    JOB_TIMEOUT: 60
 
 ## Iris only
 # 5 boards
@@ -298,7 +318,7 @@ iris-cml-traces:
     HWCI_FREQ_MAX: "true"
     LAVA_TAGS: "cbg-0"
     # Ensure that we are using the release build artifact
-    MINIO_ARTIFACT_NAME: mesa-amd64-release
+    S3_ARTIFACT_NAME: mesa-x86_64-default-release
 
 iris-apl-traces-performance:
   extends:

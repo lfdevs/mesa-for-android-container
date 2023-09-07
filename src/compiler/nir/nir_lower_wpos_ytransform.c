@@ -23,7 +23,6 @@
 
 #include "nir.h"
 #include "nir_builder.h"
-#include "program/prog_instruction.h"
 
 /* Lower gl_FragCoord (and fddy) to account for driver's requested coordinate-
  * origin and pixel-center vs. shader.  If transformation is required, a
@@ -33,8 +32,6 @@
  *
  * This is based on the logic in emit_wpos()/emit_wpos_adjustment() in TGSI
  * compiler.
- *
- * Run before nir_lower_io.
  */
 
 typedef struct {
@@ -51,16 +48,11 @@ get_transform(lower_wpos_ytransform_state *state)
       /* NOTE: name must be prefixed w/ "gl_" to trigger slot based
        * special handling in uniform setup:
        */
-      nir_variable *var = nir_variable_create(state->shader,
-                                              nir_var_uniform,
-                                              glsl_vec4_type(),
-                                              "gl_FbWposYTransform");
+      nir_variable *var = nir_state_variable_create(state->shader,
+                                                    glsl_vec4_type(),
+                                                    "gl_FbWposYTransform",
+                                                    state->options->state_tokens);
 
-      var->num_state_slots = 1;
-      var->state_slots = ralloc_array(var, nir_state_slot, 1);
-      var->state_slots[0].swizzle = SWIZZLE_XYZW;
-      memcpy(var->state_slots[0].tokens, state->options->state_tokens,
-             sizeof(var->state_slots[0].tokens));
       var->data.how_declared = nir_var_hidden;
       state->transform = var;
    }
@@ -71,7 +63,7 @@ get_transform(lower_wpos_ytransform_state *state)
 static nir_ssa_def *
 nir_cmp(nir_builder *b, nir_ssa_def *src0, nir_ssa_def *src1, nir_ssa_def *src2)
 {
-   return nir_bcsel(b, nir_flt(b, src0, nir_imm_float(b, 0.0)), src1, src2);
+   return nir_bcsel(b, nir_flt_imm(b, src0, 0.0), src1, src2);
 }
 
 /* see emit_wpos_adjustment() in st_mesa_to_tgsi.c */
@@ -256,24 +248,28 @@ lower_fddy(lower_wpos_ytransform_state *state, nir_alu_instr *fddy)
       fddy->src[0].swizzle[i] = MIN2(i, pt->num_components - 1);
 }
 
-/* Multiply interp_deref_at_offset's offset by transform.x to flip it. */
+/* Multiply interp_deref_at_offset's or load_barycentric_at_offset's offset
+ * by transform.x to flip it.
+ */
 static void
-lower_interp_deref_at_offset(lower_wpos_ytransform_state *state,
-                           nir_intrinsic_instr *interp)
+lower_interp_deref_or_load_baryc_at_offset(lower_wpos_ytransform_state *state,
+                                           nir_intrinsic_instr *intr,
+                                           unsigned offset_src)
 {
    nir_builder *b = &state->b;
    nir_ssa_def *offset;
    nir_ssa_def *flip_y;
 
-   b->cursor = nir_before_instr(&interp->instr);
+   b->cursor = nir_before_instr(&intr->instr);
 
-   offset = nir_ssa_for_src(b, interp->src[1], 2);
+   offset = nir_ssa_for_src(b, intr->src[offset_src], 2);
    flip_y = nir_fmul(b, nir_channel(b, offset, 1),
                         nir_channel(b, get_transform(state), 0));
-   nir_instr_rewrite_src(&interp->instr, &interp->src[1],
+   nir_instr_rewrite_src(&intr->instr, &intr->src[offset_src],
                          nir_src_for_ssa(nir_vec2(b, nir_channel(b, offset, 0),
                                                      flip_y)));
 }
+
 
 static void
 lower_load_sample_pos(lower_wpos_ytransform_state *state,
@@ -295,53 +291,46 @@ lower_load_sample_pos(lower_wpos_ytransform_state *state,
                                   flipped_pos->parent_instr);
 }
 
-static void
-lower_wpos_ytransform_block(lower_wpos_ytransform_state *state, nir_block *block)
+static bool
+lower_wpos_ytransform_instr(nir_builder *b, nir_instr *instr,
+                            void *data)
 {
-   nir_foreach_instr_safe(instr, block) {
-      if (instr->type == nir_instr_type_intrinsic) {
-         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-         if (intr->intrinsic == nir_intrinsic_load_deref) {
-            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-            nir_variable *var = nir_deref_instr_get_variable(deref);
+   lower_wpos_ytransform_state *state = data;
+   state->b = *b;
 
-            if ((var->data.mode == nir_var_shader_in &&
-                 var->data.location == VARYING_SLOT_POS) ||
-                (var->data.mode == nir_var_system_value &&
-                 var->data.location == SYSTEM_VALUE_FRAG_COORD)) {
-               /* gl_FragCoord should not have array/struct derefs: */
-               lower_fragcoord(state, intr);
-            } else if (var->data.mode == nir_var_system_value &&
-                       var->data.location == SYSTEM_VALUE_SAMPLE_POS) {
-               lower_load_sample_pos(state, intr);
-            }
-         } else if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
+   if (instr->type == nir_instr_type_intrinsic) {
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+      if (intr->intrinsic == nir_intrinsic_load_deref) {
+         nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+         nir_variable *var = nir_deref_instr_get_variable(deref);
+         if ((var->data.mode == nir_var_shader_in &&
+              var->data.location == VARYING_SLOT_POS) ||
+             (var->data.mode == nir_var_system_value &&
+              var->data.location == SYSTEM_VALUE_FRAG_COORD)) {
+            /* gl_FragCoord should not have array/struct derefs: */
             lower_fragcoord(state, intr);
-         } else if (intr->intrinsic == nir_intrinsic_load_sample_pos) {
+         } else if (var->data.mode == nir_var_system_value &&
+                    var->data.location == SYSTEM_VALUE_SAMPLE_POS) {
             lower_load_sample_pos(state, intr);
-         } else if (intr->intrinsic == nir_intrinsic_interp_deref_at_offset) {
-            lower_interp_deref_at_offset(state, intr);
          }
-      } else if (instr->type == nir_instr_type_alu) {
-         nir_alu_instr *alu = nir_instr_as_alu(instr);
-         if (alu->op == nir_op_fddy ||
-             alu->op == nir_op_fddy_fine ||
-             alu->op == nir_op_fddy_coarse)
-            lower_fddy(state, alu);
+      } else if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
+         lower_fragcoord(state, intr);
+      } else if (intr->intrinsic == nir_intrinsic_load_sample_pos) {
+         lower_load_sample_pos(state, intr);
+      } else if (intr->intrinsic == nir_intrinsic_interp_deref_at_offset) {
+         lower_interp_deref_or_load_baryc_at_offset(state, intr, 1);
+      } else if (intr->intrinsic == nir_intrinsic_load_barycentric_at_offset) {
+         lower_interp_deref_or_load_baryc_at_offset(state, intr, 0);
       }
+   } else if (instr->type == nir_instr_type_alu) {
+      nir_alu_instr *alu = nir_instr_as_alu(instr);
+      if (alu->op == nir_op_fddy ||
+          alu->op == nir_op_fddy_fine ||
+          alu->op == nir_op_fddy_coarse)
+         lower_fddy(state, alu);
    }
-}
 
-static void
-lower_wpos_ytransform_impl(lower_wpos_ytransform_state *state, nir_function_impl *impl)
-{
-   nir_builder_init(&state->b, impl);
-
-   nir_foreach_block(block, impl) {
-      lower_wpos_ytransform_block(state, block);
-   }
-   nir_metadata_preserve(impl, nir_metadata_block_index |
-                               nir_metadata_dominance);
+   return state->transform != NULL;
 }
 
 bool
@@ -355,10 +344,9 @@ nir_lower_wpos_ytransform(nir_shader *shader,
 
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         lower_wpos_ytransform_impl(&state, function->impl);
-   }
-
-   return state.transform != NULL;
+   return nir_shader_instructions_pass(shader,
+                                       lower_wpos_ytransform_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       &state);
 }

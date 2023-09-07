@@ -32,6 +32,7 @@
 #include "nir_serialize.h"
 
 #include "util/mesa-sha1.h"
+#include "util/mesa-blake3.h"
 
 bool
 vk_pipeline_shader_stage_is_null(const VkPipelineShaderStageCreateInfo *info)
@@ -176,12 +177,12 @@ vk_pipeline_hash_shader_stage(const VkPipelineShaderStageCreateInfo *info,
    _mesa_sha1_update(&ctx, &info->stage, sizeof(info->stage));
 
    if (module) {
-      _mesa_sha1_update(&ctx, module->sha1, sizeof(module->sha1));
+      _mesa_sha1_update(&ctx, module->hash, sizeof(module->hash));
    } else if (minfo) {
-      unsigned char spirv_sha1[SHA1_DIGEST_LENGTH];
+      blake3_hash spirv_hash;
 
-      _mesa_sha1_compute(minfo->pCode, minfo->codeSize, spirv_sha1);
-      _mesa_sha1_update(&ctx, spirv_sha1, sizeof(spirv_sha1));
+      _mesa_blake3_compute(minfo->pCode, minfo->codeSize, spirv_hash);
+      _mesa_sha1_update(&ctx, spirv_hash, sizeof(spirv_hash));
    } else {
       /* It is legal to pass in arbitrary identifiers as long as they don't exceed
        * the limit. Shaders with bogus identifiers are more or less guaranteed to fail. */

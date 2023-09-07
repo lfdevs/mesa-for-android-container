@@ -218,8 +218,8 @@ upload_STIPPLE(struct i915_context *i915)
    /* I915_NEW_STIPPLE
     */
    {
-      const ubyte *mask = (const ubyte *)i915->poly_stipple.stipple;
-      ubyte p[4];
+      const uint8_t *mask = (const uint8_t *)i915->poly_stipple.stipple;
+      uint8_t p[4];
 
       p[0] = mask[12] & 0xf;
       p[1] = mask[8] & 0xf;

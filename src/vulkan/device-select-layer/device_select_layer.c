@@ -42,6 +42,7 @@
 #include "util/hash_table.h"
 #include "vk_util.h"
 #include "util/simple_mtx.h"
+#include "util/u_debug.h"
 
 struct instance_info {
    PFN_vkDestroyInstance DestroyInstance;
@@ -408,6 +409,11 @@ static int find_non_cpu_skip(struct device_pci_info *pci_infos,
    return -1;
 }
 
+static bool should_debug_device_selection() {
+   return debug_get_bool_option("MESA_VK_DEVICE_SELECT_DEBUG", false) ||
+      debug_get_bool_option("DRI_PRIME_DEBUG", false);
+}
+
 static uint32_t get_default_device(const struct instance_info *info,
                                    const char *selection,
                                    uint32_t physical_device_count,
@@ -415,6 +421,7 @@ static uint32_t get_default_device(const struct instance_info *info,
 {
    int default_idx = -1;
    const char *dri_prime = getenv("DRI_PRIME");
+   bool debug = should_debug_device_selection();
    bool dri_prime_is_one = false;
    int cpu_count = 0;
    if (dri_prime && !strcmp(dri_prime, "1"))
@@ -434,6 +441,8 @@ static uint32_t get_default_device(const struct instance_info *info,
    if (default_idx == -1 && dri_prime && !dri_prime_is_one) {
       /* Try DRI_PRIME=vendor_id:device_id */
       default_idx = device_select_find_explicit_default(pci_infos, physical_device_count, dri_prime);
+      if (debug && default_idx != -1)
+         fprintf(stderr, "device-select: device_select_find_explicit_default selected %i\n", default_idx);
 
       if (default_idx == -1) {
          /* Try DRI_PRIME=pci-xxxx_yy_zz_w */
@@ -441,17 +450,33 @@ static uint32_t get_default_device(const struct instance_info *info,
             fprintf(stderr, "device-select: cannot correctly use DRI_PRIME tag\n");
          else
             default_idx = device_select_find_dri_prime_tag_default(pci_infos, physical_device_count, dri_prime);
+
+         if (debug && default_idx != -1)
+            fprintf(stderr, "device-select: device_select_find_dri_prime_tag_default selected %i\n", default_idx);
       }
    }
-   if (default_idx == -1 && info->has_wayland)
+   if (default_idx == -1 && info->has_wayland) {
       default_idx = device_select_find_wayland_pci_default(pci_infos, physical_device_count);
-   if (default_idx == -1 && info->has_xcb)
+      if (debug && default_idx != -1)
+         fprintf(stderr, "device-select: device_select_find_wayland_pci_default selected %i\n", default_idx);
+   }
+   if (default_idx == -1 && info->has_xcb) {
       default_idx = device_select_find_xcb_pci_default(pci_infos, physical_device_count);
+      if (debug && default_idx != -1)
+         fprintf(stderr, "device-select: device_select_find_xcb_pci_default selected %i\n", default_idx);
+   }
    if (default_idx == -1) {
       if (info->has_vulkan11 && info->has_pci_bus)
          default_idx = device_select_find_boot_vga_default(pci_infos, physical_device_count);
       else
          default_idx = device_select_find_boot_vga_vid_did(pci_infos, physical_device_count);
+      if (debug && default_idx != -1)
+         fprintf(stderr, "device-select: device_select_find_boot_vga selected %i\n", default_idx);
+   }
+   if (default_idx == -1 && cpu_count) {
+      default_idx = device_select_find_non_cpu(pci_infos, physical_device_count);
+      if (debug && default_idx != -1)
+         fprintf(stderr, "device-select: device_select_find_non_cpu selected %i\n", default_idx);
    }
    /* If no GPU has been selected so far, select the first non-CPU device. If none are available,
     * pick the first CPU device.
@@ -459,14 +484,19 @@ static uint32_t get_default_device(const struct instance_info *info,
    if (default_idx == -1) {
       default_idx = device_select_find_non_cpu(pci_infos, physical_device_count);
       if (default_idx != -1) {
-         /* device_select_find_non_cpu picked a default, do nothing */
+         if (debug)
+            fprintf(stderr, "device-select: device_select_find_non_cpu selected %i\n", default_idx);
       } else if (cpu_count) {
          default_idx = 0;
       }
    }
    /* DRI_PRIME=1 handling - pick any other device than default. */
+   if (dri_prime_is_one && debug)
+      fprintf(stderr, "device-select: DRI_PRIME=1, default_idx so far: %i\n", default_idx);
    if (default_idx != -1 && dri_prime_is_one && physical_device_count > (cpu_count + 1)) {
       default_idx = find_non_cpu_skip(pci_infos, physical_device_count, default_idx);
+      if (debug && default_idx != -1)
+         fprintf(stderr, "device-select: find_non_cpu_skip selected %i\n", default_idx);
    }
    free(pci_infos);
    return default_idx == -1 ? 0 : default_idx;
@@ -512,19 +542,21 @@ static VkResult device_select_EnumeratePhysicalDevices(VkInstance instance,
 	 free(extensions);
       }
    }
-   if (selection && strcmp(selection, "list") == 0) {
+   if (should_debug_device_selection() || (selection && strcmp(selection, "list") == 0)) {
       fprintf(stderr, "selectable devices:\n");
       for (unsigned i = 0; i < physical_device_count; ++i)
          print_gpu(info, i, physical_devices[i]);
-      exit(0);
-   } else {
-      unsigned selected_index = get_default_device(info, selection, physical_device_count, physical_devices);
-      selected_physical_device_count = physical_device_count;
-      selected_physical_devices[0] = physical_devices[selected_index];
-      for (unsigned i = 0; i < physical_device_count - 1; ++i) {
-         unsigned  this_idx = i < selected_index ? i : i + 1;
-         selected_physical_devices[i + 1] = physical_devices[this_idx];
-      }
+      
+      if (selection && strcmp(selection, "list") == 0)
+         exit(0);
+   }
+
+   unsigned selected_index = get_default_device(info, selection, physical_device_count, physical_devices);
+   selected_physical_device_count = physical_device_count;
+   selected_physical_devices[0] = physical_devices[selected_index];
+   for (unsigned i = 0; i < physical_device_count - 1; ++i) {
+      unsigned  this_idx = i < selected_index ? i : i + 1;
+      selected_physical_devices[i + 1] = physical_devices[this_idx];
    }
 
    if (selected_physical_device_count == 0) {

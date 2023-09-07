@@ -64,7 +64,7 @@ struct pvr_spm_eot_state {
    uint64_t pbe_reg_words[PVR_MAX_COLOR_ATTACHMENTS]
                          [ROGUE_NUM_PBESTATE_REG_WORDS];
 
-   struct pvr_bo *usc_eot_program;
+   struct pvr_suballoc_bo *usc_eot_program;
 
    /* TODO: Make this struct pvr_pds_upload? It would pull in pvr_private.h
     * though which causes a cycle since that includes pvr_spm.h .
@@ -73,7 +73,7 @@ struct pvr_spm_eot_state {
     * creation.
     */
    uint64_t pixel_event_program_data_offset;
-   struct pvr_bo *pixel_event_program_data_upload;
+   struct pvr_suballoc_bo *pixel_event_program_data_upload;
 };
 
 struct pvr_spm_bgobj_state {
@@ -82,7 +82,7 @@ struct pvr_spm_bgobj_state {
    /* TODO: Make this struct pvr_pds_upload? It would pull in pvr_private.h
     * though which causes a cycle since that includes pvr_spm.h .
     */
-   struct pvr_bo *pds_texture_data_upload;
+   struct pvr_suballoc_bo *pds_texture_data_upload;
 
    uint64_t pds_reg_values[ROGUE_NUM_CR_PDS_BGRND_WORDS];
 };

@@ -38,23 +38,6 @@ struct anv_measure_batch {
 void
 anv_measure_device_init(struct anv_physical_device *device)
 {
-   switch (device->info.verx10) {
-   case 125:
-      device->cmd_emit_timestamp = &gfx125_cmd_emit_timestamp;
-      break;
-   case 120:
-      device->cmd_emit_timestamp = &gfx12_cmd_emit_timestamp;
-      break;
-   case 110:
-      device->cmd_emit_timestamp = &gfx11_cmd_emit_timestamp;
-      break;
-   case 90:
-      device->cmd_emit_timestamp = &gfx9_cmd_emit_timestamp;
-      break;
-   default:
-      assert(false);
-   }
-
    /* initialise list of measure structures that await rendering */
    struct intel_measure_device *measure_device = &device->measure_device;
    intel_measure_init(measure_device);
@@ -104,16 +87,18 @@ anv_measure_init(struct anv_cmd_buffer *cmd_buffer)
                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
    memset(measure, 0, batch_bytes);
+   cmd_buffer->measure = measure;
+   if(config->cpu_measure)
+      return;
+
    ASSERTED VkResult result =
       anv_device_alloc_bo(device, "measure data",
                           config->batch_size * sizeof(uint64_t),
-                          ANV_BO_ALLOC_MAPPED,
+                          ANV_BO_ALLOC_MAPPED | ANV_BO_ALLOC_SNOOPED,
                           0,
                           (struct anv_bo**)&measure->bo);
    measure->base.timestamps = measure->bo->map;
    assert(result == VK_SUCCESS);
-
-   cmd_buffer->measure = measure;
 }
 
 static void
@@ -126,6 +111,7 @@ anv_measure_start_snapshot(struct anv_cmd_buffer *cmd_buffer,
    struct anv_measure_batch *measure = cmd_buffer->measure;
    struct anv_physical_device *device = cmd_buffer->device->physical;
    struct intel_measure_device *measure_device = &device->measure_device;
+   struct intel_measure_config *config = config_from_command_buffer(cmd_buffer);
 
    const unsigned device_frame = measure_device->frame;
 
@@ -135,28 +121,26 @@ anv_measure_start_snapshot(struct anv_cmd_buffer *cmd_buffer,
    if (measure->base.frame == 0)
       measure->base.frame = device_frame;
 
-//   uintptr_t framebuffer = (uintptr_t)cmd_buffer->state.framebuffer;
-//
-//   if (!measure->base.framebuffer &&
-//       cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY)
-//      /* secondary command buffer inherited the framebuffer from the primary */
-//      measure->base.framebuffer = framebuffer;
-//
-//   /* verify framebuffer has been properly tracked */
-//   assert(type == INTEL_SNAPSHOT_END ||
-//          framebuffer == measure->base.framebuffer ||
-//          framebuffer == 0 ); /* compute has no framebuffer */
-
    unsigned index = measure->base.index++;
+   if (event_name == NULL)
+      event_name = intel_measure_snapshot_string(type);
+
+   if (config->cpu_measure) {
+      intel_measure_print_cpu_result(measure->base.frame,
+                                     measure->base.batch_count,
+                                     index/2,
+                                     measure->base.event_count,
+                                     count,
+                                     event_name);
+      return;
+   }
 
    (*device->cmd_emit_timestamp)(batch, cmd_buffer->device,
                                  (struct anv_address) {
                                     .bo = measure->bo,
                                     .offset = index * sizeof(uint64_t) },
-                                 ANV_TIMESTAMP_CAPTURE_AT_CS_STALL);
-
-   if (event_name == NULL)
-      event_name = intel_measure_snapshot_string(type);
+                                 ANV_TIMESTAMP_CAPTURE_AT_CS_STALL,
+                                 NULL);
 
    struct intel_measure_snapshot *snapshot = &(measure->base.snapshots[index]);
    memset(snapshot, 0, sizeof(*snapshot));
@@ -164,20 +148,21 @@ anv_measure_start_snapshot(struct anv_cmd_buffer *cmd_buffer,
    snapshot->count = (unsigned) count;
    snapshot->event_count = measure->base.event_count;
    snapshot->event_name = event_name;
-//   snapshot->framebuffer = framebuffer;
+   snapshot->renderpass = (type == INTEL_SNAPSHOT_COMPUTE) ? 0
+                            : measure->base.renderpass;
 
    if (type == INTEL_SNAPSHOT_COMPUTE && cmd_buffer->state.compute.pipeline) {
       snapshot->cs = (uintptr_t) cmd_buffer->state.compute.pipeline->cs;
    } else if (cmd_buffer->state.gfx.pipeline) {
       const struct anv_graphics_pipeline *pipeline =
          cmd_buffer->state.gfx.pipeline;
-      snapshot->vs = (uintptr_t) pipeline->shaders[MESA_SHADER_VERTEX];
-      snapshot->tcs = (uintptr_t) pipeline->shaders[MESA_SHADER_TESS_CTRL];
-      snapshot->tes = (uintptr_t) pipeline->shaders[MESA_SHADER_TESS_EVAL];
-      snapshot->gs = (uintptr_t) pipeline->shaders[MESA_SHADER_GEOMETRY];
-      snapshot->fs = (uintptr_t) pipeline->shaders[MESA_SHADER_FRAGMENT];
-      snapshot->ms = (uintptr_t) pipeline->shaders[MESA_SHADER_MESH];
-      snapshot->ts = (uintptr_t) pipeline->shaders[MESA_SHADER_TASK];
+      snapshot->vs = (uintptr_t) pipeline->base.shaders[MESA_SHADER_VERTEX];
+      snapshot->tcs = (uintptr_t) pipeline->base.shaders[MESA_SHADER_TESS_CTRL];
+      snapshot->tes = (uintptr_t) pipeline->base.shaders[MESA_SHADER_TESS_EVAL];
+      snapshot->gs = (uintptr_t) pipeline->base.shaders[MESA_SHADER_GEOMETRY];
+      snapshot->fs = (uintptr_t) pipeline->base.shaders[MESA_SHADER_FRAGMENT];
+      snapshot->ms = (uintptr_t) pipeline->base.shaders[MESA_SHADER_MESH];
+      snapshot->ts = (uintptr_t) pipeline->base.shaders[MESA_SHADER_TASK];
    }
 }
 
@@ -188,15 +173,19 @@ anv_measure_end_snapshot(struct anv_cmd_buffer *cmd_buffer,
    struct anv_batch *batch = &cmd_buffer->batch;
    struct anv_measure_batch *measure = cmd_buffer->measure;
    struct anv_physical_device *device = cmd_buffer->device->physical;
+   struct intel_measure_config *config = config_from_command_buffer(cmd_buffer);
 
    unsigned index = measure->base.index++;
    assert(index % 2 == 1);
+   if (config->cpu_measure)
+      return;
 
    (*device->cmd_emit_timestamp)(batch, cmd_buffer->device,
                                  (struct anv_address) {
                                     .bo = measure->bo,
                                     .offset = index * sizeof(uint64_t) },
-                                 ANV_TIMESTAMP_CAPTURE_AT_CS_STALL);
+                                 ANV_TIMESTAMP_CAPTURE_AT_CS_STALL,
+                                 NULL);
 
    struct intel_measure_snapshot *snapshot = &(measure->base.snapshots[index]);
    memset(snapshot, 0, sizeof(*snapshot));
@@ -222,13 +211,13 @@ state_changed(struct anv_cmd_buffer *cmd_buffer,
    } else if (type == INTEL_SNAPSHOT_DRAW) {
       const struct anv_graphics_pipeline *gfx = cmd_buffer->state.gfx.pipeline;
       assert(gfx);
-      vs = (uintptr_t) gfx->shaders[MESA_SHADER_VERTEX];
-      tcs = (uintptr_t) gfx->shaders[MESA_SHADER_TESS_CTRL];
-      tes = (uintptr_t) gfx->shaders[MESA_SHADER_TESS_EVAL];
-      gs = (uintptr_t) gfx->shaders[MESA_SHADER_GEOMETRY];
-      fs = (uintptr_t) gfx->shaders[MESA_SHADER_FRAGMENT];
-      ms = (uintptr_t) gfx->shaders[MESA_SHADER_MESH];
-      ts = (uintptr_t) gfx->shaders[MESA_SHADER_TASK];
+      vs = (uintptr_t) gfx->base.shaders[MESA_SHADER_VERTEX];
+      tcs = (uintptr_t) gfx->base.shaders[MESA_SHADER_TESS_CTRL];
+      tes = (uintptr_t) gfx->base.shaders[MESA_SHADER_TESS_EVAL];
+      gs = (uintptr_t) gfx->base.shaders[MESA_SHADER_GEOMETRY];
+      fs = (uintptr_t) gfx->base.shaders[MESA_SHADER_FRAGMENT];
+      ms = (uintptr_t) gfx->base.shaders[MESA_SHADER_MESH];
+      ts = (uintptr_t) gfx->base.shaders[MESA_SHADER_TASK];
    }
    /* else blorp, all programs NULL */
 
@@ -323,7 +312,7 @@ anv_measure_reset(struct anv_cmd_buffer *cmd_buffer)
    assert(cmd_buffer->device != NULL);
 
    measure->base.index = 0;
-//   measure->base.framebuffer = 0;
+   measure->base.renderpass = 0;
    measure->base.frame = 0;
    measure->base.event_count = 0;
    list_inithead(&measure->base.link);
@@ -347,7 +336,8 @@ anv_measure_destroy(struct anv_cmd_buffer *cmd_buffer)
     */
    intel_measure_gather(&physical->measure_device, &physical->info);
 
-   anv_device_release_bo(device, measure->bo);
+   if (measure->bo != NULL)
+      anv_device_release_bo(device, measure->bo);
    vk_free(&cmd_buffer->vk.pool->alloc, measure);
    cmd_buffer->measure = NULL;
 }
@@ -402,6 +392,9 @@ _anv_measure_submit(struct anv_cmd_buffer *cmd_buffer)
       base->event_count = 0;
    }
 
+   if (config->cpu_measure)
+      return;
+
    /* Mark the final timestamp as 'not completed'.  This marker will be used
     * to verify that rendering is complete.
     */
@@ -455,15 +448,11 @@ _anv_measure_beginrenderpass(struct anv_cmd_buffer *cmd_buffer)
 {
    struct intel_measure_config *config = config_from_command_buffer(cmd_buffer);
    struct anv_measure_batch *measure = cmd_buffer->measure;
+   struct anv_physical_device *device = cmd_buffer->device->physical;
+   struct intel_measure_device *measure_device = &device->measure_device;
 
-   if (!config)
+   if (!config || !measure)
       return;
-   if (measure == NULL)
-      return;
-
-//   if (measure->base.framebuffer == (uintptr_t) cmd_buffer->state.framebuffer)
-//      /* no change */
-//      return;
 
    bool filtering = (config->flags & (INTEL_MEASURE_RENDERPASS |
                                       INTEL_MEASURE_SHADER));
@@ -474,7 +463,8 @@ _anv_measure_beginrenderpass(struct anv_cmd_buffer *cmd_buffer)
       measure->base.event_count = 0;
    }
 
-//   measure->base.framebuffer = (uintptr_t) cmd_buffer->state.framebuffer;
+   measure->base.renderpass =
+      (uintptr_t) p_atomic_inc_return(&measure_device->render_pass_count);
 }
 
 void

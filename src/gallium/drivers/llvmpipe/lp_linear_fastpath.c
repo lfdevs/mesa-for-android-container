@@ -56,7 +56,7 @@
 /* Linear shader which implements the BLIT_RGBA shader with the
  * additional constraints imposed by lp_setup_is_blit().
  */
-static boolean
+static bool
 lp_linear_blit_rgba_blit(const struct lp_rast_state *state,
                          unsigned x, unsigned y,
                          unsigned width, unsigned height,
@@ -66,8 +66,8 @@ lp_linear_blit_rgba_blit(const struct lp_rast_state *state,
                          uint8_t *color,
                          unsigned stride)
 {
-   const struct lp_jit_context *context = &state->jit_context;
-   const struct lp_jit_texture *texture = &context->textures[0];
+   const struct lp_jit_resources *resources = &state->jit_resources;
+   const struct lp_jit_texture *texture = &resources->textures[0];
 
    LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
@@ -76,7 +76,7 @@ lp_linear_blit_rgba_blit(const struct lp_rast_state *state,
    if (a0[0][3] != 1.0 ||
        dadx[0][3] != 0.0 ||
        dady[0][3] != 0.0)
-      return FALSE;
+      return false;
 
    const int src_x = x + util_iround(a0[1][0]*texture->width - 0.5f);
    const int src_y = y + util_iround(a0[1][1]*texture->height - 0.5f);
@@ -90,7 +90,7 @@ lp_linear_blit_rgba_blit(const struct lp_rast_state *state,
        src_y < 0 ||
        src_x + width > texture->width ||
        src_y + height > texture->height)
-      return FALSE;
+      return false;
 
    util_copy_rect(color, PIPE_FORMAT_B8G8R8A8_UNORM, stride,
                   x, y,
@@ -98,14 +98,14 @@ lp_linear_blit_rgba_blit(const struct lp_rast_state *state,
                   src, src_stride,
                   src_x, src_y);
 
-   return TRUE;
+   return true;
 }
 
 
 /* Linear shader which implements the BLIT_RGB1 shader, with the
  * additional constraints imposed by lp_setup_is_blit().
  */
-static boolean
+static bool
 lp_linear_blit_rgb1_blit(const struct lp_rast_state *state,
                unsigned x, unsigned y,
                unsigned width, unsigned height,
@@ -115,8 +115,8 @@ lp_linear_blit_rgb1_blit(const struct lp_rast_state *state,
                uint8_t *color,
                unsigned stride)
 {
-   const struct lp_jit_context *context = &state->jit_context;
-   const struct lp_jit_texture *texture = &context->textures[0];
+   const struct lp_jit_resources *resources = &state->jit_resources;
+   const struct lp_jit_texture *texture = &resources->textures[0];
 
    LP_DBG(DEBUG_RAST, "%s\n", __func__);
 
@@ -125,7 +125,7 @@ lp_linear_blit_rgb1_blit(const struct lp_rast_state *state,
    if (a0[0][3] != 1.0 ||
        dadx[0][3] != 0.0 ||
        dady[0][3] != 0.0)
-      return FALSE;
+      return false;
 
    color += x * 4 + y * stride;
 
@@ -141,7 +141,7 @@ lp_linear_blit_rgb1_blit(const struct lp_rast_state *state,
        src_y < 0 ||
        src_x + width > texture->width ||
        src_y + height > texture->height)
-      return FALSE;
+      return false;
 
    for (y = 0; y < height; y++) {
       const uint32_t *src_row = (const uint32_t *)src;
@@ -155,13 +155,13 @@ lp_linear_blit_rgb1_blit(const struct lp_rast_state *state,
       src += src_stride;
    }
 
-   return TRUE;
+   return true;
 }
 
 
 /* Linear shader which always emits purple.  Used for debugging.
  */
-static boolean
+static bool
 lp_linear_purple(const struct lp_rast_state *state,
                  unsigned x, unsigned y,
                  unsigned width, unsigned height,
@@ -185,14 +185,14 @@ lp_linear_purple(const struct lp_rast_state *state,
                   height,
                   &uc);
 
-   return TRUE;
+   return true;
 }
 
 
 /* Examine the fragment shader variant and determine whether we can
  * substitute a fastpath linear shader implementation.
  */
-boolean
+bool
 lp_linear_check_fastpath(struct lp_fragment_shader_variant *variant)
 {
    struct lp_sampler_static_state *samp0 =
@@ -230,10 +230,10 @@ lp_linear_check_fastpath(struct lp_fragment_shader_variant *variant)
 
 #else
 
-boolean
+bool
 lp_linear_check_fastpath(struct lp_fragment_shader_variant *variant)
 {
-   return FALSE;
+   return false;
 }
 
 #endif

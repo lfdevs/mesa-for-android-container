@@ -74,7 +74,8 @@ ir3_nir_lower_load_barycentric_at_offset_instr(nir_builder *b, nir_instr *instr,
       pos = nir_ffma(b, chan(off, 1), nir_fddy(b, sij), pos);
 
       /* convert back into screen space, dividing by the offset 1/w */
-      return nir_fmul(b, nir_channels(b, pos, 0x3), nir_frcp(b, chan(pos, 2)));
+      return nir_fmul(b, nir_trim_vector(b, pos, 2),
+                      nir_frcp(b, chan(pos, 2)));
    }
 }
 

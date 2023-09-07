@@ -364,7 +364,7 @@ handle_mmu_interruptions(struct v3d_hw *v3d,
         uint64_t vio_addr = ((uint64_t)V3D_READ(V3D_MMU_VIO_ADDR) <<
                              (va_width - 32));
 
-        /* Difference with the kernal: here were are going to abort after
+        /* Difference with the kernel: here were are going to abort after
          * logging, so we don't bother with some stuff that the kernel does,
          * like restoring the MMU ctrl bits
          */

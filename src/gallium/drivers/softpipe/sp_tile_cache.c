@@ -298,7 +298,7 @@ clear_tile(struct softpipe_cached_tile *tile,
       else {
          for (i = 0; i < TILE_SIZE; i++) {
             for (j = 0; j < TILE_SIZE; j++) {
-               tile->data.depth16[i][j] = (ushort) clear_value;
+               tile->data.depth16[i][j] = (uint16_t) clear_value;
             }
          }
       }

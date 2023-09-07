@@ -1,4 +1,7 @@
 #!/bin/bash
+# shellcheck disable=SC1091 # The relative paths in this file only become valid at runtime.
+# shellcheck disable=SC2034
+# shellcheck disable=SC2086 # we want word splitting
 
 # Boot script for Chrome OS devices attached to a servo debug connector, using
 # NFS and TFTP to boot.

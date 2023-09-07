@@ -1,3 +1,4 @@
+from collections import defaultdict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,7 +33,7 @@ RESULT_GET_TESTJOB_RESULTS = [{"metadata": {"result": "test"}}]
 
 
 @pytest.fixture
-def mock_proxy():
+def mock_proxy(frozen_time):
     def create_proxy_mock(
         job_results=RESULT_GET_TESTJOB_RESULTS,
         testsuite_results=[generate_testsuite_result()],
@@ -50,6 +51,20 @@ def mock_proxy():
 
         proxy_logs_mock = proxy_mock.scheduler.jobs.logs
         proxy_logs_mock.return_value = jobs_logs_response()
+
+        proxy_job_state = proxy_mock.scheduler.job_state
+        proxy_job_state.return_value = {"job_state": "Running"}
+        proxy_job_state.side_effect = frozen_time.tick(1)
+
+        proxy_show_mock = proxy_mock.scheduler.jobs.show
+        proxy_show_mock.return_value = defaultdict(
+            str,
+            {
+                "device_type": "test_device",
+                "device": "test_device-cbg-1",
+                "state": "created",
+            },
+        )
 
         for key, value in kwargs.items():
             setattr(proxy_logs_mock, key, value)

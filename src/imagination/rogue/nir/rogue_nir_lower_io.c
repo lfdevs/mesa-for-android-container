@@ -67,11 +67,8 @@ static void lower_load_global_constant_to_scalar(nir_builder *b,
    for (uint8_t i = 0; i < intr->num_components; i++) {
       nir_intrinsic_instr *chan_intr =
          nir_intrinsic_instr_create(b->shader, intr->intrinsic);
-      nir_ssa_dest_init(&chan_intr->instr,
-                        &chan_intr->dest,
-                        1,
-                        intr->dest.ssa.bit_size,
-                        NULL);
+      nir_ssa_dest_init(&chan_intr->instr, &chan_intr->dest, 1,
+                        intr->dest.ssa.bit_size);
       chan_intr->num_components = 1;
 
       nir_intrinsic_set_access(chan_intr, nir_intrinsic_access(intr));
@@ -114,9 +111,7 @@ static bool lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr)
 static bool lower_impl(nir_function_impl *impl)
 {
    bool progress = false;
-   nir_builder b;
-
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block (block, impl) {
       nir_foreach_instr_safe (instr, block) {

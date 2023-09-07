@@ -24,12 +24,12 @@ deqp_args = [
     "--deqp-visibility=hidden",
 ]
 
-[[piglit]]
-piglit_folder = "/piglit"
-profile = "quick_gl"
-process_isolation = true
-  [piglit.env]
-  PIGLIT_PLATFORM = "mixed_glx_egl"
+# [[piglit]]
+# piglit_folder = "/piglit"
+# profile = "quick_gl"
+# process_isolation = true
+#   [piglit.env]
+#   PIGLIT_PLATFORM = "mixed_glx_egl"
 
 [[piglit]]
 piglit_folder = "/piglit"
@@ -49,7 +49,7 @@ prefix = "wayland-"
 
 # x11
 [[deqp]]
-deqp = "/deqp/modules/egl/deqp-egl"
+deqp = "/deqp/modules/egl/deqp-egl-x11"
 caselists = ["/deqp/mustpass/egl-master.txt"]
 deqp_args = [
     "--deqp-surface-width=256", "--deqp-surface-height=256",

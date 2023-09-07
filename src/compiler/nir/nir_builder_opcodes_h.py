@@ -33,6 +33,12 @@ def src_list(num_srcs):
 
 def needs_num_components(opcode):
    return "replicated" in opcode.name
+
+def intrinsic_prefix(name):
+   if name in build_prefixed_intrinsics:
+      return 'nir_build'
+   else:
+      return 'nir'
 %>
 
 % for name, opcode in sorted(opcodes.items()):
@@ -56,12 +62,14 @@ nir_${name}(nir_builder *build, ${src_decl_list(opcode.num_inputs)})
 % endfor
 
 % for name, opcode in sorted(INTR_OPCODES.items()):
+% if opcode.indices:
 struct _nir_${name}_indices {
    int _; /* exists to avoid empty initializers */
 % for index in opcode.indices:
    ${index.c_data_type} ${index.name};
 % endfor
 };
+% endif
 % endfor
 
 <%
@@ -120,9 +128,9 @@ _nir_build_${name}(nir_builder *build${intrinsic_decl_list(opcode)})
    % endif
    % if opcode.has_dest:
       % if opcode.dest_components == 0:
-      nir_ssa_dest_init(&intrin->instr, &intrin->dest, intrin->num_components, ${get_intrinsic_bitsize(opcode)}, NULL);
+      nir_ssa_dest_init(&intrin->instr, &intrin->dest, intrin->num_components, ${get_intrinsic_bitsize(opcode)});
       % else:
-      nir_ssa_dest_init(&intrin->instr, &intrin->dest, ${opcode.dest_components}, ${get_intrinsic_bitsize(opcode)}, NULL);
+      nir_ssa_dest_init(&intrin->instr, &intrin->dest, ${opcode.dest_components}, ${get_intrinsic_bitsize(opcode)});
       % endif
    % endif
    % for i in range(opcode.num_srcs):
@@ -155,16 +163,48 @@ _nir_build_${name}(nir_builder *build${intrinsic_decl_list(opcode)})
 % for name, opcode in sorted(INTR_OPCODES.items()):
 % if opcode.indices:
 #ifdef __cplusplus
-#define nir_build_${name}(build${intrinsic_macro_list(opcode)}, ...) ${'\\\\'}
+#define ${intrinsic_prefix(name)}_${name}(build${intrinsic_macro_list(opcode)}, ...) ${'\\\\'}
 _nir_build_${name}(build${intrinsic_macro_list(opcode)}, _nir_${name}_indices{0, __VA_ARGS__})
 #else
-#define nir_build_${name}(build${intrinsic_macro_list(opcode)}, ...) ${'\\\\'}
+#define ${intrinsic_prefix(name)}_${name}(build${intrinsic_macro_list(opcode)}, ...) ${'\\\\'}
 _nir_build_${name}(build${intrinsic_macro_list(opcode)}, (struct _nir_${name}_indices){0, __VA_ARGS__})
 #endif
 % else:
-#define nir_build_${name} _nir_build_${name}
+#define nir_${name} _nir_build_${name}
 % endif
+% if name in build_prefixed_intrinsics:
 #define nir_${name} nir_build_${name}
+% endif
+% endfor
+
+% for name in ['flt', 'fge', 'feq', 'fneu']:
+static inline nir_ssa_def *
+nir_${name}_imm(nir_builder *build, nir_ssa_def *src1, double src2)
+{
+   return nir_${name}(build, src1, nir_imm_floatN_t(build, src2, src1->bit_size));
+}
+% endfor
+
+% for name in ['ilt', 'ige', 'ieq', 'ine', 'ult', 'uge']:
+static inline nir_ssa_def *
+nir_${name}_imm(nir_builder *build, nir_ssa_def *src1, uint64_t src2)
+{
+   return nir_${name}(build, src1, nir_imm_intN_t(build, src2, src1->bit_size));
+}
+% endfor
+
+% for prefix in ['i', 'u']:
+static inline nir_ssa_def *
+nir_${prefix}gt_imm(nir_builder *build, nir_ssa_def *src1, uint64_t src2)
+{
+   return nir_${prefix}lt(build, nir_imm_intN_t(build, src2, src1->bit_size), src1);
+}
+
+static inline nir_ssa_def *
+nir_${prefix}le_imm(nir_builder *build, nir_ssa_def *src1, uint64_t src2)
+{
+   return nir_${prefix}ge(build, nir_imm_intN_t(build, src2, src1->bit_size), src1);
+}
 % endfor
 
 #endif /* _NIR_BUILDER_OPCODES_ */"""
@@ -173,9 +213,29 @@ from nir_opcodes import opcodes, type_size, type_base_type
 from nir_intrinsics import INTR_OPCODES, WRITE_MASK, ALIGN_MUL
 from mako.template import Template
 
+# List of intrinsics that also need a nir_build_ prefixed factory macro.
+build_prefixed_intrinsics = [
+   "load_deref",
+   "store_deref",
+   "copy_deref",
+   "memcpy_deref",
+
+   "load_param",
+
+   "load_global",
+   "load_global_constant",
+   "store_global",
+
+   "load_reg",
+   "store_reg",
+
+   "deref_mode_is",
+]
+
 print(Template(template).render(opcodes=opcodes,
                                 type_size=type_size,
                                 type_base_type=type_base_type,
                                 INTR_OPCODES=INTR_OPCODES,
                                 WRITE_MASK=WRITE_MASK,
-                                ALIGN_MUL=ALIGN_MUL))
+                                ALIGN_MUL=ALIGN_MUL,
+                                build_prefixed_intrinsics=build_prefixed_intrinsics))

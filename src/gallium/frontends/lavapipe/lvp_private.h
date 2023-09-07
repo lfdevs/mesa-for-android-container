@@ -73,6 +73,7 @@ typedef uint32_t xcb_window_t;
 #include "vk_queue.h"
 #include "vk_sync.h"
 #include "vk_sync_timeline.h"
+#include "lp_jit.h"
 
 #include "wsi_common.h"
 
@@ -82,10 +83,13 @@ extern "C" {
 #endif
 
 #define MAX_SETS         8
-#define MAX_PUSH_CONSTANTS_SIZE 128
+#define MAX_DESCRIPTORS 1000000 /* Required by vkd3d-proton */
+#define MAX_PUSH_CONSTANTS_SIZE 256
 #define MAX_PUSH_DESCRIPTORS 32
 #define MAX_DESCRIPTOR_UNIFORM_BLOCK_SIZE 4096
 #define MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BLOCKS 8
+#define MAX_DGC_STREAMS 16
+#define MAX_DGC_TOKENS 16
 
 #ifdef _WIN32
 #define lvp_printflike(a, b)
@@ -113,7 +117,9 @@ void __lvp_finishme(const char *file, int line, const char *format, ...)
       return; \
    } while (0)
 
-#define LVP_STAGE_MASK ((1 << MESA_SHADER_STAGES) - 1)
+#define LVP_SHADER_STAGES (MESA_SHADER_MESH + 1)
+#define LVP_STAGE_MASK BITFIELD_MASK(LVP_SHADER_STAGES)
+#define LVP_STAGE_MASK_GFX (BITFIELD_MASK(LVP_SHADER_STAGES) & ~BITFIELD_BIT(MESA_SHADER_COMPUTE))
 
 #define lvp_foreach_stage(stage, stage_bits)                         \
    for (gl_shader_stage stage,                                       \
@@ -121,12 +127,21 @@ void __lvp_finishme(const char *file, int line, const char *format, ...)
         stage = ffs(__tmp) - 1, __tmp;                     \
         __tmp &= ~(1 << (stage)))
 
+#define lvp_forall_stage(stage)                                      \
+   for (gl_shader_stage stage = MESA_SHADER_VERTEX; stage < LVP_SHADER_STAGES; stage++)
+
+#define lvp_forall_gfx_stage(stage)                                  \
+   for (gl_shader_stage stage,                                       \
+           __tmp = (gl_shader_stage)(LVP_STAGE_MASK_GFX);            \
+        stage = ffs(__tmp) - 1, __tmp;                               \
+        __tmp &= ~(1 << (stage)))
+
 struct lvp_physical_device {
    struct vk_physical_device vk;
 
    struct pipe_loader_device *pld;
    struct pipe_screen *pscreen;
-   const nir_shader_compiler_options *drv_options[MESA_SHADER_STAGES];
+   const nir_shader_compiler_options *drv_options[LVP_SHADER_STAGES];
    uint32_t max_images;
 
    struct vk_sync_timeline_type sync_timeline_type;
@@ -163,7 +178,7 @@ struct lvp_queue {
    struct pipe_fence_handle *last_fence;
    void *state;
    struct util_dynarray pipeline_destroys;
-   simple_mtx_t pipeline_lock;
+   simple_mtx_t lock;
 };
 
 struct lvp_pipeline_cache {
@@ -180,8 +195,16 @@ struct lvp_device {
    struct lvp_physical_device *physical_device;
    struct pipe_screen *pscreen;
    void *noop_fs;
+   simple_mtx_t bda_lock;
+   struct hash_table bda;
+   struct pipe_resource *zero_buffer; /* for zeroed bda */
    bool poison_mem;
    bool print_cmds;
+
+   struct lp_texture_handle *null_texture_handle;
+   struct lp_texture_handle *null_image_handle;
+   struct util_dynarray bda_texture_handles;
+   struct util_dynarray bda_image_handles;
 };
 
 void lvp_device_get_cache_uuid(void *uuid);
@@ -197,6 +220,7 @@ struct lvp_device_memory {
    struct pipe_memory_allocation *pmem;
    uint32_t                                     type_index;
    VkDeviceSize                                 map_size;
+   VkDeviceSize                                 size;
    void *                                       map;
    enum lvp_device_memory_type memory_type;
    int                                          backed_fd;
@@ -245,33 +269,32 @@ struct lvp_image_view {
 
    struct pipe_surface *surface; /* have we created a pipe surface for this? */
    struct lvp_image_view *multisample; //VK_EXT_multisampled_render_to_single_sampled
+
+   struct lp_texture_handle *texture_handle;
+   struct lp_texture_handle *image_handle;
 };
 
 struct lvp_sampler {
    struct vk_object_base base;
-   struct pipe_sampler_state state;
+   struct lp_descriptor desc;
+
+   struct lp_texture_handle *texture_handle;
 };
 
 struct lvp_descriptor_set_binding_layout {
-   uint16_t descriptor_index;
+   uint32_t descriptor_index;
    /* Number of array elements in this binding */
    VkDescriptorType type;
-   uint16_t array_size;
+   uint32_t array_size;
    bool valid;
 
-   int16_t dynamic_index;
-   struct {
-      int16_t const_buffer_index;
-      int16_t shader_buffer_index;
-      int16_t sampler_index;
-      int16_t sampler_view_index;
-      int16_t image_index;
-      int16_t uniform_block_index;
-      int16_t uniform_block_offset;
-   } stage[MESA_SHADER_STAGES];
+   uint32_t dynamic_index;
+
+   uint32_t uniform_block_offset;
+   uint32_t uniform_block_size;
 
    /* Immutable samplers (or NULL if no immutable samplers) */
-   struct pipe_sampler_state **immutable_samplers;
+   struct lp_descriptor **immutable_samplers;
 };
 
 struct lvp_descriptor_set_layout {
@@ -282,27 +305,19 @@ struct lvp_descriptor_set_layout {
    uint32_t immutable_sampler_count;
 
    /* Number of bindings in this descriptor set */
-   uint16_t binding_count;
+   uint32_t binding_count;
 
    /* Total size of the descriptor set with room for all array entries */
-   uint16_t size;
+   uint32_t size;
 
    /* Shader stages affected by this descriptor set */
-   uint16_t shader_stages;
-
-   struct {
-      uint16_t const_buffer_count;
-      uint16_t shader_buffer_count;
-      uint16_t sampler_count;
-      uint16_t sampler_view_count;
-      uint16_t image_count;
-      uint16_t uniform_block_count;
-      uint16_t uniform_block_size;
-      uint16_t uniform_block_sizes[MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BLOCKS]; //zero-indexed
-   } stage[MESA_SHADER_STAGES];
+   uint32_t shader_stages;
 
    /* Number of dynamic offsets used by this descriptor set */
-   uint16_t dynamic_offset_count;
+   uint32_t dynamic_offset_count;
+
+   /* if this layout is comprised solely of immutable samplers, this will be a bindable set */
+   struct lvp_descriptor_set *immutable_set;
 
    /* Bindings in this descriptor set */
    struct lvp_descriptor_set_binding_layout binding[0];
@@ -314,28 +329,15 @@ vk_to_lvp_descriptor_set_layout(const struct vk_descriptor_set_layout *layout)
    return container_of(layout, const struct lvp_descriptor_set_layout, vk);
 }
 
-union lvp_descriptor_info {
-   struct {
-      struct pipe_sampler_state *sampler;
-      struct pipe_sampler_view *sampler_view;
-   };
-   struct pipe_image_view image_view;
-   struct pipe_shader_buffer ssbo;
-   struct pipe_constant_buffer ubo;
-   uint8_t *uniform;
-};
-
-struct lvp_descriptor {
-   VkDescriptorType type;
-
-   union lvp_descriptor_info info;
-};
-
 struct lvp_descriptor_set {
    struct vk_object_base base;
    struct lvp_descriptor_set_layout *layout;
    struct list_head link;
-   struct lvp_descriptor descriptors[0];
+
+   /* Buffer holding the descriptors. */
+   struct pipe_memory_allocation *pmem;
+   struct pipe_resource *bo;
+   void *map;
 };
 
 struct lvp_descriptor_pool {
@@ -356,6 +358,8 @@ struct lvp_descriptor_update_template {
    struct lvp_pipeline_layout *pipeline_layout;
    VkDescriptorUpdateTemplateEntry entry[0];
 };
+
+uint32_t lvp_descriptor_update_template_entry_size(VkDescriptorType type);
 
 static inline void
 lvp_descriptor_template_templ_ref(struct lvp_descriptor_update_template *templ)
@@ -387,16 +391,16 @@ void
 lvp_descriptor_set_destroy(struct lvp_device *device,
                            struct lvp_descriptor_set *set);
 
+void
+lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descriptorSet,
+                                        VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                        const void *pData, bool push);
+
 struct lvp_pipeline_layout {
    struct vk_pipeline_layout vk;
 
    uint32_t push_constant_size;
    VkShaderStageFlags push_constant_stages;
-   struct {
-      uint16_t uniform_block_size;
-      uint16_t uniform_block_count;
-      uint16_t uniform_block_sizes[MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BLOCKS * MAX_SETS];
-   } stage[MESA_SHADER_STAGES];
 };
 
 
@@ -404,12 +408,6 @@ struct lvp_pipeline_layout *
 lvp_pipeline_layout_create(struct lvp_device *device,
                            const VkPipelineLayoutCreateInfo*           pCreateInfo,
                            const VkAllocationCallbacks*                pAllocator);
-
-struct lvp_access_info {
-   uint64_t images_read;
-   uint64_t images_written;
-   uint64_t buffers_written;
-};
 
 struct lvp_pipeline_nir {
    int ref_cnt;
@@ -441,7 +439,6 @@ struct lvp_inline_variant {
 struct lvp_shader {
    struct vk_object_base base;
    struct lvp_pipeline_layout *layout;
-   struct lvp_access_info access;
    struct lvp_pipeline_nir *pipeline_nir;
    struct lvp_pipeline_nir *tess_ccw;
    void *shader_cso;
@@ -465,7 +462,7 @@ struct lvp_pipeline {
    void *state_data;
    bool is_compute_pipeline;
    bool force_min_sample;
-   struct lvp_shader shaders[MESA_SHADER_STAGES];
+   struct lvp_shader shaders[LVP_SHADER_STAGES];
    gl_shader_stage last_vertex;
    struct vk_graphics_pipeline_state graphics_state;
    VkGraphicsPipelineLibraryFlagsEXT stages;
@@ -475,10 +472,14 @@ struct lvp_pipeline {
    bool library;
    bool compiled;
    bool used;
+
+   unsigned num_groups;
+   unsigned num_groups_total;
+   VkPipeline groups[0];
 };
 
 void
-lvp_pipeline_shaders_compile(struct lvp_pipeline *pipeline);
+lvp_pipeline_shaders_compile(struct lvp_pipeline *pipeline, bool locked);
 
 struct lvp_event {
    struct vk_object_base base;
@@ -507,6 +508,9 @@ struct lvp_buffer_view {
    struct lvp_buffer *buffer;
    uint32_t offset;
    uint64_t range;
+
+   struct lp_texture_handle *texture_handle;
+   struct lp_texture_handle *image_handle;
 };
 
 struct lvp_query_pool {
@@ -524,6 +528,16 @@ struct lvp_cmd_buffer {
    struct lvp_device *                          device;
 
    uint8_t push_constants[MAX_PUSH_CONSTANTS_SIZE];
+};
+
+struct lvp_indirect_command_layout {
+   struct vk_object_base base;
+   uint8_t stream_count;
+   uint8_t token_count;
+   uint16_t stream_strides[MAX_DGC_STREAMS];
+   VkPipelineBindPoint bind_point;
+   VkIndirectCommandsLayoutUsageFlagsNV flags;
+   VkIndirectCommandsLayoutTokenNV tokens[0];
 };
 
 extern const struct vk_command_buffer_ops lvp_cmd_buffer_ops;
@@ -583,22 +597,8 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_query_pool, base, VkQueryPool,
                                VK_OBJECT_TYPE_QUERY_POOL)
 VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_sampler, base, VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
-
-struct lvp_write_descriptor {
-   uint32_t dst_binding;
-   uint32_t dst_array_element;
-   uint32_t descriptor_count;
-   VkDescriptorType descriptor_type;
-};
-
-struct lvp_cmd_push_descriptor_set {
-   VkPipelineBindPoint bind_point;
-   struct lvp_pipeline_layout *layout;
-   uint32_t set;
-   uint32_t descriptor_write_count;
-   struct lvp_write_descriptor *descriptors;
-   union lvp_descriptor_info *infos;
-};
+VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_indirect_command_layout, base, VkIndirectCommandsLayoutNV,
+                               VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV)
 
 void lvp_add_enqueue_cmd_entrypoints(struct vk_device_dispatch_table *disp);
 
@@ -651,14 +651,14 @@ queue_thread_noop(void *data, void *gdata, int thread_index);
 
 void
 lvp_shader_optimize(nir_shader *nir);
-void *
-lvp_shader_compile_stage(struct lvp_device *device, struct lvp_shader *shader, nir_shader *nir);
 bool
 lvp_find_inlinable_uniforms(struct lvp_shader *shader, nir_shader *nir);
 void
 lvp_inline_uniforms(nir_shader *nir, const struct lvp_shader *shader, const uint32_t *uniform_values, uint32_t ubo);
 void *
-lvp_shader_compile(struct lvp_device *device, struct lvp_shader *shader, nir_shader *nir);
+lvp_shader_compile(struct lvp_device *device, struct lvp_shader *shader, nir_shader *nir, bool locked);
+enum vk_cmd_type
+lvp_nv_dgc_token_to_cmd_type(const VkIndirectCommandsLayoutTokenNV *token);
 #ifdef __cplusplus
 }
 #endif

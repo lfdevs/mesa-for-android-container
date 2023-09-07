@@ -51,6 +51,12 @@ static void tile_info(vlVaContext *context, VADecPictureParameterBufferAV1 *av1)
    unsigned TileColsLog2 = util_logbase2_ceil(av1->tile_cols);
    unsigned TileRowsLog2 = util_logbase2_ceil(av1->tile_rows);
 
+   if (av1->pic_info_fields.bits.use_superres) {
+      unsigned width = ((av1->frame_width_minus1 + 1) * 8 + av1->superres_scale_denominator / 2)
+         / av1->superres_scale_denominator;
+      MiCols = 2 * (((width - 1) + 8) >> 3);
+   }
+
    sbCols = (av1->seq_info_fields.fields.use_128x128_superblock) ?
       ((MiCols + 31) >> 5) : ((MiCols + 15) >> 4);
    sbRows = (av1->seq_info_fields.fields.use_128x128_superblock) ?

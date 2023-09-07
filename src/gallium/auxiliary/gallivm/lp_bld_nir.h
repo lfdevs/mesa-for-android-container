@@ -101,7 +101,7 @@ struct lp_build_nir_context
                         LLVMValueRef addr, LLVMValueRef dst);
 
    void (*atomic_global)(struct lp_build_nir_context *bld_base,
-                         nir_intrinsic_op op,
+                         nir_atomic_op nir_op,
                          unsigned addr_bit_size,
                          unsigned val_bit_size,
                          LLVMValueRef addr,
@@ -111,16 +111,17 @@ struct lp_build_nir_context
    /* for SSBO and shared memory */
    void (*load_mem)(struct lp_build_nir_context *bld_base,
                     unsigned nc, unsigned bit_size,
-                    bool index_and_offset_are_uniform,
+                    bool index_and_offset_are_uniform, bool payload,
                     LLVMValueRef index, LLVMValueRef offset, LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
    void (*store_mem)(struct lp_build_nir_context *bld_base,
                      unsigned writemask, unsigned nc, unsigned bit_size,
-                     bool index_and_offset_are_uniform,
+                     bool index_and_offset_are_uniform, bool payload,
                      LLVMValueRef index, LLVMValueRef offset, LLVMValueRef dst);
 
    void (*atomic_mem)(struct lp_build_nir_context *bld_base,
-                      nir_intrinsic_op op,
+                      nir_atomic_op op,
                       unsigned bit_size,
+                      bool payload,
                       LLVMValueRef index, LLVMValueRef offset,
                       LLVMValueRef val, LLVMValueRef val2,
                       LLVMValueRef *result);
@@ -160,13 +161,15 @@ struct lp_build_nir_context
 
    LLVMValueRef (*load_reg)(struct lp_build_nir_context *bld_base,
                             struct lp_build_context *reg_bld,
-                            const nir_reg_src *reg,
+                            const nir_intrinsic_instr *decl,
+                            unsigned base,
                             LLVMValueRef indir_src,
                             LLVMValueRef reg_storage);
    void (*store_reg)(struct lp_build_nir_context *bld_base,
                      struct lp_build_context *reg_bld,
-                     const nir_reg_dest *reg,
+                     const nir_intrinsic_instr *decl,
                      unsigned writemask,
+                     unsigned base,
                      LLVMValueRef indir_src,
                      LLVMValueRef reg_storage,
                      LLVMValueRef dst[NIR_MAX_VEC_COMPONENTS]);
@@ -230,6 +233,11 @@ struct lp_build_nir_context
                      unsigned const_index,
                      LLVMValueRef indir_index,
                      LLVMValueRef offsets[2], LLVMValueRef dst[4]);
+   void (*set_vertex_and_primitive_count)(struct lp_build_nir_context *bld_base,
+                                               LLVMValueRef vert_count,
+                                               LLVMValueRef prim_count);
+   void (*launch_mesh_workgroups)(struct lp_build_nir_context *bld_base,
+                                  LLVMValueRef launch_grid);
 //   LLVMValueRef main_function
 };
 
@@ -246,12 +254,15 @@ struct lp_build_nir_soa_context
    LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS];
    LLVMTypeRef context_type;
    LLVMValueRef context_ptr;
+   LLVMTypeRef resources_type;
+   LLVMValueRef resources_ptr;
    LLVMTypeRef thread_data_type;
    LLVMValueRef thread_data_ptr;
 
    LLVMValueRef ssbo_ptr;
 
    LLVMValueRef shared_ptr;
+   LLVMValueRef payload_ptr;
    LLVMValueRef scratch_ptr;
    unsigned scratch_size;
 
@@ -264,6 +275,8 @@ struct lp_build_nir_soa_context
    const struct lp_build_tcs_iface *tcs_iface;
    const struct lp_build_tes_iface *tes_iface;
    const struct lp_build_fs_iface *fs_iface;
+   const struct lp_build_mesh_iface *mesh_iface;
+
    LLVMValueRef emitted_prims_vec_ptr[PIPE_MAX_VERTEX_STREAMS];
    LLVMValueRef total_emitted_vertices_vec_ptr[PIPE_MAX_VERTEX_STREAMS];
    LLVMValueRef emitted_vertices_vec_ptr[PIPE_MAX_VERTEX_STREAMS];
@@ -358,6 +371,15 @@ get_int_bld(struct lp_build_nir_context *bld_base,
 
 unsigned
 lp_nir_aos_swizzle(struct lp_build_nir_context *bld_base, unsigned chan);
+
+LLVMAtomicRMWBinOp
+lp_translate_atomic_op(nir_atomic_op op);
+
+uint32_t
+lp_build_nir_sample_key(gl_shader_stage stage, nir_tex_instr *instr);
+
+
+void lp_img_op_from_intrinsic(struct lp_img_params *params, nir_intrinsic_instr *instr);
 
 
 #endif

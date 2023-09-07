@@ -74,7 +74,7 @@ d3d12_wgl_framebuffer_destroy(struct stw_winsys_framebuffer *fb,
       /* Ensure all resources are flushed */
       ctx->flush(ctx, &fence, PIPE_FLUSH_HINT_FINISH);
       if (fence) {
-         ctx->screen->fence_finish(ctx->screen, ctx, fence, PIPE_TIMEOUT_INFINITE);
+         ctx->screen->fence_finish(ctx->screen, ctx, fence, OS_TIMEOUT_INFINITE);
          ctx->screen->fence_reference(ctx->screen, &fence, NULL);
       }
    }
@@ -164,7 +164,7 @@ d3d12_wgl_framebuffer_resize(stw_winsys_framebuffer *fb,
    framebuffer->pformat = templ->format;
 }
 
-static boolean
+static bool
 d3d12_wgl_framebuffer_present(stw_winsys_framebuffer *fb, int interval)
 {
    auto framebuffer = d3d12_wgl_framebuffer(fb);
@@ -178,14 +178,21 @@ d3d12_wgl_framebuffer_present(stw_winsys_framebuffer *fb, int interval)
       D3D12XBOX_PRESENT_FLAG_IMMEDIATE :
       D3D12XBOX_PRESENT_FLAG_NONE;
 
-   if (cached_interval != interval) {
+   int clamped_interval = CLAMP(interval, 1, 4); // SetFrameIntervalX only supports values [1,4]
+   if (cached_interval != clamped_interval) {
       framebuffer->screen->dev->SetFrameIntervalX(
          nullptr,
          D3D12XBOX_FRAME_INTERVAL_60_HZ,
-         interval,
+         clamped_interval,
          D3D12XBOX_FRAME_INTERVAL_FLAG_NONE
       );
-      cached_interval = interval;
+      framebuffer->screen->dev->ScheduleFrameEventX(
+         D3D12XBOX_FRAME_EVENT_ORIGIN,
+         0,
+         nullptr,
+         D3D12XBOX_SCHEDULE_FRAME_EVENT_FLAG_NONE
+      );
+      cached_interval = clamped_interval;
    }
 
    framebuffer->screen->cmdqueue->PresentX(1, &planeParams, &presentParams);

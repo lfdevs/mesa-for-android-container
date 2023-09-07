@@ -175,7 +175,7 @@ def filter_api(elem, api):
 
     return api in elem.attrib['api'].split(',')
 
-def get_all_required(xml, thing, api):
+def get_all_required(xml, thing, api, beta):
     things = {}
     for feature in xml.findall('./feature'):
         if not filter_api(feature, api):
@@ -192,7 +192,7 @@ def get_all_required(xml, thing, api):
         if api not in ext.supported:
             continue
 
-        if ext.provisional:
+        if beta != 'true' and ext.provisional:
             continue
 
         for require in extension.findall('./require'):

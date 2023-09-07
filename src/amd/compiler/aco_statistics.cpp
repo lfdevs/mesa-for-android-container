@@ -105,12 +105,12 @@ struct perf_info {
 };
 
 static bool
-is_dual_issue_capable(const Program& program, const Instruction& instruction)
+is_dual_issue_capable(const Program& program, const Instruction& instr)
 {
-   if (program.gfx_level < GFX11 || !instruction.isVALU() || instruction.isDPP())
+   if (program.gfx_level < GFX11 || !instr.isVALU() || instr.isDPP())
       return false;
 
-   switch (instruction.opcode) {
+   switch (instr.opcode) {
    case aco_opcode::v_fma_f32:
    case aco_opcode::v_fmac_f32:
    case aco_opcode::v_fmaak_f32:
@@ -122,9 +122,6 @@ is_dual_issue_capable(const Program& program, const Instruction& instruction)
    case aco_opcode::v_mul_legacy_f32:
    case aco_opcode::v_fma_legacy_f32:
    case aco_opcode::v_fmac_legacy_f32:
-   case aco_opcode::v_fma_mix_f32:
-   case aco_opcode::v_fma_mixlo_f16:
-   case aco_opcode::v_fma_mixhi_f16:
    case aco_opcode::v_fma_f16:
    case aco_opcode::v_fmac_f16:
    case aco_opcode::v_fmaak_f16:
@@ -169,6 +166,24 @@ is_dual_issue_capable(const Program& program, const Instruction& instruction)
    case aco_opcode::v_dot2_f16_f16:
    case aco_opcode::v_dot2_f32_f16:
    case aco_opcode::v_dot2c_f32_f16: return true;
+   case aco_opcode::v_fma_mix_f32:
+   case aco_opcode::v_fma_mixlo_f16:
+   case aco_opcode::v_fma_mixhi_f16: {
+      /* dst and acc type must match */
+      if (instr.valu().opsel_hi[2] == (instr.opcode == aco_opcode::v_fma_mix_f32))
+         return false;
+
+      /* If all operands are vgprs, two must be the same. */
+      for (unsigned i = 0; i < 3; i++) {
+         if (instr.operands[i].isConstant() || instr.operands[i].isOfType(RegType::sgpr))
+            return true;
+         for (unsigned j = 0; j < i; j++) {
+            if (instr.operands[i].physReg() == instr.operands[j].physReg())
+               return true;
+         }
+      }
+      return false;
+   }
    default: return false;
    }
 }

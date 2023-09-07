@@ -137,7 +137,7 @@ OpFunctionEnd
    ASSERT_TRUE(shader);
 }
 
-TEST_F(ControlFlow, DISABLED_EarlyMerge)
+TEST_F(ControlFlow, EarlyMerge)
 {
    // From https://gitlab.khronos.org/spirv/SPIR-V/-/issues/640.
 
@@ -200,5 +200,44 @@ TEST_F(ControlFlow, DISABLED_EarlyMerge)
       0x00000003, 0x0000000e, 0x000100fd, 0x00010038,
    };
    get_nir(sizeof(words) / sizeof(words[0]), words, MESA_SHADER_FRAGMENT);
+   ASSERT_TRUE(shader);
+}
+
+TEST_F(ControlFlow, SingleBlockLoop)
+{
+   /*
+OpCapability Shader
+OpMemoryModel Logical Simple
+OpEntryPoint GLCompute %100 "main"
+OpExecutionMode %100 LocalSize 1 1 1
+%void = OpTypeVoid
+%8 = OpTypeFunction %void
+%bool = OpTypeBool
+%cond = OpConstantNull %bool
+
+%100 = OpFunction %void None %8
+%10 = OpLabel
+OpBranch %20
+
+%20 = OpLabel
+OpLoopMerge %30 %20 None
+OpBranchConditional %cond %20 %30
+
+%30 = OpLabel
+OpReturn
+OpFunctionEnd
+ */
+   static const uint32_t words[] = {
+      0x07230203, 0x00010600, 0x00070000, 0x00000009, 0x00000000, 0x00020011,
+      0x00000001, 0x0003000e, 0x00000000, 0x00000000, 0x0005000f, 0x00000005,
+      0x00000001, 0x6e69616d, 0x00000000, 0x00060010, 0x00000001, 0x00000011,
+      0x00000001, 0x00000001, 0x00000001, 0x00020013, 0x00000002, 0x00030021,
+      0x00000003, 0x00000002, 0x00020014, 0x00000004, 0x0003002e, 0x00000004,
+      0x00000005, 0x00050036, 0x00000002, 0x00000001, 0x00000000, 0x00000003,
+      0x000200f8, 0x00000006, 0x000200f9, 0x00000007, 0x000200f8, 0x00000007,
+      0x000400f6, 0x00000008, 0x00000007, 0x00000000, 0x000400fa, 0x00000005,
+      0x00000007, 0x00000008, 0x000200f8, 0x00000008, 0x000100fd, 0x00010038,
+   };
+   get_nir(ARRAY_SIZE(words), words, MESA_SHADER_COMPUTE);
    ASSERT_TRUE(shader);
 }

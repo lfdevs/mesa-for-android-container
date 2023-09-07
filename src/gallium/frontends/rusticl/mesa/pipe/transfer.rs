@@ -58,7 +58,7 @@ impl PipeTransfer {
         unsafe { (*self.pipe).stride }
     }
 
-    pub fn slice_pitch(&self) -> u32 {
+    pub fn slice_pitch(&self) -> usize {
         unsafe { (*self.pipe).layer_stride }
     }
 

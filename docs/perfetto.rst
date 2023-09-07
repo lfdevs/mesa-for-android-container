@@ -88,7 +88,7 @@ the steps above :
    # Configure Mesa with perfetto
    mesa $ meson . build -Dperfetto=true -Dvulkan-drivers=intel,broadcom -Dgallium-drivers=
    # Build mesa
-   mesa $ ninja -C build
+   mesa $ meson compile -C build
 
    # Within the Mesa repo, build perfetto
    mesa $ cd subprojects/perfetto

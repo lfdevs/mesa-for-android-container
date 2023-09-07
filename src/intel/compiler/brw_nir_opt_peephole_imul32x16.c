@@ -48,8 +48,7 @@ replace_imul_instr(nir_builder *b, nir_alu_instr *imul, unsigned small_val,
    nir_alu_src_copy(&imul_32x16->src[1], &imul->src[small_val], imul_32x16);
 
    nir_ssa_dest_init(&imul_32x16->instr, &imul_32x16->dest.dest,
-                     imul->dest.dest.ssa.num_components,
-                     32, NULL);
+                     imul->dest.dest.ssa.num_components, 32);
 
    nir_ssa_def_rewrite_uses(&imul->dest.dest.ssa,
                             &imul_32x16->dest.dest.ssa);

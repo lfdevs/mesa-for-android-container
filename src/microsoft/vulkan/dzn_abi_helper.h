@@ -58,7 +58,6 @@ dzn_ID3D12Device4_GetResourceAllocationInfo(ID3D12Device4 *dev, UINT visible_mas
     return ret;
 }
 
-#if D3D12_SDK_VERSION >= 610
 static inline D3D12_RESOURCE_ALLOCATION_INFO
 dzn_ID3D12Device12_GetResourceAllocationInfo3(ID3D12Device12 *dev, UINT visible_mask, UINT num_resource_descs, const D3D12_RESOURCE_DESC1 *resource_descs,
                                               const UINT *num_castable_formats, const DXGI_FORMAT *const *castable_formats,
@@ -72,7 +71,6 @@ dzn_ID3D12Device12_GetResourceAllocationInfo3(ID3D12Device12 *dev, UINT visible_
 #endif
    return ret;
 }
-#endif
 
 static inline D3D12_RESOURCE_DESC
 dzn_ID3D12Resource_GetDesc(ID3D12Resource *res)
@@ -82,6 +80,18 @@ dzn_ID3D12Resource_GetDesc(ID3D12Resource *res)
     ID3D12Resource_GetDesc(res, &ret);
 #else
     ret = ID3D12Resource_GetDesc(res);
+#endif
+    return ret;
+}
+
+static inline D3D12_HEAP_DESC
+dzn_ID3D12Heap_GetDesc(ID3D12Heap *heap)
+{
+   D3D12_HEAP_DESC ret;
+#ifdef _WIN32
+    ID3D12Heap_GetDesc(heap, &ret);
+#else
+    ret = ID3D12Heap_GetDesc(heap);
 #endif
     return ret;
 }

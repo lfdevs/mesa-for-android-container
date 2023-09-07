@@ -46,17 +46,9 @@ d3d12_get_state_var(nir_builder *b,
 {
    const gl_state_index16 tokens[STATE_LENGTH] = { STATE_INTERNAL_DRIVER, var_enum };
    if (*out_var == NULL) {
-      nir_variable *var = nir_variable_create(b->shader,
-                                              nir_var_uniform,
-                                              var_type,
-                                              var_name);
-
-      var->num_state_slots = 1;
-      var->state_slots = ralloc_array(var, nir_state_slot, 1);
-      memcpy(var->state_slots[0].tokens, tokens,
-             sizeof(var->state_slots[0].tokens));
+      nir_variable *var = nir_state_variable_create(b->shader, var_type,
+                                                    var_name, tokens);
       var->data.how_declared = nir_var_hidden;
-      b->shader->num_uniforms++;
       *out_var = var;
    }
    return nir_load_var(b, *out_var);
@@ -100,20 +92,17 @@ d3d12_lower_yflip(nir_shader *nir)
        nir->info.stage != MESA_SHADER_GEOMETRY)
       return;
 
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               lower_pos_write(&b, instr, &flip);
-            }
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            lower_pos_write(&b, instr, &flip);
          }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 }
 
@@ -158,20 +147,17 @@ d3d12_lower_depth_range(nir_shader *nir)
 {
    assert(nir->info.stage == MESA_SHADER_FRAGMENT);
    nir_variable *depth_transform = NULL;
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               lower_pos_read(&b, instr, &depth_transform);
-            }
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            lower_pos_read(&b, instr, &depth_transform);
          }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 }
 
@@ -243,8 +229,8 @@ lower_uint_color_write(nir_builder *b, struct nir_instr *instr, bool is_signed)
    nir_ssa_def *def = is_signed ? nir_format_float_to_snorm(b, col, bits) :
                                   nir_format_float_to_unorm(b, col, bits);
    if (is_signed)
-      def = nir_bcsel(b, nir_ilt(b, def, nir_imm_int(b, 0)),
-                      nir_iadd(b, def, nir_imm_int(b, 1 << NUM_BITS)),
+      def = nir_bcsel(b, nir_ilt_imm(b, def, 0),
+                      nir_iadd_imm(b, def, 1ull << NUM_BITS),
                       def);
    nir_instr_rewrite_src(&intr->instr, intr->src + 1, nir_src_for_ssa(def));
 }
@@ -255,20 +241,17 @@ d3d12_lower_uint_cast(nir_shader *nir, bool is_signed)
    if (nir->info.stage != MESA_SHADER_FRAGMENT)
       return;
 
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               lower_uint_color_write(&b, instr, is_signed);
-            }
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            lower_uint_color_write(&b, instr, is_signed);
          }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 }
 
@@ -425,25 +408,22 @@ d3d12_nir_invert_depth(nir_shader *shader, unsigned viewport_mask, bool clip_hal
       return;
 
    struct invert_depth_state state = { viewport_mask, clip_halfz };
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               invert_depth_instr(&b, instr, &state);
-            }
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            invert_depth_instr(&b, instr, &state);
          }
-
-         if (state.store_pos_instr) {
-            b.cursor = nir_after_block(function->impl->end_block);
-            invert_depth_impl(&b, &state);
-         }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      if (state.store_pos_instr) {
+         b.cursor = nir_after_block(impl->end_block);
+         invert_depth_impl(&b, &state);
+      }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 }
 
@@ -547,23 +527,20 @@ d3d12_lower_state_vars(nir_shader *nir, struct d3d12_shader *shader)
       }
    }
 
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_builder builder;
-         nir_builder_init(&builder, function->impl);
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               if (instr->type == nir_instr_type_intrinsic)
-                  progress |= lower_instr(nir_instr_as_intrinsic(instr),
-                                          &builder,
-                                          shader,
-                                          binding);
-            }
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder builder = nir_builder_create(impl);
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type == nir_instr_type_intrinsic)
+               progress |= lower_instr(nir_instr_as_intrinsic(instr),
+                                       &builder,
+                                       shader,
+                                       binding);
          }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 
    if (progress) {
@@ -613,8 +590,7 @@ d3d12_add_missing_dual_src_target(struct nir_shader *s,
    assert(missing_mask != 0);
    nir_builder b;
    nir_function_impl *impl = nir_shader_get_entrypoint(s);
-   nir_builder_init(&b, impl);
-   b.cursor = nir_before_cf_list(&impl->body);
+   b = nir_builder_at(nir_before_cf_list(&impl->body));
 
    nir_ssa_def *zero = nir_imm_zero(&b, 4, 32);
    for (unsigned i = 0; i < 2; ++i) {
@@ -636,49 +612,13 @@ d3d12_add_missing_dual_src_target(struct nir_shader *s,
                                nir_metadata_dominance);
 }
 
-static bool
-lower_load_ubo_packed_filter(const nir_instr *instr,
-                             UNUSED const void *_options) {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-   return intr->intrinsic == nir_intrinsic_load_ubo;
-}
-
-static nir_ssa_def *
-lower_load_ubo_packed_impl(nir_builder *b, nir_instr *instr,
-                              UNUSED void *_options) {
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-   nir_ssa_def *buffer = intr->src[0].ssa;
-   nir_ssa_def *offset = intr->src[1].ssa;
-
-   nir_ssa_def *result =
-      build_load_ubo_dxil(b, buffer,
-                          offset,
-                          nir_dest_num_components(intr->dest),
-                          nir_dest_bit_size(intr->dest),
-                          nir_intrinsic_align(intr));
-   return result;
-}
-
-bool
-nir_lower_packed_ubo_loads(nir_shader *nir) {
-   return nir_shader_lower_instructions(nir,
-                                        lower_load_ubo_packed_filter,
-                                        lower_load_ubo_packed_impl,
-                                        NULL);
-}
-
 void
 d3d12_lower_primitive_id(nir_shader *shader)
 {
    nir_builder b;
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    nir_ssa_def *primitive_id;
-   nir_builder_init(&b, impl);
+   b = nir_builder_create(impl);
 
    nir_variable *primitive_id_var = nir_variable_create(shader, nir_var_shader_out,
                                                         glsl_uint_type(), "primitive_id");
@@ -770,7 +710,7 @@ lower_triangle_strip_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
 
    nir_pop_if(b, count_check);
 
-   vertex_count = nir_iadd(b, vertex_count, nir_imm_int(b, 1));
+   vertex_count = nir_iadd_imm(b, vertex_count, 1);
    nir_store_var(b, vertex_count_var, vertex_count, 0x1);
 
    nir_instr_remove(&intr->instr);
@@ -794,7 +734,7 @@ d3d12_lower_triangle_strip(nir_shader *shader)
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    nir_variable *tmp_vars[VARYING_SLOT_MAX] = {0};
    nir_variable *out_vars[VARYING_SLOT_MAX] = {0};
-   nir_builder_init(&b, impl);
+   b = nir_builder_create(impl);
 
    shader->info.gs.vertices_out = (shader->info.gs.vertices_out - 2) * 3;
 
@@ -852,7 +792,7 @@ is_multisampling_instr(const nir_instr *instr, const void *_data)
       nir_io_semantics semantics = nir_intrinsic_io_semantics(intr);
       return semantics.location == FRAG_RESULT_SAMPLE_MASK;
    } else if (intr->intrinsic == nir_intrinsic_store_deref) {
-      nir_variable *var = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
+      nir_variable *var = nir_intrinsic_get_var(intr, 0);
       return var->data.location == FRAG_RESULT_SAMPLE_MASK;
    } else if (intr->intrinsic == nir_intrinsic_load_sample_id ||
               intr->intrinsic == nir_intrinsic_load_sample_mask_in)
@@ -1057,14 +997,10 @@ d3d12_write_0_to_new_varying(nir_shader *s, nir_variable *var)
    if (s->info.stage == MESA_SHADER_TESS_CTRL && !var->data.patch)
       return;
 
-   nir_foreach_function(func, s) {
-      if (!func->impl)
-         continue;
+   nir_foreach_function_impl(impl, s) {
+      nir_builder b = nir_builder_create(impl);
 
-      nir_builder b;
-      nir_builder_init(&b, func->impl);
-
-      nir_foreach_block(block, func->impl) {
+      nir_foreach_block(block, impl) {
          b.cursor = nir_before_block(block);
          if (s->info.stage != MESA_SHADER_GEOMETRY) {
             write_0(&b, nir_build_deref_var(&b, var));
@@ -1083,6 +1019,6 @@ d3d12_write_0_to_new_varying(nir_shader *s, nir_variable *var)
          }
       }
 
-      nir_metadata_preserve(func->impl, nir_metadata_block_index | nir_metadata_dominance);
+      nir_metadata_preserve(impl, nir_metadata_block_index | nir_metadata_dominance);
    }
 }

@@ -215,7 +215,7 @@ glx_config_get(struct glx_config * mode, int attribute, int *value_return)
  * 
  * \param count         Number of structures to allocate.
  * \returns A pointer to the first element in a linked list of \c count
- *          stuctures on success, or \c NULL on failure.
+ *          structures on success, or \c NULL on failure.
  */
 _X_HIDDEN struct glx_config *
 glx_config_create_list(unsigned count)

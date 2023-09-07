@@ -28,7 +28,7 @@
 #ifndef DRI_DRAWABLE_H
 #define DRI_DRAWABLE_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/format/u_formats.h"
 #include "frontend/api.h"
 #include "dri_util.h"

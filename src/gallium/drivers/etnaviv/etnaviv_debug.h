@@ -25,6 +25,7 @@
 #ifndef H_ETNA_DEBUG
 #define H_ETNA_DEBUG
 
+#include "util/u_debug.h"
 #include "util/log.h"
 
 #include <stdint.h>
@@ -39,6 +40,7 @@
 #define ETNA_DBG_LINKER_MSGS     0x10
 #define ETNA_DBG_DUMP_SHADERS    0x20
 #define ETNA_DRM_MSGS            0x40 /* Debug messages from DRM */
+#define ETNA_DBG_PERF            0x80
 
 /* Bypasses */
 #define ETNA_DBG_NO_TS           0x1000   /* Disable TS */
@@ -64,14 +66,14 @@ extern int etna_mesa_debug; /* set in etnaviv_screen.c from ETNA_MESA_DEBUG */
 
 #define DBG_F(flag, fmt, ...)                             \
    do {                                                   \
-      if (etna_mesa_debug & (flag))                       \
+      if (DBG_ENABLED(flag))                              \
          mesa_logd("%s:%d: " fmt, __func__, __LINE__,     \
                    ##__VA_ARGS__);                        \
    } while (0)
 
 #define DBG(fmt, ...)                                     \
    do {                                                   \
-      if (etna_mesa_debug & ETNA_DBG_MSGS)                \
+      if (DBG_ENABLED(ETNA_DBG_MSGS))                     \
          mesa_logd("%s:%d: " fmt, __func__, __LINE__,     \
                    ##__VA_ARGS__);                        \
    } while (0)
@@ -81,5 +83,22 @@ extern int etna_mesa_debug; /* set in etnaviv_screen.c from ETNA_MESA_DEBUG */
    do {                                                                \
       mesa_loge("%s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__);     \
    } while (0)
+
+#define perf_debug_message(debug, type, ...)                           \
+   do {                                                                \
+      if (DBG_ENABLED(ETNA_DBG_PERF))                                  \
+         mesa_logw(__VA_ARGS__);                                       \
+      struct util_debug_callback *__d = (debug);                       \
+      if (__d)                                                         \
+         util_debug_message(__d, type, __VA_ARGS__);                   \
+   } while (0)
+
+#define perf_debug_ctx(ctx, ...)                                                 \
+   do {                                                                          \
+      struct etna_context *__c = (ctx);                                          \
+      perf_debug_message(__c ? &__c->base.debug : NULL, PERF_INFO, __VA_ARGS__); \
+   } while (0)
+
+#define perf_debug(...) perf_debug_ctx(NULL, PERF_INFO, __VA_ARGS__)
 
 #endif

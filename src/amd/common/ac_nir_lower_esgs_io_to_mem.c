@@ -1,25 +1,7 @@
 /*
  * Copyright © 2021 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -62,7 +44,7 @@ emit_split_buffer_load(nir_builder *b, nir_ssa_def *desc, nir_ssa_def *v_off, ni
    unsigned full_dwords = total_bytes / 4u;
    unsigned remaining_bytes = total_bytes - full_dwords * 4u;
 
-   /* Accomodate max number of split 64-bit loads */
+   /* Accommodate max number of split 64-bit loads */
    nir_ssa_def *comps[NIR_MAX_VEC_COMPONENTS * 2u];
 
    /* Assume that 1x32-bit load is better than 1x16-bit + 1x8-bit */
@@ -113,7 +95,7 @@ emit_split_buffer_store(nir_builder *b, nir_ssa_def *d, nir_ssa_def *desc, nir_s
          nir_store_buffer_amd(b, store_val, desc, v_off, s_off, zero,
                               .base = start_byte, .memory_modes = nir_var_shader_out,
                               .access = ACCESS_COHERENT |
-                                        (slc ? ACCESS_STREAM_CACHE_POLICY : 0) |
+                                        (slc ? ACCESS_NON_TEMPORAL : 0) |
                                         (swizzled ? ACCESS_IS_SWIZZLED_AMD : 0));
 
          start_byte += store_bytes;
@@ -175,17 +157,16 @@ lower_es_output_store(nir_builder *b,
 
    if (st->gfx_level <= GFX8) {
       /* GFX6-8: ES is a separate HW stage, data is passed from ES to GS in VRAM. */
-      nir_ssa_def *ring = nir_build_load_ring_esgs_amd(b);
-      nir_ssa_def *es2gs_off = nir_build_load_ring_es2gs_offset_amd(b);
+      nir_ssa_def *ring = nir_load_ring_esgs_amd(b);
+      nir_ssa_def *es2gs_off = nir_load_ring_es2gs_offset_amd(b);
       emit_split_buffer_store(b, intrin->src[0].ssa, ring, io_off, es2gs_off, 4u,
                               intrin->src[0].ssa->num_components, intrin->src[0].ssa->bit_size,
                               write_mask, true, true);
    } else {
       /* GFX9+: ES is merged into GS, data is passed through LDS. */
-      nir_ssa_def *vertex_idx = nir_build_load_local_invocation_index(b);
+      nir_ssa_def *vertex_idx = nir_load_local_invocation_index(b);
       nir_ssa_def *off = nir_iadd(b, nir_imul_imm(b, vertex_idx, st->esgs_itemsize), io_off);
-      nir_build_store_shared(b, intrin->src[0].ssa, off, .write_mask = write_mask,
-                             .align_mul = 16u, .align_offset = (nir_intrinsic_component(intrin) * 4u) % 16u);
+      nir_store_shared(b, intrin->src[0].ssa, off, .write_mask = write_mask);
    }
 
    nir_instr_remove(instr);
@@ -195,7 +176,7 @@ lower_es_output_store(nir_builder *b,
 static nir_ssa_def *
 gs_get_vertex_offset(nir_builder *b, lower_esgs_io_state *st, unsigned vertex_index)
 {
-   nir_ssa_def *origin = nir_build_load_gs_vertex_offset_amd(b, .base = vertex_index);
+   nir_ssa_def *origin = nir_load_gs_vertex_offset_amd(b, .base = vertex_index);
    if (!st->gs_triangle_strip_adjacency_fix)
       return origin;
 
@@ -209,7 +190,7 @@ gs_get_vertex_offset(nir_builder *b, lower_esgs_io_state *st, unsigned vertex_in
       /* 6 vertex offset are packed to 3 vgprs for GFX9+ */
       fixed_index = (vertex_index + 2) % 3;
    }
-   nir_ssa_def *fixed = nir_build_load_gs_vertex_offset_amd(b, .base = fixed_index);
+   nir_ssa_def *fixed = nir_load_gs_vertex_offset_amd(b, .base = fixed_index);
 
    nir_ssa_def *prim_id = nir_load_primitive_id(b);
    /* odd primitive id use fixed offset */
@@ -241,8 +222,8 @@ gs_per_vertex_input_vertex_offset_gfx9(nir_builder *b, lower_esgs_io_state *st,
 {
    if (nir_src_is_const(*vertex_src)) {
       unsigned vertex = nir_src_as_uint(*vertex_src);
-      return nir_ubfe(b, gs_get_vertex_offset(b, st, vertex / 2u),
-                      nir_imm_int(b, (vertex & 1u) * 16u), nir_imm_int(b, 16u));
+      return nir_ubfe_imm(b, gs_get_vertex_offset(b, st, vertex / 2u),
+                          (vertex & 1u) * 16u, 16u);
    }
 
    nir_ssa_def *vertex_offset = gs_get_vertex_offset(b, st, 0);
@@ -291,11 +272,10 @@ lower_gs_per_vertex_input_load(nir_builder *b,
    nir_ssa_def *off = gs_per_vertex_input_offset(b, st, intrin);
 
    if (st->gfx_level >= GFX9)
-      return nir_build_load_shared(b, intrin->dest.ssa.num_components, intrin->dest.ssa.bit_size, off,
-                                   .align_mul = 16u, .align_offset = (nir_intrinsic_component(intrin) * 4u) % 16u);
+      return nir_load_shared(b, intrin->dest.ssa.num_components, intrin->dest.ssa.bit_size, off);
 
    unsigned wave_size = 64u; /* GFX6-8 only support wave64 */
-   nir_ssa_def *ring = nir_build_load_ring_esgs_amd(b);
+   nir_ssa_def *ring = nir_load_ring_esgs_amd(b);
    return emit_split_buffer_load(b, ring, off, nir_imm_zero(b, 1, 32), 4u * wave_size,
                                  intrin->dest.ssa.num_components, intrin->dest.ssa.bit_size);
 }

@@ -54,6 +54,10 @@ static const struct debug_named_value debug_control[] = {
           "Dump NIR during program compile" },
         { "tgsi",        V3D_DEBUG_TGSI,
           "Dump TGSI during program compile (v3d only)" },
+        /* `shaderdb` is *not* used by shader-db, but is here so that any other
+         * game/app can dump its stats in the shader-db format, allowing them
+         * to be compared using shader-db's report.py tool.
+         */
         { "shaderdb",    V3D_DEBUG_SHADERDB,
           "Dump program compile information for shader-db analysis" },
         { "surface",     V3D_DEBUG_SURFACE,

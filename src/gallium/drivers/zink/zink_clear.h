@@ -26,6 +26,7 @@
 
 #include "util/u_rect.h"
 #include "zink_types.h"
+#include "zink_screen.h"
 
 void
 zink_clear(struct pipe_context *pctx,

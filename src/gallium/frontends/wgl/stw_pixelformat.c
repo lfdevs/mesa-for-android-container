@@ -108,10 +108,10 @@ stw_pf_depth_stencil[] = {
 };
 
 
-static const boolean
+static const bool
 stw_pf_doublebuffer[] = {
-   FALSE,
-   TRUE,
+   false,
+   true,
 };
 
 
@@ -133,12 +133,12 @@ stw_pf_multisample[] = {
 
 static void
 stw_pixelformat_add(struct stw_device *stw_dev,
-                    boolean extended,
+                    bool extended,
                     const struct stw_pf_color_info *color,
                     const struct stw_pf_depth_info *depth,
                     unsigned accum,
-                    boolean doublebuffer,
-                    boolean gdi,
+                    bool doublebuffer,
+                    bool gdi,
                     unsigned samples)
 {
    struct stw_pixelformat_info *pfi;
@@ -226,9 +226,9 @@ stw_pixelformat_add(struct stw_device *stw_dev,
 
    /* WGL_ARB_render_texture */
    if (color->bits.alpha)
-      pfi->bindToTextureRGBA = TRUE;
+      pfi->bindToTextureRGBA = true;
 
-   pfi->bindToTextureRGB = TRUE;
+   pfi->bindToTextureRGB = true;
 
    if (!extended) {
       ++stw_dev->pixelformat_count;
@@ -244,7 +244,7 @@ stw_pixelformat_add(struct stw_device *stw_dev,
  */
 static unsigned
 add_color_format_variants(const struct stw_pf_color_info *color_formats,
-                          unsigned num_color_formats, boolean extended)
+                          unsigned num_color_formats, bool extended)
 {
    struct pipe_screen *screen = stw_dev->screen;
    unsigned cfmt, ms, db, ds, acc, f;
@@ -336,12 +336,12 @@ stw_pixelformat_init(void)
 
    /* normal, displayable formats */
    num_formats = add_color_format_variants(stw_pf_color,
-                                           ARRAY_SIZE(stw_pf_color), FALSE);
+                                           ARRAY_SIZE(stw_pf_color), false);
    assert(num_formats > 0);
 
    /* extended, pbuffer-only formats */
    add_color_format_variants(stw_pf_color_extended,
-                             ARRAY_SIZE(stw_pf_color_extended), TRUE);
+                             ARRAY_SIZE(stw_pf_color_extended), true);
 
    assert(stw_dev->pixelformat_count <=
           util_dynarray_num_elements(&stw_dev->pixelformats,
@@ -471,7 +471,7 @@ DrvDescribeLayerPlane(HDC hdc, INT iPixelFormat, INT iLayerPlane,
                       UINT nBytes, LPLAYERPLANEDESCRIPTOR plpd)
 {
    assert(0);
-   return FALSE;
+   return false;
 }
 
 
@@ -497,7 +497,7 @@ BOOL APIENTRY
 DrvRealizeLayerPalette(HDC hdc, INT iLayerPlane, BOOL bRealize)
 {
    assert(0);
-   return FALSE;
+   return false;
 }
 
 

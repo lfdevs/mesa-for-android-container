@@ -708,7 +708,7 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
     * The stride of the BO must be greater or equal to our padded
     * stride. The size of the BO must accomodate the padded height. */
    if (level->stride < util_format_get_stride(tmpl->format, level->padded_width)) {
-      BUG("BO stride %u is too small for RS engine width padding (%zu, format %s)",
+      BUG("BO stride %u is too small for RS engine width padding (%u, format %s)",
           level->stride, util_format_get_stride(tmpl->format, level->padded_width),
           util_format_name(tmpl->format));
       goto fail;

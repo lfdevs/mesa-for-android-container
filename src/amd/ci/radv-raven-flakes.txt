@@ -1,2 +1,6 @@
+dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.linear_interpolation.offset_max_2_samples
 dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.linear_interpolation.offset_max_8_samples
 dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.linear_interpolation.no_offset_4_samples
+dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.linear_interpolation.offset_max_4_samples
+# since Debian 12 CI uprev
+dEQP-VK.pipeline.pipeline_library.framebuffer_attachment.diff_attachments_2d_32x32_39x41_ms

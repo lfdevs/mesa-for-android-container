@@ -28,8 +28,7 @@
 #include "radv_private.h"
 
 void
-radv_device_memory_init(struct radv_device_memory *mem, struct radv_device *device,
-                        struct radeon_winsys_bo *bo)
+radv_device_memory_init(struct radv_device_memory *mem, struct radv_device *device, struct radeon_winsys_bo *bo)
 {
    memset(mem, 0, sizeof(*mem));
    vk_object_base_init(&device->vk, &mem->base, VK_OBJECT_TYPE_DEVICE_MEMORY);
@@ -44,8 +43,7 @@ radv_device_memory_finish(struct radv_device_memory *mem)
 }
 
 void
-radv_free_memory(struct radv_device *device, const VkAllocationCallbacks *pAllocator,
-                 struct radv_device_memory *mem)
+radv_free_memory(struct radv_device *device, const VkAllocationCallbacks *pAllocator, struct radv_device_memory *mem)
 {
    if (mem == NULL)
       return;
@@ -86,8 +84,7 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
 
    assert(pAllocateInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
 
-   const VkImportMemoryFdInfoKHR *import_info =
-      vk_find_struct_const(pAllocateInfo->pNext, IMPORT_MEMORY_FD_INFO_KHR);
+   const VkImportMemoryFdInfoKHR *import_info = vk_find_struct_const(pAllocateInfo->pNext, IMPORT_MEMORY_FD_INFO_KHR);
    const VkMemoryDedicatedAllocateInfo *dedicate_info =
       vk_find_struct_const(pAllocateInfo->pNext, MEMORY_DEDICATED_ALLOCATE_INFO);
    const VkExportMemoryAllocateInfo *export_info =
@@ -103,15 +100,14 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
       vk_find_struct_const(pAllocateInfo->pNext, WSI_MEMORY_ALLOCATE_INFO_MESA);
 
    if (pAllocateInfo->allocationSize == 0 && !ahb_import_info &&
-       !(export_info && (export_info->handleTypes &
-                         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID))) {
+       !(export_info &&
+         (export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID))) {
       /* Apparently, this is allowed */
       *pMem = VK_NULL_HANDLE;
       return VK_SUCCESS;
    }
 
-   mem =
-      vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*mem), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   mem = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*mem), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (mem == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -147,8 +143,8 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
    if (replay_info && replay_info->opaqueCaptureAddress)
       replay_address = replay_info->opaqueCaptureAddress;
 
-   unsigned priority = MIN2(RADV_BO_PRIORITY_APPLICATION_MAX - 1,
-                            (int)(priority_float * RADV_BO_PRIORITY_APPLICATION_MAX));
+   unsigned priority =
+      MIN2(RADV_BO_PRIORITY_APPLICATION_MAX - 1, (int)(priority_float * RADV_BO_PRIORITY_APPLICATION_MAX));
 
    mem->user_ptr = NULL;
 
@@ -160,8 +156,8 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
       result = radv_import_ahb_memory(device, mem, priority, ahb_import_info);
       if (result != VK_SUCCESS)
          goto fail;
-   } else if (export_info && (export_info->handleTypes &
-                              VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)) {
+   } else if (export_info &&
+              (export_info->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)) {
       result = radv_create_ahb_memory(device, mem, priority, pAllocateInfo);
       if (result != VK_SUCCESS)
          goto fail;
@@ -175,19 +171,17 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
          close(import_info->fd);
       }
 
-      if (mem->image && mem->image->plane_count == 1 &&
-          !vk_format_is_depth_or_stencil(mem->image->vk.format) && mem->image->info.samples == 1 &&
-          mem->image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      if (mem->image && mem->image->plane_count == 1 && !vk_format_is_depth_or_stencil(mem->image->vk.format) &&
+          mem->image->vk.samples == 1 && mem->image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
          struct radeon_bo_metadata metadata;
          device->ws->buffer_get_metadata(device->ws, mem->bo, &metadata);
 
-         struct radv_image_create_info create_info = {.no_metadata_planes = true,
-                                                      .bo_metadata = &metadata};
+         struct radv_image_create_info create_info = {.no_metadata_planes = true, .bo_metadata = &metadata};
 
          /* This gives a basic ability to import radeonsi images
           * that don't have DCC. This is not guaranteed by any
           * spec and can be removed after we support modifiers. */
-         result = radv_image_create_layout(device, create_info, NULL, mem->image);
+         result = radv_image_create_layout(device, create_info, NULL, NULL, mem->image);
          if (result != VK_SUCCESS) {
             device->ws->buffer_destroy(device->ws, mem->bo);
             goto fail;
@@ -195,8 +189,8 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
       }
    } else if (host_ptr_info) {
       assert(host_ptr_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT);
-      result = device->ws->buffer_from_ptr(device->ws, host_ptr_info->pHostPointer,
-                                           pAllocateInfo->allocationSize, priority, &mem->bo);
+      result = device->ws->buffer_from_ptr(device->ws, host_ptr_info->pHostPointer, pAllocateInfo->allocationSize,
+                                           priority, &mem->bo);
       if (result != VK_SUCCESS) {
          goto fail;
       } else {
@@ -206,9 +200,7 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
       uint64_t alloc_size = align_u64(pAllocateInfo->allocationSize, 4096);
       uint32_t heap_index;
 
-      heap_index =
-         device->physical_device->memory_properties.memoryTypes[pAllocateInfo->memoryTypeIndex]
-            .heapIndex;
+      heap_index = device->physical_device->memory_properties.memoryTypes[pAllocateInfo->memoryTypeIndex].heapIndex;
       domain = device->physical_device->memory_domains[pAllocateInfo->memoryTypeIndex];
       flags |= device->physical_device->memory_flags[pAllocateInfo->memoryTypeIndex];
 
@@ -236,8 +228,7 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
          flags |= RADEON_FLAG_ZERO_VRAM;
 
       if (device->overallocation_disallowed) {
-         uint64_t total_size =
-            device->physical_device->memory_properties.memoryHeaps[heap_index].size;
+         uint64_t total_size = device->physical_device->memory_properties.memoryHeaps[heap_index].size;
 
          mtx_lock(&device->overallocation_mutex);
          if (device->allocated_memory_size[heap_index] + alloc_size > total_size) {
@@ -249,9 +240,8 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
          mtx_unlock(&device->overallocation_mutex);
       }
 
-      result = device->ws->buffer_create(device->ws, alloc_size,
-                                         device->physical_device->rad_info.max_alignment, domain,
-                                         flags, priority, replay_address, &mem->bo);
+      result = device->ws->buffer_create(device->ws, alloc_size, device->physical_device->rad_info.max_alignment,
+                                         domain, flags, priority, replay_address, &mem->bo);
 
       if (result != VK_SUCCESS) {
          if (device->overallocation_disallowed) {
@@ -335,30 +325,26 @@ radv_UnmapMemory2KHR(VkDevice _device, const VkMemoryUnmapInfoKHR *pMemoryUnmapI
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-radv_FlushMappedMemoryRanges(VkDevice _device, uint32_t memoryRangeCount,
-                             const VkMappedMemoryRange *pMemoryRanges)
+radv_FlushMappedMemoryRanges(VkDevice _device, uint32_t memoryRangeCount, const VkMappedMemoryRange *pMemoryRanges)
 {
    return VK_SUCCESS;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-radv_InvalidateMappedMemoryRanges(VkDevice _device, uint32_t memoryRangeCount,
-                                  const VkMappedMemoryRange *pMemoryRanges)
+radv_InvalidateMappedMemoryRanges(VkDevice _device, uint32_t memoryRangeCount, const VkMappedMemoryRange *pMemoryRanges)
 {
    return VK_SUCCESS;
 }
 
 VKAPI_ATTR uint64_t VKAPI_CALL
-radv_GetDeviceMemoryOpaqueCaptureAddress(VkDevice device,
-                                         const VkDeviceMemoryOpaqueCaptureAddressInfo *pInfo)
+radv_GetDeviceMemoryOpaqueCaptureAddress(VkDevice device, const VkDeviceMemoryOpaqueCaptureAddressInfo *pInfo)
 {
    RADV_FROM_HANDLE(radv_device_memory, mem, pInfo->memory);
    return radv_buffer_get_va(mem->bo);
 }
 
 VKAPI_ATTR void VKAPI_CALL
-radv_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory,
-                               VkDeviceSize *pCommittedMemoryInBytes)
+radv_GetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize *pCommittedMemoryInBytes)
 {
    *pCommittedMemoryInBytes = 0;
 }

@@ -240,13 +240,13 @@ st_compressed_format_fallback(struct st_context *st, mesa_format format);
 
 void
 st_convert_image(const struct st_context *st, const struct gl_image_unit *u,
-                 struct pipe_image_view *img, unsigned shader_access);
+                 struct pipe_image_view *img, enum gl_access_qualifier shader_access);
 
 void
 st_convert_image_from_unit(const struct st_context *st,
                            struct pipe_image_view *img,
                            GLuint imgUnit,
-                           unsigned shader_access);
+                           enum gl_access_qualifier shader_access);
 
 void
 st_convert_sampler(const struct st_context *st,

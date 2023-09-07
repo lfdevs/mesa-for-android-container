@@ -216,7 +216,6 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PRIMITIVE_RESTART_FIXED_INDEX:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
-   case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
    case PIPE_CAP_FS_COORD_ORIGIN_UPPER_LEFT:
    case PIPE_CAP_FS_COORD_PIXEL_CENTER_INTEGER:
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
@@ -272,7 +271,6 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SHADER_CLOCK:
    case PIPE_CAP_SHADER_BALLOT:
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
-   case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_CLEAR_SCISSORED:
    case PIPE_CAP_SHADER_GROUP_VOTE:
    case PIPE_CAP_VS_WINDOW_SPACE_POSITION:
@@ -431,6 +429,9 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_TIMESTAMP_BITS:
       return TIMESTAMP_BITS;
 
+   case PIPE_CAP_TIMER_RESOLUTION:
+      return DIV_ROUND_UP(1000000000ull, devinfo->timestamp_frequency);
+
    case PIPE_CAP_DEVICE_PROTECTED_CONTEXT:
       return screen->kernel_features & KERNEL_HAS_PROTECTED_CONTEXT;
 
@@ -484,6 +485,10 @@ iris_get_shader_param(struct pipe_screen *pscreen,
                       enum pipe_shader_cap param)
 {
    gl_shader_stage stage = stage_from_pipe(p_stage);
+
+   if (p_stage == PIPE_SHADER_MESH ||
+       p_stage == PIPE_SHADER_TASK)
+      return 0;
 
    /* this is probably not totally correct.. but it's a start: */
    switch (param) {
@@ -540,8 +545,6 @@ iris_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
       return 0;
-   case PIPE_SHADER_CAP_PREFERRED_IR:
-      return PIPE_SHADER_IR_NIR;
    case PIPE_SHADER_CAP_SUPPORTED_IRS: {
       int irs = 1 << PIPE_SHADER_IR_NIR;
       if (iris_enable_clover())
@@ -612,8 +615,11 @@ iris_get_compute_param(struct pipe_screen *pscreen,
    case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
       RET((uint32_t []) { 1 });
 
-   case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
-      RET((uint32_t []) { BRW_SUBGROUP_SIZE });
+   case PIPE_COMPUTE_CAP_SUBGROUP_SIZES:
+      RET((uint32_t []) { 32 | 16 | 8 });
+
+   case PIPE_COMPUTE_CAP_MAX_SUBGROUPS:
+      RET((uint32_t []) { devinfo->max_cs_workgroup_threads });
 
    case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:

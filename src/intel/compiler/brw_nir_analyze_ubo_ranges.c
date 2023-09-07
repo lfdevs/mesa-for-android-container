@@ -128,16 +128,8 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
       case nir_intrinsic_load_uniform:
       case nir_intrinsic_image_deref_load:
       case nir_intrinsic_image_deref_store:
-      case nir_intrinsic_image_deref_atomic_add:
-      case nir_intrinsic_image_deref_atomic_imin:
-      case nir_intrinsic_image_deref_atomic_umin:
-      case nir_intrinsic_image_deref_atomic_imax:
-      case nir_intrinsic_image_deref_atomic_umax:
-      case nir_intrinsic_image_deref_atomic_and:
-      case nir_intrinsic_image_deref_atomic_or:
-      case nir_intrinsic_image_deref_atomic_xor:
-      case nir_intrinsic_image_deref_atomic_exchange:
-      case nir_intrinsic_image_deref_atomic_comp_swap:
+      case nir_intrinsic_image_deref_atomic:
+      case nir_intrinsic_image_deref_atomic_swap:
       case nir_intrinsic_image_deref_size:
          state->uses_regular_uniforms = true;
          continue;
@@ -149,9 +141,9 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          continue; /* Not a uniform or UBO intrinsic */
       }
 
-      if (nir_src_is_const(intrin->src[0]) &&
+      if (brw_nir_ubo_surface_index_is_pushable(intrin->src[0]) &&
           nir_src_is_const(intrin->src[1])) {
-         const int block = nir_src_as_uint(intrin->src[0]);
+         const int block = brw_nir_ubo_surface_index_get_push_block(intrin->src[0]);
          const unsigned byte_offset = nir_src_as_uint(intrin->src[1]);
          const int offset = byte_offset / 32;
 
@@ -226,11 +218,9 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
    }
 
    /* Walk the IR, recording how many times each UBO block/offset is used. */
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         nir_foreach_block(block, function->impl) {
-            analyze_ubos_block(&state, block);
-         }
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         analyze_ubos_block(&state, block);
       }
    }
 

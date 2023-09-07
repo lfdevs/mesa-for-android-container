@@ -79,7 +79,7 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
    int profileMask = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
    int resetStrategy = WGL_NO_RESET_NOTIFICATION_ARB;
    int i;
-   BOOL done = FALSE;
+   BOOL done = false;
    const int contextFlagsAll = (WGL_CONTEXT_DEBUG_BIT_ARB |
                                 WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB |
                                 WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB);
@@ -111,7 +111,7 @@ wglCreateContextAttribsARB(HDC hDC, HGLRC hShareContext, const int *attribList)
             break;
          case 0:
             /* end of list */
-            done = TRUE;
+            done = true;
             break;
          default:
             /* bad attribute */

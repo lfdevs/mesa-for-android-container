@@ -93,7 +93,7 @@ lower_wide_load_store(nir_builder *b, nir_instr *instr, void *unused)
          load->num_components = c;
          load->src[0] = nir_src_for_ssa(addr);
          nir_intrinsic_set_align(load, nir_intrinsic_align(intr), 0);
-         nir_ssa_dest_init(&load->instr, &load->dest, c, bit_size, NULL);
+         nir_ssa_dest_init(&load->instr, &load->dest, c, bit_size);
          nir_builder_instr_insert(b, &load->instr);
 
          addr = nir_iadd(b,

@@ -137,9 +137,6 @@ gather_ubo_ranges(nir_shader *nir, nir_intrinsic_instr *instr,
                   struct ir3_ubo_analysis_state *state, uint32_t alignment,
                   uint32_t *upload_remaining)
 {
-   if (ir3_shader_debug & IR3_DBG_NOUBOOPT)
-      return;
-
    struct ir3_ubo_info ubo = {};
    if (!get_ubo_info(instr, &ubo))
       return;
@@ -310,8 +307,8 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
       uniform_offset = new_offset;
    } else {
       uniform_offset = shift > 0
-                          ? nir_ishl(b, ubo_offset, nir_imm_int(b, shift))
-                          : nir_ushr(b, ubo_offset, nir_imm_int(b, -shift));
+                          ? nir_ishl_imm(b, ubo_offset, shift)
+                          : nir_ushr_imm(b, ubo_offset, -shift);
    }
 
    assert(!(const_offset & 0x3));
@@ -353,9 +350,8 @@ copy_ubo_to_uniform(nir_shader *nir, const struct ir3_const_state *const_state)
       return false;
 
    nir_function_impl *preamble = nir_shader_get_preamble(nir);
-   nir_builder _b, *b = &_b;
-   nir_builder_init(b, preamble);
-   b->cursor = nir_after_cf_list(&preamble->body);
+   nir_builder _b = nir_builder_at(nir_after_cf_list(&preamble->body));
+   nir_builder *b = &_b;
 
    for (unsigned i = 0; i < state->num_enabled; i++) {
       const struct ir3_ubo_range *range = &state->range[i];
@@ -425,6 +421,9 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
 
    memset(state, 0, sizeof(*state));
 
+   if (ir3_shader_debug & IR3_DBG_NOUBOOPT)
+      return;
+
    uint32_t upload_remaining = max_upload;
    bool push_ubos = compiler->options.push_ubo_with_preamble;
    nir_foreach_function (function, nir) {
@@ -483,8 +482,7 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
             nir_metadata_preserve(function->impl, nir_metadata_all);
             continue;
          }
-         nir_builder builder;
-         nir_builder_init(&builder, function->impl);
+         nir_builder builder = nir_builder_create(function->impl);
          nir_foreach_block (block, function->impl) {
             nir_foreach_instr_safe (instr, block) {
                if (!instr_is_load_ubo(instr))

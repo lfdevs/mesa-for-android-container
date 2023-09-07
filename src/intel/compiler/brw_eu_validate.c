@@ -2279,6 +2279,47 @@ instruction_restrictions(const struct brw_isa_info *isa,
 
    }
 
+   if (brw_inst_opcode(isa, inst) == BRW_OPCODE_ADD3) {
+      const enum brw_reg_type dst_type = inst_dst_type(isa, inst);
+
+      ERROR_IF(dst_type != BRW_REGISTER_TYPE_D &&
+               dst_type != BRW_REGISTER_TYPE_UD &&
+               dst_type != BRW_REGISTER_TYPE_W &&
+               dst_type != BRW_REGISTER_TYPE_UW,
+               "Destination must be integer D, UD, W, or UW type.");
+
+      for (unsigned i = 0; i < 3; i++) {
+         enum brw_reg_type src_type;
+
+         switch (i) {
+         case 0: src_type = brw_inst_3src_a1_src0_type(devinfo, inst); break;
+         case 1: src_type = brw_inst_3src_a1_src1_type(devinfo, inst); break;
+         case 2: src_type = brw_inst_3src_a1_src2_type(devinfo, inst); break;
+         default: unreachable("invalid src");
+         }
+
+         ERROR_IF(src_type != BRW_REGISTER_TYPE_D &&
+                  src_type != BRW_REGISTER_TYPE_UD &&
+                  src_type != BRW_REGISTER_TYPE_W &&
+                  src_type != BRW_REGISTER_TYPE_UW,
+                  "Source must be integer D, UD, W, or UW type.");
+
+         if (i == 0) {
+            if (brw_inst_3src_a1_src0_is_imm(devinfo, inst)) {
+               ERROR_IF(src_type != BRW_REGISTER_TYPE_W &&
+                        src_type != BRW_REGISTER_TYPE_UW,
+                        "Immediate source must be integer W or UW type.");
+            }
+         } else if (i == 2) {
+            if (brw_inst_3src_a1_src2_is_imm(devinfo, inst)) {
+               ERROR_IF(src_type != BRW_REGISTER_TYPE_W &&
+                        src_type != BRW_REGISTER_TYPE_UW,
+                        "Immediate source must be integer W or UW type.");
+            }
+         }
+      }
+   }
+
    if (brw_inst_opcode(isa, inst) == BRW_OPCODE_OR ||
        brw_inst_opcode(isa, inst) == BRW_OPCODE_AND ||
        brw_inst_opcode(isa, inst) == BRW_OPCODE_XOR ||

@@ -581,7 +581,7 @@ const rogue_alu_op_info rogue_alu_op_infos[ROGUE_ALU_OP_COUNT] = {
       },
       .supported_dst_types = { [0] = T(REG) | T(REGARRAY) | T(IO), },
       .supported_src_types = {
-         [0] = T(REG),
+         [0] = T(REG) | T(REGARRAY),
       },
    },
    [ROGUE_ALU_OP_FADD] = { .str = "fadd", .num_dsts = 1, .num_srcs = 2,
@@ -640,17 +640,18 @@ const rogue_alu_op_info rogue_alu_op_infos[ROGUE_ALU_OP_COUNT] = {
          [1] = T(REG) | T(IO),
       },
    },
+   /* TODO: Support fully. */
    [ROGUE_ALU_OP_MOVC] = { .str = "movc", .num_dsts = 2, .num_srcs = 3,
       .supported_phases = P(2_MOV),
-      .phase_io[PH(2_MOV)] = { .dst[0] = IO(W0), .dst[1] = IO(W1), .src[1] = IO(FT0), .src[2] = IO(FTE), }, /* TODO: SRC ONES ARE TEMPORARY, SHOULD BE MADE TO MATCH THE TST ONES INSTEAD? */
+      .phase_io[PH(2_MOV)] = { .dst[0] = IO(W0), .src[1] = IO(FTE), },
       .supported_dst_mods = {
          [0] = DM(E0) | DM(E1) | DM(E2) | DM(E3),
       },
-      .supported_dst_types = { [0] = T(REG), [1] = T(REG) | T(IO), },
+      .supported_dst_types = { [0] = T(REG) | T(REGARRAY), [1] = T(REG) | T(REGARRAY) | T(IO), },
       .supported_src_types = {
          [0] = T(IO),
-         [1] = T(REG) | T(IO),
-         [2] = T(REG) | T(IO),
+         [1] = T(REG) | T(REGARRAY) | T(IO),
+         [2] = T(REG) | T(REGARRAY) | T(IO),
       },
    },
    [ROGUE_ALU_OP_ADD64] = { .str = "add64", .num_dsts = 3, .num_srcs = 5,
@@ -684,7 +685,7 @@ const rogue_alu_op_info rogue_alu_op_infos[ROGUE_ALU_OP_COUNT] = {
    [ROGUE_ALU_OP_MOV] = { .str = "mov", .num_dsts = 1, .num_srcs = 1,
       .supported_dst_types = { [0] = T(REG) | T(REGARRAY), },
       .supported_src_types = {
-         [0] = T(REG) | T(IMM),
+         [0] = T(REG) | T(REGARRAY) | T(IMM),
       },
    },
    [ROGUE_ALU_OP_CMOV] = { .str = "cmov", .num_dsts = 1, .num_srcs = 3,

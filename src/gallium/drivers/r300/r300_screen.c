@@ -26,6 +26,7 @@
 #include "util/format/u_format_s3tc.h"
 #include "util/u_screen.h"
 #include "util/u_memory.h"
+#include "util/hex.h"
 #include "util/os_time.h"
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
@@ -35,6 +36,7 @@
 #include "r300_screen_buffer.h"
 #include "r300_state_inlines.h"
 #include "r300_public.h"
+#include "compiler/r300_nir.h"
 
 #include "draw/draw_context.h"
 
@@ -105,7 +107,7 @@ static void r300_disk_cache_create(struct r300_screen* r300screen)
         return;
 
     _mesa_sha1_final(&ctx, sha1);
-    disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
+    mesa_bytes_to_hex(cache_id, sha1, 20);
 
     r300screen->disk_shader_cache =
                     disk_cache_create(r300_get_family_name(r300screen),
@@ -122,7 +124,7 @@ static struct disk_cache* r300_get_disk_shader_cache(struct pipe_screen* pscreen
 static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 {
     struct r300_screen* r300screen = r300_screen(pscreen);
-    boolean is_r500 = r300screen->caps.is_r500;
+    bool is_r500 = r300screen->caps.is_r500;
 
     switch (param) {
         /* Supported features (boolean caps). */
@@ -143,6 +145,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_CLIP_HALFZ:
         case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
         case PIPE_CAP_LEGACY_MATH_RULES:
+        case PIPE_CAP_TGSI_TEXCOORD:
             return 1;
 
         case PIPE_CAP_TEXTURE_TRANSFER_MODES:
@@ -249,12 +252,10 @@ static int r300_get_shader_param(struct pipe_screen *pscreen,
                                  enum pipe_shader_cap param)
 {
    struct r300_screen* r300screen = r300_screen(pscreen);
-   boolean is_r400 = r300screen->caps.is_r400;
-   boolean is_r500 = r300screen->caps.is_r500;
+   bool is_r400 = r300screen->caps.is_r400;
+   bool is_r500 = r300screen->caps.is_r500;
 
    switch (param) {
-    case PIPE_SHADER_CAP_PREFERRED_IR:
-        return (r300screen->debug & DBG_USE_TGSI) ? PIPE_SHADER_IR_TGSI : PIPE_SHADER_IR_NIR;
     case PIPE_SHADER_CAP_SUPPORTED_IRS:
         return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_TGSI);
     default:
@@ -492,13 +493,13 @@ static int r300_get_video_param(struct pipe_screen *screen,
    .lower_bitops = true,                      \
    .lower_extract_byte = true,                \
    .lower_extract_word = true,                \
+   .lower_fceil = true,                       \
    .lower_fdiv = true,                        \
    .lower_fdph = true,                        \
    .lower_ffloor = true,                      \
    .lower_flrp32 = true,                      \
    .lower_flrp64 = true,                      \
    .lower_fmod = true,                        \
-   .lower_fround_even = true,                 \
    .lower_fsign = true,                       \
    .lower_ftrunc = true,                      \
    .lower_insert_byte = true,                 \
@@ -511,6 +512,7 @@ static int r300_get_video_param(struct pipe_screen *screen,
 
 static const nir_shader_compiler_options r500_vs_compiler_options = {
    COMMON_NIR_OPTIONS,
+   .has_fused_comp_and_csel = true,
 
    /* Have HW loops support and 1024 max instr count, but don't unroll *too*
     * hard.
@@ -574,7 +576,7 @@ r300_get_compiler_options(struct pipe_screen *pscreen,
  * Whether the format matches:
  *   PIPE_FORMAT_?10?10?10?2_UNORM
  */
-static inline boolean
+static inline bool
 util_format_is_rgba1010102_variant(const struct util_format_description *desc)
 {
    static const unsigned size[4] = {10, 10, 10, 2};
@@ -583,17 +585,17 @@ util_format_is_rgba1010102_variant(const struct util_format_description *desc)
    if (desc->block.width != 1 ||
        desc->block.height != 1 ||
        desc->block.bits != 32)
-      return FALSE;
+      return false;
 
    for (chan = 0; chan < 4; ++chan) {
       if(desc->channel[chan].type != UTIL_FORMAT_TYPE_UNSIGNED &&
          desc->channel[chan].type != UTIL_FORMAT_TYPE_VOID)
-         return FALSE;
+         return false;
       if (desc->channel[chan].size != size[chan])
-         return FALSE;
+         return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 static bool r300_is_blending_supported(struct r300_screen *rscreen,
@@ -642,26 +644,26 @@ static bool r300_is_format_supported(struct pipe_screen* screen,
                                      unsigned usage)
 {
     uint32_t retval = 0;
-    boolean is_r500 = r300_screen(screen)->caps.is_r500;
-    boolean is_r400 = r300_screen(screen)->caps.is_r400;
-    boolean is_color2101010 = format == PIPE_FORMAT_R10G10B10A2_UNORM ||
-                              format == PIPE_FORMAT_R10G10B10X2_SNORM ||
-                              format == PIPE_FORMAT_B10G10R10A2_UNORM ||
-                              format == PIPE_FORMAT_B10G10R10X2_UNORM ||
-                              format == PIPE_FORMAT_R10SG10SB10SA2U_NORM;
-    boolean is_ati1n = format == PIPE_FORMAT_RGTC1_UNORM ||
-                       format == PIPE_FORMAT_RGTC1_SNORM ||
-                       format == PIPE_FORMAT_LATC1_UNORM ||
-                       format == PIPE_FORMAT_LATC1_SNORM;
-    boolean is_ati2n = format == PIPE_FORMAT_RGTC2_UNORM ||
-                       format == PIPE_FORMAT_RGTC2_SNORM ||
-                       format == PIPE_FORMAT_LATC2_UNORM ||
-                       format == PIPE_FORMAT_LATC2_SNORM;
-    boolean is_half_float = format == PIPE_FORMAT_R16_FLOAT ||
-                            format == PIPE_FORMAT_R16G16_FLOAT ||
-                            format == PIPE_FORMAT_R16G16B16_FLOAT ||
-                            format == PIPE_FORMAT_R16G16B16A16_FLOAT ||
-                            format == PIPE_FORMAT_R16G16B16X16_FLOAT;
+    bool is_r500 = r300_screen(screen)->caps.is_r500;
+    bool is_r400 = r300_screen(screen)->caps.is_r400;
+    bool is_color2101010 = format == PIPE_FORMAT_R10G10B10A2_UNORM ||
+                           format == PIPE_FORMAT_R10G10B10X2_SNORM ||
+                           format == PIPE_FORMAT_B10G10R10A2_UNORM ||
+                           format == PIPE_FORMAT_B10G10R10X2_UNORM ||
+                           format == PIPE_FORMAT_R10SG10SB10SA2U_NORM;
+    bool is_ati1n = format == PIPE_FORMAT_RGTC1_UNORM ||
+                    format == PIPE_FORMAT_RGTC1_SNORM ||
+                    format == PIPE_FORMAT_LATC1_UNORM ||
+                    format == PIPE_FORMAT_LATC1_SNORM;
+    bool is_ati2n = format == PIPE_FORMAT_RGTC2_UNORM ||
+                    format == PIPE_FORMAT_RGTC2_SNORM ||
+                    format == PIPE_FORMAT_LATC2_UNORM ||
+                    format == PIPE_FORMAT_LATC2_SNORM;
+    bool is_half_float = format == PIPE_FORMAT_R16_FLOAT ||
+                         format == PIPE_FORMAT_R16G16_FLOAT ||
+                         format == PIPE_FORMAT_R16G16B16_FLOAT ||
+                         format == PIPE_FORMAT_R16G16B16A16_FLOAT ||
+                         format == PIPE_FORMAT_R16G16B16X16_FLOAT;
     const struct util_format_description *desc;
 
     if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
@@ -835,13 +837,14 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws,
     if (SCREEN_DBG_ON(r300screen, DBG_NO_HIZ))
         r300screen->caps.hiz_ram = 0;
     if (SCREEN_DBG_ON(r300screen, DBG_NO_TCL))
-        r300screen->caps.has_tcl = FALSE;
+        r300screen->caps.has_tcl = false;
 
     r300screen->rws = rws;
     r300screen->screen.destroy = r300_destroy_screen;
     r300screen->screen.get_name = r300_get_name;
     r300screen->screen.get_vendor = r300_get_vendor;
     r300screen->screen.get_compiler_options = r300_get_compiler_options;
+    r300screen->screen.finalize_nir = r300_finalize_nir;
     r300screen->screen.get_device_vendor = r300_get_device_vendor;
     r300screen->screen.get_disk_shader_cache = r300_get_disk_shader_cache;
     r300screen->screen.get_screen_fd = r300_screen_get_fd;

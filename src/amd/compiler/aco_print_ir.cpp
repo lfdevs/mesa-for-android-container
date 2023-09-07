@@ -322,6 +322,31 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
             fprintf(output, " sa_sdst(%d)", sa_sdst);
          break;
       }
+      case aco_opcode::s_delay_alu: {
+         unsigned delay[2] = {imm & 0xfu, (imm >> 7) & 0xfu};
+         unsigned skip = (imm >> 4) & 0x3;
+         for (unsigned i = 0; i < 2; i++) {
+            if (i == 1 && skip) {
+               if (skip == 1)
+                  fprintf(output, " next");
+               else
+                  fprintf(output, " skip_%u", skip - 1);
+            }
+
+            alu_delay_wait wait = (alu_delay_wait)delay[i];
+            if (wait >= alu_delay_wait::VALU_DEP_1 && wait <= alu_delay_wait::VALU_DEP_4)
+               fprintf(output, " valu_dep_%u", delay[i]);
+            else if (wait >= alu_delay_wait::TRANS32_DEP_1 && wait <= alu_delay_wait::TRANS32_DEP_3)
+               fprintf(output, " trans32_dep_%u",
+                       delay[i] - (unsigned)alu_delay_wait::TRANS32_DEP_1 + 1);
+            else if (wait == alu_delay_wait::FMA_ACCUM_CYCLE_1)
+               fprintf(output, " fma_accum_cycle_1");
+            else if (wait >= alu_delay_wait::SALU_CYCLE_1 && wait <= alu_delay_wait::SALU_CYCLE_3)
+               fprintf(output, " salu_cycle_%u",
+                       delay[i] - (unsigned)alu_delay_wait::SALU_CYCLE_1 + 1);
+         }
+         break;
+      }
       case aco_opcode::s_endpgm:
       case aco_opcode::s_endpgm_saved:
       case aco_opcode::s_endpgm_ordered_ps_done:
@@ -334,18 +359,18 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
       }
       case aco_opcode::s_sendmsg: {
          unsigned id = imm & sendmsg_id_mask;
-         static_assert(_sendmsg_gs == sendmsg_hs_tessfactor);
-         static_assert(_sendmsg_gs_done == sendmsg_dealloc_vgprs);
+         static_assert(sendmsg_gs == sendmsg_hs_tessfactor);
+         static_assert(sendmsg_gs_done == sendmsg_dealloc_vgprs);
          switch (id) {
          case sendmsg_none: fprintf(output, " sendmsg(MSG_NONE)"); break;
-         case _sendmsg_gs:
+         case sendmsg_gs:
             if (gfx_level >= GFX11)
                fprintf(output, " sendmsg(hs_tessfactor)");
             else
                fprintf(output, " sendmsg(gs%s%s, %u)", imm & 0x10 ? ", cut" : "",
                        imm & 0x20 ? ", emit" : "", imm >> 8);
             break;
-         case _sendmsg_gs_done:
+         case sendmsg_gs_done:
             if (gfx_level >= GFX11)
                fprintf(output, " sendmsg(dealloc_vgprs)");
             else
@@ -362,6 +387,11 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
          case sendmsg_get_ddid: fprintf(output, " sendmsg(get_ddid)"); break;
          default: fprintf(output, " imm:%u", imm);
          }
+         break;
+      }
+      case aco_opcode::s_wait_event: {
+         if (!(imm & wait_event_imm_dont_wait_export_ready))
+            fprintf(output, " export_ready");
          break;
       }
       default: {
@@ -491,7 +521,7 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
       if (mimg.lwe)
          fprintf(output, " lwe");
       if (mimg.r128)
-        fprintf(output, " r128");
+         fprintf(output, " r128");
       if (mimg.a16)
          fprintf(output, " a16");
       if (mimg.d16)

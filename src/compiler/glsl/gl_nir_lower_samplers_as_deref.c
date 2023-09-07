@@ -122,8 +122,7 @@ static void
 record_images_used(struct shader_info *info,
                    nir_intrinsic_instr *instr)
 {
-   nir_variable *var =
-      nir_deref_instr_get_variable(nir_src_as_deref(instr->src[0]));
+   nir_variable *var = nir_intrinsic_get_var(instr, 0);
 
    /* Structs have been lowered already, so get_aoa_size is sufficient. */
    const unsigned size =
@@ -316,17 +315,8 @@ lower_intrinsic(nir_intrinsic_instr *instr,
 {
    if (instr->intrinsic == nir_intrinsic_image_deref_load ||
        instr->intrinsic == nir_intrinsic_image_deref_store ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_add ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_imin ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_umin ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_imax ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_umax ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_and ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_or ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_xor ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_exchange ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_comp_swap ||
-       instr->intrinsic == nir_intrinsic_image_deref_atomic_fadd ||
+       instr->intrinsic == nir_intrinsic_image_deref_atomic ||
+       instr->intrinsic == nir_intrinsic_image_deref_atomic_swap ||
        instr->intrinsic == nir_intrinsic_image_deref_size ||
        instr->intrinsic == nir_intrinsic_image_deref_samples_identical ||
        instr->intrinsic == nir_intrinsic_image_deref_descriptor_amd ||

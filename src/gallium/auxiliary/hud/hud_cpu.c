@@ -60,7 +60,7 @@ filetime_to_scalar(FILETIME ft)
    return uli.QuadPart;
 }
 
-static boolean
+static bool
 get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
 {
    SYSTEM_INFO sysInfo;
@@ -70,13 +70,13 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
    assert(sysInfo.dwNumberOfProcessors >= 1);
    if (cpu_index != ALL_CPUS && cpu_index >= sysInfo.dwNumberOfProcessors) {
       /* Tell hud_get_num_cpus there are only this many CPUs. */
-      return FALSE;
+      return false;
    }
 
    /* Get accumulated user and sys time for all threads */
    if (!GetProcessTimes(GetCurrentProcess(), &ftCreation, &ftExit,
                         &ftKernel, &ftUser))
-      return FALSE;
+      return false;
 
    GetSystemTimeAsFileTime(&ftNow);
 
@@ -92,12 +92,12 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
    /* XXX: we ignore cpu_index, i.e, we assume that the individual CPU usage
     * and the system usage are one and the same.
     */
-   return TRUE;
+   return true;
 }
 
 #elif DETECT_OS_BSD
 
-static boolean
+static bool
 get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
 {
 #if DETECT_OS_NETBSD || DETECT_OS_OPENBSD
@@ -114,20 +114,20 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
       int mib[] = { CTL_KERN, KERN_CP_TIME };
 
       if (sysctl(mib, ARRAY_SIZE(mib), cp_time, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 #elif DETECT_OS_OPENBSD
       int mib[] = { CTL_KERN, KERN_CPTIME };
       long sum_cp_time[CPUSTATES];
 
       len = sizeof(sum_cp_time);
       if (sysctl(mib, ARRAY_SIZE(mib), sum_cp_time, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 
       for (int state = 0; state < CPUSTATES; state++)
          cp_time[state] = sum_cp_time[state];
 #else
       if (sysctlbyname("kern.cp_time", cp_time, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 #endif
    } else {
 #if DETECT_OS_NETBSD
@@ -135,26 +135,26 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
 
       len = sizeof(cp_time);
       if (sysctl(mib, ARRAY_SIZE(mib), cp_time, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 #elif DETECT_OS_OPENBSD
       int mib[] = { CTL_KERN, KERN_CPTIME2, cpu_index };
 
       len = sizeof(cp_time);
       if (sysctl(mib, ARRAY_SIZE(mib), cp_time, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 #else
       long *cp_times = NULL;
 
       if (sysctlbyname("kern.cp_times", NULL, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 
       if (len < (cpu_index + 1) * sizeof(cp_time))
-         return FALSE;
+         return false;
 
       cp_times = malloc(len);
 
       if (sysctlbyname("kern.cp_times", cp_times, &len, NULL, 0) == -1)
-         return FALSE;
+         return false;
 
       memcpy(cp_time, cp_times + (cpu_index * CPUSTATES),
             sizeof(cp_time));
@@ -167,12 +167,12 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
 
    *total_time = *busy_time + cp_time[CP_IDLE];
 
-   return TRUE;
+   return true;
 }
 
 #else
 
-static boolean
+static bool
 get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
 {
    char cpuname[32];
@@ -186,7 +186,7 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
 
    f = fopen("/proc/stat", "r");
    if (!f)
-      return FALSE;
+      return false;
 
    while (!feof(f) && fgets(line, sizeof(line), f)) {
       if (strstr(line, cpuname) == line) {
@@ -201,7 +201,7 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
                       &v[6], &v[7], &v[8], &v[9], &v[10], &v[11]);
          if (num < 5) {
             fclose(f);
-            return FALSE;
+            return false;
          }
 
          /* user + nice + system */
@@ -213,11 +213,11 @@ get_cpu_stats(unsigned cpu_index, uint64_t *busy_time, uint64_t *total_time)
             *total_time += v[i];
          }
          fclose(f);
-         return TRUE;
+         return true;
       }
    }
    fclose(f);
-   return FALSE;
+   return false;
 }
 #endif
 

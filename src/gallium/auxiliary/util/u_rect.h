@@ -29,7 +29,7 @@
 #ifndef U_RECT_H
 #define U_RECT_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_math.h"
 
 #ifdef __cplusplus
@@ -44,7 +44,7 @@ struct u_rect {
 /* Do two rectangles intersect?
  * Note: empty rectangles are valid as inputs (and never intersect).
  */
-static inline boolean
+static inline bool
 u_rect_test_intersection(const struct u_rect *a,
                          const struct u_rect *b)
 {

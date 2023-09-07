@@ -412,8 +412,7 @@ replace_varyings(const struct gl_constants *consts,
    }
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader->Program->nir);
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* assert that functions have been inlined before packing is called */
    nir_foreach_function(f, shader->Program->nir) {

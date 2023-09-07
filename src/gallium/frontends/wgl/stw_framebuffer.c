@@ -172,7 +172,7 @@ stw_framebuffer_get_size(struct stw_framebuffer *fb)
    }
 
    if (width != fb->width || height != fb->height) {
-      fb->must_resize = TRUE;
+      fb->must_resize = true;
       fb->width = width;
       fb->height = height;
    }
@@ -353,7 +353,7 @@ stw_framebuffer_create(HWND hWnd, const struct stw_pixelformat_info *pfi, enum s
     * a non-zero framebuffer size at all times.
     */
 
-   fb->must_resize = TRUE;
+   fb->must_resize = true;
    fb->width  = 1;
    fb->height = 1;
    fb->client_rect.left   = 0;
@@ -521,12 +521,12 @@ DrvSetPixelFormat(HDC hdc, LONG iPixelFormat)
    struct stw_framebuffer *fb;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    index = (uint) iPixelFormat - 1;
    count = stw_pixelformat_get_count(hdc);
    if (index >= count)
-      return FALSE;
+      return false;
 
    fb = stw_framebuffer_from_hdc_locked(hdc);
    if (fb) {
@@ -534,7 +534,7 @@ DrvSetPixelFormat(HDC hdc, LONG iPixelFormat)
        * SetPixelFormat must be called only once.  However ignore
        * pbuffers, for which the framebuffer object is created first.
        */
-      boolean bPbuffer = fb->owner == STW_FRAMEBUFFER_PBUFFER;
+      bool bPbuffer = fb->owner == STW_FRAMEBUFFER_PBUFFER;
 
       stw_framebuffer_unlock( fb );
 
@@ -545,7 +545,7 @@ DrvSetPixelFormat(HDC hdc, LONG iPixelFormat)
 
    fb = stw_framebuffer_create(WindowFromDC(hdc), pfi, STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->fscreen);
    if (!fb) {
-      return FALSE;
+      return false;
    }
 
    stw_framebuffer_unlock( fb );
@@ -560,7 +560,7 @@ DrvSetPixelFormat(HDC hdc, LONG iPixelFormat)
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -590,11 +590,11 @@ DrvPresentBuffers(HDC hdc, LPPRESENTBUFFERS data)
    struct pipe_resource *res;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    fb = stw_framebuffer_from_hdc( hdc );
    if (fb == NULL)
-      return FALSE;
+      return false;
 
    screen = stw_dev->screen;
    ctx = stw_current_context();
@@ -636,7 +636,7 @@ DrvPresentBuffers(HDC hdc, LPPRESENTBUFFERS data)
 
    stw_framebuffer_unlock(fb);
 
-   return TRUE;
+   return true;
 }
 
 
@@ -688,7 +688,7 @@ stw_framebuffer_present_locked(HDC hdc,
       stw_notify_current_locked(fb);
       stw_framebuffer_unlock(fb);
 
-      return TRUE;
+      return true;
    }
 }
 
@@ -733,7 +733,7 @@ stw_framebuffer_swap_locked(HDC hdc, struct stw_framebuffer *fb)
    struct stw_context *ctx;
    if (!(fb->pfi->pfd.dwFlags & PFD_DOUBLEBUFFER)) {
       stw_framebuffer_unlock(fb);
-      return TRUE;
+      return true;
    }
 
    ctx = stw_current_context();
@@ -767,11 +767,11 @@ DrvSwapBuffers(HDC hdc)
    struct stw_framebuffer *fb;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    fb = stw_framebuffer_from_hdc( hdc );
    if (fb == NULL)
-      return FALSE;
+      return false;
 
    return stw_framebuffer_swap_locked(hdc, fb);
 }
@@ -783,5 +783,5 @@ DrvSwapLayerBuffers(HDC hdc, UINT fuPlanes)
    if (fuPlanes & WGL_SWAP_MAIN_PLANE)
       return DrvSwapBuffers(hdc);
 
-   return FALSE;
+   return false;
 }

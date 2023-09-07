@@ -104,7 +104,7 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
       .name = "I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_GFX12_CCS_E,
+      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
       .supports_clear_color = false,
    },
    {
@@ -118,7 +118,7 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC,
       .name = "I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC",
       .tiling = ISL_TILING_Y0,
-      .aux_usage = ISL_AUX_USAGE_GFX12_CCS_E,
+      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
       .supports_clear_color = true,
    },
    {
@@ -130,7 +130,7 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS,
       .name = "I915_FORMAT_MOD_4_TILED_DG2_RC_CCS",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_GFX12_CCS_E,
+      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
       .supports_clear_color = false,
    },
    {
@@ -144,8 +144,29 @@ isl_drm_modifier_info_list[] = {
       .modifier = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC,
       .name = "I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC",
       .tiling = ISL_TILING_4,
-      .aux_usage = ISL_AUX_USAGE_GFX12_CCS_E,
+      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
       .supports_clear_color = true,
+   },
+   {
+      .modifier = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS,
+      .name = "I915_FORMAT_MOD_4_TILED_MTL_RC_CCS",
+      .tiling = ISL_TILING_4,
+      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_clear_color = false,
+   },
+   {
+      .modifier = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC,
+      .name = "I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC",
+      .tiling = ISL_TILING_4,
+      .aux_usage = ISL_AUX_USAGE_FCV_CCS_E,
+      .supports_clear_color = true,
+   },
+   {
+      .modifier = I915_FORMAT_MOD_4_TILED_MTL_MC_CCS,
+      .name = "I915_FORMAT_MOD_4_TILED_MTL_MC_CCS",
+      .tiling = ISL_TILING_4,
+      .aux_usage = ISL_AUX_USAGE_MC,
+      .supports_clear_color = false,
    },
    {
       .modifier = DRM_FORMAT_MOD_INVALID,

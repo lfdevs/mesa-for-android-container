@@ -25,15 +25,13 @@
  *
  **************************************************************************/
 
-
 #include <inttypes.h>
 #include <string.h>
 
-#include "eglsync.h"
 #include "eglcurrent.h"
 #include "egldriver.h"
 #include "egllog.h"
-
+#include "eglsync.h"
 
 /**
  * Parse the list of sync attributes and return the proper error code.
@@ -81,7 +79,6 @@ _eglParseSyncAttribList(_EGLSync *sync, const EGLAttrib *attrib_list)
    return EGL_SUCCESS;
 }
 
-
 EGLBoolean
 _eglInitSync(_EGLSync *sync, _EGLDisplay *disp, EGLenum type,
              const EGLAttrib *attrib_list)
@@ -118,10 +115,9 @@ _eglInitSync(_EGLSync *sync, _EGLDisplay *disp, EGLenum type,
    return EGL_TRUE;
 }
 
-
 EGLBoolean
-_eglGetSyncAttrib(_EGLDisplay *disp, _EGLSync *sync,
-                  EGLint attribute, EGLAttrib *value)
+_eglGetSyncAttrib(_EGLDisplay *disp, _EGLSync *sync, EGLint attribute,
+                  EGLAttrib *value)
 {
    switch (attribute) {
    case EGL_SYNC_TYPE_KHR:

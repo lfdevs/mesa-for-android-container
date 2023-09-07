@@ -49,6 +49,7 @@
 #include "u_endian.h" /* for UTIL_ARCH_BIG_ENDIAN */
 #include "util/detect_cc.h"
 #include "util/detect_arch.h"
+#include "util/macros.h"
 
 #ifdef __HAIKU__
 #include <sys/param.h>
@@ -656,7 +657,7 @@ static inline uintptr_t
 ALIGN(uintptr_t value, int32_t alignment)
 {
    assert(util_is_power_of_two_nonzero(alignment));
-   return (((value) + (alignment) - 1) & ~((alignment) - 1));
+   return ALIGN_POT(value, alignment);
 }
 
 /**
@@ -681,25 +682,27 @@ ALIGN_NPOT(uintptr_t value, int32_t alignment)
  * \sa ALIGN()
  */
 static inline uint64_t
-ROUND_DOWN_TO(uint64_t value, int32_t alignment)
+ROUND_DOWN_TO(uint64_t value, uint32_t alignment)
 {
    assert(util_is_power_of_two_nonzero(alignment));
-   return ((value) & ~(alignment - 1));
+   return ((value) & ~(uint64_t)(alignment - 1));
 }
 
 /**
  * Align a value, only works pot alignemnts.
  */
-static inline int
-align(int value, int alignment)
+static inline uint32_t
+align(uint32_t value, uint32_t alignment)
 {
-   return (value + alignment - 1) & ~(alignment - 1);
+   assert(util_is_power_of_two_nonzero(alignment));
+   return ALIGN_POT(value, alignment);
 }
 
 static inline uint64_t
 align64(uint64_t value, uint64_t alignment)
 {
-   return (value + alignment - 1) & ~(alignment - 1);
+   assert(util_is_power_of_two_nonzero64(alignment));
+   return ALIGN_POT(value, alignment);
 }
 
 /**

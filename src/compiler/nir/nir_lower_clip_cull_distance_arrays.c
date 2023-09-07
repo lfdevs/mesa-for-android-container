@@ -139,18 +139,15 @@ nir_lower_clip_cull_distance_arrays(nir_shader *nir)
                                     nir->info.stage == MESA_SHADER_FRAGMENT);
    }
 
-   nir_foreach_function(function, nir) {
-      if (!function->impl)
-         continue;
-
+   nir_foreach_function_impl(impl, nir) {
       if (progress) {
-         nir_metadata_preserve(function->impl,
+         nir_metadata_preserve(impl,
                                nir_metadata_block_index |
                                nir_metadata_dominance |
                                nir_metadata_live_ssa_defs |
                                nir_metadata_loop_analysis);
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 

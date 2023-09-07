@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 2022 VMware, Inc.  All rights reserved.
+ * Copyright 2022-2023 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -23,12 +23,14 @@
  *
  **********************************************************/
 
+#include "compiler/nir/nir.h"
+#include "compiler/glsl/gl_nir.h"
 #include "nir/nir_to_tgsi.h"
+
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_bitmask.h"
 #include "tgsi/tgsi_parse.h"
-#include "tgsi/tgsi_text.h"
 
 #include "svga_context.h"
 #include "svga_cmd.h"
@@ -48,23 +50,22 @@ svga_create_compute_state(struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
 
    struct svga_compute_shader *cs = CALLOC_STRUCT(svga_compute_shader);
+   nir_shader *nir = (nir_shader *)templ->prog;
 
    if (!cs)
       return NULL;
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_CREATECS);
 
-   if (templ->ir_type == PIPE_SHADER_IR_NIR) {
-      cs->base.tokens = nir_to_tgsi((void *)templ->prog, pipe->screen);
-   } else {
-      assert(templ->ir_type == PIPE_SHADER_IR_TGSI);
-      /* we need to keep a local copy of the tokens */
-      cs->base.tokens = tgsi_dup_tokens(templ->prog);
-   }
-   assert(templ->ir_type == PIPE_SHADER_IR_TGSI);
+   assert(templ->ir_type == PIPE_SHADER_IR_NIR);
+   /* nir_to_tgsi requires lowered images */
+   NIR_PASS_V(nir, gl_nir_lower_images, false);
+
+   cs->base.tokens = nir_to_tgsi((void *)nir, pipe->screen);
+
    struct svga_shader *shader = &cs->base;
    shader->id = svga->debug.shader_id++;
-   shader->type = templ->ir_type;
+   shader->type = PIPE_SHADER_IR_TGSI;
    shader->stage = PIPE_SHADER_COMPUTE;
 
    /* Collect shader basic info */

@@ -108,7 +108,7 @@ nine_csmt_worker(void *arg)
             /* decode */
             if (instr->func(ctx->device, instr)) {
                 mtx_lock(&ctx->mutex_processed);
-                p_atomic_set(&ctx->processed, TRUE);
+                p_atomic_set(&ctx->processed, true);
                 cnd_signal(&ctx->event_processed);
                 mtx_unlock(&ctx->mutex_processed);
             }
@@ -124,7 +124,7 @@ nine_csmt_worker(void *arg)
         mtx_unlock(&ctx->thread_running);
         if (p_atomic_read(&ctx->terminate)) {
             mtx_lock(&ctx->mutex_processed);
-            p_atomic_set(&ctx->processed, TRUE);
+            p_atomic_set(&ctx->processed, true);
             cnd_signal(&ctx->event_processed);
             mtx_unlock(&ctx->mutex_processed);
             break;
@@ -204,7 +204,7 @@ nine_csmt_process( struct NineDevice9 *device )
     assert(instr);
     instr->func = nop_func;
 
-    p_atomic_set(&ctx->processed, FALSE);
+    p_atomic_set(&ctx->processed, false);
     nine_queue_flush(ctx->pool);
 
     nine_csmt_wait_processed(ctx);
@@ -236,9 +236,9 @@ nine_csmt_destroy( struct NineDevice9 *device, struct csmt_context *ctx )
     assert(instr);
     instr->func = nop_func;
 
-    p_atomic_set(&ctx->processed, FALSE);
+    p_atomic_set(&ctx->processed, false);
     /* Signal worker to terminate. */
-    p_atomic_set(&ctx->terminate, TRUE);
+    p_atomic_set(&ctx->terminate, true);
     nine_queue_flush(ctx->pool);
 
     nine_csmt_wait_processed(ctx);
@@ -268,12 +268,12 @@ nine_csmt_pause( struct NineDevice9 *device )
         return;
 
     mtx_lock(&ctx->thread_resume);
-    p_atomic_set(&ctx->toPause, TRUE);
+    p_atomic_set(&ctx->toPause, true);
 
     /* Wait the thread is paused */
     mtx_lock(&ctx->thread_running);
-    ctx->hasPaused = TRUE;
-    p_atomic_set(&ctx->toPause, FALSE);
+    ctx->hasPaused = true;
+    p_atomic_set(&ctx->toPause, false);
 }
 
 static void
@@ -287,7 +287,7 @@ nine_csmt_resume( struct NineDevice9 *device )
     if (!ctx->hasPaused)
         return;
 
-    ctx->hasPaused = FALSE;
+    ctx->hasPaused = false;
     mtx_unlock(&ctx->thread_running);
     mtx_unlock(&ctx->thread_resume);
 }
@@ -389,6 +389,20 @@ prepare_vs_constants_userbuf_swvp(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
 
+    if (device->driver_caps.emulate_ucp) {
+        /* TODO: Avoid memcpy all time by storing directly into the array */
+        memcpy(&context->vs_const_f[4 * NINE_MAX_CONST_SWVP_SPE_OFFSET], &context->clip.ucp, sizeof(context->clip));
+        context->changed.vs_const_f = 1; /* TODO optimize */
+    }
+
+    if (device->driver_caps.always_output_pointsize) {
+        context->vs_const_f[4 * (NINE_MAX_CONST_SWVP_SPE_OFFSET + 8)] =
+            CLAMP(asfloat(context->rs[D3DRS_POINTSIZE]),
+                asfloat(context->rs[D3DRS_POINTSIZE_MIN]),
+                asfloat(context->rs[D3DRS_POINTSIZE_MAX]));
+        context->changed.vs_const_f = 1; /* TODO optimize */
+    }
+
     if (context->changed.vs_const_f || context->changed.group & NINE_STATE_SWVP) {
         struct pipe_constant_buffer cb;
 
@@ -469,6 +483,17 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
     if (context->swvp) {
         prepare_vs_constants_userbuf_swvp(device);
         return;
+    }
+
+    if (device->driver_caps.emulate_ucp) {
+        /* TODO: Avoid memcpy all time by storing directly into the array */
+        memcpy(&context->vs_const_f[4 * NINE_MAX_CONST_VS_SPE_OFFSET], &context->clip.ucp, sizeof(context->clip));
+    }
+    if (device->driver_caps.always_output_pointsize) {
+        context->vs_const_f[4 * (NINE_MAX_CONST_VS_SPE_OFFSET + 8)] =
+            CLAMP(asfloat(context->rs[D3DRS_POINTSIZE]),
+                asfloat(context->rs[D3DRS_POINTSIZE_MIN]),
+                asfloat(context->rs[D3DRS_POINTSIZE_MAX]));
     }
 
     if (context->changed.vs_const_i || context->changed.group & NINE_STATE_SWVP) {
@@ -560,32 +585,24 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
     cb.user_buffer = context->ps_const_f;
 
     if (context->changed.ps_const_i) {
-        int *idst = (int *)&context->ps_const_f[4 * device->max_ps_const_f];
+        int *idst = (int *)&context->ps_const_f[4 * NINE_MAX_CONST_F_PS3];
         memcpy(idst, context->ps_const_i, sizeof(context->ps_const_i));
         context->changed.ps_const_i = 0;
     }
     if (context->changed.ps_const_b) {
-        int *idst = (int *)&context->ps_const_f[4 * device->max_ps_const_f];
+        int *idst = (int *)&context->ps_const_f[4 * NINE_MAX_CONST_F_PS3];
         uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
         memcpy(bdst, context->ps_const_b, sizeof(context->ps_const_b));
         context->changed.ps_const_b = 0;
     }
 
     /* Upload special constants needed to implement PS1.x instructions like TEXBEM,TEXBEML and BEM */
-    if (context->ps->bumpenvmat_needed) {
-        memcpy(context->ps_lconstf_temp, cb.user_buffer, 8 * sizeof(float[4]));
-        memcpy(&context->ps_lconstf_temp[4 * 8], &device->context.bumpmap_vars, sizeof(device->context.bumpmap_vars));
-
-        cb.user_buffer = context->ps_lconstf_temp;
-    }
+    if (context->ps->bumpenvmat_needed)
+        memcpy(&context->ps_const_f[4 * NINE_MAX_CONST_PS_SPE_OFFSET], &device->context.bumpmap_vars, sizeof(device->context.bumpmap_vars));
 
     if (context->ps->byte_code.version < 0x30 &&
         context->rs[D3DRS_FOGENABLE]) {
-        float *dst = &context->ps_lconstf_temp[4 * 32];
-        if (cb.user_buffer != context->ps_lconstf_temp) {
-            memcpy(context->ps_lconstf_temp, cb.user_buffer, 32 * sizeof(float[4]));
-            cb.user_buffer = context->ps_lconstf_temp;
-        }
+        float *dst = &context->ps_const_f[4 * (NINE_MAX_CONST_PS_SPE_OFFSET + 12)];
 
         d3dcolor_to_rgba(dst, context->rs[D3DRS_FOGCOLOR]);
         if (context->rs[D3DRS_FOGTABLEMODE] == D3DFOG_LINEAR) {
@@ -595,6 +612,8 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
             dst[4] = asfloat(context->rs[D3DRS_FOGDENSITY]);
         }
     }
+
+    context->ps_const_f[4 * (NINE_MAX_CONST_PS_SPE_OFFSET + 14)] = context->rs[D3DRS_ALPHAREF] / 255.f;
 
     if (!cb.buffer_size)
         return;
@@ -663,6 +682,12 @@ prepare_vs(struct NineDevice9 *device, uint8_t shader_changed)
     if (context->rs[NINED3DRS_VSPOINTSIZE] != vs->point_size) {
         context->rs[NINED3DRS_VSPOINTSIZE] = vs->point_size;
         changed_group |= NINE_STATE_RASTERIZER;
+    }
+    if (context->rs[NINED3DRS_POSITIONT] != vs->position_t) {
+        context->rs[NINED3DRS_POSITIONT] = vs->position_t;
+        if (!device->driver_caps.window_space_position_support &&
+            device->driver_caps.disabling_depth_clipping_support)
+            changed_group |= NINE_STATE_RASTERIZER;
     }
 
     if ((context->bound_samplers_mask_vs & vs->sampler_mask) != vs->sampler_mask)
@@ -842,7 +867,7 @@ update_vertex_elements(struct NineDevice9 *device)
     int8_t vdecl_index_map[16]; /* vs->num_inputs <= 16 */
     uint16_t used_streams = 0;
     int dummy_vbo_stream = -1;
-    BOOL need_dummy_vbo = FALSE;
+    BOOL need_dummy_vbo = false;
     struct cso_velems_state ve;
 
     context->stream_usage_mask = 0;
@@ -862,12 +887,12 @@ update_vertex_elements(struct NineDevice9 *device)
                 }
             }
             if (vdecl_index_map[n] < 0)
-                need_dummy_vbo = TRUE;
+                need_dummy_vbo = true;
         }
     } else {
         /* No vertex declaration. Likely will never happen in practice,
          * but we need not crash on this */
-        need_dummy_vbo = TRUE;
+        need_dummy_vbo = true;
     }
 
     if (need_dummy_vbo) {
@@ -907,7 +932,7 @@ update_vertex_elements(struct NineDevice9 *device)
             context->changed.vtxbuf |= 1 << context->dummy_vbo_bound_at;
         if (dummy_vbo_stream >= 0) {
             context->changed.vtxbuf |= 1 << dummy_vbo_stream;
-            context->vbo_bound_done = FALSE;
+            context->vbo_bound_done = false;
         }
         context->dummy_vbo_bound_at = dummy_vbo_stream;
     }
@@ -935,7 +960,7 @@ update_vertex_buffers(struct NineDevice9 *device)
             dummy_vtxbuf.buffer_offset = 0;
             pipe->set_vertex_buffers(pipe, context->dummy_vbo_bound_at,
                                      1, 0, false, &dummy_vtxbuf);
-            context->vbo_bound_done = TRUE;
+            context->vbo_bound_done = true;
         }
         mask &= ~(1 << context->dummy_vbo_bound_at);
     }
@@ -952,19 +977,19 @@ update_vertex_buffers(struct NineDevice9 *device)
     context->changed.vtxbuf = 0;
 }
 
-static inline boolean
+static inline bool
 update_sampler_derived(struct nine_context *context, unsigned s)
 {
-    boolean changed = FALSE;
+    bool changed = false;
 
     if (context->samp[s][NINED3DSAMP_SHADOW] != context->texture[s].shadow) {
-        changed = TRUE;
+        changed = true;
         context->samp[s][NINED3DSAMP_SHADOW] = context->texture[s].shadow;
     }
 
     if (context->samp[s][NINED3DSAMP_CUBETEX] !=
         (context->texture[s].type == D3DRTYPE_CUBETEXTURE)) {
-        changed = TRUE;
+        changed = true;
         context->samp[s][NINED3DSAMP_CUBETEX] =
                 context->texture[s].type == D3DRTYPE_CUBETEXTURE;
     }
@@ -974,7 +999,7 @@ update_sampler_derived(struct nine_context *context, unsigned s)
         if (lod < 0)
             lod = 0;
         if (context->samp[s][NINED3DSAMP_MINLOD] != lod) {
-            changed = TRUE;
+            changed = true;
             context->samp[s][NINED3DSAMP_MINLOD] = lod;
         }
     } else {
@@ -992,11 +1017,11 @@ update_textures_and_samplers(struct NineDevice9 *device)
     struct pipe_context *pipe = context->pipe;
     struct pipe_sampler_view *view[NINE_MAX_SAMPLERS];
     unsigned num_textures = 0;
-    boolean commit_samplers;
+    bool commit_samplers;
     uint16_t sampler_mask = context->ps ? context->ps->sampler_mask :
                             device->ff.ps->sampler_mask;
 
-    commit_samplers = FALSE;
+    commit_samplers = false;
     const uint16_t ps_mask = sampler_mask | context->enabled_samplers_mask_ps;
     context->bound_samplers_mask_ps = ps_mask;
     num_textures = util_last_bit(ps_mask);
@@ -1009,7 +1034,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
 
         if (update_sampler_derived(context, s) || (context->changed.sampler[s] & 0x05fe)) {
             context->changed.sampler[s] = 0;
-            commit_samplers = TRUE;
+            commit_samplers = true;
             nine_convert_sampler_state(context->cso, s, context->samp[s]);
         }
     }
@@ -1027,7 +1052,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
         cso_single_sampler(context->cso, PIPE_SHADER_FRAGMENT,
                            s - NINE_SAMPLER_PS(0), &device->dummy_sampler_state);
 
-        commit_samplers = TRUE;
+        commit_samplers = true;
         context->changed.sampler[s] = ~0;
     }
     /* fill in unused samplers */
@@ -1042,7 +1067,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
     if (commit_samplers)
         cso_single_sampler_done(context->cso, PIPE_SHADER_FRAGMENT);
 
-    commit_samplers = FALSE;
+    commit_samplers = false;
     sampler_mask = context->programmable_vs ? context->vs->sampler_mask : 0;
     const uint16_t vs_mask = sampler_mask | context->enabled_samplers_mask_vs;
     context->bound_samplers_mask_vs = vs_mask;
@@ -1055,7 +1080,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
 
         if (update_sampler_derived(context, s) || (context->changed.sampler[s] & 0x05fe)) {
             context->changed.sampler[s] = 0;
-            commit_samplers = TRUE;
+            commit_samplers = true;
             nine_convert_sampler_state(context->cso, s, context->samp[s]);
         }
     }
@@ -1072,7 +1097,7 @@ update_textures_and_samplers(struct NineDevice9 *device)
         cso_single_sampler(context->cso, PIPE_SHADER_VERTEX,
                            s - NINE_SAMPLER_VS(0), &device->dummy_sampler_state);
 
-        commit_samplers = TRUE;
+        commit_samplers = true;
         context->changed.sampler[s] = ~0;
     }
     /* fill in unused samplers */
@@ -1159,6 +1184,7 @@ static inline void
 commit_vs(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
+    assert(context->cso_shader.vs);
 
     context->pipe->bind_vs_state(context->pipe, context->cso_shader.vs);
 }
@@ -1237,7 +1263,7 @@ nine_update_state(struct NineDevice9 *device)
 
     if (group & (NINE_STATE_COMMON | NINE_STATE_VS)) {
         if (group & NINE_STATE_FB)
-            update_framebuffer(device, FALSE);
+            update_framebuffer(device, false);
         if (group & NINE_STATE_BLEND)
             prepare_blend(device);
         if (group & NINE_STATE_DSA)
@@ -1283,7 +1309,7 @@ nine_update_state(struct NineDevice9 *device)
 
     if (unlikely(context->changed.ucp)) {
         pipe->set_clip_state(pipe, &context->clip);
-        context->changed.ucp = FALSE;
+        context->changed.ucp = false;
     }
 
     if (unlikely(group & NINE_STATE_RARE)) {
@@ -1366,7 +1392,7 @@ NineDevice9_ResolveZ( struct NineDevice9 *device )
 
     blit.mask = PIPE_MASK_ZS;
     blit.filter = PIPE_TEX_FILTER_NEAREST;
-    blit.scissor_enable = FALSE;
+    blit.scissor_enable = false;
 
     context->pipe->blit(context->pipe, &blit);
 }
@@ -1443,6 +1469,24 @@ CSMT_ITEM_NO_WAIT(nine_context_set_render_state,
 
     context->rs[State] = nine_fix_render_state_value(State, Value);
     context->changed.group |= nine_render_state_group[State];
+
+    if (device->driver_caps.alpha_test_emulation) {
+        if (State == D3DRS_ALPHATESTENABLE || State == D3DRS_ALPHAFUNC) {
+            context->rs[NINED3DRS_EMULATED_ALPHATEST] = context->rs[D3DRS_ALPHATESTENABLE] ?
+                d3dcmpfunc_to_pipe_func(context->rs[D3DRS_ALPHAFUNC]) : 7;
+            context->changed.group |= NINE_STATE_PS_PARAMS_MISC | NINE_STATE_PS_CONST | NINE_STATE_FF_SHADER;
+        }
+        if (State == D3DRS_ALPHAREF)
+            context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_FF_PS_CONSTS;
+    }
+
+    if (device->driver_caps.always_output_pointsize) {
+        if (State == D3DRS_POINTSIZE || State == D3DRS_POINTSIZE_MIN || State == D3DRS_POINTSIZE_MAX)
+            context->changed.group |= NINE_STATE_VS_CONST;
+    }
+
+    if (device->driver_caps.emulate_ucp && State == D3DRS_CLIPPLANEENABLE)
+        context->changed.group |= NINE_STATE_VS_PARAMS_MISC | NINE_STATE_VS_CONST;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_set_texture_apply,
@@ -1692,7 +1736,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_vertex_shader_constant_f,
                    Vector4fCount * 4 * sizeof(context->vs_const_f[0]));
     }
 
-    context->changed.vs_const_f = TRUE;
+    context->changed.vs_const_f = true;
     context->changed.group |= NINE_STATE_VS_CONST;
 }
 
@@ -1718,7 +1762,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_vertex_shader_constant_i,
         }
     }
 
-    context->changed.vs_const_i = TRUE;
+    context->changed.vs_const_i = true;
     context->changed.group |= NINE_STATE_VS_CONST | NINE_STATE_VS_PARAMS_MISC;
 }
 
@@ -1737,7 +1781,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_vertex_shader_constant_b,
     for (i = 0; i < BoolCount; i++)
         context->vs_const_b[StartRegister + i] = pConstantData[i] ? bool_true : 0;
 
-    context->changed.vs_const_b = TRUE;
+    context->changed.vs_const_b = true;
     context->changed.group |= NINE_STATE_VS_CONST | NINE_STATE_VS_PARAMS_MISC;
 }
 
@@ -1775,7 +1819,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_f,
            pConstantData,
            pConstantData_size);
 
-    context->changed.ps_const_f = TRUE;
+    context->changed.ps_const_f = true;
     context->changed.group |= NINE_STATE_PS_CONST;
 }
 
@@ -1792,7 +1836,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_i_transformed,
            pConstantData,
            Vector4iCount * sizeof(context->ps_const_i[0]));
 
-    context->changed.ps_const_i = TRUE;
+    context->changed.ps_const_i = true;
     context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_PS_PARAMS_MISC;
 }
 
@@ -1817,7 +1861,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_i,
             context->ps_const_i[StartRegister+i][3] = fui((float)(pConstantData[4*i+3]));
         }
     }
-    context->changed.ps_const_i = TRUE;
+    context->changed.ps_const_i = true;
     context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_PS_PARAMS_MISC;
 }
 
@@ -1836,7 +1880,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_b,
     for (i = 0; i < BoolCount; i++)
         context->ps_const_b[StartRegister + i] = pConstantData[i] ? bool_true : 0;
 
-    context->changed.ps_const_b = TRUE;
+    context->changed.ps_const_b = true;
     context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_PS_PARAMS_MISC;
 }
 
@@ -1902,9 +1946,20 @@ CSMT_ITEM_NO_WAIT(nine_context_set_transform,
                   ARG_COPY_REF(D3DMATRIX, pMatrix))
 {
     struct nine_context *context = &device->context;
-    D3DMATRIX *M = nine_state_access_transform(&context->ff, State, TRUE);
+    D3DMATRIX *M = nine_state_access_transform(&context->ff, State, true);
 
     *M = *pMatrix;
+    if (State == D3DTS_PROJECTION) {
+        BOOL prev_zfog = context->zfog;
+        /* Pixel fog (with WFOG advertised): source is either Z or W.
+         * W is the source if the projection matrix is not orthogonal.
+         * Tests on Win 10 seem to indicate _34
+         * and _33 are checked against 0, 1. */
+        context->zfog = (M->_34 == 0.0f &&
+                         M->_44 == 1.0f);
+        if (context->zfog != prev_zfog)
+            context->changed.group |= NINE_STATE_PS_PARAMS_MISC;
+    }
     context->ff.changed.transform[State / 32] |= 1 << (State % 32);
     context->changed.group |= NINE_STATE_FF;
 }
@@ -2005,11 +2060,14 @@ CSMT_ITEM_NO_WAIT(nine_context_set_clip_plane,
     struct nine_context *context = &device->context;
 
     memcpy(&context->clip.ucp[Index][0], pPlane, sizeof(context->clip.ucp[0]));
-    context->changed.ucp = TRUE;
+    if (!device->driver_caps.emulate_ucp)
+        context->changed.ucp = true;
+    else
+        context->changed.group |= NINE_STATE_FF_VS_OTHER | NINE_STATE_VS_CONST;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_set_swvp,
-                  ARG_VAL(boolean, swvp))
+                  ARG_VAL(bool, swvp))
 {
     struct nine_context *context = &device->context;
 
@@ -2192,7 +2250,7 @@ nine_context_apply_stateblock(struct NineDevice9 *device,
                 nine_context_set_transform(device, s,
                                            nine_state_access_transform(
                                                (struct nine_ff_state *)&src->ff,
-                                                                       s, FALSE));
+                                                                       s, false));
             }
         }
     }
@@ -2204,7 +2262,7 @@ nine_update_state_framebuffer_clear(struct NineDevice9 *device)
     struct nine_context *context = &device->context;
 
     if (context->changed.group & NINE_STATE_FB)
-        update_framebuffer(device, TRUE);
+        update_framebuffer(device, true);
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_clear_fb,
@@ -2362,12 +2420,12 @@ init_draw_info(struct pipe_draw_info *info,
     info->instance_count = 1;
     if (dev->context.stream_instancedata_mask & dev->context.stream_usage_mask)
         info->instance_count = MAX2(dev->context.stream_freq[0] & 0x7FFFFF, 1);
-    info->primitive_restart = FALSE;
-    info->has_user_indices = FALSE;
-    info->take_index_buffer_ownership = FALSE;
-    info->index_bias_varies = FALSE;
-    info->increment_draw_id = FALSE;
-    info->was_line_loop = FALSE;
+    info->primitive_restart = false;
+    info->has_user_indices = false;
+    info->take_index_buffer_ownership = false;
+    info->index_bias_varies = false;
+    info->increment_draw_id = false;
+    info->was_line_loop = false;
     info->restart_index = 0;
     info->view_mask = 0;
 }
@@ -2643,13 +2701,13 @@ CSMT_ITEM_NO_WAIT_WITH_COUNTER(nine_context_end_query,
     (void) context->pipe->end_query(context->pipe, query);
 }
 
-boolean
+bool
 nine_context_get_query_result(struct NineDevice9 *device, struct pipe_query *query,
-                              unsigned *counter, boolean flush, boolean wait,
+                              unsigned *counter, bool flush, bool wait,
                               union pipe_query_result *result)
 {
     struct pipe_context *pipe;
-    boolean ret;
+    bool ret;
 
     if (wait)
         nine_csmt_process(device);
@@ -2684,19 +2742,19 @@ static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
     [D3DRS_FILLMODE] = D3DFILL_SOLID,
     [D3DRS_SHADEMODE] = D3DSHADE_GOURAUD,
 /*  [D3DRS_LINEPATTERN] = 0x00000000, */
-    [D3DRS_ZWRITEENABLE] = TRUE,
-    [D3DRS_ALPHATESTENABLE] = FALSE,
-    [D3DRS_LASTPIXEL] = TRUE,
+    [D3DRS_ZWRITEENABLE] = true,
+    [D3DRS_ALPHATESTENABLE] = false,
+    [D3DRS_LASTPIXEL] = true,
     [D3DRS_SRCBLEND] = D3DBLEND_ONE,
     [D3DRS_DESTBLEND] = D3DBLEND_ZERO,
     [D3DRS_CULLMODE] = D3DCULL_CCW,
     [D3DRS_ZFUNC] = D3DCMP_LESSEQUAL,
     [D3DRS_ALPHAFUNC] = D3DCMP_ALWAYS,
     [D3DRS_ALPHAREF] = 0,
-    [D3DRS_DITHERENABLE] = FALSE,
-    [D3DRS_ALPHABLENDENABLE] = FALSE,
-    [D3DRS_FOGENABLE] = FALSE,
-    [D3DRS_SPECULARENABLE] = FALSE,
+    [D3DRS_DITHERENABLE] = false,
+    [D3DRS_ALPHABLENDENABLE] = false,
+    [D3DRS_FOGENABLE] = false,
+    [D3DRS_SPECULARENABLE] = false,
 /*  [D3DRS_ZVISIBLE] = 0, */
     [D3DRS_FOGCOLOR] = 0,
     [D3DRS_FOGTABLEMODE] = D3DFOG_NONE,
@@ -2704,8 +2762,8 @@ static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
     [D3DRS_FOGEND] = 0x3F800000,
     [D3DRS_FOGDENSITY] = 0x3F800000,
 /*  [D3DRS_EDGEANTIALIAS] = FALSE, */
-    [D3DRS_RANGEFOGENABLE] = FALSE,
-    [D3DRS_STENCILENABLE] = FALSE,
+    [D3DRS_RANGEFOGENABLE] = false,
+    [D3DRS_STENCILENABLE] = false,
     [D3DRS_STENCILFAIL] = D3DSTENCILOP_KEEP,
     [D3DRS_STENCILZFAIL] = D3DSTENCILOP_KEEP,
     [D3DRS_STENCILPASS] = D3DSTENCILOP_KEEP,
@@ -2722,13 +2780,13 @@ static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
     [D3DRS_WRAP5] = 0,
     [D3DRS_WRAP6] = 0,
     [D3DRS_WRAP7] = 0,
-    [D3DRS_CLIPPING] = TRUE,
-    [D3DRS_LIGHTING] = TRUE,
+    [D3DRS_CLIPPING] = true,
+    [D3DRS_LIGHTING] = true,
     [D3DRS_AMBIENT] = 0,
     [D3DRS_FOGVERTEXMODE] = D3DFOG_NONE,
-    [D3DRS_COLORVERTEX] = TRUE,
-    [D3DRS_LOCALVIEWER] = TRUE,
-    [D3DRS_NORMALIZENORMALS] = FALSE,
+    [D3DRS_COLORVERTEX] = true,
+    [D3DRS_LOCALVIEWER] = true,
+    [D3DRS_NORMALIZENORMALS] = false,
     [D3DRS_DIFFUSEMATERIALSOURCE] = D3DMCS_COLOR1,
     [D3DRS_SPECULARMATERIALSOURCE] = D3DMCS_COLOR2,
     [D3DRS_AMBIENTMATERIALSOURCE] = D3DMCS_MATERIAL,
@@ -2738,34 +2796,34 @@ static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
 /*  [D3DRS_SOFTWAREVERTEXPROCESSING] = FALSE, */
     [D3DRS_POINTSIZE] = 0x3F800000,
     [D3DRS_POINTSIZE_MIN] = 0x3F800000,
-    [D3DRS_POINTSPRITEENABLE] = FALSE,
-    [D3DRS_POINTSCALEENABLE] = FALSE,
+    [D3DRS_POINTSPRITEENABLE] = false,
+    [D3DRS_POINTSCALEENABLE] = false,
     [D3DRS_POINTSCALE_A] = 0x3F800000,
     [D3DRS_POINTSCALE_B] = 0x00000000,
     [D3DRS_POINTSCALE_C] = 0x00000000,
-    [D3DRS_MULTISAMPLEANTIALIAS] = TRUE,
+    [D3DRS_MULTISAMPLEANTIALIAS] = true,
     [D3DRS_MULTISAMPLEMASK] = 0xFFFFFFFF,
     [D3DRS_PATCHEDGESTYLE] = D3DPATCHEDGE_DISCRETE,
 /*  [D3DRS_PATCHSEGMENTS] = 0x3F800000, */
     [D3DRS_DEBUGMONITORTOKEN] = 0xDEADCAFE,
     [D3DRS_POINTSIZE_MAX] = 0x3F800000, /* depends on cap */
-    [D3DRS_INDEXEDVERTEXBLENDENABLE] = FALSE,
+    [D3DRS_INDEXEDVERTEXBLENDENABLE] = false,
     [D3DRS_COLORWRITEENABLE] = 0x0000000f,
     [D3DRS_TWEENFACTOR] = 0x00000000,
     [D3DRS_BLENDOP] = D3DBLENDOP_ADD,
     [D3DRS_POSITIONDEGREE] = D3DDEGREE_CUBIC,
     [D3DRS_NORMALDEGREE] = D3DDEGREE_LINEAR,
-    [D3DRS_SCISSORTESTENABLE] = FALSE,
+    [D3DRS_SCISSORTESTENABLE] = false,
     [D3DRS_SLOPESCALEDEPTHBIAS] = 0,
     [D3DRS_MINTESSELLATIONLEVEL] = 0x3F800000,
     [D3DRS_MAXTESSELLATIONLEVEL] = 0x3F800000,
-    [D3DRS_ANTIALIASEDLINEENABLE] = FALSE,
+    [D3DRS_ANTIALIASEDLINEENABLE] = false,
     [D3DRS_ADAPTIVETESS_X] = 0x00000000,
     [D3DRS_ADAPTIVETESS_Y] = 0x00000000,
     [D3DRS_ADAPTIVETESS_Z] = 0x3F800000,
     [D3DRS_ADAPTIVETESS_W] = 0x00000000,
-    [D3DRS_ENABLEADAPTIVETESSELLATION] = FALSE,
-    [D3DRS_TWOSIDEDSTENCILMODE] = FALSE,
+    [D3DRS_ENABLEADAPTIVETESSELLATION] = false,
+    [D3DRS_TWOSIDEDSTENCILMODE] = false,
     [D3DRS_CCW_STENCILFAIL] = D3DSTENCILOP_KEEP,
     [D3DRS_CCW_STENCILZFAIL] = D3DSTENCILOP_KEEP,
     [D3DRS_CCW_STENCILPASS] = D3DSTENCILOP_KEEP,
@@ -2784,15 +2842,16 @@ static const DWORD nine_render_state_defaults[NINED3DRS_LAST + 1] =
     [D3DRS_WRAP13] = 0,
     [D3DRS_WRAP14] = 0,
     [D3DRS_WRAP15] = 0,
-    [D3DRS_SEPARATEALPHABLENDENABLE] = FALSE,
+    [D3DRS_SEPARATEALPHABLENDENABLE] = false,
     [D3DRS_SRCBLENDALPHA] = D3DBLEND_ONE,
     [D3DRS_DESTBLENDALPHA] = D3DBLEND_ZERO,
     [D3DRS_BLENDOPALPHA] = D3DBLENDOP_ADD,
-    [NINED3DRS_VSPOINTSIZE] = FALSE,
+    [NINED3DRS_VSPOINTSIZE] = false,
     [NINED3DRS_RTMASK] = 0xf,
-    [NINED3DRS_ALPHACOVERAGE] = FALSE,
-    [NINED3DRS_MULTISAMPLE] = FALSE,
-    [NINED3DRS_FETCH4] = 0
+    [NINED3DRS_ALPHACOVERAGE] = false,
+    [NINED3DRS_MULTISAMPLE] = false,
+    [NINED3DRS_FETCH4] = 0,
+    [NINED3DRS_EMULATED_ALPHATEST] = 7 /* ALWAYS pass */
 };
 static const DWORD nine_tex_stage_state_defaults[NINED3DTSS_LAST + 1] =
 {
@@ -2843,7 +2902,7 @@ void nine_state_restore_non_cso(struct NineDevice9 *device)
 
     context->changed.group = NINE_STATE_ALL; /* TODO: we can remove states that have prepared commits */
     context->changed.vtxbuf = (1ULL << device->caps.MaxStreams) - 1;
-    context->changed.ucp = TRUE;
+    context->changed.ucp = true;
     context->commit |= 0xffffffff; /* re-commit everything */
     context->enabled_sampler_count_vs = 0;
     context->enabled_sampler_count_ps = 0;
@@ -2851,7 +2910,7 @@ void nine_state_restore_non_cso(struct NineDevice9 *device)
 
 void
 nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
-                        boolean is_reset)
+                        bool is_reset)
 {
     struct nine_state *state = &device->state;
     struct nine_context *context = &device->context;
@@ -2896,6 +2955,7 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
     memset(context->ps_const_i, 0, sizeof(context->ps_const_i));
     memset(state->ps_const_b, 0, sizeof(state->ps_const_b));
     memset(context->ps_const_b, 0, sizeof(context->ps_const_b));
+    context->zfog = false; /* Guess from wine tests: both true or false are ok */
 
     /* Cap dependent initial state:
      */
@@ -2907,7 +2967,7 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
      */
     context->changed.group = NINE_STATE_ALL;
     context->changed.vtxbuf = (1ULL << device->caps.MaxStreams) - 1;
-    context->changed.ucp = TRUE;
+    context->changed.ucp = true;
 
     context->ff.changed.transform[0] = ~0;
     context->ff.changed.transform[D3DTS_WORLD / 32] |= 1 << (D3DTS_WORLD % 32);
@@ -2922,7 +2982,7 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
 
     if (!is_reset) {
         context->dummy_vbo_bound_at = -1;
-        context->vbo_bound_done = FALSE;
+        context->vbo_bound_done = false;
     }
 }
 
@@ -2994,7 +3054,7 @@ nine_context_clear(struct NineDevice9 *device)
     pipe_resource_reference(&context->pipe_data.cb_ps.buffer, NULL);
 
     for (i = 0; i < NINE_MAX_SAMPLERS; ++i) {
-        context->texture[i].enabled = FALSE;
+        context->texture[i].enabled = false;
         pipe_resource_reference(&context->texture[i].resource,
                                 NULL);
         pipe_sampler_view_reference(&context->texture[i].view[0],
@@ -3050,7 +3110,7 @@ update_vertex_elements_sw(struct NineDevice9 *device)
     int8_t vdecl_index_map[16]; /* vs->num_inputs <= 16 */
     int8_t used_streams[device->caps.MaxStreams];
     int dummy_vbo_stream = -1;
-    BOOL need_dummy_vbo = FALSE;
+    BOOL need_dummy_vbo = false;
     struct cso_velems_state ve;
     bool programmable_vs = state->vs && !(state->vdecl && state->vdecl->position_t);
 
@@ -3071,12 +3131,12 @@ update_vertex_elements_sw(struct NineDevice9 *device)
                 }
             }
             if (vdecl_index_map[n] < 0)
-                need_dummy_vbo = TRUE;
+                need_dummy_vbo = true;
         }
     } else {
         /* No vertex declaration. Likely will never happen in practice,
          * but we need not crash on this */
-        need_dummy_vbo = TRUE;
+        need_dummy_vbo = true;
     }
 
     if (need_dummy_vbo) {
@@ -3454,7 +3514,7 @@ const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
 {
     [D3DRS_ZENABLE] = NINE_STATE_DSA | NINE_STATE_MULTISAMPLE,
     [D3DRS_FILLMODE] = NINE_STATE_RASTERIZER,
-    [D3DRS_SHADEMODE] = NINE_STATE_RASTERIZER,
+    [D3DRS_SHADEMODE] = NINE_STATE_RASTERIZER | NINE_STATE_PS_PARAMS_MISC,
     [D3DRS_ZWRITEENABLE] = NINE_STATE_DSA,
     [D3DRS_ALPHATESTENABLE] = NINE_STATE_DSA,
     [D3DRS_LASTPIXEL] = NINE_STATE_RASTERIZER,
@@ -3582,7 +3642,7 @@ nine_state_resize_transform(struct nine_ff_state *ff_state, unsigned N)
 
 D3DMATRIX *
 nine_state_access_transform(struct nine_ff_state *ff_state, D3DTRANSFORMSTATETYPE t,
-                            boolean alloc)
+                            bool alloc)
 {
     unsigned index;
 

@@ -29,6 +29,27 @@
 
 #include "vulkan/runtime/vk_common_entrypoints.h"
 
+/** Timestamp structure format */
+union anv_utrace_timestamp {
+   /* Timestamp writtem by either 2 * MI_STORE_REGISTER_MEM or
+    * PIPE_CONTROL.
+    */
+   uint64_t timestamp;
+
+   /* Timestamp written by COMPUTE_WALKER::PostSync
+    *
+    * Layout is described in PRMs.
+    * ATSM PRMs, Volume 2d: Command Reference: Structures, POSTSYNC_DATA:
+    *
+    *    "The timestamp layout :
+    *        [0] = 32b Context Timestamp Start
+    *        [1] = 32b Global Timestamp Start
+    *        [2] = 32b Context Timestamp End
+    *        [3] = 32b Global Timestamp End"
+    */
+   uint32_t compute_walker[4];
+};
+
 static uint32_t
 command_buffers_count_utraces(struct anv_device *device,
                               uint32_t cmd_buffer_count,
@@ -88,7 +109,8 @@ anv_device_utrace_emit_copy_ts_buffer(struct u_trace_context *utctx,
       .bo = ts_to, .offset = to_offset * sizeof(uint64_t) };
 
    anv_genX(device->info, emit_so_memcpy)(&submit->memcpy_state,
-                                           to_addr, from_addr, count * sizeof(uint64_t));
+                                          to_addr, from_addr,
+                                          count * sizeof(union anv_utrace_timestamp));
 }
 
 VkResult
@@ -130,7 +152,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
          goto error_trace_buf;
 
       uint32_t batch_size = 512; /* 128 dwords of setup */
-      if (device->info->verx10 == 120 || intel_device_info_is_dg2(device->info)) {
+      if (intel_needs_workaround(device->info, 16013994831)) {
          /* Enable/Disable preemption at the begin/end */
          batch_size += 2 * (250 /* 250 MI_NOOPs*/ +
                             6   /* PIPE_CONTROL */ +
@@ -171,6 +193,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
          }
       }
       anv_genX(device->info, emit_so_memcpy_fini)(&submit->memcpy_state);
+
       anv_genX(device->info, emit_so_memcpy_end)(&submit->memcpy_state);
 
       u_trace_flush(&submit->ds.trace, submit, true);
@@ -212,12 +235,21 @@ anv_utrace_create_ts_buffer(struct u_trace_context *utctx, uint32_t size_b)
    struct anv_device *device =
       container_of(utctx, struct anv_device, ds.trace_context);
 
+   uint32_t anv_ts_size_b = (size_b / sizeof(uint64_t)) *
+      sizeof(union anv_utrace_timestamp);
+
    struct anv_bo *bo = NULL;
    UNUSED VkResult result =
       anv_bo_pool_alloc(&device->utrace_bo_pool,
-                        align(size_b, 4096),
+                        align(anv_ts_size_b, 4096),
                         &bo);
    assert(result == VK_SUCCESS);
+
+   memset(bo->map, 0, bo->size);
+#ifdef SUPPORT_INTEL_INTEGRATED_GPUS
+   if (device->physical->memory.need_clflush)
+         intel_clflush_range(bo->map, bo->size);
+#endif
 
    return bo;
 }
@@ -239,19 +271,30 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
 {
    struct anv_device *device =
       container_of(ut->utctx, struct anv_device, ds.trace_context);
-   struct anv_batch *batch =
-      cs != NULL ? cs :
-      &container_of(ut, struct anv_cmd_buffer, trace)->batch;
+   struct anv_cmd_buffer *cmd_buffer =
+      container_of(ut, struct anv_cmd_buffer, trace);
+   /* cmd_buffer is only valid if cs == NULL */
+   struct anv_batch *batch = cs != NULL ? cs : &cmd_buffer->batch;
    struct anv_bo *bo = timestamps;
 
-   enum anv_timestamp_capture_type capture_type =
-      (end_of_pipe) ? ANV_TIMESTAMP_CAPTURE_END_OF_PIPE
-                    : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
-   device->physical->cmd_emit_timestamp(batch, device,
-                                        (struct anv_address) {
-                                           .bo = bo,
-                                           .offset = idx * sizeof(uint64_t) },
-                                        capture_type);
+   struct anv_address ts_address = (struct anv_address) {
+      .bo = bo,
+      .offset = idx * sizeof(union anv_utrace_timestamp)
+   };
+
+   /* Is this a end of compute trace point? */
+   const bool is_end_compute =
+      (cs == NULL && cmd_buffer->last_compute_walker != NULL && end_of_pipe);
+
+   enum anv_timestamp_capture_type capture_type = end_of_pipe ?
+      is_end_compute ? ANV_TIMESTAMP_REWRITE_COMPUTE_WALKER :
+      ANV_TIMESTAMP_CAPTURE_END_OF_PIPE : ANV_TIMESTAMP_CAPTURE_TOP_OF_PIPE;
+   device->physical->cmd_emit_timestamp(batch, device, ts_address,
+                                        capture_type,
+                                        is_end_compute ?
+                                        cmd_buffer->last_compute_walker : NULL);
+   if (is_end_compute)
+         cmd_buffer->last_compute_walker = NULL;
 }
 
 static uint64_t
@@ -274,13 +317,30 @@ anv_utrace_read_ts(struct u_trace_context *utctx,
       assert(result == VK_SUCCESS);
    }
 
-   uint64_t *ts = bo->map;
+   union anv_utrace_timestamp *ts = (union anv_utrace_timestamp *)bo->map;
 
    /* Don't translate the no-timestamp marker: */
-   if (ts[idx] == U_TRACE_NO_TIMESTAMP)
+   if (ts[idx].timestamp == U_TRACE_NO_TIMESTAMP)
       return U_TRACE_NO_TIMESTAMP;
 
-   return intel_device_info_timebase_scale(device->info, ts[idx]);
+   /* Detect a 16bytes timestamp write */
+   if (ts[idx].compute_walker[2] != 0 || ts[idx].compute_walker[3] != 0) {
+      /* The timestamp written by COMPUTE_WALKER::PostSync only as 32bits. We
+       * need to rebuild the full 64bits using the previous timestamp. We
+       * assume that utrace is reading the timestamp in order. Anyway
+       * timestamp rollover on 32bits in a few minutes so in most cases that
+       * should be correct.
+       */
+      uint64_t timestamp =
+         (submit->last_full_timestamp & 0xffffffff00000000) |
+         (uint64_t) ts[idx].compute_walker[3];
+
+      return intel_device_info_timebase_scale(device->info, timestamp);
+   }
+
+   submit->last_full_timestamp = ts[idx].timestamp;
+
+   return intel_device_info_timebase_scale(device->info, ts[idx].timestamp);
 }
 
 void
@@ -338,6 +398,7 @@ anv_pipe_flush_bit_to_ds_stall_flag(enum anv_pipe_bits bits)
       { .anv = ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT, .ds = INTEL_DS_UNTYPED_DATAPORT_CACHE_FLUSH_BIT, },
       { .anv = ANV_PIPE_PSS_STALL_SYNC_BIT,               .ds = INTEL_DS_PSS_STALL_SYNC_BIT, },
       { .anv = ANV_PIPE_END_OF_PIPE_SYNC_BIT,             .ds = INTEL_DS_END_OF_PIPE_BIT, },
+      { .anv = ANV_PIPE_CCS_CACHE_FLUSH_BIT,              .ds = INTEL_DS_CCS_CACHE_FLUSH_BIT, },
    };
 
    enum intel_ds_stall_flag ret = 0;

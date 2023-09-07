@@ -76,8 +76,9 @@ lower_tex_src_to_offset(nir_builder *b,
          }
 
          index = nir_iadd(b, index,
-                          nir_imul(b, nir_imm_int(b, array_elements),
-                                   nir_ssa_for_src(b, deref->arr.index, 1)));
+                          nir_imul_imm(b,
+                                       nir_ssa_for_src(b, deref->arr.index, 1),
+                                       array_elements));
       }
 
       array_elements *= glsl_get_length(parent->type);

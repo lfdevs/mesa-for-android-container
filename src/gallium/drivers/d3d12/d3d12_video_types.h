@@ -37,10 +37,16 @@
 #include <directx/d3d12video.h>
 #include <dxguids/dxguids.h>
 
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+#else // leave this way so #if D3D12_PREVIEW_SDK_VERSION >= 711 is easily searchable later
+using D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1 = D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT;
+constexpr D3D12_FEATURE_VIDEO D3D12_FEATURE_VIDEO_ENCODER_SUPPORT1 = D3D12_FEATURE_VIDEO_ENCODER_SUPPORT;
+#endif
+
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
 
-#if !defined(_WIN32) || defined(_MSC_VER) || D3D12_SDK_VERSION < 606
+#if !defined(_WIN32) || defined(_MSC_VER)
 inline D3D12_VIDEO_DECODER_HEAP_DESC
 GetDesc(ID3D12VideoDecoderHeap *heap)
 {
@@ -56,25 +62,13 @@ GetDesc(ID3D12VideoDecoderHeap *heap)
 }
 #endif
 
-// Allow encoder to continue the encoding session when an optional 
-// rate control mode such as the following is used but not supported
-//
-// D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES
-// D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE
-//
-// If setting this OS Env variable to true, the encoding process will continue, disregarding the settings
-// requested for the optional RC mode
-//
-
-const bool D3D12_VIDEO_ENC_FALLBACK_RATE_CONTROL_CONFIG = debug_get_bool_option("D3D12_VIDEO_ENC_FALLBACK_RATE_CONTROL_CONFIG", false);
-
 /* For CBR mode, to guarantee bitrate of generated stream complies with
 * target bitrate (e.g. no over +/-10%), vbv_buffer_size should be same
 * as target bitrate. Controlled by OS env var D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE
 */
 const bool D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE = debug_get_bool_option("D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE", false);
 
-// Allow encoder to continue the encoding session when aa slice mode 
+// Allow encoder to continue the encoding session when aa slice mode
 // is requested but not supported.
 //
 // If setting this OS Env variable to true, the encoder will try to adjust to the closest slice
@@ -92,6 +86,18 @@ const uint64_t D3D12_VIDEO_ENC_ASYNC_DEPTH = debug_get_num_option("D3D12_VIDEO_E
 const uint64_t D3D12_VIDEO_ENC_METADATA_BUFFERS_COUNT = debug_get_num_option("D3D12_VIDEO_ENC_METADATA_BUFFERS_COUNT", 2 * D3D12_VIDEO_ENC_ASYNC_DEPTH);
 
 constexpr unsigned int D3D12_VIDEO_H264_MB_IN_PIXELS = 16;
+
+constexpr size_t D3D12_DEFAULT_COMPBIT_STAGING_SIZE = (1024 /*1K*/ * 1024/*1MB*/) * 8/*8 MB*/; // 8MB 
+
+/* If enabled, the D3D12 AV1 encoder will use always ...CONFIGURABLE_GRID_PARTITION mode */
+/* If disabled, the D3D12 AV1 encoder will try to use ...UNIFORM_GRID_PARTITION first and then fallback to ...CONFIGURABLE_GRID_PARTITION if not possible */
+const bool D3D12_VIDEO_FORCE_TILE_MODE = debug_get_bool_option("D3D12_VIDEO_FORCE_TILE_MODE", false);
+
+/**
+ * If enabled, the D3D12 AV1 encoder will insert a OBU_FRAME_HEADER with show_existing_frame = 1 after the current frame to show a previous
+ * show_frame = 0 encoded frame as reference and used by the current frame
+ */
+const bool D3D12_VIDEO_AV1_INSERT_SHOW_EXISTING_FRAME_HEADER = debug_get_bool_option("D3D12_VIDEO_AV1_INSERT_SHOW_EXISTING_FRAME_HEADER", false);
 
 enum d3d12_video_decode_config_specific_flags
 {
@@ -140,24 +146,39 @@ d3d12_video_encoder_convert_from_d3d12_level_h264(D3D12_VIDEO_ENCODER_LEVELS_H26
 void
 d3d12_video_encoder_convert_from_d3d12_level_hevc(D3D12_VIDEO_ENCODER_LEVELS_HEVC level12,
                                                   uint32_t &                      specLevel);
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+void
+d3d12_video_encoder_convert_d3d12_to_spec_level_av1(D3D12_VIDEO_ENCODER_AV1_LEVELS   level12,
+                                                    uint32_t &                      specLevel);
+void
+d3d12_video_encoder_convert_spec_to_d3d12_level_av1(uint32_t specLevel,
+                                                    D3D12_VIDEO_ENCODER_AV1_LEVELS& level12);    
+void
+d3d12_video_encoder_convert_spec_to_d3d12_tier_av1(uint32_t specTier,
+                                                   D3D12_VIDEO_ENCODER_AV1_TIER & tier12);           
+#endif                                                                                      
 D3D12_VIDEO_ENCODER_PROFILE_H264
 d3d12_video_encoder_convert_profile_to_d3d12_enc_profile_h264(enum pipe_video_profile profile);
 D3D12_VIDEO_ENCODER_PROFILE_HEVC
 d3d12_video_encoder_convert_profile_to_d3d12_enc_profile_hevc(enum pipe_video_profile profile);
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+D3D12_VIDEO_ENCODER_AV1_PROFILE
+d3d12_video_encoder_convert_profile_to_d3d12_enc_profile_av1(enum pipe_video_profile profile);
+#endif
 D3D12_VIDEO_ENCODER_CODEC
 d3d12_video_encoder_convert_codec_to_d3d12_enc_codec(enum pipe_video_profile profile);
 GUID
 d3d12_video_decoder_convert_pipe_video_profile_to_d3d12_profile(enum pipe_video_profile profile);
-D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_TUSIZE 
+D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_TUSIZE
 d3d12_video_encoder_convert_pixel_size_hevc_to_12tusize(const uint32_t& TUSize);
 D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_CUSIZE
 d3d12_video_encoder_convert_pixel_size_hevc_to_12cusize(const uint32_t& cuSize);
 uint8_t
 d3d12_video_encoder_convert_12cusize_to_pixel_size_hevc(const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_CUSIZE& cuSize);
-uint8_t 
+uint8_t
 d3d12_video_encoder_convert_12tusize_to_pixel_size_hevc(const D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_TUSIZE& TUSize);
 
-DEFINE_ENUM_FLAG_OPERATORS(pipe_h265_enc_feature);
+DEFINE_ENUM_FLAG_OPERATORS(pipe_enc_feature);
 DEFINE_ENUM_FLAG_OPERATORS(pipe_h265_enc_pred_direction);
 
 #endif

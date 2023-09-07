@@ -33,10 +33,36 @@
 #include "pvr_types.h"
 
 struct pvr_device;
+struct pvr_device_info;
 struct pvr_free_list;
 struct pvr_render_ctx;
 struct pvr_rt_dataset;
 struct vk_sync;
+
+/* Macrotile information. */
+struct pvr_rt_mtile_info {
+   uint32_t tile_size_x;
+   uint32_t tile_size_y;
+
+   uint32_t num_tiles_x;
+   uint32_t num_tiles_y;
+
+   uint32_t tiles_per_mtile_x;
+   uint32_t tiles_per_mtile_y;
+
+   uint32_t x_tile_max;
+   uint32_t y_tile_max;
+
+   uint32_t mtiles_x;
+   uint32_t mtiles_y;
+
+   uint32_t mtile_x1;
+   uint32_t mtile_y1;
+   uint32_t mtile_x2;
+   uint32_t mtile_y2;
+   uint32_t mtile_x3;
+   uint32_t mtile_y3;
+};
 
 /* FIXME: Turn 'struct pvr_sub_cmd' into 'struct pvr_job' and change 'struct
  * pvr_render_job' to subclass it? This is approximately what v3dv does
@@ -62,7 +88,6 @@ struct pvr_render_job {
 
    pvr_dev_addr_t ctrl_stream_addr;
 
-   pvr_dev_addr_t border_colour_table_addr;
    pvr_dev_addr_t depth_bias_table_addr;
    pvr_dev_addr_t scissor_table_addr;
 
@@ -72,13 +97,17 @@ struct pvr_render_job {
     * has_stencil_attachment are false, the contents are undefined.
     */
    struct pvr_ds_attachment {
+      struct {
+         bool d : 1;
+         bool s : 1;
+      } load, store;
+
       pvr_dev_addr_t addr;
       uint32_t stride;
       uint32_t height;
-      uint32_t physical_width;
-      uint32_t physical_height;
+      VkExtent2D physical_extent;
       uint32_t layer_size;
-      VkFormat vk_format;
+      enum PVRX(CR_ZLS_FORMAT_TYPE) zls_format;
       /* FIXME: This should be of type 'enum pvr_memlayout', but this is defined
        * in pvr_private.h, which causes a circular include dependency. For now,
        * treat it as a uint32_t. A couple of ways to possibly fix this:
@@ -88,6 +117,12 @@ struct pvr_render_job {
        *      included by both this header and pvr_private.h.
        */
       uint32_t memlayout;
+
+      /* TODO: Is this really necessary? Maybe we can extract all useful
+       * information and drop this member. */
+      const struct pvr_image_view *iview;
+
+      bool has_alignment_transfers;
    } ds;
 
    VkClearDepthStencilValue ds_clear_value;
@@ -109,6 +144,12 @@ struct pvr_render_job {
    uint64_t pds_bgnd_reg_values[ROGUE_NUM_CR_PDS_BGRND_WORDS];
    uint64_t pds_pr_bgnd_reg_values[ROGUE_NUM_CR_PDS_BGRND_WORDS];
 };
+
+void pvr_rt_mtile_info_init(const struct pvr_device_info *dev_info,
+                            struct pvr_rt_mtile_info *info,
+                            uint32_t width,
+                            uint32_t height,
+                            uint32_t samples);
 
 VkResult pvr_free_list_create(struct pvr_device *device,
                               uint32_t initial_size,

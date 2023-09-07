@@ -39,9 +39,6 @@ struct tgsi_src_register;
 struct tgsi_full_src_register;
 struct tgsi_full_instruction;
 
-void *
-tgsi_align_128bit(void *unaligned);
-
 unsigned
 tgsi_util_get_src_register_swizzle(const struct tgsi_src_register *reg,
                                    unsigned component);
@@ -51,11 +48,6 @@ unsigned
 tgsi_util_get_full_src_register_swizzle(
    const struct tgsi_full_src_register *reg,
    unsigned component );
-
-void
-tgsi_util_set_src_register_swizzle(struct tgsi_src_register *reg,
-                                   unsigned swizzle,
-                                   unsigned component);
 
 /* returns the channels of the src_idx src register used by the full instruction. */
 unsigned

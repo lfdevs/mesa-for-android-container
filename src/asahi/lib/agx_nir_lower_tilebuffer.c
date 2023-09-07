@@ -29,7 +29,7 @@ tib_filter(const nir_instr *instr, UNUSED const void *_)
       return false;
 
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
-   assert(sem.dual_source_blend_index == 0 && "todo: dual source blending");
+   assert(sem.dual_source_blend_index == 0 && "dual source blending lowered");
    return (sem.location >= FRAG_RESULT_DATA0);
 }
 

@@ -60,9 +60,9 @@ namespace
          if (!nir)
             return NULL;
 
-         nir_foreach_function(func, nir)
+         nir_foreach_function_impl(impl, nir)
          {
-            nir_foreach_block(block, func->impl)
+            nir_foreach_block(block, impl)
             {
                nir_foreach_instr(instr, block)
                {
@@ -444,7 +444,7 @@ TEST_F(gl_nir_lower_mediump_test, func_args_in_mediump)
          }
     )"));
 
-   EXPECT_PRED_FORMAT2(glsl_ir_contains, fs_ir, "expression float16_t * (expression float16_t f2fmp (var_ref a) ) (expression float16_t f2fmp (var_ref b) ) )");
+   EXPECT_PRED_FORMAT2(glsl_ir_contains, fs_ir, "expression float f162f (expression float16_t * (expression float16_t f2fmp (var_ref x) ) (expression float16_t f2fmp (var_ref y) ) )");
 
    /* NIR optimization will notice that we downconvert the highp to mediump just
     * to multiply and cast back up, and just multiply in highp instead.

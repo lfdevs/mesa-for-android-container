@@ -65,9 +65,9 @@ nv30_render_get_vertex_info(struct vbuf_render *render)
    return &nv30_render(render)->vertex_info;
 }
 
-static boolean
+static bool
 nv30_render_allocate_vertices(struct vbuf_render *render,
-                              ushort vertex_size, ushort nr_vertices)
+                              uint16_t vertex_size, uint16_t nr_vertices)
 {
    struct nv30_render *r = nv30_render(render);
    struct nv30_context *nv30 = r->nv30;
@@ -104,7 +104,7 @@ nv30_render_map_vertices(struct vbuf_render *render)
 
 static void
 nv30_render_unmap_vertices(struct vbuf_render *render,
-                           ushort min_index, ushort max_index)
+                           uint16_t min_index, uint16_t max_index)
 {
    struct nv30_render *r = nv30_render(render);
    pipe_buffer_unmap(&r->nv30->base.pipe, r->transfer);
@@ -112,7 +112,7 @@ nv30_render_unmap_vertices(struct vbuf_render *render,
 }
 
 static void
-nv30_render_set_primitive(struct vbuf_render *render, enum pipe_prim_type prim)
+nv30_render_set_primitive(struct vbuf_render *render, enum mesa_prim prim)
 {
    struct nv30_render *r = nv30_render(render);
 
@@ -121,7 +121,7 @@ nv30_render_set_primitive(struct vbuf_render *render, enum pipe_prim_type prim)
 
 static void
 nv30_render_draw_elements(struct vbuf_render *render,
-                          const ushort *indices, uint count)
+                          const uint16_t *indices, uint count)
 {
    struct nv30_render *r = nv30_render(render);
    struct nv30_context *nv30 = r->nv30;
@@ -440,7 +440,7 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
                                PIPE_MAP_UNSYNCHRONIZED |
                                PIPE_MAP_READ, &transferi);
       draw_set_indexes(draw,
-                       (ubyte *) map,
+                       (uint8_t *) map,
                        info->index_size, ~0);
    } else {
       draw_set_indexes(draw, NULL, 0, 0);

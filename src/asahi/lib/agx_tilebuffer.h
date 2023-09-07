@@ -50,6 +50,23 @@ bool agx_nir_lower_tilebuffer(struct nir_shader *shader,
                               struct agx_tilebuffer_layout *tib,
                               uint8_t *colormasks, bool *translucent);
 
+struct agx_msaa_state {
+   uint8_t nr_samples;
+
+   /* Enable API sample mask lowering (e.g. glSampleMask) */
+   bool api_sample_mask;
+};
+
+bool agx_nir_lower_monolithic_msaa(struct nir_shader *shader,
+                                   struct agx_msaa_state *state);
+
+bool agx_nir_lower_sample_intrinsics(struct nir_shader *shader);
+
+void agx_nir_lower_alpha_to_coverage(struct nir_shader *shader,
+                                     uint8_t nr_samples);
+
+void agx_nir_lower_alpha_to_one(struct nir_shader *shader);
+
 void agx_usc_tilebuffer(struct agx_usc_builder *b,
                         struct agx_tilebuffer_layout *tib);
 

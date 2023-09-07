@@ -83,7 +83,6 @@ void bifrost_compile_shader_nir(nir_shader *nir,
       .lower_uadd_carry = true,                                                \
       .lower_usub_borrow = true,                                               \
                                                                                \
-      .has_fsub = true,                                                        \
       .has_isub = true,                                                        \
       .vectorize_io = true,                                                    \
       .vectorize_vec2_16bit = true,                                            \
@@ -100,8 +99,6 @@ void bifrost_compile_shader_nir(nir_shader *nir,
       .force_indirect_unrolling =                                              \
          (nir_var_shader_in | nir_var_shader_out | nir_var_function_temp),     \
       .force_indirect_unrolling_sampler = true,                                \
-                                                                               \
-      .use_scoped_barrier = true,                                              \
    };
 
 DEFINE_OPTIONS(6);

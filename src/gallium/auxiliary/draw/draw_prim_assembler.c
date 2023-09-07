@@ -47,7 +47,7 @@ struct draw_assembler
    const struct draw_prim_info *input_prims;
    const struct draw_vertex_info *input_verts;
 
-   boolean needs_primid;
+   bool needs_primid;
    int primid_slot;
    unsigned primid;
 
@@ -55,7 +55,7 @@ struct draw_assembler
 };
 
 
-static boolean
+static bool
 needs_primid(const struct draw_context *draw)
 {
    const struct draw_fragment_shader *fs = draw->fs.fragment_shader;
@@ -67,26 +67,26 @@ needs_primid(const struct draw_context *draw)
       else if (tes)
          return !tes->info.uses_primid;
       else
-         return TRUE;
+         return true;
    }
-   return FALSE;
+   return false;
 }
 
 
-boolean
+bool
 draw_prim_assembler_is_required(const struct draw_context *draw,
                                 const struct draw_prim_info *prim_info,
                                 const struct draw_vertex_info *vert_info)
 {
    /* viewport index requires primitive boundaries to get correct vertex */
    if (draw_current_shader_uses_viewport_index(draw))
-      return TRUE;
+      return true;
    switch (prim_info->prim) {
-   case PIPE_PRIM_LINES_ADJACENCY:
-   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
-      return TRUE;
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return true;
    default:
       return needs_primid(draw);
    }
@@ -247,7 +247,7 @@ draw_prim_assembler_prepare_outputs(struct draw_assembler *ia)
 #include "draw_prim_assembler_tmp.h"
 
 #define FUNC assembler_run_elts
-#define LOCAL_VARS   const ushort *elts = input_prims->elts;
+#define LOCAL_VARS   const uint16_t *elts = input_prims->elts;
 #define GET_ELT(idx) (elts[start + (idx)])
 #include "draw_prim_assembler_tmp.h"
 
@@ -255,8 +255,8 @@ draw_prim_assembler_prepare_outputs(struct draw_assembler *ia)
 /*
  * Primitive assembler breaks up adjacency primitives and assembles
  * the base primitives they represent, e.g. vertices forming
- * PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY
- * become vertices forming PIPE_PRIM_TRIANGLES
+ * MESA_PRIM_TRIANGLE_STRIP_ADJACENCY
+ * become vertices forming MESA_PRIM_TRIANGLES
  * This is needed because specification says that the adjacency
  * primitives are only visible in the geometry shader so we need
  * to get rid of them so that the rest of the pipeline can
@@ -271,9 +271,9 @@ draw_prim_assembler_run(struct draw_context *draw,
 {
    struct draw_assembler *asmblr = draw->ia;
    unsigned start, i;
-   unsigned assembled_prim = (input_prims->prim == PIPE_PRIM_QUADS ||
-                              input_prims->prim == PIPE_PRIM_QUAD_STRIP) ?
-      PIPE_PRIM_QUADS : u_reduced_prim(input_prims->prim);
+   unsigned assembled_prim = (input_prims->prim == MESA_PRIM_QUADS ||
+                              input_prims->prim == MESA_PRIM_QUAD_STRIP) ?
+      MESA_PRIM_QUADS : u_reduced_prim(input_prims->prim);
    unsigned max_primitives = u_decomposed_prims_for_vertices(
       input_prims->prim, input_prims->count);
    unsigned max_verts = u_vertices_per_prim(assembled_prim) * max_primitives;
@@ -285,7 +285,7 @@ draw_prim_assembler_run(struct draw_context *draw,
    asmblr->needs_primid = needs_primid(asmblr->draw);
    asmblr->num_prims = 0;
 
-   output_prims->linear = TRUE;
+   output_prims->linear = true;
    output_prims->elts = NULL;
    output_prims->start = 0;
    output_prims->prim = assembled_prim;

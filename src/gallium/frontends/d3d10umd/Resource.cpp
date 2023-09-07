@@ -360,8 +360,8 @@ CreateResource(D3D10DDI_HDEVICE hDevice,                                // IN
             assert(map);
             if (map) {
                for (int z = 0; z < box.depth; ++z) {
-                  ubyte *dst = (ubyte*)map + z*transfer->layer_stride;
-                  const ubyte *src = (const ubyte*)pInitialDataUP->pSysMem + z*pInitialDataUP->SysMemSlicePitch;
+                  uint8_t *dst = (uint8_t*)map + z*transfer->layer_stride;
+                  const uint8_t *src = (const uint8_t*)pInitialDataUP->pSysMem + z*pInitialDataUP->SysMemSlicePitch;
                   util_copy_rect(dst,
                                  templat.format,
                                  transfer->stride,
@@ -609,14 +609,14 @@ areResourcesCompatible(const struct pipe_resource *src_resource, // IN
        * Trivial.
        */
 
-      return TRUE;
+      return true;
    } else if (src_resource->target == PIPE_BUFFER &&
               dst_resource->target == PIPE_BUFFER) {
       /*
        * Buffer resources are merely a collection of bytes.
        */
 
-      return TRUE;
+      return true;
    } else {
       /*
        * Check whether the formats are supported by
@@ -821,7 +821,7 @@ ResourceIsStagingBusy(D3D10DDI_HDEVICE hDevice,       // IN
 
    /* ignore */
 
-   return FALSE;
+   return false;
 }
 
 
@@ -917,8 +917,8 @@ ResourceUpdateSubResourceUP(D3D10DDI_HDEVICE hDevice,                // IN
    assert(map);
    if (map) {
       for (int z = 0; z < box.depth; ++z) {
-         ubyte *dst = (ubyte*)map + z*transfer->layer_stride;
-         const ubyte *src = (const ubyte*)pSysMemUP + z*DepthPitch;
+         uint8_t *dst = (uint8_t*)map + z*transfer->layer_stride;
+         const uint8_t *src = (const uint8_t*)pSysMemUP + z*DepthPitch;
          util_copy_rect(dst,
                         dst_resource->format,
                         transfer->stride,

@@ -178,7 +178,7 @@ private:
    void do_get_shader_info(r600_shader *sh_info) override;
 
    VertexExportStage *m_export_stage{nullptr};
-   int m_last_vertex_atribute_register{0};
+   int m_last_vertex_attribute_register{0};
    PRegister m_vertex_id{nullptr};
    PRegister m_instance_id{nullptr};
    PRegister m_rel_vertex_id{nullptr};

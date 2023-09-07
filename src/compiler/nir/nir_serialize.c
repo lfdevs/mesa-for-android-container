@@ -187,11 +187,15 @@ read_constant(read_ctx *ctx, nir_variable *nvar)
 {
    nir_constant *c = ralloc(nvar, nir_constant);
 
+   static const nir_const_value zero_vals[ARRAY_SIZE(c->values)] = { 0 };
    blob_copy_bytes(ctx->blob, (uint8_t *)c->values, sizeof(c->values));
+   c->is_null_constant = memcmp(c->values, zero_vals, sizeof(c->values)) == 0;
    c->num_elements = blob_read_uint32(ctx->blob);
    c->elements = ralloc_array(nvar, nir_constant *, c->num_elements);
-   for (unsigned i = 0; i < c->num_elements; i++)
+   for (unsigned i = 0; i < c->num_elements; i++) {
       c->elements[i] = read_constant(ctx, nvar);
+      c->is_null_constant &= c->elements[i]->is_null_constant;
+   }
 
    return c;
 }
@@ -772,7 +776,7 @@ read_dest(read_ctx *ctx, nir_dest *dst, nir_instr *instr,
          num_components = blob_read_uint32(ctx->blob);
       else
          num_components = decode_num_components_in_3bits(dest.ssa.num_components);
-      nir_ssa_dest_init(instr, dst, num_components, bit_size, NULL);
+      nir_ssa_dest_init(instr, dst, num_components, bit_size);
       dst->ssa.divergent = dest.ssa.divergent;
       read_add_object(ctx, &dst->ssa);
    } else {
@@ -1503,7 +1507,8 @@ union packed_tex_data {
       unsigned texture_non_uniform:1;
       unsigned sampler_non_uniform:1;
       unsigned array_is_lowered_cube:1;
-      unsigned unused:6; /* Mark unused for valgrind. */
+      unsigned is_gather_implicit_lod:1;
+      unsigned unused:5; /* Mark unused for valgrind. */
    } u;
 };
 
@@ -1540,6 +1545,7 @@ write_tex(write_ctx *ctx, const nir_tex_instr *tex)
       .u.texture_non_uniform = tex->texture_non_uniform,
       .u.sampler_non_uniform = tex->sampler_non_uniform,
       .u.array_is_lowered_cube = tex->array_is_lowered_cube,
+      .u.is_gather_implicit_lod = tex->is_gather_implicit_lod,
    };
    blob_write_uint32(ctx->blob, packed.u32);
 
@@ -1577,6 +1583,7 @@ read_tex(read_ctx *ctx, union packed_instr header)
    tex->texture_non_uniform = packed.u.texture_non_uniform;
    tex->sampler_non_uniform = packed.u.sampler_non_uniform;
    tex->array_is_lowered_cube = packed.u.array_is_lowered_cube;
+   tex->is_gather_implicit_lod = packed.u.is_gather_implicit_lod;
 
    for (unsigned i = 0; i < tex->num_srcs; i++) {
       union packed_src src = read_src(ctx, &tex->src[i].src);
@@ -1994,10 +2001,9 @@ write_function_impl(write_ctx *ctx, const nir_function_impl *fi)
 }
 
 static nir_function_impl *
-read_function_impl(read_ctx *ctx, nir_function *fxn)
+read_function_impl(read_ctx *ctx)
 {
    nir_function_impl *fi = nir_function_impl_create_bare(ctx->nir);
-   fi->function = fxn;
 
    fi->structured = blob_read_uint8(ctx->blob);
    bool preamble = blob_read_uint8(ctx->blob);
@@ -2146,9 +2152,8 @@ nir_serialize(struct blob *blob, const nir_shader *nir, bool strip)
       write_function(&ctx, fxn);
    }
 
-   nir_foreach_function(fxn, nir) {
-      if (fxn->impl)
-         write_function_impl(&ctx, fxn->impl);
+   nir_foreach_function_impl(impl, nir) {
+      write_function_impl(&ctx, impl);
    }
 
    blob_write_uint32(blob, nir->constant_data_size);
@@ -2216,7 +2221,7 @@ nir_deserialize(void *mem_ctx,
 
    nir_foreach_function(fxn, ctx.nir) {
       if (fxn->impl == NIR_SERIALIZE_FUNC_HAS_IMPL)
-         fxn->impl = read_function_impl(&ctx, fxn);
+         nir_function_set_impl(fxn, read_function_impl(&ctx));
    }
 
    ctx.nir->constant_data_size = blob_read_uint32(blob);

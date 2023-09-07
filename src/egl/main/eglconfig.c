@@ -27,25 +27,20 @@
  *
  **************************************************************************/
 
-
 /**
  * EGL Configuration (pixel format) functions.
  */
 
-
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include "util/macros.h"
 
 #include "eglconfig.h"
 #include "eglconfigdebug.h"
-#include "egldisplay.h"
 #include "eglcurrent.h"
+#include "egldisplay.h"
 #include "egllog.h"
-
-
-
 
 /**
  * Init the given _EGLconfig to default values.
@@ -71,7 +66,6 @@ _eglInitConfig(_EGLConfig *conf, _EGLDisplay *disp, EGLint id)
    conf->ComponentType = EGL_COLOR_COMPONENT_TYPE_FIXED_EXT;
 }
 
-
 /**
  * Link a config to its display and return the handle of the link.
  * The handle can be passed to client directly.
@@ -90,14 +84,13 @@ _eglLinkConfig(_EGLConfig *conf)
    if (!disp->Configs) {
       disp->Configs = _eglCreateArray("Config", 16);
       if (!disp->Configs)
-         return (EGLConfig) NULL;
+         return (EGLConfig)NULL;
    }
 
-   _eglAppendArray(disp->Configs, (void *) conf);
+   _eglAppendArray(disp->Configs, (void *)conf);
 
-   return (EGLConfig) conf;
+   return (EGLConfig)conf;
 }
-
 
 /**
  * Lookup a handle to find the linked config.
@@ -111,20 +104,19 @@ _eglLookupConfig(EGLConfig config, _EGLDisplay *disp)
    if (!disp)
       return NULL;
 
-   conf = (_EGLConfig *) _eglFindArray(disp->Configs, (void *) config);
+   conf = (_EGLConfig *)_eglFindArray(disp->Configs, (void *)config);
    if (conf)
       assert(conf->Display == disp);
 
    return conf;
 }
 
-
 enum type {
    ATTRIB_TYPE_INTEGER,
    ATTRIB_TYPE_BOOLEAN,
    ATTRIB_TYPE_BITMASK,
    ATTRIB_TYPE_ENUM,
-   ATTRIB_TYPE_PSEUDO, /* non-queryable */
+   ATTRIB_TYPE_PSEUDO,   /* non-queryable */
    ATTRIB_TYPE_PLATFORM, /* platform-dependent */
 };
 
@@ -136,15 +128,14 @@ enum criterion {
    ATTRIB_CRITERION_IGNORE
 };
 
-
 /* EGL spec Table 3.1 and 3.4 */
 static const struct {
    EGLint attr;
    enum type type;
    enum criterion criterion;
    EGLint default_value;
-} _eglValidationTable[] =
-{
+} _eglValidationTable[] = {
+   /* clang-format off */
    /* core */
    { EGL_BUFFER_SIZE,               ATTRIB_TYPE_INTEGER,
                                     ATTRIB_CRITERION_ATLEAST,
@@ -258,8 +249,8 @@ static const struct {
    { EGL_COLOR_COMPONENT_TYPE_EXT,  ATTRIB_TYPE_ENUM,
                                     ATTRIB_CRITERION_EXACT,
                                     EGL_COLOR_COMPONENT_TYPE_FIXED_EXT },
+   /* clang-format on */
 };
-
 
 /**
  * Return true if a config is valid.  When for_matching is true,
@@ -334,11 +325,8 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
       case ATTRIB_TYPE_BITMASK:
          switch (attr) {
          case EGL_SURFACE_TYPE:
-            mask = EGL_PBUFFER_BIT |
-                   EGL_PIXMAP_BIT |
-                   EGL_WINDOW_BIT |
-                   EGL_VG_COLORSPACE_LINEAR_BIT |
-                   EGL_VG_ALPHA_FORMAT_PRE_BIT |
+            mask = EGL_PBUFFER_BIT | EGL_PIXMAP_BIT | EGL_WINDOW_BIT |
+                   EGL_VG_COLORSPACE_LINEAR_BIT | EGL_VG_ALPHA_FORMAT_PRE_BIT |
                    EGL_MULTISAMPLE_RESOLVE_BOX_BIT |
                    EGL_SWAP_BEHAVIOR_PRESERVED_BIT;
             if (disp->Extensions.KHR_mutable_render_buffer)
@@ -346,11 +334,8 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
             break;
          case EGL_RENDERABLE_TYPE:
          case EGL_CONFORMANT:
-            mask = EGL_OPENGL_ES_BIT |
-                   EGL_OPENVG_BIT |
-                   EGL_OPENGL_ES2_BIT |
-                   EGL_OPENGL_ES3_BIT_KHR |
-                   EGL_OPENGL_BIT;
+            mask = EGL_OPENGL_ES_BIT | EGL_OPENVG_BIT | EGL_OPENGL_ES2_BIT |
+                   EGL_OPENGL_ES3_BIT_KHR | EGL_OPENGL_BIT;
             break;
          default:
             unreachable("check _eglValidationTable[]");
@@ -378,13 +363,13 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
             valid = EGL_TRUE;
       }
       if (!valid) {
-         _eglLog(_EGL_DEBUG,
-               "attribute 0x%04x has an invalid value 0x%x", attr, val);
+         _eglLog(_EGL_DEBUG, "attribute 0x%04x has an invalid value 0x%x", attr,
+                 val);
          break;
       }
    }
 
-   /* any invalid attribute value should have been catched */
+   /* any invalid attribute value should have been caught */
    if (!valid || for_matching)
       return valid;
 
@@ -394,8 +379,8 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
    case EGL_RGB_BUFFER:
       if (conf->LuminanceSize)
          valid = EGL_FALSE;
-      if (conf->RedSize + conf->GreenSize +
-            conf->BlueSize + conf->AlphaSize != conf->BufferSize)
+      if (conf->RedSize + conf->GreenSize + conf->BlueSize + conf->AlphaSize !=
+          conf->BufferSize)
          valid = EGL_FALSE;
       break;
    case EGL_LUMINANCE_BUFFER:
@@ -426,13 +411,13 @@ _eglValidateConfig(const _EGLConfig *conf, EGLBoolean for_matching)
          valid = EGL_FALSE;
    }
    if (!valid) {
-      _eglLog(_EGL_DEBUG, "conflicting surface type and native visual/texture binding");
+      _eglLog(_EGL_DEBUG,
+              "conflicting surface type and native visual/texture binding");
       return EGL_FALSE;
    }
 
    return valid;
 }
-
 
 /**
  * Return true if a config matches the criteria.  This and
@@ -487,8 +472,9 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria)
             break;
 #endif
          _eglLog(_EGL_DEBUG,
-               "the value (0x%x) of attribute 0x%04x did not meet the criteria (0x%x)",
-               val, attr, cmp);
+                 "the value (0x%x) of attribute 0x%04x did not meet the "
+                 "criteria (0x%x)",
+                 val, attr, cmp);
          break;
       }
    }
@@ -550,8 +536,7 @@ _eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *disp,
       return EGL_FALSE;
 
    /* EGL_LEVEL and EGL_MATCH_NATIVE_PIXMAP cannot be EGL_DONT_CARE */
-   if (conf->Level == EGL_DONT_CARE ||
-       conf->MatchNativePixmap == EGL_DONT_CARE)
+   if (conf->Level == EGL_DONT_CARE || conf->MatchNativePixmap == EGL_DONT_CARE)
       return EGL_FALSE;
 
    /* ignore other attributes when EGL_CONFIG_ID is given */
@@ -561,8 +546,7 @@ _eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *disp,
          if (attr != EGL_CONFIG_ID)
             _eglSetConfigKey(conf, attr, EGL_DONT_CARE);
       }
-   }
-   else {
+   } else {
       if (!(conf->SurfaceType & EGL_WINDOW_BIT))
          conf->NativeVisualType = EGL_DONT_CARE;
 
@@ -575,7 +559,6 @@ _eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *disp,
 
    return EGL_TRUE;
 }
-
 
 /**
  * Decide the ordering of conf1 and conf2, under the given criteria.
@@ -595,12 +578,8 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
                    const _EGLConfig *criteria, EGLBoolean compare_id)
 {
    const EGLint compare_attribs[] = {
-      EGL_BUFFER_SIZE,
-      EGL_SAMPLE_BUFFERS,
-      EGL_SAMPLES,
-      EGL_DEPTH_SIZE,
-      EGL_STENCIL_SIZE,
-      EGL_ALPHA_MASK_SIZE,
+      EGL_BUFFER_SIZE, EGL_SAMPLE_BUFFERS, EGL_SAMPLES,
+      EGL_DEPTH_SIZE,  EGL_STENCIL_SIZE,   EGL_ALPHA_MASK_SIZE,
    };
    EGLint val1, val2;
    EGLint i;
@@ -636,8 +615,7 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
             val1 += conf1->BlueSize;
             val2 += conf2->BlueSize;
          }
-      }
-      else {
+      } else {
          if (criteria->LuminanceSize > 0) {
             val1 += conf1->LuminanceSize;
             val2 += conf2->LuminanceSize;
@@ -647,8 +625,7 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
          val1 += conf1->AlphaSize;
          val2 += conf2->AlphaSize;
       }
-   }
-   else {
+   } else {
       /* assume the default criteria, which gives no specific ordering */
       val1 = val2 = 0;
    }
@@ -669,15 +646,13 @@ _eglCompareConfigs(const _EGLConfig *conf1, const _EGLConfig *conf2,
    return (compare_id) ? (conf1->ConfigID - conf2->ConfigID) : 0;
 }
 
-
-static inline
-void _eglSwapConfigs(const _EGLConfig **conf1, const _EGLConfig **conf2)
+static inline void
+_eglSwapConfigs(const _EGLConfig **conf1, const _EGLConfig **conf2)
 {
    const _EGLConfig *tmp = *conf1;
    *conf1 = *conf2;
    *conf2 = tmp;
 }
-
 
 /**
  * Quick sort an array of configs.  This differs from the standard
@@ -708,8 +683,7 @@ _eglSortConfigs(const _EGLConfig **configs, EGLint count,
          _eglSwapConfigs(&configs[i], &configs[j]);
          i++;
          j--;
-      }
-      else if (i == j) {
+      } else if (i == j) {
          i++;
          j--;
          break;
@@ -721,14 +695,13 @@ _eglSortConfigs(const _EGLConfig **configs, EGLint count,
    _eglSortConfigs(configs + i, count - i, compare, priv_data);
 }
 
-
 /**
  * A helper function for implementing eglChooseConfig.  See _eglFilterArray and
  * _eglSortConfigs for the meanings of match and compare.
  */
 EGLBoolean
-_eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
-                      EGLint config_size, EGLint *num_configs,
+_eglFilterConfigArray(_EGLArray *array, EGLConfig *configs, EGLint config_size,
+                      EGLint *num_configs,
                       EGLBoolean (*match)(const _EGLConfig *, void *),
                       EGLint (*compare)(const _EGLConfig *, const _EGLConfig *,
                                         void *),
@@ -738,8 +711,7 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
    EGLint i, count;
 
    /* get the number of matched configs */
-   count = _eglFilterArray(array, NULL, 0,
-         (_EGLArrayForEach) match, priv_data);
+   count = _eglFilterArray(array, NULL, 0, (_EGLArrayForEach)match, priv_data);
    if (!count) {
       *num_configs = count;
       return EGL_TRUE;
@@ -750,13 +722,13 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
       return _eglError(EGL_BAD_ALLOC, "eglChooseConfig(out of memory)");
 
    /* get the matched configs */
-   _eglFilterArray(array, (void **) configList, count,
-         (_EGLArrayForEach) match, priv_data);
+   _eglFilterArray(array, (void **)configList, count, (_EGLArrayForEach)match,
+                   priv_data);
 
    /* perform sorting of configs */
    if (configs && count) {
-      _eglSortConfigs((const _EGLConfig **) configList, count,
-                      compare, priv_data);
+      _eglSortConfigs((const _EGLConfig **)configList, count, compare,
+                      priv_data);
       count = MIN2(count, config_size);
       for (i = 0; i < count; i++)
          configs[i] = _eglGetConfigHandle(configList[i]);
@@ -769,22 +741,19 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
    return EGL_TRUE;
 }
 
-
 static EGLBoolean
 _eglFallbackMatch(const _EGLConfig *conf, void *priv_data)
 {
-   return _eglMatchConfig(conf, (const _EGLConfig *) priv_data);
+   return _eglMatchConfig(conf, (const _EGLConfig *)priv_data);
 }
-
 
 static EGLint
 _eglFallbackCompare(const _EGLConfig *conf1, const _EGLConfig *conf2,
                     void *priv_data)
 {
-   return _eglCompareConfigs(conf1, conf2,
-         (const _EGLConfig *) priv_data, EGL_TRUE);
+   return _eglCompareConfigs(conf1, conf2, (const _EGLConfig *)priv_data,
+                             EGL_TRUE);
 }
-
 
 /**
  * Typical fallback routine for eglChooseConfig
@@ -799,17 +768,15 @@ _eglChooseConfig(_EGLDisplay *disp, const EGLint *attrib_list,
    if (!_eglParseConfigAttribList(&criteria, disp, attrib_list))
       return _eglError(EGL_BAD_ATTRIBUTE, "eglChooseConfig");
 
-   result = _eglFilterConfigArray(disp->Configs,
-                                  configs, config_size, num_configs,
-                                  _eglFallbackMatch, _eglFallbackCompare,
-                                  (void *) &criteria);
+   result = _eglFilterConfigArray(disp->Configs, configs, config_size,
+                                  num_configs, _eglFallbackMatch,
+                                  _eglFallbackCompare, (void *)&criteria);
 
    if (result && (_eglGetLogLevel() == _EGL_DEBUG))
       eglPrintConfigDebug(disp, configs, *num_configs, EGL_TRUE);
 
    return result;
 }
-
 
 /**
  * Fallback for eglGetConfigAttrib.
@@ -837,12 +804,11 @@ _eglGetConfigAttrib(const _EGLDisplay *disp, const _EGLConfig *conf,
    return EGL_TRUE;
 }
 
-
 static EGLBoolean
 _eglFlattenConfig(void *elem, void *buffer)
 {
-   _EGLConfig *conf = (_EGLConfig *) elem;
-   EGLConfig *handle = (EGLConfig *) buffer;
+   _EGLConfig *conf = (_EGLConfig *)elem;
+   EGLConfig *handle = (EGLConfig *)buffer;
    *handle = _eglGetConfigHandle(conf);
    return EGL_TRUE;
 }
@@ -851,11 +817,12 @@ _eglFlattenConfig(void *elem, void *buffer)
  * Fallback for eglGetConfigs.
  */
 EGLBoolean
-_eglGetConfigs(_EGLDisplay *disp, EGLConfig *configs,
-               EGLint config_size, EGLint *num_config)
+_eglGetConfigs(_EGLDisplay *disp, EGLConfig *configs, EGLint config_size,
+               EGLint *num_config)
 {
-   *num_config = _eglFlattenArray(disp->Configs, (void *) configs,
-         sizeof(configs[0]), config_size, _eglFlattenConfig);
+   *num_config =
+      _eglFlattenArray(disp->Configs, (void *)configs, sizeof(configs[0]),
+                       config_size, _eglFlattenConfig);
 
    if (_eglGetLogLevel() == _EGL_DEBUG)
       eglPrintConfigDebug(disp, configs, *num_config, EGL_FALSE);

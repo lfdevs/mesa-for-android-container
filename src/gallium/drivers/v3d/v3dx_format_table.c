@@ -185,6 +185,36 @@ static const struct v3d_format format_table[] = {
         FORMAT(DXT3_SRGBA,        NO,           BC2,         SWIZ_XYZW, 16, 0),
         FORMAT(DXT5_RGBA,         NO,           BC3,         SWIZ_XYZW, 16, 0),
         FORMAT(DXT5_SRGBA,        NO,           BC3,         SWIZ_XYZW, 16, 0),
+
+        /* Compressed: ASTC */
+        FORMAT(ASTC_4x4,          NO,           ASTC_4X4,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_4x4_SRGB,     NO,           ASTC_4X4,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_5x4,          NO,           ASTC_5X4,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_5x4_SRGB,     NO,           ASTC_5X4,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_5x5,          NO,           ASTC_5X5,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_5x5_SRGB,     NO,           ASTC_5X5,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_6x5,          NO,           ASTC_6X5,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_6x5_SRGB,     NO,           ASTC_6X5,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_6x6,          NO,           ASTC_6X6,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_6x6_SRGB,     NO,           ASTC_6X6,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_8x5,          NO,           ASTC_8X5,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_8x5_SRGB,     NO,           ASTC_8X5,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_8x6,          NO,           ASTC_8X6,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_8x6_SRGB,     NO,           ASTC_8X6,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_8x8,          NO,           ASTC_8X8,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_8x8_SRGB,     NO,           ASTC_8X8,    SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x5,         NO,           ASTC_10X5,   SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x5_SRGB,    NO,           ASTC_10X5,   SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x6,         NO,           ASTC_10X6,   SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x6_SRGB,    NO,           ASTC_10X6,   SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x8,         NO,           ASTC_10X8,   SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x8_SRGB,    NO,           ASTC_10X8,   SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x10,        NO,           ASTC_10X10,  SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_10x10_SRGB,   NO,           ASTC_10X10,  SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_12x10,        NO,           ASTC_12X10,  SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_12x10_SRGB,   NO,           ASTC_12X10,  SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_12x12,        NO,           ASTC_12X12,  SWIZ_XYZW, 16, 1),
+        FORMAT(ASTC_12x12_SRGB,   NO,           ASTC_12X12,  SWIZ_XYZW, 16, 1),
 };
 
 const struct v3d_format *
@@ -327,10 +357,10 @@ v3dX(get_internal_type_bpp_for_output_format)(uint32_t format,
 }
 
 bool
-v3dX(tfu_supports_tex_format)(enum V3DX(Texture_Data_Formats) format,
+v3dX(tfu_supports_tex_format)(uint32_t tex_format,
                               bool for_mipmap)
 {
-        switch (format) {
+        switch (tex_format) {
         case TEXTURE_DATA_FORMAT_R8:
         case TEXTURE_DATA_FORMAT_R8_SNORM:
         case TEXTURE_DATA_FORMAT_RG8:

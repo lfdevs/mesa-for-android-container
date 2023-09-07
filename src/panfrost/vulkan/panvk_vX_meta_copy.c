@@ -326,17 +326,16 @@ panvk_meta_copy_img2img_shader(struct panfrost_device *pdev,
       unreachable("Invalid texture dimension");
    }
 
-   tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(coord);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, coord);
    tex->coord_components = texdim + texisarray;
 
    if (is_ms) {
-      tex->src[1].src_type = nir_tex_src_ms_index;
-      tex->src[1].src = nir_src_for_ssa(nir_load_sample_id(&b));
+      tex->src[1] =
+         nir_tex_src_for_ssa(nir_tex_src_ms_index, nir_load_sample_id(&b));
    }
 
    nir_ssa_dest_init(&tex->instr, &tex->dest, 4,
-                     nir_alu_type_get_type_size(tex->dest_type), NULL);
+                     nir_alu_type_get_type_size(tex->dest_type));
    nir_builder_instr_insert(&b, &tex->instr);
 
    nir_ssa_def *texel = &tex->dest.ssa;
@@ -391,7 +390,7 @@ panvk_meta_copy_img2img_shader(struct panfrost_device *pdev,
       if (dstcompsz == 16)
          texel = nir_u2u16(&b, texel);
 
-      texel = nir_channels(&b, texel, (1 << ndstcomps) - 1);
+      texel = nir_trim_vector(&b, texel, ndstcomps);
       outtype = glsl_vector_type(basetype, ndstcomps);
    }
 
@@ -920,7 +919,7 @@ panvk_meta_copy_buf2img_shader(struct panfrost_device *pdev,
       /* Blendable formats are unorm and the fixed-function blend unit
        * takes float values.
        */
-      texel = nir_fmul(&b, nir_u2f32(&b, texel), nir_imm_float(&b, 1.0f / 255));
+      texel = nir_fmul_imm(&b, nir_u2f32(&b, texel), 1.0f / 255);
       basetype = GLSL_TYPE_FLOAT;
    } else {
       texel = nir_u2uN(&b, texel, imgcompsz * 8);
@@ -1358,11 +1357,10 @@ panvk_meta_copy_img2buf_shader(struct panfrost_device *pdev,
       unreachable("Invalid texture dimension");
    }
 
-   tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(imgcoords);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, imgcoords);
    tex->coord_components = texdim + texisarray;
    nir_ssa_dest_init(&tex->instr, &tex->dest, 4,
-                     nir_alu_type_get_type_size(tex->dest_type), NULL);
+                     nir_alu_type_get_type_size(tex->dest_type));
    nir_builder_instr_insert(&b, &tex->instr);
 
    nir_ssa_def *texel = &tex->dest.ssa;

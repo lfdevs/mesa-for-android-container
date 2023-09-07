@@ -218,7 +218,7 @@ int windows_bind_context(windowsContext *context, windowsDrawable *draw, windows
 
       if (!ret) {
          printf("wglMakeContextCurrentARB error: %08x\n", (int)GetLastError());
-         return FALSE;
+         return false;
       }
    }
    else
@@ -227,7 +227,7 @@ int windows_bind_context(windowsContext *context, windowsDrawable *draw, windows
       BOOL ret = wglMakeCurrent(drawDc, context->ctx);
       if (!ret) {
          printf("wglMakeCurrent error: %08x\n", (int)GetLastError());
-         return FALSE;
+         return false;
       }
    }
 
@@ -235,7 +235,7 @@ int windows_bind_context(windowsContext *context, windowsDrawable *draw, windows
 
    windows_glapi_set_dispatch();
 
-   return TRUE;
+   return true;
 }
 
 void windows_unbind_context(windowsContext * context)
@@ -344,9 +344,9 @@ windows_check_render_test(HDC hdc, void *args)
    const char *gl_renderer = (const char *)proc(GL_RENDERER);
 
    if ((!gl_renderer) || (strcasecmp(gl_renderer, "GDI Generic") == 0))
-      *result = FALSE;
+      *result = false;
    else
-      *result = TRUE;
+      *result = true;
 }
 
 int

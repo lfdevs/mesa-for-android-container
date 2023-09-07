@@ -218,7 +218,8 @@ pvr_pack_tex_state(struct pvr_device *device,
             if (iview_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY)
                array_layers /= 6;
 
-            word1.depth = array_layers - 1;
+            if (array_layers > 0)
+               word1.depth = array_layers - 1;
          }
 
          word1.texaddr = PVR_DEV_ADDR_OFFSET(info->addr, info->offset);

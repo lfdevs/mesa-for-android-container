@@ -209,7 +209,7 @@ emit_vertices_seq(struct push_context *ctx, unsigned start, unsigned count)
 
 
 #define NV50_PRIM_GL_CASE(n) \
-   case PIPE_PRIM_##n: return NV50_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
+   case MESA_PRIM_##n: return NV50_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
 
 static inline unsigned
 nv50_prim_gl(unsigned prim)

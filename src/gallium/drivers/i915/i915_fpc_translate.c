@@ -35,7 +35,6 @@
 
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_from_mesa.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
 #include "util/log.h"

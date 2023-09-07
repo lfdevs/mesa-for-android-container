@@ -23,6 +23,7 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_builder_opcodes.h"
 #include "nir_vla.h"
 
 /*
@@ -36,6 +37,7 @@ struct from_ssa_state {
    void *dead_ctx;
    struct exec_list dead_instrs;
    bool phi_webs_only;
+   bool reg_intrinsics;
    struct hash_table *merge_node_table;
    nir_instr *instr;
    bool progress;
@@ -121,7 +123,10 @@ typedef struct merge_set {
    struct exec_list nodes;
    unsigned size;
    bool divergent;
-   nir_register *reg;
+   union {
+      nir_register *reg;
+      nir_ssa_def *decl;
+   } reg;
 } merge_set;
 
 #if 0
@@ -153,11 +158,10 @@ get_merge_node(nir_ssa_def *def, struct from_ssa_state *state)
    if (entry)
       return entry->data;
 
-   merge_set *set = ralloc(state->dead_ctx, merge_set);
+   merge_set *set = rzalloc(state->dead_ctx, merge_set);
    exec_list_make_empty(&set->nodes);
    set->size = 1;
    set->divergent = def->divergent;
-   set->reg = NULL;
 
    merge_node *node = ralloc(state->dead_ctx, merge_node);
    node->set = set;
@@ -376,17 +380,9 @@ get_parallel_copy_at_end_of_block(nir_block *block)
 static bool
 isolate_phi_nodes_block(nir_shader *shader, nir_block *block, void *dead_ctx)
 {
-   nir_instr *last_phi_instr = NULL;
-   nir_foreach_instr(instr, block) {
-      /* Phi nodes only ever come at the start of a block */
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      last_phi_instr = instr;
-   }
-
    /* If we don't have any phis, then there's nothing for us to do. */
-   if (last_phi_instr == NULL)
+   nir_phi_instr *last_phi = nir_block_last_phi_instr(block);
+   if (last_phi == NULL)
       return true;
 
    /* If we have phi nodes, we need to create a parallel copy at the
@@ -394,14 +390,9 @@ isolate_phi_nodes_block(nir_shader *shader, nir_block *block, void *dead_ctx)
     */
    nir_parallel_copy_instr *block_pcopy =
       nir_parallel_copy_instr_create(shader);
-   nir_instr_insert_after(last_phi_instr, &block_pcopy->instr);
+   nir_instr_insert_after(&last_phi->instr, &block_pcopy->instr);
 
-   nir_foreach_instr(instr, block) {
-      /* Phi nodes only ever come at the start of a block */
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
+   nir_foreach_phi(phi, block) {
       assert(phi->dest.is_ssa);
       nir_foreach_phi_src(src, phi) {
          if (nir_src_is_undef(src->src))
@@ -413,29 +404,32 @@ isolate_phi_nodes_block(nir_shader *shader, nir_block *block, void *dead_ctx)
 
          nir_parallel_copy_entry *entry = rzalloc(dead_ctx,
                                                   nir_parallel_copy_entry);
-         nir_ssa_dest_init(&pcopy->instr, &entry->dest,
+         entry->src_is_reg = false;
+         entry->dest_is_reg = false;
+         nir_ssa_dest_init(&pcopy->instr, &entry->dest.dest,
                            phi->dest.ssa.num_components,
-                           phi->dest.ssa.bit_size, NULL);
-         entry->dest.ssa.divergent = nir_src_is_divergent(src->src);
+                           phi->dest.ssa.bit_size);
+         entry->dest.dest.ssa.divergent = nir_src_is_divergent(src->src);
          exec_list_push_tail(&pcopy->entries, &entry->node);
 
          assert(src->src.is_ssa);
          nir_instr_rewrite_src(&pcopy->instr, &entry->src, src->src);
 
          nir_instr_rewrite_src(&phi->instr, &src->src,
-                               nir_src_for_ssa(&entry->dest.ssa));
+                               nir_src_for_ssa(&entry->dest.dest.ssa));
       }
 
       nir_parallel_copy_entry *entry = rzalloc(dead_ctx,
                                                nir_parallel_copy_entry);
-      nir_ssa_dest_init(&block_pcopy->instr, &entry->dest,
-                        phi->dest.ssa.num_components, phi->dest.ssa.bit_size,
-                        NULL);
-      entry->dest.ssa.divergent = phi->dest.ssa.divergent;
+      entry->src_is_reg = false;
+      entry->dest_is_reg = false;
+      nir_ssa_dest_init(&block_pcopy->instr, &entry->dest.dest,
+                        phi->dest.ssa.num_components, phi->dest.ssa.bit_size);
+      entry->dest.dest.ssa.divergent = phi->dest.ssa.divergent;
       exec_list_push_tail(&block_pcopy->entries, &entry->node);
 
       nir_ssa_def_rewrite_uses(&phi->dest.ssa,
-                               &entry->dest.ssa);
+                               &entry->dest.dest.ssa);
 
       nir_instr_rewrite_src(&block_pcopy->instr, &entry->src,
                             nir_src_for_ssa(&phi->dest.ssa));
@@ -447,13 +441,7 @@ isolate_phi_nodes_block(nir_shader *shader, nir_block *block, void *dead_ctx)
 static bool
 coalesce_phi_nodes_block(nir_block *block, struct from_ssa_state *state)
 {
-   nir_foreach_instr(instr, block) {
-      /* Phi nodes only ever come at the start of a block */
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
-
+   nir_foreach_phi(phi, block) {
       assert(phi->dest.is_ssa);
       merge_node *dest_node = get_merge_node(&phi->dest.ssa, state);
 
@@ -476,8 +464,12 @@ aggressive_coalesce_parallel_copy(nir_parallel_copy_instr *pcopy,
                                  struct from_ssa_state *state)
 {
    nir_foreach_parallel_copy_entry(entry, pcopy) {
-      if (!entry->src.is_ssa)
-         continue;
+      assert(!entry->src_is_reg);
+      assert(entry->src.is_ssa);
+      assert(!entry->dest_is_reg);
+      assert(entry->dest.dest.is_ssa);
+      assert(entry->dest.dest.ssa.num_components ==
+             entry->src.ssa->num_components);
 
       /* Since load_const instructions are SSA only, we can't replace their
        * destinations with registers and, therefore, can't coalesce them.
@@ -485,12 +477,8 @@ aggressive_coalesce_parallel_copy(nir_parallel_copy_instr *pcopy,
       if (entry->src.ssa->parent_instr->type == nir_instr_type_load_const)
          continue;
 
-      /* Don't try and coalesce these */
-      if (entry->dest.ssa.num_components != entry->src.ssa->num_components)
-         continue;
-
       merge_node *src_node = get_merge_node(entry->src.ssa, state);
-      merge_node *dest_node = get_merge_node(&entry->dest.ssa, state);
+      merge_node *dest_node = get_merge_node(&entry->dest.dest.ssa, state);
 
       if (src_node->set == dest_node->set)
          continue;
@@ -545,8 +533,66 @@ create_reg_for_ssa_def(nir_ssa_def *def, nir_function_impl *impl)
    return reg;
 }
 
+static nir_ssa_def *
+decl_reg_for_ssa_def(nir_builder *b, nir_ssa_def *def)
+{
+   return nir_decl_reg(b, def->num_components, def->bit_size, 0);
+}
+
+static void
+set_reg_divergent(nir_ssa_def *reg, bool divergent)
+{
+   nir_intrinsic_instr *decl = nir_reg_get_decl(reg);
+   nir_intrinsic_set_divergent(decl, divergent);
+}
+
+void
+nir_rewrite_uses_to_load_reg(nir_builder *b, nir_ssa_def *old,
+                             nir_ssa_def *reg)
+{
+   nir_foreach_use_including_if_safe(use, old) {
+      b->cursor = nir_before_src(use);
+
+      /* If this is a parallel copy, it can just take the register directly */
+      if (!use->is_if &&
+          use->parent_instr->type == nir_instr_type_parallel_copy) {
+
+         nir_parallel_copy_entry *copy_entry =
+            list_entry(use, nir_parallel_copy_entry, src);
+
+         assert(!copy_entry->src_is_reg);
+         copy_entry->src_is_reg = true;
+         nir_src_rewrite_ssa(&copy_entry->src, reg);
+         continue;
+      }
+
+      /* If the immediate preceding instruction is a load_reg from the same
+       * register, use it instead of creating a new load_reg. This helps when
+       * a register is referenced in multiple sources in the same instruction,
+       * which otherwise would turn into piles of unnecessary moves.
+       */
+      nir_ssa_def *load = NULL;
+      if (b->cursor.option == nir_cursor_before_instr) {
+          nir_instr *prev = nir_instr_prev(b->cursor.instr);
+
+          if (prev != NULL && prev->type == nir_instr_type_intrinsic) {
+             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(prev);
+             if (intr->intrinsic == nir_intrinsic_load_reg &&
+                 intr->src[0].ssa == reg &&
+                 nir_intrinsic_base(intr) == 0)
+                load = &intr->dest.ssa;
+          }
+      }
+
+      if (load == NULL)
+         load = nir_load_reg(b, reg);
+
+      nir_src_rewrite_ssa(use, load);
+   }
+}
+
 static bool
-rewrite_ssa_def(nir_ssa_def *def, void *void_state)
+rewrite_ssa_def_legacy_reg(nir_ssa_def *def, void *void_state)
 {
    struct from_ssa_state *state = void_state;
    nir_register *reg;
@@ -561,12 +607,12 @@ rewrite_ssa_def(nir_ssa_def *def, void *void_state)
        * the things in the merge set should be the same so it doesn't
        * matter which node's definition we use.
        */
-      if (node->set->reg == NULL) {
-         node->set->reg = create_reg_for_ssa_def(def, state->builder.impl);
-         node->set->reg->divergent = node->set->divergent;
+      if (node->set->reg.reg == NULL) {
+         node->set->reg.reg = create_reg_for_ssa_def(def, state->builder.impl);
+         node->set->reg.reg->divergent = node->set->divergent;
       }
 
-      reg = node->set->reg;
+      reg = node->set->reg.reg;
    } else {
       if (state->phi_webs_only)
          return true;
@@ -610,11 +656,12 @@ rewrite_ssa_def(nir_ssa_def *def, void *void_state)
  * remove phi nodes.
  */
 static void
-resolve_registers_block(nir_block *block, struct from_ssa_state *state)
+resolve_registers_block_legacy_reg(nir_block *block,
+                                   struct from_ssa_state *state)
 {
    nir_foreach_instr_safe(instr, block) {
       state->instr = instr;
-      nir_foreach_ssa_def(instr, rewrite_ssa_def, state);
+      nir_foreach_ssa_def(instr, rewrite_ssa_def_legacy_reg, state);
 
       if (instr->type == nir_instr_type_phi) {
          nir_instr_remove(instr);
@@ -623,6 +670,189 @@ resolve_registers_block(nir_block *block, struct from_ssa_state *state)
       }
    }
    state->instr = NULL;
+}
+
+static bool
+dest_replace_ssa_with_reg(nir_dest *dest, nir_function_impl *impl)
+{
+   if (!dest->is_ssa)
+      return false;
+
+   nir_builder b = nir_builder_create(impl);
+
+   nir_ssa_def *reg = decl_reg_for_ssa_def(&b, &dest->ssa);
+   nir_rewrite_uses_to_load_reg(&b, &dest->ssa, reg);
+
+   b.cursor = nir_after_instr(dest->ssa.parent_instr);
+   nir_store_reg(&b, &dest->ssa, reg);
+   return true;
+}
+
+static nir_ssa_def *
+reg_for_ssa_def(nir_ssa_def *def, struct from_ssa_state *state)
+{
+   struct hash_entry *entry =
+      _mesa_hash_table_search(state->merge_node_table, def);
+   if (entry) {
+      /* In this case, we're part of a phi web.  Use the web's register. */
+      merge_node *node = (merge_node *)entry->data;
+
+      /* If it doesn't have a register yet, create one.  Note that all of
+       * the things in the merge set should be the same so it doesn't
+       * matter which node's definition we use.
+       */
+      if (node->set->reg.decl == NULL) {
+         node->set->reg.decl = decl_reg_for_ssa_def(&state->builder, def);
+         set_reg_divergent(node->set->reg.decl, node->set->divergent);
+      }
+
+      return node->set->reg.decl;
+   } else {
+      assert(state->phi_webs_only);
+      return NULL;
+   }
+}
+
+static void
+remove_no_op_phi(nir_instr *instr, struct from_ssa_state *state)
+{
+#ifndef NDEBUG
+   nir_phi_instr *phi = nir_instr_as_phi(instr);
+
+   assert(phi->dest.is_ssa);
+   struct hash_entry *entry =
+      _mesa_hash_table_search(state->merge_node_table, &phi->dest.ssa);
+   assert(entry != NULL);
+   merge_node *node = (merge_node *)entry->data;
+
+   nir_foreach_phi_src(src, phi) {
+      if (nir_src_is_undef(src->src))
+         continue;
+
+      assert(src->src.is_ssa);
+      entry = _mesa_hash_table_search(state->merge_node_table, src->src.ssa);
+      assert(entry != NULL);
+      merge_node *src_node = (merge_node *)entry->data;
+      assert(src_node->set == node->set);
+   }
+#endif
+
+   nir_instr_remove(instr);
+}
+
+static bool
+rewrite_ssa_def(nir_ssa_def *def, void *void_state)
+{
+   struct from_ssa_state *state = void_state;
+
+   nir_ssa_def *reg = reg_for_ssa_def(def, state);
+   if (reg == NULL)
+      return true;
+
+   assert(nir_ssa_def_is_unused(def));
+
+   /* At this point we know a priori that this SSA def is part of a
+    * nir_dest.  We can use exec_node_data to get the dest pointer.
+    */
+   assert(def->parent_instr->type != nir_instr_type_load_const);
+   nir_store_reg(&state->builder, def, reg);
+
+   state->progress = true;
+   return true;
+}
+
+static bool
+rewrite_src(nir_src *src, void *void_state)
+{
+   struct from_ssa_state *state = void_state;
+
+   assert(src->is_ssa);
+   nir_ssa_def *reg = reg_for_ssa_def(src->ssa, state);
+   if (reg == NULL)
+      return true;
+
+   nir_src_rewrite_ssa(src, nir_load_reg(&state->builder, reg));
+
+   state->progress = true;
+   return true;
+}
+
+/* Resolves ssa definitions to registers.  While we're at it, we also
+ * remove phi nodes.
+ */
+static void
+resolve_registers_impl(nir_function_impl *impl, struct from_ssa_state *state)
+{
+   nir_foreach_block_reverse(block, impl) {
+      /* Remove successor phis in case there's a back edge. */
+      for (unsigned i = 0; i < 2; i++) {
+         nir_block *succ = block->successors[i];
+         if (succ == NULL)
+            continue;
+
+         nir_foreach_instr_safe(instr, succ) {
+            if (instr->type != nir_instr_type_phi)
+               break;
+
+            remove_no_op_phi(instr, state);
+         }
+      }
+
+      /* The following if is right after the block, handle its condition as the
+       * last source "in" the block.
+       */
+      nir_if *nif = nir_block_get_following_if(block);
+      if (nif) {
+         state->builder.cursor = nir_before_src(&nif->condition);
+         rewrite_src(&nif->condition, state);
+      }
+
+      nir_foreach_instr_reverse_safe(instr, block) {
+         switch (instr->type) {
+         case nir_instr_type_phi:
+            remove_no_op_phi(instr, state);
+            break;
+
+         case nir_instr_type_parallel_copy: {
+            nir_parallel_copy_instr *pcopy = nir_instr_as_parallel_copy(instr);
+
+            nir_foreach_parallel_copy_entry(entry, pcopy) {
+               assert(!entry->dest_is_reg);
+               assert(entry->dest.dest.is_ssa);
+               assert(nir_ssa_def_is_unused(&entry->dest.dest.ssa));
+
+               /* Parallel copy destinations will always be registers */
+               nir_ssa_def *reg = reg_for_ssa_def(&entry->dest.dest.ssa, state);
+               assert(reg != NULL);
+
+               entry->dest_is_reg = true;
+               entry->dest.reg = NIR_SRC_INIT;
+               nir_instr_rewrite_src(&pcopy->instr, &entry->dest.reg,
+                                     nir_src_for_ssa(reg));
+            }
+
+            nir_foreach_parallel_copy_entry(entry, pcopy) {
+               assert(!entry->src_is_reg);
+               assert(entry->src.is_ssa);
+               nir_ssa_def *reg = reg_for_ssa_def(entry->src.ssa, state);
+               if (reg == NULL)
+                  continue;
+
+               entry->src_is_reg = true;
+               nir_instr_rewrite_src(&pcopy->instr, &entry->src,
+                                     nir_src_for_ssa(reg));
+            }
+            break;
+         }
+
+         default:
+            state->builder.cursor = nir_after_instr(instr);
+            nir_foreach_ssa_def(instr, rewrite_ssa_def, state);
+            state->builder.cursor = nir_before_instr(instr);
+            nir_foreach_src(instr, rewrite_src, state);
+         }
+      }
+   }
 }
 
 static void
@@ -670,13 +900,15 @@ emit_copy(nir_builder *b, nir_src src, nir_src dest_src)
  * can continue with the above steps.
  */
 static void
-resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
-                      struct from_ssa_state *state)
+resolve_parallel_copy_legacy_reg(nir_parallel_copy_instr *pcopy,
+                                 struct from_ssa_state *state)
 {
    unsigned num_copies = 0;
    nir_foreach_parallel_copy_entry(entry, pcopy) {
-      /* Sources may be SSA */
-      if (!entry->src.is_ssa && entry->src.reg.reg == entry->dest.reg.reg)
+      /* Sources may be SSA but destinations are always registers */
+      assert(!entry->src_is_reg);
+      assert(!entry->dest_is_reg && !entry->dest.dest.is_ssa);
+      if (!entry->src.is_ssa && entry->src.reg.reg == entry->dest.dest.reg.reg)
          continue;
 
       num_copies++;
@@ -711,8 +943,8 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
     */
    int num_vals = 0;
    nir_foreach_parallel_copy_entry(entry, pcopy) {
-      /* Sources may be SSA */
-      if (!entry->src.is_ssa && entry->src.reg.reg == entry->dest.reg.reg)
+      /* Sources may be SSA but destinations are always registers */
+      if (!entry->src.is_ssa && entry->src.reg.reg == entry->dest.dest.reg.reg)
          continue;
 
       int src_idx = -1;
@@ -725,7 +957,7 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
          values[src_idx] = entry->src;
       }
 
-      nir_src dest_src = nir_src_for_reg(entry->dest.reg.reg);
+      nir_src dest_src = nir_src_for_reg(entry->dest.dest.reg.reg);
 
       int dest_idx = -1;
       for (int i = 0; i < num_vals; ++i) {
@@ -835,6 +1067,229 @@ resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
    exec_list_push_tail(&state->dead_instrs, &pcopy->instr.node);
 }
 
+struct copy_value {
+   bool is_reg;
+   nir_ssa_def *ssa;
+};
+
+static bool
+copy_values_equal(struct copy_value a, struct copy_value b)
+{
+   return a.is_reg == b.is_reg && a.ssa == b.ssa;
+}
+
+static bool
+copy_value_is_divergent(struct copy_value v)
+{
+   if (!v.is_reg)
+      return v.ssa->divergent;
+
+   nir_intrinsic_instr *decl = nir_reg_get_decl(v.ssa);
+   return nir_intrinsic_divergent(decl);
+}
+
+static void
+copy_values(nir_builder *b, struct copy_value dest, struct copy_value src)
+{
+   nir_ssa_def *val = src.is_reg ? nir_load_reg(b, src.ssa) : src.ssa;
+
+   assert(!copy_value_is_divergent(src) || copy_value_is_divergent(dest));
+
+   assert(dest.is_reg);
+   nir_store_reg(b, val, dest.ssa);
+}
+
+static void
+resolve_parallel_copy(nir_parallel_copy_instr *pcopy,
+                      struct from_ssa_state *state)
+{
+   if (!state->reg_intrinsics) {
+      resolve_parallel_copy_legacy_reg(pcopy, state);
+      return;
+   }
+
+   unsigned num_copies = 0;
+   nir_foreach_parallel_copy_entry(entry, pcopy) {
+      /* Sources may be SSA but destinations are always registers */
+      assert(entry->src.is_ssa);
+      assert(entry->dest_is_reg && entry->dest.dest.is_ssa);
+      if (entry->src_is_reg && entry->src.ssa == entry->dest.reg.ssa)
+         continue;
+
+      num_copies++;
+   }
+
+   if (num_copies == 0) {
+      /* Hooray, we don't need any copies! */
+      nir_instr_remove(&pcopy->instr);
+      exec_list_push_tail(&state->dead_instrs, &pcopy->instr.node);
+      return;
+   }
+
+   /* The register/source corresponding to the given index */
+   NIR_VLA_ZERO(struct copy_value, values, num_copies * 2);
+
+   /* The current location of a given piece of data.  We will use -1 for "null" */
+   NIR_VLA_FILL(int, loc, num_copies * 2, -1);
+
+   /* The piece of data that the given piece of data is to be copied from.  We will use -1 for "null" */
+   NIR_VLA_FILL(int, pred, num_copies * 2, -1);
+
+   /* The destinations we have yet to properly fill */
+   NIR_VLA(int, to_do, num_copies * 2);
+   int to_do_idx = -1;
+
+   state->builder.cursor = nir_before_instr(&pcopy->instr);
+
+   /* Now we set everything up:
+    *  - All values get assigned a temporary index
+    *  - Current locations are set from sources
+    *  - Predecessors are recorded from sources and destinations
+    */
+   int num_vals = 0;
+   nir_foreach_parallel_copy_entry(entry, pcopy) {
+      /* Sources may be SSA but destinations are always registers */
+      if (entry->src_is_reg && entry->src.ssa == entry->dest.reg.ssa)
+         continue;
+
+      assert(entry->src.is_ssa);
+      struct copy_value src_value = {
+         .is_reg = entry->src_is_reg,
+         .ssa = entry->src.ssa,
+      };
+
+      int src_idx = -1;
+      for (int i = 0; i < num_vals; ++i) {
+         if (copy_values_equal(values[i], src_value))
+            src_idx = i;
+      }
+      if (src_idx < 0) {
+         src_idx = num_vals++;
+         values[src_idx] = src_value;
+      }
+
+      assert(entry->dest_is_reg && entry->dest.dest.is_ssa);
+      struct copy_value dest_value = {
+         .is_reg = true,
+         .ssa = entry->dest.reg.ssa,
+      };
+
+      int dest_idx = -1;
+      for (int i = 0; i < num_vals; ++i) {
+         if (copy_values_equal(values[i], dest_value)) {
+            /* Each destination of a parallel copy instruction should be
+             * unique.  A destination may get used as a source, so we still
+             * have to walk the list.  However, the predecessor should not,
+             * at this point, be set yet, so we should have -1 here.
+             */
+            assert(pred[i] == -1);
+            dest_idx = i;
+         }
+      }
+      if (dest_idx < 0) {
+         dest_idx = num_vals++;
+         values[dest_idx] = dest_value;
+      }
+
+      loc[src_idx] = src_idx;
+      pred[dest_idx] = src_idx;
+
+      to_do[++to_do_idx] = dest_idx;
+   }
+
+   /* Currently empty destinations we can go ahead and fill */
+   NIR_VLA(int, ready, num_copies * 2);
+   int ready_idx = -1;
+
+   /* Mark the ones that are ready for copying.  We know an index is a
+    * destination if it has a predecessor and it's ready for copying if
+    * it's not marked as containing data.
+    */
+   for (int i = 0; i < num_vals; i++) {
+      if (pred[i] != -1 && loc[i] == -1)
+         ready[++ready_idx] = i;
+   }
+
+   while (1) {
+      while (ready_idx >= 0) {
+         int b = ready[ready_idx--];
+         int a = pred[b];
+         copy_values(&state->builder, values[b], values[loc[a]]);
+
+         /* b has been filled, mark it as not needing to be copied */
+         pred[b] = -1;
+
+         /* The next bit only applies if the source and destination have the
+          * same divergence.  If they differ (it must be convergent ->
+          * divergent), then we can't guarantee we won't need the convergent
+          * version of it again.
+          */
+         if (copy_value_is_divergent(values[a]) ==
+             copy_value_is_divergent(values[b])) {
+            /* If a needs to be filled... */
+            if (pred[a] != -1) {
+               /* If any other copies want a they can find it at b */
+               loc[a] = b;
+
+               /* It's ready for copying now */
+               ready[++ready_idx] = a;
+            }
+         }
+      }
+
+      assert(ready_idx < 0);
+      if (to_do_idx < 0)
+         break;
+
+      int b = to_do[to_do_idx--];
+      if (pred[b] == -1)
+         continue;
+
+      /* If we got here, then we don't have any more trivial copies that we
+       * can do.  We have to break a cycle, so we create a new temporary
+       * register for that purpose.  Normally, if going out of SSA after
+       * register allocation, you would want to avoid creating temporary
+       * registers.  However, we are going out of SSA before register
+       * allocation, so we would rather not create extra register
+       * dependencies for the backend to deal with.  If it wants, the
+       * backend can coalesce the (possibly multiple) temporaries.
+       *
+       * We can also get here in the case where there is no cycle but our
+       * source value is convergent, is also used as a destination by another
+       * element of the parallel copy, and all the destinations of the
+       * parallel copy which copy from it are divergent. In this case, the
+       * above loop cannot detect that the value has moved due to all the
+       * divergent destinations and we'll end up emitting a copy to a
+       * temporary which never gets used. We can avoid this with additional
+       * tracking or we can just trust the back-end to dead-code the unused
+       * temporary (which is trivial).
+       */
+      assert(num_vals < num_copies * 2);
+      nir_ssa_def *reg;
+      if (values[b].is_reg) {
+         nir_intrinsic_instr *decl = nir_reg_get_decl(values[b].ssa);
+         uint8_t num_components = nir_intrinsic_num_components(decl);
+         uint8_t bit_size = nir_intrinsic_bit_size(decl);
+         reg = nir_decl_reg(&state->builder, num_components, bit_size, 0);
+      } else {
+         reg = decl_reg_for_ssa_def(&state->builder, values[b].ssa);
+      }
+      set_reg_divergent(reg, copy_value_is_divergent(values[b]));
+
+      values[num_vals] = (struct copy_value) {
+         .is_reg = true,
+         .ssa = reg,
+      };
+      copy_values(&state->builder, values[num_vals], values[b]);
+      loc[b] = num_vals;
+      ready[++ready_idx] = b;
+      num_vals++;
+   }
+
+   nir_instr_remove(&pcopy->instr);
+   exec_list_push_tail(&state->dead_instrs, &pcopy->instr.node);
+}
+
 /* Resolves the parallel copies in a block.  Each block can have at most
  * two:  One at the beginning, right after all the phi noces, and one at
  * the end (or right before the final jump if it exists).
@@ -850,35 +1305,49 @@ resolve_parallel_copies_block(nir_block *block, struct from_ssa_state *state)
    if (first_instr == NULL)
       return true; /* Empty, nothing to do. */
 
-   if (first_instr->type == nir_instr_type_parallel_copy) {
-      nir_parallel_copy_instr *pcopy = nir_instr_as_parallel_copy(first_instr);
+   if (state->reg_intrinsics) {
+      /* There can be load_reg in the way of the copies... don't be clever. */
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type == nir_instr_type_parallel_copy) {
+            nir_parallel_copy_instr *pcopy = nir_instr_as_parallel_copy(instr);
 
-      resolve_parallel_copy(pcopy, state);
+            resolve_parallel_copy(pcopy, state);
+         }
+      }
+   } else {
+      if (first_instr->type == nir_instr_type_parallel_copy) {
+         nir_parallel_copy_instr *pcopy = nir_instr_as_parallel_copy(first_instr);
+
+         resolve_parallel_copy(pcopy, state);
+      }
+
+      /* It's possible that the above code already cleaned up the end parallel
+       * copy.  However, doing so removed it form the instructions list so we
+       * won't find it here.  Therefore, it's safe to go ahead and just look
+       * for one and clean it up if it exists.
+       */
+      nir_parallel_copy_instr *end_pcopy =
+         get_parallel_copy_at_end_of_block(block);
+      if (end_pcopy)
+         resolve_parallel_copy(end_pcopy, state);
    }
-
-   /* It's possible that the above code already cleaned up the end parallel
-    * copy.  However, doing so removed it form the instructions list so we
-    * won't find it here.  Therefore, it's safe to go ahead and just look
-    * for one and clean it up if it exists.
-    */
-   nir_parallel_copy_instr *end_pcopy =
-      get_parallel_copy_at_end_of_block(block);
-   if (end_pcopy)
-      resolve_parallel_copy(end_pcopy, state);
 
    return true;
 }
 
 static bool
-nir_convert_from_ssa_impl(nir_function_impl *impl, bool phi_webs_only)
+nir_convert_from_ssa_impl(nir_function_impl *impl,
+                          bool phi_webs_only,
+                          bool reg_intrinsics)
 {
    nir_shader *shader = impl->function->shader;
 
    struct from_ssa_state state;
 
-   nir_builder_init(&state.builder, impl);
+   state.builder = nir_builder_create(impl);
    state.dead_ctx = ralloc_context(NULL);
    state.phi_webs_only = phi_webs_only;
+   state.reg_intrinsics = reg_intrinsics;
    state.merge_node_table = _mesa_pointer_hash_table_create(NULL);
    state.progress = false;
    exec_list_make_empty(&state.dead_instrs);
@@ -899,6 +1368,7 @@ nir_convert_from_ssa_impl(nir_function_impl *impl, bool phi_webs_only)
                               nir_metadata_live_ssa_defs |
                               nir_metadata_dominance);
 
+
    nir_foreach_block(block, impl) {
       coalesce_phi_nodes_block(block, &state);
    }
@@ -907,8 +1377,12 @@ nir_convert_from_ssa_impl(nir_function_impl *impl, bool phi_webs_only)
       aggressive_coalesce_block(block, &state);
    }
 
-   nir_foreach_block(block, impl) {
-      resolve_registers_block(block, &state);
+   if (reg_intrinsics) {
+      resolve_registers_impl(impl, &state);
+   } else {
+      nir_foreach_block(block, impl) {
+         resolve_registers_block_legacy_reg(block, &state);
+      }
    }
 
    nir_foreach_block(block, impl) {
@@ -926,13 +1400,15 @@ nir_convert_from_ssa_impl(nir_function_impl *impl, bool phi_webs_only)
 }
 
 bool
-nir_convert_from_ssa(nir_shader *shader, bool phi_webs_only)
+nir_convert_from_ssa(nir_shader *shader,
+                     bool phi_webs_only,
+                     bool reg_intrinsics)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_convert_from_ssa_impl(function->impl, phi_webs_only);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_convert_from_ssa_impl(impl, phi_webs_only,
+                                            reg_intrinsics);
    }
 
    return progress;
@@ -940,7 +1416,7 @@ nir_convert_from_ssa(nir_shader *shader, bool phi_webs_only)
 
 
 static void
-place_phi_read(nir_builder *b, nir_register *reg,
+place_phi_read(nir_builder *b, nir_ssa_def *reg,
                nir_ssa_def *def, nir_block *block, struct set *visited_blocks)
 {
   /* Search already visited blocks to avoid back edges in tree */
@@ -971,7 +1447,7 @@ place_phi_read(nir_builder *b, nir_register *reg,
    }
 
    b->cursor = nir_after_block_before_jump(block);
-   nir_store_reg(b, reg, def, ~0);
+   nir_store_reg(b, def, reg);
 }
 
 /** Lower all of the phi nodes in a block to movs to and from a register
@@ -1006,37 +1482,24 @@ place_phi_read(nir_builder *b, nir_register *reg,
 bool
 nir_lower_phis_to_regs_block(nir_block *block)
 {
-   nir_builder b;
-   nir_builder_init(&b, nir_cf_node_get_function(&block->cf_node));
+   nir_builder b = nir_builder_create(nir_cf_node_get_function(&block->cf_node));
    struct set *visited_blocks = _mesa_set_create(NULL, _mesa_hash_pointer,
                                                  _mesa_key_pointer_equal);
 
    bool progress = false;
-   nir_foreach_instr_safe(instr, block) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
+   nir_foreach_phi_safe(phi, block) {
       assert(phi->dest.is_ssa);
-
-      nir_register *reg = create_reg_for_ssa_def(&phi->dest.ssa, b.impl);
+      nir_ssa_def *reg = decl_reg_for_ssa_def(&b, &phi->dest.ssa);
 
       b.cursor = nir_after_instr(&phi->instr);
-      nir_ssa_def *def = nir_load_reg(&b, reg);
-
-      nir_ssa_def_rewrite_uses(&phi->dest.ssa, def);
+      nir_ssa_def_rewrite_uses(&phi->dest.ssa, nir_load_reg(&b, reg));
 
       nir_foreach_phi_src(src, phi) {
-         if (src->src.is_ssa) {
-            _mesa_set_add(visited_blocks, src->src.ssa->parent_instr->block);
-            place_phi_read(&b, reg, src->src.ssa, src->pred, visited_blocks);
-            _mesa_set_clear(visited_blocks, NULL);
-         } else {
-            b.cursor = nir_after_block_before_jump(src->pred);
-            nir_ssa_def *src_ssa =
-               nir_ssa_for_src(&b, src->src, phi->dest.ssa.num_components);
-            nir_store_reg(&b, reg, src_ssa, ~0);
-         }
+         assert(src->src.is_ssa);
+
+         _mesa_set_add(visited_blocks, src->src.ssa->parent_instr->block);
+         place_phi_read(&b, reg, src->src.ssa, src->pred, visited_blocks);
+         _mesa_set_clear(visited_blocks, NULL);
       }
 
       nir_instr_remove(&phi->instr);
@@ -1055,24 +1518,10 @@ struct ssa_def_to_reg_state {
 };
 
 static bool
-dest_replace_ssa_with_reg(nir_dest *dest, void *void_state)
+dest_replace_ssa_with_reg_state(nir_dest *dest, void *void_state)
 {
    struct ssa_def_to_reg_state *state = void_state;
-
-   if (!dest->is_ssa)
-      return true;
-
-   nir_register *reg = create_reg_for_ssa_def(&dest->ssa, state->impl);
-
-   nir_ssa_def_rewrite_uses_src(&dest->ssa, nir_src_for_reg(reg));
-
-   nir_instr *instr = dest->ssa.parent_instr;
-   *dest = nir_dest_for_reg(reg);
-   dest->reg.parent_instr = instr;
-   list_addtail(&dest->reg.def_link, &reg->defs);
-
-   state->progress = true;
-
+   state->progress |= dest_replace_ssa_with_reg(dest, state->impl);
    return true;
 }
 
@@ -1091,6 +1540,22 @@ ssa_def_is_local_to_block(nir_ssa_def *def, UNUSED void *state)
    return true;
 }
 
+static bool
+instr_is_load_new_reg(nir_instr *instr, unsigned old_num_ssa)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *load = nir_instr_as_intrinsic(instr);
+   if (load->intrinsic != nir_intrinsic_load_reg)
+      return false;
+
+   assert(load->src[0].is_ssa);
+   nir_ssa_def *reg = load->src[0].ssa;
+
+   return reg->index >= old_num_ssa;
+}
+
 /** Lower all of the SSA defs in a block to registers
  *
  * This performs the very simple operation of blindly replacing all of the SSA
@@ -1102,37 +1567,44 @@ bool
 nir_lower_ssa_defs_to_regs_block(nir_block *block)
 {
    nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
-   nir_shader *shader = impl->function->shader;
+   nir_builder b = nir_builder_create(impl);
 
    struct ssa_def_to_reg_state state = {
       .impl = impl,
       .progress = false,
    };
 
-   nir_foreach_instr(instr, block) {
+   /* Save off the current number of SSA defs so we can detect which regs
+    * we've added vs. regs that were already there.
+    */
+   const unsigned num_ssa = impl->ssa_alloc;
+
+   nir_foreach_instr_safe(instr, block) {
       if (instr->type == nir_instr_type_ssa_undef) {
          /* Undefs are just a read of something never written. */
          nir_ssa_undef_instr *undef = nir_instr_as_ssa_undef(instr);
-         nir_register *reg = create_reg_for_ssa_def(&undef->def, state.impl);
-         nir_ssa_def_rewrite_uses_src(&undef->def, nir_src_for_reg(reg));
+         nir_ssa_def *reg = decl_reg_for_ssa_def(&b, &undef->def);
+         nir_rewrite_uses_to_load_reg(&b, &undef->def, reg);
       } else if (instr->type == nir_instr_type_load_const) {
-         /* Constant loads are SSA-only, we need to insert a move */
          nir_load_const_instr *load = nir_instr_as_load_const(instr);
-         nir_register *reg = create_reg_for_ssa_def(&load->def, state.impl);
-         nir_ssa_def_rewrite_uses_src(&load->def, nir_src_for_reg(reg));
+         nir_ssa_def *reg = decl_reg_for_ssa_def(&b, &load->def);
+         nir_rewrite_uses_to_load_reg(&b, &load->def, reg);
 
-         nir_alu_instr *mov = nir_alu_instr_create(shader, nir_op_mov);
-         mov->src[0].src = nir_src_for_ssa(&load->def);
-         mov->dest.dest = nir_dest_for_reg(reg);
-         mov->dest.write_mask = (1 << reg->num_components) - 1;
-         nir_instr_insert(nir_after_instr(&load->instr), &mov->instr);
+         b.cursor = nir_after_instr(instr);
+         nir_store_reg(&b, &load->def, reg);
+      } else if (instr_is_load_new_reg(instr, num_ssa)) {
+         /* Calls to nir_rewrite_uses_to_load_reg() may place new load_reg
+          * intrinsics in this block with new SSA destinations.  To avoid
+          * infinite recursion, we don't want to lower any newly placed
+          * load_reg instructions to yet anoter load/store_reg.
+          */
       } else if (nir_foreach_ssa_def(instr, ssa_def_is_local_to_block, NULL)) {
          /* If the SSA def produced by this instruction is only in the block
           * in which it is defined and is not used by ifs or phis, then we
           * don't have a reason to convert it to a register.
           */
       } else {
-         nir_foreach_dest(instr, dest_replace_ssa_with_reg, &state);
+         nir_foreach_dest(instr, dest_replace_ssa_with_reg_state, &state);
       }
    }
 

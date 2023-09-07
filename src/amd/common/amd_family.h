@@ -2,24 +2,8 @@
  * Copyright 2008 Corbin Simpson <MostAwesomeDude@gmail.com>
  * Copyright 2010 Marek Olšák <maraeo@gmail.com>
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE. */
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef AMD_FAMILY_H
 #define AMD_FAMILY_H
@@ -187,6 +171,31 @@ enum amd_vram_type {
    AMD_VRAM_TYPE_DDR5,
    AMD_VRAM_TYPE_LPDDR4,
    AMD_VRAM_TYPE_LPDDR5,
+};
+
+enum vcn_version{
+   VCN_UNKNOWN,
+   VCN_1_0_0,
+   VCN_1_0_1,
+
+   VCN_2_0_0,
+   VCN_2_0_2,
+   VCN_2_0_3,
+   VCN_2_2_0,
+   VCN_2_5_0,
+   VCN_2_6_0,
+
+   VCN_3_0_0,
+   VCN_3_0_2,
+   VCN_3_0_16,
+   VCN_3_0_33,
+   VCN_3_1_1,
+   VCN_3_1_2,
+
+   VCN_4_0_0,
+   VCN_4_0_2,
+   VCN_4_0_3,
+   VCN_4_0_4,
 };
 
 const char *ac_get_family_name(enum radeon_family family);

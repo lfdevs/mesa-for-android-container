@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# For the dependencies, see the requirements.txt
 
 import re
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
@@ -51,7 +52,8 @@ class GitlabGQL:
         headers = {}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
-        self._transport = AIOHTTPTransport(url=self.url, headers=headers)
+        self._transport = AIOHTTPTransport(
+            url=self.url, headers=headers, client_session_args = { "trust_env": True })
 
         # Create a GraphQL client using the defined transport
         self.client = Client(

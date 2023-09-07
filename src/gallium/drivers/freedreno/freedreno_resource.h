@@ -253,6 +253,19 @@ has_depth(enum pipe_format format)
    return util_format_has_depth(desc);
 }
 
+static inline bool
+is_z32(enum pipe_format format)
+{
+   switch (format) {
+   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+   case PIPE_FORMAT_Z32_UNORM:
+   case PIPE_FORMAT_Z32_FLOAT:
+      return true;
+   default:
+      return false;
+   }
+}
+
 struct fd_transfer {
    struct threaded_transfer b;
    struct pipe_resource *staging_prsc;

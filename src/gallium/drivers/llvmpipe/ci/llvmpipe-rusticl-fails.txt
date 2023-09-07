@@ -9,9 +9,6 @@ api@clcompileprogram,Fail
 # Failed to compile binary program.
 api@clcreateprogramwithbinary,Fail
 
-# Failed (error code: CL_SUCCESS): CL_INVALID_VALUE if values in region do not follow rules described in the argument description for region.
-api@clenqueuefillimage,Fail
-
 # Failed (error code: CL_INVALID_COMMAND_QUEUE): Get size of CL_QUEUE_SIZE.
 api@clgetcommandqueueinfo,Fail
 
@@ -80,8 +77,5 @@ program@execute@calls-struct@small struct in regs,Fail
 program@execute@global-offset,Fail
 program@execute@global-offset@3d- input dependent,Fail
 
-# InvalidModule: Invalid SPIR-V module: vloada_half should be of a half vector type
-program@execute@vload@vloada_half-float-constant,Crash
-program@execute@vload@vloada_half-float-global,Crash
-program@execute@vload@vloada_half-float-local,Crash
-program@execute@vload@vloada_half-float-private,Crash
+# Debian bookworm fails
+program@build@vector-data-types,Fail

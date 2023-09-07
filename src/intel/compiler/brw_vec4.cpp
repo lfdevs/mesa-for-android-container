@@ -28,6 +28,7 @@
 #include "brw_vec4_builder.h"
 #include "brw_vec4_vs.h"
 #include "brw_dead_control_flow.h"
+#include "brw_private.h"
 #include "dev/intel_debug.h"
 #include "program/prog_parameter.h"
 #include "util/u_math.h"
@@ -1309,13 +1310,7 @@ vec4_visitor::split_virtual_grfs()
 }
 
 void
-vec4_visitor::dump_instruction(const backend_instruction *be_inst) const
-{
-   dump_instruction(be_inst, stderr);
-}
-
-void
-vec4_visitor::dump_instruction(const backend_instruction *be_inst, FILE *file) const
+vec4_visitor::dump_instruction_to_file(const backend_instruction *be_inst, FILE *file) const
 {
    const vec4_instruction *inst = (const vec4_instruction *)be_inst;
 
@@ -2545,14 +2540,14 @@ brw_compile_vs(const struct brw_compiler *compiler,
    const struct brw_vs_prog_key *key = params->key;
    struct brw_vs_prog_data *prog_data = params->prog_data;
    const bool debug_enabled =
-      INTEL_DEBUG(params->debug_flag ? params->debug_flag : DEBUG_VS);
+      brw_should_print_shader(nir, params->debug_flag ? params->debug_flag : DEBUG_VS);
 
    prog_data->base.base.stage = MESA_SHADER_VERTEX;
    prog_data->base.base.ray_queries = nir->info.ray_queries;
    prog_data->base.base.total_scratch = 0;
 
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_VERTEX];
-   brw_nir_apply_key(nir, compiler, &key->base, 8, is_scalar);
+   brw_nir_apply_key(nir, compiler, &key->base, 8);
 
    const unsigned *assembly = NULL;
 
@@ -2561,7 +2556,7 @@ brw_compile_vs(const struct brw_compiler *compiler,
 
    brw_nir_lower_vs_inputs(nir, params->edgeflag_is_last, key->gl_attrib_wa_flags);
    brw_nir_lower_vue_outputs(nir);
-   brw_postprocess_nir(nir, compiler, is_scalar, debug_enabled,
+   brw_postprocess_nir(nir, compiler, debug_enabled,
                        key->base.robust_buffer_access);
 
    prog_data->base.clip_distance_mask =

@@ -25,12 +25,10 @@ parse_gpu_id(void *buf)
    return *((unsigned int *)buf);
 }
 
-static uint32_t
+static uint64_t
 parse_chip_id(void *buf)
 {
-   uint64_t chip_id = *((uint64_t *)buf);
-   return 100 * ((chip_id >> 24) & 0xff) + 10 * ((chip_id >> 16) & 0xff) +
-          ((chip_id >> 8) & 0xff);
+   return *((uint64_t *)buf);
 }
 
 struct rd_parsed_section

@@ -388,7 +388,6 @@ spec@arb_framebuffer_object@fbo-generatemipmap-cubemap s3tc_dxt1,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels draw stencil,Fail
 spec@arb_framebuffer_object@framebuffer-blit-levels read stencil,Fail
 spec@arb_framebuffer_object@same-attachment-glframebuffertexture2d-gl_depth_stencil_attachment,Fail
-spec@arb_internalformat_query2@all internalformat_<x>_type pname checks,Timeout
 
 # Need to be able to report 0 OQ bits, since there are no HW OQs.
 spec@arb_occlusion_query2@render,Fail

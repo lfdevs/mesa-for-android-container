@@ -190,7 +190,7 @@ struct iris_bo {
    uint32_t gem_handle;
 
    /**
-    * Virtual address of the buffer inside the PPGTT (Per-Process Graphics
+    * Canonical virtual address of the buffer inside the PPGTT (Per-Process Graphics
     * Translation Table).
     *
     * Although each hardware context has its own VMA, we assign BO's to the
@@ -267,6 +267,9 @@ struct iris_bo {
           * List contains both flink named and prime fd'd objects
           */
          unsigned global_name;
+
+         /** Prime fd used for shared buffers, -1 otherwise. */
+         int prime_fd;
 
          /** The mmap coherency mode selected at BO allocation time */
          enum iris_mmap_mode mmap_mode;
@@ -486,7 +489,8 @@ int iris_gem_get_tiling(struct iris_bo *bo, uint32_t *tiling);
 int iris_gem_set_tiling(struct iris_bo *bo, const struct isl_surf *surf);
 
 int iris_bo_export_dmabuf(struct iris_bo *bo, int *prime_fd);
-struct iris_bo *iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd);
+struct iris_bo *iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
+                                      const uint64_t modifier);
 
 /**
  * Exports a bo as a GEM handle into a given DRM file descriptor
@@ -535,6 +539,22 @@ iris_bo_bump_seqno(struct iris_bo *bo, uint64_t seqno,
       prev_seqno = tmp;
 }
 
+/**
+ * Return the pat index based on the bo allocation flags.
+ */
+static inline uint32_t
+iris_pat_index_for_bo_flags(const struct intel_device_info *devinfo,
+                            unsigned alloc_flags)
+{
+   if (alloc_flags & BO_ALLOC_COHERENT)
+      return devinfo->pat.coherent;
+
+   if (alloc_flags & (BO_ALLOC_SHARED | BO_ALLOC_SCANOUT))
+      return devinfo->pat.scanout;
+
+   return devinfo->pat.writeback;
+}
+
 enum iris_memory_zone iris_memzone_for_address(uint64_t address);
 
 int iris_bufmgr_create_screen_id(struct iris_bufmgr *bufmgr);
@@ -580,5 +600,8 @@ enum iris_madvice {
    IRIS_MADVICE_WILL_NEED = 0,
    IRIS_MADVICE_DONT_NEED = 1,
 };
+
+void iris_bo_import_sync_state(struct iris_bo *bo, int sync_file_fd);
+struct iris_syncobj *iris_bo_export_sync_state(struct iris_bo *bo);
 
 #endif /* IRIS_BUFMGR_H */

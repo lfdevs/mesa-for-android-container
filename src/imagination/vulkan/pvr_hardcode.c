@@ -290,9 +290,9 @@ void pvr_hard_code_graphics_get_build_info(
 
    switch (stage) {
    case MESA_SHADER_VERTEX:
-      assert(
-         data->graphics.build_infos[pipeline_n]->vert_common_data.temps ==
-         data->graphics.vert_shader_states[pipeline_n]->stage_state.temps_count);
+      assert(data->graphics.build_infos[pipeline_n]->vert_common_data.temps ==
+             data->graphics.vert_shader_states[pipeline_n]
+                ->stage_state.pds_temps_count);
 
       assert(data->graphics.build_infos[pipeline_n]->vert_common_data.coeffs ==
              data->graphics.vert_shader_states[pipeline_n]
@@ -307,9 +307,9 @@ void pvr_hard_code_graphics_get_build_info(
       break;
 
    case MESA_SHADER_FRAGMENT:
-      assert(
-         data->graphics.build_infos[pipeline_n]->frag_common_data.temps ==
-         data->graphics.frag_shader_states[pipeline_n]->stage_state.temps_count);
+      assert(data->graphics.build_infos[pipeline_n]->frag_common_data.temps ==
+             data->graphics.frag_shader_states[pipeline_n]
+                ->stage_state.pds_temps_count);
 
       assert(data->graphics.build_infos[pipeline_n]->frag_common_data.coeffs ==
              data->graphics.frag_shader_states[pipeline_n]

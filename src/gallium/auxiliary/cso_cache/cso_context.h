@@ -147,7 +147,7 @@ cso_set_viewport(struct cso_context *cso,
 
 void
 cso_set_viewport_dims(struct cso_context *ctx,
-                      float width, float height, boolean invert);
+                      float width, float height, bool invert);
 
 void
 cso_set_sample_mask(struct cso_context *cso, unsigned stencil_mask);
@@ -162,7 +162,7 @@ cso_set_stencil_ref(struct cso_context *cso,
 void
 cso_set_render_condition(struct cso_context *cso,
                          struct pipe_query *query,
-                         boolean condition,
+                         bool condition,
                          enum pipe_render_cond_flag mode);
 
 /* gap */
@@ -219,12 +219,12 @@ cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
                                     const struct pipe_vertex_buffer *vbuffers);
 
 void
-cso_draw_arrays_instanced(struct cso_context *cso, uint mode,
-                          uint start, uint count,
-                          uint start_instance, uint instance_count);
+cso_draw_arrays_instanced(struct cso_context *cso, unsigned mode,
+                          unsigned start, unsigned count,
+                          unsigned start_instance, unsigned instance_count);
 
 void
-cso_draw_arrays(struct cso_context *cso, uint mode, uint start, uint count);
+cso_draw_arrays(struct cso_context *cso, unsigned mode, unsigned start, unsigned count);
 
 /* Inline functions. */
 

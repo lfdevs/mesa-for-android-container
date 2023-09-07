@@ -196,7 +196,7 @@ v3d_get_query_result_perfcnt(struct v3d_context *v3d, struct v3d_query *query,
         if (pquery->perfmon->job_submitted) {
                 if (!v3d_fence_wait(v3d->screen,
                                     pquery->perfmon->last_job_fence,
-                                    wait ? PIPE_TIMEOUT_INFINITE : 0))
+                                    wait ? OS_TIMEOUT_INFINITE : 0))
                         return false;
 
                 req.id = pquery->perfmon->kperfmon_id;

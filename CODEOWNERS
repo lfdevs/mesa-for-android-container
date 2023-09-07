@@ -137,9 +137,12 @@ meson.build @dbaker @eric
 /src/gallium/drivers/d3d12/ @jenatali
 
 # Panfrost
-/src/panfrost/ @alyssa
-/src/panfrost/vulkan/ @bbrezillon
-/src/gallium/drivers/panfrost/ @alyssa
+/src/panfrost/ @bbrezillon
+/src/panfrost/midgard @italove
+/src/gallium/drivers/panfrost/ @bbrezillon
+
+# R300
+/src/gallium/drivers/r300/ @ondracka @gawin
 
 # VMware
 /src/gallium/drivers/svga/ @brianp @charmainel

@@ -119,13 +119,13 @@ rastpos_destroy(struct draw_stage *stage)
  * else copy the current attrib.
  */
 static void
-update_attrib(struct gl_context *ctx, const ubyte *outputMapping,
+update_attrib(struct gl_context *ctx, const uint8_t *outputMapping,
               const struct vertex_header *vert,
               GLfloat *dest,
               GLuint result, GLuint defaultAttrib)
 {
    const GLfloat *src;
-   const ubyte k = outputMapping[result];
+   const uint8_t k = outputMapping[result];
    if (k != 0xff)
       src = vert->data[k];
    else
@@ -145,7 +145,7 @@ rastpos_point(struct draw_stage *stage, struct prim_header *prim)
    const GLfloat height = (GLfloat) ctx->DrawBuffer->Height;
    struct gl_vertex_program *stvp =
       (struct gl_vertex_program *)ctx->VertexProgram._Current;
-   const ubyte *outputMapping = stvp->result_to_output;
+   const uint8_t *outputMapping = stvp->result_to_output;
    const GLfloat *pos;
    GLuint i;
 
@@ -210,7 +210,7 @@ new_draw_rastpos_stage(struct gl_context *ctx, struct draw_context *draw)
                              GL_RGBA, GL_FALSE, GL_FALSE, GL_FALSE, 0);
    _mesa_enable_vertex_array_attrib(ctx, rs->VAO, 0);
 
-   rs->info.mode = PIPE_PRIM_POINTS;
+   rs->info.mode = MESA_PRIM_POINTS;
    rs->info.instance_count = 1;
    rs->draw.count = 1;
 

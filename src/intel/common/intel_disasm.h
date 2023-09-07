@@ -31,6 +31,9 @@
 extern "C" {
 #endif
 
+int intel_disassemble_find_end(const struct brw_isa_info *isa,
+                               const void *assembly, int start);
+
 void intel_disassemble(const struct brw_isa_info *isa,
                        const void *assembly, int start, FILE *out);
 

@@ -26,6 +26,7 @@
 #include "ir_uniform.h" /* for gl_uniform_storage */
 #include "linker_util.h"
 #include "main/shader_types.h"
+#include "util/u_math.h"
 
 /**
  * This file contains code to do a nir-based linking for uniform blocks. This
@@ -530,7 +531,7 @@ fill_block(struct gl_uniform_block *block,
     *    or end-of-structure padding), adding one, and rounding up to the next
     *    multiple of the base alignment required for a vec4."
     */
-   block->UniformBufferSize = glsl_align(block->UniformBufferSize, 16);
+   block->UniformBufferSize = align(block->UniformBufferSize, 16);
 }
 
 /*

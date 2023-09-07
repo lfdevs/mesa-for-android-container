@@ -94,7 +94,7 @@ impl PipeContext {
         bx: &pipe_box,
         data: *const c_void,
         stride: u32,
-        layer_stride: u32,
+        layer_stride: usize,
     ) {
         unsafe {
             self.pipe.as_ref().texture_subdata.unwrap()(
@@ -160,7 +160,12 @@ impl PipeContext {
 
     pub fn clear_texture(&self, res: &PipeResource, pattern: &[u32], bx: &pipe_box) {
         unsafe {
-            self.pipe.as_ref().clear_texture.unwrap()(
+            let clear_texture = self
+                .pipe
+                .as_ref()
+                .clear_texture
+                .unwrap_or(u_default_clear_texture);
+            clear_texture(
                 self.pipe.as_ptr(),
                 res.pipe(),
                 0,
@@ -327,6 +332,16 @@ impl PipeContext {
         info
     }
 
+    pub fn compute_state_subgroup_size(&self, state: *mut c_void, block: &[u32; 3]) -> u32 {
+        unsafe {
+            if let Some(cb) = self.pipe.as_ref().get_compute_state_subgroup_size {
+                cb(self.pipe.as_ptr(), state, block)
+            } else {
+                0
+            }
+        }
+    }
+
     pub fn create_sampler_state(&self, state: &pipe_sampler_state) -> *mut c_void {
         unsafe { self.pipe.as_ref().create_sampler_state.unwrap()(self.pipe.as_ptr(), state) }
     }
@@ -396,6 +411,10 @@ impl PipeContext {
             grid_base: [0; 3],
             indirect: ptr::null_mut(),
             indirect_offset: 0,
+            indirect_stride: 0,
+            draw_count: 0,
+            indirect_draw_count_offset: 0,
+            indirect_draw_count: ptr::null_mut(),
         };
         unsafe { self.pipe.as_ref().launch_grid.unwrap()(self.pipe.as_ptr(), &info) }
     }
@@ -513,6 +532,30 @@ impl PipeContext {
             PipeFence::new(fence, &self.screen)
         }
     }
+
+    pub fn svm_migrate(
+        &self,
+        ptrs: &[*const c_void],
+        sizes: &[usize],
+        to_device: bool,
+        content_undefined: bool,
+    ) {
+        assert_eq!(ptrs.len(), sizes.len());
+        unsafe {
+            if let Some(cb) = self.pipe.as_ref().svm_migrate {
+                cb(
+                    self.pipe.as_ptr(),
+                    ptrs.len() as u32,
+                    ptrs.as_ptr(),
+                    sizes.as_ptr(),
+                    to_device,
+                    content_undefined,
+                );
+            } else {
+                panic!("svm_migrate not implemented but called!");
+            }
+        }
+    }
 }
 
 impl Drop for PipeContext {
@@ -533,7 +576,6 @@ fn has_required_cbs(context: &pipe_context) -> bool {
         & has_required_feature!(context, buffer_subdata)
         & has_required_feature!(context, buffer_unmap)
         & has_required_feature!(context, clear_buffer)
-        & has_required_feature!(context, clear_texture)
         & has_required_feature!(context, create_compute_state)
         & has_required_feature!(context, delete_compute_state)
         & has_required_feature!(context, delete_sampler_state)

@@ -45,7 +45,7 @@ static void
 calculate_vertex_layout(struct i915_context *i915)
 {
    const struct i915_fragment_shader *fs = i915->fs;
-   struct vertex_info vinfo;
+   struct i915_vertex_info vinfo;
    bool colors[2], fog, needW, face;
    uint32_t i;
    int src;
@@ -84,20 +84,20 @@ calculate_vertex_layout(struct i915_context *i915)
    /* pos */
    src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_POSITION, 0);
    if (needW) {
-      draw_emit_vertex_attr(&vinfo, EMIT_4F, src);
+      draw_emit_vertex_attr(&vinfo.draw, EMIT_4F, src);
       vinfo.hwfmt[0] |= S4_VFMT_XYZW;
-      vinfo.attrib[0].emit = EMIT_4F;
+      vinfo.draw.attrib[0].emit = EMIT_4F;
    } else {
-      draw_emit_vertex_attr(&vinfo, EMIT_3F, src);
+      draw_emit_vertex_attr(&vinfo.draw, EMIT_3F, src);
       vinfo.hwfmt[0] |= S4_VFMT_XYZ;
-      vinfo.attrib[0].emit = EMIT_3F;
+      vinfo.draw.attrib[0].emit = EMIT_3F;
    }
 
    /* point size.  if not emitted here, then point size comes from LIS4. */
    if (i915->rasterizer->templ.point_size_per_vertex) {
       src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_PSIZE, 0);
       if (src != -1) {
-         draw_emit_vertex_attr(&vinfo, EMIT_1F, src);
+         draw_emit_vertex_attr(&vinfo.draw, EMIT_1F, src);
          vinfo.hwfmt[0] |= S4_VFMT_POINT_WIDTH;
       }
    }
@@ -105,21 +105,21 @@ calculate_vertex_layout(struct i915_context *i915)
    /* primary color */
    if (colors[0]) {
       src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_COLOR, 0);
-      draw_emit_vertex_attr(&vinfo, EMIT_4UB_BGRA, src);
+      draw_emit_vertex_attr(&vinfo.draw, EMIT_4UB_BGRA, src);
       vinfo.hwfmt[0] |= S4_VFMT_COLOR;
    }
 
    /* secondary color */
    if (colors[1]) {
       src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_COLOR, 1);
-      draw_emit_vertex_attr(&vinfo, EMIT_4UB_BGRA, src);
+      draw_emit_vertex_attr(&vinfo.draw, EMIT_4UB_BGRA, src);
       vinfo.hwfmt[0] |= S4_VFMT_SPEC_FOG;
    }
 
    /* fog coord, not fog blend factor */
    if (fog) {
       src = draw_find_shader_output(i915->draw, TGSI_SEMANTIC_FOG, 0);
-      draw_emit_vertex_attr(&vinfo, EMIT_1F, src);
+      draw_emit_vertex_attr(&vinfo.draw, EMIT_1F, src);
       vinfo.hwfmt[0] |= S4_VFMT_FOG_PARAM;
    }
 
@@ -135,11 +135,11 @@ calculate_vertex_layout(struct i915_context *i915)
              * the draw module by adding an extra shader output.
              */
             mesa_loge("Front/back face is broken\n");
-            draw_emit_vertex_attr(&vinfo, EMIT_1F, src);
+            draw_emit_vertex_attr(&vinfo.draw, EMIT_1F, src);
             hwtc = TEXCOORDFMT_1D;
          } else {
             hwtc = TEXCOORDFMT_4D;
-            draw_emit_vertex_attr(&vinfo, EMIT_4F, src);
+            draw_emit_vertex_attr(&vinfo.draw, EMIT_4F, src);
          }
       } else {
          hwtc = TEXCOORDFMT_NOT_PRESENT;
@@ -147,7 +147,7 @@ calculate_vertex_layout(struct i915_context *i915)
       vinfo.hwfmt[1] |= hwtc << (i * 4);
    }
 
-   draw_compute_vertex_size(&vinfo);
+   draw_compute_vertex_size(&vinfo.draw);
 
    if (memcmp(&i915->current.vertex_info, &vinfo, sizeof(vinfo))) {
       /* Need to set this flag so that the LIS2/4 registers get set.

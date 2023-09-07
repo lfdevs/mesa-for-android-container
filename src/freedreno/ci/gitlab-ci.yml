@@ -83,12 +83,12 @@ a306-traces:
     PIGLIT_REPLAY_DEVICE_NAME: "freedreno-a306"
     PIGLIT_RESULTS: "freedreno-a306-replay"
 
+# 8 devices (2023-04-15)
 .a530-test:
   extends:
     - .google-freedreno-test
   variables:
     BM_KERNEL: /baremetal-files/Image.gz
-    BM_KERNEL_EXTRA_ARGS: maxcpus=2
     BM_DTB: /baremetal-files/apq8096-db820c.dtb
     GPU_VERSION: freedreno-a530
   tags:
@@ -98,10 +98,10 @@ a530_gl:
   extends:
     - .baremetal-deqp-test
     - .a530-test
-    - .freedreno-manual-rules # Unstable as of kernel 5.19
   variables:
     DEQP_SUITE: freedreno-a530
     PIGLIT_PLATFORM: gbm
+    FDO_CI_CONCURRENT: 3  # if 4, sometimes "deqp-gles31, not enough memory for the allocation" appears
   parallel: 6
 
 # piglit and piglit_gl since it takes a bit under 20 minutes and has a lot of flakes, so
@@ -135,6 +135,8 @@ a530-traces:
     PIGLIT_RESULTS: "freedreno-a530-replay"
 
 .a618-test:
+  extends:
+    .lava-test:arm64
   variables:
     FLAKES_CHANNEL: "#freedreno-ci"
     BOOT_METHOD: depthcharge
@@ -177,13 +179,14 @@ a618_vk_full:
     - .turnip-manual-rules
   # We use a longer timeout to keep the parallel down so that we don't lock up
   # too many runners for a long time when a dev is trying out at full VK status.
-  timeout: 2h
+  timeout: 4h
   parallel: 3
   variables:
     # ran into OOM with VK-GL-CTS 1.2.8.0 at 6
     FDO_CI_CONCURRENT: 4
     DEQP_SUITE: freedreno-a618-vk-full
-    JOB_TIMEOUT: 120
+    JOB_TIMEOUT: 180
+    TEST_PHASE_TIMEOUT: 180
 
 a618_gl:
   extends:
@@ -196,7 +199,7 @@ a618_gl:
 
 # Run dEQP EGL window system tests separately with the window systems available.
 # X11 takes over the screen, wayland is run headless.
-a618_egl:
+.a618_egl:  # FIXME disabled due to device outage
   extends:
     - .lava-test-deqp:arm64
     - .a618-test-limozeen-nots-r5
@@ -207,7 +210,7 @@ a618_egl:
     HWCI_START_WESTON: 1
     DEQP_SUITE: freedreno-a618-egl
 
-a618_skqp:
+.a618_skqp:  # FIXME disabled due to device outage
   extends:
     - .lava-test-deqp:arm64
     - .a618-test-limozeen-nots-r5
@@ -218,8 +221,7 @@ a618_skqp:
     HWCI_START_XORG: 1
     DEQP_SUITE: freedreno-a618-skqp
 
-# FIXME: this job runs gles2 deqp, rename or fix!
-a618_piglit:
+.a618_piglit_gles2:  # FIXME disabled due to device outage
   extends:
     - .piglit-test
     - .lava-piglit:arm64
@@ -228,7 +230,7 @@ a618_piglit:
     # Note that piglit has GL+VK integration testing.
     - .freedreno-turnip-rules
   variables:
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
     DEQP_VER: gles2
     PIGLIT_PROFILES: gpu
 
@@ -253,13 +255,39 @@ a618-traces:
 a618-traces-performance:
   extends:
     - a618-traces
-    - .freedreno-rules-performance
     - .piglit-performance:arm64
+    - .freedreno-rules-performance
   variables:
     # Always use the same device
     # a618 tag starts with cbg-1 (not cbg-0) for some reason
     LAVA_TAGS: "cbg-1"
+  needs:
+    - !reference [a618-traces, needs]
+    - !reference [.piglit-performance:arm64, needs]
 
+.lava-sm8350-hdk:
+  variables:
+    BOOT_METHOD: fastboot
+    KERNEL_IMAGE_NAME: "Image.gz"
+    KERNEL_IMAGE_TYPE: ""
+    # Increase the hangcheck timer for our spilling tests which bump up against
+    # the .5s default.
+    FREEDRENO_HANGCHECK_MS: 2000
+    DEVICE_TYPE: sm8350-hdk
+    DTB: sm8350-hdk
+    GPU_VERSION: freedreno-a660
+    RUNNER_TAG: mesa-ci-x86-64-lava-sm8350-hdk
+
+a660_gl:
+  extends:
+    - .lava-test-deqp:arm64
+    - .freedreno-rules
+    - .lava-sm8350-hdk
+  parallel: 2
+  variables:
+    DEQP_SUITE: freedreno-a660
+
+# 6 devices (2023-07-06)
 .a630-test:
   extends:
     - .google-freedreno-test
@@ -316,7 +344,7 @@ a630_skqp:
     # SKQP tests both the GL and VK drivers.
     - .freedreno-turnip-rules
   variables:
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
     DEQP_SUITE: freedreno-a630-skqp
 
 a630_vk:
@@ -360,7 +388,7 @@ a630_piglit:
     # Note that piglit has GL+VK integration testing.
     - .freedreno-turnip-rules
   variables:
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
     DEQP_SUITE: freedreno-a630-piglit
 
 a630-traces:

@@ -366,6 +366,8 @@ struct fd_pipe {
     */
    bool no_implicit_sync;
 
+   bool is_64bit;
+
    struct fd_bo *control_mem;
    volatile struct fd_pipe_control *control;
 

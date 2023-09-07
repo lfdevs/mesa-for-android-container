@@ -36,6 +36,7 @@ anv_entrypoints = custom_target(
   command : [
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'anv',
+    '--beta', with_vulkan_beta.to_string(),
     '--device-prefix', 'gfx9',
     '--device-prefix', 'gfx11',
     '--device-prefix', 'gfx12',
@@ -115,7 +116,7 @@ foreach g : [['90', ['gfx8_cmd_buffer.c']],
   _gfx_ver = g[0]
   libanv_per_hw_ver_libs += static_library(
     'anv_per_hw_ver@0@'.format(_gfx_ver),
-    [anv_per_hw_ver_files, g[1], anv_entrypoints[0], generated_draws_spvs, ],
+    [anv_per_hw_ver_files, g[1], anv_entrypoints[0], anv_internal_spvs, ],
     include_directories : [
       inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_compiler, inc_intel,
     ],
@@ -155,9 +156,10 @@ libanv_files = files(
   'anv_descriptor_set.c',
   'anv_device.c',
   'anv_formats.c',
-  'anv_generated_indirect_draws.c',
   'anv_genX.h',
   'anv_image.c',
+  'anv_internal_kernels.c',
+  'anv_internal_kernels.h',
   'anv_kmd_backend.c',
   'anv_kmd_backend.h',
   'anv_measure.c',
@@ -167,7 +169,9 @@ libanv_files = files(
   'anv_nir_apply_pipeline_layout.c',
   'anv_nir_compute_push_layout.c',
   'anv_nir_lower_multiview.c',
+  'anv_nir_lower_load_patch_vertices_in.c',
   'anv_nir_lower_ubo_loads.c',
+  'anv_nir_lower_resource_intel.c',
   'anv_nir_push_descriptor_analysis.c',
   'anv_perf.c',
   'anv_pipeline.c',
@@ -176,6 +180,7 @@ libanv_files = files(
   'anv_queue.c',
   'anv_util.c',
   'anv_utrace.c',
+  'anv_va.c',
   'anv_video.c',
   'anv_wsi.c',
 )
@@ -215,7 +220,7 @@ libanv_common = static_library(
   [
     libanv_files, anv_entrypoints, sha1_h,
     gen_xml_pack, float64_spv_h,
-    generated_draws_spvs,
+    anv_internal_spvs,
   ],
   include_directories : [
     inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel, inc_compiler,

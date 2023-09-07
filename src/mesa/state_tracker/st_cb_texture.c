@@ -84,7 +84,6 @@
 #include "util/u_memory.h"
 #include "util/u_simple_shaders.h"
 #include "cso_cache/cso_context.h"
-#include "tgsi/tgsi_ureg.h"
 
 #define DBG if (0) printf
 
@@ -184,7 +183,7 @@ create_dst_texture(struct gl_context *ctx,
    return screen->resource_create(screen, &dst_templ);
 }
 
-static boolean
+static bool
 copy_to_staging_dest(struct gl_context * ctx, struct pipe_resource *dst,
                  GLint xoffset, GLint yoffset, GLint zoffset,
                  GLsizei width, GLsizei height, GLint depth,
@@ -200,8 +199,8 @@ copy_to_staging_dest(struct gl_context * ctx, struct pipe_resource *dst,
    GLenum gl_target = texImage->TexObject->Target;
    unsigned dims;
    struct pipe_transfer *tex_xfer;
-   ubyte *map = NULL;
-   boolean done = FALSE;
+   uint8_t *map = NULL;
+   bool done = false;
 
    pixels = _mesa_map_pbo_dest(ctx, &ctx->Pack, pixels);
 
@@ -222,7 +221,7 @@ copy_to_staging_dest(struct gl_context * ctx, struct pipe_resource *dst,
       GLuint row, slice;
 
       for (slice = 0; slice < depth; slice++) {
-         ubyte *slice_map = map;
+         uint8_t *slice_map = map;
 
          for (row = 0; row < height; row++) {
             void *dest = _mesa_image_address(dims, &ctx->Pack, pixels,
@@ -281,7 +280,7 @@ copy_to_staging_dest(struct gl_context * ctx, struct pipe_resource *dst,
 
       free(rgba);
    }
-   done = TRUE;
+   done = true;
 
 end:
    if (map)
@@ -924,7 +923,7 @@ guess_base_level_size(GLenum target,
  * \param stObj  the texture object we're going to allocate memory for.
  * \param stImage  describes the incoming image which we need to store.
  */
-static boolean
+static bool
 allocate_full_mipmap(const struct gl_texture_object *stObj,
                      const struct gl_texture_image *stImage)
 {
@@ -935,11 +934,11 @@ allocate_full_mipmap(const struct gl_texture_object *stObj,
    case GL_TEXTURE_2D_MULTISAMPLE:
    case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
       /* these texture types cannot be mipmapped */
-      return FALSE;
+      return false;
    }
 
    if (stImage->Level > 0 || stObj->Attrib.GenerateMipmap)
-      return TRUE;
+      return true;
 
    /* If the application has explicitly called glTextureParameter to set
     * GL_TEXTURE_MAX_LEVEL, such that (max - base) > 0, then they're trying
@@ -950,20 +949,20 @@ allocate_full_mipmap(const struct gl_texture_object *stObj,
     */
    if (stObj->Attrib.MaxLevel < MAX_TEXTURE_LEVELS &&
        stObj->Attrib.MaxLevel - stObj->Attrib.BaseLevel > 0)
-      return TRUE;
+      return true;
 
    if (stImage->_BaseFormat == GL_DEPTH_COMPONENT ||
        stImage->_BaseFormat == GL_DEPTH_STENCIL_EXT)
       /* depth/stencil textures are seldom mipmapped */
-      return FALSE;
+      return false;
 
    if (stObj->Attrib.BaseLevel == 0 && stObj->Attrib.MaxLevel == 0)
-      return FALSE;
+      return false;
 
    if (stObj->Sampler.Attrib.MinFilter == GL_NEAREST ||
        stObj->Sampler.Attrib.MinFilter == GL_LINEAR)
       /* not a mipmap minification filter */
-      return FALSE;
+      return false;
 
    /* If the following sequence of GL calls is used:
     *   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, ...
@@ -975,13 +974,13 @@ allocate_full_mipmap(const struct gl_texture_object *stObj,
     * reallocation later, but GL_NEAREST_MIPMAP_LINEAR is pretty rare.
     */
    if (stObj->Sampler.Attrib.MinFilter == GL_NEAREST_MIPMAP_LINEAR)
-      return FALSE;
+      return false;
 
    if (stObj->Target == GL_TEXTURE_3D)
       /* 3D textures are seldom mipmapped */
-      return FALSE;
+      return false;
 
-   return TRUE;
+   return true;
 }
 
 
@@ -1071,14 +1070,22 @@ guess_and_alloc_texture(struct st_context *st,
                                    width, height, depth,
                                    &ptWidth, &ptHeight, &ptDepth, &ptLayers);
 
+   enum pipe_texture_target target = gl_target_to_pipe(stObj->Target);
+   unsigned nr_samples = 0;
+   if (stObj->TargetIndex == TEXTURE_2D_MULTISAMPLE_INDEX ||
+       stObj->TargetIndex == TEXTURE_2D_MULTISAMPLE_ARRAY_INDEX) {
+      int samples[16];
+      st_QueryInternalFormat(st->ctx, 0, stImage->InternalFormat, GL_SAMPLES, samples);
+      nr_samples = samples[0];
+   }
    stObj->pt = st_texture_create(st,
-                                 gl_target_to_pipe(stObj->Target),
+                                 target,
                                  fmt,
                                  lastLevel,
                                  ptWidth,
                                  ptHeight,
                                  ptDepth,
-                                 ptLayers, 0,
+                                 ptLayers, nr_samples,
                                  bindings,
                                  false);
 
@@ -1684,7 +1691,7 @@ try_pbo_upload_common(struct gl_context *ctx,
 
    cso_set_sample_mask(cso, ~0);
    cso_set_min_samples(cso, 1);
-   cso_set_render_condition(cso, NULL, FALSE, 0);
+   cso_set_render_condition(cso, NULL, false, 0);
 
    /* Set up the sampler_view */
    {
@@ -1726,7 +1733,7 @@ try_pbo_upload_common(struct gl_context *ctx,
       cso_set_framebuffer(cso, &fb);
    }
 
-   cso_set_viewport_dims(cso, surface->width, surface->height, FALSE);
+   cso_set_viewport_dims(cso, surface->width, surface->height, false);
 
    /* Blend state */
    cso_set_blend(cso, &st->pbo.upload_blend);
@@ -1951,7 +1958,7 @@ try_pbo_download(struct st_context *st,
 
    cso_set_sample_mask(cso, ~0);
    cso_set_min_samples(cso, 1);
-   cso_set_render_condition(cso, NULL, FALSE, 0);
+   cso_set_render_condition(cso, NULL, false, 0);
 
    /* Set up the sampler_view */
    {
@@ -2011,7 +2018,7 @@ try_pbo_download(struct st_context *st,
     */
    cso_set_blend(cso, &st->pbo.upload_blend);
 
-   cso_set_viewport_dims(cso, fb.width, fb.height, FALSE);
+   cso_set_viewport_dims(cso, fb.width, fb.height, false);
 
    {
       struct pipe_depth_stencil_alpha_state dsa;
@@ -2074,6 +2081,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    GLubyte *map;
    unsigned dstz = texImage->Face + texImage->TexObject->Attrib.MinLayer;
    unsigned dst_level = 0;
+   bool is_ms = dst->nr_samples > 1;
    bool throttled = false;
 
    st_flush_bitmap_cache(st);
@@ -2092,11 +2100,13 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    /* Try texture_subdata, which should be the fastest memcpy path. */
    if (pixels &&
        !unpack->BufferObj &&
+       !is_ms &&
        _mesa_texstore_can_use_memcpy(ctx, texImage->_BaseFormat,
                                      texImage->TexFormat, format, type,
                                      unpack)) {
       struct pipe_box box;
-      unsigned stride, layer_stride;
+      unsigned stride;
+      intptr_t layer_stride;
       void *data;
 
       stride = _mesa_image_row_stride(unpack, width, format, type);
@@ -2171,7 +2181,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
     * in which case the memcpy-based fast path will likely be used and
     * we don't have to blit. */
    if (_mesa_format_matches_format_and_type(texImage->TexFormat, format,
-                                            type, unpack->SwapBytes, NULL)) {
+                                            type, unpack->SwapBytes, NULL) && !is_ms) {
       goto fallback;
    }
 
@@ -2189,7 +2199,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
     * etc. */
    if (!_mesa_texstore_can_use_memcpy(ctx,
                              _mesa_get_format_base_format(mesa_src_format),
-                             mesa_src_format, format, type, unpack)) {
+                             mesa_src_format, format, type, unpack) && !is_ms) {
       goto fallback;
    }
 
@@ -2275,7 +2285,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
             memcpy(map, src, bytesPerRow);
          }
          else {
-            ubyte *slice_map = map;
+            uint8_t *slice_map = map;
 
             for (row = 0; row < (unsigned) height; row++) {
                void *src = _mesa_image_address(dims, unpack, pixels,
@@ -2309,7 +2319,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    blit.src.box.depth = blit.dst.box.depth = depth;
    blit.mask = st_get_blit_mask(format, texImage->_BaseFormat);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
-   blit.scissor_enable = FALSE;
+   blit.scissor_enable = false;
 
    st->pipe->blit(st->pipe, &blit);
 
@@ -2590,7 +2600,7 @@ st_GetTexSubImage(struct gl_context * ctx,
    enum pipe_texture_target pipe_target;
    struct pipe_blit_info blit;
    unsigned bind;
-   boolean done = FALSE;
+   bool done = false;
 
    assert(!_mesa_is_format_etc2(texImage->TexFormat) &&
           !_mesa_is_format_astc_2d(texImage->TexFormat) &&
@@ -2696,7 +2706,7 @@ st_GetTexSubImage(struct gl_context * ctx,
    blit.src.box.depth = blit.dst.box.depth = depth;
    blit.mask = st_get_blit_mask(texImage->_BaseFormat, format);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
-   blit.scissor_enable = FALSE;
+   blit.scissor_enable = false;
 
    /* blit/render/decompress */
    st->pipe->blit(st->pipe, &blit);
@@ -3182,7 +3192,7 @@ st_finalize_texture(struct gl_context *ctx,
          if (!tObj->_BaseComplete) {
             _mesa_test_texobj_completeness(ctx, tObj);
             if (!tObj->_BaseComplete) {
-               return TRUE;
+               return true;
             }
          }
       }
@@ -3384,7 +3394,7 @@ st_texture_storage(struct gl_context *ctx,
        * choose 4x here.
        */
       enum pipe_texture_target ptarget = gl_target_to_pipe(texObj->Target);
-      boolean found = FALSE;
+      bool found = false;
 
       if (ctx->Const.MaxSamples > 1 && num_samples == 1) {
          /* don't try num_samples = 1 with drivers that support real msaa */
@@ -3397,7 +3407,7 @@ st_texture_storage(struct gl_context *ctx,
                                          PIPE_BIND_SAMPLER_VIEW)) {
             /* Update the sample count in gl_texture_image as well. */
             texImage->NumSamples = num_samples;
-            found = TRUE;
+            found = true;
             break;
          }
       }
@@ -3679,7 +3689,13 @@ st_ClearTexSubImage(struct gl_context *ctx,
 
    assert(level <= pt->last_level);
 
-   pipe->clear_texture(pipe, pt, level, &box, clearValue ? clearValue : zeros);
+   if (pipe->clear_texture) {
+      pipe->clear_texture(pipe, pt, level, &box,
+                          clearValue ? clearValue : zeros);
+   } else {
+      u_default_clear_texture(pipe, pt, level, &box,
+                              clearValue ? clearValue : zeros);
+   }
 }
 
 

@@ -93,8 +93,15 @@ struct iris_batch {
    /** Last binder address set in this hardware context. */
    uint64_t last_binder_address;
 
-   uint32_t ctx_id;
-   uint32_t exec_flags;
+   union {
+      struct {
+         uint32_t ctx_id;
+         uint32_t exec_flags;
+      } i915;
+      struct {
+         uint32_t engine_id;
+      } xe;
+   };
 
    /** A list of all BOs referenced by this batch */
    struct iris_bo **exec_bos;
@@ -225,6 +232,8 @@ void iris_use_pinned_bo(struct iris_batch *batch, struct iris_bo *bo,
                         bool writable, enum iris_domain access);
 
 enum pipe_reset_status iris_batch_check_for_reset(struct iris_batch *batch);
+
+bool iris_batch_syncobj_to_sync_file_fd(struct iris_batch *batch, int *out_fd);
 
 static inline unsigned
 iris_batch_bytes_used(struct iris_batch *batch)

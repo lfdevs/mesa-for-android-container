@@ -173,6 +173,7 @@ mark_node_class(unsigned *bitfield, unsigned node)
 void
 mir_lower_special_reads(compiler_context *ctx)
 {
+   mir_compute_temp_count(ctx);
    size_t sz = BITSET_WORDS(ctx->temp_count) * sizeof(BITSET_WORD);
 
    /* Bitfields for the various types of registers we could have. aluw can
@@ -276,36 +277,46 @@ mir_lower_special_reads(compiler_context *ctx)
          /* Insert move before each read/write, depending on the
           * hazard we're trying to account for */
 
-         mir_foreach_instr_global_safe(ctx, pre_use) {
-            if (pre_use->type != classes[j])
-               continue;
+         mir_foreach_block(ctx, block_) {
+            midgard_block *block = (midgard_block *)block_;
+            midgard_instruction *mov = NULL;
 
-            if (hazard_write) {
-               if (pre_use->dest != i)
+            mir_foreach_instr_in_block_safe(block, pre_use) {
+               if (pre_use->type != classes[j])
                   continue;
 
-               midgard_instruction m = v_mov(idx, i);
-               m.dest_type = pre_use->dest_type;
-               m.src_types[1] = m.dest_type;
-               m.mask = pre_use->mask;
+               if (hazard_write) {
+                  if (pre_use->dest != i)
+                     continue;
 
-               midgard_instruction *use = mir_next_op(pre_use);
-               assert(use);
-               mir_insert_instruction_before(ctx, use, m);
-               mir_rewrite_index_dst_single(pre_use, i, idx);
-            } else {
-               if (!mir_has_arg(pre_use, i))
-                  continue;
+                  midgard_instruction m = v_mov(idx, i);
+                  m.dest_type = pre_use->dest_type;
+                  m.src_types[1] = m.dest_type;
+                  m.mask = pre_use->mask;
 
-               idx = spill_idx++;
+                  midgard_instruction *use = mir_next_op(pre_use);
+                  assert(use);
+                  mir_insert_instruction_before(ctx, use, m);
+                  mir_rewrite_index_dst_single(pre_use, i, idx);
+               } else {
+                  if (!mir_has_arg(pre_use, i))
+                     continue;
 
-               midgard_instruction m = v_mov(i, idx);
-               m.mask = mir_from_bytemask(
-                  mir_round_bytemask_up(
-                     mir_bytemask_of_read_components(pre_use, i), 32),
-                  32);
-               mir_insert_instruction_before(ctx, pre_use, m);
-               mir_rewrite_index_src_single(pre_use, i, idx);
+                  unsigned mask = mir_from_bytemask(
+                     mir_round_bytemask_up(
+                        mir_bytemask_of_read_components(pre_use, i), 32),
+                     32);
+
+                  if (mov == NULL || !mir_is_ssa(i)) {
+                     midgard_instruction m = v_mov(i, spill_idx++);
+                     m.mask = mask;
+                     mov = mir_insert_instruction_before(ctx, pre_use, m);
+                  } else {
+                     mov->mask |= mask;
+                  }
+
+                  mir_rewrite_index_src_single(pre_use, i, mov->dest);
+               }
             }
          }
       }

@@ -269,10 +269,10 @@ fd6_setup_slices(struct fd_resource *rsc)
 {
    struct pipe_resource *prsc = &rsc->b.b;
 
-   if (!FD_DBG(NOLRZ) && has_depth(rsc->b.b.format))
+   if (!FD_DBG(NOLRZ) && has_depth(prsc->format) && !is_z32(prsc->format))
       setup_lrz(rsc);
 
-   if (rsc->layout.ubwc && !ok_ubwc_format(rsc->b.b.screen, rsc->b.b.format))
+   if (rsc->layout.ubwc && !ok_ubwc_format(prsc->screen, prsc->format))
       rsc->layout.ubwc = false;
 
    fdl6_layout(&rsc->layout, prsc->format, fd_resource_nr_samples(prsc),

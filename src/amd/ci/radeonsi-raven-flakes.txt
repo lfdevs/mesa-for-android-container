@@ -4,3 +4,7 @@ spec@arb_shader_draw_parameters@drawid-single-draw-display-list
 # The following two case are xfails, but sometimes pass.
 spec@egl_chromium_sync_control@conformance
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+
+# With X11 -> Wayland: Crash -> Flake/Fail
+glx@glx-visuals-depth -pixmap
+glx@glx-visuals-stencil -pixmap

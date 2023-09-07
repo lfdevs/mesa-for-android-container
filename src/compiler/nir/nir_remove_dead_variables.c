@@ -95,13 +95,11 @@ add_var_use_deref(nir_deref_instr *deref, struct set *live)
 static void
 add_var_use_shader(nir_shader *shader, struct set *live, nir_variable_mode modes)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr(instr, block) {
-               if (instr->type == nir_instr_type_deref)
-                  add_var_use_deref(nir_instr_as_deref(instr), live);
-            }
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type == nir_instr_type_deref)
+               add_var_use_deref(nir_instr_as_deref(instr), live);
          }
       }
    }
@@ -110,11 +108,8 @@ add_var_use_shader(nir_shader *shader, struct set *live, nir_variable_mode modes
 static void
 remove_dead_var_writes(nir_shader *shader)
 {
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             switch (instr->type) {
             case nir_instr_type_deref: {
@@ -199,28 +194,23 @@ nir_remove_dead_variables(nir_shader *shader, nir_variable_mode modes,
    }
 
    if (modes & nir_var_function_temp) {
-      nir_foreach_function(function, shader) {
-         if (function->impl) {
-            if (remove_dead_vars(&function->impl->locals,
-                                 nir_var_function_temp,
-                                 live, opts))
-               progress = true;
-         }
+      nir_foreach_function_impl(impl, shader) {
+         if (remove_dead_vars(&impl->locals,
+                              nir_var_function_temp,
+                              live, opts))
+            progress = true;
       }
    }
 
    _mesa_set_destroy(live, NULL);
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
+   nir_foreach_function_impl(impl, shader) {
       if (progress) {
          remove_dead_var_writes(shader);
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+         nir_metadata_preserve(impl, nir_metadata_block_index |
+                                     nir_metadata_dominance);
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 

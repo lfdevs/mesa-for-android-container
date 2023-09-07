@@ -385,7 +385,7 @@ agx_pack_alu(struct util_dynarray *emission, agx_instr *I)
       if (is_16 && !is_cmpsel)
          assert((src_short & (1 << 9)) == 0);
 
-      if (info.is_float) {
+      if (info.is_float || (I->op == AGX_OPCODE_FCMPSEL && !is_cmpsel)) {
          unsigned fmod = agx_pack_float_mod(I->src[s]);
          unsigned fmod_offset = is_16 ? 9 : 10;
          src_short |= (fmod << fmod_offset);
@@ -395,7 +395,8 @@ agx_pack_alu(struct util_dynarray *emission, agx_instr *I)
 
          unsigned sxt = (extends && !zext) ? (1 << 10) : 0;
 
-         assert(!I->src[s].neg || s == 1);
+         unsigned negate_src = (I->op == AGX_OPCODE_IMAD) ? 2 : 1;
+         assert(!I->src[s].neg || s == negate_src);
          src_short |= sxt;
       }
 
@@ -408,15 +409,17 @@ agx_pack_alu(struct util_dynarray *emission, agx_instr *I)
       extend |= (src_extend << extend_offset);
    }
 
-   if ((I->op == AGX_OPCODE_IMAD || I->op == AGX_OPCODE_IADD) && I->src[1].neg)
+   if ((I->op == AGX_OPCODE_IMAD && I->src[2].neg) ||
+       (I->op == AGX_OPCODE_IADD && I->src[1].neg))
       raw |= (1 << 27);
 
    if (info.immediates & AGX_IMMEDIATE_TRUTH_TABLE) {
       raw |= (I->truth_table & 0x3) << 26;
       raw |= (uint64_t)(I->truth_table >> 2) << 38;
    } else if (info.immediates & AGX_IMMEDIATE_SHIFT) {
+      assert(I->shift <= 4);
       raw |= (uint64_t)(I->shift & 1) << 39;
-      raw |= (uint64_t)(I->shift >> 2) << 52;
+      raw |= (uint64_t)(I->shift >> 1) << 52;
    } else if (info.immediates & AGX_IMMEDIATE_BFI_MASK) {
       raw |= (uint64_t)(I->bfi_mask & 0x3) << 38;
       raw |= (uint64_t)((I->bfi_mask >> 2) & 0x3) << 50;
@@ -499,9 +502,10 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
    }
 
    case AGX_OPCODE_SAMPLE_MASK: {
-      unsigned S = agx_pack_sample_mask_src(I->src[0]);
-      unsigned T = 0xFF;
-      bool Tt = true /* immediate */;
+      unsigned S = agx_pack_sample_mask_src(I->src[1]);
+      unsigned T = I->src[0].value;
+      bool Tt = I->src[0].type == AGX_INDEX_IMMEDIATE;
+      assert(Tt || I->src[0].type == AGX_INDEX_REGISTER);
       uint32_t raw = 0xc1 | (Tt ? BITFIELD_BIT(8) : 0) |
                      ((T & BITFIELD_MASK(6)) << 9) | ((S & 0xff) << 16) |
                      ((T >> 6) << 24) | ((S >> 8) << 26);
@@ -521,20 +525,20 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
    }
 
    case AGX_OPCODE_ITER:
+   case AGX_OPCODE_ITERPROJ:
    case AGX_OPCODE_LDCF: {
       bool flat = (I->op == AGX_OPCODE_LDCF);
+      bool perspective = (I->op == AGX_OPCODE_ITERPROJ);
       unsigned D = agx_pack_alu_dst(I->dest[0]);
       unsigned channels = (I->channels & 0x3);
-      assert(I->mask < 0xF); /* 0 indicates full mask */
 
       agx_index src_I = I->src[0];
       assert(src_I.type == AGX_INDEX_IMMEDIATE);
-      assert(!(flat && I->perspective));
 
       unsigned cf_I = src_I.value;
       unsigned cf_J = 0;
 
-      if (I->perspective) {
+      if (perspective) {
          agx_index src_J = I->src[1];
          assert(src_J.type == AGX_INDEX_IMMEDIATE);
          cf_J = src_J.value;
@@ -543,14 +547,28 @@ agx_pack_instr(struct util_dynarray *emission, struct util_dynarray *fixups,
       assert(cf_I < 0x100);
       assert(cf_J < 0x100);
 
+      enum agx_interpolation interp = I->interpolation;
+      agx_index sample_index = flat ? agx_null() : I->src[perspective ? 2 : 1];
+
+      /* Fix up the interpolation enum to distinguish the sample index source */
+      if (interp == AGX_INTERPOLATION_SAMPLE) {
+         if (sample_index.type == AGX_INDEX_REGISTER)
+            interp = AGX_INTERPOLATION_SAMPLE_REGISTER;
+         else
+            assert(sample_index.type == AGX_INDEX_IMMEDIATE);
+      } else {
+         sample_index = agx_zero();
+      }
+
       bool kill = false; // TODO: optimize
 
       uint64_t raw =
-         0x21 | (flat ? (1 << 7) : 0) | (I->perspective ? (1 << 6) : 0) |
+         0x21 | (flat ? (1 << 7) : 0) | (perspective ? (1 << 6) : 0) |
          ((D & 0xFF) << 7) | (1ull << 15) | /* XXX */
          ((cf_I & BITFIELD_MASK(6)) << 16) | ((cf_J & BITFIELD_MASK(6)) << 24) |
-         (((uint64_t)channels) << 30) | (!flat ? (1ull << 46) : 0) | /* XXX */
-         (kill ? (1ull << 52) : 0) |                                 /* XXX */
+         (((uint64_t)channels) << 30) | (((uint64_t)sample_index.value) << 32) |
+         (!flat ? (1ull << 46) : 0) |                             /* XXX */
+         (((uint64_t)interp) << 48) | (kill ? (1ull << 52) : 0) | /* XXX */
          (((uint64_t)(D >> 8)) << 56) | ((uint64_t)(cf_I >> 6) << 58) |
          ((uint64_t)(cf_J >> 6) << 60);
 

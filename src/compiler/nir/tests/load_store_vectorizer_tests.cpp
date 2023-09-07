@@ -185,7 +185,7 @@ nir_load_store_vectorize_test::get_resource(uint32_t binding, bool ssbo)
 
    nir_intrinsic_instr *res = nir_intrinsic_instr_create(
       b->shader, nir_intrinsic_vulkan_resource_index);
-   nir_ssa_dest_init(&res->instr, &res->dest, 1, 32, NULL);
+   nir_ssa_dest_init(&res->instr, &res->dest, 1, 32);
    res->num_components = 1;
    res->src[0] = nir_src_for_ssa(nir_imm_zero(b, 1, 32));
    nir_intrinsic_set_desc_type(
@@ -220,7 +220,7 @@ nir_load_store_vectorize_test::create_indirect_load(
       return NULL;
    }
    nir_intrinsic_instr *load = nir_intrinsic_instr_create(b->shader, intrinsic);
-   nir_ssa_dest_init(&load->instr, &load->dest, components, bit_size, NULL);
+   nir_ssa_dest_init(&load->instr, &load->dest, components, bit_size);
    load->num_components = components;
    if (res) {
       load->src[0] = nir_src_for_ssa(res);
@@ -281,7 +281,7 @@ nir_load_store_vectorize_test::create_indirect_store(
       return;
    }
    nir_intrinsic_instr *store = nir_intrinsic_instr_create(b->shader, intrinsic);
-   nir_ssa_dest_init(&store->instr, &store->dest, components, bit_size, NULL);
+   nir_ssa_dest_init(&store->instr, &store->dest, components, bit_size);
    store->num_components = components;
    if (res) {
       store->src[0] = nir_src_for_ssa(value);
@@ -806,7 +806,7 @@ TEST_F(nir_load_store_vectorize_test, ubo_load_adjacent_memory_barrier)
 {
    create_load(nir_var_mem_ubo, 0, 0, 0x1);
 
-   nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
+   nir_scoped_memory_barrier(b, SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
                              nir_var_mem_ssbo);
 
    create_load(nir_var_mem_ubo, 0, 4, 0x2);
@@ -823,7 +823,7 @@ TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_memory_barrier)
 {
    create_load(nir_var_mem_ssbo, 0, 0, 0x1);
 
-   nir_scoped_memory_barrier(b, NIR_SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
+   nir_scoped_memory_barrier(b, SCOPE_DEVICE, NIR_MEMORY_ACQ_REL,
                              nir_var_mem_ssbo);
 
    create_load(nir_var_mem_ssbo, 0, 4, 0x2);
@@ -836,13 +836,14 @@ TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_memory_barrier)
    ASSERT_EQ(count_intrinsics(nir_intrinsic_load_ssbo), 2);
 }
 
-/* nir_intrinsic_control_barrier only syncs invocations in a workgroup, it
- * doesn't require that loads/stores complete.
+/* A control barrier may only sync invocations in a workgroup, it doesn't
+ * require that loads/stores complete.
  */
 TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_barrier)
 {
    create_load(nir_var_mem_ssbo, 0, 0, 0x1);
-   nir_control_barrier(b);
+   nir_scoped_barrier(b, SCOPE_WORKGROUP, SCOPE_NONE,
+                      (nir_memory_semantics)0, (nir_variable_mode)0);
    create_load(nir_var_mem_ssbo, 0, 4, 0x2);
 
    nir_validate_shader(b->shader, NULL);
@@ -857,7 +858,7 @@ TEST_F(nir_load_store_vectorize_test, ssbo_load_adjacent_memory_barrier_shared)
 {
    create_load(nir_var_mem_ssbo, 0, 0, 0x1);
 
-   nir_scoped_memory_barrier(b, NIR_SCOPE_WORKGROUP, NIR_MEMORY_ACQ_REL,
+   nir_scoped_memory_barrier(b, SCOPE_WORKGROUP, NIR_MEMORY_ACQ_REL,
                              nir_var_mem_shared);
 
    create_load(nir_var_mem_ssbo, 0, 4, 0x2);
@@ -1222,7 +1223,7 @@ TEST_F(nir_load_store_vectorize_test, shared_load_distant_64bit)
 {
    nir_variable *var = nir_variable_create(b->shader, nir_var_mem_shared, glsl_array_type(glsl_uint_type(), 4, 0), "var");
    nir_deref_instr *deref = nir_build_deref_var(b, var);
-   nir_ssa_dest_init(&deref->instr, &deref->dest, 1, 64, NULL);
+   nir_ssa_dest_init(&deref->instr, &deref->dest, 1, 64);
 
    create_shared_load(nir_build_deref_array_imm(b, deref, 0x100000000), 0x1);
    create_shared_load(nir_build_deref_array_imm(b, deref, 0x200000001), 0x2);

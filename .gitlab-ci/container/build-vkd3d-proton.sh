@@ -1,8 +1,12 @@
 #!/bin/bash
 
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# DEBIAN_X86_64_TEST_VK_TAG
+# KERNEL_ROOTFS_TAG
 set -ex
 
-VKD3D_PROTON_COMMIT="507cb3195bae32395c69763afec2b1ac078d509a"
+VKD3D_PROTON_COMMIT="6365efeba253807beecaed0eaa963295522c6b70"
 
 VKD3D_PROTON_DST_DIR="/vkd3d-proton-tests"
 VKD3D_PROTON_SRC_DIR="/vkd3d-proton-src"

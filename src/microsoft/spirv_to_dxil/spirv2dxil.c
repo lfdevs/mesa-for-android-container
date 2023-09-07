@@ -176,11 +176,6 @@ main(int argc, char **argv)
    };
    gl_shader_stage shader_stage = MESA_SHADER_FRAGMENT;
 
-   nir_options = *dxil_get_nir_compiler_options();
-   // We will manually handle base_vertex when vertex_id and instance_id have
-   // have been already converted to zero-base.
-   nir_options.lower_base_vertex = false;
-
    struct dxil_spirv_runtime_conf conf;
    memset(&conf, 0, sizeof(conf));
    conf.runtime_data_cbv.base_shader_register = 0;
@@ -215,7 +210,6 @@ main(int argc, char **argv)
          break;
       case 'm':
          conf.shader_model_max = SHADER_MODEL_6_0 + atoi(optarg);
-         nir_options.lower_helper_invocation = conf.shader_model_max < SHADER_MODEL_6_6;
          break;
       case 'x':
          val_ver = DXIL_VALIDATOR_1_0 + atoi(optarg);
@@ -231,6 +225,12 @@ main(int argc, char **argv)
          return 1;
       }
    }
+
+   const unsigned supported_bit_sizes = 16 | 32 | 64;
+   dxil_get_nir_compiler_options(&nir_options, conf.shader_model_max, supported_bit_sizes, supported_bit_sizes);
+   // We will manually handle base_vertex when vertex_id and instance_id have
+   // have been already converted to zero-base.
+   nir_options.lower_base_vertex = false;
 
    if (!any_shaders) {
       fprintf(stderr, "Specify a shader filename\n");

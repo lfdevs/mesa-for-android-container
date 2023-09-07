@@ -63,8 +63,8 @@
     <value name="Triangles" value="6"/>
     <value name="Triangle strip" value="9"/>
     <value name="Triangle fan" value="10"/>
-    <value name="Quads" value="14"/> <!-- guess, confirm with piglit later XXX -->
-    <value name="Quad strip" value="15"/> <!-- guess, confirm with piglit later XXX -->
+    <value name="Quads" value="14"/>
+    <value name="Quad strip" value="15"/>
   </enum>
 
   <enum name="Object Type">
@@ -173,6 +173,8 @@
     <field name="Perspective" size="1" start="4" type="bool"/>
     <field name="Fragcoord Z" size="1" start="5" type="bool"/>
     <field name="Point sprite" size="1" start="6" type="bool"/>
+    <!-- Set with fragcoord Z for a vec2 of bary coords -->
+    <field name="Barycentric coordinates" size="1" start="7" type="bool"/>
     <field name="Base slot" size="8" start="8" type="uint"/>
     <field name="Base coefficient register" size="8" start="16" type="uint"/>
   </struct>
@@ -194,7 +196,7 @@
     <value name="4" value="1"/>
   </enum>
 
-  <struct name="Render Target" size="24">
+  <struct name="PBE" size="24">
     <field name="Dimension" size="4" start="0" type="Texture dimension" default="2D"/>
     <field name="Layout" size="2" start="4" type="Layout"/>
     <field name="Channels" size="7" start="6" type="Channels"/>
@@ -212,7 +214,6 @@
     <field name="Unk mipmapped" size="1" start="58" type="bool"/>
     <field name="Compressed 1" size="1" start="59" type="bool"/>
     <field name="Buffer" size="36" start="64" type="address" modifier="shr(4)"/>
-    <!-- N.b. sRGB is not specified here -->
     <field name="Level" size="4" start="100" type="uint"/>
 
     <!-- If layout is not linear. Layers must be zero unless rendering to an
@@ -221,11 +222,17 @@
     <field name="Layers" size="14" start="108" type="uint" modifier="minus(1)" default="1"/>
     <field name="Page-aligned layers" size="1" start="124" type="bool"/>
 
+    <!-- Should writes to this image convert to sRGB?
+
+      Note that imageblock writes do not use this flag, instead doing the
+      conversion when writing into the tilebuffer. -->
+    <field name="sRGB" size="1" start="125" type="bool"/>
+
     <!-- Read the next word (set for compression or linear 2D arrays) -->
     <field name="Extended" size="1" start="127" type="bool"/>
 
     <!-- If layout is linear. Off by 4? -->
-    <field name="Stride" size="24" start="104" type="hex"/>
+    <field name="Stride" size="21" start="104" type="hex"/>
 
     <!-- If layout is compressed -->
     <field name="Acceleration buffer" size="64" start="128" type="address" modifier="shr(4)"/>
@@ -354,8 +361,8 @@
     <field name="Viewport" size="1" start="11" type="bool"/>
     <field name="W clamp" size="1" start="16" type="bool"/>
     <field name="Output select" size="1" start="17" type="bool"/>
-    <field name="Varying word 0" size="1" start="18" type="bool"/>
-    <field name="Varying word 1" size="1" start="19" type="bool"/>
+    <field name="Varying counts 32" size="1" start="18" type="bool"/>
+    <field name="Varying counts 16" size="1" start="19" type="bool"/>
     <field name="Cull" size="1" start="21" type="bool"/>
     <field name="Cull 2" size="1" start="22" type="bool"/>
     <field name="Fragment shader" size="1" start="23" type="bool"/>
@@ -437,7 +444,7 @@
     <field name="Depth bias enable" size="1" start="17" type="bool"/>
     <field name="Stencil test enable" size="1" start="18" type="bool"/>
     <field name="Two-sided stencil" size="1" start="19" type="bool"/>
-    <field name="No colour output" size="1" start="21" type="bool"/>
+    <field name="Tag write disable" size="1" start="21" type="bool"/>
     <field name="Sample mask after depth/stencil" size="1" start="25" type="bool"/>
     <field name="Disable tri merging" size="1" start="26" type="bool"/>
     <field name="Pass type" size="3" start="29" type="Pass type"/>
@@ -478,13 +485,10 @@
     <field name="Rasterizer discard" size="1" start="17" type="bool"/>
   </struct>
 
-  <struct name="Varying 0" size="4">
-    <!-- TODO: 16-bit is separate AFAIU -->
-    <field name="Count" size="32" start="0" type="uint"/>
-  </struct>
-
-  <struct name="Varying 1" size="4">
-    <!-- TODO -->
+  <struct name="Varying Counts" size="4">
+    <field name="Smooth" size="8" start="0" type="uint"/>
+    <field name="Flat" size="8" start="8" type="uint"/>
+    <field name="Linear" size="8" start="16" type="uint"/>
   </struct>
 
   <struct name="Varying 2" size="8">
@@ -517,6 +521,7 @@
     <field name="Viewport target" size="1" start="19" type="bool"/>
     <field name="Render target" size="1" start="20" type="bool"/>
     <field name="Frag coord Z" size="1" start="21" type="bool"/>
+    <field name="Barycentric coordinates" size="1" start="22" type="bool"/>
   </struct>
 
   <struct name="Output Unknown" size="4">
@@ -744,15 +749,18 @@
     <field name="Restart enable" size="1" start="16" type="bool"/> 
     <field name="Index size" size="3" start="17" type="Index size"/>
 
-    <!-- XXX: Might be backwards, not sure how to check that -->
-    <field name="Index buffer present" size="1" start="20" type="bool"/>
-    <field name="Index buffer size present" size="1" start="21" type="bool"/>
+    <field name="Index buffer size present" size="1" start="20" type="bool"/>
+    <field name="Index buffer present" size="1" start="21" type="bool"/>
 
-    <!-- XXX: Might be mixed up, not sure how to check that -->
+    <!-- Order in the cmdstream is the same as bit order for these -->
     <field name="Index count present" size="1" start="22" type="bool"/>
     <field name="Instance count present" size="1" start="23" type="bool"/>
     <field name="Start present" size="1" start="24" type="bool"/>
+    <!-- 2 words, 1st word is some kind of extra vertex offset? -->
+    <field name="Unk 1 present" size="1" start="25" type="bool"/>
     <field name="Indirect buffer present" size="1" start="26" type="bool"/>
+    <!-- 1 word, unknown purpose -->
+    <field name="Unk 2 present" size="1" start="27" type="bool"/>
 
     <field name="Block Type" size="3" start="29" type="VDM Block Type" default="Index List"/>
   </struct>
@@ -905,6 +913,8 @@
     <field name="S Store Enable" start="18" size="1" type="bool"/>
     <field name="Z Store Enable" start="19" size="1" type="bool"/>
     <field name="Z Format" start="25" size="2" type="ZLS Format"/>
+    <field name="Z Resolve" start="56" size="1" type="bool"/>
+    <field name="S Resolve" start="58" size="1" type="bool"/>
   </struct>
 
   <struct name="IOGPU Header" size="64">

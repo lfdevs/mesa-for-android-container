@@ -149,7 +149,7 @@ lower_image_samples_identical_to_fragment_mask_load(nir_builder *b, nir_intrinsi
       break;
    }
 
-   nir_ssa_dest_init(&fmask_load->instr, &fmask_load->dest, 1, 32, NULL);
+   nir_ssa_dest_init(&fmask_load->instr, &fmask_load->dest, 1, 32);
    nir_builder_instr_insert(b, &fmask_load->instr);
 
    nir_ssa_def *samples_identical = nir_ieq_imm(b, &fmask_load->dest.ssa, 0);

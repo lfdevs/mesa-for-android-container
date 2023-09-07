@@ -110,7 +110,7 @@ brw_nir_lower_launch_mesh_workgroups_instr(nir_builder *b, nir_instr *instr, voi
    /* Make sure that the mesh workgroup size is taken from the first invocation
     * (nir_intrinsic_launch_mesh_workgroups requirement)
     */
-   nir_ssa_def *cmp = nir_ieq(b, local_invocation_index, nir_imm_int(b, 0));
+   nir_ssa_def *cmp = nir_ieq_imm(b, local_invocation_index, 0);
    nir_if *if_stmt = nir_push_if(b, cmp);
    {
       /* TUE header contains 4 words:
@@ -277,7 +277,7 @@ brw_compile_task(const struct brw_compiler *compiler,
    struct nir_shader *nir = params->nir;
    const struct brw_task_prog_key *key = params->key;
    struct brw_task_prog_data *prog_data = params->prog_data;
-   const bool debug_enabled = INTEL_DEBUG(DEBUG_TASK);
+   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TASK);
 
    brw_nir_lower_tue_outputs(nir, &prog_data->map);
 
@@ -322,12 +322,12 @@ brw_compile_task(const struct brw_compiler *compiler,
       const unsigned dispatch_width = 8 << simd;
 
       nir_shader *shader = nir_shader_clone(mem_ctx, nir);
-      brw_nir_apply_key(shader, compiler, &key->base, dispatch_width, true /* is_scalar */);
+      brw_nir_apply_key(shader, compiler, &key->base, dispatch_width);
 
       NIR_PASS(_, shader, brw_nir_lower_load_uniforms);
       NIR_PASS(_, shader, brw_nir_lower_simd, dispatch_width);
 
-      brw_postprocess_nir(shader, compiler, true /* is_scalar */, debug_enabled,
+      brw_postprocess_nir(shader, compiler, debug_enabled,
                           key->base.robust_buffer_access);
 
       brw_nir_adjust_payload(shader, compiler);
@@ -639,8 +639,7 @@ brw_nir_initialize_mue(nir_shader *nir,
 
    nir_builder b;
    nir_function_impl *entrypoint = nir_shader_get_entrypoint(nir);
-   nir_builder_init(&b, entrypoint);
-   b.cursor = nir_before_block(nir_start_block(entrypoint));
+   b = nir_builder_at(nir_before_block(nir_start_block(entrypoint)));
 
    nir_ssa_def *dw_off = nir_imm_int(&b, 0);
    nir_ssa_def *zerovec = nir_imm_vec4(&b, 0, 0, 0, 0);
@@ -684,8 +683,7 @@ brw_nir_initialize_mue(nir_shader *nir,
       /* Zero "remaining" primitive headers starting from the last one covered
        * by the loop above + workgroup_size.
        */
-      nir_ssa_def *cmp = nir_ilt(&b, local_invocation_index,
-                                     nir_imm_int(&b, remaining));
+      nir_ssa_def *cmp = nir_ilt_imm(&b, local_invocation_index, remaining);
       nir_if *if_stmt = nir_push_if(&b, cmp);
       {
          nir_ssa_def *prim = nir_iadd_imm(&b, local_invocation_index,
@@ -705,7 +703,7 @@ brw_nir_initialize_mue(nir_shader *nir,
     * may start filling MUE before other finished initializing.
     */
    if (workgroup_size > dispatch_width) {
-      nir_scoped_barrier(&b, NIR_SCOPE_WORKGROUP, NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(&b, SCOPE_WORKGROUP, SCOPE_WORKGROUP,
                          NIR_MEMORY_ACQ_REL, nir_var_shader_out);
    }
 
@@ -821,11 +819,8 @@ brw_can_pack_primitive_indices(nir_shader *nir, struct index_packing_state *stat
    assert(type->without_array()->is_vector());
    assert(type->without_array()->vector_elements == state->vertices_per_primitive);
 
-   nir_foreach_function(function, nir) {
-      if (!function->impl)
-         continue;
-
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -970,7 +965,7 @@ brw_compile_mesh(const struct brw_compiler *compiler,
    struct nir_shader *nir = params->nir;
    const struct brw_mesh_prog_key *key = params->key;
    struct brw_mesh_prog_data *prog_data = params->prog_data;
-   const bool debug_enabled = INTEL_DEBUG(DEBUG_MESH);
+   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_MESH);
 
    prog_data->base.base.stage = MESA_SHADER_MESH;
    prog_data->base.base.total_shared = nir->info.shared_size;
@@ -1027,7 +1022,7 @@ brw_compile_mesh(const struct brw_compiler *compiler,
       if (prog_data->map.per_primitive_header_size_dw > 0)
          NIR_PASS_V(shader, brw_nir_initialize_mue, &prog_data->map, dispatch_width);
 
-      brw_nir_apply_key(shader, compiler, &key->base, dispatch_width, true /* is_scalar */);
+      brw_nir_apply_key(shader, compiler, &key->base, dispatch_width);
 
       NIR_PASS(_, shader, brw_nir_adjust_offset_for_arrayed_indices, &prog_data->map);
       /* Load uniforms can do a better job for constants, so fold before it. */
@@ -1036,7 +1031,7 @@ brw_compile_mesh(const struct brw_compiler *compiler,
 
       NIR_PASS(_, shader, brw_nir_lower_simd, dispatch_width);
 
-      brw_postprocess_nir(shader, compiler, true /* is_scalar */, debug_enabled,
+      brw_postprocess_nir(shader, compiler, debug_enabled,
                           key->base.robust_buffer_access);
 
       brw_nir_adjust_payload(shader, compiler);
@@ -1568,9 +1563,9 @@ fs_visitor::nir_emit_task_mesh_intrinsic(const fs_builder &bld,
    case nir_intrinsic_load_num_workgroups:
       assert(!nir->info.mesh.nv);
       dest = retype(dest, BRW_REGISTER_TYPE_UD);
-      bld.SHR(offset(dest, bld, 0), retype(brw_vec1_grf(0, 6), dest.type), brw_imm_ud(16));
-      bld.AND(offset(dest, bld, 1), retype(brw_vec1_grf(0, 4), dest.type), brw_imm_ud(0xffff));
-      bld.SHR(offset(dest, bld, 2), retype(brw_vec1_grf(0, 4), dest.type), brw_imm_ud(16));
+      bld.MOV(offset(dest, bld, 0), brw_uw1_grf(0, 13)); /* g0.6 >> 16 */
+      bld.MOV(offset(dest, bld, 1), brw_uw1_grf(0, 8));  /* g0.4 & 0xffff */
+      bld.MOV(offset(dest, bld, 2), brw_uw1_grf(0, 9));  /* g0.4 >> 16 */
       break;
 
    case nir_intrinsic_load_workgroup_index:

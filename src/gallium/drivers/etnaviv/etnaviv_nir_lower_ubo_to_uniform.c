@@ -61,7 +61,7 @@ lower_ubo_to_uniform(nir_builder *b, nir_instr *instr, void *_data)
    nir_ssa_def *range_base = nir_imm_int(b, nir_intrinsic_range_base(intr));
 
    nir_ssa_def *uniform_offset =
-      nir_ushr(b, nir_isub(b, ubo_offset, range_base), nir_imm_int(b, 4));
+      nir_ushr_imm(b, nir_isub(b, ubo_offset, range_base), 4);
 
    nir_ssa_def *uniform =
       nir_load_uniform(b, intr->num_components, intr->dest.ssa.bit_size, uniform_offset,

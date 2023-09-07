@@ -138,6 +138,15 @@ MakeContextCurrent(Display * dpy, GLXDrawable draw,
    __glXSetCurrentContextNull();
 
    if (gc) {
+      /* GLX spec 3.3: If ctx is current to some other thread, then
+       * glXMakeContextCurrent will generate a BadAccess error
+       */
+      if (gc->currentDpy)
+      {
+         __glXUnlock();
+         __glXSendError(dpy, BadAccess, None, opcode, True);
+         return False;
+      }
       /* Attempt to bind the context.  We do this before mucking with
        * gc and __glXSetCurrentContext to properly handle our state in
        * case of an error.

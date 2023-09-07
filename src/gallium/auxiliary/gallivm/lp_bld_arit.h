@@ -38,7 +38,7 @@
 
 
 #include "gallivm/lp_bld.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 
 struct lp_type;
@@ -303,7 +303,7 @@ LLVMValueRef
 lp_build_rsqrt(struct lp_build_context *bld,
                LLVMValueRef a);
 
-boolean
+bool
 lp_build_fast_rsqrt_available(struct lp_type type);
 
 LLVMValueRef
@@ -376,7 +376,7 @@ lp_build_log2_approx(struct lp_build_context *bld,
                      LLVMValueRef *p_exp,
                      LLVMValueRef *p_floor_log2,
                      LLVMValueRef *p_log2,
-                     boolean handle_nans);
+                     bool handle_nans);
 
 LLVMValueRef
 lp_build_mod(struct lp_build_context *bld,
@@ -403,7 +403,7 @@ lp_build_fpstate_get(struct gallivm_state *gallivm);
 
 void
 lp_build_fpstate_set_denorms_zero(struct gallivm_state *gallivm,
-                                  boolean zero);
+                                  bool zero);
 void
 lp_build_fpstate_set(struct gallivm_state *gallivm,
                      LLVMValueRef mxcsr);

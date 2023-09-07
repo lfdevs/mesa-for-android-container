@@ -27,6 +27,7 @@
  * spirv_to_nir code.
  */
 
+#include "nir.h"
 #include "spirv/nir_spirv.h"
 
 #include <sys/mman.h>
@@ -69,16 +70,16 @@ static void
 print_usage(char *exec_name, FILE *f)
 {
    fprintf(f,
-"Usage: %s [options] file\n"
-"Options:\n"
-"  -h  --help              Print this help.\n"
-"  -s, --stage <stage>     Specify the shader stage.  Valid stages are:\n"
-"                          vertex, tess-ctrl, tess-eval, geometry, fragment,\n"
-"                          task, mesh, compute, and kernel (OpenCL-style compute).\n"
-"  -e, --entry <name>      Specify the entry-point name.\n"
-"  -g, --opengl            Use OpenGL environment instead of Vulkan for\n"
-"                          graphics stages.\n"
-   , exec_name);
+           "Usage: %s [options] file\n"
+           "Options:\n"
+           "  -h  --help              Print this help.\n"
+           "  -s, --stage <stage>     Specify the shader stage.  Valid stages are:\n"
+           "                          vertex, tess-ctrl, tess-eval, geometry, fragment,\n"
+           "                          task, mesh, compute, and kernel (OpenCL-style compute).\n"
+           "  -e, --entry <name>      Specify the entry-point name.\n"
+           "  -g, --opengl            Use OpenGL environment instead of Vulkan for\n"
+           "                          graphics stages.\n"
+           "  --optimize              Run basic NIR optimizations in the result.\n", exec_name);
 }
 
 int main(int argc, char **argv)
@@ -86,28 +87,27 @@ int main(int argc, char **argv)
    gl_shader_stage shader_stage = MESA_SHADER_FRAGMENT;
    char *entry_point = "main";
    int ch;
+   bool optimize = false;
    enum nir_spirv_execution_environment env = NIR_SPIRV_VULKAN;
 
    static struct option long_options[] =
-     {
-       {"help",         no_argument, 0, 'h'},
-       {"stage",  required_argument, 0, 's'},
-       {"entry",  required_argument, 0, 'e'},
-       {"opengl",       no_argument, 0, 'g'},
-       {0, 0, 0, 0}
-     };
-
-   while ((ch = getopt_long(argc, argv, "hs:e:g", long_options, NULL)) != -1)
-   {
-      switch (ch)
       {
+         {"help",     no_argument,       0, 'h'},
+         {"stage",    required_argument, 0, 's'},
+         {"entry",    required_argument, 0, 'e'},
+         {"opengl",   no_argument,       0, 'g'},
+         {"optimize", no_argument,       0, 'O'},
+         {0, 0,                          0, 0}
+      };
+
+   while ((ch = getopt_long(argc, argv, "hs:e:g", long_options, NULL)) != -1) {
+      switch (ch) {
       case 'h':
          print_usage(argv[0], stdout);
          return 0;
       case 's':
          shader_stage = stage_to_enum(optarg);
-         if (shader_stage == MESA_SHADER_NONE)
-         {
+         if (shader_stage == MESA_SHADER_NONE) {
             fprintf(stderr, "Unknown stage \"%s\"\n", optarg);
             print_usage(argv[0], stderr);
             return 1;
@@ -119,6 +119,9 @@ int main(int argc, char **argv)
       case 'g':
          env = NIR_SPIRV_OPENGL;
          break;
+      case 'O':
+         optimize = true;
+         break;
       default:
          fprintf(stderr, "Unrecognized option \"%s\".\n", optarg);
          print_usage(argv[0], stderr);
@@ -128,15 +131,13 @@ int main(int argc, char **argv)
 
    const char *filename = argv[optind];
    int fd = open(filename, O_RDONLY);
-   if (fd < 0)
-   {
+   if (fd < 0) {
       fprintf(stderr, "Failed to open %s\n", filename);
       return 1;
    }
 
    off_t len = lseek(fd, 0, SEEK_END);
-   if (len % WORD_SIZE != 0)
-   {
+   if (len % WORD_SIZE != 0) {
       fprintf(stderr, "File length isn't a multiple of the word size\n");
       fprintf(stderr, "Are you sure this is a valid SPIR-V shader?\n");
       close(fd);
@@ -146,8 +147,7 @@ int main(int argc, char **argv)
    size_t word_count = len / WORD_SIZE;
 
    const void *map = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-   if (map == MAP_FAILED)
-   {
+   if (map == MAP_FAILED) {
       fprintf(stderr, "Failed to mmap the file: errno=%d, %s\n",
               errno, strerror(errno));
       close(fd);
@@ -155,6 +155,8 @@ int main(int argc, char **argv)
    }
 
    glsl_type_singleton_init_or_ref();
+
+   struct nir_shader_compiler_options nir_opts = {0};
 
    struct spirv_to_nir_options spirv_opts = {
       .environment = env,
@@ -172,12 +174,44 @@ int main(int argc, char **argv)
 
    nir_shader *nir = spirv_to_nir(map, word_count, NULL, 0,
                                   shader_stage, entry_point,
-                                  &spirv_opts, NULL);
+                                  &spirv_opts, &nir_opts);
 
-   if (nir)
-      nir_print_shader(nir, stderr);
-   else
+   if (nir) {
+      if (optimize) {
+         bool progress;
+         do {
+            progress = false;
+
+            #define OPT(pass, ...) ({                                  \
+               bool this_progress = false;                             \
+               NIR_PASS(this_progress, nir, pass, ##__VA_ARGS__);      \
+               if (this_progress)                                      \
+                  progress = true;                                     \
+               this_progress;                                          \
+            })
+
+            OPT(nir_opt_dce);
+            OPT(nir_opt_cse);
+            OPT(nir_opt_dead_cf);
+            OPT(nir_lower_vars_to_ssa);
+            OPT(nir_copy_prop);
+            OPT(nir_opt_deref);
+            OPT(nir_opt_constant_folding);
+            OPT(nir_opt_copy_prop_vars);
+            OPT(nir_opt_dead_write_vars);
+            OPT(nir_opt_combine_stores, nir_var_all);
+            OPT(nir_remove_dead_variables, nir_var_function_temp, NULL);
+            OPT(nir_opt_algebraic);
+            OPT(nir_opt_if, 0);
+            OPT(nir_opt_loop_unroll);
+
+            #undef OPT
+         } while (progress);
+      }
+      nir_print_shader(nir, stdout);
+   } else {
       fprintf(stderr, "SPIRV to NIR compilation failed\n");
+   }
 
    glsl_type_singleton_decref();
 

@@ -30,7 +30,7 @@
 
 #include "pipe/p_context.h"
 
-EXTERNC
+template <chip CHIP>
 void fd6_gmem_init(struct pipe_context *pctx);
 
 #endif /* FD6_GMEM_H_ */

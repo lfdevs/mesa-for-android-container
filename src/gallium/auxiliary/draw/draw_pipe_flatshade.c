@@ -42,8 +42,8 @@ struct flat_stage
 {
    struct draw_stage stage;
 
-   uint num_flat_attribs;
-   uint flat_attribs[PIPE_MAX_SHADER_OUTPUTS];  /* flatshaded attribs */
+   unsigned num_flat_attribs;
+   unsigned flat_attribs[PIPE_MAX_SHADER_OUTPUTS];  /* flatshaded attribs */
 };
 
 
@@ -62,7 +62,7 @@ copy_flats(struct draw_stage *stage,
 {
    const struct flat_stage *flat = flat_stage(stage);
    for (unsigned i = 0; i < flat->num_flat_attribs; i++) {
-      const uint attr = flat->flat_attribs[i];
+      const unsigned attr = flat->flat_attribs[i];
       COPY_4FV(dst->data[attr], src->data[attr]);
    }
 }
@@ -77,7 +77,7 @@ copy_flats2(struct draw_stage *stage,
 {
    const struct flat_stage *flat = flat_stage(stage);
    for (unsigned i = 0; i < flat->num_flat_attribs; i++) {
-      const uint attr = flat->flat_attribs[i];
+      const unsigned attr = flat->flat_attribs[i];
       COPY_4FV(dst0->data[attr], src->data[attr]);
       COPY_4FV(dst1->data[attr], src->data[attr]);
    }
@@ -168,7 +168,7 @@ flatshade_line_1(struct draw_stage *stage,
 
 static int
 find_interp(const struct draw_fragment_shader *fs, int *indexed_interp,
-            uint semantic_name, uint semantic_index)
+            enum tgsi_semantic semantic_name, unsigned semantic_index)
 {
    int interp;
    /* If it's gl_{Front,Back}{,Secondary}Color, pick up the mode
@@ -203,7 +203,7 @@ flatshade_init_state(struct draw_stage *stage)
    const struct draw_context *draw = stage->draw;
    const struct draw_fragment_shader *fs = draw->fs.fragment_shader;
    const struct tgsi_shader_info *info = draw_get_shader_info(draw);
-   uint i, j;
+   unsigned i, j;
 
    /* Find which vertex shader outputs need constant interpolation, make a list */
 

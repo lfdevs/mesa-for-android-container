@@ -370,7 +370,7 @@ d3d12_bufmgr_destroy(struct pb_manager *_mgr)
    FREE(mgr);
 }
 
-static boolean
+static bool
 d3d12_bufmgr_is_buffer_busy(struct pb_manager *_mgr, struct pb_buffer *_buf)
 {
    /* We're only asked this on buffers that are known not busy */

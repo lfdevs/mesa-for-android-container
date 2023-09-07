@@ -2143,7 +2143,7 @@ TEST_F(ComputeTest, packed_struct_local)
    }
 }
 
-TEST_F(ComputeTest, DISABLED_packed_struct_const)
+TEST_F(ComputeTest, packed_struct_const)
 {
 #pragma pack(push, 1)
    struct s { uint8_t uc; uint64_t ul; uint16_t us; };

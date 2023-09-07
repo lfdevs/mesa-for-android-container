@@ -427,21 +427,21 @@ static inline uint32_t
 translate_draw_mode(unsigned mode)
 {
    switch (mode) {
-   case PIPE_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return PRIMITIVE_TYPE_POINTS;
-   case PIPE_PRIM_LINES:
+   case MESA_PRIM_LINES:
       return PRIMITIVE_TYPE_LINES;
-   case PIPE_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINE_LOOP:
       return PRIMITIVE_TYPE_LINE_LOOP;
-   case PIPE_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINE_STRIP:
       return PRIMITIVE_TYPE_LINE_STRIP;
-   case PIPE_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLES:
       return PRIMITIVE_TYPE_TRIANGLES;
-   case PIPE_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
       return PRIMITIVE_TYPE_TRIANGLE_STRIP;
-   case PIPE_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_TRIANGLE_FAN:
       return PRIMITIVE_TYPE_TRIANGLE_FAN;
-   case PIPE_PRIM_QUADS:
+   case MESA_PRIM_QUADS:
       return PRIMITIVE_TYPE_QUADS;
    default:
       DBG("Unhandled draw mode primitive %i", mode);

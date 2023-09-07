@@ -22,8 +22,8 @@
 pvr_xml_files = [
   'rogue_cdm.xml',
   'rogue_cr.xml',
-  'rogue_fw.xml',
   'rogue_ipf.xml',
+  'rogue_kmd_stream.xml',
   'rogue_lls.xml',
   'rogue_pbestate.xml',
   'rogue_pds.xml',

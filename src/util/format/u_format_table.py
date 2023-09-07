@@ -100,7 +100,9 @@ def has_access(format):
         'xyuv',
         'ayuv',
         'r8g8_r8b8_unorm',
+        'r8b8_r8g8_unorm',
         'g8r8_b8r8_unorm',
+        'b8r8_g8r8_unorm',
         'g8r8_g8b8_unorm',
         'y8_400_unorm',
         'y8_u8_v8_422_unorm',
@@ -113,6 +115,7 @@ def has_access(format):
         'r8_g8b8_420_unorm',
         'g8_b8r8_420_unorm',
         'g8_b8_r8_420_unorm',
+        'r8_g8_b8_unorm',
         'y8_unorm',
     ]
     if format.short_name() in noaccess_formats:

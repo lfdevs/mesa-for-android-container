@@ -102,8 +102,8 @@ nir_lower_vars_to_scratch(nir_shader *shader,
    /* First, we walk the instructions and flag any variables we want to lower
     * by removing them from their respective list and setting the mode to 0.
     */
-   nir_foreach_function(function, shader) {
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -145,8 +145,8 @@ nir_lower_vars_to_scratch(nir_shader *shader,
       return false;
    }
 
-   nir_foreach_function(function, shader) {
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_deref)
                continue;
@@ -179,15 +179,11 @@ nir_lower_vars_to_scratch(nir_shader *shader,
    }
 
    bool progress = false;
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_builder build;
-      nir_builder_init(&build, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder build = nir_builder_create(impl);
 
       bool impl_progress = false;
-      nir_foreach_block(block, function->impl) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -217,10 +213,10 @@ nir_lower_vars_to_scratch(nir_shader *shader,
 
       if (impl_progress) {
          progress = true;
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+         nir_metadata_preserve(impl, nir_metadata_block_index |
+                                     nir_metadata_dominance);
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 

@@ -454,17 +454,19 @@ ir3_emit_driver_params(const struct ir3_shader_variant *v,
                        struct fd_ringbuffer *ring, struct fd_context *ctx,
                        const struct pipe_draw_info *info,
                        const struct pipe_draw_indirect_info *indirect,
-                       const struct pipe_draw_start_count_bias *draw) assert_dt
+                       const struct pipe_draw_start_count_bias *draw,
+                       const uint32_t draw_id) assert_dt
 {
    assert(v->need_driver_params);
 
    const struct ir3_const_state *const_state = ir3_const_state(v);
    uint32_t offset = const_state->offsets.driver_param;
    uint32_t vertex_params[IR3_DP_VS_COUNT] = {
-      [IR3_DP_DRAWID] = 0, /* filled by hw (CP_DRAW_INDIRECT_MULTI) */
+      [IR3_DP_DRAWID] = draw_id, /* filled by hw (CP_DRAW_INDIRECT_MULTI) */
       [IR3_DP_VTXID_BASE] = info->index_size ? draw->index_bias : draw->start,
       [IR3_DP_INSTID_BASE] = info->start_instance,
       [IR3_DP_VTXCNT_MAX] = ctx->streamout.max_tf_vtx,
+      [IR3_DP_IS_INDEXED_DRAW] = info->index_size != 0 ? ~0 : 0,
    };
    if (v->key.ucp_enables) {
       struct pipe_clip_state *ucp = &ctx->ucp;
@@ -573,7 +575,7 @@ ir3_emit_vs_consts(const struct ir3_shader_variant *v,
    /* emit driver params every time: */
    if (info && v->need_driver_params) {
       ring_wfi(ctx->batch, ring);
-      ir3_emit_driver_params(v, ring, ctx, info, indirect, draw);
+      ir3_emit_driver_params(v, ring, ctx, info, indirect, draw, 0);
    }
 }
 

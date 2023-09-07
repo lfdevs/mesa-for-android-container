@@ -64,11 +64,12 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
    };
 
    const struct spirv_to_nir_options *spirv_opts = dxil_spirv_nir_get_spirv_options();
-   struct nir_shader_compiler_options nir_options = *dxil_get_nir_compiler_options();
+   nir_shader_compiler_options nir_options;
+   const unsigned supported_bit_sizes = 16 | 32 | 64;
+   dxil_get_nir_compiler_options(&nir_options, conf->shader_model_max, supported_bit_sizes, supported_bit_sizes);
    // We will manually handle base_vertex when vertex_id and instance_id have
    // have been already converted to zero-base.
    nir_options.lower_base_vertex = !conf->zero_based_vertex_instance_id;
-   nir_options.lower_helper_invocation = opts.shader_model_max < SHADER_MODEL_6_6;
 
    nir_shader *nir = spirv_to_nir(
       words, word_count, (struct nir_spirv_specialization *)specializations,

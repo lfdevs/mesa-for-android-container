@@ -27,7 +27,7 @@
 
 
 #include "util/detect.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/macros.h"
 #include "util/u_cpu_detect.h"
 #include "util/u_debug.h"
@@ -42,14 +42,14 @@
 
 #include <llvm/Config/llvm-config.h>
 #include <llvm-c/Analysis.h>
-#include <llvm-c/Transforms/Scalar.h>
-#if LLVM_VERSION_MAJOR >= 7
-#include <llvm-c/Transforms/Utils.h>
-#endif
 #include <llvm-c/BitWriter.h>
 #if GALLIVM_USE_NEW_PASS == 1
 #include <llvm-c/Transforms/PassBuilder.h>
 #elif GALLIVM_HAVE_CORO == 1
+#include <llvm-c/Transforms/Scalar.h>
+#if LLVM_VERSION_MAJOR >= 7
+#include <llvm-c/Transforms/Utils.h>
+#endif
 #if LLVM_VERSION_MAJOR <= 8 && (DETECT_ARCH_AARCH64 || DETECT_ARCH_ARM || DETECT_ARCH_S390 || DETECT_ARCH_MIPS64)
 #include <llvm-c/Transforms/IPO.h>
 #endif
@@ -85,7 +85,7 @@ static const struct debug_named_value lp_bld_debug_flags[] = {
 DEBUG_GET_ONCE_FLAGS_OPTION(gallivm_debug, "GALLIVM_DEBUG", lp_bld_debug_flags, 0)
 
 
-static boolean gallivm_initialized = FALSE;
+static bool gallivm_initialized = false;
 
 unsigned lp_native_vector_width;
 
@@ -112,7 +112,7 @@ enum LLVM_CodeGenOpt_Level {
  * relevant optimization passes.
  * \return  TRUE for success, FALSE for failure
  */
-static boolean
+static bool
 create_pass_manager(struct gallivm_state *gallivm)
 {
 #if GALLIVM_USE_NEW_PASS == 0
@@ -121,7 +121,7 @@ create_pass_manager(struct gallivm_state *gallivm)
 
    gallivm->passmgr = LLVMCreateFunctionPassManagerForModule(gallivm->module);
    if (!gallivm->passmgr)
-      return FALSE;
+      return false;
 
 #if GALLIVM_HAVE_CORO == 1
    gallivm->cgpassmgr = LLVMCreatePassManager();
@@ -191,7 +191,7 @@ create_pass_manager(struct gallivm_state *gallivm)
    LLVMAddCoroCleanupPass(gallivm->passmgr);
 #endif
 #endif
-   return TRUE;
+   return true;
 }
 
 /**
@@ -266,7 +266,7 @@ gallivm_free_code(struct gallivm_state *gallivm)
 }
 
 
-static boolean
+static bool
 init_gallivm_engine(struct gallivm_state *gallivm)
 {
    if (1) {
@@ -316,10 +316,10 @@ init_gallivm_engine(struct gallivm_state *gallivm)
        free(engine_data_layout);
    }
 
-   return TRUE;
+   return true;
 
 fail:
-   return FALSE;
+   return false;
 }
 
 
@@ -327,7 +327,7 @@ fail:
  * Allocate gallivm LLVM objects.
  * \return  TRUE for success, FALSE for failure
  */
-static boolean
+static bool
 init_gallivm_state(struct gallivm_state *gallivm, const char *name,
                    LLVMContextRef context, struct lp_cached_code *cache)
 {
@@ -335,7 +335,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
    assert(!gallivm->module);
 
    if (!lp_build_init())
-      return FALSE;
+      return false;
 
    gallivm->context = context;
    gallivm->cache = cache;
@@ -404,7 +404,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
 
       gallivm->target = LLVMCreateTargetData(layout);
       if (!gallivm->target) {
-         return FALSE;
+         return false;
       }
    }
 
@@ -412,12 +412,12 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
       goto fail;
 
    lp_build_coro_declare_malloc_hooks(gallivm);
-   return TRUE;
+   return true;
 
 fail:
    gallivm_free_ir(gallivm);
    gallivm_free_code(gallivm);
-   return FALSE;
+   return false;
 }
 
 unsigned
@@ -433,12 +433,12 @@ lp_build_init_native_width(void)
    return lp_native_vector_width;
 }
 
-boolean
+bool
 lp_build_init(void)
 {
    lp_build_init_native_width();
    if (gallivm_initialized)
-      return TRUE;
+      return true;
 
 
    /* LLVMLinkIn* are no-ops at runtime.  They just ensure the respective
@@ -475,9 +475,9 @@ lp_build_init(void)
    }
 #endif
 
-   gallivm_initialized = TRUE;
+   gallivm_initialized = true;
 
-   return TRUE;
+   return true;
 }
 
 

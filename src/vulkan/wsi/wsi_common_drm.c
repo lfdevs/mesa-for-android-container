@@ -25,6 +25,7 @@
 #include "wsi_common_drm.h"
 #include "util/macros.h"
 #include "util/os_file.h"
+#include "util/log.h"
 #include "util/xmlconfig.h"
 #include "vk_device.h"
 #include "vk_physical_device.h"
@@ -57,6 +58,7 @@ wsi_dma_buf_export_sync_file(int dma_buf_fd, int *sync_file_fd)
          no_dma_buf_sync_file = true;
          return VK_ERROR_FEATURE_NOT_PRESENT;
       } else {
+         mesa_loge("MESA: failed to export sync file '%s'", strerror(errno));
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
    }
@@ -84,6 +86,7 @@ wsi_dma_buf_import_sync_file(int dma_buf_fd, int sync_file_fd)
          no_dma_buf_sync_file = true;
          return VK_ERROR_FEATURE_NOT_PRESENT;
       } else {
+         mesa_loge("MESA: failed to import sync file '%s'", strerror(errno));
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
    }
@@ -451,6 +454,23 @@ fail_oom:
 }
 
 static VkResult
+wsi_init_image_dmabuf_fd(const struct wsi_swapchain *chain,
+                          struct wsi_image *image,
+                          bool linear)
+{
+   const struct wsi_device *wsi = chain->wsi;
+   const VkMemoryGetFdInfoKHR memory_get_fd_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
+      .pNext = NULL,
+      .memory = linear ? image->blit.memory : image->memory,
+      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+   };
+
+   return wsi->GetMemoryFdKHR(chain->device, &memory_get_fd_info,
+                              &image->dma_buf_fd);
+}
+
+static VkResult
 wsi_create_native_image_mem(const struct wsi_swapchain *chain,
                             const struct wsi_image_info *info,
                             struct wsi_image *image)
@@ -489,15 +509,7 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
    if (result != VK_SUCCESS)
       return result;
 
-   const VkMemoryGetFdInfoKHR memory_get_fd_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
-      .pNext = NULL,
-      .memory = image->memory,
-      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-   };
-
-   result = wsi->GetMemoryFdKHR(chain->device, &memory_get_fd_info,
-                                &image->dma_buf_fd);
+   result = wsi_init_image_dmabuf_fd(chain, image, false);
    if (result != VK_SUCCESS)
       return result;
 
@@ -558,7 +570,6 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
                            const struct wsi_image_info *info,
                            struct wsi_image *image)
 {
-   const struct wsi_device *wsi = chain->wsi;
    VkResult result =
       wsi_create_buffer_blit_context(chain, info, image,
                                      VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
@@ -566,14 +577,7 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
    if (result != VK_SUCCESS)
       return result;
 
-   const VkMemoryGetFdInfoKHR linear_memory_get_fd_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
-      .pNext = NULL,
-      .memory = image->blit.memory,
-      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-   };
-   result = wsi->GetMemoryFdKHR(chain->device, &linear_memory_get_fd_info,
-                                &image->dma_buf_fd);
+   result = wsi_init_image_dmabuf_fd(chain, image, true);
    if (result != VK_SUCCESS)
       return result;
 

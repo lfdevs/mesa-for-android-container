@@ -18,13 +18,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+general_ir_test_files = files(
+  'array_refcount_test.cpp',
+  'builtin_variable_test.cpp',
+  'general_ir_test.cpp',
+  'lower_int64_test.cpp',
+  'opt_add_neg_to_sub_test.cpp',
+)
+general_ir_test_files += ir_expression_operation_h
+
+if with_gles2
+  general_ir_test_files += files('test_gl_lower_mediump.cpp')
+endif
+
 test(
   'general_ir_test',
   executable(
     'general_ir_test',
-    ['array_refcount_test.cpp', 'builtin_variable_test.cpp',
-     'general_ir_test.cpp', 'lower_int64_test.cpp',
-     'opt_add_neg_to_sub_test.cpp', 'test_gl_lower_mediump.cpp', ir_expression_operation_h],
+    general_ir_test_files,
     cpp_args : [cpp_msvc_compat_args],
     gnu_symbol_visibility : 'hidden',
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glsl],
@@ -101,12 +112,14 @@ if with_tools.contains('glsl')
            ],
     suite : ['compiler', 'glsl'],
   )
-  test(
-    'glsl lower-precision test',
-    prog_python,
-    args : [files('lower_precision_test.py'),
-            glsl_compiler
-           ],
-    suite : ['compiler', 'glsl'],
-  )
+  if with_gles2
+    test(
+      'glsl lower-precision test',
+      prog_python,
+      args : [files('lower_precision_test.py'),
+              glsl_compiler
+            ],
+      suite : ['compiler', 'glsl'],
+    )
+  endif
 endif

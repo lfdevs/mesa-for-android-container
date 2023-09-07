@@ -271,7 +271,7 @@ void r600_invalidate_resource(struct pipe_context *ctx,
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
 	struct r600_resource *rbuffer = r600_resource(resource);
 
-	/* We currently only do anyting here for buffers */
+	/* We currently only do anything here for buffers */
 	if (resource->target == PIPE_BUFFER)
 		(void)r600_invalidate_buffer(rctx, rbuffer);
 }

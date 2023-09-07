@@ -60,11 +60,11 @@ def struct_get_stype(xml_node):
     return None
 
 
-def parse_xml(filename, structs):
+def parse_xml(filename, structs, beta):
     xml = et.parse(filename)
     api = 'vulkan'
 
-    required_types = get_all_required(xml, 'type', api)
+    required_types = get_all_required(xml, 'type', api, beta)
 
     for struct_type in xml.findall('./types/type[@category="struct"]'):
         if not filter_api(struct_type, api):
@@ -93,13 +93,14 @@ def main():
     parser.add_argument('--outdir',
                         help='Directory to put the generated files in',
                         required=True)
+    parser.add_argument('--beta', required=True, help='Enable beta extensions.')
 
     args = parser.parse_args()
 
     structs = []
 
     for filename in args.xml_files:
-        parse_xml(filename, structs)
+        parse_xml(filename, structs, args.beta)
 
     structs = sorted(structs, key=lambda s: s.name)
 

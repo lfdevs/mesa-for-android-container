@@ -27,7 +27,7 @@
 
 /* Fake occlusion queries which return 0, it's better than crashing */
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 #include "util/u_memory.h"
 

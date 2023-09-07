@@ -1,25 +1,7 @@
 /*
  * Copyright 2022 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "nir_builder.h"
@@ -34,6 +16,10 @@
 struct lower_abi_state {
    struct si_shader *shader;
    struct si_shader_args *args;
+
+   nir_ssa_def *esgs_ring;
+   nir_ssa_def *tess_offchip_ring;
+   nir_ssa_def *gsvs_ring[4];
 };
 
 #define GET_FIELD_NIR(field) \
@@ -173,13 +159,10 @@ fetch_framebuffer(nir_builder *b, struct si_shader_args *args,
                                   .access = ACCESS_CAN_REORDER);
 }
 
-static nir_ssa_def *build_tess_factor_ring_desc(nir_builder *b, struct si_screen *screen,
-                                                struct si_shader_args *args)
+static nir_ssa_def *build_tess_ring_desc(nir_builder *b, struct si_screen *screen,
+                                         struct si_shader_args *args)
 {
-   nir_ssa_def *addr = ac_nir_load_arg(b, &args->ac, args->tcs_out_lds_layout);
-   /* TCS only receives high 13 bits of the address. */
-   addr = nir_iand_imm(b, addr, 0xfff80000);
-   addr = nir_iadd_imm(b, addr, screen->hs.tess_offchip_ring_size);
+   nir_ssa_def *addr = ac_nir_load_arg(b, &args->ac, args->tes_offchip_addr);
 
    uint32_t rsrc3 =
       S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
@@ -209,11 +192,125 @@ static nir_ssa_def *build_tess_factor_ring_desc(nir_builder *b, struct si_screen
    return nir_vec(b, comp, 4);
 }
 
-static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_state *s)
+static nir_ssa_def *build_esgs_ring_desc(nir_builder *b, enum amd_gfx_level gfx_level,
+                                         struct si_shader_args *args)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
+   nir_ssa_def *desc = si_nir_load_internal_binding(b, args, SI_RING_ESGS, 4);
 
+   if (b->shader->info.stage == MESA_SHADER_GEOMETRY)
+      return desc;
+
+   nir_ssa_def *vec[4];
+   for (int i = 0; i < 4; i++)
+      vec[i] = nir_channel(b, desc, i);
+
+   vec[1] = nir_ior_imm(b, vec[1], S_008F04_SWIZZLE_ENABLE_GFX6(1));
+   vec[3] = nir_ior_imm(b, vec[3],
+                        S_008F0C_ELEMENT_SIZE(1) |
+                        S_008F0C_INDEX_STRIDE(3) |
+                        S_008F0C_ADD_TID_ENABLE(1));
+
+   /* If MUBUF && ADD_TID_ENABLE, DATA_FORMAT means STRIDE[14:17] on gfx8-9, so set 0. */
+   if (gfx_level == GFX8)
+      vec[3] = nir_iand_imm(b, vec[3], C_008F0C_DATA_FORMAT);
+
+   return nir_vec(b, vec, 4);
+}
+
+static void build_gsvs_ring_desc(nir_builder *b, struct lower_abi_state *s)
+{
+   const struct si_shader_selector *sel = s->shader->selector;
+   const union si_shader_key *key = &s->shader->key;
+
+   if (s->shader->is_gs_copy_shader) {
+      s->gsvs_ring[0] = si_nir_load_internal_binding(b, s->args, SI_RING_GSVS, 4);
+   } else if (sel->stage == MESA_SHADER_GEOMETRY && !key->ge.as_ngg) {
+      nir_ssa_def *base_addr = si_nir_load_internal_binding(b, s->args, SI_RING_GSVS, 2);
+      base_addr = nir_pack_64_2x32(b, base_addr);
+
+      /* The conceptual layout of the GSVS ring is
+       *   v0c0 .. vLv0 v0c1 .. vLc1 ..
+       * but the real memory layout is swizzled across
+       * threads:
+       *   t0v0c0 .. t15v0c0 t0v1c0 .. t15v1c0 ... t15vLcL
+       *   t16v0c0 ..
+       * Override the buffer descriptor accordingly.
+       */
+
+      for (unsigned stream = 0; stream < 4; stream++) {
+         unsigned num_components = sel->info.num_stream_output_components[stream];
+         if (!num_components)
+            continue;
+
+         nir_ssa_def *desc[4];
+         desc[0] = nir_unpack_64_2x32_split_x(b, base_addr);
+         desc[1] = nir_unpack_64_2x32_split_y(b, base_addr);
+
+         unsigned stride = 4 * num_components * sel->info.base.gs.vertices_out;
+         /* Limit on the stride field for <= GFX7. */
+         assert(stride < (1 << 14));
+
+         desc[1] = nir_ior_imm(
+            b, desc[1], S_008F04_STRIDE(stride) | S_008F04_SWIZZLE_ENABLE_GFX6(1));
+
+         unsigned num_records = s->shader->wave_size;
+         desc[2] = nir_imm_int(b, num_records);
+
+         uint32_t rsrc3 =
+            S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
+            S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
+            S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) |
+            S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W) |
+            S_008F0C_INDEX_STRIDE(1) | /* index_stride = 16 (elements) */
+            S_008F0C_ADD_TID_ENABLE(1);
+
+         if (sel->screen->info.gfx_level >= GFX10) {
+            rsrc3 |=
+               S_008F0C_FORMAT(V_008F0C_GFX10_FORMAT_32_FLOAT) |
+               S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_DISABLED) |
+               S_008F0C_RESOURCE_LEVEL(1);
+         } else {
+            /* If MUBUF && ADD_TID_ENABLE, DATA_FORMAT means STRIDE[14:17] on gfx8-9, so set 0. */
+            unsigned data_format =
+               sel->screen->info.gfx_level == GFX8 || sel->screen->info.gfx_level == GFX9 ?
+               0 : V_008F0C_BUF_DATA_FORMAT_32;
+
+            rsrc3 |=
+               S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
+               S_008F0C_DATA_FORMAT(data_format) |
+               S_008F0C_ELEMENT_SIZE(1); /* element_size = 4 (bytes) */
+         }
+
+         desc[3] = nir_imm_int(b, rsrc3);
+
+         s->gsvs_ring[stream] = nir_vec(b, desc, 4);
+
+         /* next stream's desc addr */
+         base_addr = nir_iadd_imm(b, base_addr, stride * num_records);
+      }
+   }
+}
+
+static void preload_reusable_variables(nir_builder *b, struct lower_abi_state *s)
+{
+   const struct si_shader_selector *sel = s->shader->selector;
+   const union si_shader_key *key = &s->shader->key;
+
+   b->cursor = nir_before_cf_list(&b->impl->body);
+
+   if (sel->screen->info.gfx_level <= GFX8 && sel->stage <= MESA_SHADER_GEOMETRY &&
+       (key->ge.as_es || sel->stage == MESA_SHADER_GEOMETRY)) {
+      s->esgs_ring = build_esgs_ring_desc(b, sel->screen->info.gfx_level, s->args);
+   }
+
+   if (sel->stage == MESA_SHADER_TESS_CTRL || sel->stage == MESA_SHADER_TESS_EVAL)
+      s->tess_offchip_ring = build_tess_ring_desc(b, sel->screen, s->args);
+
+   build_gsvs_ring_desc(b, s);
+}
+
+static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_state *s)
+{
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
    struct si_shader *shader = s->shader;
@@ -256,17 +353,18 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
       unsigned num_components = intrin->dest.ssa.num_components;
       unsigned offset =
          intrin->intrinsic == nir_intrinsic_load_tess_level_inner_default ? 16 : 0;
-      replacement = nir_load_smem_buffer_amd(b, num_components, buf, nir_imm_int(b, offset));
+      replacement = nir_load_ubo(b, num_components, 32, buf, nir_imm_int(b, offset),
+                                 .range = ~0);
       break;
    }
    case nir_intrinsic_load_patch_vertices_in:
       if (stage == MESA_SHADER_TESS_CTRL)
-         replacement = ac_nir_unpack_arg(b, &args->ac, args->tcs_out_lds_layout, 13, 6);
+         replacement = ac_nir_unpack_arg(b, &args->ac, args->tcs_offchip_layout, 11, 5);
       else if (stage == MESA_SHADER_TESS_EVAL) {
-         nir_ssa_def *tmp = ac_nir_unpack_arg(b, &args->ac, args->tcs_offchip_layout, 6, 5);
-         replacement = nir_iadd_imm(b, tmp, 1);
+         replacement = ac_nir_unpack_arg(b, &args->ac, args->tcs_offchip_layout, 6, 5);
       } else
          unreachable("no nir_load_patch_vertices_in");
+      replacement = nir_iadd_imm(b, replacement, 1);
       break;
    case nir_intrinsic_load_sample_mask_in:
       replacement = ac_nir_load_arg(b, &args->ac, args->ac.sample_coverage);
@@ -293,7 +391,7 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
       break;
    }
    case nir_intrinsic_load_hs_out_patch_data_offset_amd:
-      replacement = ac_nir_unpack_arg(b, &args->ac, args->tcs_offchip_layout, 11, 21);
+      replacement = ac_nir_unpack_arg(b, &args->ac, args->tcs_offchip_layout, 16, 16);
       break;
    case nir_intrinsic_load_ring_tess_offchip_offset_amd:
       replacement = ac_nir_load_arg(b, &args->ac, args->ac.tess_offchip_offset);
@@ -318,7 +416,7 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
       break;
    case nir_intrinsic_load_cull_ccw_amd:
       /* radeonsi embed cw/ccw info into front/back face enabled */
-      replacement = nir_imm_bool(b, false);
+      replacement = nir_imm_false(b);
       break;
    case nir_intrinsic_load_cull_any_enabled_amd:
       replacement = nir_imm_bool(b, !!key->ge.opt.ngg_culling);
@@ -361,7 +459,8 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
    case nir_intrinsic_load_user_clip_plane: {
       nir_ssa_def *buf = si_nir_load_internal_binding(b, args, SI_VS_CONST_CLIP_PLANES, 4);
       unsigned offset = nir_intrinsic_ucp_id(intrin) * 16;
-      replacement = nir_load_smem_buffer_amd(b, 4, buf, nir_imm_int(b, offset));
+      replacement = nir_load_ubo(b, 4, 32, buf, nir_imm_int(b, offset),
+                                 .range = ~0);
       break;
    }
    case nir_intrinsic_load_streamout_buffer_amd: {
@@ -380,7 +479,8 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
       unsigned offset = si_query_pipestat_end_dw_offset(sel->screen, index) * 4;
 
       nir_ssa_def *count = intrin->src[0].ssa;
-      nir_buffer_atomic_add_amd(b, 32, buf, count, .base = offset);
+      nir_ssbo_atomic(b, 32, buf, nir_imm_int(b, offset), count,
+                      .atomic_op = nir_atomic_op_iadd);
       break;
    }
    case nir_intrinsic_atomic_add_gen_prim_count_amd:
@@ -389,11 +489,12 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
 
       unsigned stream = nir_intrinsic_stream_id(intrin);
       unsigned offset = intrin->intrinsic == nir_intrinsic_atomic_add_gen_prim_count_amd ?
-         offsetof(struct gfx10_sh_query_buffer_mem, stream[stream].generated_primitives) :
-         offsetof(struct gfx10_sh_query_buffer_mem, stream[stream].emitted_primitives);
+         offsetof(struct gfx11_sh_query_buffer_mem, stream[stream].generated_primitives) :
+         offsetof(struct gfx11_sh_query_buffer_mem, stream[stream].emitted_primitives);
 
       nir_ssa_def *prim_count = intrin->src[0].ssa;
-      nir_buffer_atomic_add_amd(b, 32, buf, prim_count, .base = offset);
+      nir_ssbo_atomic(b, 32, buf, nir_imm_int(b, offset), prim_count,
+                      .atomic_op = nir_atomic_op_iadd);
       break;
    }
    case nir_intrinsic_load_ring_attr_amd:
@@ -453,9 +554,9 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
          nir_ssa_def *offset = nir_ishl_imm(b, sample_id, 3);
 
          nir_ssa_def *buf = si_nir_load_internal_binding(b, args, SI_PS_CONST_SAMPLE_POSITIONS, 4);
-         nir_ssa_def *sample_pos = nir_load_smem_buffer_amd(b, 2, buf, offset);
+         nir_ssa_def *sample_pos = nir_load_ubo(b, 2, 32, buf, offset, .range = ~0);
 
-         sample_pos = nir_fsub(b, sample_pos, nir_imm_float(b, 0.5));
+         sample_pos = nir_fadd_imm(b, sample_pos, -0.5);
 
          replacement = nir_load_barycentric_at_offset(b, 32, sample_pos, .interp_mode = mode);
       }
@@ -473,14 +574,135 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
       replacement = fetch_framebuffer(b, args, sel, key);
       break;
    }
-   case nir_intrinsic_load_ring_tess_factors_amd:
-      replacement = build_tess_factor_ring_desc(b, sel->screen, args);
+   case nir_intrinsic_load_ring_tess_factors_amd: {
+      assert(s->tess_offchip_ring);
+      nir_ssa_def *addr = nir_channel(b, s->tess_offchip_ring, 0);
+      addr = nir_iadd_imm(b, addr, sel->screen->hs.tess_offchip_ring_size);
+      replacement = nir_vector_insert_imm(b, s->tess_offchip_ring, addr, 0);
       break;
+   }
    case nir_intrinsic_load_ring_tess_factors_offset_amd:
       replacement = ac_nir_load_arg(b, &args->ac, args->ac.tcs_factor_offset);
       break;
    case nir_intrinsic_load_alpha_reference_amd:
       replacement = ac_nir_load_arg(b, &args->ac, args->alpha_reference);
+      break;
+   case nir_intrinsic_load_barycentric_optimize_amd: {
+      nir_ssa_def *prim_mask = ac_nir_load_arg(b, &args->ac, args->ac.prim_mask);
+      /* enabled when bit 31 is set */
+      replacement = nir_ilt_imm(b, prim_mask, 0);
+      break;
+   }
+   case nir_intrinsic_load_color0:
+   case nir_intrinsic_load_color1: {
+      uint32_t colors_read = sel->info.colors_read;
+
+      int start, offset;
+      if (intrin->intrinsic == nir_intrinsic_load_color0) {
+         start = 0;
+         offset = 0;
+      } else {
+         start = 4;
+         offset = util_bitcount(colors_read & 0xf);
+      }
+
+      nir_ssa_def *color[4];
+      for (int i = 0; i < 4; i++) {
+         color[i] = colors_read & BITFIELD_BIT(start + i) ?
+            ac_nir_load_arg_at_offset(b, &args->ac, args->color_start, offset++) :
+            nir_ssa_undef(b, 1, 32);
+      }
+
+      replacement = nir_vec(b, color, 4);
+      break;
+   }
+   case nir_intrinsic_load_point_coord_maybe_flipped: {
+      nir_ssa_def *interp_param =
+         nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_NONE);
+
+      /* Load point coordinates (x, y) which are written by the hw after the interpolated inputs */
+      replacement = nir_load_interpolated_input(b, 2, 32, interp_param, nir_imm_int(b, 0),
+                                                .base = si_get_ps_num_interp(shader),
+                                                .component = 2);
+      break;
+   }
+   case nir_intrinsic_load_poly_line_smooth_enabled:
+      replacement = nir_imm_bool(b, key->ps.mono.poly_line_smoothing);
+      break;
+   case nir_intrinsic_load_gs_vertex_offset_amd: {
+      unsigned base = nir_intrinsic_base(intrin);
+      replacement = ac_nir_load_arg(b, &args->ac, args->ac.gs_vtx_offset[base]);
+      break;
+   }
+   case nir_intrinsic_load_merged_wave_info_amd:
+      replacement = ac_nir_load_arg(b, &args->ac, args->ac.merged_wave_info);
+      break;
+   case nir_intrinsic_load_workgroup_num_input_vertices_amd:
+      replacement = ac_nir_unpack_arg(b, &args->ac, args->ac.gs_tg_info, 12, 9);
+      break;
+   case nir_intrinsic_load_workgroup_num_input_primitives_amd:
+      replacement = ac_nir_unpack_arg(b, &args->ac, args->ac.gs_tg_info, 22, 9);
+      break;
+   case nir_intrinsic_load_initial_edgeflags_amd:
+      if (shader->key.ge.opt.ngg_culling & SI_NGG_CULL_LINES ||
+          (shader->selector->stage == MESA_SHADER_VERTEX &&
+           shader->selector->info.base.vs.blit_sgprs_amd)) {
+         /* Line primitives and blits don't need edge flags. */
+         replacement = nir_imm_int(b, 0);
+      } else if (shader->selector->stage == MESA_SHADER_VERTEX) {
+         /* Use the following trick to extract the edge flags:
+          *   extracted = v_and_b32 gs_invocation_id, 0x700 ; get edge flags at bits 8, 9, 10
+          *   shifted = v_mul_u32_u24 extracted, 0x80402u   ; shift the bits: 8->9, 9->19, 10->29
+          *   result = v_and_b32 shifted, 0x20080200        ; remove garbage
+          */
+         nir_ssa_def *tmp = ac_nir_load_arg(b, &args->ac, args->ac.gs_invocation_id);
+         tmp = nir_iand_imm(b, tmp, 0x700);
+         tmp = nir_imul_imm(b, tmp, 0x80402);
+         replacement = nir_iand_imm(b, tmp, 0x20080200);
+      } else {
+         /* Edge flags are always enabled when polygon mode is enabled, so we always have to
+          * return valid edge flags if the primitive type is not lines and if we are not blitting
+          * because the shader doesn't know when polygon mode is enabled.
+          */
+         replacement = nir_imm_int(b, ac_get_all_edge_flag_bits());
+      }
+      break;
+   case nir_intrinsic_load_packed_passthrough_primitive_amd:
+      replacement = ac_nir_load_arg(b, &args->ac, args->ac.gs_vtx_offset[0]);
+      break;
+   case nir_intrinsic_load_ordered_id_amd:
+      replacement = ac_nir_unpack_arg(b, &args->ac, args->ac.gs_tg_info, 0, 12);
+      break;
+   case nir_intrinsic_load_ring_esgs_amd:
+      assert(s->esgs_ring);
+      replacement = s->esgs_ring;
+      break;
+   case nir_intrinsic_load_tess_rel_patch_id_amd:
+      /* LLVM need to replace patch id arg, so have to be done in LLVM backend. */
+      if (!shader->use_aco)
+         return false;
+
+      if (stage == MESA_SHADER_TESS_CTRL) {
+         replacement = ac_nir_unpack_arg(b, &args->ac, args->ac.tcs_rel_ids, 0, 8);
+      } else {
+         assert(stage == MESA_SHADER_TESS_EVAL);
+         replacement = ac_nir_load_arg(b, &args->ac, args->ac.tes_rel_patch_id);
+      }
+      break;
+   case nir_intrinsic_load_ring_tess_offchip_amd:
+      assert(s->tess_offchip_ring);
+      replacement = s->tess_offchip_ring;
+      break;
+   case nir_intrinsic_load_ring_gsvs_amd: {
+      unsigned stream_id = nir_intrinsic_stream_id(intrin);
+      /* Unused nir_load_ring_gsvs_amd may not be eliminated yet. */
+      replacement = s->gsvs_ring[stream_id] ?
+         s->gsvs_ring[stream_id] : nir_ssa_undef(b, 4, 32);
+      break;
+   }
+   case nir_intrinsic_load_user_data_amd:
+      replacement = ac_nir_load_arg(b, &args->ac, args->cs_user_data);
+      replacement = nir_pad_vec4(b, replacement);
       break;
    default:
       return false;
@@ -495,6 +717,51 @@ static bool lower_abi_instr(nir_builder *b, nir_instr *instr, struct lower_abi_s
    return true;
 }
 
+static bool lower_tex(nir_builder *b, nir_instr *instr, struct lower_abi_state *s)
+{
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+   const struct si_shader_selector *sel = s->shader->selector;
+   enum amd_gfx_level gfx_level = sel->screen->info.gfx_level;
+
+   b->cursor = nir_before_instr(instr);
+
+   /* Section 8.23.1 (Depth Texture Comparison Mode) of the
+    * OpenGL 4.5 spec says:
+    *
+    *    "If the texture’s internal format indicates a fixed-point
+    *     depth texture, then D_t and D_ref are clamped to the
+    *     range [0, 1]; otherwise no clamping is performed."
+    *
+    * TC-compatible HTILE promotes Z16 and Z24 to Z32_FLOAT,
+    * so the depth comparison value isn't clamped for Z16 and
+    * Z24 anymore. Do it manually here for GFX8-9; GFX10 has
+    * an explicitly clamped 32-bit float format.
+    */
+
+   /* LLVM keep non-uniform sampler as index, so can't do this in NIR. */
+   if (tex->is_shadow && gfx_level >= GFX8 && gfx_level <= GFX9 && s->shader->use_aco) {
+      int samp_index = nir_tex_instr_src_index(tex, nir_tex_src_sampler_handle);
+      int comp_index = nir_tex_instr_src_index(tex, nir_tex_src_comparator);
+      assert(samp_index >= 0 && comp_index >= 0);
+
+      nir_ssa_def *sampler = tex->src[samp_index].src.ssa;
+      nir_ssa_def *compare = tex->src[comp_index].src.ssa;
+      /* Must have been lowered to descriptor. */
+      assert(sampler->num_components > 1);
+
+      nir_ssa_def *upgraded = nir_channel(b, sampler, 3);
+      upgraded = nir_i2b(b, nir_ubfe_imm(b, upgraded, 29, 1));
+
+      nir_ssa_def *clamped = nir_fsat(b, compare);
+      compare = nir_bcsel(b, upgraded, clamped, compare);
+
+      nir_instr_rewrite_src_ssa(instr, &tex->src[comp_index].src, compare);
+      return true;
+   }
+
+   return false;
+}
+
 bool si_nir_lower_abi(nir_shader *nir, struct si_shader *shader, struct si_shader_args *args)
 {
    struct lower_abi_state state = {
@@ -504,13 +771,17 @@ bool si_nir_lower_abi(nir_shader *nir, struct si_shader *shader, struct si_shade
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
+
+   preload_reusable_variables(&b, &state);
 
    bool progress = false;
    nir_foreach_block_safe(block, impl) {
       nir_foreach_instr_safe(instr, block) {
-         progress |= lower_abi_instr(&b, instr, &state);
+         if (instr->type == nir_instr_type_intrinsic)
+            progress |= lower_intrinsic(&b, instr, &state);
+         else if (instr->type == nir_instr_type_tex)
+            progress |= lower_tex(&b, instr, &state);
       }
    }
 

@@ -32,7 +32,7 @@ libspirv_to_dxil = both_libraries(
     sha1_h,
   ],
   vs_module_defs : 'spirv_to_dxil.def',
-  dependencies : [idep_nir, idep_libdxil_compiler],
+  dependencies : [idep_nir, idep_vtn, idep_libdxil_compiler],
   include_directories : [inc_include, inc_src, inc_compiler, inc_gallium],
   install : true,
 )

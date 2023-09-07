@@ -726,7 +726,7 @@ dri_get_egl_image(struct pipe_frontend_screen *fscreen,
    }
 
    if (!img)
-      return FALSE;
+      return false;
 
    stimg->texture = NULL;
    pipe_resource_reference(&stimg->texture, img->texture);
@@ -749,7 +749,7 @@ dri_get_egl_image(struct pipe_frontend_screen *fscreen,
    stimg->yuv_color_space = img->yuv_color_space;
    stimg->yuv_range = img->sample_range;
 
-   return TRUE;
+   return true;
 }
 
 static bool
@@ -769,12 +769,19 @@ dri_get_param(struct pipe_frontend_screen *fscreen,
 }
 
 void
-dri_destroy_screen_helper(struct dri_screen * screen)
+dri_release_screen(struct dri_screen * screen)
 {
    st_screen_destroy(&screen->base);
 
-   if (screen->base.screen)
+   if (screen->base.screen) {
       screen->base.screen->destroy(screen->base.screen);
+      screen->base.screen = NULL;
+   }
+
+   if (screen->dev) {
+      pipe_loader_release(&screen->dev, 1);
+      screen->dev = NULL;
+   }
 
    mtx_destroy(&screen->opencl_func_mutex);
 }
@@ -782,9 +789,7 @@ dri_destroy_screen_helper(struct dri_screen * screen)
 void
 dri_destroy_screen(struct dri_screen *screen)
 {
-   dri_destroy_screen_helper(screen);
-
-   pipe_loader_release(&screen->dev, 1);
+   dri_release_screen(screen);
 
    free(screen->options.force_gl_vendor);
    free(screen->options.force_gl_renderer);
@@ -824,8 +829,8 @@ dri_set_background_context(struct st_context *st,
 }
 
 const __DRIconfig **
-dri_init_screen_helper(struct dri_screen *screen,
-                       struct pipe_screen *pscreen)
+dri_init_screen(struct dri_screen *screen,
+                struct pipe_screen *pscreen)
 {
    screen->base.screen = pscreen;
    screen->base.get_egl_image = dri_get_egl_image;

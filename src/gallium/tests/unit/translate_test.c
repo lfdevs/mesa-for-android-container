@@ -173,7 +173,7 @@ int main(int argc, char** argv)
          unsigned fail = 0;
          unsigned used_generic = 0;
          unsigned input_normalized = 0;
-         boolean input_is_float = FALSE;
+         bool input_is_float = false;
 
          if (!fetch_rgba
              || !input_format_pack->pack_rgba_float

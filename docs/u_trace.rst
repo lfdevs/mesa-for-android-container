@@ -35,7 +35,7 @@ u_trace is controlled by environment variables:
       valid. For the Vulkan API, it is expected to destroy the device,
       for GL it's expected to destroy the context.
    ``perfetto``
-      enables perfetto instrumentation prior to connecting, perfetto
+      enables Perfetto instrumentation prior to connecting, Perfetto
       traces can be collected without setting this but it may miss some
       events prior to the tracing session being started.
    ``markers``

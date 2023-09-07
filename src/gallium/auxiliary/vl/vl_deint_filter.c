@@ -508,16 +508,16 @@ vl_deint_filter_render(struct vl_deint_filter *filter,
       filter->pipe->bind_fs_state(filter->pipe, field ? filter->fs_copy_bottom : filter->fs_copy_top);
       filter->pipe->set_framebuffer_state(filter->pipe, &fb_state);
       filter->pipe->set_viewport_states(filter->pipe, 0, 1, &viewport);
-      util_draw_arrays(filter->pipe, PIPE_PRIM_QUADS, 0, 4);
+      util_draw_arrays(filter->pipe, MESA_PRIM_QUADS, 0, 4);
 
       /* blit or interpolate other field */
       fb_state.cbufs[0] = dst_surf;
       filter->pipe->set_framebuffer_state(filter->pipe, &fb_state);
       if (i > 0 && filter->skip_chroma) {
-         util_draw_arrays(filter->pipe, PIPE_PRIM_QUADS, 0, 4);
+         util_draw_arrays(filter->pipe, MESA_PRIM_QUADS, 0, 4);
       } else {
          filter->pipe->bind_fs_state(filter->pipe, field ? filter->fs_deint_top : filter->fs_deint_bottom);
-         util_draw_arrays(filter->pipe, PIPE_PRIM_QUADS, 0, 4);
+         util_draw_arrays(filter->pipe, MESA_PRIM_QUADS, 0, 4);
       }
 
       if (++j >= util_format_get_nr_components(dst_surf->format)) {

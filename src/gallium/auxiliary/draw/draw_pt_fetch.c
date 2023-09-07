@@ -86,7 +86,7 @@ draw_pt_fetch_prepare(struct pt_fetch *fetch,
          key.element[nr].output_format = PIPE_FORMAT_R32_USCALED;
          key.element[nr].output_offset = dst_offset;
 
-         dst_offset += sizeof(uint);
+         dst_offset += sizeof(uint32_t);
       } else if (util_format_is_pure_sint(draw->pt.vertex_element[i].src_format)) {
          key.element[nr].type = TRANSLATE_ELEMENT_NORMAL;
          key.element[nr].input_format = draw->pt.vertex_element[ei].src_format;
@@ -97,7 +97,7 @@ draw_pt_fetch_prepare(struct pt_fetch *fetch,
          key.element[nr].output_offset = dst_offset;
 
          ei++;
-         dst_offset += 4 * sizeof(int);
+         dst_offset += 4 * sizeof(int32_t);
       } else if (util_format_is_pure_uint(draw->pt.vertex_element[i].src_format)) {
          key.element[nr].type = TRANSLATE_ELEMENT_NORMAL;
          key.element[nr].input_format = draw->pt.vertex_element[ei].src_format;
@@ -108,7 +108,7 @@ draw_pt_fetch_prepare(struct pt_fetch *fetch,
          key.element[nr].output_offset = dst_offset;
 
          ei++;
-         dst_offset += 4 * sizeof(unsigned);
+         dst_offset += 4 * sizeof(uint32_t);
       } else {
          key.element[nr].type = TRANSLATE_ELEMENT_NORMAL;
          key.element[nr].input_format = draw->pt.vertex_element[ei].src_format;

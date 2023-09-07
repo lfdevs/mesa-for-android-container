@@ -28,7 +28,7 @@
 #ifndef LP_FLUSH_H
 #define LP_FLUSH_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 struct pipe_context;
 struct pipe_fence_handle;
@@ -43,13 +43,13 @@ void
 llvmpipe_finish(struct pipe_context *pipe,
                 const char *reason);
 
-boolean
+bool
 llvmpipe_flush_resource(struct pipe_context *pipe,
                         struct pipe_resource *resource,
                         unsigned level,
-                        boolean read_only,
-                        boolean cpu_access,
-                        boolean do_not_block,
+                        bool read_only,
+                        bool cpu_access,
+                        bool do_not_block,
                         const char *reason);
 
 #endif

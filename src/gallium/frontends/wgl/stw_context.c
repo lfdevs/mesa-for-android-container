@@ -34,7 +34,7 @@
 #include <GL/gl.h>
 #include <GL/wglext.h>
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "util/compiler.h"
@@ -69,10 +69,10 @@ DrvCopyContext(DHGLRC dhrcSource, DHGLRC dhrcDest, UINT fuMask)
 {
    struct stw_context *src;
    struct stw_context *dst;
-   BOOL ret = FALSE;
+   BOOL ret = false;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    stw_lock_contexts(stw_dev);
 
@@ -98,10 +98,10 @@ DrvShareLists(DHGLRC dhglrc1, DHGLRC dhglrc2)
 {
    struct stw_context *ctx1;
    struct stw_context *ctx2;
-   BOOL ret = FALSE;
+   BOOL ret = false;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    stw_lock_contexts(stw_dev);
 
@@ -110,8 +110,8 @@ DrvShareLists(DHGLRC dhglrc1, DHGLRC dhglrc2)
 
    if (ctx1 && ctx2) {
       ret = _mesa_share_state(ctx2->st->ctx, ctx1->st->ctx);
-      ctx1->shared = TRUE;
-      ctx2->shared = TRUE;
+      ctx1->shared = true;
+      ctx2->shared = true;
    }
 
    stw_unlock_contexts(stw_dev);
@@ -173,7 +173,7 @@ stw_create_context_attribs(HDC hdc, INT iLayerPlane, struct stw_context *shareCt
       return 0;
 
    if (shareCtx != NULL)
-      shareCtx->shared = TRUE;
+      shareCtx->shared = true;
 
    ctx = CALLOC_STRUCT( stw_context );
    if (ctx == NULL)
@@ -312,10 +312,10 @@ BOOL APIENTRY
 DrvDeleteContext(DHGLRC dhglrc)
 {
    struct stw_context *ctx ;
-   BOOL ret = FALSE;
+   BOOL ret = false;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    stw_lock_contexts(stw_dev);
    ctx = stw_lookup_context_locked(dhglrc);
@@ -330,7 +330,7 @@ DrvDeleteContext(DHGLRC dhglrc)
          st_api_make_current(NULL, NULL, NULL);
 
       stw_destroy_context(ctx);
-      ret = TRUE;
+      ret = true;
    }
 
    return ret;
@@ -340,19 +340,19 @@ BOOL
 stw_unbind_context(struct stw_context *ctx)
 {
    if (!ctx)
-      return FALSE;
+      return false;
 
    /* The expectation is that ctx is the same context which is
     * current for this thread.  We should check that and return False
     * if not the case.
     */
    if (ctx != stw_current_context())
-      return FALSE;
+      return false;
 
-   if (stw_make_current( NULL, NULL, NULL ) == FALSE)
-      return FALSE;
+   if (stw_make_current( NULL, NULL, NULL ) == false)
+      return false;
 
-   return TRUE;
+   return true;
 }
 
 BOOL APIENTRY
@@ -361,7 +361,7 @@ DrvReleaseContext(DHGLRC dhglrc)
    struct stw_context *ctx;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    stw_lock_contexts(stw_dev);
    ctx = stw_lookup_context_locked( dhglrc );
@@ -430,17 +430,17 @@ BOOL
 stw_make_current(struct stw_framebuffer *fb, struct stw_framebuffer *fbRead, struct stw_context *ctx)
 {
    struct stw_context *old_ctx = NULL;
-   BOOL ret = FALSE;
+   BOOL ret = false;
 
    if (!stw_dev)
-      return FALSE;
+      return false;
 
    old_ctx = stw_current_context();
    if (old_ctx != NULL) {
       if (old_ctx == ctx) {
          if (old_ctx->current_framebuffer == fb && old_ctx->current_read_framebuffer == fbRead) {
             /* Return if already current. */
-            return TRUE;
+            return true;
          }
       } else {
          if (old_ctx->shared) {
@@ -559,13 +559,13 @@ stw_make_current_by_handles(HDC hDrawDC, HDC hReadDC, DHGLRC dhglrc)
    struct stw_context *ctx = stw_lookup_context(dhglrc);
    if (dhglrc && !ctx) {
       stw_make_current_by_handles(NULL, NULL, 0);
-      return FALSE;
+      return false;
    }
 
    struct stw_framebuffer *fb = get_unlocked_refd_framebuffer_from_dc(hDrawDC);
    if (ctx && !fb) {
       stw_make_current_by_handles(NULL, NULL, 0);
-      return FALSE;
+      return false;
    }
 
    struct stw_framebuffer *fbRead = (hDrawDC == hReadDC || hReadDC == NULL) ?
@@ -573,7 +573,7 @@ stw_make_current_by_handles(HDC hDrawDC, HDC hReadDC, DHGLRC dhglrc)
    if (ctx && !fbRead) {
       release_old_framebuffers(fb, NULL, ctx);
       stw_make_current_by_handles(NULL, NULL, 0);
-      return FALSE;
+      return false;
    }
 
    BOOL success = stw_make_current(fb, fbRead, ctx);

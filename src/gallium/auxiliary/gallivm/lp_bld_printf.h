@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "lp_bld.h"
 #include "lp_bld_init.h"
 

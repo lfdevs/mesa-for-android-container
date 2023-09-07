@@ -893,7 +893,7 @@ i915_texture_transfer_unmap(struct pipe_context *pipe,
 void
 i915_texture_subdata(struct pipe_context *pipe, struct pipe_resource *resource,
                      unsigned level, unsigned usage, const struct pipe_box *box,
-                     const void *data, unsigned stride, unsigned layer_stride)
+                     const void *data, unsigned stride, uintptr_t layer_stride)
 {
    /* i915's cube and 3D maps are not laid out such that one could use a
     * layer_stride to get from one layer to the next, so we have to walk the

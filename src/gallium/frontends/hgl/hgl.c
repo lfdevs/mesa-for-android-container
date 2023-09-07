@@ -135,7 +135,7 @@ hgl_st_framebuffer_validate_textures(struct pipe_frontend_drawable *drawable,
 				buffer->textures[i] = buffer->screen->resource_create(buffer->screen,
 					&templat);
 				if (!buffer->textures[i])
-					return FALSE;
+					return false;
 			}
 		}
 	}
@@ -177,7 +177,7 @@ hgl_st_framebuffer_validate(struct st_context *st,
 		|| (buffer->height != buffer->newHeight);
 
 	if (resized || newMask) {
-		boolean ret;
+		bool ret;
 		TRACE("%s: resize event. old:  %d x %d; new: %d x %d\n", __func__,
 			buffer->width, buffer->height, buffer->newWidth, buffer->newHeight);
 

@@ -81,13 +81,13 @@ zink_resource_object_init_mutable(struct zink_context *ctx, struct zink_resource
 VkDeviceAddress
 zink_resource_get_address(struct zink_screen *screen, struct zink_resource *res);
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_resource_has_binds(const struct zink_resource *res)
 {
    return res->all_binds > 0;
 }
 
-static inline bool
+static ALWAYS_INLINE  bool
 zink_is_swapchain(const struct zink_resource *res)
 {
    return res->swapchain;
@@ -96,7 +96,7 @@ zink_is_swapchain(const struct zink_resource *res)
 bool
 zink_resource_copy_box_intersects(struct zink_resource *res, unsigned level, const struct pipe_box *box);
 void
-zink_resource_copy_box_add(struct zink_resource *res, unsigned level, const struct pipe_box *box);
+zink_resource_copy_box_add(struct zink_context *ctx, struct zink_resource *res, unsigned level, const struct pipe_box *box);
 void
 zink_resource_copies_reset(struct zink_resource *res);
 
@@ -113,7 +113,7 @@ zink_resource_usage_is_unflushed(const struct zink_resource *res)
 static inline bool
 zink_resource_usage_is_unflushed_write(const struct zink_resource *res)
 {
-   return zink_batch_usage_is_unflushed(res->obj->bo->writes);
+   return zink_batch_usage_is_unflushed(res->obj->bo->writes.u);
 }
 
 
@@ -190,6 +190,9 @@ zink_batch_resource_usage_set(struct zink_batch *batch, struct zink_resource *re
 
    batch->has_work = true;
 }
+
+void
+zink_debug_mem_print_stats(struct zink_screen *screen);
 
 #ifdef __cplusplus
 }

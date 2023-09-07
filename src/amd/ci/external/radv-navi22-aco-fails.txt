@@ -1,2 +1,0 @@
-
-dEQP-VK.subgroups.builtin_var.ray_tracing.subgroupsize,Fail

@@ -1,4 +1,1 @@
 dEQP-GLES31.functional.ssbo.layout.random.all_shared_buffer.12,Crash
-
-# New CTS failures in 1.3.5.0
-dEQP-VK.pipeline.monolithic.descriptor_limits.fragment_shader.input_attachments_6,Fail

@@ -112,10 +112,10 @@ const struct pan_blendable_format
 
 /* Convenience */
 
-#define _V PIPE_BIND_VERTEX_BUFFER
-#define _T PIPE_BIND_SAMPLER_VIEW
-#define _R PIPE_BIND_RENDER_TARGET
-#define _Z PIPE_BIND_DEPTH_STENCIL
+#define _V PAN_BIND_VERTEX_BUFFER
+#define _T PAN_BIND_SAMPLER_VIEW
+#define _R PAN_BIND_RENDER_TARGET
+#define _Z PAN_BIND_DEPTH_STENCIL
 
 #define FLAGS_V___ (_V)
 #define FLAGS__T__ (_T)

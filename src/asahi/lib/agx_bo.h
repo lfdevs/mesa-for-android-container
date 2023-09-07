@@ -81,7 +81,7 @@ struct agx_bo {
    int prime_fd;
 
    /* Syncobj handle of the current writer, if any */
-   int writer_syncobj;
+   uint32_t writer_syncobj;
 
    /* Globally unique value (system wide) for tracing. Exists for resources,
     * command buffers, GPU submissions, segments, segmentent lists, encoders,

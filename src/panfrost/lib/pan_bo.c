@@ -93,16 +93,17 @@ static void
 panfrost_bo_free(struct panfrost_bo *bo)
 {
    struct drm_gem_close gem_close = {.handle = bo->gem_handle};
+   int fd = bo->dev->fd;
    int ret;
 
-   ret = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_CLOSE, &gem_close);
+   /* BO will be freed with the sparse array, but zero to indicate free */
+   memset(bo, 0, sizeof(*bo));
+
+   ret = drmIoctl(fd, DRM_IOCTL_GEM_CLOSE, &gem_close);
    if (ret) {
       fprintf(stderr, "DRM_IOCTL_GEM_CLOSE failed: %m\n");
       assert(0);
    }
-
-   /* BO will be freed with the sparse array, but zero to indicate free */
-   memset(bo, 0, sizeof(*bo));
 }
 
 /* Returns true if the BO is ready, false otherwise.

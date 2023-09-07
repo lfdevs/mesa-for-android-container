@@ -23,7 +23,6 @@
 
 #include "vk_shader_module.h"
 
-#include "util/mesa-sha1.h"
 #include "vk_alloc.h"
 #include "vk_common_entrypoints.h"
 #include "vk_device.h"
@@ -43,7 +42,7 @@ void vk_shader_module_init(struct vk_device *device,
    module->size = create_info->codeSize;
    memcpy(module->data, create_info->pCode, module->size);
 
-   _mesa_sha1_compute(module->data, module->size, module->sha1);
+   _mesa_blake3_compute(module->data, module->size, module->hash);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -71,7 +70,7 @@ vk_common_CreateShaderModule(VkDevice _device,
     return VK_SUCCESS;
 }
 
-const uint8_t vk_shaderModuleIdentifierAlgorithmUUID[VK_UUID_SIZE] = "MESA-SHA1";
+const uint8_t vk_shaderModuleIdentifierAlgorithmUUID[VK_UUID_SIZE] = "MESA-BLAKE3";
 
 VKAPI_ATTR void VKAPI_CALL
 vk_common_GetShaderModuleIdentifierEXT(VkDevice _device,
@@ -79,8 +78,8 @@ vk_common_GetShaderModuleIdentifierEXT(VkDevice _device,
                                        VkShaderModuleIdentifierEXT *pIdentifier)
 {
    VK_FROM_HANDLE(vk_shader_module, module, _module);
-   memcpy(pIdentifier->identifier, module->sha1, sizeof(module->sha1));
-   pIdentifier->identifierSize = sizeof(module->sha1);
+   memcpy(pIdentifier->identifier, module->hash, sizeof(module->hash));
+   pIdentifier->identifierSize = sizeof(module->hash);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -88,9 +87,9 @@ vk_common_GetShaderModuleCreateInfoIdentifierEXT(VkDevice _device,
                                                  const VkShaderModuleCreateInfo *pCreateInfo,
                                                  VkShaderModuleIdentifierEXT *pIdentifier)
 {
-   _mesa_sha1_compute(pCreateInfo->pCode, pCreateInfo->codeSize,
-                      pIdentifier->identifier);
-   pIdentifier->identifierSize = SHA1_DIGEST_LENGTH;
+   _mesa_blake3_compute(pCreateInfo->pCode, pCreateInfo->codeSize,
+                        pIdentifier->identifier);
+   pIdentifier->identifierSize = sizeof(blake3_hash);
 }
 
 VKAPI_ATTR void VKAPI_CALL

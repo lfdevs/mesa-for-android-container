@@ -47,7 +47,9 @@ traces:
     freedreno-a530:
       checksum: 102a09ce76092436173fd09a6a2bd941
     freedreno-a618:
+      label: [skip, flakes]
       checksum: e0e18dcc50ab2e23cead650d64469178
+      text: "intermittent segfault https://mesa.pages.freedesktop.org/-/mesa/-/jobs/39893593/artifacts/results/summary/results/trace@freedreno-a618@valve@portal-2-v2.trace.html"
     freedreno-a630:
       checksum: e0e18dcc50ab2e23cead650d64469178
     zink-a618:
@@ -77,7 +79,9 @@ traces:
       label: [skip, slow]
       checksum: ade41e6fe932552914c678155149babb
     zink-a630:
+      label: [skip, slow]
       checksum: ade41e6fe932552914c678155149babb
+      text: "intermittent timeouts"
 
   xonotic/xonotic-keybench-high-v2.trace:
     freedreno-a306:
@@ -381,9 +385,9 @@ traces:
         One of the material textures appears brighter on freedreno than
         i965 in a way that is probably wrong.
     zink-a618:
-      checksum: 227516d3818969c68a1864aa942119c2
+      checksum: e64bcc59d61d1c75ce5eeb109343d9bd
     zink-a630:
-      checksum: 227516d3818969c68a1864aa942119c2
+      checksum: e64bcc59d61d1c75ce5eeb109343d9bd
 
   gputest/pixmark-volplosion-v2.trace:
     freedreno-a306:
@@ -669,7 +673,9 @@ traces:
     zink-a618:
       checksum: 8533a3fd4dca0c68df6721f7eab75960
     zink-a630:
+      label: [skip, flakes]
       checksum: 8533a3fd4dca0c68df6721f7eab75960
+      text: "intermittent gpu fault ring 0 fence 4b1 status 00C40085 rb 004b/004b ib1 000000012240C000/485c ib2 0000000121A3C270/0037"
 
   nheko/nheko-colors.trace:
     freedreno-a306:
@@ -779,7 +785,9 @@ traces:
     zink-a618:
       checksum: 7d084f2cd05644b717cc591bd8e9dcce
     zink-a630:
+      label: [skip, flakes]
       checksum: 7d084f2cd05644b717cc591bd8e9dcce
+      text: "intermittent gpu fault ring 0 fence 4b4 status 00CE0185 rb 0067/0067 ib1 000000010C498000/14d14 ib2 0000000000000000/0000"
 
   warzone2100/warzone2100-default.trace:
     freedreno-a306:

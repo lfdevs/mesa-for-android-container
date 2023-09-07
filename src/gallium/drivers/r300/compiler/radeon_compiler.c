@@ -415,7 +415,7 @@ static void print_stats(struct radeon_compiler * c)
 	rc_get_stats(c, &s);
 
 	/* Note that we print some dummy values for instruction categories that
-	 * only the FS has, becasue shader-db's report.py wants all shaders to
+	 * only the FS has, because shader-db's report.py wants all shaders to
 	 * have the same set.
 	 */
 	util_debug_message(c->debug, SHADER_INFO, "%s shader: %u inst, %u vinst, %u sinst, %u predicate, %u flowcontrol, %u loops, %u tex, %u presub, %u omod, %u temps, %u consts, %u lits",

@@ -81,12 +81,12 @@ lp_build_vec_type(const struct gallivm_state *gallivm, struct lp_type type)
  * XXX: I'm not sure if it wouldn't be easier/efficient to just recreate the
  * type and check for identity.
  */
-boolean
+bool
 lp_check_elem_type(struct lp_type type, LLVMTypeRef elem_type)
 {
    assert(elem_type);
    if (!elem_type)
-      return FALSE;
+      return false;
 
    const LLVMTypeKind elem_kind = LLVMGetTypeKind(elem_type);
 
@@ -96,63 +96,63 @@ lp_check_elem_type(struct lp_type type, LLVMTypeRef elem_type)
          if (elem_kind != (lp_has_fp16()
                            ? LLVMHalfTypeKind : LLVMIntegerTypeKind)) {
             debug_printf("%s:%d: type is not 16 bits\n", __FILE__, __LINE__);
-            return FALSE;
+            return false;
          }
          break;
       case 32:
          if (elem_kind != LLVMFloatTypeKind) {
             debug_printf("%s:%d: type is not float\n", __FILE__, __LINE__);
-            return FALSE;
+            return false;
          }
          break;
       case 64:
          if (elem_kind != LLVMDoubleTypeKind) {
             debug_printf("%s:%d: type is not double\n", __FILE__, __LINE__);
-            return FALSE;
+            return false;
          }
          break;
       default:
          assert(0);
-         return FALSE;
+         return false;
       }
    }
    else {
       if (elem_kind != LLVMIntegerTypeKind) {
          debug_printf("%s:%d: element is not integer\n", __FILE__, __LINE__);
-         return FALSE;
+         return false;
       }
 
       if (LLVMGetIntTypeWidth(elem_type) != type.width) {
          debug_printf("%s:%d: type width mismatch %d != %d\n",
                       __FILE__, __LINE__,
                       LLVMGetIntTypeWidth(elem_type), type.width);
-         return FALSE;
+         return false;
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 
-boolean
+bool
 lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type)
 {
    assert(vec_type);
    if (!vec_type)
-      return FALSE;
+      return false;
 
    if (type.length == 1)
       return lp_check_elem_type(type, vec_type);
 
    if (LLVMGetTypeKind(vec_type) != LLVMVectorTypeKind) {
       printf("%s:%d: kind is not vector\n", __FILE__, __LINE__);
-      return FALSE;
+      return false;
    }
 
    if (LLVMGetVectorSize(vec_type) != type.length) {
       printf("%s:%d: vector size mismatch %d != expected %d\n", __FILE__, __LINE__,
              LLVMGetVectorSize(vec_type), type.length);
-      return FALSE;
+      return false;
    }
 
    LLVMTypeRef elem_type = LLVMGetElementType(vec_type);
@@ -161,12 +161,12 @@ lp_check_vec_type(struct lp_type type, LLVMTypeRef vec_type)
 }
 
 
-boolean
+bool
 lp_check_value(struct lp_type type, LLVMValueRef val)
 {
    assert(val);
    if (!val)
-      return FALSE;
+      return false;
 
    LLVMTypeRef vec_type = LLVMTypeOf(val);
 

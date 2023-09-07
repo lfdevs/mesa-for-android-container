@@ -323,19 +323,24 @@ intel_get_mesh_urb_config(const struct intel_device_info *devinfo,
 
    float task_urb_share = 0.0f;
    if (r.task_entry_size_64b > 0) {
-      /* By default, assign 10% to TASK and 90% to MESH, since we expect MESH
-       * to use larger URB entries since it contains all the vertex and
-       * primitive data.  Environment variable allow us to tweak it.
+      /* By default, split memory between TASK and MESH proportionally to
+       * their entry sizes. Environment variable allow us to tweak it.
        *
        * TODO(mesh): Re-evaluate if this is a good default once there are more
        * workloads.
        */
       static int task_urb_share_percentage = -1;
-      if (task_urb_share_percentage < 0) {
+      if (task_urb_share_percentage == -1) {
          task_urb_share_percentage =
-            MIN2(debug_get_num_option("INTEL_MESH_TASK_URB_SHARE", 10), 100);
+            MIN2(debug_get_num_option("INTEL_MESH_TASK_URB_SHARE", -2), 100);
       }
-      task_urb_share = task_urb_share_percentage / 100.0f;
+
+      if (task_urb_share_percentage >= 0) {
+         task_urb_share = task_urb_share_percentage / 100.0f;
+      } else {
+         task_urb_share = 1.0f * r.task_entry_size_64b /
+                          (r.task_entry_size_64b + r.mesh_entry_size_64b);
+      }
    }
 
    const unsigned one_task_urb_kb = ALIGN(r.task_entry_size_64b * 64, 1024) / 1024;

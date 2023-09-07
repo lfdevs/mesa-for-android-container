@@ -1,28 +1,8 @@
 /*
  * Copyright © 2008 Jérôme Glisse
  * Copyright © 2010 Marek Olšák <maraeo@gmail.com>
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS, AUTHORS
- * AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
+ * SPDX-License-Identifier: MIT
  */
 
 /*
@@ -89,7 +69,7 @@ static void radeon_drm_ctx_destroy(struct radeon_winsys_ctx *ctx)
 
 static enum pipe_reset_status
 radeon_drm_ctx_query_reset_status(struct radeon_winsys_ctx *rctx, bool full_reset_only,
-                                  bool *needs_reset)
+                                  bool *needs_reset, bool *reset_completed)
 {
    struct radeon_ctx *ctx = (struct radeon_ctx*)rctx;
 
@@ -98,11 +78,15 @@ radeon_drm_ctx_query_reset_status(struct radeon_winsys_ctx *rctx, bool full_rese
    if (ctx->gpu_reset_counter == latest) {
       if (needs_reset)
          *needs_reset = false;
+      if (reset_completed)
+         *reset_completed = false;
       return PIPE_NO_RESET;
    }
 
    if (needs_reset)
       *needs_reset = true;
+   if (reset_completed)
+      *reset_completed = true;
 
    ctx->gpu_reset_counter = latest;
    return PIPE_UNKNOWN_CONTEXT_RESET;
@@ -861,7 +845,6 @@ void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
    ws->base.ctx_destroy = radeon_drm_ctx_destroy;
    ws->base.ctx_query_reset_status = radeon_drm_ctx_query_reset_status;
    ws->base.cs_create = radeon_drm_cs_create;
-   ws->base.cs_set_preamble = radeon_drm_cs_set_preamble;
    ws->base.cs_destroy = radeon_drm_cs_destroy;
    ws->base.cs_add_buffer = radeon_drm_cs_add_buffer;
    ws->base.cs_lookup_buffer = radeon_drm_cs_lookup_buffer;

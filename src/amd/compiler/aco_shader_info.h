@@ -27,6 +27,7 @@
 #ifndef ACO_SHADER_INFO_H
 #define ACO_SHADER_INFO_H
 
+#include "ac_hw_stage.h"
 #include "ac_shader_args.h"
 #include "amd_family.h"
 #include "shader_enums.h"
@@ -35,10 +36,10 @@
 extern "C" {
 #endif
 
-#define ACO_MAX_SO_OUTPUTS 64
-#define ACO_MAX_SO_BUFFERS 4
+#define ACO_MAX_SO_OUTPUTS     64
+#define ACO_MAX_SO_BUFFERS     4
 #define ACO_MAX_VERTEX_ATTRIBS 32
-#define ACO_MAX_VBS 32
+#define ACO_MAX_VBS            32
 
 struct aco_vs_input_state {
    uint32_t instance_rate_inputs;
@@ -77,46 +78,26 @@ struct aco_ps_epilog_info {
 };
 
 struct aco_shader_info {
+   enum ac_hw_stage hw_stage;
    uint8_t wave_size;
-   bool is_ngg;
    bool has_ngg_culling;
    bool has_ngg_early_prim_export;
    bool image_2d_view_of_3d;
    unsigned workgroup_size;
    struct {
-      bool as_es;
-      bool as_ls;
       bool tcs_in_out_eq;
       uint64_t tcs_temp_only_input_mask;
-      bool use_per_attribute_vb_descs;
-      uint32_t input_slot_usage_mask;
       bool has_prolog;
-      bool dynamic_inputs;
    } vs;
-   struct {
-      uint8_t output_usage_mask[VARYING_SLOT_VAR31 + 1];
-      uint8_t num_stream_output_components[4];
-      uint8_t output_streams[VARYING_SLOT_VAR31 + 1];
-      unsigned vertices_out;
-   } gs;
    struct {
       uint32_t num_lds_blocks;
       unsigned tess_input_vertices;
    } tcs;
    struct {
-      bool as_es;
-   } tes;
-   struct {
-      struct aco_ps_epilog_info epilog;
-      bool writes_z;
-      bool writes_stencil;
-      bool writes_sample_mask;
       bool has_epilog;
+      struct ac_arg epilog_pc;
       uint32_t num_interp;
       unsigned spi_ps_input;
-
-      /* Used to export alpha through MRTZ for alpha-to-coverage (GFX11+). */
-      bool alpha_to_coverage_via_mrtz;
    } ps;
    struct {
       uint8_t subgroup_size;
@@ -134,7 +115,6 @@ enum aco_compiler_debug_level {
 };
 
 struct aco_compiler_options {
-   bool robust_buffer_access;
    bool dump_shader;
    bool dump_preoptir;
    bool record_ir;
@@ -144,12 +124,13 @@ struct aco_compiler_options {
    bool optimisations_disabled;
    uint8_t enable_mrt_output_nan_fixup;
    bool wgp_mode;
+   bool is_opengl;
    enum radeon_family family;
    enum amd_gfx_level gfx_level;
    uint32_t address32_hi;
    struct {
-      void (*func)(void *private_data, enum aco_compiler_debug_level level, const char *message);
-      void *private_data;
+      void (*func)(void* private_data, enum aco_compiler_debug_level level, const char* message);
+      void* private_data;
    } debug;
 };
 
@@ -165,6 +146,19 @@ enum aco_statistic {
    aco_statistic_sgpr_presched,
    aco_statistic_vgpr_presched,
    aco_num_statistics
+};
+
+enum aco_symbol_id {
+   aco_symbol_invalid,
+   aco_symbol_scratch_addr_lo,
+   aco_symbol_scratch_addr_hi,
+   aco_symbol_lds_ngg_scratch_base,
+   aco_symbol_lds_ngg_gs_out_vertex_base,
+};
+
+struct aco_symbol {
+   enum aco_symbol_id id;
+   unsigned offset;
 };
 
 #ifdef __cplusplus

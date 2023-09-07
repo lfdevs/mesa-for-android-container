@@ -35,8 +35,8 @@ struct nv50_varying {
    unsigned linear : 1;
    unsigned pad    : 3;
 
-   ubyte sn; /* semantic name */
-   ubyte si; /* semantic index */
+   uint8_t sn; /* semantic name */
+   uint8_t si; /* semantic index */
 };
 
 struct nv50_stream_output_state
@@ -57,7 +57,7 @@ struct nv50_gmem_state {
 struct nv50_program {
    struct pipe_shader_state pipe;
 
-   ubyte type;
+   uint8_t type;
    bool translated;
 
    uint32_t *code;
@@ -67,21 +67,21 @@ struct nv50_program {
    unsigned parm_size; /* size limit of uniform buffer */
    uint32_t tls_space; /* required local memory per thread */
 
-   ubyte max_gpr; /* REG_ALLOC_TEMP */
-   ubyte max_out; /* REG_ALLOC_RESULT or FP_RESULT_COUNT */
+   uint8_t max_gpr; /* REG_ALLOC_TEMP */
+   uint8_t max_out; /* REG_ALLOC_RESULT or FP_RESULT_COUNT */
 
-   ubyte in_nr;
-   ubyte out_nr;
+   uint8_t in_nr;
+   uint8_t out_nr;
    struct nv50_varying in[16];
    struct nv50_varying out[16];
 
    struct {
       uint32_t attrs[3]; /* VP_ATTR_EN_0,1 and VP_GP_BUILTIN_ATTR_EN */
-      ubyte psiz;        /* output slot of point size */
-      ubyte bfc[2];      /* indices into varying for FFC (FP) or BFC (VP) */
-      ubyte edgeflag;
-      ubyte clpd[2];     /* output slot of clip distance[i]'s 1st component */
-      ubyte clpd_nr;
+      uint8_t psiz;        /* output slot of point size */
+      uint8_t bfc[2];      /* indices into varying for FFC (FP) or BFC (VP) */
+      uint8_t edgeflag;
+      uint8_t clpd[2];     /* output slot of clip distance[i]'s 1st component */
+      uint8_t clpd_nr;
       bool need_vertex_id;
       uint32_t clip_mode;
       uint8_t clip_enable; /* mask of defined clip planes */
@@ -101,9 +101,9 @@ struct nv50_program {
       uint32_t vert_count;
       uint8_t prim_type; /* point, line strip or tri strip */
       uint8_t has_layer;
-      ubyte layerid; /* hw value of layer output */
+      uint8_t layerid; /* hw value of layer output */
       uint8_t has_viewport;
-      ubyte viewportid; /* hw value of viewport index output */
+      uint8_t viewportid; /* hw value of viewport index output */
    } gp;
 
    struct {

@@ -33,9 +33,7 @@ radv_nir_lower_intrinsics_early(nir_shader *nir, const struct radv_pipeline_key 
 {
    nir_function_impl *entry = nir_shader_get_entrypoint(nir);
    bool progress = false;
-   nir_builder b;
-
-   nir_builder_init(&b, entry);
+   nir_builder b = nir_builder_create(entry);
 
    nir_foreach_block (block, entry) {
       nir_foreach_instr_safe (instr, block) {

@@ -3,7 +3,7 @@
 #ifndef _NINE_FLAGS_H_
 #define _NINE_FLAGS_H_
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 /* Incoming 32 bits calls are 4-byte aligned.
  * We need to realign them to be able to use

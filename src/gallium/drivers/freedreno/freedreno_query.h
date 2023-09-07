@@ -131,6 +131,12 @@ pidx(unsigned query_type)
       return 5;
    case PIPE_QUERY_PRIMITIVES_EMITTED:
       return 6;
+   case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
+      return 7;
+   case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
+      return 8;
+   case PIPE_QUERY_PIPELINE_STATISTICS_SINGLE:
+      return 9;
 
    default:
       return -1;

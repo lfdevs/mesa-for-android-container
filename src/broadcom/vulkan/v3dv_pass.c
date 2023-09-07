@@ -234,7 +234,7 @@ v3dv_CreateRenderPass2(VkDevice _device,
             .layout = desc->pDepthStencilAttachment->layout,
          };
 
-         /* GFXH-1461: if depth is cleared but stencil is loaded (or viceversa),
+         /* GFXH-1461: if depth is cleared but stencil is loaded (or vice versa),
           * the clear might get lost. If a subpass has this then we can't emit
           * the clear using the TLB and we have to do it as a draw call.
           *

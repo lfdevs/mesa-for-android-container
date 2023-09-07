@@ -1103,8 +1103,28 @@ v3dX(cmd_buffer_emit_viewport)(struct v3dv_cmd_buffer *cmd_buffer)
    }
 
    cl_emit(&job->bcl, VIEWPORT_OFFSET, vp) {
-      vp.viewport_centre_x_coordinate = vptranslate[0];
-      vp.viewport_centre_y_coordinate = vptranslate[1];
+      float vp_fine_x = vptranslate[0];
+      float vp_fine_y = vptranslate[1];
+      int32_t vp_coarse_x = 0;
+      int32_t vp_coarse_y = 0;
+
+      /* The fine coordinates must be unsigned, but coarse can be signed */
+      if (unlikely(vp_fine_x < 0)) {
+         int32_t blocks_64 = DIV_ROUND_UP(fabsf(vp_fine_x), 64);
+         vp_fine_x += 64.0f * blocks_64;
+         vp_coarse_x -= blocks_64;
+      }
+
+      if (unlikely(vp_fine_y < 0)) {
+         int32_t blocks_64 = DIV_ROUND_UP(fabsf(vp_fine_y), 64);
+         vp_fine_y += 64.0f * blocks_64;
+         vp_coarse_y -= blocks_64;
+      }
+
+      vp.fine_x = vp_fine_x;
+      vp.fine_y = vp_fine_y;
+      vp.coarse_x = vp_coarse_x;
+      vp.coarse_y = vp_coarse_y;
    }
 
    cmd_buffer->state.dirty &= ~V3DV_CMD_DIRTY_VIEWPORT;
@@ -1842,14 +1862,14 @@ emit_gs_shader_state_record(struct v3dv_job *job,
 }
 
 static uint8_t
-v3d_gs_output_primitive(enum shader_prim prim_type)
+v3d_gs_output_primitive(enum mesa_prim prim_type)
 {
     switch (prim_type) {
-    case SHADER_PRIM_POINTS:
+    case MESA_PRIM_POINTS:
         return GEOMETRY_SHADER_POINTS;
-    case SHADER_PRIM_LINE_STRIP:
+    case MESA_PRIM_LINE_STRIP:
         return GEOMETRY_SHADER_LINE_STRIP;
-    case SHADER_PRIM_TRIANGLE_STRIP:
+    case MESA_PRIM_TRIANGLE_STRIP:
         return GEOMETRY_SHADER_TRI_STRIP;
     default:
         unreachable("Unsupported primitive type");

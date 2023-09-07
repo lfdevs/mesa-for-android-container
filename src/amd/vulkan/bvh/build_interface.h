@@ -58,7 +58,7 @@ struct morton_args {
 };
 
 #define LBVH_RIGHT_CHILD_BIT_SHIFT 29
-#define LBVH_RIGHT_CHILD_BIT (1 << LBVH_RIGHT_CHILD_BIT_SHIFT)
+#define LBVH_RIGHT_CHILD_BIT       (1 << LBVH_RIGHT_CHILD_BIT_SHIFT)
 
 struct lbvh_node_info {
    /* Number of children that have been processed (or are invalid/leaves) in

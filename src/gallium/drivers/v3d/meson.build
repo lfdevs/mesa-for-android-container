@@ -58,7 +58,7 @@ if dep_v3dv3.found()
   v3d_args += '-DUSE_V3D_SIMULATOR'
 endif
 
-v3d_versions = ['33', '41']
+v3d_versions = ['33', '42']
 
 per_version_libs = []
 foreach ver : v3d_versions

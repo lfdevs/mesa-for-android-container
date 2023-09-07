@@ -877,6 +877,27 @@ program: ``bind_sampler_states`` may be used to set up texture
 samplers for the compute stage and ``set_sampler_views`` may
 be used to bind a number of sampler views to it.
 
+Compute kernel queries
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. _get_compute_state_info:
+
+get_compute_state_info
+%%%%%%%%%%%%%%%%%%%%%%
+
+This function allows frontends to query kernel information defined inside
+``pipe_compute_state_object_info``.
+
+.. _get_compute_state_subgroup_size:
+
+get_compute_state_subgroup_size
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+This function returns the choosen subgroup size when `launch_grid` is
+called with the given block size. This doesn't need to be implemented when
+only one size is reported through ``PIPE_COMPUTE_CAP_SUBGROUP_SIZES`` or
+``pipe_compute_state_object_info::simd_sizes``.
+
 Mipmap generation
 ^^^^^^^^^^^^^^^^^
 

@@ -1880,18 +1880,18 @@ lsc_disassemble_ex_desc(const struct intel_device_info *devinfo,
    const unsigned addr_type = lsc_msg_desc_addr_type(devinfo, imm_desc);
    switch (addr_type) {
    case LSC_ADDR_SURFTYPE_FLAT:
-      format(file, "base_offset %u ",
+      format(file, " base_offset %u ",
              lsc_flat_ex_desc_base_offset(devinfo, imm_ex_desc));
       break;
    case LSC_ADDR_SURFTYPE_BSS:
    case LSC_ADDR_SURFTYPE_SS:
-      format(file, "surface_state_index %u ",
+      format(file, " surface_state_index %u ",
              lsc_bss_ex_desc_index(devinfo, imm_ex_desc));
       break;
    case LSC_ADDR_SURFTYPE_BTI:
-      format(file, "BTI %u ",
+      format(file, " BTI %u ",
              lsc_bti_ex_desc_index(devinfo, imm_ex_desc));
-      format(file, "base_offset %u ",
+      format(file, " base_offset %u ",
              lsc_bti_ex_desc_base_offset(devinfo, imm_ex_desc));
       break;
    default:
@@ -2469,11 +2469,13 @@ brw_disassemble_inst(FILE *file, const struct brw_isa_info *isa,
          if (space)
             string(file, " ");
       }
+      if (devinfo->verx10 >= 125 && brw_inst_send_ex_bso(devinfo, inst))
+         format(file, " ex_bso");
       if (brw_sfid_is_lsc(sfid)) {
             lsc_disassemble_ex_desc(devinfo, imm_desc, imm_ex_desc, file);
       } else {
          if (has_imm_desc)
-            format(file, "mlen %u", brw_message_desc_mlen(devinfo, imm_desc));
+            format(file, " mlen %u", brw_message_desc_mlen(devinfo, imm_desc));
          if (has_imm_ex_desc) {
             format(file, " ex_mlen %u",
                    brw_message_ex_desc_ex_mlen(devinfo, imm_ex_desc));

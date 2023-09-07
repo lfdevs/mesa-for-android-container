@@ -56,6 +56,8 @@ KHR-GLES31.core.shader_storage_buffer_object.basic-syntax-cs
 # (ci-fd-fastboot-nfs)
 dEQP-GLES31.functional.synchronization.inter_call.without_memory_barrier.*
 
+dEQP-GLES31.functional.texture.gather.basic.2d_array.rgba8.filter_mode.min_nearest_mipmap_nearest_mag_linear
+
 glx@glx-swap-event_interval
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
 glx@glx_arb_sync_control@waitformsc
@@ -110,3 +112,50 @@ spec@!opengl 1.1@depthstencil-default_fb-copypixels
 spec@arb_direct_state_access@gettextureimage-formats
 spec@ext_polygon_offset_clamp@ext_polygon_offset_clamp-draw_gles2
 spec@ext_polygon_offset_clamp@ext_polygon_offset_clamp-draw_gles2@negative clamp
+
+# random unexpected pass of bunnch dEQP-GLES31.functional.texture
+# See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9333
+dEQP-GLES31.functional.texture.gather.basic.2d.rgba8i.texture_swizzle.red_green_blue_alpha
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d.rgba8i.size_npot.clamp_to_edge_repeat
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d_array.depth32f.size_pot.compare_greater.repeat_mirrored_repeat
+dEQP-GLES31.functional.texture.gather.offset.implementation_offset.2d_array.rgba8.base_level.level_1
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d_array.depth32f.size_npot.compare_less.repeat_mirrored_repeat
+dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d_array.rgba8ui.size_npot.clamp_to_edge_repeat
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d.rgba8i.size_pot.repeat_mirrored_repeat
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d_array.depth32f.size_npot.compare_less.repeat_mirrored_repeat
+dEQP-GLES31.functional.texture.gather.offset_dynamic.implementation_offset.2d_array.rgba8ui.filter_mode.min_nearest_mipmap_nearest_mag_nearest
+dEQP-GLES31.functional.texture.gather.offsets.implementation_offset.2d_array.rgba8i.texture_swizzle.one_red_green_blue
+dEQP-GLES31.functional.texture.multisample.samples_1.use_texture_depth_2d
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_array_as_index_array_as_vertex_texture_as_fragment_texture.offset_1_alignments
+dEQP-GLES31.functional.texture.texture_buffer.render.as_vertex_texture_as_fragment_texture.offset_1_alignments
+dEQP-GLES31.functional.texture.texture_buffer.render_modify.as_vertex_array_as_index_array.mapbuffer_write
+dEQP-GLES31.functional.texture.texture_buffer.render_modify.as_vertex_array_as_vertex_texture.mapbuffer_readwrite
+
+# 1/10 run flake
+dEQP-GLES31.functional.atomic_counter.layout.default_offset_set.inc_dec.8_counters_5_calls_1_thread
+
+KHR-GLES31.core.explicit_uniform_location.uniform-loc-types-samplers
+KHR-GLES31.core.internalformat.copy_tex_image.alpha
+KHR-GLES31.core.internalformat.texture2d.red_integer_int_r32i
+KHR-GLES31.core.internalformat.texture2d.rgb_integer_byte_rgb8i
+KHR-GLES31.core.internalformat.texture2d.rgb_integer_int_rgb32i
+KHR-GLES31.core.texture_buffer.texture_buffer_conv_int_to_float
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_transform_feedback
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_ssbo_writes
+KHR-GLES31.shaders.layout_location.isampler_2d
+KHR-GLES31.shaders.layout_location.sampler_2d
+
+spec@glsl-1.10@execution@built-in-functions@fs-op-assign-add-ivec4-int
+spec@glsl-1.10@execution@built-in-functions@vs-dot-vec3-vec3
+spec@glsl-1.10@execution@built-in-functions@vs-mod-float-float
+spec@glsl-1.20@execution@const-builtin@glsl-const-builtin-distance
+spec@glsl-1.20@execution@uniform-initializer@fs-int-set-by-other-stage
+spec@glsl-1.20@execution@built-in-functions@vs-op-assign-add-mat4x2-mat4x2
+spec@glsl-1.30@execution@built-in-functions@fs-op-bitxor-uint-uvec3
+spec@glsl-1.30@execution@built-in-functions@vs-op-assign-lshift-uvec2-ivec2
+spec@glsl-1.30@execution@built-in-functions@vs-op-bitand-abs-neg-ivec3-ivec3
+spec@glsl-1.30@execution@built-in-functions@vs-op-bitor-abs-neg-ivec2-int
+spec@glsl-1.30@execution@interpolation@interpolation-smooth-other-flat-distance
+spec@glsl-es-3.00@execution@built-in-functions@const-packhalf2x16
+spec@glsl-es-3.00@execution@varying-struct-copy-return-vs
+spec@mesa_shader_integer_functions@execution@built-in-functions@fs-umulextended-only-msb-nonuniform

@@ -69,7 +69,7 @@ nir_mod_analysis_test::nir_imul_vec2y(nir_builder *b, nir_ssa_def *src0, nir_ssa
    instr->src[1].src = nir_src_for_ssa(src1);
    instr->src[1].swizzle[0] = 1;
 
-   nir_ssa_dest_init(&instr->instr, &instr->dest.dest, 1, 32, NULL);
+   nir_ssa_dest_init(&instr->instr, &instr->dest.dest, 1, 32);
    instr->dest.write_mask = 1;
 
    nir_builder_instr_insert(b, &instr->instr);

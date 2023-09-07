@@ -109,7 +109,7 @@ build_view_index(struct lower_multiview_state *state)
                remap |= (uint64_t)bit << (i++ * 4);
             }
 
-            nir_ssa_def *shift = nir_imul(b, compacted, nir_imm_int(b, 4));
+            nir_ssa_def *shift = nir_imul_imm(b, compacted, 4);
 
             /* One of these days, when we have int64 everywhere, this will be
              * easier.
@@ -122,11 +122,11 @@ build_view_index(struct lower_multiview_state *state)
                   nir_ushr(b, nir_imm_int(b, remap), shift);
                nir_ssa_def *shifted_high =
                   nir_ushr(b, nir_imm_int(b, remap >> 32),
-                              nir_isub(b, shift, nir_imm_int(b, 32)));
-               shifted = nir_bcsel(b, nir_ilt(b, shift, nir_imm_int(b, 32)),
+                              nir_iadd_imm(b, shift, -32));
+               shifted = nir_bcsel(b, nir_ilt_imm(b, shift, 32),
                                       shifted_low, shifted_high);
             }
-            state->view_index = nir_iand(b, shifted, nir_imm_int(b, 0xf));
+            state->view_index = nir_iand_imm(b, shifted, 0xf);
          }
       } else {
          const struct glsl_type *type = glsl_int_type();
@@ -198,7 +198,7 @@ anv_nir_lower_multiview(nir_shader *shader, uint32_t view_mask)
       .view_mask = view_mask,
    };
 
-   nir_builder_init(&state.builder, entrypoint);
+   state.builder = nir_builder_create(entrypoint);
 
    nir_foreach_block(block, entrypoint) {
       nir_foreach_instr_safe(instr, block) {

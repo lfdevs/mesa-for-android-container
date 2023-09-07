@@ -27,6 +27,19 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+/**
+ * \brief Convert dwords to bytes.
+ *
+ * Throughout the code base we keep sizes in dwords (e.g. code_size and
+ * data_size returned by the pds api) and in some cases we need to convert those
+ * to be in bytes.
+ *
+ * This macro makes the conversion more obvious.
+ */
+/* clang-format off */
+#define PVR_DW_TO_BYTES(_value) ((_value) * 4)
+/* clang-format on */
+
 /*****************************************************************************
    Device virtual addresses
 *****************************************************************************/

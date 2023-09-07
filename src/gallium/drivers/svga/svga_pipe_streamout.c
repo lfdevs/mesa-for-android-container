@@ -422,7 +422,7 @@ svga_set_stream_output_targets(struct pipe_context *pipe,
    struct SVGA3dSoTarget soBindings[SVGA3D_DX_MAX_SOTARGETS];
    unsigned i;
    unsigned num_so_targets;
-   boolean begin_so_queries = num_targets > 0;
+   bool begin_so_queries = num_targets > 0;
 
    SVGA_DBG(DEBUG_STREAMOUT, "%s num_targets=%d\n", __func__,
             num_targets);
@@ -434,7 +434,7 @@ svga_set_stream_output_targets(struct pipe_context *pipe,
     */
    for (i = 0; i < svga->num_so_targets; i++) {
       struct svga_buffer *sbuf = svga_buffer(svga->so_targets[i]->buffer);
-      sbuf->dirty = TRUE;
+      sbuf->dirty = true;
    }
 
    /* Before the currently bound streamout targets are unbound,
@@ -470,7 +470,7 @@ svga_set_stream_output_targets(struct pipe_context *pipe,
          /* The streamout is being resumed. There is no need to restart streamout statistics
           * queries for the draw-auto fallback since those queries are still active.
           */
-         begin_so_queries = FALSE;
+         begin_so_queries = false;
       }
       else
          soBindings[i].offset = sot->base.buffer_offset + offsets[i];
@@ -593,7 +593,7 @@ svga_begin_stream_output_queries(struct svga_context *svga,
       }
       (void) ret;
    }   
-   svga->in_streamout = TRUE;
+   svga->in_streamout = true;
 
    return;
 }
@@ -618,7 +618,7 @@ svga_end_stream_output_queries(struct svga_context *svga,
       }
       (void) ret;
    }   
-   svga->in_streamout = FALSE;
+   svga->in_streamout = false;
 
    return;
 }
@@ -642,7 +642,7 @@ svga_get_primcount_from_stream_output(struct svga_context *svga,
 
    ret = svga->pipe.get_query_result(&svga->pipe,
                                      svga->so_queries[stream],
-                                     TRUE, &result);
+                                     true, &result);
    if (ret)
       primcount = result.so_statistics.num_primitives_written;
 

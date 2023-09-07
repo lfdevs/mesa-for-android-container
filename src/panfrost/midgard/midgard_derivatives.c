@@ -95,13 +95,8 @@ void
 midgard_emit_derivatives(compiler_context *ctx, nir_alu_instr *instr)
 {
    /* Create texture instructions */
-
-   unsigned nr_components = nir_dest_num_components(instr->dest.dest);
-
    midgard_instruction ins = {
       .type = TAG_TEXTURE_4,
-      .mask = mask_of(nr_components),
-      .dest = nir_dest_index(&instr->dest.dest),
       .dest_type = nir_type_float32,
       .src =
          {
@@ -127,9 +122,7 @@ midgard_emit_derivatives(compiler_context *ctx, nir_alu_instr *instr)
          },
    };
 
-   if (!instr->dest.dest.is_ssa)
-      ins.mask &= instr->dest.write_mask;
-
+   ins.dest = nir_dest_index_with_mask(&instr->dest.dest, &ins.mask);
    emit_mir_instruction(ctx, ins);
 }
 

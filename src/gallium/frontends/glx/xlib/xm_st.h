@@ -28,7 +28,7 @@
 #ifndef _XM_ST_H_
 #define _XM_ST_H_
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "frontend/api.h"
 
 #include "xm_api.h"

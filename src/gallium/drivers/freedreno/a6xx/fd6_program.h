@@ -99,15 +99,12 @@ fd6_last_shader(const struct fd6_program_state *state)
       return state->vs;
 }
 
-BEGINC;
-
 void fd6_emit_shader(struct fd_context *ctx, struct fd_ringbuffer *ring,
                      const struct ir3_shader_variant *so) assert_dt;
 
 struct fd_ringbuffer *fd6_program_interp_state(struct fd6_emit *emit) assert_dt;
 
+template <chip CHIP>
 void fd6_prog_init(struct pipe_context *pctx);
-
-ENDC;
 
 #endif /* FD6_PROGRAM_H_ */

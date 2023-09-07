@@ -68,8 +68,8 @@ emit_udiv(nir_builder *bld, nir_ssa_def *numer, nir_ssa_def *denom, bool modulo)
 static nir_ssa_def *
 emit_idiv(nir_builder *bld, nir_ssa_def *numer, nir_ssa_def *denom, nir_op op)
 {
-   nir_ssa_def *lh_sign = nir_ilt(bld, numer, nir_imm_int(bld, 0));
-   nir_ssa_def *rh_sign = nir_ilt(bld, denom, nir_imm_int(bld, 0));
+   nir_ssa_def *lh_sign = nir_ilt_imm(bld, numer, 0);
+   nir_ssa_def *rh_sign = nir_ilt_imm(bld, denom, 0);
 
    nir_ssa_def *lhs = nir_iabs(bld, numer);
    nir_ssa_def *rhs = nir_iabs(bld, denom);

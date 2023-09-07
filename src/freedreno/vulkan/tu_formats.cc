@@ -258,6 +258,17 @@ tu_physical_device_get_format_properties(
          if (physical_device->vk.supported_extensions.EXT_filter_cubic)
             optimal |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_CUBIC_BIT_EXT;
       }
+
+      /* We sample on the CPU so we can technically support anything as long
+       * as it's floating point, but this restricts it to "reasonable" formats
+       * to use, which means two channels and not something weird like
+       * luminance-alpha.
+       */
+      if (util_format_is_float(format) &&
+          desc->nr_channels == 2 && desc->swizzle[0] == PIPE_SWIZZLE_X &&
+          desc->swizzle[1] == PIPE_SWIZZLE_Y) {
+         optimal |= VK_FORMAT_FEATURE_FRAGMENT_DENSITY_MAP_BIT_EXT;
+      }
    }
 
    if (supported_color) {
@@ -453,6 +464,12 @@ tu_get_image_format_properties(
    case VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT: {
       const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *drm_info =
          vk_find_struct_const(info->pNext, PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT);
+
+      /* Subsampled format isn't stable yet, so don't allow
+       * importing/exporting with modifiers yet.
+       */
+      if (info->flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT)
+         return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
       switch (drm_info->drmFormatModifier) {
       case DRM_FORMAT_MOD_QCOM_COMPRESSED:

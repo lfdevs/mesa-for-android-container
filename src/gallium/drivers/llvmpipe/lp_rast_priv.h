@@ -112,8 +112,8 @@ struct lp_rasterizer_task
  */
 struct lp_rasterizer
 {
-   boolean exit_flag;
-   boolean no_rast;  /**< For debugging/profiling */
+   bool exit_flag;
+   bool no_rast;  /**< For debugging/profiling */
 
    /** The incoming queue of scenes ready to rasterize */
    struct lp_scene_queue *full_scenes;
@@ -271,6 +271,7 @@ lp_rast_shade_quads_all(struct lp_rasterizer_task *task,
       /* run shader on 4x4 block */
       BEGIN_JIT_CALL(state, task);
       variant->jit_function[RAST_WHOLE](&state->jit_context,
+                                        &state->jit_resources,
                                         x, y,
                                         inputs->frontfacing,
                                         GET_A0(inputs),

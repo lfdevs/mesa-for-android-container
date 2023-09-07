@@ -70,35 +70,35 @@
 
 /** angle preserving matrix flags mask */
 #define MAT_FLAGS_ANGLE_PRESERVING (MAT_FLAG_ROTATION | \
-				    MAT_FLAG_TRANSLATION | \
-				    MAT_FLAG_UNIFORM_SCALE)
+                                    MAT_FLAG_TRANSLATION | \
+                                    MAT_FLAG_UNIFORM_SCALE)
 
 /** geometry related matrix flags mask */
 #define MAT_FLAGS_GEOMETRY (MAT_FLAG_GENERAL | \
-			    MAT_FLAG_ROTATION | \
-			    MAT_FLAG_TRANSLATION | \
-			    MAT_FLAG_UNIFORM_SCALE | \
-			    MAT_FLAG_GENERAL_SCALE | \
-			    MAT_FLAG_GENERAL_3D | \
-			    MAT_FLAG_PERSPECTIVE | \
-	                    MAT_FLAG_SINGULAR)
+                            MAT_FLAG_ROTATION | \
+                            MAT_FLAG_TRANSLATION | \
+                            MAT_FLAG_UNIFORM_SCALE | \
+                            MAT_FLAG_GENERAL_SCALE | \
+                            MAT_FLAG_GENERAL_3D | \
+                            MAT_FLAG_PERSPECTIVE | \
+                            MAT_FLAG_SINGULAR)
 
 /** length preserving matrix flags mask */
 #define MAT_FLAGS_LENGTH_PRESERVING (MAT_FLAG_ROTATION | \
-				     MAT_FLAG_TRANSLATION)
+                                     MAT_FLAG_TRANSLATION)
 
 
 /** 3D (non-perspective) matrix flags mask */
 #define MAT_FLAGS_3D (MAT_FLAG_ROTATION | \
-		      MAT_FLAG_TRANSLATION | \
-		      MAT_FLAG_UNIFORM_SCALE | \
-		      MAT_FLAG_GENERAL_SCALE | \
-		      MAT_FLAG_GENERAL_3D)
+                      MAT_FLAG_TRANSLATION | \
+                      MAT_FLAG_UNIFORM_SCALE | \
+                      MAT_FLAG_GENERAL_SCALE | \
+                      MAT_FLAG_GENERAL_3D)
 
 /** dirty matrix flags mask */
 #define MAT_DIRTY          (MAT_DIRTY_TYPE | \
-			    MAT_DIRTY_FLAGS | \
-			    MAT_DIRTY_INVERSE)
+                            MAT_DIRTY_FLAGS | \
+                            MAT_DIRTY_INVERSE)
 
 /*@}*/
 
@@ -223,9 +223,9 @@ void
 _math_matrix_mul_matrix( GLmatrix *dest, const GLmatrix *a, const GLmatrix *b )
 {
    dest->flags = (a->flags |
-		  b->flags |
-		  MAT_DIRTY_TYPE |
-		  MAT_DIRTY_INVERSE);
+                  b->flags |
+                  MAT_DIRTY_TYPE |
+                  MAT_DIRTY_INVERSE);
 
    if (TEST_MAT_FLAGS(dest, MAT_FLAGS_3D))
       matmul34( dest->m, a->m, b->m );
@@ -246,8 +246,8 @@ void
 _math_matrix_mul_floats( GLmatrix *dest, const GLfloat *m )
 {
    dest->flags |= (MAT_FLAG_GENERAL |
-		   MAT_DIRTY_TYPE |
-		   MAT_DIRTY_INVERSE |
+                   MAT_DIRTY_TYPE |
+                   MAT_DIRTY_INVERSE |
                    MAT_DIRTY_FLAGS);
 
    matmul4( dest->m, dest->m, m );
@@ -355,14 +355,14 @@ static GLboolean invert_matrix_3d_general( GLmatrix *mat )
 
    /* Do the translation part */
    MAT(out,0,3) = - (MAT(in,0,3) * MAT(out,0,0) +
-		     MAT(in,1,3) * MAT(out,0,1) +
-		     MAT(in,2,3) * MAT(out,0,2) );
+                     MAT(in,1,3) * MAT(out,0,1) +
+                     MAT(in,2,3) * MAT(out,0,2) );
    MAT(out,1,3) = - (MAT(in,0,3) * MAT(out,1,0) +
-		     MAT(in,1,3) * MAT(out,1,1) +
-		     MAT(in,2,3) * MAT(out,1,2) );
+                     MAT(in,1,3) * MAT(out,1,1) +
+                     MAT(in,2,3) * MAT(out,1,2) );
    MAT(out,2,3) = - (MAT(in,0,3) * MAT(out,2,0) +
-		     MAT(in,1,3) * MAT(out,2,1) +
-		     MAT(in,2,3) * MAT(out,2,2) );
+                     MAT(in,1,3) * MAT(out,2,1) +
+                     MAT(in,2,3) * MAT(out,2,2) );
 
    return GL_TRUE;
 }
@@ -434,14 +434,14 @@ static GLboolean invert_matrix_3d( GLmatrix *mat )
    if (mat->flags & MAT_FLAG_TRANSLATION) {
       /* Do the translation part */
       MAT(out,0,3) = - (MAT(in,0,3) * MAT(out,0,0) +
-			MAT(in,1,3) * MAT(out,0,1) +
-			MAT(in,2,3) * MAT(out,0,2) );
+                        MAT(in,1,3) * MAT(out,0,1) +
+                        MAT(in,2,3) * MAT(out,0,2) );
       MAT(out,1,3) = - (MAT(in,0,3) * MAT(out,1,0) +
-			MAT(in,1,3) * MAT(out,1,1) +
-			MAT(in,2,3) * MAT(out,1,2) );
+                        MAT(in,1,3) * MAT(out,1,1) +
+                        MAT(in,2,3) * MAT(out,1,2) );
       MAT(out,2,3) = - (MAT(in,0,3) * MAT(out,2,0) +
-			MAT(in,1,3) * MAT(out,2,1) +
-			MAT(in,2,3) * MAT(out,2,2) );
+                        MAT(in,1,3) * MAT(out,2,1) +
+                        MAT(in,2,3) * MAT(out,2,2) );
    }
    else {
       MAT(out,0,3) = MAT(out,1,3) = MAT(out,2,3) = 0.0;
@@ -542,7 +542,7 @@ static inv_mat_func inv_mat_tab[7] = {
    invert_matrix_identity,
    invert_matrix_3d_no_rot,
    invert_matrix_general,
-   invert_matrix_3d,		/* lazy! */
+   invert_matrix_3d,        /* lazy! */
    invert_matrix_2d_no_rot,
    invert_matrix_3d
 };
@@ -588,7 +588,7 @@ static GLboolean matrix_invert( GLmatrix *mat )
  */
 void
 _math_matrix_rotate( GLmatrix *mat,
-		     GLfloat angle, GLfloat x, GLfloat y, GLfloat z )
+                     GLfloat angle, GLfloat x, GLfloat y, GLfloat z )
 {
    GLfloat xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c, s, c;
    GLfloat m[16];
@@ -772,9 +772,9 @@ _math_matrix_rotate( GLmatrix *mat,
  */
 void
 _math_matrix_frustum( GLmatrix *mat,
-		      GLfloat left, GLfloat right,
-		      GLfloat bottom, GLfloat top,
-		      GLfloat nearval, GLfloat farval )
+                      GLfloat left, GLfloat right,
+                      GLfloat bottom, GLfloat top,
+                      GLfloat nearval, GLfloat farval )
 {
    GLfloat x, y, a, b, c, d;
    GLfloat m[16];
@@ -855,9 +855,9 @@ _math_float_ortho(float *m,
  */
 void
 _math_matrix_ortho( GLmatrix *mat,
-		    GLfloat left, GLfloat right,
-		    GLfloat bottom, GLfloat top,
-		    GLfloat nearval, GLfloat farval )
+                    GLfloat left, GLfloat right,
+                    GLfloat bottom, GLfloat top,
+                    GLfloat nearval, GLfloat farval )
 {
    GLfloat m[16];
 
@@ -893,7 +893,7 @@ _math_matrix_scale( GLmatrix *mat, GLfloat x, GLfloat y, GLfloat z )
       mat->flags |= MAT_FLAG_GENERAL_SCALE;
 
    mat->flags |= (MAT_DIRTY_TYPE |
-		  MAT_DIRTY_INVERSE);
+                  MAT_DIRTY_INVERSE);
 }
 
 /**
@@ -918,8 +918,8 @@ _math_matrix_translate( GLmatrix *mat, GLfloat x, GLfloat y, GLfloat z )
    m[15] = m[3] * x + m[7] * y + m[11] * z + m[15];
 
    mat->flags |= (MAT_FLAG_TRANSLATION |
-		  MAT_DIRTY_TYPE |
-		  MAT_DIRTY_INVERSE);
+                  MAT_DIRTY_TYPE |
+                  MAT_DIRTY_INVERSE);
 }
 
 
@@ -931,12 +931,12 @@ void
 _math_matrix_viewport(GLmatrix *m, const float scale[3],
                       const float translate[3], double depthMax)
 {
-   m->m[MAT_SX] = scale[0];
-   m->m[MAT_TX] = translate[0];
-   m->m[MAT_SY] = scale[1];
-   m->m[MAT_TY] = translate[1];
-   m->m[MAT_SZ] = depthMax*scale[2];
-   m->m[MAT_TZ] = depthMax*translate[2];
+   m->m[0] = scale[0];
+   m->m[5] = scale[1];
+   m->m[10] = depthMax*scale[2];
+   m->m[12] = translate[0];
+   m->m[13] = translate[1];
+   m->m[14] = depthMax*translate[2];
    m->flags = MAT_FLAG_GENERAL_SCALE | MAT_FLAG_TRANSLATION;
    m->type = MATRIX_3D_NO_ROT;
 }
@@ -953,16 +953,13 @@ _math_matrix_viewport(GLmatrix *m, const float scale[3],
 void
 _math_matrix_set_identity( GLmatrix *mat )
 {
-   STATIC_ASSERT(MATRIX_M == offsetof(GLmatrix, m));
-   STATIC_ASSERT(MATRIX_INV == offsetof(GLmatrix, inv));
-
    memcpy( mat->m, Identity, sizeof(Identity) );
    memcpy( mat->inv, Identity, sizeof(Identity) );
 
    mat->type = MATRIX_IDENTITY;
    mat->flags &= ~(MAT_DIRTY_FLAGS|
-		   MAT_DIRTY_TYPE|
-		   MAT_DIRTY_INVERSE);
+                   MAT_DIRTY_TYPE|
+                   MAT_DIRTY_INVERSE);
 }
 
 /*@}*/
@@ -979,36 +976,36 @@ _math_matrix_set_identity( GLmatrix *mat )
 #define MASK_NO_2D_SCALE ( ONE(0)  | ONE(5))
 
 #define MASK_IDENTITY    ( ONE(0)  | ZERO(4)  | ZERO(8)  | ZERO(12) |\
-			  ZERO(1)  |  ONE(5)  | ZERO(9)  | ZERO(13) |\
-			  ZERO(2)  | ZERO(6)  |  ONE(10) | ZERO(14) |\
-			  ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
+                          ZERO(1)  |  ONE(5)  | ZERO(9)  | ZERO(13) |\
+                          ZERO(2)  | ZERO(6)  |  ONE(10) | ZERO(14) |\
+                          ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
 
 #define MASK_2D_NO_ROT   (           ZERO(4)  | ZERO(8)  |           \
-			  ZERO(1)  |            ZERO(9)  |           \
-			  ZERO(2)  | ZERO(6)  |  ONE(10) | ZERO(14) |\
-			  ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
+                          ZERO(1)  |            ZERO(9)  |           \
+                          ZERO(2)  | ZERO(6)  |  ONE(10) | ZERO(14) |\
+                          ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
 
 #define MASK_2D          (                      ZERO(8)  |           \
-			                        ZERO(9)  |           \
-			  ZERO(2)  | ZERO(6)  |  ONE(10) | ZERO(14) |\
-			  ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
+                                                ZERO(9)  |           \
+                          ZERO(2)  | ZERO(6)  |  ONE(10) | ZERO(14) |\
+                          ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
 
 
 #define MASK_3D_NO_ROT   (           ZERO(4)  | ZERO(8)  |           \
-			  ZERO(1)  |            ZERO(9)  |           \
-			  ZERO(2)  | ZERO(6)  |                      \
-			  ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
+                          ZERO(1)  |            ZERO(9)  |           \
+                          ZERO(2)  | ZERO(6)  |                      \
+                          ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
 
 #define MASK_3D          (                                           \
-			                                             \
-			                                             \
-			  ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
+                                                                     \
+                                                                     \
+                          ZERO(3)  | ZERO(7)  | ZERO(11) |  ONE(15) )
 
 
 #define MASK_PERSPECTIVE (           ZERO(4)  |            ZERO(12) |\
-			  ZERO(1)  |                       ZERO(13) |\
-			  ZERO(2)  | ZERO(6)  |                      \
-			  ZERO(3)  | ZERO(7)  |            ZERO(15) )
+                          ZERO(1)  |                       ZERO(13) |\
+                          ZERO(2)  | ZERO(6)  |                      \
+                          ZERO(3)  | ZERO(7)  |            ZERO(15) )
 
 #define SQ(x) ((x)*(x))
 
@@ -1050,7 +1047,7 @@ static void analyse_from_scratch( GLmatrix *mat )
       mat->type = MATRIX_2D_NO_ROT;
 
       if ((mask & MASK_NO_2D_SCALE) != MASK_NO_2D_SCALE)
-	 mat->flags |= MAT_FLAG_GENERAL_SCALE;
+         mat->flags |= MAT_FLAG_GENERAL_SCALE;
    }
    else if ((mask & MASK_2D) == (GLuint) MASK_2D) {
       GLfloat mm = DOT2(m, m);
@@ -1061,14 +1058,14 @@ static void analyse_from_scratch( GLmatrix *mat )
 
       /* Check for scale */
       if (SQ(mm-1) > SQ(1e-6F) ||
-	  SQ(m4m4-1) > SQ(1e-6F))
-	 mat->flags |= MAT_FLAG_GENERAL_SCALE;
+          SQ(m4m4-1) > SQ(1e-6F))
+         mat->flags |= MAT_FLAG_GENERAL_SCALE;
 
       /* Check for rotation */
       if (SQ(mm4) > SQ(1e-6F))
-	 mat->flags |= MAT_FLAG_GENERAL_3D;
+         mat->flags |= MAT_FLAG_GENERAL_3D;
       else
-	 mat->flags |= MAT_FLAG_ROTATION;
+         mat->flags |= MAT_FLAG_ROTATION;
 
    }
    else if ((mask & MASK_3D_NO_ROT) == (GLuint) MASK_3D_NO_ROT) {
@@ -1076,13 +1073,13 @@ static void analyse_from_scratch( GLmatrix *mat )
 
       /* Check for scale */
       if (SQ(m[0]-m[5]) < SQ(1e-6F) &&
-	  SQ(m[0]-m[10]) < SQ(1e-6F)) {
-	 if (SQ(m[0]-1.0F) > SQ(1e-6F)) {
-	    mat->flags |= MAT_FLAG_UNIFORM_SCALE;
+          SQ(m[0]-m[10]) < SQ(1e-6F)) {
+         if (SQ(m[0]-1.0F) > SQ(1e-6F)) {
+            mat->flags |= MAT_FLAG_UNIFORM_SCALE;
          }
       }
       else {
-	 mat->flags |= MAT_FLAG_GENERAL_SCALE;
+         mat->flags |= MAT_FLAG_GENERAL_SCALE;
       }
    }
    else if ((mask & MASK_3D) == (GLuint) MASK_3D) {
@@ -1096,25 +1093,25 @@ static void analyse_from_scratch( GLmatrix *mat )
 
       /* Check for scale */
       if (SQ(c1-c2) < SQ(1e-6F) && SQ(c1-c3) < SQ(1e-6F)) {
-	 if (SQ(c1-1.0F) > SQ(1e-6F))
-	    mat->flags |= MAT_FLAG_UNIFORM_SCALE;
-	 /* else no scale at all */
+         if (SQ(c1-1.0F) > SQ(1e-6F))
+            mat->flags |= MAT_FLAG_UNIFORM_SCALE;
+         /* else no scale at all */
       }
       else {
-	 mat->flags |= MAT_FLAG_GENERAL_SCALE;
+         mat->flags |= MAT_FLAG_GENERAL_SCALE;
       }
 
       /* Check for rotation */
       if (SQ(d1) < SQ(1e-6F)) {
-	 CROSS3( cp, m, m+4 );
-	 SUB_3V( cp, cp, (m+8) );
-	 if (LEN_SQUARED_3FV(cp) < SQ(1e-6F))
-	    mat->flags |= MAT_FLAG_ROTATION;
-	 else
-	    mat->flags |= MAT_FLAG_GENERAL_3D;
+         CROSS3( cp, m, m+4 );
+         SUB_3V( cp, cp, (m+8) );
+         if (LEN_SQUARED_3FV(cp) < SQ(1e-6F))
+            mat->flags |= MAT_FLAG_ROTATION;
+         else
+            mat->flags |= MAT_FLAG_GENERAL_3D;
       }
       else {
-	 mat->flags |= MAT_FLAG_GENERAL_3D; /* shear, etc */
+         mat->flags |= MAT_FLAG_GENERAL_3D; /* shear, etc */
       }
    }
    else if ((mask & MASK_PERSPECTIVE) == MASK_PERSPECTIVE && m[11]==-1.0F) {
@@ -1140,23 +1137,23 @@ static void analyse_from_flags( GLmatrix *mat )
       mat->type = MATRIX_IDENTITY;
    }
    else if (TEST_MAT_FLAGS(mat, (MAT_FLAG_TRANSLATION |
-				 MAT_FLAG_UNIFORM_SCALE |
-				 MAT_FLAG_GENERAL_SCALE))) {
+                                 MAT_FLAG_UNIFORM_SCALE |
+                                 MAT_FLAG_GENERAL_SCALE))) {
       if ( m[10]==1.0F && m[14]==0.0F ) {
-	 mat->type = MATRIX_2D_NO_ROT;
+         mat->type = MATRIX_2D_NO_ROT;
       }
       else {
-	 mat->type = MATRIX_3D_NO_ROT;
+         mat->type = MATRIX_3D_NO_ROT;
       }
    }
    else if (TEST_MAT_FLAGS(mat, MAT_FLAGS_3D)) {
       if (                                 m[ 8]==0.0F
             &&                             m[ 9]==0.0F
             && m[2]==0.0F && m[6]==0.0F && m[10]==1.0F && m[14]==0.0F) {
-	 mat->type = MATRIX_2D;
+         mat->type = MATRIX_2D;
       }
       else {
-	 mat->type = MATRIX_3D;
+         mat->type = MATRIX_3D;
       }
    }
    else if (                 m[4]==0.0F                 && m[12]==0.0F
@@ -1185,9 +1182,9 @@ _math_matrix_analyse( GLmatrix *mat )
 {
    if (mat->flags & MAT_DIRTY_TYPE) {
       if (mat->flags & MAT_DIRTY_FLAGS)
-	 analyse_from_scratch( mat );
+         analyse_from_scratch( mat );
       else
-	 analyse_from_flags( mat );
+         analyse_from_flags( mat );
    }
 
    if (mat->flags & MAT_DIRTY_INVERSE) {

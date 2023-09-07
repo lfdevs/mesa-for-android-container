@@ -75,10 +75,10 @@ struct r600_shader {
 	struct r600_shader_io	output[PIPE_MAX_SHADER_OUTPUTS];
 	struct r600_shader_atomic atomics[8];
 	unsigned                nhwatomic_ranges;
-	boolean			uses_kill;
-	boolean			fs_write_all;
-	boolean			two_side;
-	boolean			needs_scratch_space;
+	bool			uses_kill;
+	bool			fs_write_all;
+	bool			two_side;
+	bool			needs_scratch_space;
 	/* Real number of ps color exports compiled in the bytecode */
 	unsigned		nr_ps_color_exports;
 	unsigned                ps_color_export_mask;
@@ -87,17 +87,17 @@ struct r600_shader {
 	unsigned		cc_dist_mask;
 	unsigned		clip_dist_write;
 	unsigned                cull_dist_write;
-	boolean			vs_position_window_space;
+	bool			vs_position_window_space;
 	/* flag is set if the shader writes VS_OUT_MISC_VEC (e.g. for PSIZE) */
-	boolean			vs_out_misc_write;
-	boolean			vs_out_point_size;
-	boolean			vs_out_layer;
-	boolean			vs_out_viewport;
-	boolean			vs_out_edgeflag;
-	boolean			has_txq_cube_array_z_comp;
-	boolean			uses_tex_buffers;
-	boolean                 gs_prim_id_input;
-	boolean                 gs_tri_strip_adj_fix;
+	bool			vs_out_misc_write;
+	bool			vs_out_point_size;
+	bool			vs_out_layer;
+	bool			vs_out_viewport;
+	bool			vs_out_edgeflag;
+	bool			has_txq_cube_array_z_comp;
+	bool			uses_tex_buffers;
+	bool                 gs_prim_id_input;
+	bool                 gs_tri_strip_adj_fix;
 	uint8_t			ps_conservative_z;
 
 	/* Size in bytes of a data item in the ring(s) (single vertex data).
@@ -117,14 +117,15 @@ struct r600_shader {
 
 	struct r600_shader_array * arrays;
 
-	boolean			uses_doubles;
-	boolean                 uses_atomics;
-	boolean			uses_images;
-	boolean			uses_helper_invocation;
-	boolean			uses_interpolate_at_sample;
+	bool			uses_doubles;
+	bool                 uses_atomics;
+	bool			uses_images;
+	bool			uses_helper_invocation;
+	bool			uses_interpolate_at_sample;
 	uint8_t                 atomic_base;
 	uint8_t			rat_base;
 	uint8_t                 image_size_const_offset;
+        bool			disable_sb;
 };
 
 union r600_shader_key {

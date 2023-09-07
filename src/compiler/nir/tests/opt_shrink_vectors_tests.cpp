@@ -300,8 +300,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_simple)
    nir_loop *loop = nir_push_loop(&bld);
 
    nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     v->num_components, v->bit_size,
-                     NULL);
+                     v->num_components, v->bit_size);
 
    nir_phi_instr_add_src(phi, v->parent_instr->block,
                          nir_src_for_ssa(v));
@@ -410,8 +409,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_swizzle)
    nir_loop *loop = nir_push_loop(&bld);
 
    nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     v->num_components, v->bit_size,
-                     NULL);
+                     v->num_components, v->bit_size);
 
    nir_phi_instr_add_src(phi, v->parent_instr->block,
                          nir_src_for_ssa(v));
@@ -521,8 +519,7 @@ TEST_F(nir_opt_shrink_vectors_test, opt_shrink_phis_loop_phi_out)
    nir_loop *loop = nir_push_loop(&bld);
 
    nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     v->num_components, v->bit_size,
-                     NULL);
+                     v->num_components, v->bit_size);
 
    nir_phi_instr_add_src(phi, v->parent_instr->block,
                          nir_src_for_ssa(v));

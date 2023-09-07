@@ -31,7 +31,8 @@ tu_cs_init(struct tu_cs *cs,
  */
 void
 tu_cs_init_external(struct tu_cs *cs, struct tu_device *device,
-                    uint32_t *start, uint32_t *end)
+                    uint32_t *start, uint32_t *end, uint64_t iova,
+                    bool writeable)
 {
    memset(cs, 0, sizeof(*cs));
 
@@ -39,6 +40,8 @@ tu_cs_init_external(struct tu_cs *cs, struct tu_device *device,
    cs->mode = TU_CS_MODE_EXTERNAL;
    cs->start = cs->reserved_end = cs->cur = start;
    cs->end = end;
+   cs->external_iova = iova;
+   cs->writeable = writeable;
 }
 
 /**
@@ -66,15 +69,20 @@ tu_cs_init_suballoc(struct tu_cs *cs, struct tu_device *device,
 void
 tu_cs_finish(struct tu_cs *cs)
 {
-   for (uint32_t i = 0; i < cs->bo_count; ++i) {
-      tu_bo_finish(cs->device, cs->bos[i]);
+   for (uint32_t i = 0; i < cs->read_only.bo_count; ++i) {
+      tu_bo_finish(cs->device, cs->read_only.bos[i]);
+   }
+
+   for (uint32_t i = 0; i < cs->read_write.bo_count; ++i) {
+      tu_bo_finish(cs->device, cs->read_write.bos[i]);
    }
 
    if (cs->refcount_bo)
       tu_bo_finish(cs->device, cs->refcount_bo);
 
    free(cs->entries);
-   free(cs->bos);
+   free(cs->read_only.bos);
+   free(cs->read_write.bos);
 }
 
 static struct tu_bo *
@@ -83,8 +91,9 @@ tu_cs_current_bo(const struct tu_cs *cs)
    if (cs->refcount_bo) {
       return cs->refcount_bo;
    } else {
-      assert(cs->bo_count);
-      return cs->bos[cs->bo_count - 1];
+      const struct tu_bo_array *bos = cs->writeable ? &cs->read_write : &cs->read_only;
+      assert(bos->bo_count);
+      return bos->bos[bos->bo_count - 1];
    }
 }
 
@@ -96,6 +105,18 @@ static uint32_t
 tu_cs_get_offset(const struct tu_cs *cs)
 {
    return cs->start - (uint32_t *) tu_cs_current_bo(cs)->map;
+}
+
+/* Get the iova for the next dword to be emitted. Useful after
+ * tu_cs_reserve_space() to create a patch point that can be overwritten on
+ * the GPU.
+ */
+uint64_t
+tu_cs_get_cur_iova(const struct tu_cs *cs)
+{
+   if (cs->mode == TU_CS_MODE_EXTERNAL)
+      return cs->external_iova + ((char *) cs->cur - (char *) cs->start);
+   return tu_cs_current_bo(cs)->iova + ((char *) cs->cur - (char *) tu_cs_current_bo(cs)->map);
 }
 
 /*
@@ -113,23 +134,26 @@ tu_cs_add_bo(struct tu_cs *cs, uint32_t size)
    /* no dangling command packet */
    assert(tu_cs_is_empty(cs));
 
+   struct tu_bo_array *bos = cs->writeable ? &cs->read_write : &cs->read_only;
+
    /* grow cs->bos if needed */
-   if (cs->bo_count == cs->bo_capacity) {
-      uint32_t new_capacity = MAX2(4, 2 * cs->bo_capacity);
+   if (bos->bo_count == bos->bo_capacity) {
+      uint32_t new_capacity = MAX2(4, 2 * bos->bo_capacity);
       struct tu_bo **new_bos = (struct tu_bo **)
-         realloc(cs->bos, new_capacity * sizeof(struct tu_bo *));
+         realloc(bos->bos, new_capacity * sizeof(struct tu_bo *));
       if (!new_bos)
          return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-      cs->bo_capacity = new_capacity;
-      cs->bos = new_bos;
+      bos->bo_capacity = new_capacity;
+      bos->bos = new_bos;
    }
 
    struct tu_bo *new_bo;
 
    VkResult result =
       tu_bo_init_new(cs->device, &new_bo, size * sizeof(uint32_t),
-                     (enum tu_bo_alloc_flags)(TU_BO_ALLOC_GPU_READ_ONLY |
+                     (enum tu_bo_alloc_flags)(COND(!cs->writeable,
+                                                   TU_BO_ALLOC_GPU_READ_ONLY) |
                                               TU_BO_ALLOC_ALLOW_DUMP),
                      cs->name);
    if (result != VK_SUCCESS) {
@@ -142,7 +166,7 @@ tu_cs_add_bo(struct tu_cs *cs, uint32_t size)
       return result;
    }
 
-   cs->bos[cs->bo_count++] = new_bo;
+   bos->bos[bos->bo_count++] = new_bo;
 
    cs->start = cs->cur = cs->reserved_end = (uint32_t *) new_bo->map;
    cs->end = cs->start + new_bo->size / sizeof(uint32_t);
@@ -174,6 +198,7 @@ tu_cs_reserve_entry(struct tu_cs *cs)
    return VK_SUCCESS;
 }
 
+
 /**
  * Add an IB entry for the command packets emitted since the last call to this
  * function.
@@ -191,7 +216,7 @@ tu_cs_add_entry(struct tu_cs *cs)
     * because we disallow empty entry, tu_cs_add_bo and tu_cs_reserve_entry
     * must both have been called
     */
-   assert(cs->bo_count);
+   assert(cs->writeable ? cs->read_write.bo_count : cs->read_only.bo_count);
    assert(cs->entry_count < cs->entry_capacity);
 
    /* add an entry for [cs->start, cs->cur] */
@@ -252,6 +277,30 @@ tu_cs_end(struct tu_cs *cs)
       tu_cs_add_entry(cs);
 }
 
+void
+tu_cs_set_writeable(struct tu_cs *cs, bool writeable)
+{
+   assert(cs->mode == TU_CS_MODE_GROW || cs->mode == TU_CS_MODE_SUB_STREAM);
+
+   if (cs->writeable != writeable) {
+      if (cs->mode == TU_CS_MODE_GROW && !tu_cs_is_empty(cs))
+         tu_cs_add_entry(cs);
+      struct tu_bo_array *old_bos = cs->writeable ? &cs->read_write : &cs->read_only;
+      struct tu_bo_array *new_bos = writeable ? &cs->read_write : &cs->read_only;
+
+      old_bos->start = cs->start;
+      cs->start = cs->cur = cs->reserved_end = new_bos->start;
+      if (new_bos->bo_count) {
+         struct tu_bo *bo = new_bos->bos[new_bos->bo_count - 1];
+         cs->end = (uint32_t *)bo->map + bo->size / sizeof(uint32_t);
+      } else {
+         cs->end = NULL;
+      }
+
+      cs->writeable = writeable;
+   }
+}
+
 /**
  * Begin command packet emission to a sub-stream.  \a cs must be in
  * TU_CS_MODE_SUB_STREAM mode.
@@ -270,7 +319,8 @@ tu_cs_begin_sub_stream(struct tu_cs *cs, uint32_t size, struct tu_cs *sub_cs)
    if (result != VK_SUCCESS)
       return result;
 
-   tu_cs_init_external(sub_cs, cs->device, cs->cur, cs->reserved_end);
+   tu_cs_init_external(sub_cs, cs->device, cs->cur, cs->reserved_end,
+                       tu_cs_get_cur_iova(cs), cs->writeable);
    tu_cs_begin(sub_cs);
    result = tu_cs_reserve_space(sub_cs, size);
    assert(result == VK_SUCCESS);
@@ -312,6 +362,7 @@ tu_cs_alloc(struct tu_cs *cs,
 
    memory->map = (uint32_t *) bo->map + offset;
    memory->iova = bo->iova + offset * sizeof(uint32_t);
+   memory->writeable = cs->writeable;
 
    cs->start = cs->cur = (uint32_t*) bo->map + offset + count * size;
 
@@ -394,7 +445,7 @@ tu_cs_reserve_space(struct tu_cs *cs, uint32_t reserved_size)
          cs->cond_dwords[i] = cs->cur;
 
          /* Emit dummy DWORD field here */
-         tu_cs_emit(cs, CP_COND_REG_EXEC_1_DWORDS(0));
+         tu_cs_emit(cs, RENDER_MODE_CP_COND_REG_EXEC_1_DWORDS(0));
       }
 
       /* double the size for the next bo, also there is an upper
@@ -424,21 +475,33 @@ void
 tu_cs_reset(struct tu_cs *cs)
 {
    if (cs->mode == TU_CS_MODE_EXTERNAL) {
-      assert(!cs->bo_count && !cs->refcount_bo && !cs->entry_count);
+      assert(!cs->read_only.bo_count && !cs->read_write.bo_count &&
+             !cs->refcount_bo && !cs->entry_count);
       cs->reserved_end = cs->cur = cs->start;
       return;
    }
 
-   for (uint32_t i = 0; i + 1 < cs->bo_count; ++i) {
-      tu_bo_finish(cs->device, cs->bos[i]);
+   for (uint32_t i = 0; i + 1 < cs->read_only.bo_count; ++i) {
+      tu_bo_finish(cs->device, cs->read_only.bos[i]);
    }
 
-   if (cs->bo_count) {
-      cs->bos[0] = cs->bos[cs->bo_count - 1];
-      cs->bo_count = 1;
+   for (uint32_t i = 0; i + 1 < cs->read_write.bo_count; ++i) {
+      tu_bo_finish(cs->device, cs->read_write.bos[i]);
+   }
 
-      cs->start = cs->cur = cs->reserved_end = (uint32_t *) cs->bos[0]->map;
-      cs->end = cs->start + cs->bos[0]->size / sizeof(uint32_t);
+   cs->writeable = false;
+
+   if (cs->read_only.bo_count) {
+      cs->read_only.bos[0] = cs->read_only.bos[cs->read_only.bo_count - 1];
+      cs->read_only.bo_count = 1;
+
+      cs->start = cs->cur = cs->reserved_end = (uint32_t *) cs->read_only.bos[0]->map;
+      cs->end = cs->start + cs->read_only.bos[0]->size / sizeof(uint32_t);
+   }
+
+   if (cs->read_write.bo_count) {
+      cs->read_write.bos[0] = cs->read_write.bos[cs->read_write.bo_count - 1];
+      cs->read_write.bo_count = 1;
    }
 
    cs->entry_count = 0;

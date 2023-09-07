@@ -232,7 +232,8 @@ apply_nuw_to_offsets(isel_context* ctx, nir_function_impl* impl)
                apply_nuw_to_ssa(ctx, intrin->src[2].ssa);
             break;
          case nir_intrinsic_load_scratch: apply_nuw_to_ssa(ctx, intrin->src[0].ssa); break;
-         case nir_intrinsic_store_scratch: apply_nuw_to_ssa(ctx, intrin->src[1].ssa); break;
+         case nir_intrinsic_store_scratch:
+         case nir_intrinsic_load_smem_amd: apply_nuw_to_ssa(ctx, intrin->src[1].ssa); break;
          default: break;
          }
       }
@@ -307,7 +308,8 @@ init_context(isel_context* ctx, nir_shader* shader)
    ctx->ub_config.max_workgroup_size[2] = 2048;
 
    nir_divergence_analysis(shader);
-   nir_opt_uniform_atomics(shader);
+   if (nir_opt_uniform_atomics(shader) && nir_lower_int64(shader))
+      nir_divergence_analysis(shader);
 
    apply_nuw_to_offsets(ctx, impl);
 
@@ -394,8 +396,7 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_ldexp:
                case nir_op_frexp_sig:
                case nir_op_frexp_exp:
-               case nir_op_cube_face_index_amd:
-               case nir_op_cube_face_coord_amd:
+               case nir_op_cube_amd:
                case nir_op_sad_u8x4:
                case nir_op_udot_4x8_uadd:
                case nir_op_sdot_4x8_iadd:
@@ -411,12 +412,9 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_op_f2u16:
                case nir_op_f2i32:
                case nir_op_f2u32:
-               case nir_op_f2i64:
-               case nir_op_f2u64:
                case nir_op_b2i8:
                case nir_op_b2i16:
                case nir_op_b2i32:
-               case nir_op_b2i64:
                case nir_op_b2b32:
                case nir_op_b2f16:
                case nir_op_b2f32:
@@ -463,6 +461,13 @@ init_context(isel_context* ctx, nir_shader* shader)
                nir_intrinsic_instr* intrinsic = nir_instr_as_intrinsic(instr);
                if (!nir_intrinsic_infos[intrinsic->intrinsic].has_dest)
                   break;
+               if (intrinsic->intrinsic == nir_intrinsic_strict_wqm_coord_amd) {
+                  regclasses[intrinsic->dest.ssa.index] =
+                     RegClass::get(RegType::vgpr, intrinsic->dest.ssa.num_components * 4 +
+                                                     nir_intrinsic_base(intrinsic))
+                        .as_linear();
+                  break;
+               }
                RegType type = RegType::sgpr;
                switch (intrinsic->intrinsic) {
                case nir_intrinsic_load_push_constant:
@@ -484,6 +489,8 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_bindless_image_samples:
                case nir_intrinsic_load_force_vrs_rates_amd:
                case nir_intrinsic_load_scalar_arg_amd:
+               case nir_intrinsic_load_lds_ngg_scratch_base_amd:
+               case nir_intrinsic_load_lds_ngg_gs_out_vertex_base_amd:
                case nir_intrinsic_load_smem_amd: type = RegType::sgpr; break;
                case nir_intrinsic_load_sample_id:
                case nir_intrinsic_load_input:
@@ -496,7 +503,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_load_barycentric_pixel:
                case nir_intrinsic_load_barycentric_model:
                case nir_intrinsic_load_barycentric_centroid:
-               case nir_intrinsic_load_barycentric_at_sample:
                case nir_intrinsic_load_barycentric_at_offset:
                case nir_intrinsic_load_interpolated_input:
                case nir_intrinsic_load_frag_coord:
@@ -511,59 +517,15 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_mbcnt_amd:
                case nir_intrinsic_lane_permute_16_amd:
                case nir_intrinsic_load_instance_id:
-               case nir_intrinsic_ssbo_atomic_add:
-               case nir_intrinsic_ssbo_atomic_imin:
-               case nir_intrinsic_ssbo_atomic_umin:
-               case nir_intrinsic_ssbo_atomic_imax:
-               case nir_intrinsic_ssbo_atomic_umax:
-               case nir_intrinsic_ssbo_atomic_and:
-               case nir_intrinsic_ssbo_atomic_or:
-               case nir_intrinsic_ssbo_atomic_xor:
-               case nir_intrinsic_ssbo_atomic_exchange:
-               case nir_intrinsic_ssbo_atomic_comp_swap:
-               case nir_intrinsic_ssbo_atomic_fadd:
-               case nir_intrinsic_ssbo_atomic_fmin:
-               case nir_intrinsic_ssbo_atomic_fmax:
-               case nir_intrinsic_global_atomic_add_amd:
-               case nir_intrinsic_global_atomic_imin_amd:
-               case nir_intrinsic_global_atomic_umin_amd:
-               case nir_intrinsic_global_atomic_imax_amd:
-               case nir_intrinsic_global_atomic_umax_amd:
-               case nir_intrinsic_global_atomic_and_amd:
-               case nir_intrinsic_global_atomic_or_amd:
-               case nir_intrinsic_global_atomic_xor_amd:
-               case nir_intrinsic_global_atomic_exchange_amd:
-               case nir_intrinsic_global_atomic_comp_swap_amd:
-               case nir_intrinsic_global_atomic_fadd_amd:
-               case nir_intrinsic_global_atomic_fmin_amd:
-               case nir_intrinsic_global_atomic_fmax_amd:
-               case nir_intrinsic_bindless_image_atomic_add:
-               case nir_intrinsic_bindless_image_atomic_umin:
-               case nir_intrinsic_bindless_image_atomic_imin:
-               case nir_intrinsic_bindless_image_atomic_umax:
-               case nir_intrinsic_bindless_image_atomic_imax:
-               case nir_intrinsic_bindless_image_atomic_and:
-               case nir_intrinsic_bindless_image_atomic_or:
-               case nir_intrinsic_bindless_image_atomic_xor:
-               case nir_intrinsic_bindless_image_atomic_exchange:
-               case nir_intrinsic_bindless_image_atomic_comp_swap:
-               case nir_intrinsic_bindless_image_atomic_fadd:
-               case nir_intrinsic_bindless_image_atomic_fmin:
-               case nir_intrinsic_bindless_image_atomic_fmax:
+               case nir_intrinsic_ssbo_atomic:
+               case nir_intrinsic_ssbo_atomic_swap:
+               case nir_intrinsic_global_atomic_amd:
+               case nir_intrinsic_global_atomic_swap_amd:
+               case nir_intrinsic_bindless_image_atomic:
+               case nir_intrinsic_bindless_image_atomic_swap:
                case nir_intrinsic_bindless_image_size:
-               case nir_intrinsic_shared_atomic_add:
-               case nir_intrinsic_shared_atomic_imin:
-               case nir_intrinsic_shared_atomic_umin:
-               case nir_intrinsic_shared_atomic_imax:
-               case nir_intrinsic_shared_atomic_umax:
-               case nir_intrinsic_shared_atomic_and:
-               case nir_intrinsic_shared_atomic_or:
-               case nir_intrinsic_shared_atomic_xor:
-               case nir_intrinsic_shared_atomic_exchange:
-               case nir_intrinsic_shared_atomic_comp_swap:
-               case nir_intrinsic_shared_atomic_fadd:
-               case nir_intrinsic_shared_atomic_fmin:
-               case nir_intrinsic_shared_atomic_fmax:
+               case nir_intrinsic_shared_atomic:
+               case nir_intrinsic_shared_atomic_swap:
                case nir_intrinsic_load_scratch:
                case nir_intrinsic_load_invocation_id:
                case nir_intrinsic_load_primitive_id:
@@ -630,12 +592,6 @@ init_context(isel_context* ctx, nir_shader* shader)
                regclasses[tex->dest.ssa.index] = rc;
                break;
             }
-            case nir_instr_type_parallel_copy: {
-               nir_foreach_parallel_copy_entry (entry, nir_instr_as_parallel_copy(instr)) {
-                  regclasses[entry->dest.ssa.index] = regclasses[entry->src.ssa->index];
-               }
-               break;
-            }
             case nir_instr_type_ssa_undef: {
                unsigned num_components = nir_instr_as_ssa_undef(instr)->def.num_components;
                unsigned bit_size = nir_instr_as_ssa_undef(instr)->def.bit_size;
@@ -694,8 +650,8 @@ cleanup_context(isel_context* ctx)
 isel_context
 setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* const* shaders,
                    ac_shader_config* config, const struct aco_compiler_options* options,
-                   const struct aco_shader_info* info,
-                   const struct ac_shader_args* args, bool is_ps_epilog)
+                   const struct aco_shader_info* info, const struct ac_shader_args* args,
+                   bool is_ps_epilog)
 {
    SWStage sw_stage = SWStage::None;
    for (unsigned i = 0; i < shader_count; i++) {
@@ -705,6 +661,7 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
       case MESA_SHADER_TESS_EVAL: sw_stage = sw_stage | SWStage::TES; break;
       case MESA_SHADER_GEOMETRY: sw_stage = sw_stage | SWStage::GS; break;
       case MESA_SHADER_FRAGMENT: sw_stage = sw_stage | SWStage::FS; break;
+      case MESA_SHADER_KERNEL:
       case MESA_SHADER_COMPUTE: sw_stage = sw_stage | SWStage::CS; break;
       case MESA_SHADER_TASK: sw_stage = sw_stage | SWStage::TS; break;
       case MESA_SHADER_MESH: sw_stage = sw_stage | SWStage::MS; break;
@@ -723,51 +680,7 @@ setup_isel_context(Program* program, unsigned shader_count, struct nir_shader* c
       sw_stage = SWStage::FS;
    }
 
-   bool gfx9_plus = options->gfx_level >= GFX9;
-   bool ngg = info->is_ngg && options->gfx_level >= GFX10;
-   HWStage hw_stage{};
-   if (sw_stage == SWStage::VS && info->vs.as_es && !ngg)
-      hw_stage = HWStage::ES;
-   else if (sw_stage == SWStage::VS && !info->vs.as_ls && !ngg)
-      hw_stage = HWStage::VS;
-   else if (sw_stage == SWStage::VS && ngg)
-      hw_stage = HWStage::NGG; /* GFX10/NGG: VS without GS uses the HW GS stage */
-   else if (sw_stage == SWStage::GS)
-      hw_stage = HWStage::GS;
-   else if (sw_stage == SWStage::FS)
-      hw_stage = HWStage::FS;
-   else if (sw_stage == SWStage::CS)
-      hw_stage = HWStage::CS;
-   else if (sw_stage == SWStage::TS)
-      hw_stage = HWStage::CS; /* Task shaders are implemented with compute shaders. */
-   else if (sw_stage == SWStage::MS)
-      hw_stage = HWStage::NGG; /* Mesh shaders only work on NGG and on GFX10.3+. */
-   else if (sw_stage == SWStage::VS_GS && gfx9_plus && !ngg)
-      hw_stage = HWStage::GS; /* GFX6-9: VS+GS merged into a GS (and GFX10/legacy) */
-   else if (sw_stage == SWStage::VS_GS && ngg)
-      hw_stage = HWStage::NGG; /* GFX10+: VS+GS merged into an NGG GS */
-   else if (sw_stage == SWStage::VS && info->vs.as_ls)
-      hw_stage = HWStage::LS; /* GFX6-8: VS is a Local Shader, when tessellation is used */
-   else if (sw_stage == SWStage::TCS)
-      hw_stage = HWStage::HS; /* GFX6-8: TCS is a Hull Shader */
-   else if (sw_stage == SWStage::VS_TCS)
-      hw_stage = HWStage::HS; /* GFX9-10: VS+TCS merged into a Hull Shader */
-   else if (sw_stage == SWStage::TES && !info->tes.as_es && !ngg)
-      hw_stage = HWStage::VS; /* GFX6-9: TES without GS uses the HW VS stage (and GFX10/legacy) */
-   else if (sw_stage == SWStage::TES && !info->tes.as_es && ngg)
-      hw_stage = HWStage::NGG; /* GFX10/NGG: TES without GS */
-   else if (sw_stage == SWStage::TES && info->tes.as_es && !ngg)
-      hw_stage = HWStage::ES; /* GFX6-8: TES is an Export Shader */
-   else if (sw_stage == SWStage::TES_GS && gfx9_plus && !ngg)
-      hw_stage = HWStage::GS; /* GFX9: TES+GS merged into a GS (and GFX10/legacy) */
-   else if (sw_stage == SWStage::TES_GS && ngg)
-      hw_stage = HWStage::NGG; /* GFX10+: TES+GS merged into an NGG GS */
-   else if (sw_stage == SWStage::RT)
-      hw_stage = HWStage::CS; /* Raytracing shaders run as CS */
-   else
-      unreachable("Shader stage not implemented");
-
-   init_program(program, Stage{hw_stage, sw_stage}, info, options->gfx_level, options->family,
+   init_program(program, Stage{info->hw_stage, sw_stage}, info, options->gfx_level, options->family,
                 options->wgp_mode, config);
 
    isel_context ctx = {};

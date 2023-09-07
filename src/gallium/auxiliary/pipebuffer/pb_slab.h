@@ -143,7 +143,7 @@ pb_slab_alloc(struct pb_slabs *slabs, unsigned size, unsigned heap);
 void
 pb_slab_free(struct pb_slabs* slabs, struct pb_slab_entry *entry);
 
-void
+unsigned
 pb_slabs_reclaim(struct pb_slabs *slabs);
 
 bool

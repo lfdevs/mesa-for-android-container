@@ -31,6 +31,7 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_intrinsics.h"
+#include "r600_asm.h"
 #include "sfn_assembler.h"
 #include "sfn_debug.h"
 #include "sfn_instr_tex.h"
@@ -42,6 +43,7 @@
 #include "sfn_ra.h"
 #include "sfn_scheduler.h"
 #include "sfn_shader.h"
+#include "sfn_split_address_loads.h"
 #include "util/u_prim.h"
 
 #include <vector>
@@ -100,7 +102,7 @@ r600_nir_lower_scratch_address_impl(nir_builder *b, nir_intrinsic_instr *instr)
    }
 
    nir_ssa_def *address = instr->src[address_index].ssa;
-   nir_ssa_def *new_address = nir_ishr(b, address, nir_imm_int(b, 4 * align));
+   nir_ssa_def *new_address = nir_ishr_imm(b, address, 4 * align);
 
    nir_instr_rewrite_src(&instr->instr,
                          &instr->src[address_index],
@@ -111,12 +113,11 @@ bool
 r600_lower_scratch_addresses(nir_shader *shader)
 {
    bool progress = false;
-   nir_foreach_function(function, shader)
+   nir_foreach_function_impl(impl, shader)
    {
-      nir_builder build;
-      nir_builder_init(&build, function->impl);
+      nir_builder build = nir_builder_create(impl);
 
-      nir_foreach_block(block, function->impl)
+      nir_foreach_block(block, impl)
       {
          nir_foreach_instr(instr, block)
          {
@@ -413,7 +414,7 @@ r600_lower_deref_instr(nir_builder *b, nir_instr *instr_, UNUSED void *cb_data)
          array_stride *= glsl_get_aoa_size(d->type);
 
       offset =
-         nir_iadd(b, offset, nir_imul(b, d->arr.index.ssa, nir_imm_int(b, array_stride)));
+         nir_iadd(b, offset, nir_imul_imm(b, d->arr.index.ssa, array_stride));
    }
 
    /* Since the first source is a deref and the first source in the lowered
@@ -502,13 +503,12 @@ r600_get_natural_size_align_bytes(const struct glsl_type *type,
 }
 
 static bool
-r600_lower_shared_io_impl(nir_function *func)
+r600_lower_shared_io_impl(nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, func->impl);
+   nir_builder b = nir_builder_create(impl);
 
    bool progress = false;
-   nir_foreach_block(block, func->impl)
+   nir_foreach_block(block, impl)
    {
       nir_foreach_instr_safe(instr, block)
       {
@@ -548,7 +548,8 @@ r600_lower_shared_io_impl(nir_function *func)
                nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_local_shared_r600);
             load->num_components = nir_dest_num_components(op->dest);
             load->src[0] = nir_src_for_ssa(addr);
-            nir_ssa_dest_init(&load->instr, &load->dest, load->num_components, 32, NULL);
+            nir_ssa_dest_init(&load->instr, &load->dest, load->num_components,
+                              32);
             nir_ssa_def_rewrite_uses(&op->dest.ssa, &load->dest.ssa);
             nir_builder_instr_insert(&b, &load->instr);
          } else {
@@ -568,7 +569,7 @@ r600_lower_shared_io_impl(nir_function *func)
                bool start_even = (writemask & (1u << (2 * i)));
 
                auto addr2 =
-                  nir_iadd(&b, addr, nir_imm_int(&b, 8 * i + (start_even ? 0 : 4)));
+                  nir_iadd_imm(&b, addr, 8 * i + (start_even ? 0 : 4));
                store->src[1] = nir_src_for_ssa(addr2);
 
                nir_builder_instr_insert(&b, &store->instr);
@@ -585,9 +586,9 @@ static bool
 r600_lower_shared_io(nir_shader *nir)
 {
    bool progress = false;
-   nir_foreach_function(function, nir)
+   nir_foreach_function_impl(impl, nir)
    {
-      if (function->impl && r600_lower_shared_io_impl(function))
+      if (r600_lower_shared_io_impl(impl))
          progress = true;
    }
    return progress;
@@ -599,11 +600,9 @@ r600_lower_fs_pos_input_impl(nir_builder *b, nir_instr *instr, void *_options)
    (void)_options;
    auto old_ir = nir_instr_as_intrinsic(instr);
    auto load = nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_input);
-   nir_ssa_dest_init(&load->instr,
-                     &load->dest,
+   nir_ssa_dest_init(&load->instr, &load->dest,
                      old_ir->dest.ssa.num_components,
-                     old_ir->dest.ssa.bit_size,
-                     NULL);
+                     old_ir->dest.ssa.bit_size);
    nir_intrinsic_set_io_semantics(load, nir_intrinsic_io_semantics(old_ir));
 
    nir_intrinsic_set_base(load, nir_intrinsic_base(old_ir));
@@ -735,8 +734,6 @@ r600_lower_to_scalar_instr_filter(const nir_instr *instr, const void *)
    case nir_op_fddy_coarse:
    case nir_op_fddy_fine:
       return nir_src_bit_size(alu->src[0].src) == 64;
-   case nir_op_cube_r600:
-      return false;
    default:
       return true;
    }
@@ -755,7 +752,6 @@ r600_finalize_nir(pipe_screen *screen, void *shader)
 
    nir_shader *nir = (nir_shader *)shader;
 
-   NIR_PASS_V(nir, nir_lower_regs_to_ssa);
    const int nir_lower_flrp_mask = 16 | 32 | 64;
 
    NIR_PASS_V(nir, nir_lower_flrp, nir_lower_flrp_mask, false);
@@ -870,12 +866,12 @@ r600_shader_from_nir(struct r600_context *rctx,
        (sh->info.stage == MESA_SHADER_VERTEX && key->vs.as_ls)) {
       auto prim_type = sh->info.stage == MESA_SHADER_TESS_EVAL
                           ? u_tess_prim_from_shader(sh->info.tess._primitive_mode)
-                          : (pipe_prim_type)key->tcs.prim_mode;
-      NIR_PASS_V(sh, r600_lower_tess_io, static_cast<pipe_prim_type>(prim_type));
+                          : (mesa_prim)key->tcs.prim_mode;
+      NIR_PASS_V(sh, r600_lower_tess_io, static_cast<mesa_prim>(prim_type));
    }
 
    if (sh->info.stage == MESA_SHADER_TESS_CTRL)
-      NIR_PASS_V(sh, r600_append_tcs_TF_emission, (pipe_prim_type)key->tcs.prim_mode);
+      NIR_PASS_V(sh, r600_append_tcs_TF_emission, (mesa_prim)key->tcs.prim_mode);
 
    if (sh->info.stage == MESA_SHADER_TESS_EVAL) {
       NIR_PASS_V(sh,
@@ -939,13 +935,8 @@ r600_shader_from_nir(struct r600_context *rctx,
 
    NIR_PASS_V(sh, nir_lower_bool_to_int32);
 
-   NIR_PASS_V(sh, nir_lower_locals_to_regs);
-
-   NIR_PASS_V(sh,
-              nir_lower_to_source_mods,
-              (nir_lower_to_source_mods_flags)(nir_lower_float_source_mods |
-                                               nir_lower_64bit_source_mods));
-   NIR_PASS_V(sh, nir_convert_from_ssa, true);
+   NIR_PASS_V(sh, nir_lower_locals_to_regs, 32);
+   NIR_PASS_V(sh, nir_convert_from_ssa, true, false);
    NIR_PASS_V(sh, nir_opt_dce);
 
    if (rctx->screen->b.debug_flags & DBG_ALL_SHADERS) {
@@ -978,7 +969,8 @@ r600_shader_from_nir(struct r600_context *rctx,
    r600_screen *rscreen = rctx->screen;
 
    r600::Shader *shader =
-      r600::Shader::translate_from_nir(sh, &sel->so, gs_shader, *key, rctx->isa->hw_class);
+      r600::Shader::translate_from_nir(sh, &sel->so, gs_shader, *key,
+                                       rctx->isa->hw_class, rscreen->b.family);
 
    assert(shader);
    if (!shader)
@@ -995,6 +987,23 @@ r600_shader_from_nir(struct r600_context *rctx,
       shader->print(std::cerr);
    }
 
+   if (!r600::sfn_log.has_debug_flag(r600::SfnLog::noopt)) {
+      optimize(*shader);
+
+      if (r600::sfn_log.has_debug_flag(r600::SfnLog::steps)) {
+         std::cerr << "Shader after optimization\n";
+         shader->print(std::cerr);
+      }
+   }
+
+   if (!r600::sfn_log.has_debug_flag(r600::SfnLog::noaddrsplit))
+      split_address_loads(*shader);
+   
+   if (r600::sfn_log.has_debug_flag(r600::SfnLog::steps)) {
+      std::cerr << "Shader after splitting address loads\n";
+      shader->print(std::cerr);
+   }
+   
    if (!r600::sfn_log.has_debug_flag(r600::SfnLog::noopt)) {
       optimize(*shader);
 
@@ -1040,6 +1049,12 @@ r600_shader_from_nir(struct r600_context *rctx,
                       rscreen->b.family,
                       rscreen->has_compressed_msaa_texturing);
 
+   /* We already schedule the code with this in mind, no need to handle this
+    * in the backend assembler */
+   if (!r600::sfn_log.has_debug_flag(r600::SfnLog::noaddrsplit)) {
+      pipeshader->shader.bc.ar_handling = AR_HANDLE_NORMAL;
+      pipeshader->shader.bc.r6xx_nop_after_rel_dst = 0;
+   }
 
    r600::sfn_log << r600::SfnLog::shader_info << "pipeshader->shader.processor_type = "
                  << pipeshader->shader.processor_type << "\n";
@@ -1062,6 +1077,10 @@ r600_shader_from_nir(struct r600_context *rctx,
       pipeshader->shader.vs_position_window_space =
             sh->info.vs.window_space_position;
    }
+
+   if (sh->info.stage == MESA_SHADER_FRAGMENT)
+      pipeshader->shader.ps_conservative_z =
+            sh->info.fs.depth_layout;
 
    if (sh->info.stage == MESA_SHADER_GEOMETRY) {
       r600::sfn_log << r600::SfnLog::shader_info

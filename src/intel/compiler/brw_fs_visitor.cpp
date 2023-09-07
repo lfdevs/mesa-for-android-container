@@ -1413,6 +1413,9 @@ fs_visitor::init()
 
    this->nir_locals = NULL;
    this->nir_ssa_values = NULL;
+   this->nir_resource_insts = NULL;
+   this->nir_ssa_bind_infos = NULL;
+   this->nir_resource_values = NULL;
    this->nir_system_values = NULL;
 
    this->payload_ = NULL;

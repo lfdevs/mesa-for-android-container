@@ -39,7 +39,7 @@
 #define DRAW_VERTEX_H
 
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_state.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
@@ -66,9 +66,8 @@ enum attrib_emit {
  */
 struct vertex_info
 {
-   uint num_attribs;
-   uint hwfmt[4];      /**< hardware format info for this format */
-   uint size;          /**< total vertex size in dwords */
+   unsigned num_attribs;
+   unsigned size;      /**< total vertex size in dwords */
 
    /* Keep this small and at the end of the struct to allow quick
     * memcmp() comparisons.
@@ -117,7 +116,7 @@ draw_emit_vertex_attr(struct vertex_info *vinfo,
                       enum attrib_emit emit,
                       int src_index)
 {
-   const uint n = vinfo->num_attribs;
+   const unsigned n = vinfo->num_attribs;
 
    /* If the src_index is negative, meaning it hasn't been found
     * we'll assign it all zeros later - set to DRAW_ATTR_NONEXIST */

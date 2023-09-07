@@ -40,50 +40,63 @@
 #include "nir/nir_builder.h"
 
 static nir_op
-parse_atomic_op(nir_intrinsic_op op, unsigned *offset_src, unsigned *data_src,
-                unsigned *offset2_src)
+atomic_op_to_alu(nir_atomic_op op)
 {
    switch (op) {
-   #define OP_NOIMG(intrin, alu) \
-   case nir_intrinsic_ssbo_atomic_##intrin: \
-      *offset_src = 1; \
-      *data_src = 2; \
-      *offset2_src = *offset_src; \
-      return nir_op_##alu; \
-   case nir_intrinsic_shared_atomic_##intrin: \
-   case nir_intrinsic_global_atomic_##intrin: \
-   case nir_intrinsic_deref_atomic_##intrin: \
-      *offset_src = 0; \
-      *data_src = 1; \
-      *offset2_src = *offset_src; \
-      return nir_op_##alu; \
-   case nir_intrinsic_global_atomic_##intrin##_amd: \
-      *offset_src = 0; \
-      *data_src = 1; \
-      *offset2_src = 2; \
-      return nir_op_##alu;
-   #define OP(intrin, alu) \
-   OP_NOIMG(intrin, alu) \
-   case nir_intrinsic_image_deref_atomic_##intrin: \
-   case nir_intrinsic_image_atomic_##intrin: \
-   case nir_intrinsic_bindless_image_atomic_##intrin: \
-      *offset_src = 1; \
-      *data_src = 3; \
-      *offset2_src = *offset_src; \
-      return nir_op_##alu;
-   OP(add, iadd)
-   OP(imin, imin)
-   OP(umin, umin)
-   OP(imax, imax)
-   OP(umax, umax)
-   OP(and, iand)
-   OP(or, ior)
-   OP(xor, ixor)
-   OP(fadd, fadd)
-   OP_NOIMG(fmin, fmin)
-   OP_NOIMG(fmax, fmax)
-   #undef OP_NOIMG
-   #undef OP
+   case nir_atomic_op_iadd: return nir_op_iadd;
+   case nir_atomic_op_imin: return nir_op_imin;
+   case nir_atomic_op_umin: return nir_op_umin;
+   case nir_atomic_op_imax: return nir_op_imax;
+   case nir_atomic_op_umax: return nir_op_umax;
+   case nir_atomic_op_iand: return nir_op_iand;
+   case nir_atomic_op_ior:  return nir_op_ior;
+   case nir_atomic_op_ixor: return nir_op_ixor;
+   case nir_atomic_op_fadd: return nir_op_fadd;
+   case nir_atomic_op_fmin: return nir_op_fmin;
+   case nir_atomic_op_fmax: return nir_op_fmax;
+
+   /* We don't handle exchanges or wraps */
+   case nir_atomic_op_xchg:
+   case nir_atomic_op_cmpxchg:
+   case nir_atomic_op_fcmpxchg:
+   case nir_atomic_op_inc_wrap:
+   case nir_atomic_op_dec_wrap:
+      return nir_num_opcodes;
+   }
+
+   unreachable("Unknown atomic op");
+}
+
+static nir_op
+parse_atomic_op(nir_intrinsic_instr *intr, unsigned *offset_src,
+                unsigned *data_src, unsigned *offset2_src)
+{
+   switch (intr->intrinsic) {
+   case nir_intrinsic_ssbo_atomic:
+      *offset_src = 1;
+      *data_src = 2;
+      *offset2_src = *offset_src;
+      return atomic_op_to_alu(nir_intrinsic_atomic_op(intr));
+   case nir_intrinsic_shared_atomic:
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_deref_atomic:
+      *offset_src = 0;
+      *data_src = 1;
+      *offset2_src = *offset_src;
+      return atomic_op_to_alu(nir_intrinsic_atomic_op(intr));
+   case nir_intrinsic_global_atomic_amd:
+      *offset_src = 0;
+      *data_src = 1;
+      *offset2_src = 2;
+      return atomic_op_to_alu(nir_intrinsic_atomic_op(intr));
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_bindless_image_atomic:
+      *offset_src = 1;
+      *data_src = 3;
+      *offset2_src = *offset_src;
+      return atomic_op_to_alu(nir_intrinsic_atomic_op(intr));
+
    default:
       return nir_num_opcodes;
    }
@@ -211,7 +224,7 @@ optimize_atomic(nir_builder *b, nir_intrinsic_instr *intrin, bool return_prev)
    unsigned offset_src = 0;
    unsigned data_src = 0;
    unsigned offset2_src = 0;
-   nir_op op = parse_atomic_op(intrin->intrinsic, &offset_src, &data_src, &offset2_src);
+   nir_op op = parse_atomic_op(intrin, &offset_src, &data_src, &offset2_src);
    nir_ssa_def *data = intrin->src[data_src].ssa;
 
    /* Separate uniform reduction and scan is faster than doing a combined scan+reduce */
@@ -262,7 +275,8 @@ optimize_and_rewrite_atomic(nir_builder *b, nir_intrinsic_instr *intrin)
 
    nir_ssa_def old_result = intrin->dest.ssa;
    list_replace(&intrin->dest.ssa.uses, &old_result.uses);
-   nir_ssa_dest_init(&intrin->instr, &intrin->dest, 1, intrin->dest.ssa.bit_size, NULL);
+   nir_ssa_dest_init(&intrin->instr, &intrin->dest, 1,
+                     intrin->dest.ssa.bit_size);
 
    nir_ssa_def *result = optimize_atomic(b, intrin, return_prev);
 
@@ -284,8 +298,7 @@ static bool
 opt_uniform_atomics(nir_function_impl *impl)
 {
    bool progress = false;
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
    b.update_divergence = true;
 
    nir_foreach_block(block, impl) {
@@ -295,7 +308,7 @@ opt_uniform_atomics(nir_function_impl *impl)
 
          nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
          unsigned offset_src, data_src, offset2_src;
-         if (parse_atomic_op(intrin->intrinsic, &offset_src, &data_src, &offset2_src) ==
+         if (parse_atomic_op(intrin, &offset_src, &data_src, &offset2_src) ==
              nir_num_opcodes)
             continue;
 
@@ -330,15 +343,12 @@ nir_opt_uniform_atomics(nir_shader *shader)
        shader->info.workgroup_size[2] == 1)
       return false;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      if (opt_uniform_atomics(function->impl)) {
+   nir_foreach_function_impl(impl, shader) {
+      if (opt_uniform_atomics(impl)) {
          progress = true;
-         nir_metadata_preserve(function->impl, nir_metadata_none);
+         nir_metadata_preserve(impl, nir_metadata_none);
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 

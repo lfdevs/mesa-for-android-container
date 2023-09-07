@@ -128,8 +128,7 @@ lima_nir_split_loads(nir_shader *shader)
 
    nir_foreach_function(function, shader) {
       if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+         nir_builder b = nir_builder_create(function->impl);
 
          nir_foreach_block_reverse(block, function->impl) {
             nir_foreach_instr_reverse_safe(instr, block) {

@@ -152,6 +152,7 @@ public:
    auto prepare_instr() const { return m_prepare_instr; }
 
    bool replace_source(PRegister old_src, PVirtualValue new_src) override;
+   void update_indirect_addr(PRegister addr) override;
 
    uint8_t allowed_src_chan_mask() const override;
 

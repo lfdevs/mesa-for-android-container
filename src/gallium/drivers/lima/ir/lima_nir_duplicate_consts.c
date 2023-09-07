@@ -87,8 +87,7 @@ lima_nir_duplicate_load_const(nir_builder *b, nir_load_const_instr *load)
 static void
 lima_nir_duplicate_load_consts_impl(nir_shader *shader, nir_function_impl *impl)
 {
-   nir_builder builder;
-   nir_builder_init(&builder, impl);
+   nir_builder builder = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr(instr, block) {

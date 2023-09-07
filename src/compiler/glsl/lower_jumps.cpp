@@ -88,7 +88,7 @@
  *   is not true (since all execution paths through the loop might
  *   jump back to the top, or return from the function).
  *
- * Both of these simplifying assumtions are safe, since they can never
+ * Both of these simplifying assumptions are safe, since they can never
  * cause reachable code to be incorrectly classified as unreachable;
  * they can only do the opposite.
  */

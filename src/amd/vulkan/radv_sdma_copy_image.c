@@ -27,31 +27,29 @@
 #include "radv_private.h"
 
 static bool
-radv_sdma_v4_v5_copy_image_to_buffer(struct radv_device *device, struct radeon_cmdbuf *cs,
-                                     struct radv_image *image, struct radv_buffer *buffer,
-                                     const VkBufferImageCopy2 *region)
+radv_sdma_v4_v5_copy_image_to_buffer(struct radv_device *device, struct radeon_cmdbuf *cs, struct radv_image *image,
+                                     struct radv_buffer *buffer, const VkBufferImageCopy2 *region)
 {
    assert(image->plane_count == 1);
    unsigned bpp = image->planes[0].surface.bpe;
    uint64_t dst_address = buffer->bo->va;
    uint64_t src_address = image->bindings[0].bo->va + image->planes[0].surface.u.gfx9.surf_offset;
    unsigned src_pitch = image->planes[0].surface.u.gfx9.surf_pitch;
-   unsigned copy_width = DIV_ROUND_UP(image->info.width, image->planes[0].surface.blk_w);
-   unsigned copy_height = DIV_ROUND_UP(image->info.height, image->planes[0].surface.blk_h);
+   unsigned copy_width = DIV_ROUND_UP(image->vk.extent.width, image->planes[0].surface.blk_w);
+   unsigned copy_height = DIV_ROUND_UP(image->vk.extent.height, image->planes[0].surface.blk_h);
    bool tmz = false;
 
    /* Linear -> linear sub-window copy. */
    if (image->planes[0].surface.is_linear) {
       ASSERTED unsigned cdw_max = radeon_check_space(device->ws, cs, 7);
-      unsigned bytes = src_pitch * copy_height * bpp;
+      uint64_t bytes = (uint64_t)src_pitch * copy_height * bpp;
 
       if (!(bytes < (1u << 22)))
          return false;
 
       src_address += image->planes[0].surface.u.gfx9.offset[0];
 
-      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
-                                                  CIK_SDMA_COPY_SUB_OPCODE_LINEAR, (tmz ? 4 : 0)));
+      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_LINEAR, (tmz ? 4 : 0)));
       radeon_emit(cs, bytes - 1);
       radeon_emit(cs, 0);
       radeon_emit(cs, src_address);
@@ -68,7 +66,7 @@ radv_sdma_v4_v5_copy_image_to_buffer(struct radv_device *device, struct radeon_c
       unsigned tiled_width = copy_width;
       unsigned tiled_height = copy_height;
       unsigned linear_pitch = region->bufferRowLength;
-      unsigned linear_slice_pitch = region->bufferRowLength * copy_height;
+      uint64_t linear_slice_pitch = (uint64_t)region->bufferRowLength * copy_height;
       uint64_t tiled_address = src_address;
       uint64_t linear_address = dst_address;
       bool is_v5 = device->physical_device->rad_info.gfx_level >= GFX10;
@@ -82,23 +80,16 @@ radv_sdma_v4_v5_copy_image_to_buffer(struct radv_device *device, struct radeon_c
 
       ASSERTED unsigned cdw_max = radeon_check_space(device->ws, cs, 14 + (dcc ? 3 : 0));
 
-      radeon_emit(cs,
-                  CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW,
-                                  (tmz ? 4 : 0)) |
-                     dcc << 19 | (is_v5 ? 0 : 0 /* tiled->buffer.b.b.last_level */) << 20 |
-                     1u << 31);
-      radeon_emit(cs,
-         (uint32_t)tiled_address | (image->planes[0].surface.tile_swizzle << 8));
+      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_TILED_SUB_WINDOW, (tmz ? 4 : 0)) |
+                         dcc << 19 | (is_v5 ? 0 : 0 /* tiled->buffer.b.b.last_level */) << 20 | 1u << 31);
+      radeon_emit(cs, (uint32_t)tiled_address | (image->planes[0].surface.tile_swizzle << 8));
       radeon_emit(cs, (uint32_t)(tiled_address >> 32));
       radeon_emit(cs, 0);
       radeon_emit(cs, ((tiled_width - 1) << 16));
       radeon_emit(cs, (tiled_height - 1));
-      radeon_emit(
-         cs,
-         util_logbase2(bpp) | image->planes[0].surface.u.gfx9.swizzle_mode << 3 |
-            image->planes[0].surface.u.gfx9.resource_type << 9 |
-            (is_v5 ? 0 /* tiled->buffer.b.b.last_level */ : image->planes[0].surface.u.gfx9.epitch)
-               << 16);
+      radeon_emit(cs, util_logbase2(bpp) | image->planes[0].surface.u.gfx9.swizzle_mode << 3 |
+                         image->planes[0].surface.u.gfx9.resource_type << 9 |
+                         (is_v5 ? 0 /* tiled->buffer.b.b.last_level */ : image->planes[0].surface.u.gfx9.epitch) << 16);
       radeon_emit(cs, (uint32_t)linear_address);
       radeon_emit(cs, (uint32_t)(linear_address >> 32));
       radeon_emit(cs, 0);
@@ -114,17 +105,16 @@ radv_sdma_v4_v5_copy_image_to_buffer(struct radv_device *device, struct radeon_c
          unsigned hw_fmt, hw_type;
 
          desc = vk_format_description(image->vk.format);
-         hw_fmt = radv_translate_colorformat(format);
+         hw_fmt = ac_get_cb_format(device->physical_device->rad_info.gfx_level, vk_format_to_pipe_format(format));
          hw_type = radv_translate_buffer_numformat(desc, vk_format_get_first_non_void_channel(format));
 
          /* Add metadata */
          radeon_emit(cs, (uint32_t)md_address);
          radeon_emit(cs, (uint32_t)(md_address >> 32));
-         radeon_emit(cs,
-                     hw_fmt | vi_alpha_is_on_msb(device, format) << 8 | hw_type << 9 |
-                        image->planes[0].surface.u.gfx9.color.dcc.max_compressed_block_size << 24 |
-                        V_028C78_MAX_BLOCK_SIZE_256B << 26 | tmz << 29 |
-                        image->planes[0].surface.u.gfx9.color.dcc.pipe_aligned << 31);
+         radeon_emit(cs, hw_fmt | vi_alpha_is_on_msb(device, format) << 8 | hw_type << 9 |
+                            image->planes[0].surface.u.gfx9.color.dcc.max_compressed_block_size << 24 |
+                            V_028C78_MAX_BLOCK_SIZE_256B << 26 | tmz << 29 |
+                            image->planes[0].surface.u.gfx9.color.dcc.pipe_aligned << 31);
       }
 
       assert(cs->cdw <= cdw_max);
@@ -144,23 +134,28 @@ radv_sdma_copy_image(struct radv_device *device, struct radeon_cmdbuf *cs, struc
 }
 
 void
-radv_sdma_copy_buffer(struct radv_device *device, struct radeon_cmdbuf *cs, uint64_t src_va,
-                      uint64_t dst_va, uint64_t size)
+radv_sdma_copy_buffer(struct radv_device *device, struct radeon_cmdbuf *cs, uint64_t src_va, uint64_t dst_va,
+                      uint64_t size)
 {
    if (size == 0)
       return;
 
    enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
-   unsigned max_size_per_packet =
-      gfx_level >= GFX10_3 ? GFX103_SDMA_COPY_MAX_SIZE : CIK_SDMA_COPY_MAX_SIZE;
+   unsigned max_size_per_packet = gfx_level >= GFX10_3 ? GFX103_SDMA_COPY_MAX_SIZE : CIK_SDMA_COPY_MAX_SIZE;
    unsigned align = ~0u;
    unsigned ncopy = DIV_ROUND_UP(size, max_size_per_packet);
    bool tmz = false;
 
    assert(gfx_level >= GFX7);
 
-   /* Align copy size to dw if src/dst address are dw aligned */
-   if ((src_va & 0x3) == 0 && (src_va & 0x3) == 0 && size > 4 && (size & 3) != 0) {
+   /* SDMA FW automatically enables a faster dword copy mode when
+    * source, destination and size are all dword-aligned.
+    *
+    * When source and destination are dword-aligned, round down the size to
+    * take advantage of faster dword copy, and copy the remaining few bytes
+    * with the last copy packet.
+    */
+   if ((src_va & 0x3) == 0 && (dst_va & 0x3) == 0 && size > 4 && (size & 0x3) != 0) {
       align = ~0x3u;
       ncopy++;
    }
@@ -169,8 +164,7 @@ radv_sdma_copy_buffer(struct radv_device *device, struct radeon_cmdbuf *cs, uint
 
    for (unsigned i = 0; i < ncopy; i++) {
       unsigned csize = size >= 4 ? MIN2(size & align, max_size_per_packet) : size;
-      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_LINEAR,
-                                      (tmz ? 1u : 0) << 2));
+      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY, CIK_SDMA_COPY_SUB_OPCODE_LINEAR, (tmz ? 1u : 0) << 2));
       radeon_emit(cs, gfx_level >= GFX9 ? csize - 1 : csize);
       radeon_emit(cs, 0); /* src/dst endian swap */
       radeon_emit(cs, src_va);

@@ -37,8 +37,7 @@ radv_nir_lower_fs_intrinsics(nir_shader *nir, const struct radv_pipeline_stage *
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block (block, impl) {
       nir_foreach_instr_safe (instr, block) {
@@ -50,14 +49,16 @@ radv_nir_lower_fs_intrinsics(nir_shader *nir, const struct radv_pipeline_stage *
 
          switch (intrin->intrinsic) {
          case nir_intrinsic_load_sample_mask_in: {
-            nir_ssa_def *sample_coverage =
-               nir_load_vector_arg_amd(&b, 1, .base = args->ac.sample_coverage.arg_index);
+            nir_ssa_def *sample_coverage = nir_load_vector_arg_amd(&b, 1, .base = args->ac.sample_coverage.arg_index);
 
             nir_ssa_def *def = NULL;
             if (info->ps.uses_sample_shading || key->ps.sample_shading_enable) {
-               /* gl_SampleMaskIn[0] = (SampleCoverage & (1 << gl_SampleID)). */
+               /* gl_SampleMaskIn[0] = (SampleCoverage & (PsIterMask << gl_SampleID)). */
+               nir_ssa_def *ps_state = nir_load_scalar_arg_amd(&b, 1, .base = args->ps_state.arg_index);
+               nir_ssa_def *ps_iter_mask =
+                  nir_ubfe_imm(&b, ps_state, PS_STATE_PS_ITER_MASK__SHIFT, util_bitcount(PS_STATE_PS_ITER_MASK__MASK));
                nir_ssa_def *sample_id = nir_load_sample_id(&b);
-               def = nir_iand(&b, sample_coverage, nir_ishl(&b, nir_imm_int(&b, 1u), sample_id));
+               def = nir_iand(&b, sample_coverage, nir_ishl(&b, ps_iter_mask, sample_id));
             } else {
                def = sample_coverage;
             }
@@ -82,8 +83,7 @@ radv_nir_lower_fs_intrinsics(nir_shader *nir, const struct radv_pipeline_stage *
             adjusted_frag_z = nir_ffma_imm1(&b, adjusted_frag_z, 0.0625f, frag_z);
 
             /* VRS Rate X = Ancillary[2:3] */
-            nir_ssa_def *ancillary =
-               nir_load_vector_arg_amd(&b, 1, .base = args->ac.ancillary.arg_index);
+            nir_ssa_def *ancillary = nir_load_vector_arg_amd(&b, 1, .base = args->ac.ancillary.arg_index);
             nir_ssa_def *x_rate = nir_ubfe_imm(&b, ancillary, 2, 2);
 
             /* xRate = xRate == 0x1 ? adjusted_frag_z : frag_z. */
@@ -105,36 +105,32 @@ radv_nir_lower_fs_intrinsics(nir_shader *nir, const struct radv_pipeline_stage *
 
                nir_push_if(&b, nir_ieq_imm(&b, num_samples, 1));
                {
-                  res1 = nir_load_barycentric_pixel(
-                     &b, 32, .interp_mode = nir_intrinsic_interp_mode(intrin));
+                  res1 = nir_load_barycentric_pixel(&b, 32, .interp_mode = nir_intrinsic_interp_mode(intrin));
                }
                nir_push_else(&b, NULL);
                {
-                  nir_ssa_def *sample_pos =
-                     nir_load_sample_positions_amd(&b, 32, intrin->src[0].ssa, num_samples);
+                  nir_ssa_def *sample_pos = nir_load_sample_positions_amd(&b, 32, intrin->src[0].ssa, num_samples);
 
                   /* sample_pos -= 0.5 */
-                  sample_pos = nir_fsub(&b, sample_pos, nir_imm_float(&b, 0.5f));
+                  sample_pos = nir_fadd_imm(&b, sample_pos, -0.5f);
 
-                  res2 = nir_load_barycentric_at_offset(
-                     &b, 32, sample_pos, .interp_mode = nir_intrinsic_interp_mode(intrin));
+                  res2 = nir_load_barycentric_at_offset(&b, 32, sample_pos,
+                                                        .interp_mode = nir_intrinsic_interp_mode(intrin));
                }
                nir_pop_if(&b, NULL);
 
                new_dest = nir_if_phi(&b, res1, res2);
             } else {
                if (!key->ps.num_samples) {
-                  new_dest = nir_load_barycentric_pixel(
-                     &b, 32, .interp_mode = nir_intrinsic_interp_mode(intrin));
+                  new_dest = nir_load_barycentric_pixel(&b, 32, .interp_mode = nir_intrinsic_interp_mode(intrin));
                } else {
-                  nir_ssa_def *sample_pos =
-                     nir_load_sample_positions_amd(&b, 32, intrin->src[0].ssa, num_samples);
+                  nir_ssa_def *sample_pos = nir_load_sample_positions_amd(&b, 32, intrin->src[0].ssa, num_samples);
 
                   /* sample_pos -= 0.5 */
-                  sample_pos = nir_fsub(&b, sample_pos, nir_imm_float(&b, 0.5f));
+                  sample_pos = nir_fadd_imm(&b, sample_pos, -0.5f);
 
-                  new_dest = nir_load_barycentric_at_offset(
-                     &b, 32, sample_pos, .interp_mode = nir_intrinsic_interp_mode(intrin));
+                  new_dest = nir_load_barycentric_at_offset(&b, 32, sample_pos,
+                                                            .interp_mode = nir_intrinsic_interp_mode(intrin));
                }
             }
 

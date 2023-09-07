@@ -1,34 +1,32 @@
-use crate::api::device::get_devs_for_type;
 use crate::api::icd::*;
 use crate::api::types::*;
 use crate::api::util::*;
 use crate::cl_closure;
 use crate::core::context::*;
+use crate::core::device::get_devs_for_type;
 use crate::core::platform::*;
 
 use mesa_rust_util::properties::Properties;
 use rusticl_opencl_gen::*;
+use rusticl_proc_macros::cl_entrypoint;
+use rusticl_proc_macros::cl_info_entrypoint;
 
 use std::collections::HashSet;
 use std::iter::FromIterator;
+use std::mem::MaybeUninit;
 use std::slice;
-use std::sync::Arc;
 
+#[cl_info_entrypoint(cl_get_context_info)]
 impl CLInfo<cl_context_info> for cl_context {
-    fn query(&self, q: cl_context_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_context_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let ctx = self.get_ref()?;
         Ok(match q {
-            CL_CONTEXT_DEVICES => {
-                cl_prop::<&Vec<cl_device_id>>(
-                    &ctx.devs
-                        .iter()
-                        .map(|d| {
-                            // Note we use as_ptr here which doesn't increase the reference count.
-                            cl_device_id::from_ptr(Arc::as_ptr(d))
-                        })
-                        .collect(),
-                )
-            }
+            CL_CONTEXT_DEVICES => cl_prop::<Vec<cl_device_id>>(
+                ctx.devs
+                    .iter()
+                    .map(|&d| cl_device_id::from_ptr(d))
+                    .collect(),
+            ),
             CL_CONTEXT_NUM_DEVICES => cl_prop::<cl_uint>(ctx.devs.len() as u32),
             CL_CONTEXT_PROPERTIES => cl_prop::<&Properties<cl_context_properties>>(&ctx.properties),
             CL_CONTEXT_REFERENCE_COUNT => cl_prop::<cl_uint>(self.refcnt()?),
@@ -38,7 +36,8 @@ impl CLInfo<cl_context_info> for cl_context {
     }
 }
 
-pub fn create_context(
+#[cl_entrypoint]
+fn create_context(
     properties: *const cl_context_properties,
     num_devices: cl_uint,
     devices: *const cl_device_id,
@@ -76,12 +75,13 @@ pub fn create_context(
     // Duplicate devices specified in devices are ignored.
     let set: HashSet<_> =
         HashSet::from_iter(unsafe { slice::from_raw_parts(devices, num_devices as usize) }.iter());
-    let devs: Result<_, _> = set.into_iter().map(cl_device_id::get_arc).collect();
+    let devs: Result<_, _> = set.into_iter().map(cl_device_id::get_ref).collect();
 
     Ok(cl_context::from_arc(Context::new(devs?, props)))
 }
 
-pub fn create_context_from_type(
+#[cl_entrypoint]
+fn create_context_from_type(
     properties: *const cl_context_properties,
     device_type: cl_device_type,
     pfn_notify: Option<CreateContextCB>,
@@ -91,8 +91,8 @@ pub fn create_context_from_type(
     check_cl_device_type(device_type)?;
 
     let devs: Vec<_> = get_devs_for_type(device_type)
-        .iter()
-        .map(|d| cl_device_id::from_ptr(Arc::as_ptr(d)))
+        .into_iter()
+        .map(|d| cl_device_id::from_ptr(d))
         .collect();
 
     // CL_DEVICE_NOT_FOUND if no devices that match device_type and property values specified in properties were found.
@@ -111,7 +111,18 @@ pub fn create_context_from_type(
     )
 }
 
-pub fn set_context_destructor_callback(
+#[cl_entrypoint]
+fn retain_context(context: cl_context) -> CLResult<()> {
+    context.retain()
+}
+
+#[cl_entrypoint]
+fn release_context(context: cl_context) -> CLResult<()> {
+    context.release()
+}
+
+#[cl_entrypoint]
+fn set_context_destructor_callback(
     context: cl_context,
     pfn_notify: ::std::option::Option<DeleteContextCB>,
     user_data: *mut ::std::os::raw::c_void,

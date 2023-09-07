@@ -58,6 +58,7 @@ EXPAND_ONLY_PREDEF = YES
 
 # Defines required to keep doxygen from tripping on our attribute macros
 PREDEFINED  = PACKED=
+PREDEFINED += ENUM_PACKED=
 PREDEFINED += ATTRIBUTE_CONST=
 PREDEFINED += MUST_CHECK=
 """)

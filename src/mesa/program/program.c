@@ -123,7 +123,7 @@ _mesa_free_program_data(struct gl_context *ctx)
    _mesa_reference_program(ctx, &ctx->VertexProgram.Current, NULL);
    _mesa_delete_program_cache(ctx, ctx->VertexProgram.Cache);
    _mesa_reference_program(ctx, &ctx->FragmentProgram.Current, NULL);
-   _mesa_delete_shader_cache(ctx, ctx->FragmentProgram.Cache);
+   _mesa_delete_program_cache(ctx, ctx->FragmentProgram.Cache);
 
    /* XXX probably move this stuff */
    if (ctx->ATIFragmentShader.Current) {

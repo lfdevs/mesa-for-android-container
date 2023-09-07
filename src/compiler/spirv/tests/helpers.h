@@ -58,7 +58,6 @@ protected:
 
       nir_shader_compiler_options nir_options;
       memset(&nir_options, 0, sizeof(nir_options));
-      nir_options.use_scoped_barrier = true;
 
       shader = spirv_to_nir(words, num_words, NULL, 0,
                             stage, "main", &spirv_options, &nir_options);

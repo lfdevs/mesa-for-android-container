@@ -1,27 +1,8 @@
 /**************************************************************************
  *
  * Copyright 2011 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  **************************************************************************/
 
@@ -401,7 +382,7 @@ static unsigned calc_dpb_size(struct ruvd_decoder *dec)
             dpb_size += align(width_in_mb * height_in_mb * 32, alignment);
          }
       } else {
-         // the firmware seems to allways assume a minimum of ref frames
+         // the firmware seems to always assume a minimum of ref frames
          max_references = MAX2(NUM_H264_REFS, max_references);
          // reference picture buffer
          dpb_size = image_size * max_references;
@@ -433,7 +414,7 @@ static unsigned calc_dpb_size(struct ruvd_decoder *dec)
       break;
 
    case PIPE_VIDEO_FORMAT_VC1:
-      // the firmware seems to allways assume a minimum of ref frames
+      // the firmware seems to always assume a minimum of ref frames
       max_references = MAX2(NUM_VC1_REFS, max_references);
 
       // reference picture buffer

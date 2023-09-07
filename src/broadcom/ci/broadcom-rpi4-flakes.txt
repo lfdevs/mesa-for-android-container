@@ -1,11 +1,10 @@
 KHR-GLES31.core.shader_image_load_store.basic-glsl-earlyFragTests
 
-glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
 glx@glx_arb_sync_control@waitformsc
-spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=2
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=4
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=2
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=4
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=4
 spec@arb_occlusion_query@occlusion_query_order
 spec@arb_texture_multisample@large-float-texture
@@ -21,9 +20,6 @@ dEQP-GLES3.functional.texture.specification.teximage2d_pbo.rg32f_cube
 dEQP-GLES3.functional.texture.specification.teximage2d_pbo.rgba32f_cube
 dEQP-GLES3.functional.texture.specification.teximage2d_pbo.rgba32i_cube
 dEQP-GLES3.functional.texture.specification.teximage2d_pbo.rgba32ui_2d
-
-dEQP-VK.api.external.fence.opaque_fd.reset_permanent
-dEQP-VK.api.external.fence.opaque_fd.reset_temporary
 
 # Seem reliable on arm64, but they flake on armhf
 dEQP-VK.glsl.builtin.function.integer.findMSB.ivec2_mediump_geometry

@@ -451,7 +451,7 @@ construct_value(nir_builder *build,
 
       nir_alu_instr *alu = nir_alu_instr_create(build->shader, op);
       nir_ssa_dest_init(&alu->instr, &alu->dest.dest, num_components,
-                        dst_bit_size, NULL);
+                        dst_bit_size);
       alu->dest.write_mask = (1 << num_components) - 1;
       alu->dest.saturate = false;
 
@@ -879,8 +879,7 @@ nir_algebraic_impl(nir_function_impl *impl,
 {
    bool progress = false;
 
-   nir_builder build;
-   nir_builder_init(&build, impl);
+   nir_builder build = nir_builder_create(impl);
 
    /* Note: it's important here that we're allocating a zeroed array, since
     * state 0 is the default state, which means we don't have to visit

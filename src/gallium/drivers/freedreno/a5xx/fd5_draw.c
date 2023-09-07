@@ -164,19 +164,6 @@ fd5_draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       fd5_draw_vbo(ctx, info, drawid_offset, indirect, &draws[i], index_offset);
 }
 
-static bool
-is_z32(enum pipe_format format)
-{
-   switch (format) {
-   case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-   case PIPE_FORMAT_Z32_UNORM:
-   case PIPE_FORMAT_Z32_FLOAT:
-      return true;
-   default:
-      return false;
-   }
-}
-
 static void
 fd5_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 {

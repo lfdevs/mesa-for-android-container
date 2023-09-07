@@ -559,14 +559,12 @@ static struct A6XX_GRAS_LRZ_CNTL
 tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
                         const uint32_t a)
 {
-   struct tu_pipeline *pipeline = cmd->state.pipeline;
-   bool z_test_enable = (bool) (cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE);
-   bool z_write_enable = (bool) (cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_WRITE_ENABLE);
-   bool z_bounds_enable = (bool) (cmd->state.rb_depth_cntl & A6XX_RB_DEPTH_CNTL_Z_BOUNDS_ENABLE);
+   struct tu_pipeline *pipeline = &cmd->state.pipeline->base;
+   bool z_test_enable = cmd->vk.dynamic_graphics_state.ds.depth.test_enable;
+   bool z_write_enable = cmd->vk.dynamic_graphics_state.ds.depth.write_enable;
+   bool z_bounds_enable = cmd->vk.dynamic_graphics_state.ds.depth.bounds_test.enable;
    VkCompareOp depth_compare_op =
-      (VkCompareOp) ((cmd->state.rb_depth_cntl &
-                      A6XX_RB_DEPTH_CNTL_ZFUNC__MASK) >>
-                     A6XX_RB_DEPTH_CNTL_ZFUNC__SHIFT);
+      cmd->vk.dynamic_graphics_state.ds.depth.compare_op;
 
    struct A6XX_GRAS_LRZ_CNTL gras_lrz_cntl = { 0 };
 
@@ -599,63 +597,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
 
 
    /* See comment in tu_pipeline about disabling LRZ write for blending. */
-   bool reads_dest = !!(pipeline->lrz.lrz_status & TU_LRZ_READS_DEST);
-   if (gras_lrz_cntl.lrz_write && cmd->state.pipeline->dynamic_state_mask &
-         (BIT(TU_DYNAMIC_STATE_LOGIC_OP) |
-          BIT(TU_DYNAMIC_STATE_BLEND_ENABLE))) {
-       if (cmd->state.logic_op_enabled && cmd->state.rop_reads_dst) {
-          perf_debug(cmd->device, "disabling lrz write due to dynamic logic op");
-          gras_lrz_cntl.lrz_write = false;
-          reads_dest = true;
-       }
-
-       if (cmd->state.blend_enable) {
-          perf_debug(cmd->device, "disabling lrz write due to dynamic blend");
-          gras_lrz_cntl.lrz_write = false;
-          reads_dest = true;
-       }
-   }
-
-   if ((cmd->state.pipeline->dynamic_state_mask & BIT(TU_DYNAMIC_STATE_BLEND))) {
-      for (unsigned i = 0; i < cmd->state.subpass->color_count; i++) {
-         unsigned a = cmd->state.subpass->color_attachments[i].attachment;
-         if (a == VK_ATTACHMENT_UNUSED)
-            continue;
-
-         VkFormat format = cmd->state.pass->attachments[a].format;
-         unsigned mask = MASK(vk_format_get_nr_components(format));
-         uint32_t enabled_mask = (cmd->state.rb_mrt_control[i] &
-              A6XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK) >>
-             A6XX_RB_MRT_CONTROL_COMPONENT_ENABLE__SHIFT;
-         if ((enabled_mask & mask) != mask) {
-            if (gras_lrz_cntl.lrz_write) {
-               perf_debug(cmd->device,
-                          "disabling lrz write due to dynamic color write "
-                          "mask (%x/%x)",
-                          enabled_mask, mask);
-            }
-            gras_lrz_cntl.lrz_write = false;
-            reads_dest = true;
-            break;
-         }
-      }
-   }
-
-   if ((cmd->state.pipeline->dynamic_state_mask &
-        BIT(TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE)) &&
-       (cmd->state.color_write_enable &
-        MASK(cmd->state.subpass->color_count)) !=
-          MASK(cmd->state.pipeline->blend.num_rts)) {
-      if (gras_lrz_cntl.lrz_write) {
-         perf_debug(
-            cmd->device,
-            "disabling lrz write due to dynamic color write enables (%x/%x)",
-            cmd->state.color_write_enable,
-            MASK(cmd->state.pipeline->blend.num_rts));
-      }
-      gras_lrz_cntl.lrz_write = false;
-      reads_dest = true;
-   }
+   bool reads_dest = cmd->state.blend_reads_dest;
 
    /* LRZ is disabled until it is cleared, which means that one "wrong"
     * depth test or shader could disable LRZ until depth buffer is cleared.
@@ -761,13 +703,13 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
       cmd->state.lrz.prev_direction = lrz_direction;
 
    /* Invalidate LRZ and disable write if stencil test is enabled */
-   bool stencil_test_enable = cmd->state.rb_stencil_cntl & A6XX_RB_STENCIL_CONTROL_STENCIL_ENABLE;
+   bool stencil_test_enable = cmd->vk.dynamic_graphics_state.ds.stencil.test_enable;
    if (!disable_lrz && stencil_test_enable) {
       VkCompareOp stencil_front_compare_op = (VkCompareOp)
-         ((cmd->state.rb_stencil_cntl & A6XX_RB_STENCIL_CONTROL_FUNC__MASK) >> A6XX_RB_STENCIL_CONTROL_FUNC__SHIFT);
+         cmd->vk.dynamic_graphics_state.ds.stencil.front.op.compare;
 
       VkCompareOp stencil_back_compare_op = (VkCompareOp)
-         ((cmd->state.rb_stencil_cntl & A6XX_RB_STENCIL_CONTROL_FUNC_BF__MASK) >> A6XX_RB_STENCIL_CONTROL_FUNC_BF__SHIFT);
+         cmd->vk.dynamic_graphics_state.ds.stencil.back.op.compare;
 
       bool lrz_allowed = true;
       lrz_allowed = lrz_allowed && tu6_stencil_op_lrz_allowed(

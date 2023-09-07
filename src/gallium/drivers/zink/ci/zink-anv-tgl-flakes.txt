@@ -1,3 +1,9 @@
+# driver seems flaky
+KHR-GL46.sample_variables.mask.rgba8.*.samples.*.mask.*
+
+# ???
+spec@arb_query_buffer_object@qbo
+spec@arb_query_buffer_object@qbo@query-GL_PRIMITIVES_SUBMITTED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB
 
 # "../src/gallium/drivers/zink/zink_fence.c:130: fence_wait: Assertion `fence->batch_id' failed."
 .*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.4
@@ -18,6 +24,9 @@ dEQP-EGL.functional.color_clears.*_window
 
 # MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
 dEQP-EGL.functional.render.*_window
+
+# ../../src/xcb_in.c:746: xcb_request_check: Assertion `!reply' failed.
+glx@glx-make-current
 
 # Expected 15 15 15, observed 0 0 0
 glx@glx-multithread-texture
@@ -53,45 +62,47 @@ spec@glsl-4.00@execution@built-in-functions@fs-inverse-dmat4
 # Around the time of running these tests there are some warnings from the kernel in dma_resv.c, and at least
 # some failures look like not waiting for rendering to complete.
 # Because those tests sometimes pass, keep them here
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles2.rgba8888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgb565_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgb888_pbuffer,Fail
-wayland-dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer,Fail
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2_gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1_gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles1.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.multi_thread.gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles1.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb565_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.color_clears.single_context.gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.negative_api.create_pixmap_surface
+wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb565_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles2_gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb565_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb565_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.multi_thread.gles3.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles2.rgb565_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles2.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles2.rgba8888_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles3.rgb565_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles3.rgb888_pbuffer
+wayland-dEQP-EGL.functional.render.single_context.gles3.rgba8888_pbuffer
 
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-index-wr
+
+spec@arb_timer_query@timestamp-get

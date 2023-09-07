@@ -126,8 +126,19 @@ struct util_cpu_caps_t {
    unsigned max_vector_bits;
 
    uint16_t cpu_to_L3[UTIL_MAX_CPUS];
+
    /* Affinity masks for each L3 cache. */
    util_affinity_mask *L3_affinity_mask;
+   /**
+    * number of "big" CPUs in big.LITTLE configuration
+    * 
+    * a "big" CPU is defined as anything with >= 50% the capacity of the largest CPU,
+    * useful for drivers determining how many and what kinds of threads to use
+    * example: 1x prime + 3x big + 4x little = 4x "big" cores
+    * 
+    * A value of zero indicates that CPUs are homogeneous.
+    */
+   int16_t nr_big_cpus;
 };
 
 struct _util_cpu_caps_state_t {

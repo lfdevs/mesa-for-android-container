@@ -58,6 +58,17 @@ VkResult genX(init_device_state)(struct anv_device *device);
 
 void genX(init_cps_device_state)(struct anv_device *device);
 
+void
+genX(set_fast_clear_state)(struct anv_cmd_buffer *cmd_buffer,
+                           const struct anv_image *image,
+                           const enum isl_format format,
+                           union isl_color_value clear_color);
+
+void
+genX(load_image_clear_color)(struct anv_cmd_buffer *cmd_buffer,
+                             struct anv_state surface_state,
+                             const struct anv_image *image);
+
 void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer);
@@ -93,7 +104,7 @@ genX(emit_apply_pipe_flushes)(struct anv_batch *batch,
                               struct anv_device *device,
                               uint32_t current_pipeline,
                               enum anv_pipe_bits bits,
-                              enum anv_query_bits *query_bits);
+                              enum anv_pipe_bits *emitted_flush_bits);
 
 void genX(emit_so_memcpy_init)(struct anv_memcpy_state *state,
                                struct anv_device *device,
@@ -162,7 +173,8 @@ void genX(blorp_exec)(struct blorp_batch *batch,
 void genX(cmd_emit_timestamp)(struct anv_batch *batch,
                               struct anv_device *device,
                               struct anv_address addr,
-                              enum anv_timestamp_capture_type);
+                              enum anv_timestamp_capture_type type,
+                              void *data);
 
 void genX(batch_emit_dummy_post_sync_op)(struct anv_batch *batch,
                                          struct anv_device *device,
@@ -210,3 +222,16 @@ genX(batch_set_preemption)(struct anv_batch *batch, bool value);
 
 void
 genX(cmd_buffer_set_preemption)(struct anv_cmd_buffer *cmd_buffer, bool value);
+
+void
+genX(batch_emit_pipe_control)(struct anv_batch *batch,
+                              const struct intel_device_info *devinfo,
+                              enum anv_pipe_bits bits);
+
+void
+genX(batch_emit_pipe_control_write)(struct anv_batch *batch,
+                                    const struct intel_device_info *devinfo,
+                                    uint32_t post_sync_op,
+                                    struct anv_address address,
+                                    uint32_t imm_data,
+                                    enum anv_pipe_bits bits);

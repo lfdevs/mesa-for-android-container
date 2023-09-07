@@ -1,1 +1,6 @@
-
+# Test bug https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4498
+dEQP-VK.fragment_shading_barycentric.weights.pipeline_topology_dynamic.msaa_interpolate_at_offset.triangle_fan.perspective,Fail
+dEQP-VK.fragment_shading_barycentric.weights.pipeline_topology_dynamic.msaa_interpolate_at_offset.triangle_list.perspective,Fail
+dEQP-VK.fragment_shading_barycentric.weights.pipeline_topology_dynamic.msaa_interpolate_at_offset.triangle_list_with_adjacency.perspective,Fail
+dEQP-VK.fragment_shading_barycentric.weights.pipeline_topology_dynamic.msaa_interpolate_at_offset.triangle_strip.perspective,Fail
+dEQP-VK.fragment_shading_barycentric.weights.pipeline_topology_dynamic.msaa_interpolate_at_offset.triangle_strip_with_adjacency.perspective,Fail

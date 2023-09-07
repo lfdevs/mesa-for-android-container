@@ -63,7 +63,7 @@ setup_stage(struct draw_stage *stage)
 static inline void
 emit_hw_vertex(struct i915_context *i915, const struct vertex_header *vertex)
 {
-   const struct vertex_info *vinfo = &i915->current.vertex_info;
+   const struct vertex_info *vinfo = &i915->current.vertex_info.draw;
    uint32_t i;
    uint32_t count = 0; /* for debug/sanity */
 
@@ -129,7 +129,7 @@ emit_prim(struct draw_stage *stage, struct prim_header *prim, unsigned hwprim,
       i915_emit_hardware_state(i915);
 
    /* need to do this after validation! */
-   vertex_size = i915->current.vertex_info.size * 4; /* in bytes */
+   vertex_size = i915->current.vertex_info.draw.size * 4; /* in bytes */
    assert(vertex_size >= 12); /* never smaller than 12 bytes */
 
    if (!BEGIN_BATCH(1 + nr * vertex_size / 4)) {

@@ -56,8 +56,14 @@ struct clc_optional_features {
    bool images;
    bool images_read_write;
    bool images_write_3d;
+   bool integer_dot_product;
    bool intel_subgroups;
+   /* OpenCL core subgroups */
    bool subgroups;
+   /* OpenCL extension cl_khr_subgroups, which requires independent forward
+    * progress
+    */
+   bool subgroups_ifp;
 };
 
 struct clc_compile_args {
@@ -78,6 +84,10 @@ struct clc_compile_args {
    const char * const *allowed_spirv_extensions;
 
    unsigned address_bits;
+};
+
+struct clc_validator_options {
+   uint32_t limit_max_function_arg;
 };
 
 struct clc_binary {

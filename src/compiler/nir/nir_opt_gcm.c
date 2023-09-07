@@ -531,7 +531,9 @@ set_block_for_loop_instr(struct gcm_state *state, nir_instr *instr,
       return true;
 
    if (instr->type == nir_instr_type_load_const ||
-       instr->type == nir_instr_type_tex)
+       instr->type == nir_instr_type_tex ||
+       (instr->type == nir_instr_type_intrinsic &&
+        nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_resource_intel))
       return true;
 
    return false;
@@ -542,6 +544,10 @@ set_block_to_if_block(struct gcm_state *state,  nir_instr *instr,
                       nir_block *block)
 {
    if (instr->type == nir_instr_type_load_const)
+      return true;
+
+   if (instr->type == nir_instr_type_intrinsic &&
+       nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_resource_intel)
       return true;
 
    /* TODO: Figure out some more heuristics to allow more to be moved into
@@ -878,9 +884,8 @@ nir_opt_gcm(nir_shader *shader, bool value_number)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= opt_gcm_impl(shader, function->impl, value_number);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= opt_gcm_impl(shader, impl, value_number);
    }
 
    return progress;

@@ -16,7 +16,7 @@ def get_gitlab_project(glab, name: str):
     """Finds a specified gitlab project for given user"""
     glab.auth()
     username = glab.user.username
-    return glab.projects.get(f"{username}/mesa")
+    return glab.projects.get(f"{username}/{name}")
 
 
 def read_token(token_arg: Optional[str]) -> str:

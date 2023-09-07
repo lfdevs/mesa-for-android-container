@@ -85,8 +85,11 @@ anv_dump_pipe_bits(enum anv_pipe_bits bits, FILE *f)
       fputs("+pss_stall ", f);
    if (bits & ANV_PIPE_DEPTH_STALL_BIT)
       fputs("+depth_stall ", f);
-   if (bits & ANV_PIPE_CS_STALL_BIT)
+   if (bits & ANV_PIPE_CS_STALL_BIT ||
+       bits & ANV_PIPE_END_OF_PIPE_SYNC_BIT)
       fputs("+cs_stall ", f);
    if (bits & ANV_PIPE_UNTYPED_DATAPORT_CACHE_FLUSH_BIT)
       fputs("+utdp_flush", f);
+   if (bits & ANV_PIPE_CCS_CACHE_FLUSH_BIT)
+      fputs("+ccs_flush ", f);
 }

@@ -30,6 +30,7 @@
 #include "compiler/nir/nir.h"
 #include "util/disk_cache.h"
 #include "util/log.h"
+#include "util/perf/cpu_trace.h"
 
 #include "freedreno_dev_info.h"
 
@@ -66,6 +67,9 @@ struct ir3_compiler_options {
 
    /* True if 16-bit descriptors are used for both 16-bit and 32-bit access. */
    bool storage_16bit;
+
+  /* If base_vertex should be lowered in nir */
+  bool lower_base_vertex;
 };
 
 struct ir3_compiler {
@@ -88,6 +92,8 @@ struct ir3_compiler {
     * Configuration options for things that are handled differently on
     * different generations:
     */
+
+   bool is_64bit;
 
    /* a4xx (and later) drops SP_FS_FLAT_SHAD_MODE_REG_* for flat-interpolate
     * so we need to use ldlv.u32 to load the varying directly:
@@ -261,7 +267,7 @@ int ir3_compile_shader_nir(struct ir3_compiler *compiler,
 static inline unsigned
 ir3_pointer_size(struct ir3_compiler *compiler)
 {
-   return fd_dev_64b(compiler->dev_id) ? 2 : 1;
+   return compiler->is_64bit ? 2 : 1;
 }
 
 enum ir3_shader_debug {

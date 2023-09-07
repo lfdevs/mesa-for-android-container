@@ -101,6 +101,14 @@ iris_create_hw_context(struct iris_bufmgr *bufmgr, bool protected)
    uint32_t ctx_id;
 
    if (protected) {
+      /* User explicitly requested for PXP so wait for the kernel + firmware
+       * dependencies to complete to avoid a premature PXP context-create failure.
+       */
+      if (!intel_gem_wait_on_get_param(iris_bufmgr_get_fd(bufmgr),
+                                      I915_PARAM_PXP_STATUS, 1,
+                                      8000))
+         DBG("unable to wait for pxp-readiness\n");
+
       if (!intel_gem_create_context_ext(iris_bufmgr_get_fd(bufmgr),
                                         INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG,
                                         &ctx_id)) {
@@ -126,13 +134,13 @@ iris_init_non_engine_contexts(struct iris_context *ice)
    struct iris_screen *screen = (void *) ice->ctx.screen;
 
    iris_foreach_batch(ice, batch) {
-      batch->ctx_id = iris_create_hw_context(screen->bufmgr, ice->protected);
-      batch->exec_flags = I915_EXEC_RENDER;
-      assert(batch->ctx_id);
-      context_set_priority(screen->bufmgr, batch->ctx_id, ice->priority);
+      batch->i915.ctx_id = iris_create_hw_context(screen->bufmgr, ice->protected);
+      batch->i915.exec_flags = I915_EXEC_RENDER;
+      assert(batch->i915.ctx_id);
+      context_set_priority(screen->bufmgr, batch->i915.ctx_id, ice->priority);
    }
 
-   ice->batches[IRIS_BATCH_BLITTER].exec_flags = I915_EXEC_BLT;
+   ice->batches[IRIS_BATCH_BLITTER].i915.exec_flags = I915_EXEC_BLT;
    ice->has_engines_context = false;
 }
 
@@ -168,8 +176,21 @@ iris_create_engines_context(struct iris_context *ice)
        intel_engines_count(engines_info, INTEL_ENGINE_CLASS_COMPUTE) > 0)
       engine_classes[IRIS_BATCH_COMPUTE] = INTEL_ENGINE_CLASS_COMPUTE;
 
+   enum intel_gem_create_context_flags flags = 0;
+   if (ice->protected) {
+      flags |= INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG;
+
+      /* User explicitly requested for PXP so wait for the kernel + firmware
+       * dependencies to complete to avoid a premature PXP context-create failure.
+       */
+      if (!intel_gem_wait_on_get_param(fd,
+                                      I915_PARAM_PXP_STATUS, 1,
+                                      8000))
+         DBG("unable to wait for pxp-readiness\n");
+   }
+
    uint32_t engines_ctx;
-   if (!intel_gem_create_context_engines(fd, engines_info, num_batches,
+   if (!intel_gem_create_context_engines(fd, flags, engines_info, num_batches,
                                          engine_classes, &engines_ctx)) {
       free(engines_info);
       return -1;
@@ -192,8 +213,8 @@ iris_init_engines_context(struct iris_context *ice)
 
    iris_foreach_batch(ice, batch) {
       unsigned i = batch - &ice->batches[0];
-      batch->ctx_id = engines_ctx;
-      batch->exec_flags = i;
+      batch->i915.ctx_id = engines_ctx;
+      batch->i915.exec_flags = i;
    }
 
    ice->has_engines_context = true;
@@ -216,7 +237,7 @@ clone_hw_context(struct iris_batch *batch)
    struct iris_screen *screen = batch->screen;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
    struct iris_context *ice = batch->ice;
-   bool protected = iris_hw_context_get_protected(bufmgr, batch->ctx_id);
+   bool protected = iris_hw_context_get_protected(bufmgr, batch->i915.ctx_id);
    uint32_t new_ctx = iris_create_hw_context(bufmgr, protected);
 
    if (new_ctx)
@@ -243,12 +264,12 @@ iris_i915_replace_batch(struct iris_batch *batch)
    struct iris_context *ice = batch->ice;
 
    if (ice->has_engines_context) {
-      uint32_t old_ctx = batch->ctx_id;
+      uint32_t old_ctx = batch->i915.ctx_id;
       int new_ctx = iris_create_engines_context(ice);
       if (new_ctx < 0)
          return false;
       iris_foreach_batch(ice, bat) {
-         bat->ctx_id = new_ctx;
+         bat->i915.ctx_id = new_ctx;
          /* Notify the context that state must be re-initialized. */
          iris_lost_context_state(bat);
       }
@@ -258,8 +279,8 @@ iris_i915_replace_batch(struct iris_batch *batch)
       if (!new_ctx)
          return false;
 
-      iris_destroy_kernel_context(bufmgr, batch->ctx_id);
-      batch->ctx_id = new_ctx;
+      iris_destroy_kernel_context(bufmgr, batch->i915.ctx_id);
+      batch->i915.ctx_id = new_ctx;
 
       /* Notify the context that state must be re-initialized. */
       iris_lost_context_state(batch);
@@ -273,7 +294,13 @@ void iris_i915_destroy_batch(struct iris_batch *batch)
    struct iris_screen *screen = batch->screen;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
 
-   iris_destroy_kernel_context(bufmgr, batch->ctx_id);
+   /* destroy the engines context on the first batch or destroy each batch
+    * context
+    */
+   if (batch->ice->has_engines_context && batch != &batch->ice->batches[0])
+      return;
+
+   iris_destroy_kernel_context(bufmgr, batch->i915.ctx_id);
 }
 
 void iris_i915_init_batches(struct iris_context *ice)

@@ -168,6 +168,9 @@ SOFTWARE.
     <field name="swmask" start="0" end="7" type="uint"/>
   </struct>
 
+  <!-- `REGION_CLIP{0,1}` `left`,`right`,`top`,`bottom`, are all 9 bits. -->
+  <define name="REGION_CLIP_MAX" value="0x1FF"/>
+
   <struct name="REGION_CLIP0" length="1">
     <field name="mode" start="31" end="31" type="REGION_CLIP_MODE"/>
     <field name="left" start="16" end="24" type="uint"/>

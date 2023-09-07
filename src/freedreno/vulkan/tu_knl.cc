@@ -65,6 +65,18 @@ void tu_bo_allow_dump(struct tu_device *dev, struct tu_bo *bo)
    dev->instance->knl->bo_allow_dump(dev, bo);
 }
 
+VkResult
+tu_drm_device_init(struct tu_device *dev)
+{
+   return dev->instance->knl->device_init(dev);
+}
+
+void
+tu_drm_device_finish(struct tu_device *dev)
+{
+   dev->instance->knl->device_finish(dev);
+}
+
 int
 tu_device_get_gpu_timestamp(struct tu_device *dev,
                             uint64_t *ts)
@@ -208,6 +220,9 @@ tu_physical_device_try_create(struct vk_instance *vk_instance,
    }
 
    device->master_fd = master_fd;
+
+   assert(strlen(path) < ARRAY_SIZE(device->fd_path));
+   snprintf(device->fd_path, ARRAY_SIZE(device->fd_path), "%s", path);
 
    struct stat st;
 

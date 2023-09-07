@@ -158,7 +158,7 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
    assert(!sbuf->user);
 
    if (!sbuf->handle) {
-      boolean invalidated;
+      bool invalidated;
 
       sbuf->key.flags = 0;
 
@@ -235,7 +235,7 @@ svga_buffer_create_host_surface(struct svga_screen *ss,
        * mode, the recycled buffer would have been invalidated.
        */
       if (!ss->sws->have_gb_objects)
-         sbuf->dma.flags.discard = TRUE;
+         sbuf->dma.flags.discard = true;
 
       SVGA_DBG(DEBUG_DMA, "   --> got sid %p sz %d (buffer)\n",
                sbuf->handle, sbuf->b.width0);
@@ -299,7 +299,7 @@ svga_buffer_recreate_host_surface(struct svga_context *svga,
    /* Set the dirty bit to signal a read back is needed before the data copied
     * to this new surface can be referenced.
     */
-   sbuf->dirty = TRUE;
+   sbuf->dirty = true;
 
    return ret;
 }
@@ -308,20 +308,20 @@ svga_buffer_recreate_host_surface(struct svga_context *svga,
 /**
  * Returns TRUE if the surface bind flags is compatible with the new bind flags.
  */
-static boolean
+static bool
 compatible_bind_flags(unsigned bind_flags,
                       unsigned tobind_flags)
 {
    if ((bind_flags & tobind_flags) == tobind_flags)
-      return TRUE;
+      return true;
    else if ((bind_flags|tobind_flags) & PIPE_BIND_CONSTANT_BUFFER)
-      return FALSE;
+      return false;
    else if ((bind_flags & PIPE_BIND_STREAM_OUTPUT) &&
             (tobind_flags & (PIPE_BIND_SHADER_IMAGE | PIPE_BIND_SHADER_BUFFER)))
       /* Stream out cannot be mixed with UAV */
-      return FALSE;
+      return false;
    else
-      return TRUE;
+      return true;
 }
 
 
@@ -554,7 +554,7 @@ svga_buffer_upload_gb_command(struct svga_context *svga,
    SVGA_FIFOCommitAll(swc);
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
-   sbuf->dma.flags.discard = FALSE;
+   sbuf->dma.flags.discard = false;
 
    svga->hud.num_resource_updates++;
 
@@ -631,7 +631,7 @@ svga_buffer_upload_hb_command(struct svga_context *svga,
    SVGA_FIFOCommitAll(swc);
 
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
-   sbuf->dma.flags.discard = FALSE;
+   sbuf->dma.flags.discard = false;
 
    svga->hud.num_buffer_uploads++;
 
@@ -736,9 +736,9 @@ svga_buffer_upload_flush(struct svga_context *svga, struct svga_buffer *sbuf)
 
    assert(sbuf->head.prev && sbuf->head.next);
    list_del(&sbuf->head);  /* remove from svga->dirty_buffers list */
-   sbuf->dma.pending = FALSE;
-   sbuf->dma.flags.discard = FALSE;
-   sbuf->dma.flags.unsynchronized = FALSE;
+   sbuf->dma.pending = false;
+   sbuf->dma.flags.discard = false;
+   sbuf->dma.flags.unsynchronized = false;
 
    sbuf->dma.svga = NULL;
    sbuf->dma.boxes = NULL;
@@ -857,7 +857,7 @@ svga_buffer_update_hw(struct svga_context *svga, struct svga_buffer *sbuf,
    if (!svga_buffer_has_hw_storage(sbuf)) {
       struct svga_screen *ss = svga_screen(sbuf->b.screen);
       enum pipe_error ret;
-      boolean retry;
+      bool retry;
       void *map;
       unsigned i;
 
@@ -896,7 +896,7 @@ svga_buffer_update_hw(struct svga_context *svga, struct svga_buffer *sbuf,
       assert(sbuf->map.count == 0);
       if (sbuf->map.count == 0) {
          if (sbuf->user)
-            sbuf->user = FALSE;
+            sbuf->user = false;
          else
             align_free(sbuf->swbuf);
          sbuf->swbuf = NULL;
@@ -969,7 +969,7 @@ svga_buffer_upload_piecewise(struct svga_screen *ss,
                                            hwbuf, sbuf->handle,
                                            SVGA3D_WRITE_HOST_VRAM,
                                            size, 0, offset, sbuf->dma.flags));
-         sbuf->dma.flags.discard = FALSE;
+         sbuf->dma.flags.discard = false;
 
          sws->buffer_destroy(sws, hwbuf);
 
@@ -1005,7 +1005,7 @@ svga_buffer_upload_ranges(struct svga_context *svga,
             /* Emit DMA or UpdateGBImage commands */
             SVGA_RETRY_OOM(svga, ret, svga_buffer_upload_command(svga, sbuf));
             if (ret == PIPE_OK) {
-               sbuf->dma.pending = TRUE;
+               sbuf->dma.pending = true;
                assert(!sbuf->head.prev && !sbuf->head.next);
                list_addtail(&sbuf->head, &svga->dirty_buffers);
             }

@@ -33,6 +33,8 @@
 extern "C" {
 #endif
 
+extern const enum pipe_format vk_format_map[];
+
 enum pipe_format
 vk_format_to_pipe_format(enum VkFormat vkformat);
 

@@ -47,8 +47,7 @@ radv_nir_export_multiview(nir_shader *nir)
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* This pass is not suitable for mesh shaders, because it can't know the mapping between API mesh
     * shader invocations and output primitives. Needs to be handled in ac_nir_lower_ngg.

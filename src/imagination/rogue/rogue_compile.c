@@ -180,16 +180,57 @@ static void trans_nir_intrinsic_load_input_fs(rogue_builder *b,
 static void trans_nir_intrinsic_load_input_vs(rogue_builder *b,
                                               nir_intrinsic_instr *intr)
 {
+   struct pvr_pipeline_layout *pipeline_layout =
+      b->shader->ctx->pipeline_layout;
+
    ASSERTED unsigned load_size = nir_dest_num_components(intr->dest);
    assert(load_size == 1); /* TODO: We can support larger load sizes. */
 
    rogue_reg *dst = rogue_ssa_reg(b->shader, intr->dest.ssa.index);
 
    struct nir_io_semantics io_semantics = nir_intrinsic_io_semantics(intr);
+   unsigned input = io_semantics.location - VERT_ATTRIB_GENERIC0;
    unsigned component = nir_intrinsic_component(intr);
-   /* TODO: Get these properly with the intrinsic index (ssa argument) */
-   unsigned vtxin_index =
-      ((io_semantics.location - VERT_ATTRIB_GENERIC0) * 3) + component;
+   unsigned vtxin_index = ~0U;
+
+   if (pipeline_layout) {
+      rogue_vertex_inputs *vs_inputs = &b->shader->ctx->stage_data.vs.inputs;
+      assert(input < vs_inputs->num_input_vars);
+      assert(component < vs_inputs->components[input]);
+
+      vtxin_index = vs_inputs->base[input] + component;
+   } else {
+      /* Dummy defaults for offline compiler. */
+      /* TODO: Load these from an offline description
+       * if using the offline compiler.
+       */
+
+      nir_shader *nir = b->shader->ctx->nir[MESA_SHADER_VERTEX];
+      vtxin_index = 0;
+
+      /* Process inputs. */
+      nir_foreach_shader_in_variable (var, nir) {
+         unsigned input_components = glsl_get_components(var->type);
+         unsigned bit_size =
+            glsl_base_type_bit_size(glsl_get_base_type(var->type));
+         assert(bit_size >= 32); /* TODO: Support smaller bit sizes. */
+         unsigned reg_count = bit_size / 32;
+
+         /* Check input location. */
+         assert(var->data.location >= VERT_ATTRIB_GENERIC0 &&
+                var->data.location <= VERT_ATTRIB_GENERIC15);
+
+         if (var->data.location == io_semantics.location) {
+            assert(component < input_components);
+            vtxin_index += reg_count * component;
+            break;
+         }
+
+         vtxin_index += reg_count * input_components;
+      }
+   }
+
+   assert(vtxin_index != ~0U);
 
    rogue_reg *src = rogue_vtxin_reg(b->shader, vtxin_index);
    rogue_instr *instr =
@@ -682,11 +723,9 @@ static inline void rogue_feedback_used_regs(rogue_build_ctx *ctx,
 {
    /* TODO NEXT: Use this counting method elsewhere as well. */
    ctx->common_data[shader->stage].temps =
-      __bitset_count(shader->regs_used[ROGUE_REG_CLASS_TEMP],
-                     BITSET_WORDS(rogue_reg_infos[ROGUE_REG_CLASS_TEMP].num));
-   ctx->common_data[shader->stage].internals = __bitset_count(
-      shader->regs_used[ROGUE_REG_CLASS_INTERNAL],
-      BITSET_WORDS(rogue_reg_infos[ROGUE_REG_CLASS_INTERNAL].num));
+      rogue_count_used_regs(shader, ROGUE_REG_CLASS_TEMP);
+   ctx->common_data[shader->stage].internals =
+      rogue_count_used_regs(shader, ROGUE_REG_CLASS_INTERNAL);
 }
 
 static bool ssa_def_cb(nir_ssa_def *ssa, void *state)

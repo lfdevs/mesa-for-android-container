@@ -69,16 +69,14 @@ nir_lower_fb_read_instr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
    tex->coord_components = 3;
    tex->dest_type = nir_type_float32;
    tex->is_array = true;
-   tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src =
-      nir_src_for_ssa(nir_vec3(b, nir_channel(b, fragcoord, 0), nir_channel(b, fragcoord, 1), layer));
-   tex->src[1].src_type = nir_tex_src_ms_index;
-   tex->src[1].src = nir_src_for_ssa(sampid);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord,
+                                     nir_vec3(b, nir_channel(b, fragcoord, 0), nir_channel(b, fragcoord, 1), layer));
+   tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_ms_index, sampid);
    struct nir_io_semantics io = nir_intrinsic_io_semantics(intr);
-   tex->src[2].src = nir_src_for_ssa(nir_imm_intN_t(b, io.location - FRAG_RESULT_DATA0, 32));
-   tex->src[2].src_type = nir_tex_src_texture_handle;
+   tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_texture_handle,
+                                     nir_imm_intN_t(b, io.location - FRAG_RESULT_DATA0, 32));
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
 
    nir_ssa_def_rewrite_uses(&intr->dest.ssa, &tex->dest.ssa);

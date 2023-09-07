@@ -63,6 +63,7 @@
 #include "pipe/p_state.h"
 #include "frontend/api.h"
 
+#include "util/simple_mtx.h"
 #include "util/u_atomic.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
@@ -193,7 +194,7 @@ xmesa_close_display(Display *display)
 static XMesaDisplay
 xmesa_init_display( Display *display )
 {
-   static mtx_t init_mutex = _MTX_INITIALIZER_NP;
+   static simple_mtx_t init_mutex = SIMPLE_MTX_INITIALIZER;
    XMesaDisplay xmdpy;
    XMesaExtDisplayInfo *info;
 
@@ -201,14 +202,14 @@ xmesa_init_display( Display *display )
       return NULL;
    }
 
-   mtx_lock(&init_mutex);
+   simple_mtx_lock(&init_mutex);
 
    /* Look for XMesaDisplay which corresponds to this display */
    info = MesaExtInfo.head;
    while(info) {
       if (info->display == display) {
          /* Found it */
-         mtx_unlock(&init_mutex);
+         simple_mtx_unlock(&init_mutex);
          return  &info->mesaDisplay;
       }
       info = info->next;
@@ -220,7 +221,7 @@ xmesa_init_display( Display *display )
    /* allocate mesa display info */
    info = (XMesaExtDisplayInfo *) Xmalloc(sizeof(XMesaExtDisplayInfo));
    if (info == NULL) {
-      mtx_unlock(&init_mutex);
+      simple_mtx_unlock(&init_mutex);
       return NULL;
    }
    info->display = display;
@@ -232,7 +233,7 @@ xmesa_init_display( Display *display )
    xmdpy->fscreen = CALLOC_STRUCT(pipe_frontend_screen);
    if (!xmdpy->fscreen) {
       Xfree(info);
-      mtx_unlock(&init_mutex);
+      simple_mtx_unlock(&init_mutex);
       return NULL;
    }
 
@@ -240,7 +241,7 @@ xmesa_init_display( Display *display )
    if (!xmdpy->screen) {
       free(xmdpy->fscreen);
       Xfree(info);
-      mtx_unlock(&init_mutex);
+      simple_mtx_unlock(&init_mutex);
       return NULL;
    }
 
@@ -256,7 +257,7 @@ xmesa_init_display( Display *display )
    MesaExtInfo.ndisplays++;
    _XUnlockMutex(_Xglobal_lock);
 
-   mtx_unlock(&init_mutex);
+   simple_mtx_unlock(&init_mutex);
 
    return xmdpy;
 }
@@ -397,8 +398,8 @@ xmesa_get_window_size(Display *dpy, XMesaBuffer b,
 static GLuint
 choose_pixel_format(XMesaVisual v)
 {
-   boolean native_byte_order = (host_byte_order() ==
-                                ImageByteOrder(v->display));
+   bool native_byte_order = (host_byte_order() ==
+                             ImageByteOrder(v->display));
 
    if (   GET_REDMASK(v)   == 0x0000ff
        && GET_GREENMASK(v) == 0x00ff00
@@ -1350,7 +1351,7 @@ void XMesaSwapBuffers( XMesaBuffer b )
          XMesaDisplay xmdpy = xmesa_init_display(b->xm_visual->display);
          struct pipe_screen *screen = xmdpy->screen;
          xmdpy->screen->fence_finish(screen, NULL, fence,
-                                     PIPE_TIMEOUT_INFINITE);
+                                     OS_TIMEOUT_INFINITE);
          xmdpy->screen->fence_reference(screen, &fence, NULL);
       }
    }
@@ -1388,7 +1389,7 @@ void XMesaFlush( XMesaContext c )
       st_context_flush(c->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
       if (fence) {
          xmdpy->screen->fence_finish(xmdpy->screen, NULL, fence,
-                                     PIPE_TIMEOUT_INFINITE);
+                                     OS_TIMEOUT_INFINITE);
          xmdpy->screen->fence_reference(xmdpy->screen, &fence, NULL);
       }
       XFlush( c->xm_visual->display );
@@ -1533,7 +1534,7 @@ XMesaBindTexImage(Display *dpy, XMesaBuffer drawable, int buffer,
       pipe_texture_unmap(pipe, tex_xfer);
 
       st_context_teximage(st, GL_TEXTURE_2D, 0 /* level */, internal_format,
-                          res, FALSE /* no mipmap */);
+                          res, false /* no mipmap */);
 
    }
 }

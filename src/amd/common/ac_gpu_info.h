@@ -1,39 +1,15 @@
 /*
  * Copyright © 2017 Advanced Micro Devices, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS, AUTHORS
- * AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef AC_GPU_INFO_H
 #define AC_GPU_INFO_H
 
-#include "amd_family.h"
-
 #include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-
 #include "util/macros.h"
+#include "amd_family.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +23,7 @@ struct amdgpu_gpu_info;
 struct amd_ip_info {
    uint8_t ver_major;
    uint8_t ver_minor;
+   uint8_t ver_rev;
    uint8_t num_queues;
 };
 
@@ -112,8 +89,9 @@ struct radeon_info {
    bool cpdma_prefetch_writes_memory;
    bool has_gfx9_scissor_bug;
    bool has_tc_compat_zrange_bug;
-   bool has_msaa_sample_loc_bug;
+   bool has_small_prim_filter_sample_loc_bug;
    bool has_ls_vgpr_init_bug;
+   bool has_pops_missed_overlap_bug;
    bool has_zero_index_buffer_bug;
    bool has_image_load_dcc_bug;
    bool has_two_planes_iterate256_bug;
@@ -130,6 +108,7 @@ struct radeon_info {
    bool has_export_conflict_bug;
    bool has_vrs_ds_export_bug;
    bool has_taskmesh_indirect0_bug;
+   bool has_set_pairs_packets;
 
    /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
     *
@@ -185,14 +164,8 @@ struct radeon_info {
    uint32_t mec_fw_feature;
    uint32_t pfp_fw_version;
    uint32_t pfp_fw_feature;
-   bool has_set_reg_pairs;
-   bool has_set_sh_reg_pairs_n;
 
    /* Multimedia info. */
-   struct {
-      bool vcn_decode; /* TODO: remove */
-   } has_video_hw;
-
    uint32_t uvd_fw_version;
    uint32_t vce_fw_version;
    uint32_t vce_harvest_config;
@@ -206,6 +179,8 @@ struct radeon_info {
          uint32_t pad;
       } codec_info[8]; /* the number of available codecs */
    } dec_caps, enc_caps;
+
+   enum vcn_version vcn_ip_version;
 
    /* Kernel & winsys capabilities. */
    uint32_t drm_major; /* version */
@@ -226,9 +201,24 @@ struct radeon_info {
    bool has_pcie_bandwidth_info;
    bool has_stable_pstate;
    /* Whether SR-IOV is enabled or amdgpu.mcbp=1 was set on the kernel command line. */
-   bool mid_command_buffer_preemption_enabled;
+   bool register_shadowing_required;
    bool has_tmz_support;
    bool kernel_has_modifiers;
+
+   /* If the kernel driver uses CU reservation for high priority compute on gfx10+, it programs
+    * a global CU mask in the hw that is AND'ed with CU_EN register fields set by userspace.
+    * The packet that does the AND'ing is SET_SH_REG_INDEX(index = 3). If you don't use
+    * SET_SH_REG_INDEX, the global CU mask will not be applied.
+    *
+    * If uses_kernel_cu_mask is true, use SET_SH_REG_INDEX.
+    *
+    * If uses_kernel_cu_mask is false, SET_SH_REG_INDEX shouldn't be used because it only
+    * increases CP overhead and doesn't have any other effect.
+    *
+    * The alternative to this is to set the AMD_CU_MASK environment variable that has the same
+    * effect on radeonsi and RADV and doesn't need SET_SH_REG_INDEX.
+    */
+   bool uses_kernel_cu_mask;
 
    /* Shader cores. */
    uint16_t cu_mask[AMD_MAX_SE][AMD_MAX_SA_PER_SE];
@@ -273,6 +263,14 @@ struct radeon_info {
    /* AMD_CU_MASK environment variable or ~0. */
    bool spi_cu_en_has_effect;
    uint32_t spi_cu_en;
+
+   struct {
+      uint32_t shadow_size;
+      uint32_t shadow_alignment;
+      uint32_t csa_size;
+      uint32_t csa_alignment;
+   } fw_based_mcbp;
+   bool has_fw_based_shadowing;
 };
 
 bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info);
@@ -280,12 +278,12 @@ bool ac_query_pci_bus_info(int fd, struct radeon_info *info);
 
 void ac_compute_driver_uuid(char *uuid, size_t size);
 
-void ac_compute_device_uuid(struct radeon_info *info, char *uuid, size_t size);
-void ac_print_gpu_info(struct radeon_info *info, FILE *f);
+void ac_compute_device_uuid(const struct radeon_info *info, char *uuid, size_t size);
+void ac_print_gpu_info(const struct radeon_info *info, FILE *f);
 int ac_get_gs_table_depth(enum amd_gfx_level gfx_level, enum radeon_family family);
-void ac_get_raster_config(struct radeon_info *info, uint32_t *raster_config_p,
+void ac_get_raster_config(const struct radeon_info *info, uint32_t *raster_config_p,
                           uint32_t *raster_config_1_p, uint32_t *se_tile_repeat_p);
-void ac_get_harvested_configs(struct radeon_info *info, unsigned raster_config,
+void ac_get_harvested_configs(const struct radeon_info *info, unsigned raster_config,
                               unsigned *cik_raster_config_1_p, unsigned *raster_config_se);
 unsigned ac_get_compute_resource_limits(const struct radeon_info *info,
                                         unsigned waves_per_threadgroup, unsigned max_waves_per_sh,
@@ -300,7 +298,7 @@ struct ac_hs_info {
    uint32_t tess_offchip_ring_size;
 };
 
-void ac_get_hs_info(struct radeon_info *info,
+void ac_get_hs_info(const struct radeon_info *info,
                     struct ac_hs_info *hs);
 
 /* Task rings BO layout information.
@@ -309,7 +307,7 @@ void ac_get_hs_info(struct radeon_info *info,
  * store the task payload which is passed to mesh shaders.
  *
  * The driver only needs to create this BO once,
- * and it will always be able to accomodate the maximum needed
+ * and it will always be able to accommodate the maximum needed
  * task payload size.
  *
  * The following memory layout is used:
@@ -344,7 +342,7 @@ struct ac_task_info {
 /* Size of the task control buffer. 9 DWORDs. */
 #define AC_TASK_CTRLBUF_BYTES 36
 
-void ac_get_task_info(struct radeon_info *info,
+void ac_get_task_info(const struct radeon_info *info,
                       struct ac_task_info *task_info);
 
 uint32_t ac_memory_ops_per_clock(uint32_t vram_type);

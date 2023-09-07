@@ -64,6 +64,18 @@
 #include "uniforms.h"
 #include "program/prog_instruction.h"
 
+/** Wrapper around nir_state_variable_create to pick the name automatically. */
+nir_variable *
+st_nir_state_variable_create(nir_shader *shader,
+                             const struct glsl_type *type,
+                             const gl_state_index16 tokens[STATE_LENGTH])
+{
+   char *name = _mesa_program_state_string(tokens);
+   nir_variable *var = nir_state_variable_create(shader, type, name, tokens);
+   free(name);
+   return var;
+}
+
 static const struct gl_builtin_uniform_element *
 get_element(const struct gl_builtin_uniform_desc *desc, nir_deref_path *path)
 {
@@ -133,27 +145,12 @@ get_variable(nir_builder *b, nir_deref_path *path,
       }
    }
 
-   char *name = _mesa_program_state_string(tokens);
-
-   nir_foreach_uniform_variable(var, shader) {
-      if (strcmp(var->name, name) == 0) {
-         free(name);
-         return var;
-      }
-   }
+   nir_variable *var = nir_find_state_variable(shader, tokens);
+   if (var)
+      return var;
 
    /* variable doesn't exist yet, so create it: */
-   nir_variable *var =
-      nir_variable_create(shader, nir_var_uniform, glsl_vec4_type(), name);
-
-   var->num_state_slots = 1;
-   var->state_slots = rzalloc_array(var, nir_state_slot, 1);
-   memcpy(var->state_slots[0].tokens, tokens,
-          sizeof(var->state_slots[0].tokens));
-
-   free(name);
-
-   return var;
+   return st_nir_state_variable_create(shader, glsl_vec4_type(), tokens);
 }
 
 static bool

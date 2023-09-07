@@ -5,7 +5,7 @@ use crate::core::context::*;
 use crate::core::device::*;
 use crate::core::format::*;
 use crate::core::queue::*;
-use crate::core::util::cl_mem_type_to_texture_target;
+use crate::core::util::*;
 use crate::impl_cl_type_trait;
 
 use mesa_rust::pipe::context::*;
@@ -18,6 +18,7 @@ use mesa_rust_util::properties::Properties;
 use rusticl_opencl_gen::*;
 
 use std::cmp;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::mem::size_of;
@@ -45,7 +46,7 @@ impl MappingTransfer {
 }
 
 struct Mappings {
-    tx: HashMap<Arc<Device>, MappingTransfer>,
+    tx: HashMap<&'static Device, MappingTransfer>,
     maps: HashMap<*mut c_void, u32>,
 }
 
@@ -92,7 +93,7 @@ impl Mappings {
 
     fn clean_up_tx(&mut self, dev: &Device, ctx: &PipeContext) {
         if self.maps.is_empty() {
-            if let Some(tx) = self.tx.get(dev) {
+            if let Some(tx) = self.tx.get(&dev) {
                 if tx.pending == 0 {
                     self.tx.remove(dev).unwrap().tx.with_ctx(ctx);
                 }
@@ -101,7 +102,6 @@ impl Mappings {
     }
 }
 
-#[repr(C)]
 pub struct Mem {
     pub base: CLObjectBase<CL_INVALID_MEM_OBJECT>,
     pub context: Arc<Context>,
@@ -112,11 +112,12 @@ pub struct Mem {
     pub offset: usize,
     pub host_ptr: *mut c_void,
     pub image_format: cl_image_format,
+    pub pipe_format: pipe_format,
     pub image_desc: cl_image_desc,
     pub image_elem_size: u8,
     pub props: Vec<cl_mem_properties>,
     pub cbs: Mutex<Vec<Box<dyn Fn(cl_mem)>>>,
-    res: Option<HashMap<Arc<Device>, Arc<PipeResource>>>,
+    res: Option<HashMap<&'static Device, Arc<PipeResource>>>,
     maps: Mutex<Mappings>,
 }
 
@@ -127,14 +128,18 @@ pub trait CLImageDescInfo {
     fn pixels(&self) -> usize;
     fn bx(&self) -> CLResult<pipe_box>;
     fn row_pitch(&self) -> CLResult<u32>;
-    fn slice_pitch(&self) -> CLResult<u32>;
+    fn slice_pitch(&self) -> usize;
     fn width(&self) -> CLResult<u32>;
     fn height(&self) -> CLResult<u32>;
     fn size(&self) -> CLVec<usize>;
-    fn api_size(&self) -> CLVec<usize>;
 
     fn dims(&self) -> u8 {
         self.type_info().0
+    }
+
+    fn dims_with_array(&self) -> u8 {
+        let array: u8 = self.is_array().into();
+        self.dims() + array
     }
 
     fn has_slice(&self) -> bool {
@@ -178,40 +183,20 @@ impl CLImageDescInfo for cl_image_desc {
     }
 
     fn size(&self) -> CLVec<usize> {
-        let mut depth = if self.is_array() {
-            self.image_array_size
-        } else {
-            self.image_depth
-        };
+        let mut height = cmp::max(self.image_height, 1);
+        let mut depth = cmp::max(self.image_depth, 1);
 
-        let height = cmp::max(self.image_height, 1);
-        depth = cmp::max(depth, 1);
+        match self.image_type {
+            CL_MEM_OBJECT_IMAGE1D_ARRAY => height = self.image_array_size,
+            CL_MEM_OBJECT_IMAGE2D_ARRAY => depth = self.image_array_size,
+            _ => {}
+        }
 
         CLVec::new([self.image_width, height, depth])
     }
 
-    fn api_size(&self) -> CLVec<usize> {
-        let mut size = self.size();
-
-        if self.is_array() && self.dims() == 1 {
-            size[1] = size[2];
-            size[2] = 1;
-        }
-
-        size
-    }
-
     fn bx(&self) -> CLResult<pipe_box> {
-        let size = self.size();
-
-        Ok(pipe_box {
-            x: 0,
-            y: 0,
-            z: 0,
-            width: size[0].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-            height: size[1].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-            depth: size[2].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-        })
+        create_pipe_box(CLVec::default(), self.size(), self.image_type)
     }
 
     fn row_pitch(&self) -> CLResult<u32> {
@@ -220,10 +205,8 @@ impl CLImageDescInfo for cl_image_desc {
             .map_err(|_| CL_OUT_OF_HOST_MEMORY)
     }
 
-    fn slice_pitch(&self) -> CLResult<u32> {
+    fn slice_pitch(&self) -> usize {
         self.image_slice_pitch
-            .try_into()
-            .map_err(|_| CL_OUT_OF_HOST_MEMORY)
     }
 
     fn width(&self) -> CLResult<u32> {
@@ -270,38 +253,15 @@ fn sw_copy(
     }
 }
 
-fn create_box(
-    origin: &CLVec<usize>,
-    region: &CLVec<usize>,
-    tex_type: cl_mem_object_type,
-) -> CLResult<pipe_box> {
-    let mut y = 1;
-    let mut z = 2;
-
-    // array slice belongs to z/depth
-    if tex_type == CL_MEM_OBJECT_IMAGE1D_ARRAY {
-        (z, y) = (y, z);
-    }
-
-    Ok(pipe_box {
-        x: origin[0].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-        y: origin[y].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-        z: origin[z].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-        width: region[0].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-        height: region[y].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-        depth: region[z].try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-    })
-}
-
-fn buffer_offset_size(
-    origin: &CLVec<usize>,
-    region: &CLVec<usize>,
-    row_pitch: usize,
-    slice_pitch: usize,
-    pixel_size: usize,
-) -> (usize, usize) {
-    let pitch = [pixel_size, row_pitch, slice_pitch];
-    (*origin * pitch, *region * pitch)
+/// helper function to determine if we can just map the resource in question or if we have to go
+/// through a shdow buffer to let the CPU access the resources memory
+fn can_map_directly(dev: &Device, res: &PipeResource) -> bool {
+    // there are two aprts to this check:
+    //   1. is the resource located in system RAM
+    //   2. has the resource a linear memory layout
+    // we do not want to map memory over the PCIe bus as this generally leads to bad performance.
+    (dev.unified_memory() || res.is_staging() || res.is_user)
+        && (res.is_buffer() || res.is_linear())
 }
 
 impl Mem {
@@ -341,6 +301,7 @@ impl Mem {
             offset: 0,
             host_ptr: host_ptr,
             image_format: cl_image_format::default(),
+            pipe_format: pipe_format::PIPE_FORMAT_NONE,
             image_desc: cl_image_desc::default(),
             image_elem_size: 0,
             props: props,
@@ -372,6 +333,7 @@ impl Mem {
             offset: offset,
             host_ptr: host_ptr,
             image_format: cl_image_format::default(),
+            pipe_format: pipe_format::PIPE_FORMAT_NONE,
             image_desc: cl_image_desc::default(),
             image_elem_size: 0,
             props: Vec::new(),
@@ -412,10 +374,11 @@ impl Mem {
             ResourceType::Normal
         };
 
+        let pipe_format = image_format.to_pipe_format().unwrap();
         let texture = if parent.is_none() {
             Some(context.create_texture(
                 &image_desc,
-                image_format,
+                pipe_format,
                 host_ptr,
                 bit_check(flags, CL_MEM_COPY_HOST_PTR),
                 res_type,
@@ -440,6 +403,7 @@ impl Mem {
             offset: 0,
             host_ptr: host_ptr,
             image_format: *image_format,
+            pipe_format: pipe_format,
             image_desc: api_image_desc,
             image_elem_size: image_elem_size,
             props: props,
@@ -494,8 +458,7 @@ impl Mem {
 
         assert!(self.is_buffer());
 
-        // don't bother mapping directly if it's not UMA or a staging buffer
-        let tx = if q.device.unified_memory() || bit_check(b.flags, CL_MEM_ALLOC_HOST_PTR) {
+        let tx = if can_map_directly(q.device, r) {
             ctx.buffer_map_directly(
                 r,
                 offset.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
@@ -551,11 +514,10 @@ impl Mem {
     ) -> CLResult<(PipeTransfer, Option<PipeResource>)> {
         assert!(!self.is_buffer());
 
-        let r = self.get_res()?.get(&q.device).unwrap();
+        let r = self.get_res()?.get(q.device).unwrap();
         let ctx = q.device.helper_ctx();
 
-        // don't bother mapping directly if it's not staging
-        let tx = if bit_check(self.flags, CL_MEM_ALLOC_HOST_PTR) {
+        let tx = if can_map_directly(q.device, r) {
             ctx.texture_map_directly(r, bx, rw)
         } else {
             None
@@ -573,7 +535,7 @@ impl Mem {
                     r.depth(),
                     r.array_size(),
                     cl_mem_type_to_texture_target(self.image_desc.image_type),
-                    self.image_format.to_pipe_format().unwrap(),
+                    self.pipe_format,
                     ResourceType::Staging,
                 )
                 .ok_or(CL_OUT_OF_RESOURCES)?;
@@ -593,9 +555,7 @@ impl Mem {
     }
 
     pub fn has_same_parent(&self, other: &Self) -> bool {
-        let a = self.parent.as_ref().map_or(self, |p| p);
-        let b = other.parent.as_ref().map_or(other, |p| p);
-        ptr::eq(a, b)
+        ptr::eq(self.get_parent(), other.get_parent())
     }
 
     pub fn is_parent_buffer(&self) -> bool {
@@ -606,17 +566,28 @@ impl Mem {
         self.is_parent_buffer() && self.mem_type == CL_MEM_OBJECT_IMAGE2D
     }
 
-    fn get_res(&self) -> CLResult<&HashMap<Arc<Device>, Arc<PipeResource>>> {
-        self.parent
-            .as_ref()
-            .map_or(self, |p| p.as_ref())
-            .res
-            .as_ref()
-            .ok_or(CL_OUT_OF_HOST_MEMORY)
+    // this is kinda bogus, because that won't work with system SVM, but the spec wants us to
+    // implement this.
+    pub fn is_svm(&self) -> bool {
+        let mem = self.get_parent();
+        self.context.find_svm_alloc(mem.host_ptr.cast()).is_some()
+            && bit_check(mem.flags, CL_MEM_USE_HOST_PTR)
     }
 
-    pub fn get_res_of_dev(&self, dev: &Arc<Device>) -> CLResult<&Arc<PipeResource>> {
+    fn get_res(&self) -> CLResult<&HashMap<&'static Device, Arc<PipeResource>>> {
+        self.get_parent().res.as_ref().ok_or(CL_OUT_OF_HOST_MEMORY)
+    }
+
+    pub fn get_res_of_dev(&self, dev: &Device) -> CLResult<&Arc<PipeResource>> {
         Ok(self.get_res()?.get(dev).unwrap())
+    }
+
+    fn get_parent(&self) -> &Self {
+        if let Some(parent) = &self.parent {
+            parent
+        } else {
+            self
+        }
     }
 
     fn to_parent<'a>(&'a self, offset: &mut usize) -> &'a Self {
@@ -699,8 +670,6 @@ impl Mem {
             let tx_dst;
             let mut src_pitch = [0, 0, 0];
             let mut dst_pitch = [0, 0, 0];
-            let mut new_src_origin = &CLVec::default();
-            let mut new_dst_origin = &CLVec::default();
 
             let bpp = if !self.is_buffer() {
                 self.pixel_size().unwrap() as usize
@@ -713,28 +682,23 @@ impl Mem {
                 src_pitch[0] = bpp;
                 if self.is_image_from_buffer() {
                     src_pitch[1] = self.image_desc.row_pitch()? as usize;
-                    src_pitch[2] = self.image_desc.slice_pitch()? as usize;
+                    src_pitch[2] = self.image_desc.slice_pitch();
                 } else {
                     src_pitch[1] = region[0] * bpp;
                     src_pitch[2] = region[0] * region[1] * bpp;
                 }
 
-                // We should use original origin vector if it's not an image
-                new_src_origin = &src_origin;
-                tx_src = src.tx(q, ctx, 0, *region * src_pitch, RWFlags::RD)?;
+                let (offset, size) = CLVec::calc_offset_size(src_origin, region, src_pitch);
+                tx_src = src.tx(q, ctx, offset, size, RWFlags::RD)?;
             } else {
                 tx_src = src.tx_image(
                     q,
                     ctx,
-                    &create_box(&src_origin, region, src.mem_type)?,
+                    &create_pipe_box(src_origin, *region, src.mem_type)?,
                     RWFlags::RD,
                 )?;
 
-                src_pitch = [
-                    1,
-                    tx_src.row_pitch() as usize,
-                    tx_src.slice_pitch() as usize,
-                ];
+                src_pitch = [1, tx_src.row_pitch() as usize, tx_src.slice_pitch()];
             }
 
             if dst.is_buffer() {
@@ -742,28 +706,23 @@ impl Mem {
                 dst_pitch[0] = bpp;
                 if dst_base.is_image_from_buffer() {
                     dst_pitch[1] = dst_base.image_desc.row_pitch()? as usize;
-                    dst_pitch[2] = dst_base.image_desc.slice_pitch()? as usize;
+                    dst_pitch[2] = dst_base.image_desc.slice_pitch();
                 } else {
                     dst_pitch[1] = region[0] * bpp;
                     dst_pitch[2] = region[0] * region[1] * bpp;
                 }
 
-                // We should use original origin vector if it's not an image
-                new_dst_origin = &dst_origin;
-                tx_dst = dst.tx(q, ctx, 0, *region * dst_pitch, RWFlags::WR)?;
+                let (offset, size) = CLVec::calc_offset_size(dst_origin, region, dst_pitch);
+                tx_dst = dst.tx(q, ctx, offset, size, RWFlags::WR)?;
             } else {
                 tx_dst = dst.tx_image(
                     q,
                     ctx,
-                    &create_box(&dst_origin, region, dst.mem_type)?,
+                    &create_pipe_box(dst_origin, *region, dst.mem_type)?,
                     RWFlags::WR,
                 )?;
 
-                dst_pitch = [
-                    1,
-                    tx_dst.row_pitch() as usize,
-                    tx_dst.slice_pitch() as usize,
-                ];
+                dst_pitch = [1, tx_dst.row_pitch() as usize, tx_dst.slice_pitch()];
             }
 
             // Those pitch values cannot have 0 value in its coordinates
@@ -774,16 +733,16 @@ impl Mem {
                 tx_src.ptr(),
                 tx_dst.ptr(),
                 region,
-                new_src_origin,
+                &CLVec::default(),
                 src_pitch[1],
                 src_pitch[2],
-                new_dst_origin,
+                &CLVec::default(),
                 dst_pitch[1],
                 dst_pitch[2],
                 bpp as u8,
             )
         } else {
-            let bx = create_box(&src_origin, region, src.mem_type)?;
+            let bx = create_pipe_box(src_origin, *region, src.mem_type)?;
             let mut dst_origin: [u32; 3] = dst_origin.try_into()?;
 
             if src.mem_type == CL_MEM_OBJECT_IMAGE1D_ARRAY {
@@ -844,7 +803,7 @@ impl Mem {
         // CL_DEPTH where it's just one value.
         unsafe {
             util_format_pack_rgba(
-                self.image_format.to_pipe_format().unwrap(),
+                self.pipe_format,
                 new_pattern.as_mut_ptr().cast(),
                 pattern.as_ptr().cast(),
                 1,
@@ -856,11 +815,11 @@ impl Mem {
         if self.is_parent_buffer() {
             let strides = (
                 self.image_desc.row_pitch()? as usize,
-                self.image_desc.slice_pitch()? as usize,
+                self.image_desc.slice_pitch(),
             );
             ctx.clear_image_buffer(res, &new_pattern, origin, region, strides, pixel_size);
         } else {
-            let bx = create_box(origin, region, self.mem_type)?;
+            let bx = create_pipe_box(*origin, *region, self.mem_type)?;
             ctx.clear_texture(res, &new_pattern, &bx);
         }
 
@@ -882,12 +841,14 @@ impl Mem {
     ) -> CLResult<()> {
         if self.is_buffer() || self.is_image_from_buffer() {
             let pixel_size = self.pixel_size().unwrap();
-            let (offset, size) = buffer_offset_size(
+            let (offset, size) = CLVec::calc_offset_size(
                 dst_origin,
                 region,
-                dst_row_pitch,
-                dst_slice_pitch,
-                pixel_size.try_into().unwrap(),
+                [
+                    pixel_size.try_into().unwrap(),
+                    dst_row_pitch,
+                    dst_slice_pitch,
+                ],
             );
             let tx = self.tx(q, ctx, offset, size, RWFlags::WR)?;
 
@@ -909,7 +870,7 @@ impl Mem {
             assert!(src_origin == &CLVec::default());
 
             let res = self.get_res()?.get(&q.device).unwrap();
-            let bx = create_box(dst_origin, region, self.mem_type)?;
+            let bx = create_pipe_box(*dst_origin, *region, self.mem_type)?;
 
             if self.mem_type == CL_MEM_OBJECT_IMAGE1D_ARRAY {
                 src_slice_pitch = src_row_pitch;
@@ -922,9 +883,7 @@ impl Mem {
                 src_row_pitch
                     .try_into()
                     .map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
-                src_slice_pitch
-                    .try_into()
-                    .map_err(|_| CL_OUT_OF_HOST_MEMORY)?,
+                src_slice_pitch,
             );
         }
         Ok(())
@@ -948,21 +907,23 @@ impl Mem {
 
         if self.is_buffer() || self.is_image_from_buffer() {
             pixel_size = self.pixel_size().unwrap();
-            let (offset, size) = buffer_offset_size(
+            let (offset, size) = CLVec::calc_offset_size(
                 src_origin,
                 region,
-                src_row_pitch,
-                src_slice_pitch,
-                pixel_size.try_into().unwrap(),
+                [
+                    pixel_size.try_into().unwrap(),
+                    src_row_pitch,
+                    src_slice_pitch,
+                ],
             );
             tx = self.tx(q, ctx, offset, size, RWFlags::RD)?;
         } else {
             assert!(dst_origin == &CLVec::default());
 
-            let bx = create_box(src_origin, region, self.mem_type)?;
+            let bx = create_pipe_box(*src_origin, *region, self.mem_type)?;
             tx = self.tx_image(q, ctx, &bx, RWFlags::RD)?;
             src_row_pitch = tx.row_pitch() as usize;
-            src_slice_pitch = tx.slice_pitch() as usize;
+            src_slice_pitch = tx.slice_pitch();
 
             pixel_size = self.pixel_size().unwrap();
         };
@@ -1000,11 +961,11 @@ impl Mem {
         assert!(dst.is_buffer());
 
         let (offset, size) =
-            buffer_offset_size(src_origin, region, src_row_pitch, src_slice_pitch, 1);
+            CLVec::calc_offset_size(src_origin, region, [1, src_row_pitch, src_slice_pitch]);
         let tx_src = self.tx(q, ctx, offset, size, RWFlags::RD)?;
 
         let (offset, size) =
-            buffer_offset_size(dst_origin, region, dst_row_pitch, dst_slice_pitch, 1);
+            CLVec::calc_offset_size(dst_origin, region, [1, dst_row_pitch, dst_slice_pitch]);
         let tx_dst = dst.tx(q, ctx, offset, size, RWFlags::WR)?;
 
         // TODO check to use hw accelerated paths (e.g. resource_copy_region or blits)
@@ -1032,24 +993,22 @@ impl Mem {
         ptr: *mut c_void,
     ) -> CLResult<()> {
         let mut lock = self.maps.lock().unwrap();
-        if !lock.increase_ref(&q.device, ptr) {
+        if !lock.increase_ref(q.device, ptr) {
             return Ok(());
         }
 
-        if self.has_user_shadow_buffer(&q.device)? {
+        if self.has_user_shadow_buffer(q.device)? {
             self.read_to_user(q, ctx, 0, self.host_ptr, self.size)
         } else {
             if let Some(shadow) = lock.tx.get(&q.device).and_then(|tx| tx.shadow.as_ref()) {
                 let mut offset = 0;
                 let b = self.to_parent(&mut offset);
-                let res = b.get_res_of_dev(&q.device)?;
-                let bx = pipe_box {
-                    width: self.size as i32,
-                    height: 1,
-                    depth: 1,
-                    x: offset as i32,
-                    ..Default::default()
-                };
+                let res = b.get_res_of_dev(q.device)?;
+                let bx = create_pipe_box(
+                    [offset, 0, 0].into(),
+                    [self.size, 1, 1].into(),
+                    CL_MEM_OBJECT_BUFFER,
+                )?;
                 ctx.resource_copy_region(res, shadow, &[0; 3], &bx);
             }
             Ok(())
@@ -1064,16 +1023,16 @@ impl Mem {
         ptr: *mut c_void,
     ) -> CLResult<()> {
         let mut lock = self.maps.lock().unwrap();
-        if !lock.increase_ref(&q.device, ptr) {
+        if !lock.increase_ref(q.device, ptr) {
             return Ok(());
         }
 
-        if self.has_user_shadow_buffer(&q.device)? {
+        if self.has_user_shadow_buffer(q.device)? {
             self.read_to_user_rect(
                 self.host_ptr,
                 q,
                 ctx,
-                &self.image_desc.api_size(),
+                &self.image_desc.size(),
                 &CLVec::default(),
                 0,
                 0,
@@ -1082,8 +1041,8 @@ impl Mem {
                 self.image_desc.image_slice_pitch,
             )
         } else {
-            if let Some(shadow) = lock.tx.get(&q.device).and_then(|tx| tx.shadow.as_ref()) {
-                let res = self.get_res_of_dev(&q.device)?;
+            if let Some(shadow) = lock.tx.get(q.device).and_then(|tx| tx.shadow.as_ref()) {
+                let res = self.get_res_of_dev(q.device)?;
                 let bx = self.image_desc.bx()?;
                 ctx.resource_copy_region(res, shadow, &[0, 0, 0], &bx);
             }
@@ -1122,7 +1081,7 @@ impl Mem {
         lock: &'a mut MutexGuard<Mappings>,
         rw: RWFlags,
     ) -> CLResult<&'a PipeTransfer> {
-        if !lock.tx.contains_key(&q.device) {
+        if let Entry::Vacant(e) = lock.tx.entry(q.device) {
             let (tx, res) = if self.is_buffer() {
                 self.tx_raw_async(q, rw)?
             } else {
@@ -1130,10 +1089,9 @@ impl Mem {
                 self.tx_image_raw_async(q, &bx, rw)?
             };
 
-            lock.tx
-                .insert(q.device.clone(), MappingTransfer::new(tx, res));
+            e.insert(MappingTransfer::new(tx, res));
         } else {
-            lock.mark_pending(&q.device);
+            lock.mark_pending(q.device);
         }
 
         Ok(&lock.tx.get_mut(&q.device).unwrap().tx)
@@ -1143,7 +1101,7 @@ impl Mem {
         assert!(self.is_buffer());
 
         let mut lock = self.maps.lock().unwrap();
-        let ptr = if self.has_user_shadow_buffer(&q.device)? {
+        let ptr = if self.has_user_shadow_buffer(q.device)? {
             self.host_ptr
         } else {
             let tx = self.map(q, &mut lock, RWFlags::RW)?;
@@ -1167,7 +1125,7 @@ impl Mem {
         let mut lock = self.maps.lock().unwrap();
 
         // we might have a host_ptr shadow buffer or image created from buffer
-        let ptr = if self.has_user_shadow_buffer(&q.device)? || self.is_parent_buffer() {
+        let ptr = if self.has_user_shadow_buffer(q.device)? || self.is_parent_buffer() {
             *row_pitch = self.image_desc.image_row_pitch;
             *slice_pitch = self.image_desc.image_slice_pitch;
 
@@ -1184,7 +1142,7 @@ impl Mem {
                 *row_pitch = tx.row_pitch() as usize;
             }
             if self.image_desc.dims() > 2 || self.image_desc.is_array() {
-                *slice_pitch = tx.slice_pitch() as usize;
+                *slice_pitch = tx.slice_pitch();
             }
 
             tx.ptr()
@@ -1215,26 +1173,25 @@ impl Mem {
             return Ok(());
         }
 
-        let (needs_sync, shadow) = lock.decrease_ref(ptr, &q.device);
+        let (needs_sync, shadow) = lock.decrease_ref(ptr, q.device);
         if needs_sync {
             if let Some(shadow) = shadow {
                 let mut offset = 0;
                 let b = self.to_parent(&mut offset);
-                let res = b.get_res_of_dev(&q.device)?;
+                let res = b.get_res_of_dev(q.device)?;
 
                 let bx = if b.is_buffer() {
-                    pipe_box {
-                        width: self.size as i32,
-                        height: 1,
-                        depth: 1,
-                        ..Default::default()
-                    }
+                    create_pipe_box(
+                        CLVec::default(),
+                        [self.size, 1, 1].into(),
+                        CL_MEM_OBJECT_BUFFER,
+                    )?
                 } else {
                     self.image_desc.bx()?
                 };
 
                 ctx.resource_copy_region(shadow, res, &[offset as u32, 0, 0], &bx);
-            } else if self.has_user_shadow_buffer(&q.device)? {
+            } else if self.has_user_shadow_buffer(q.device)? {
                 if self.is_buffer() {
                     self.write_from_user(q, ctx, 0, self.host_ptr, self.size)?;
                 } else {
@@ -1242,7 +1199,7 @@ impl Mem {
                         self.host_ptr,
                         q,
                         ctx,
-                        &self.image_desc.api_size(),
+                        &self.image_desc.size(),
                         &CLVec::default(),
                         self.image_desc.image_row_pitch,
                         self.image_desc.image_slice_pitch,
@@ -1254,7 +1211,7 @@ impl Mem {
             }
         }
 
-        lock.clean_up_tx(&q.device, ctx);
+        lock.clean_up_tx(q.device, ctx);
 
         Ok(())
     }
@@ -1276,7 +1233,6 @@ impl Drop for Mem {
     }
 }
 
-#[repr(C)]
 pub struct Sampler {
     pub base: CLObjectBase<CL_INVALID_SAMPLER>,
     pub context: Arc<Context>,
@@ -1321,13 +1277,13 @@ impl Sampler {
             cl_sampler_addressing_mode::SAMPLER_ADDRESSING_MODE_REPEAT_MIRRORED => {
                 CL_ADDRESS_MIRRORED_REPEAT
             }
-            _ => panic!("unkown addressing_mode"),
+            _ => panic!("unknown addressing_mode"),
         };
 
         let filter = match filter_mode {
             cl_sampler_filter_mode::SAMPLER_FILTER_MODE_NEAREST => CL_FILTER_NEAREST,
             cl_sampler_filter_mode::SAMPLER_FILTER_MODE_LINEAR => CL_FILTER_LINEAR,
-            _ => panic!("unkown filter_mode"),
+            _ => panic!("unknown filter_mode"),
         };
 
         (addr_mode, filter, normalized_coords != 0)
@@ -1354,7 +1310,7 @@ impl Sampler {
         let img_filter = match filter_mode {
             CL_FILTER_NEAREST => pipe_tex_filter::PIPE_TEX_FILTER_NEAREST,
             CL_FILTER_LINEAR => pipe_tex_filter::PIPE_TEX_FILTER_LINEAR,
-            _ => panic!("unkown filter_mode"),
+            _ => panic!("unknown filter_mode"),
         };
 
         res.set_min_img_filter(img_filter);

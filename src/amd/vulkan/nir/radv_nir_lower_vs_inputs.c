@@ -38,8 +38,7 @@ typedef struct {
 } lower_vs_inputs_state;
 
 static nir_ssa_def *
-lower_load_vs_input_from_prolog(nir_builder *b, nir_intrinsic_instr *intrin,
-                                lower_vs_inputs_state *s)
+lower_load_vs_input_from_prolog(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs_state *s)
 {
    nir_src *offset_src = nir_get_io_offset_src(intrin);
    assert(nir_src_is_const(*offset_src));
@@ -57,8 +56,7 @@ lower_load_vs_input_from_prolog(nir_builder *b, nir_intrinsic_instr *intrin,
    const unsigned arg_bit_size = MAX2(bit_size, 32);
 
    unsigned num_input_args = 1;
-   nir_ssa_def *input_args[2] = {
-      ac_nir_load_arg(b, &s->args->ac, s->args->vs_inputs[driver_location]), NULL};
+   nir_ssa_def *input_args[2] = {ac_nir_load_arg(b, &s->args->ac, s->args->vs_inputs[driver_location]), NULL};
    if (component * 32 + arg_bit_size * num_components > 128) {
       assert(bit_size == 64);
 
@@ -115,8 +113,7 @@ can_use_untyped_load(const struct util_format_description *f, const unsigned bit
 }
 
 static nir_ssa_def *
-oob_input_load_value(nir_builder *b, const unsigned channel_idx, const unsigned bit_size,
-                     const bool is_float)
+oob_input_load_value(nir_builder *b, const unsigned channel_idx, const unsigned bit_size, const bool is_float)
 {
    /* 22.1.1. Attribute Location and Component Assignment of Vulkan 1.3 specification:
     * For 64-bit data types, no default attribute values are provided. Input variables
@@ -136,8 +133,7 @@ oob_input_load_value(nir_builder *b, const unsigned channel_idx, const unsigned 
 }
 
 static unsigned
-count_format_bytes(const struct util_format_description *f, const unsigned first_channel,
-                   const unsigned num_channels)
+count_format_bytes(const struct util_format_description *f, const unsigned first_channel, const unsigned num_channels)
 {
    if (!num_channels)
       return 0;
@@ -165,8 +161,7 @@ format_needs_swizzle(const struct util_format_description *f)
 }
 
 static unsigned
-first_used_swizzled_channel(const struct util_format_description *f, const unsigned mask,
-                            const bool backwards)
+first_used_swizzled_channel(const struct util_format_description *f, const unsigned mask, const bool backwards)
 {
    unsigned first_used = backwards ? 0 : f->nr_channels;
    const unsigned it_mask = mask & BITFIELD_MASK(f->nr_channels);
@@ -181,8 +176,7 @@ first_used_swizzled_channel(const struct util_format_description *f, const unsig
 }
 
 static nir_ssa_def *
-adjust_vertex_fetch_alpha(nir_builder *b, enum ac_vs_input_alpha_adjust alpha_adjust,
-                          nir_ssa_def *alpha)
+adjust_vertex_fetch_alpha(nir_builder *b, enum ac_vs_input_alpha_adjust alpha_adjust, nir_ssa_def *alpha)
 {
    if (alpha_adjust == AC_ALPHA_ADJUST_SSCALED)
       alpha = nir_f2u32(b, alpha);
@@ -247,16 +241,13 @@ lower_load_vs_input(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs
    const struct util_format_description *f = util_format_description(attrib_format);
    const struct ac_vtx_format_info *vtx_info =
       ac_get_vtx_format_info(s->rad_info->gfx_level, s->rad_info->family, attrib_format);
-   const unsigned binding_index =
-      s->info->vs.use_per_attribute_vb_descs ? location : attrib_binding;
-   const unsigned desc_index =
-      util_bitcount(s->info->vs.vb_desc_usage_mask & u_bit_consecutive(0, binding_index));
+   const unsigned binding_index = s->info->vs.use_per_attribute_vb_descs ? location : attrib_binding;
+   const unsigned desc_index = util_bitcount(s->info->vs.vb_desc_usage_mask & u_bit_consecutive(0, binding_index));
 
    nir_ssa_def *vertex_buffers_arg = ac_nir_load_arg(b, &s->args->ac, s->args->ac.vertex_buffers);
    nir_ssa_def *vertex_buffers =
       nir_pack_64_2x32_split(b, vertex_buffers_arg, nir_imm_int(b, s->rad_info->address32_hi));
-   nir_ssa_def *descriptor =
-      nir_load_smem_amd(b, 4, vertex_buffers, nir_imm_int(b, desc_index * 16));
+   nir_ssa_def *descriptor = nir_load_smem_amd(b, 4, vertex_buffers, nir_imm_int(b, desc_index * 16));
    nir_ssa_def *base_index = calc_vs_input_index(b, location, s);
    nir_ssa_def *zero = nir_imm_int(b, 0);
 
@@ -283,8 +274,7 @@ lower_load_vs_input(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs
     * Don't shrink the format here because this might allow the backend to
     * emit fewer (but larger than needed) HW instructions.
     */
-   const unsigned first_trailing_unused_channel =
-      first_used_swizzled_channel(f, dest_use_mask, true) + 1;
+   const unsigned first_trailing_unused_channel = first_used_swizzled_channel(f, dest_use_mask, true) + 1;
    const unsigned max_loaded_channels = MIN2(first_trailing_unused_channel, f->nr_channels);
    const unsigned fetch_num_channels =
       first_used_channel >= max_loaded_channels ? 0 : max_loaded_channels - skipped_start;
@@ -320,17 +310,15 @@ lower_load_vs_input(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs
        * Note, NONE seems to occur in real use and is considered an array format.
        */
       if (f->is_array && fetch_format != PIPE_FORMAT_NONE) {
-         while (channels > 1 && attrib_stride &&
-                (const_off + count_format_bytes(f, start, channels)) > attrib_stride) {
+         while (channels > 1 && attrib_stride && (const_off + count_format_bytes(f, start, channels)) > attrib_stride) {
             channels--;
          }
 
          /* Keep the fetch format as large as possible to let the backend emit
           * larger load instructions when it deems them beneficial.
           */
-         fetch_format =
-            util_format_get_array(f->channel[0].type, f->channel[0].size, f->nr_channels - start,
-                                  f->is_unorm || f->is_snorm, f->channel[0].pure_integer);
+         fetch_format = util_format_get_array(f->channel[0].type, f->channel[0].size, f->nr_channels - start,
+                                              f->is_unorm || f->is_snorm, f->channel[0].pure_integer);
       }
 
       assert(f->is_array || channels == fetch_num_channels);
@@ -339,33 +327,30 @@ lower_load_vs_input(nir_builder *b, nir_intrinsic_instr *intrin, lower_vs_inputs
        * Typed loads can cause GPU hangs when used with improper alignment.
        */
       if (can_use_untyped_load(f, bit_size)) {
-         loads[num_loads++] =
-            nir_load_buffer_amd(b, channels, bit_size, descriptor, zero, zero, index,
-                                .base = const_off, .memory_modes = nir_var_shader_in);
+         loads[num_loads++] = nir_load_buffer_amd(b, channels, bit_size, descriptor, zero, zero, index,
+                                                  .base = const_off, .memory_modes = nir_var_shader_in);
       } else {
          const unsigned align_mul = MAX2(1, s->pl_key->vs.vertex_binding_align[attrib_binding]);
          const unsigned align_offset = const_off % align_mul;
 
          loads[num_loads++] = nir_load_typed_buffer_amd(
-            b, channels, bit_size, descriptor, zero, zero, index, .base = const_off,
-            .format = fetch_format, .align_mul = align_mul, .align_offset = align_offset,
-            .memory_modes = nir_var_shader_in);
+            b, channels, bit_size, descriptor, zero, zero, index, .base = const_off, .format = fetch_format,
+            .align_mul = align_mul, .align_offset = align_offset, .memory_modes = nir_var_shader_in);
       }
    }
 
    nir_ssa_def *load = loads[0];
 
    /* Extract the channels we actually need when we couldn't skip starting
-    * components or had to emit more than one load instrinsic.
+    * components or had to emit more than one load intrinsic.
     */
    if (num_loads > 0 && (first_used_channel > skipped_start || num_loads != 1))
       load = nir_extract_bits(b, loads, num_loads, (first_used_channel - skipped_start) * bit_size,
                               max_loaded_channels - first_used_channel, bit_size);
 
    /* Return early if possible to avoid generating unnecessary IR. */
-   if (num_loads > 0 && first_used_channel == component &&
-       load->num_components == dest_num_components && !needs_swizzle &&
-       alpha_adjust == AC_ALPHA_ADJUST_NONE)
+   if (num_loads > 0 && first_used_channel == component && load->num_components == dest_num_components &&
+       !needs_swizzle && alpha_adjust == AC_ALPHA_ADJUST_NONE)
       return load;
 
    /* Fill unused and OOB components.
@@ -443,6 +428,6 @@ radv_nir_lower_vs_inputs(nir_shader *shader, const struct radv_pipeline_stage *v
       .rad_info = rad_info,
    };
 
-   return nir_shader_instructions_pass(shader, lower_vs_input_instr,
-                                       nir_metadata_dominance | nir_metadata_block_index, &state);
+   return nir_shader_instructions_pass(shader, lower_vs_input_instr, nir_metadata_dominance | nir_metadata_block_index,
+                                       &state);
 }

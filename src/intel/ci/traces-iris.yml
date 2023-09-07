@@ -133,16 +133,28 @@ traces:
       checksum: 0a1524303e0772f6d869e4875fe1f401
   godot/Material Testers.x86_64_2020.04.08_13.38_frame799.rdc:
     gl-intel-apl:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: dbe1de4e2e812413f173ea6c423117ff
     gl-intel-glk:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: dbe1de4e2e812413f173ea6c423117ff
     gl-intel-amly:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: dbe1de4e2e812413f173ea6c423117ff
     gl-intel-kbl:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: dbe1de4e2e812413f173ea6c423117ff
     gl-intel-whl:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: dbe1de4e2e812413f173ea6c423117ff
     gl-intel-cml:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: dbe1de4e2e812413f173ea6c423117ff
   gputest/pixmark-julia-fp32-v2.trace:
     gl-intel-apl:

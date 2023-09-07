@@ -53,7 +53,7 @@ struct llvm_middle_end {
 
    unsigned vertex_data_offset;
    unsigned vertex_size;
-   enum pipe_prim_type input_prim;
+   enum mesa_prim input_prim;
    unsigned opt;
 
    struct draw_llvm *llvm;
@@ -275,7 +275,7 @@ llvm_middle_end_prepare_tes(struct llvm_middle_end *fpme)
  */
 static void
 llvm_middle_end_prepare(struct draw_pt_middle_end *middle,
-                        enum pipe_prim_type in_prim,
+                        enum mesa_prim in_prim,
                         unsigned opt,
                         unsigned *max_vertices)
 {
@@ -286,11 +286,13 @@ llvm_middle_end_prepare(struct draw_pt_middle_end *middle,
    struct draw_geometry_shader *gs = draw->gs.geometry_shader;
    struct draw_tess_ctrl_shader *tcs = draw->tcs.tess_ctrl_shader;
    struct draw_tess_eval_shader *tes = draw->tes.tess_eval_shader;
-   const enum pipe_prim_type out_prim =
+   const enum mesa_prim out_prim =
       gs ? gs->output_primitive : tes ? get_tes_output_prim(tes) :
       u_assembled_prim(in_prim);
-   unsigned point_clip = draw->rasterizer->fill_front == PIPE_POLYGON_MODE_POINT ||
-                         out_prim == PIPE_PRIM_POINTS;
+   unsigned point_line_clip = draw->rasterizer->fill_front == PIPE_POLYGON_MODE_POINT ||
+                              draw->rasterizer->fill_front == PIPE_POLYGON_MODE_LINE ||
+                              out_prim == MESA_PRIM_POINTS ||
+                              u_reduced_prim(out_prim) == MESA_PRIM_LINES;
 
    fpme->input_prim = in_prim;
    fpme->opt = opt;
@@ -299,11 +301,11 @@ llvm_middle_end_prepare(struct draw_pt_middle_end *middle,
                            draw->clip_xy,
                            draw->clip_z,
                            draw->clip_user,
-                           point_clip ? draw->guard_band_points_xy :
-                                        draw->guard_band_xy,
+                           point_line_clip ? draw->guard_band_points_lines_xy :
+                                             draw->guard_band_xy,
                            draw->bypass_viewport,
                            draw->rasterizer->clip_halfz,
-                           (draw->vs.edgeflag_output ? TRUE : FALSE));
+                           (draw->vs.edgeflag_output ? true : false));
 
    draw_pt_so_emit_prepare(fpme->so_emit, (gs == NULL && tes == NULL));
 
@@ -404,16 +406,15 @@ llvm_middle_end_prepare(struct draw_pt_middle_end *middle,
 
 
 static unsigned
-get_num_consts_robust(struct draw_context *draw, unsigned *sizes, unsigned idx)
+get_num_consts_robust(struct draw_context *draw, struct draw_buffer_info *bufs, unsigned idx)
 {
-   uint64_t const_bytes = sizes[idx];
+   uint64_t const_bytes = bufs[idx].size;
 
    if (const_bytes < sizeof(float))
       return 0;
 
    return DIV_ROUND_UP(const_bytes, draw->constant_buffer_stride);
 }
-
 
 /**
  * Bind/update constant buffer pointers, clip planes and viewport dims.
@@ -430,91 +431,39 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    struct draw_llvm *llvm = fpme->llvm;
    unsigned i;
 
-   for (i = 0; i < ARRAY_SIZE(llvm->jit_context.constants); ++i) {
-      /*
-       * There could be a potential issue with rounding this up, as the
-       * shader expects 16-byte allocations, the fix is likely to move
-       * to LOAD intrinsic in the future and remove the vec4 constraint.
-       */
-      int num_consts = get_num_consts_robust(draw, draw->pt.user.vs_constants_size, i);
-      llvm->jit_context.constants[i].f = draw->pt.user.vs_constants[i];
-      llvm->jit_context.constants[i].num_elements = num_consts;
-      if (num_consts == 0) {
-         llvm->jit_context.constants[i].f = fake_const_buf;
+   for (enum pipe_shader_type shader_type = PIPE_SHADER_VERTEX; shader_type <= PIPE_SHADER_GEOMETRY; shader_type++) {
+      for (i = 0; i < ARRAY_SIZE(llvm->jit_resources[shader_type].constants); ++i) {
+         /*
+          * There could be a potential issue with rounding this up, as the
+          * shader expects 16-byte allocations, the fix is likely to move
+          * to LOAD intrinsic in the future and remove the vec4 constraint.
+          */
+         int num_consts = get_num_consts_robust(draw, draw->pt.user.constants[shader_type], i);
+         llvm->jit_resources[shader_type].constants[i].f = draw->pt.user.constants[shader_type][i].ptr;
+         llvm->jit_resources[shader_type].constants[i].num_elements = num_consts;
+         if (num_consts == 0) {
+            llvm->jit_resources[shader_type].constants[i].f = fake_const_buf;
+         }
       }
-   }
-   for (i = 0; i < ARRAY_SIZE(llvm->jit_context.ssbos); ++i) {
-      int num_ssbos = draw->pt.user.vs_ssbos_size[i];
-      llvm->jit_context.ssbos[i].u = draw->pt.user.vs_ssbos[i];
-      llvm->jit_context.ssbos[i].num_elements = num_ssbos;
-      if (num_ssbos == 0) {
-         llvm->jit_context.ssbos[i].u = (const uint32_t *)fake_const_buf;
+      for (i = 0; i < ARRAY_SIZE(llvm->jit_resources[shader_type].ssbos); ++i) {
+         int num_ssbos = draw->pt.user.ssbos[shader_type][i].size;
+         llvm->jit_resources[shader_type].ssbos[i].u = draw->pt.user.ssbos[shader_type][i].ptr;
+         llvm->jit_resources[shader_type].ssbos[i].num_elements = num_ssbos;
+         if (num_ssbos == 0) {
+            llvm->jit_resources[shader_type].ssbos[i].u = (const uint32_t *)fake_const_buf;
+         }
       }
+
+      llvm->jit_resources[shader_type].aniso_filter_table = lp_build_sample_aniso_filter_table();
    }
 
-   for (i = 0; i < ARRAY_SIZE(llvm->gs_jit_context.constants); ++i) {
-      int num_consts = get_num_consts_robust(draw, draw->pt.user.gs_constants_size, i);
-      llvm->gs_jit_context.constants[i].f = draw->pt.user.gs_constants[i];
-      llvm->gs_jit_context.constants[i].num_elements = num_consts;
-      if (num_consts == 0) {
-         llvm->gs_jit_context.constants[i].f = fake_const_buf;
-      }
-   }
-   for (i = 0; i < ARRAY_SIZE(llvm->gs_jit_context.ssbos); ++i) {
-      int num_ssbos = draw->pt.user.gs_ssbos_size[i];
-      llvm->gs_jit_context.ssbos[i].u = draw->pt.user.gs_ssbos[i];
-      llvm->gs_jit_context.ssbos[i].num_elements = num_ssbos;
-      if (num_ssbos == 0) {
-         llvm->gs_jit_context.ssbos[i].u = (const uint32_t *)fake_const_buf;
-      }
-   }
-
-   for (i = 0; i < ARRAY_SIZE(llvm->tcs_jit_context.constants); ++i) {
-      int num_consts = get_num_consts_robust(draw, draw->pt.user.tcs_constants_size, i);
-      llvm->tcs_jit_context.constants[i].f = draw->pt.user.tcs_constants[i];
-      llvm->tcs_jit_context.constants[i].num_elements = num_consts;
-      if (num_consts == 0) {
-         llvm->tcs_jit_context.constants[i].f = fake_const_buf;
-      }
-   }
-   for (i = 0; i < ARRAY_SIZE(llvm->tcs_jit_context.ssbos); ++i) {
-      int num_ssbos = draw->pt.user.tcs_ssbos_size[i];
-      llvm->tcs_jit_context.ssbos[i].u = draw->pt.user.tcs_ssbos[i];
-      llvm->tcs_jit_context.ssbos[i].num_elements = num_ssbos;
-      if (num_ssbos == 0) {
-         llvm->tcs_jit_context.ssbos[i].u = (const uint32_t *)fake_const_buf;
-      }
-   }
-
-   for (i = 0; i < ARRAY_SIZE(llvm->tes_jit_context.constants); ++i) {
-      int num_consts = get_num_consts_robust(draw, draw->pt.user.tes_constants_size, i);
-      llvm->tes_jit_context.constants[i].f = draw->pt.user.tes_constants[i];
-      llvm->tes_jit_context.constants[i].num_elements = num_consts;
-      if (num_consts == 0) {
-         llvm->tes_jit_context.constants[i].f = fake_const_buf;
-      }
-   }
-   for (i = 0; i < ARRAY_SIZE(llvm->tes_jit_context.ssbos); ++i) {
-      int num_ssbos = draw->pt.user.tes_ssbos_size[i];
-      llvm->tes_jit_context.ssbos[i].u = draw->pt.user.tes_ssbos[i];
-      llvm->tes_jit_context.ssbos[i].num_elements = num_ssbos;
-      if (num_ssbos == 0) {
-         llvm->tes_jit_context.ssbos[i].u = (const uint32_t *)fake_const_buf;
-      }
-   }
-
-   llvm->jit_context.planes =
+   llvm->vs_jit_context.planes =
       (float (*)[DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
    llvm->gs_jit_context.planes =
       (float (*)[DRAW_TOTAL_CLIP_PLANES][4]) draw->pt.user.planes[0];
 
-   llvm->jit_context.viewports = draw->viewports;
+   llvm->vs_jit_context.viewports = draw->viewports;
    llvm->gs_jit_context.viewports = draw->viewports;
-
-   llvm->jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
-   llvm->gs_jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
-   llvm->tcs_jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
-   llvm->tes_jit_context.aniso_filter_table = lp_build_sample_aniso_filter_table();
 }
 
 
@@ -562,10 +511,10 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
    struct draw_prim_info ia_prim_info;
    struct draw_vertex_info ia_vert_info;
    const struct draw_prim_info *prim_info = in_prim_info;
-   boolean free_prim_info = FALSE;
+   bool free_prim_info = false;
    unsigned opt = fpme->opt;
-   boolean clipped = 0;
-   ushort *tes_elts_out = NULL;
+   bool clipped = 0;
+   uint16_t *tes_elts_out = NULL;
 
    assert(fetch_info->count > 0);
 
@@ -583,7 +532,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
 
    if (draw->collect_statistics) {
       draw->statistics.ia_vertices += prim_info->count;
-      if (prim_info->prim == PIPE_PRIM_PATCHES)
+      if (prim_info->prim == MESA_PRIM_PATCHES)
          draw->statistics.ia_primitives +=
             prim_info->count / draw->pt.vertices_per_patch;
       else
@@ -606,7 +555,8 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
          elts = fetch_info->elts;
       }
       /* Run vertex fetch shader */
-      clipped = fpme->current_variant->jit_func(&fpme->llvm->jit_context,
+      clipped = fpme->current_variant->jit_func(&fpme->llvm->vs_jit_context,
+                                                &fpme->llvm->jit_resources[PIPE_SHADER_VERTEX],
                                                 llvm_vert_info.verts,
                                                 draw->pt.user.vbuffer,
                                                 fetch_info->count,
@@ -625,13 +575,10 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
       vert_info = &llvm_vert_info;
    }
 
-
    if (opt & PT_SHADE) {
       struct draw_vertex_shader *vshader = draw->vs.vertex_shader;
       if (tcs_shader) {
          draw_tess_ctrl_shader_run(tcs_shader,
-                                   draw->pt.user.tcs_constants,
-                                   draw->pt.user.tcs_constants_size,
                                    vert_info,
                                    prim_info,
                                    &vshader->info,
@@ -650,8 +597,6 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
 
       if (tes_shader) {
          draw_tess_eval_shader_run(tes_shader,
-                                   draw->pt.user.tes_constants,
-                                   draw->pt.user.tes_constants_size,
                                    tcs_shader ? tcs_shader->vertices_out : draw->pt.vertices_per_patch,
                                    vert_info,
                                    prim_info,
@@ -662,7 +607,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
          FREE(vert_info->verts);
          vert_info = &tes_vert_info;
          prim_info = &tes_prim_info;
-         free_prim_info = TRUE;
+         free_prim_info = true;
 
          /*
           * pt emit can only handle ushort number of vertices (see
@@ -682,8 +627,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
    if ((opt & PT_SHADE) && gshader) {
       struct draw_vertex_shader *vshader = draw->vs.vertex_shader;
       draw_geometry_shader_run(gshader,
-                               draw->pt.user.gs_constants,
-                               draw->pt.user.gs_constants_size,
+                               draw->pt.user.constants[PIPE_SHADER_GEOMETRY],
                                vert_info,
                                prim_info,
                                tes_shader ? &tes_shader->info : &vshader->info,
@@ -697,7 +641,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
       }
       vert_info = &gs_vert_info[0];
       prim_info = &gs_prim_info[0];
-      free_prim_info = FALSE;
+      free_prim_info = false;
       /*
        * pt emit can only handle ushort number of vertices (see
        * render->allocate_vertices).
@@ -722,7 +666,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
             }
             vert_info = &ia_vert_info;
             prim_info = &ia_prim_info;
-            free_prim_info = TRUE;
+            free_prim_info = true;
          }
       }
    }
@@ -773,11 +717,11 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
 }
 
 
-static inline enum pipe_prim_type
-prim_type(enum pipe_prim_type prim, unsigned flags)
+static inline enum mesa_prim
+prim_type(enum mesa_prim prim, unsigned flags)
 {
    if (flags & DRAW_LINE_LOOP_AS_STRIP)
-      return PIPE_PRIM_LINE_STRIP;
+      return MESA_PRIM_LINE_STRIP;
    else
       return prim;
 }
@@ -787,7 +731,7 @@ static void
 llvm_middle_end_run(struct draw_pt_middle_end *middle,
                     const unsigned *fetch_elts,
                     unsigned fetch_count,
-                    const ushort *draw_elts,
+                    const uint16_t *draw_elts,
                     unsigned draw_count,
                     unsigned prim_flags)
 {
@@ -795,12 +739,12 @@ llvm_middle_end_run(struct draw_pt_middle_end *middle,
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
-   fetch_info.linear = FALSE;
+   fetch_info.linear = false;
    fetch_info.start = 0;
    fetch_info.elts = fetch_elts;
    fetch_info.count = fetch_count;
 
-   prim_info.linear = FALSE;
+   prim_info.linear = false;
    prim_info.start = 0;
    prim_info.count = draw_count;
    prim_info.elts = draw_elts;
@@ -823,12 +767,12 @@ llvm_middle_end_linear_run(struct draw_pt_middle_end *middle,
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
-   fetch_info.linear = TRUE;
+   fetch_info.linear = true;
    fetch_info.start = start;
    fetch_info.count = count;
    fetch_info.elts = NULL;
 
-   prim_info.linear = TRUE;
+   prim_info.linear = true;
    prim_info.start = start;
    prim_info.count = count;
    prim_info.elts = NULL;
@@ -841,11 +785,11 @@ llvm_middle_end_linear_run(struct draw_pt_middle_end *middle,
 }
 
 
-static boolean
+static bool
 llvm_middle_end_linear_run_elts(struct draw_pt_middle_end *middle,
                                 unsigned start,
                                 unsigned count,
-                                const ushort *draw_elts,
+                                const uint16_t *draw_elts,
                                 unsigned draw_count,
                                 unsigned prim_flags)
 {
@@ -853,12 +797,12 @@ llvm_middle_end_linear_run_elts(struct draw_pt_middle_end *middle,
    struct draw_fetch_info fetch_info;
    struct draw_prim_info prim_info;
 
-   fetch_info.linear = TRUE;
+   fetch_info.linear = true;
    fetch_info.start = start;
    fetch_info.count = count;
    fetch_info.elts = NULL;
 
-   prim_info.linear = FALSE;
+   prim_info.linear = false;
    prim_info.start = 0;
    prim_info.count = draw_count;
    prim_info.elts = draw_elts;
@@ -869,7 +813,7 @@ llvm_middle_end_linear_run_elts(struct draw_pt_middle_end *middle,
 
    llvm_pipeline_generic(middle, &fetch_info, &prim_info);
 
-   return TRUE;
+   return true;
 }
 
 

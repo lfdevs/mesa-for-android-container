@@ -41,51 +41,18 @@ static nir_ssa_def *
 get_texcoord(nir_builder *b, lower_drawpixels_state *state)
 {
    if (state->texcoord == NULL) {
-      nir_variable *texcoord = NULL;
-
-      /* find gl_TexCoord, if it exists: */
-      nir_foreach_shader_in_variable(var, state->shader) {
-         if (var->data.location == VARYING_SLOT_TEX0) {
-            texcoord = var;
-            break;
-         }
-      }
-
-      /* otherwise create it: */
-      if (texcoord == NULL) {
-         texcoord = nir_variable_create(state->shader,
-                                        nir_var_shader_in,
-                                        glsl_vec4_type(),
-                                        "gl_TexCoord");
-         texcoord->data.location = VARYING_SLOT_TEX0;
-      }
-
-      state->texcoord = texcoord;
+      state->texcoord = nir_get_variable_with_location(state->shader, nir_var_shader_in,
+                                                       VARYING_SLOT_TEX0, glsl_vec4_type());
    }
    return nir_load_var(b, state->texcoord);
-}
-
-static nir_variable *
-create_uniform(nir_shader *shader, const char *name,
-               const gl_state_index16 state_tokens[STATE_LENGTH])
-{
-   nir_variable *var = nir_variable_create(shader,
-                                           nir_var_uniform,
-                                           glsl_vec4_type(),
-                                           name);
-   var->num_state_slots = 1;
-   var->state_slots = ralloc_array(var, nir_state_slot, 1);
-   memcpy(var->state_slots[0].tokens, state_tokens,
-          sizeof(var->state_slots[0].tokens));
-   return var;
 }
 
 static nir_ssa_def *
 get_scale(nir_builder *b, lower_drawpixels_state *state)
 {
    if (state->scale == NULL) {
-      state->scale = create_uniform(state->shader, "gl_PTscale",
-                                    state->options->scale_state_tokens);
+      state->scale = nir_state_variable_create(state->shader, glsl_vec4_type(), "gl_PTscale",
+                                               state->options->scale_state_tokens);
    }
    return nir_load_var(b, state->scale);
 }
@@ -94,8 +61,8 @@ static nir_ssa_def *
 get_bias(nir_builder *b, lower_drawpixels_state *state)
 {
    if (state->bias == NULL) {
-      state->bias = create_uniform(state->shader, "gl_PTbias",
-                                   state->options->bias_state_tokens);
+      state->bias = nir_state_variable_create(state->shader, glsl_vec4_type(), "gl_PTbias",
+                                              state->options->bias_state_tokens);
    }
    return nir_load_var(b, state->bias);
 }
@@ -104,9 +71,9 @@ static nir_ssa_def *
 get_texcoord_const(nir_builder *b, lower_drawpixels_state *state)
 {
    if (state->texcoord_const == NULL) {
-      state->texcoord_const = create_uniform(state->shader,
-                                   "gl_MultiTexCoord0",
-                                   state->options->texcoord_state_tokens);
+      state->texcoord_const = nir_state_variable_create(state->shader, glsl_vec4_type(),
+                                                        "gl_MultiTexCoord0",
+                                                        state->options->texcoord_state_tokens);
    }
    return nir_load_var(b, state->texcoord_const);
 }
@@ -145,16 +112,15 @@ lower_color(nir_builder *b, lower_drawpixels_state *state, nir_intrinsic_instr *
    tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
    tex->coord_components = 2;
    tex->dest_type = nir_type_float32;
-   tex->src[0].src_type = nir_tex_src_texture_deref;
-   tex->src[0].src = nir_src_for_ssa(&tex_deref->dest.ssa);
-   tex->src[1].src_type = nir_tex_src_sampler_deref;
-   tex->src[1].src = nir_src_for_ssa(&tex_deref->dest.ssa);
-   tex->src[2].src_type = nir_tex_src_coord;
-   tex->src[2].src =
-      nir_src_for_ssa(nir_channels(b, texcoord,
-                                   (1 << tex->coord_components) - 1));
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
+                                     &tex_deref->dest.ssa);
+   tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
+                                     &tex_deref->dest.ssa);
+   tex->src[2] =
+      nir_tex_src_for_ssa(nir_tex_src_coord,
+                          nir_trim_vector(b, texcoord, tex->coord_components));
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
    def = &tex->dest.ssa;
 
@@ -187,14 +153,14 @@ lower_color(nir_builder *b, lower_drawpixels_state *state, nir_intrinsic_instr *
       tex->sampler_index = state->options->pixelmap_sampler;
       tex->texture_index = state->options->pixelmap_sampler;
       tex->dest_type = nir_type_float32;
-      tex->src[0].src_type = nir_tex_src_texture_deref;
-      tex->src[0].src = nir_src_for_ssa(&pixelmap_deref->dest.ssa);
-      tex->src[1].src_type = nir_tex_src_sampler_deref;
-      tex->src[1].src = nir_src_for_ssa(&pixelmap_deref->dest.ssa);
-      tex->src[2].src_type = nir_tex_src_coord;
-      tex->src[2].src = nir_src_for_ssa(nir_channels(b, def, 0x3));
+      tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
+                                        &pixelmap_deref->dest.ssa);
+      tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_sampler_deref,
+                                        &pixelmap_deref->dest.ssa);
+      tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_coord,
+                                        nir_trim_vector(b, def, 2));
 
-      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
       nir_builder_instr_insert(b, &tex->instr);
       def_xy = &tex->dest.ssa;
 
@@ -205,10 +171,10 @@ lower_color(nir_builder *b, lower_drawpixels_state *state, nir_intrinsic_instr *
       tex->coord_components = 2;
       tex->sampler_index = state->options->pixelmap_sampler;
       tex->dest_type = nir_type_float32;
-      tex->src[0].src_type = nir_tex_src_coord;
-      tex->src[0].src = nir_src_for_ssa(nir_channels(b, def, 0xc));
+      tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord,
+                                        nir_channels(b, def, 0xc));
 
-      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
       nir_builder_instr_insert(b, &tex->instr);
       def_zw = &tex->dest.ssa;
 

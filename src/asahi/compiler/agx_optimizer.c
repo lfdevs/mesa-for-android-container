@@ -86,6 +86,19 @@ agx_optimizer_fmov(agx_instr **defs, agx_instr *ins)
          continue;
       if (def->saturate)
          continue;
+      if (ins->op == AGX_OPCODE_FCMPSEL && s >= 2)
+         continue;
+
+      /* We can fold f2f32 into 32-bit instructions, but we can't fold f2f16
+       * into 16-bit instructions, since the latter would implicitly promote to
+       * a 32-bit instruction which is not exact.
+       */
+      assert(def->src[0].size == AGX_SIZE_32 ||
+             def->src[0].size == AGX_SIZE_16);
+      assert(src.size == AGX_SIZE_32 || src.size == AGX_SIZE_16);
+
+      if (src.size == AGX_SIZE_16 && def->src[0].size == AGX_SIZE_32)
+         continue;
 
       ins->src[s] = agx_compose_float_src(src, def->src[0]);
    }
@@ -111,9 +124,9 @@ agx_optimizer_inline_imm(agx_instr **defs, agx_instr *I, unsigned srcs,
 
       bool float_src = is_float;
 
-      /* cmpselsrc takes integer immediates only */
-      if (s >= 2 && I->op == AGX_OPCODE_FCMPSEL)
-         float_src = false;
+      /* fcmpsel takes first 2 as floats specially */
+      if (s < 2 && I->op == AGX_OPCODE_FCMPSEL)
+         float_src = true;
       if (I->op == AGX_OPCODE_ST_TILE && s == 0)
          continue;
       if (I->op == AGX_OPCODE_ZS_EMIT && s != 0)
@@ -150,6 +163,16 @@ agx_optimizer_fmov_rev(agx_instr *I, agx_instr *use)
    if (!agx_is_fmov(use))
       return false;
    if (use->src[0].neg || use->src[0].abs)
+      return false;
+
+   /* We can fold f2f16 into 32-bit instructions, but we can't fold f2f32 into
+    * 16-bit instructions, since the latter would implicitly promote to a 32-bit
+    * instruction which is not exact.
+    */
+   assert(use->dest[0].size == AGX_SIZE_32 || use->dest[0].size == AGX_SIZE_16);
+   assert(I->dest[0].size == AGX_SIZE_32 || I->dest[0].size == AGX_SIZE_16);
+
+   if (I->dest[0].size == AGX_SIZE_16 && use->dest[0].size == AGX_SIZE_32)
       return false;
 
    /* saturate(saturate(x)) = saturate(x) */
@@ -208,7 +231,7 @@ agx_optimizer_forward(agx_context *ctx)
       agx_optimizer_copyprop(defs, I);
 
       /* Propagate fmov down */
-      if (info.is_float)
+      if (info.is_float || I->op == AGX_OPCODE_FCMPSEL)
          agx_optimizer_fmov(defs, I);
 
       /* Inline immediates if we can. TODO: systematic */

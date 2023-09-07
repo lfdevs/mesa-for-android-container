@@ -65,6 +65,8 @@ static const struct debug_named_value sfn_debug_options[] = {
    {"opt",      SfnLog::opt,         "Log optimization"                     },
    {"steps",    SfnLog::steps,       "Log shaders at transformation steps"  },
    {"noopt",    SfnLog::noopt,       "Don't run backend optimizations"      },
+   {"noaddrsplit", SfnLog::noaddrsplit, "Don't split address loads early"   },
+   {"warn" ,    SfnLog::warn,        "Print warnings"                       },
    DEBUG_NAMED_VALUE_END
 };
 

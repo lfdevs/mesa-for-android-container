@@ -39,8 +39,8 @@ build_leaf_is_procedural(nir_builder *b, struct brw_nir_rt_mem_hit_defs *hit)
       return nir_imm_true(b);
 
    default:
-      return nir_ieq(b, hit->leaf_type,
-                        nir_imm_int(b, BRW_RT_BVH_NODE_TYPE_PROCEDURAL));
+      return nir_ieq_imm(b, hit->leaf_type,
+                            BRW_RT_BVH_NODE_TYPE_PROCEDURAL);
    }
 }
 
@@ -50,11 +50,8 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
 {
    bool progress = false;
 
-   nir_builder build;
-   nir_builder_init(&build, impl);
+   nir_builder build = nir_builder_at(nir_before_block(nir_start_block(impl)));
    nir_builder *b = &build;
-
-   b->cursor = nir_before_block(nir_start_block(b->impl));
 
    struct brw_nir_rt_globals_defs globals;
    brw_nir_rt_load_globals(b, &globals);
@@ -314,6 +311,13 @@ lower_rt_intrinsics_impl(nir_function_impl *impl,
             sysval = build_leaf_is_procedural(b, &hit_in);
             break;
 
+         case nir_intrinsic_load_ray_triangle_vertex_positions: {
+            struct brw_nir_rt_bvh_primitive_leaf_positions_defs pos;
+            brw_nir_rt_load_bvh_primitive_leaf_positions(b, &pos, hit_in.prim_leaf_ptr);
+            sysval = pos.positions[nir_intrinsic_column(intrin)];
+            break;
+         }
+
          case nir_intrinsic_load_leaf_opaque_intel: {
             if (stage == MESA_SHADER_INTERSECTION) {
                /* In intersection shaders, the opaque bit is passed to us in
@@ -376,8 +380,7 @@ void
 brw_nir_lower_rt_intrinsics(nir_shader *nir,
                             const struct intel_device_info *devinfo)
 {
-   nir_foreach_function(function, nir) {
-      if (function->impl)
-         lower_rt_intrinsics_impl(function->impl, devinfo);
+   nir_foreach_function_impl(impl, nir) {
+      lower_rt_intrinsics_impl(impl, devinfo);
    }
 }

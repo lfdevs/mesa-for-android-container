@@ -106,7 +106,7 @@ LLVMValueRef
 lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
                         const struct util_format_description *format_desc,
                         struct lp_type type,
-                        boolean aligned,
+                        bool aligned,
                         LLVMValueRef base_ptr,
                         LLVMValueRef offset,
                         LLVMValueRef i,
@@ -148,7 +148,7 @@ void
 lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
                         const struct util_format_description *format_desc,
                         struct lp_type type,
-                        boolean aligned,
+                        bool aligned,
                         LLVMValueRef base_ptr,
                         LLVMValueRef offsets,
                         LLVMValueRef i,
@@ -219,7 +219,7 @@ lp_build_float_to_smallfloat(struct gallivm_state *gallivm,
                              unsigned mantissa_bits,
                              unsigned exponent_bits,
                              unsigned mantissa_start,
-                             boolean has_sign);
+                             bool has_sign);
 
 LLVMValueRef
 lp_build_smallfloat_to_float(struct gallivm_state *gallivm,
@@ -228,7 +228,7 @@ lp_build_smallfloat_to_float(struct gallivm_state *gallivm,
                              unsigned mantissa_bits,
                              unsigned exponent_bits,
                              unsigned mantissa_start,
-                             boolean has_sign);
+                             bool has_sign);
 
 LLVMValueRef
 lp_build_float_to_r11g11b10(struct gallivm_state *gallivm,

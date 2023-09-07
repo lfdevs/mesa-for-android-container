@@ -983,6 +983,30 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          }
          break;
 
+      case BRW_OPCODE_ADD3:
+         /* add3 can have a single imm16 source. Proceed if the source type is
+          * already W or UW or the value can be coerced to one of those types.
+          */
+         if (val.type == BRW_REGISTER_TYPE_W || val.type == BRW_REGISTER_TYPE_UW)
+            ; /* Nothing to do. */
+         else if (val.ud <= 0xffff)
+            val = brw_imm_uw(val.ud);
+         else if (val.d >= -0x8000 && val.d <= 0x7fff)
+            val = brw_imm_w(val.d);
+         else
+            break;
+
+         if (i == 2) {
+            inst->src[i] = val;
+            progress = true;
+         } else if (inst->src[2].file != IMM) {
+            inst->src[i] = inst->src[2];
+            inst->src[2] = val;
+            progress = true;
+         }
+
+         break;
+
       case BRW_OPCODE_CMP:
       case BRW_OPCODE_IF:
          if (i == 1) {
@@ -1062,29 +1086,27 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL:
       case SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL:
       case SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL:
-         inst->src[i] = val;
-         progress = true;
-         break;
-
       case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
       case SHADER_OPCODE_BROADCAST:
-         inst->src[i] = val;
-         progress = true;
-         break;
-
       case BRW_OPCODE_MAD:
       case BRW_OPCODE_LRP:
-         inst->src[i] = val;
-         progress = true;
-         break;
-
       case FS_OPCODE_PACK_HALF_2x16_SPLIT:
+      case SHADER_OPCODE_SHUFFLE:
          inst->src[i] = val;
          progress = true;
          break;
 
       default:
          break;
+      }
+   }
+
+   /* ADD3 can only have the immediate as src0. */
+   if (progress && inst->opcode == BRW_OPCODE_ADD3) {
+      if (inst->src[2].file == IMM) {
+         const auto src0 = inst->src[0];
+         inst->src[0] = inst->src[2];
+         inst->src[2] = src0;
       }
    }
 

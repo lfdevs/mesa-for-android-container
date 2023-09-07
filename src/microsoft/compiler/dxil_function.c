@@ -110,6 +110,7 @@ static struct  predefined_func_descr predefined_funcs[] = {
 {"dx.op.wavePrefixOp", "O", "iOcc", DXIL_ATTR_KIND_NO_UNWIND},
 {"dx.op.quadReadLaneAt", "O", "iOi", DXIL_ATTR_KIND_NO_UNWIND},
 {"dx.op.quadOp", "O", "iOc", DXIL_ATTR_KIND_NO_UNWIND},
+{"dx.op.dot4AddPacked", "i", "iiii", DXIL_ATTR_KIND_READ_NONE},
 };
 
 struct func_descr {

@@ -135,6 +135,9 @@ util_init_pipe_vertex_state(struct pipe_screen *screen,
 union pipe_color_union util_clamp_color(enum pipe_format format,
                                         const union pipe_color_union *color);
 
+struct pipe_sampler_view
+util_image_to_sampler_view(struct pipe_image_view *v);
+
 #ifdef __cplusplus
 }
 #endif

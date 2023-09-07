@@ -20,14 +20,34 @@
 
 /* buffer commands */
 
-static inline bool
-vn_buffer_create_info_can_be_cached(const VkBufferCreateInfo *create_info,
-                                    struct vn_buffer_cache *cache)
+static inline uint64_t
+vn_buffer_get_cache_index(const VkBufferCreateInfo *create_info,
+                          struct vn_buffer_cache *cache)
 {
-   /* cache only VK_SHARING_MODE_EXCLUSIVE and without pNext for simplicity */
-   return (create_info->size <= cache->max_buffer_size) &&
-          (create_info->pNext == NULL) &&
-          (create_info->sharingMode == VK_SHARING_MODE_EXCLUSIVE);
+   /* For simplicity, cache only when below conditions are met:
+    * - pNext is NULL
+    * - VK_SHARING_MODE_EXCLUSIVE or VK_SHARING_MODE_CONCURRENT across all
+    *
+    * Combine sharing mode, flags and usage bits to form a unique index.
+    *
+    * Btw, we assume VkBufferCreateFlagBits won't exhaust all 32bits, at least
+    * no earlier than VkBufferUsageFlagBits.
+    */
+   assert(!(create_info->flags & 0x80000000));
+
+   const bool is_exclusive =
+      create_info->sharingMode == VK_SHARING_MODE_EXCLUSIVE;
+   const bool is_concurrent =
+      create_info->sharingMode == VK_SHARING_MODE_CONCURRENT &&
+      create_info->queueFamilyIndexCount == cache->queue_family_count;
+   if (create_info->size <= cache->max_buffer_size &&
+       create_info->pNext == NULL && (is_exclusive || is_concurrent)) {
+      return (uint64_t)is_concurrent << 63 |
+             (uint64_t)create_info->flags << 32 | create_info->usage;
+   }
+
+   /* index being zero suggests uncachable since usage must not be zero */
+   return 0;
 }
 
 static inline uint64_t
@@ -46,30 +66,19 @@ vn_buffer_get_max_buffer_size(struct vn_physical_device *physical_dev)
              : safe_max_buffer_size;
 }
 
-VkResult
+void
 vn_buffer_cache_init(struct vn_device *dev)
 {
-   uint32_t ahb_mem_type_bits = 0;
-   VkResult result;
+   assert(dev->physical_device->queue_family_count);
 
-   /* TODO lazily initialize ahb buffer cache */
-   if (dev->base.base.enabled_extensions
-          .ANDROID_external_memory_android_hardware_buffer) {
-      result =
-         vn_android_get_ahb_buffer_memory_type_bits(dev, &ahb_mem_type_bits);
-      if (result != VK_SUCCESS)
-         return result;
-   }
-
-   dev->buffer_cache.ahb_mem_type_bits = ahb_mem_type_bits;
    dev->buffer_cache.max_buffer_size =
       vn_buffer_get_max_buffer_size(dev->physical_device);
+   dev->buffer_cache.queue_family_count =
+      dev->physical_device->queue_family_count;
 
    simple_mtx_init(&dev->buffer_cache.mutex, mtx_plain);
    util_sparse_array_init(&dev->buffer_cache.entries,
                           sizeof(struct vn_buffer_cache_entry), 64);
-
-   return VK_SUCCESS;
 }
 
 static void
@@ -89,6 +98,23 @@ vn_buffer_cache_fini(struct vn_device *dev)
 
    if (VN_DEBUG(CACHE))
       vn_buffer_cache_debug_dump(&dev->buffer_cache);
+}
+
+static inline uint32_t
+vn_buffer_get_ahb_memory_type_bits(struct vn_device *dev)
+{
+   struct vn_buffer_cache *cache = &dev->buffer_cache;
+   if (unlikely(!cache->ahb_mem_type_bits_valid)) {
+      simple_mtx_lock(&cache->mutex);
+      if (!cache->ahb_mem_type_bits_valid) {
+         cache->ahb_mem_type_bits =
+            vn_android_get_ahb_buffer_memory_type_bits(dev);
+         cache->ahb_mem_type_bits_valid = true;
+      }
+      simple_mtx_unlock(&cache->mutex);
+   }
+
+   return cache->ahb_mem_type_bits;
 }
 
 static inline VkDeviceSize
@@ -119,11 +145,8 @@ vn_buffer_get_cached_memory_requirements(
     * VkBufferCreateInfo structure and the handleTypes member of the
     * VkExternalMemoryBufferCreateInfo structure passed to vkCreateBuffer.
     */
-   if (vn_buffer_create_info_can_be_cached(create_info, cache)) {
-      /* Combine flags and usage bits to form a unique index. */
-      const uint64_t idx =
-         (uint64_t)create_info->flags << 32 | create_info->usage;
-
+   const uint64_t idx = vn_buffer_get_cache_index(create_info, cache);
+   if (idx) {
       struct vn_buffer_cache_entry *entry =
          util_sparse_array_get(&cache->entries, idx);
 
@@ -363,7 +386,7 @@ vn_CreateBuffer(VkDevice device,
        * and renderer external memory properties.
        */
       buf->requirements.memory.memoryRequirements.memoryTypeBits &=
-         dev->buffer_cache.ahb_mem_type_bits;
+         vn_buffer_get_ahb_memory_type_bits(dev);
 
       assert(buf->requirements.memory.memoryRequirements.memoryTypeBits);
    }

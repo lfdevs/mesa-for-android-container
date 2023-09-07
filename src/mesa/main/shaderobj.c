@@ -103,8 +103,8 @@ _mesa_init_shader(struct gl_shader *shader)
 {
    shader->RefCount = 1;
    shader->info.Geom.VerticesOut = -1;
-   shader->info.Geom.InputType = SHADER_PRIM_TRIANGLES;
-   shader->info.Geom.OutputType = SHADER_PRIM_TRIANGLE_STRIP;
+   shader->info.Geom.InputType = MESA_PRIM_TRIANGLES;
+   shader->info.Geom.OutputType = MESA_PRIM_TRIANGLE_STRIP;
 }
 
 /**

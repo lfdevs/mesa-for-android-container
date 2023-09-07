@@ -33,7 +33,7 @@
 #ifndef DRAW_PIPE_H
 #define DRAW_PIPE_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "draw_private.h"       /* for sizeof(vertex_header) */
 #include "draw_context.h"
 
@@ -43,8 +43,8 @@
  */
 struct prim_header {
    float det;                 /**< front/back face determinant */
-   ushort flags;
-   ushort pad;
+   uint16_t flags;
+   uint16_t pad;
    struct vertex_header *v[3];  /**< 1 to 3 vertex pointers */
 };
 
@@ -89,7 +89,7 @@ struct draw_stage *draw_wide_point_stage(struct draw_context *context);
 struct draw_stage *draw_validate_stage(struct draw_context *context);
 
 void draw_free_temp_verts(struct draw_stage *stage);
-boolean draw_alloc_temp_verts(struct draw_stage *stage, unsigned nr);
+bool draw_alloc_temp_verts(struct draw_stage *stage, unsigned nr);
 
 void draw_reset_vertex_ids(struct draw_context *draw);
 
@@ -118,7 +118,7 @@ dup_vert(struct draw_stage *stage,
          unsigned idx)
 {
    struct vertex_header *tmp = stage->tmp[idx];
-   const uint vsize = sizeof(struct vertex_header)
+   const unsigned vsize = sizeof(struct vertex_header)
       + draw_num_shader_outputs(stage->draw) * 4 * sizeof(float);
    memcpy(tmp, vert, vsize);
    tmp->vertex_id = UNDEFINED_VERTEX_ID;

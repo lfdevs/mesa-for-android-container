@@ -29,7 +29,6 @@
 #include "sfn_debug.h"
 #include "sfn_instr_alugroup.h"
 #include "sfn_instr_export.h"
-#include "tgsi/tgsi_from_mesa.h"
 
 namespace r600 {
 
@@ -436,8 +435,8 @@ VertexShader::do_scan_instruction(nir_instr *instr)
    switch (intr->intrinsic) {
    case nir_intrinsic_load_input: {
       int vtx_register = nir_intrinsic_base(intr) + 1;
-      if (m_last_vertex_atribute_register < vtx_register)
-         m_last_vertex_atribute_register = vtx_register;
+      if (m_last_vertex_attribute_register < vtx_register)
+         m_last_vertex_attribute_register = vtx_register;
       return true;
    }
    case nir_intrinsic_store_output: {
@@ -546,7 +545,7 @@ VertexShader::do_allocate_reserved_registers()
       m_rel_vertex_id = value_factory().allocate_pinned_register(0, 1);
    }
 
-   return m_last_vertex_atribute_register + 1;
+   return m_last_vertex_attribute_register + 1;
 }
 
 bool
@@ -626,7 +625,8 @@ VertexExportForGS::do_store_output(const store_loc& store_info,
    }
 
    if (ring_offset == -1) {
-      sfn_log << SfnLog::err << "VS defines output at " << store_info.driver_location
+      sfn_log << SfnLog::warn << "VS defines output at "
+              << store_info.driver_location
               << "name=" << out_io.name() << " sid=" << out_io.sid()
               << " that is not consumed as GS input\n";
       return true;

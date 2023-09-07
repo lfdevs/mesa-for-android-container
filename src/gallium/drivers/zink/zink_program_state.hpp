@@ -53,7 +53,7 @@ hash_gfx_pipeline_state(const void *key)
 
 template <bool HAS_DYNAMIC>
 static unsigned
-get_pipeline_idx(enum pipe_prim_type mode, VkPrimitiveTopology vkmode)
+get_pipeline_idx(enum mesa_prim mode, VkPrimitiveTopology vkmode)
 {
    /* VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY specifies that the topology state in
     * VkPipelineInputAssemblyStateCreateInfo only specifies the topology class,
@@ -98,7 +98,7 @@ VkPipeline
 zink_get_gfx_pipeline(struct zink_context *ctx,
                       struct zink_gfx_program *prog,
                       struct zink_gfx_pipeline_state *state,
-                      enum pipe_prim_type mode)
+                      enum mesa_prim mode)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    bool uses_dynamic_stride = state->uses_dynamic_stride;
@@ -186,7 +186,10 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
       /* init the optimized background compile fence */
       util_queue_fence_init(&pc_entry->fence);
       entry = _mesa_hash_table_insert_pre_hashed(&prog->pipelines[rp_idx][idx], state->final_hash, pc_entry, pc_entry);
-      if (HAVE_LIB && zink_can_use_pipeline_libs(ctx)) {
+      if (prog->base.uses_shobj && !prog->is_separable) {
+         memcpy(pc_entry->shobjs, prog->objs, sizeof(prog->objs));
+         zink_gfx_program_compile_queue(ctx, pc_entry);
+      } else if (HAVE_LIB && zink_can_use_pipeline_libs(ctx)) {
          /* this is the graphics pipeline library path: find/construct all partial pipelines */
          simple_mtx_lock(&prog->libs->lock);
          struct set_entry *he = _mesa_set_search(&prog->libs->libs, &ctx->gfx_pipeline_state.optimal_key);
@@ -205,17 +208,17 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
                                              zink_find_or_create_output_ds3(ctx) :
                                              zink_find_or_create_output(ctx);
          /* partial pipelines are stored to the cache entry for async optimized pipeline compiles */
-         pc_entry->ikey = ikey;
-         pc_entry->gkey = gkey;
-         pc_entry->okey = okey;
+         pc_entry->gpl.ikey = ikey;
+         pc_entry->gpl.gkey = gkey;
+         pc_entry->gpl.okey = okey;
          /* create the non-optimized pipeline first using fast-linking to avoid stuttering */
          pipeline = zink_create_gfx_pipeline_combined(screen, prog, ikey->pipeline, &gkey->pipeline, 1, okey->pipeline, false);
       } else {
          /* optimize by default only when expecting precompiles in order to reduce stuttering */
          if (DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT2 && DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT)
-            pipeline = zink_create_gfx_pipeline(screen, prog, state, state->element_state->binding_map, vkmode, !HAVE_LIB);
+            pipeline = zink_create_gfx_pipeline(screen, prog, prog->objs, state, state->element_state->binding_map, vkmode, !HAVE_LIB, NULL);
          else
-            pipeline = zink_create_gfx_pipeline(screen, prog, state, NULL, vkmode, !HAVE_LIB);
+            pipeline = zink_create_gfx_pipeline(screen, prog, prog->objs, state, NULL, vkmode, !HAVE_LIB, NULL);
       }
       if (pipeline == VK_NULL_HANDLE)
          return VK_NULL_HANDLE;

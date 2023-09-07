@@ -28,11 +28,8 @@
 UNUSED static bool
 no_load_scratch_base_ptr_intrinsic(nir_shader *shader)
 {
-   nir_foreach_function(func, shader) {
-      if (!func->impl)
-         continue;
-
-      nir_foreach_block(block, func->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -72,8 +69,7 @@ brw_nir_lower_shader_returns(nir_shader *shader)
    if (shader->info.stage != MESA_SHADER_RAYGEN)
       shader->scratch_size += BRW_BTD_STACK_CALLEE_DATA_SIZE;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    set_foreach(impl->end_block->predecessors, block_entry) {
       struct nir_block *block = (void *)block_entry->key;

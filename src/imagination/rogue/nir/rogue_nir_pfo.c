@@ -61,7 +61,7 @@ void rogue_nir_pfo(nir_shader *shader)
    if (shader->info.stage != MESA_SHADER_FRAGMENT)
       return;
 
-   nir_builder_init(&b, impl);
+   b = nir_builder_create(impl);
 
    nir_foreach_block (block, impl) {
       nir_foreach_instr_safe (instr, block) {

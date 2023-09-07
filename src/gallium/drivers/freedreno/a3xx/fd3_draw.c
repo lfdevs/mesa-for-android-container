@@ -86,7 +86,7 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
    /* points + psize -> spritelist: */
    if (ctx->rasterizer->point_size_per_vertex &&
-       fd3_emit_get_vp(emit)->writes_psize && (info->mode == PIPE_PRIM_POINTS))
+       fd3_emit_get_vp(emit)->writes_psize && (info->mode == MESA_PRIM_POINTS))
       primtype = DI_PT_POINTLIST_PSIZE;
 
    fd_draw_emit(ctx->batch, ring, primtype,
@@ -117,7 +117,7 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
       .sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
    };
 
-   if (info->mode != PIPE_PRIM_MAX && !indirect && !info->primitive_restart &&
+   if (info->mode != MESA_PRIM_COUNT && !indirect && !info->primitive_restart &&
        !u_trim_pipe_prim(info->mode, (unsigned *)&draw->count))
       return false;
 

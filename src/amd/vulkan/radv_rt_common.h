@@ -26,29 +26,26 @@
 
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
-#include "nir/nir_vulkan.h"
+#include "vk_nir_convert_ycbcr.h"
 
 #include "compiler/spirv/spirv.h"
 
 #include "radv_private.h"
 
-void nir_sort_hit_pair(nir_builder *b, nir_variable *var_distances, nir_variable *var_indices,
-                       uint32_t chan_1, uint32_t chan_2);
+void nir_sort_hit_pair(nir_builder *b, nir_variable *var_distances, nir_variable *var_indices, uint32_t chan_1,
+                       uint32_t chan_2);
 
-nir_ssa_def *intersect_ray_amd_software_box(struct radv_device *device, nir_builder *b,
-                                            nir_ssa_def *bvh_node, nir_ssa_def *ray_tmax,
-                                            nir_ssa_def *origin, nir_ssa_def *dir,
+nir_ssa_def *intersect_ray_amd_software_box(struct radv_device *device, nir_builder *b, nir_ssa_def *bvh_node,
+                                            nir_ssa_def *ray_tmax, nir_ssa_def *origin, nir_ssa_def *dir,
                                             nir_ssa_def *inv_dir);
 
-nir_ssa_def *intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b,
-                                            nir_ssa_def *bvh_node, nir_ssa_def *ray_tmax,
-                                            nir_ssa_def *origin, nir_ssa_def *dir,
+nir_ssa_def *intersect_ray_amd_software_tri(struct radv_device *device, nir_builder *b, nir_ssa_def *bvh_node,
+                                            nir_ssa_def *ray_tmax, nir_ssa_def *origin, nir_ssa_def *dir,
                                             nir_ssa_def *inv_dir);
 
 nir_ssa_def *build_addr_to_node(nir_builder *b, nir_ssa_def *addr);
 
-nir_ssa_def *nir_build_vec3_mat_mult(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *matrix[],
-                                     bool translation);
+nir_ssa_def *nir_build_vec3_mat_mult(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *matrix[], bool translation);
 
 void nir_build_wto_matrix_load(nir_builder *b, nir_ssa_def *instance_addr, nir_ssa_def **out);
 
@@ -75,8 +72,7 @@ struct radv_leaf_intersection {
    nir_ssa_def *opaque;
 };
 
-typedef void (*radv_aabb_intersection_cb)(nir_builder *b,
-                                          struct radv_leaf_intersection *intersection,
+typedef void (*radv_aabb_intersection_cb)(nir_builder *b, struct radv_leaf_intersection *intersection,
                                           const struct radv_ray_traversal_args *args);
 
 struct radv_triangle_intersection {
@@ -87,8 +83,7 @@ struct radv_triangle_intersection {
    nir_ssa_def *barycentrics;
 };
 
-typedef void (*radv_triangle_intersection_cb)(nir_builder *b,
-                                              struct radv_triangle_intersection *intersection,
+typedef void (*radv_triangle_intersection_cb)(nir_builder *b, struct radv_triangle_intersection *intersection,
                                               const struct radv_ray_traversal_args *args,
                                               const struct radv_ray_flags *ray_flags);
 

@@ -25,7 +25,7 @@
 #ifndef U_INDICES_H
 #define U_INDICES_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_defines.h"
 
 /* First/last provoking vertex */
@@ -83,8 +83,8 @@ enum indices_mode {
 void u_index_init( void );
 
 /* returns the primitive type resulting from index translation */
-enum pipe_prim_type
-u_index_prim_type_convert(unsigned hw_mask, enum pipe_prim_type prim, bool pv_matches);
+enum mesa_prim
+u_index_prim_type_convert(unsigned hw_mask, enum mesa_prim prim, bool pv_matches);
 
 static inline unsigned
 u_index_size_convert(unsigned index_size)
@@ -93,25 +93,25 @@ u_index_size_convert(unsigned index_size)
 }
 
 unsigned
-u_index_count_converted_indices(unsigned hw_mask, bool pv_matches, enum pipe_prim_type prim, unsigned nr);
+u_index_count_converted_indices(unsigned hw_mask, bool pv_matches, enum mesa_prim prim, unsigned nr);
 
 /**
  * For indexed drawing, this function determines what kind of primitive
  * transformation is needed (if any) for handling:
- * - unsupported primitive types (such as PIPE_PRIM_POLYGON)
+ * - unsupported primitive types (such as MESA_PRIM_POLYGON)
  * - changing the provoking vertex
  * - primitive restart
  * - index size (1 byte, 2 byte or 4 byte indexes)
  */
 enum indices_mode
 u_index_translator(unsigned hw_mask,
-                   enum pipe_prim_type prim,
+                   enum mesa_prim prim,
                    unsigned in_index_size,
                    unsigned nr,
                    unsigned in_pv,   /* API */
                    unsigned out_pv,  /* hardware */
                    unsigned prim_restart,
-                   enum pipe_prim_type *out_prim,
+                   enum mesa_prim *out_prim,
                    unsigned *out_index_size,
                    unsigned *out_nr,
                    u_translate_func *out_translate);
@@ -128,12 +128,12 @@ u_index_translator(unsigned hw_mask,
  */
 enum indices_mode
 u_index_generator(unsigned hw_mask,
-                  enum pipe_prim_type prim,
+                  enum mesa_prim prim,
                   unsigned start,
                   unsigned nr,
                   unsigned in_pv,   /* API */
                   unsigned out_pv,  /* hardware */
-                  enum pipe_prim_type *out_prim,
+                  enum mesa_prim *out_prim,
                   unsigned *out_index_size,
                   unsigned *out_nr,
                   u_generate_func *out_generate);
@@ -148,11 +148,11 @@ void u_unfilled_init( void );
  * points.
  */
 enum indices_mode
-u_unfilled_translator(enum pipe_prim_type prim,
+u_unfilled_translator(enum mesa_prim prim,
                       unsigned in_index_size,
                       unsigned nr,
                       unsigned unfilled_mode,
-                      enum pipe_prim_type *out_prim,
+                      enum mesa_prim *out_prim,
                       unsigned *out_index_size,
                       unsigned *out_nr,
                       u_translate_func *out_translate);
@@ -161,11 +161,11 @@ u_unfilled_translator(enum pipe_prim_type prim,
  * As above, but for non-indexed (array) primitives.
  */
 enum indices_mode
-u_unfilled_generator(enum pipe_prim_type prim,
+u_unfilled_generator(enum mesa_prim prim,
                      unsigned start,
                      unsigned nr,
                      unsigned unfilled_mode,
-                     enum pipe_prim_type *out_prim,
+                     enum mesa_prim *out_prim,
                      unsigned *out_index_size,
                      unsigned *out_nr,
                      u_generate_func *out_generate);

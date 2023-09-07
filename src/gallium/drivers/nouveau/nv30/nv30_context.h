@@ -216,7 +216,7 @@ nv30_state_release(struct nv30_context *nv30);
 
 #ifdef NV30_3D_VERTEX_BEGIN_END
 #define NV30_PRIM_GL_CASE(n) \
-   case PIPE_PRIM_##n: return NV30_3D_VERTEX_BEGIN_END_##n
+   case MESA_PRIM_##n: return NV30_3D_VERTEX_BEGIN_END_##n
 
 static inline unsigned
 nv30_prim_gl(unsigned prim)

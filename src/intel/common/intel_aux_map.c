@@ -185,6 +185,7 @@ struct intel_aux_map_context {
    uint64_t *level3_map;
    uint32_t tail_offset, tail_remaining;
    uint32_t state_num;
+   enum intel_aux_map_format format_enum;
    const struct aux_format_info *format;
 };
 
@@ -344,6 +345,7 @@ intel_aux_map_init(void *driver_ctx,
    if (pthread_mutex_init(&ctx->mutex, NULL))
       return NULL;
 
+   ctx->format_enum = format;
    ctx->format = get_format(format);
    ctx->driver_ctx = driver_ctx;
    ctx->buffer_alloc = buffer_alloc;
@@ -381,6 +383,16 @@ intel_aux_map_finish(struct intel_aux_map_context *ctx)
    }
 
    ralloc_free(ctx);
+}
+
+uint32_t
+intel_aux_map_get_alignment(struct intel_aux_map_context *ctx)
+{
+   switch (ctx->format_enum) {
+   case INTEL_AUX_MAP_GFX12_64KB: return 64 * 1024;
+   case INTEL_AUX_MAP_GFX125_1MB: return 1 * 1024 * 1024;
+   default:                       unreachable("Invalid AUX map format");
+   }
 }
 
 uint64_t

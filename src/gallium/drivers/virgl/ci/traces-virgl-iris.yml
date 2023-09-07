@@ -112,6 +112,8 @@ traces:
       label: [crash]
   godot/Material Testers.x86_64_2020.04.08_13.38_frame799.rdc:
     gl-virgl:
+      label: [skip]
+      text: Nothing wrong with it, proxy issues. Revert ASAP.
       checksum: 9f73f0d775b579a6bd15a75f86d956a2
   ror/ror-default.trace:
     gl-virgl:

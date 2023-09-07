@@ -70,7 +70,8 @@ upload_blorp_shader(struct blorp_batch *batch, uint32_t stage,
                                key, key_size, kernel, kernel_size,
                                prog_data, prog_data_size,
                                NULL, 0, NULL, &bind_map,
-                               &push_desc_info);
+                               &push_desc_info,
+                               0 /* dynamic_push_values */);
 
    if (!bin)
       return false;
@@ -540,7 +541,7 @@ anv_add_buffer_write_pending_bits(struct anv_cmd_buffer *cmd_buffer,
 {
    const struct intel_device_info *devinfo = cmd_buffer->device->info;
 
-   cmd_buffer->state.pending_query_bits |=
+   cmd_buffer->state.queries.buffer_write_bits |=
       (cmd_buffer->queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 ?
       ANV_QUERY_COMPUTE_WRITES_PENDING_BITS :
       ANV_QUERY_RENDER_TARGET_WRITES_PENDING_BITS(devinfo);
@@ -1140,6 +1141,238 @@ binding_table_for_surface_state(struct anv_cmd_buffer *cmd_buffer,
    return VK_SUCCESS;
 }
 
+static bool
+can_fast_clear_color_att(struct anv_cmd_buffer *cmd_buffer,
+                         struct blorp_batch *batch,
+                         const struct anv_attachment *att,
+                         const union isl_color_value clear_color,
+                         const VkClearAttachment *attachment,
+                         uint32_t rectCount, const VkClearRect *pRects)
+{
+   /* We don't support fast clearing with conditional rendering at the
+    * moment. All the tracking done around fast clears (clear color updates
+    * and fast-clear type updates) happens unconditionally.
+    */
+   if (batch->flags & BLORP_BATCH_PREDICATE_ENABLE)
+      return false;
+
+   if (rectCount > 1) {
+      anv_perf_warn(VK_LOG_OBJS(&cmd_buffer->device->vk.base),
+                    "Fast clears for vkCmdClearAttachments supported only for rectCount == 1");
+      return false;
+   }
+
+   /* We only support fast-clears on the first layer */
+   if (pRects[0].layerCount > 1 || pRects[0].baseArrayLayer > 0)
+      return false;
+
+   bool is_multiview = cmd_buffer->state.gfx.view_mask != 0;
+   if (is_multiview && (cmd_buffer->state.gfx.view_mask != 1))
+      return false;
+
+   return anv_can_fast_clear_color_view(cmd_buffer->device,
+                                        (struct anv_image_view *)att->iview,
+                                        att->layout,
+                                        clear_color,
+                                        pRects->layerCount,
+                                        pRects->rect);
+}
+
+static void
+exec_ccs_op(struct anv_cmd_buffer *cmd_buffer,
+            struct blorp_batch *batch,
+            const struct anv_image *image,
+            enum isl_format format, struct isl_swizzle swizzle,
+            VkImageAspectFlagBits aspect, uint32_t level,
+            uint32_t base_layer, uint32_t layer_count,
+            enum isl_aux_op ccs_op, union isl_color_value *clear_value)
+{
+   assert(image->vk.aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
+   assert(image->vk.samples == 1);
+   assert(level < anv_image_aux_levels(image, aspect));
+   /* Multi-LOD YcBcR is not allowed */
+   assert(image->n_planes == 1 || level == 0);
+   assert(base_layer + layer_count <=
+          anv_image_aux_layers(image, aspect, level));
+
+   const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
+   const struct intel_device_info *devinfo = cmd_buffer->device->info;
+
+   struct blorp_surf surf;
+   get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
+                                0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
+                                image->planes[plane].aux_usage,
+                                &surf);
+
+   uint32_t level_width = u_minify(surf.surf->logical_level0_px.w, level);
+   uint32_t level_height = u_minify(surf.surf->logical_level0_px.h, level);
+
+   /* Blorp will store the clear color for us if we provide the clear color
+    * address and we are doing a fast clear. So we save the clear value into
+    * the blorp surface.
+    */
+   if (clear_value)
+      surf.clear_color = *clear_value;
+
+   char flush_reason[64];
+   int ret =
+      snprintf(flush_reason, sizeof(flush_reason),
+               "ccs op start: %s", isl_aux_op_to_name(ccs_op));
+   assert(ret < sizeof(flush_reason));
+
+   /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
+    *
+    *    "After Render target fast clear, pipe-control with color cache
+    *    write-flush must be issued before sending any DRAW commands on
+    *    that render target."
+    *
+    * This comment is a bit cryptic and doesn't really tell you what's going
+    * or what's really needed.  It appears that fast clear ops are not
+    * properly synchronized with other drawing.  This means that we cannot
+    * have a fast clear operation in the pipe at the same time as other
+    * regular drawing operations.  We need to use a PIPE_CONTROL to ensure
+    * that the contents of the previous draw hit the render target before we
+    * resolve and then use a second PIPE_CONTROL after the resolve to ensure
+    * that it is completed before any additional drawing occurs.
+    */
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+                             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
+                             (devinfo->verx10 == 120 ?
+                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
+                             (devinfo->verx10 == 125 ?
+                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
+                                ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0) |
+                             ANV_PIPE_PSS_STALL_SYNC_BIT |
+                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                             flush_reason);
+
+   switch (ccs_op) {
+   case ISL_AUX_OP_FAST_CLEAR:
+      blorp_fast_clear(batch, &surf, format, swizzle,
+                       level, base_layer, layer_count,
+                       0, 0, level_width, level_height);
+      break;
+   case ISL_AUX_OP_FULL_RESOLVE:
+   case ISL_AUX_OP_PARTIAL_RESOLVE: {
+      /* Wa_1508744258: Enable RHWO optimization for resolves */
+      const bool enable_rhwo_opt =
+         intel_needs_workaround(cmd_buffer->device->info, 1508744258);
+
+      if (enable_rhwo_opt)
+         cmd_buffer->state.pending_rhwo_optimization_enabled = true;
+
+      blorp_ccs_resolve(batch, &surf, level, base_layer, layer_count,
+                        format, ccs_op);
+
+      if (enable_rhwo_opt)
+         cmd_buffer->state.pending_rhwo_optimization_enabled = false;
+      break;
+   }
+   case ISL_AUX_OP_AMBIGUATE:
+      for (uint32_t a = 0; a < layer_count; a++) {
+         const uint32_t layer = base_layer + a;
+         blorp_ccs_ambiguate(batch, &surf, level, layer);
+      }
+      break;
+   default:
+      unreachable("Unsupported CCS operation");
+   }
+
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+                             (devinfo->verx10 == 120 ?
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT |
+                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
+                             ANV_PIPE_PSS_STALL_SYNC_BIT |
+                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                             "ccs op finish");
+}
+
+static void
+exec_mcs_op(struct anv_cmd_buffer *cmd_buffer,
+            struct blorp_batch *batch,
+            const struct anv_image *image,
+            enum isl_format format, struct isl_swizzle swizzle,
+            VkImageAspectFlagBits aspect,
+            uint32_t base_layer, uint32_t layer_count,
+            enum isl_aux_op mcs_op, union isl_color_value *clear_value)
+{
+   assert(image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT);
+   assert(image->vk.samples > 1);
+   assert(base_layer + layer_count <= anv_image_aux_layers(image, aspect, 0));
+
+   /* Multisampling with multi-planar formats is not supported */
+   assert(image->n_planes == 1);
+
+   const struct intel_device_info *devinfo = cmd_buffer->device->info;
+   struct blorp_surf surf;
+   get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
+                                0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
+                                ISL_AUX_USAGE_MCS, &surf);
+
+   /* Blorp will store the clear color for us if we provide the clear color
+    * address and we are doing a fast clear. So we save the clear value into
+    * the blorp surface.
+    */
+   if (clear_value)
+      surf.clear_color = *clear_value;
+
+   /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
+    *
+    *    "After Render target fast clear, pipe-control with color cache
+    *    write-flush must be issued before sending any DRAW commands on
+    *    that render target."
+    *
+    * This comment is a bit cryptic and doesn't really tell you what's going
+    * or what's really needed.  It appears that fast clear ops are not
+    * properly synchronized with other drawing.  This means that we cannot
+    * have a fast clear operation in the pipe at the same time as other
+    * regular drawing operations.  We need to use a PIPE_CONTROL to ensure
+    * that the contents of the previous draw hit the render target before we
+    * resolve and then use a second PIPE_CONTROL after the resolve to ensure
+    * that it is completed before any additional drawing occurs.
+    */
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+                             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
+                             (devinfo->verx10 == 120 ?
+                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
+                             (devinfo->verx10 == 125 ?
+                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
+                                ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0) |
+                             ANV_PIPE_PSS_STALL_SYNC_BIT |
+                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                             "before fast clear mcs");
+
+   switch (mcs_op) {
+   case ISL_AUX_OP_FAST_CLEAR:
+      blorp_fast_clear(batch, &surf, format, swizzle,
+                       0, base_layer, layer_count,
+                       0, 0, image->vk.extent.width, image->vk.extent.height);
+      break;
+   case ISL_AUX_OP_PARTIAL_RESOLVE:
+      blorp_mcs_partial_resolve(batch, &surf, format,
+                                base_layer, layer_count);
+      break;
+   case ISL_AUX_OP_AMBIGUATE:
+      blorp_mcs_ambiguate(batch, &surf, base_layer, layer_count);
+      break;
+   case ISL_AUX_OP_FULL_RESOLVE:
+   default:
+      unreachable("Unsupported MCS operation");
+   }
+
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+                             (devinfo->verx10 == 120 ?
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT |
+                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
+                             ANV_PIPE_PSS_STALL_SYNC_BIT |
+                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+                             "after fast clear mcs");
+}
+
 static void
 clear_color_attachment(struct anv_cmd_buffer *cmd_buffer,
                        struct blorp_batch *batch,
@@ -1154,15 +1387,44 @@ clear_color_attachment(struct anv_cmd_buffer *cmd_buffer,
    if (att->vk_format == VK_FORMAT_UNDEFINED)
       return;
 
+   union isl_color_value clear_color =
+      vk_to_isl_color(attachment->clearValue.color);
+
+   const struct anv_image_view *iview = att->iview;
+   if (iview &&
+       can_fast_clear_color_att(cmd_buffer, batch, att, clear_color,
+                                attachment, rectCount, pRects)) {
+      if (iview->image->vk.samples == 1) {
+         exec_ccs_op(cmd_buffer, batch, iview->image,
+                     iview->planes[0].isl.format,
+                     iview->planes[0].isl.swizzle,
+                     VK_IMAGE_ASPECT_COLOR_BIT,
+                     0, 0, 1, ISL_AUX_OP_FAST_CLEAR,
+                     &clear_color);
+      } else {
+         exec_mcs_op(cmd_buffer, batch, iview->image,
+                     iview->planes[0].isl.format,
+                     iview->planes[0].isl.swizzle,
+                     VK_IMAGE_ASPECT_COLOR_BIT,
+                     0, 1, ISL_AUX_OP_FAST_CLEAR,
+                     &clear_color);
+      }
+
+      anv_cmd_buffer_mark_image_fast_cleared(cmd_buffer, iview->image,
+                                             iview->planes[0].isl.format,
+                                             clear_color);
+      anv_cmd_buffer_load_clear_color_from_image(cmd_buffer,
+                                                 att->surface_state.state,
+                                                 iview->image);
+      return;
+   }
+
    uint32_t binding_table;
    VkResult result =
       binding_table_for_surface_state(cmd_buffer, att->surface_state.state,
                                       &binding_table);
    if (result != VK_SUCCESS)
       return;
-
-   union isl_color_value clear_color =
-      vk_to_isl_color(attachment->clearValue.color);
 
    /* If multiview is enabled we ignore baseArrayLayer and layerCount */
    if (gfx->view_mask) {
@@ -1199,6 +1461,170 @@ clear_color_attachment(struct anv_cmd_buffer *cmd_buffer,
 }
 
 static void
+anv_fast_clear_depth_stencil(struct anv_cmd_buffer *cmd_buffer,
+                             struct blorp_batch *batch,
+                             const struct anv_image *image,
+                             VkImageAspectFlags aspects,
+                             uint32_t level,
+                             uint32_t base_layer, uint32_t layer_count,
+                             VkRect2D area, uint8_t stencil_value)
+{
+   assert(image->vk.aspects & (VK_IMAGE_ASPECT_DEPTH_BIT |
+                               VK_IMAGE_ASPECT_STENCIL_BIT));
+
+   struct blorp_surf depth = {};
+   if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
+      const uint32_t plane =
+         anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
+      assert(base_layer + layer_count <=
+             anv_image_aux_layers(image, VK_IMAGE_ASPECT_DEPTH_BIT, level));
+      get_blorp_surf_for_anv_image(cmd_buffer->device,
+                                   image, VK_IMAGE_ASPECT_DEPTH_BIT,
+                                   0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
+                                   image->planes[plane].aux_usage, &depth);
+   }
+
+   struct blorp_surf stencil = {};
+   if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
+      const uint32_t plane =
+         anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_STENCIL_BIT);
+      get_blorp_surf_for_anv_image(cmd_buffer->device,
+                                   image, VK_IMAGE_ASPECT_STENCIL_BIT,
+                                   0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
+                                   image->planes[plane].aux_usage, &stencil);
+   }
+
+   /* From the Sky Lake PRM Volume 7, "Depth Buffer Clear":
+    *
+    *    "The following is required when performing a depth buffer clear with
+    *    using the WM_STATE or 3DSTATE_WM:
+    *
+    *       * If other rendering operations have preceded this clear, a
+    *         PIPE_CONTROL with depth cache flush enabled, Depth Stall bit
+    *         enabled must be issued before the rectangle primitive used for
+    *         the depth buffer clear operation.
+    *       * [...]"
+    *
+    * Even though the PRM only says that this is required if using 3DSTATE_WM
+    * and a 3DPRIMITIVE, the GPU appears to also need this to avoid occasional
+    * hangs when doing a clear with WM_HZ_OP.
+    */
+   anv_add_pending_pipe_bits(cmd_buffer,
+                             ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
+                             ANV_PIPE_DEPTH_STALL_BIT,
+                             "before clear hiz");
+
+   if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+       depth.aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT) {
+      /* From Bspec 47010 (Depth Buffer Clear):
+       *
+       *    Since the fast clear cycles to CCS are not cached in TileCache,
+       *    any previous depth buffer writes to overlapping pixels must be
+       *    flushed out of TileCache before a succeeding Depth Buffer Clear.
+       *    This restriction only applies to Depth Buffer with write-thru
+       *    enabled, since fast clears to CCS only occur for write-thru mode.
+       *
+       * There may have been a write to this depth buffer. Flush it from the
+       * tile cache just in case.
+       *
+       * Set CS stall bit to guarantee that the fast clear starts the execution
+       * after the tile cache flush completed.
+       */
+      anv_add_pending_pipe_bits(cmd_buffer,
+                                ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
+                                ANV_PIPE_CS_STALL_BIT |
+                                ANV_PIPE_TILE_CACHE_FLUSH_BIT,
+                                "before clear hiz_ccs_wt");
+   }
+
+   blorp_hiz_clear_depth_stencil(batch, &depth, &stencil,
+                                 level, base_layer, layer_count,
+                                 area.offset.x, area.offset.y,
+                                 area.offset.x + area.extent.width,
+                                 area.offset.y + area.extent.height,
+                                 aspects & VK_IMAGE_ASPECT_DEPTH_BIT,
+                                 ANV_HZ_FC_VAL,
+                                 aspects & VK_IMAGE_ASPECT_STENCIL_BIT,
+                                 stencil_value);
+
+   /* From the SKL PRM, Depth Buffer Clear:
+    *
+    *    "Depth Buffer Clear Workaround
+    *
+    *    Depth buffer clear pass using any of the methods (WM_STATE,
+    *    3DSTATE_WM or 3DSTATE_WM_HZ_OP) must be followed by a PIPE_CONTROL
+    *    command with DEPTH_STALL bit and Depth FLUSH bits “set” before
+    *    starting to render.  DepthStall and DepthFlush are not needed between
+    *    consecutive depth clear passes nor is it required if the depth-clear
+    *    pass was done with “full_surf_clear” bit set in the
+    *    3DSTATE_WM_HZ_OP."
+    *
+    * Even though the PRM provides a bunch of conditions under which this is
+    * supposedly unnecessary, we choose to perform the flush unconditionally
+    * just to be safe.
+    *
+    * From Bspec 46959, a programming note applicable to Gfx12+:
+    *
+    *    "Since HZ_OP has to be sent twice (first time set the clear/resolve state
+    *    and 2nd time to clear the state), and HW internally flushes the depth
+    *    cache on HZ_OP, there is no need to explicitly send a Depth Cache flush
+    *    after Clear or Resolve."
+    */
+   if (cmd_buffer->device->info->verx10 < 120) {
+      anv_add_pending_pipe_bits(cmd_buffer,
+                                ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
+                                ANV_PIPE_DEPTH_STALL_BIT,
+                                "after clear hiz");
+   }
+}
+
+static bool
+can_hiz_clear_att(struct anv_cmd_buffer *cmd_buffer,
+                  struct blorp_batch *batch,
+                  const struct anv_attachment *ds_att,
+                  const VkClearAttachment *attachment,
+                  uint32_t rectCount, const VkClearRect *pRects)
+{
+   /* From Bspec's section MI_PREDICATE:
+    *
+    *    "The MI_PREDICATE command is used to control the Predicate state bit,
+    *    which in turn can be used to enable/disable the processing of
+    *    3DPRIMITIVE commands."
+    *
+    * Also from BDW/CHV Bspec's 3DSTATE_WM_HZ_OP programming notes:
+    *
+    *    "This command does NOT support predication from the use of the
+    *    MI_PREDICATE register. To predicate depth clears and resolves on you
+    *    must fall back to using the 3D_PRIMITIVE or GPGPU_WALKER commands."
+    *
+    * Since BLORP's predication is currently dependent on MI_PREDICATE, fall
+    * back to the slow depth clear path when the BLORP_BATCH_PREDICATE_ENABLE
+    * flag is set.
+    */
+   if (batch->flags & BLORP_BATCH_PREDICATE_ENABLE)
+      return false;
+
+   if (rectCount > 1) {
+      anv_perf_warn(VK_LOG_OBJS(&cmd_buffer->device->vk.base),
+                    "Fast clears for vkCmdClearAttachments supported only for rectCount == 1");
+      return false;
+   }
+
+   /* When the BLORP_BATCH_NO_EMIT_DEPTH_STENCIL flag is set, BLORP can only
+    * clear the first slice of the currently configured depth/stencil view.
+    */
+   assert(batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL);
+   if (pRects[0].layerCount > 1 || pRects[0].baseArrayLayer > 0)
+      return false;
+
+   return anv_can_hiz_clear_ds_view(cmd_buffer->device, ds_att->iview,
+                                    ds_att->layout,
+                                    attachment->aspectMask,
+                                    attachment->clearValue.depthStencil.depth,
+                                    pRects->rect);
+}
+
+static void
 clear_depth_stencil_attachment(struct anv_cmd_buffer *cmd_buffer,
                                struct blorp_batch *batch,
                                const VkClearAttachment *attachment,
@@ -1211,6 +1637,18 @@ clear_depth_stencil_attachment(struct anv_cmd_buffer *cmd_buffer,
    if (d_att->vk_format == VK_FORMAT_UNDEFINED &&
        s_att->vk_format == VK_FORMAT_UNDEFINED)
       return;
+
+   const struct anv_attachment *ds_att = d_att->iview ? d_att : s_att;
+   if (ds_att->iview &&
+       can_hiz_clear_att(cmd_buffer, batch, ds_att, attachment, rectCount, pRects)) {
+      anv_fast_clear_depth_stencil(cmd_buffer, batch, ds_att->iview->image,
+                                   attachment->aspectMask,
+                                   ds_att->iview->planes[0].isl.base_level,
+                                   ds_att->iview->planes[0].isl.base_array_layer,
+                                   pRects[0].layerCount, pRects->rect,
+                                   attachment->clearValue.depthStencil.stencil);
+      return;
+   }
 
    bool clear_depth = attachment->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT;
    bool clear_stencil = attachment->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -1574,109 +2012,14 @@ anv_image_hiz_clear(struct anv_cmd_buffer *cmd_buffer,
                     uint32_t base_layer, uint32_t layer_count,
                     VkRect2D area, uint8_t stencil_value)
 {
-   assert(image->vk.aspects & (VK_IMAGE_ASPECT_DEPTH_BIT |
-                               VK_IMAGE_ASPECT_STENCIL_BIT));
-
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch, 0);
    assert((batch.flags & BLORP_BATCH_USE_COMPUTE) == 0);
 
-   struct blorp_surf depth = {};
-   if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
-      const uint32_t plane =
-         anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
-      assert(base_layer + layer_count <=
-             anv_image_aux_layers(image, VK_IMAGE_ASPECT_DEPTH_BIT, level));
-      get_blorp_surf_for_anv_image(cmd_buffer->device,
-                                   image, VK_IMAGE_ASPECT_DEPTH_BIT,
-                                   0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
-                                   image->planes[plane].aux_usage, &depth);
-   }
-
-   struct blorp_surf stencil = {};
-   if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
-      const uint32_t plane =
-         anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_STENCIL_BIT);
-      get_blorp_surf_for_anv_image(cmd_buffer->device,
-                                   image, VK_IMAGE_ASPECT_STENCIL_BIT,
-                                   0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
-                                   image->planes[plane].aux_usage, &stencil);
-   }
-
-   /* From the Sky Lake PRM Volume 7, "Depth Buffer Clear":
-    *
-    *    "The following is required when performing a depth buffer clear with
-    *    using the WM_STATE or 3DSTATE_WM:
-    *
-    *       * If other rendering operations have preceded this clear, a
-    *         PIPE_CONTROL with depth cache flush enabled, Depth Stall bit
-    *         enabled must be issued before the rectangle primitive used for
-    *         the depth buffer clear operation.
-    *       * [...]"
-    *
-    * Even though the PRM only says that this is required if using 3DSTATE_WM
-    * and a 3DPRIMITIVE, the GPU appears to also need this to avoid occasional
-    * hangs when doing a clear with WM_HZ_OP.
-    */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
-                             ANV_PIPE_DEPTH_STALL_BIT,
-                             "before clear hiz");
-
-   if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-       depth.aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT) {
-      /* From Bspec 47010 (Depth Buffer Clear):
-       *
-       *    Since the fast clear cycles to CCS are not cached in TileCache,
-       *    any previous depth buffer writes to overlapping pixels must be
-       *    flushed out of TileCache before a succeeding Depth Buffer Clear.
-       *    This restriction only applies to Depth Buffer with write-thru
-       *    enabled, since fast clears to CCS only occur for write-thru mode.
-       *
-       * There may have been a write to this depth buffer. Flush it from the
-       * tile cache just in case.
-       * Set CS stall bit to guarantee that the fast clear starts the execution
-       * after the tile cache flush completed.
-       */
-      anv_add_pending_pipe_bits(cmd_buffer,
-                                ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
-                                ANV_PIPE_CS_STALL_BIT |
-                                ANV_PIPE_TILE_CACHE_FLUSH_BIT,
-                                "before clear hiz_ccs_wt");
-   }
-
-   blorp_hiz_clear_depth_stencil(&batch, &depth, &stencil,
-                                 level, base_layer, layer_count,
-                                 area.offset.x, area.offset.y,
-                                 area.offset.x + area.extent.width,
-                                 area.offset.y + area.extent.height,
-                                 aspects & VK_IMAGE_ASPECT_DEPTH_BIT,
-                                 ANV_HZ_FC_VAL,
-                                 aspects & VK_IMAGE_ASPECT_STENCIL_BIT,
-                                 stencil_value);
+   anv_fast_clear_depth_stencil(cmd_buffer, &batch, image, aspects, level,
+                                base_layer, layer_count, area, stencil_value);
 
    anv_blorp_batch_finish(&batch);
-
-   /* From the SKL PRM, Depth Buffer Clear:
-    *
-    *    "Depth Buffer Clear Workaround
-    *
-    *    Depth buffer clear pass using any of the methods (WM_STATE,
-    *    3DSTATE_WM or 3DSTATE_WM_HZ_OP) must be followed by a PIPE_CONTROL
-    *    command with DEPTH_STALL bit and Depth FLUSH bits “set” before
-    *    starting to render.  DepthStall and DepthFlush are not needed between
-    *    consecutive depth clear passes nor is it required if the depth-clear
-    *    pass was done with “full_surf_clear” bit set in the
-    *    3DSTATE_WM_HZ_OP."
-    *
-    * Even though the PRM provides a bunch of conditions under which this is
-    * supposedly unnecessary, we choose to perform the flush unconditionally
-    * just to be safe.
-    */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_DEPTH_CACHE_FLUSH_BIT |
-                             ANV_PIPE_DEPTH_STALL_BIT,
-                             "after clear hiz");
 }
 
 void
@@ -1688,83 +2031,14 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
                  enum isl_aux_op mcs_op, union isl_color_value *clear_value,
                  bool predicate)
 {
-   assert(image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT);
-   assert(image->vk.samples > 1);
-   assert(base_layer + layer_count <= anv_image_aux_layers(image, aspect, 0));
-
-   /* Multisampling with multi-planar formats is not supported */
-   assert(image->n_planes == 1);
-
-   const struct intel_device_info *devinfo = cmd_buffer->device->info;
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch,
                         BLORP_BATCH_PREDICATE_ENABLE * predicate +
                         BLORP_BATCH_NO_UPDATE_CLEAR_COLOR * !clear_value);
    assert((batch.flags & BLORP_BATCH_USE_COMPUTE) == 0);
 
-   struct blorp_surf surf;
-   get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
-                                0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
-                                ISL_AUX_USAGE_MCS, &surf);
-
-   /* Blorp will store the clear color for us if we provide the clear color
-    * address and we are doing a fast clear. So we save the clear value into
-    * the blorp surface.
-    */
-   if (clear_value)
-      surf.clear_color = *clear_value;
-
-   /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
-    *
-    *    "After Render target fast clear, pipe-control with color cache
-    *    write-flush must be issued before sending any DRAW commands on
-    *    that render target."
-    *
-    * This comment is a bit cryptic and doesn't really tell you what's going
-    * or what's really needed.  It appears that fast clear ops are not
-    * properly synchronized with other drawing.  This means that we cannot
-    * have a fast clear operation in the pipe at the same time as other
-    * regular drawing operations.  We need to use a PIPE_CONTROL to ensure
-    * that the contents of the previous draw hit the render target before we
-    * resolve and then use a second PIPE_CONTROL after the resolve to ensure
-    * that it is completed before any additional drawing occurs.
-    */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
-                             (devinfo->verx10 == 120 ?
-                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
-                             (devinfo->verx10 == 125 ?
-                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
-                                ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0) |
-                             ANV_PIPE_PSS_STALL_SYNC_BIT |
-                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
-                             "before fast clear mcs");
-
-   switch (mcs_op) {
-   case ISL_AUX_OP_FAST_CLEAR:
-      blorp_fast_clear(&batch, &surf, format, swizzle,
-                       0, base_layer, layer_count,
-                       0, 0, image->vk.extent.width, image->vk.extent.height);
-      break;
-   case ISL_AUX_OP_PARTIAL_RESOLVE:
-      blorp_mcs_partial_resolve(&batch, &surf, format,
-                                base_layer, layer_count);
-      break;
-   case ISL_AUX_OP_FULL_RESOLVE:
-   case ISL_AUX_OP_AMBIGUATE:
-   default:
-      unreachable("Unsupported MCS operation");
-   }
-
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             (devinfo->verx10 == 120 ?
-                                ANV_PIPE_TILE_CACHE_FLUSH_BIT |
-                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
-                             ANV_PIPE_PSS_STALL_SYNC_BIT |
-                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
-                             "after fast clear mcs");
+   exec_mcs_op(cmd_buffer, &batch, image, format, swizzle, aspect,
+               base_layer, layer_count, mcs_op, clear_value);
 
    anv_blorp_batch_finish(&batch);
 }
@@ -1778,111 +2052,14 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
                  enum isl_aux_op ccs_op, union isl_color_value *clear_value,
                  bool predicate)
 {
-   assert(image->vk.aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
-   assert(image->vk.samples == 1);
-   assert(level < anv_image_aux_levels(image, aspect));
-   /* Multi-LOD YcBcR is not allowed */
-   assert(image->n_planes == 1 || level == 0);
-   assert(base_layer + layer_count <=
-          anv_image_aux_layers(image, aspect, level));
-
-   const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
-   const struct intel_device_info *devinfo = cmd_buffer->device->info;
-
    struct blorp_batch batch;
    anv_blorp_batch_init(cmd_buffer, &batch,
                         BLORP_BATCH_PREDICATE_ENABLE * predicate +
                         BLORP_BATCH_NO_UPDATE_CLEAR_COLOR * !clear_value);
    assert((batch.flags & BLORP_BATCH_USE_COMPUTE) == 0);
 
-   struct blorp_surf surf;
-   get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
-                                0, ANV_IMAGE_LAYOUT_EXPLICIT_AUX,
-                                image->planes[plane].aux_usage,
-                                &surf);
-
-   uint32_t level_width = u_minify(surf.surf->logical_level0_px.w, level);
-   uint32_t level_height = u_minify(surf.surf->logical_level0_px.h, level);
-
-   /* Blorp will store the clear color for us if we provide the clear color
-    * address and we are doing a fast clear. So we save the clear value into
-    * the blorp surface.
-    */
-   if (clear_value)
-      surf.clear_color = *clear_value;
-
-   char flush_reason[64];
-   int ret =
-      snprintf(flush_reason, sizeof(flush_reason),
-               "ccs op start: %s", isl_aux_op_to_name(ccs_op));
-   assert(ret < sizeof(flush_reason));
-
-   /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
-    *
-    *    "After Render target fast clear, pipe-control with color cache
-    *    write-flush must be issued before sending any DRAW commands on
-    *    that render target."
-    *
-    * This comment is a bit cryptic and doesn't really tell you what's going
-    * or what's really needed.  It appears that fast clear ops are not
-    * properly synchronized with other drawing.  This means that we cannot
-    * have a fast clear operation in the pipe at the same time as other
-    * regular drawing operations.  We need to use a PIPE_CONTROL to ensure
-    * that the contents of the previous draw hit the render target before we
-    * resolve and then use a second PIPE_CONTROL after the resolve to ensure
-    * that it is completed before any additional drawing occurs.
-    */
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             ANV_PIPE_TILE_CACHE_FLUSH_BIT |
-                             (devinfo->verx10 == 120 ?
-                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
-                             (devinfo->verx10 == 125 ?
-                                ANV_PIPE_HDC_PIPELINE_FLUSH_BIT |
-                                ANV_PIPE_DATA_CACHE_FLUSH_BIT : 0) |
-                             ANV_PIPE_PSS_STALL_SYNC_BIT |
-                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
-                             flush_reason);
-
-   switch (ccs_op) {
-   case ISL_AUX_OP_FAST_CLEAR:
-      blorp_fast_clear(&batch, &surf, format, swizzle,
-                       level, base_layer, layer_count,
-                       0, 0, level_width, level_height);
-      break;
-   case ISL_AUX_OP_FULL_RESOLVE:
-   case ISL_AUX_OP_PARTIAL_RESOLVE: {
-      /* Wa_1508744258: Enable RHWO optimization for resolves */
-      const bool enable_rhwo_opt = cmd_buffer->device->info->verx10 == 120;
-
-      if (enable_rhwo_opt)
-         cmd_buffer->state.pending_rhwo_optimization_enabled = true;
-
-      blorp_ccs_resolve(&batch, &surf, level, base_layer, layer_count,
-                        format, ccs_op);
-
-      if (enable_rhwo_opt)
-         cmd_buffer->state.pending_rhwo_optimization_enabled = false;
-      break;
-   }
-   case ISL_AUX_OP_AMBIGUATE:
-      for (uint32_t a = 0; a < layer_count; a++) {
-         const uint32_t layer = base_layer + a;
-         blorp_ccs_ambiguate(&batch, &surf, level, layer);
-      }
-      break;
-   default:
-      unreachable("Unsupported CCS operation");
-   }
-
-   anv_add_pending_pipe_bits(cmd_buffer,
-                             ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
-                             (devinfo->verx10 == 120 ?
-                                ANV_PIPE_TILE_CACHE_FLUSH_BIT |
-                                ANV_PIPE_DEPTH_STALL_BIT : 0) |
-                             ANV_PIPE_PSS_STALL_SYNC_BIT |
-                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
-                             "ccs op finish");
+   exec_ccs_op(cmd_buffer, &batch, image, format, swizzle, aspect, level,
+               base_layer, layer_count, ccs_op, clear_value);
 
    anv_blorp_batch_finish(&batch);
 }

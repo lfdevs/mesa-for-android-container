@@ -70,7 +70,7 @@ main(int argc, char *argv[])
     DWORD dwStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_OVERLAPPEDWINDOW | WS_VISIBLE;
 
     RECT rect = {0, 0, WindowWidth, WindowHeight};
-    AdjustWindowRect(&rect, dwStyle, FALSE);
+    AdjustWindowRect(&rect, dwStyle, false);
 
     HWND hWnd = CreateWindow(wc.lpszClassName,
                              "Simple example using DirectX10",

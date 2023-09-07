@@ -115,14 +115,11 @@ radv_resume_queries(const struct radv_meta_saved_state *state, struct radv_cmd_b
 }
 
 void
-radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer,
-               uint32_t flags)
+radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer, uint32_t flags)
 {
-   VkPipelineBindPoint bind_point = flags & RADV_META_SAVE_GRAPHICS_PIPELINE
-                                       ? VK_PIPELINE_BIND_POINT_GRAPHICS
-                                       : VK_PIPELINE_BIND_POINT_COMPUTE;
-   struct radv_descriptor_state *descriptors_state =
-      radv_get_descriptors_state(cmd_buffer, bind_point);
+   VkPipelineBindPoint bind_point =
+      flags & RADV_META_SAVE_GRAPHICS_PIPELINE ? VK_PIPELINE_BIND_POINT_GRAPHICS : VK_PIPELINE_BIND_POINT_COMPUTE;
+   struct radv_descriptor_state *descriptors_state = radv_get_descriptors_state(cmd_buffer, bind_point);
 
    assert(flags & (RADV_META_SAVE_GRAPHICS_PIPELINE | RADV_META_SAVE_COMPUTE_PIPELINE));
 
@@ -172,9 +169,8 @@ radv_meta_save(struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_
 void
 radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer)
 {
-   VkPipelineBindPoint bind_point = state->flags & RADV_META_SAVE_GRAPHICS_PIPELINE
-                                       ? VK_PIPELINE_BIND_POINT_GRAPHICS
-                                       : VK_PIPELINE_BIND_POINT_COMPUTE;
+   VkPipelineBindPoint bind_point = state->flags & RADV_META_SAVE_GRAPHICS_PIPELINE ? VK_PIPELINE_BIND_POINT_GRAPHICS
+                                                                                    : VK_PIPELINE_BIND_POINT_COMPUTE;
 
    if (state->flags & RADV_META_SAVE_GRAPHICS_PIPELINE) {
       if (state->old_graphics_pipeline) {
@@ -211,8 +207,8 @@ radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buf
       if (state->flags & RADV_META_SAVE_GRAPHICS_PIPELINE)
          stages |= VK_SHADER_STAGE_ALL_GRAPHICS;
 
-      radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), VK_NULL_HANDLE, stages, 0,
-                            MAX_PUSH_CONSTANTS_SIZE, state->push_constants);
+      radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), VK_NULL_HANDLE, stages, 0, MAX_PUSH_CONSTANTS_SIZE,
+                            state->push_constants);
    }
 
    if (state->flags & RADV_META_SAVE_RENDER) {
@@ -246,27 +242,26 @@ radv_meta_get_view_type(const struct radv_image *image)
  * VkImageViewCreateInfo::subresourceRange::baseArrayLayer.
  */
 uint32_t
-radv_meta_get_iview_layer(const struct radv_image *dest_image,
-                          const VkImageSubresourceLayers *dest_subresource,
-                          const VkOffset3D *dest_offset)
+radv_meta_get_iview_layer(const struct radv_image *dst_image, const VkImageSubresourceLayers *dst_subresource,
+                          const VkOffset3D *dst_offset)
 {
-   switch (dest_image->vk.image_type) {
+   switch (dst_image->vk.image_type) {
    case VK_IMAGE_TYPE_1D:
    case VK_IMAGE_TYPE_2D:
-      return dest_subresource->baseArrayLayer;
+      return dst_subresource->baseArrayLayer;
    case VK_IMAGE_TYPE_3D:
       /* HACK: Vulkan does not allow attaching a 3D image to a framebuffer,
        * but meta does it anyway. When doing so, we translate the
        * destination's z offset into an array offset.
        */
-      return dest_offset->z;
+      return dst_offset->z;
    default:
       assert(!"bad VkImageType");
       return 0;
    }
 }
 
-static VKAPI_ATTR void * VKAPI_CALL
+static VKAPI_ATTR void *VKAPI_CALL
 meta_alloc(void *_device, size_t size, size_t alignment, VkSystemAllocationScope allocationScope)
 {
    struct radv_device *device = _device;
@@ -274,9 +269,8 @@ meta_alloc(void *_device, size_t size, size_t alignment, VkSystemAllocationScope
                                          VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 }
 
-static VKAPI_ATTR void * VKAPI_CALL
-meta_realloc(void *_device, void *original, size_t size, size_t alignment,
-             VkSystemAllocationScope allocationScope)
+static VKAPI_ATTR void *VKAPI_CALL
+meta_realloc(void *_device, void *original, size_t size, size_t alignment, VkSystemAllocationScope allocationScope)
 {
    struct radv_device *device = _device;
    return device->vk.alloc.pfnReallocation(device->vk.alloc.pUserData, original, size, alignment,
@@ -340,10 +334,15 @@ radv_load_meta_pipeline(struct radv_device *device)
    void *data = NULL;
    bool ret = false;
    int fd = -1;
-   VkResult result = VK_SUCCESS;
+   struct vk_pipeline_cache *cache = NULL;
 
    VkPipelineCacheCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+   };
+
+   struct vk_pipeline_cache_create_info info = {
+      .pCreateInfo = &create_info,
+      .skip_disk_cache = true,
    };
 
    if (!radv_builtin_cache_path(path))
@@ -364,9 +363,10 @@ radv_load_meta_pipeline(struct radv_device *device)
    create_info.pInitialData = data;
 
 fail:
-   result = vk_common_CreatePipelineCache(radv_device_to_handle(device), &create_info, NULL,
-                                          &device->meta_state.cache);
-   if (result == VK_SUCCESS) {
+   cache = vk_pipeline_cache_create(&device->vk, &info, NULL);
+
+   if (cache) {
+      device->meta_state.cache = vk_pipeline_cache_to_handle(cache);
       device->meta_state.initial_cache_entries = num_cache_entries(device->meta_state.cache);
       ret = device->meta_state.initial_cache_entries > 0;
    }
@@ -393,8 +393,7 @@ radv_store_meta_pipeline(struct radv_device *device)
    if (num_cache_entries(device->meta_state.cache) <= device->meta_state.initial_cache_entries)
       return;
 
-   if (vk_common_GetPipelineCacheData(radv_device_to_handle(device), device->meta_state.cache,
-                                      &size, NULL))
+   if (vk_common_GetPipelineCacheData(radv_device_to_handle(device), device->meta_state.cache, &size, NULL))
       return;
 
    if (!radv_builtin_cache_path(path))
@@ -409,8 +408,7 @@ radv_store_meta_pipeline(struct radv_device *device)
    if (!data)
       goto fail;
 
-   if (vk_common_GetPipelineCacheData(radv_device_to_handle(device), device->meta_state.cache,
-                                      &size, data))
+   if (vk_common_GetPipelineCacheData(radv_device_to_handle(device), device->meta_state.cache, &size, data))
       goto fail;
    if (write(fd, data, size) == -1)
       goto fail;
@@ -640,9 +638,8 @@ radv_meta_build_nir_fs_noop(struct radv_device *dev)
 }
 
 void
-radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer,
-                                    int samples, nir_variable *input_img, nir_variable *color,
-                                    nir_ssa_def *img_coord)
+radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer, int samples,
+                                    nir_variable *input_img, nir_variable *color, nir_ssa_def *img_coord)
 {
    nir_deref_instr *input_img_deref = nir_build_deref_var(b, input_img);
    nir_ssa_def *sample0 = nir_txf_ms_deref(b, input_img_deref, img_coord, nir_imm_int(b, 0));
@@ -663,7 +660,7 @@ radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, 
       accum = nir_fadd(b, accum, sample);
    }
 
-   accum = nir_fdiv(b, accum, nir_imm_float(b, samples));
+   accum = nir_fdiv_imm(b, accum, samples);
    nir_store_var(b, color, accum, 0xf);
 
    if (device->physical_device->use_fmask) {
@@ -676,9 +673,8 @@ radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, 
 nir_ssa_def *
 radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding)
 {
-   nir_ssa_def *rsrc = nir_vulkan_resource_index(b, 3, 32, nir_imm_int(b, 0), .desc_set = desc_set,
-                                                 .binding = binding);
-   return nir_channels(b, rsrc, 0x3);
+   nir_ssa_def *rsrc = nir_vulkan_resource_index(b, 3, 32, nir_imm_int(b, 0), .desc_set = desc_set, .binding = binding);
+   return nir_trim_vector(b, rsrc, 2);
 }
 
 nir_ssa_def *
@@ -688,11 +684,11 @@ get_global_ids(nir_builder *b, unsigned num_components)
 
    nir_ssa_def *local_ids = nir_channels(b, nir_load_local_invocation_id(b), mask);
    nir_ssa_def *block_ids = nir_channels(b, nir_load_workgroup_id(b, 32), mask);
-   nir_ssa_def *block_size = nir_channels(
-      b,
-      nir_imm_ivec4(b, b->shader->info.workgroup_size[0], b->shader->info.workgroup_size[1],
-                    b->shader->info.workgroup_size[2], 0),
-      mask);
+   nir_ssa_def *block_size =
+      nir_channels(b,
+                   nir_imm_ivec4(b, b->shader->info.workgroup_size[0], b->shader->info.workgroup_size[1],
+                                 b->shader->info.workgroup_size[2], 0),
+                   mask);
 
    return nir_iadd(b, nir_imul(b, block_ids, block_size), local_ids);
 }

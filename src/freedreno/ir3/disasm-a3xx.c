@@ -396,6 +396,7 @@ static const struct opc_info {
    OPC(6, OPC_GETWID,       getwid),
    OPC(6, OPC_GETFIBERID,   getfiberid),
    OPC(6, OPC_STC,          stc),
+   OPC(6, OPC_STSC,         stsc),
    OPC(6, OPC_LDC_K,        ldc.k),
 
    OPC(6, OPC_SPILL_MACRO,  spill.macro),
@@ -403,6 +404,8 @@ static const struct opc_info {
 
    OPC(7, OPC_BAR,          bar),
    OPC(7, OPC_FENCE,        fence),
+   OPC(7, OPC_LOCK,         lock),
+   OPC(7, OPC_UNLOCK,       unlock),
 /* clang-format on */
 #undef OPC
 };

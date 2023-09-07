@@ -309,6 +309,37 @@ void pvr_srv_free_sync_primitive_block(int fd, void *handle)
    }
 }
 
+VkResult
+pvr_srv_set_sync_primitive(int fd, void *handle, uint32_t index, uint32_t value)
+{
+   struct pvr_srv_bridge_sync_prim_set_cmd cmd = {
+      .handle = handle,
+      .index = index,
+      .value = value,
+   };
+
+   struct pvr_srv_bridge_sync_prim_set_ret ret = {
+      .error = PVR_SRV_ERROR_BRIDGE_CALL_FAILED,
+   };
+
+   int result;
+
+   result = pvr_srv_bridge_call(fd,
+                                PVR_SRV_BRIDGE_SYNC,
+                                PVR_SRV_BRIDGE_SYNC_SYNCPRIMSET,
+                                &cmd,
+                                sizeof(cmd),
+                                &ret,
+                                sizeof(ret));
+   if (result || ret.error != PVR_SRV_OK) {
+      return vk_bridge_err(VK_ERROR_UNKNOWN,
+                           "PVR_SRV_BRIDGE_SYNC_SYNCPRIMSET",
+                           ret);
+   }
+
+   return VK_SUCCESS;
+}
+
 VkResult pvr_srv_get_heap_count(int fd, uint32_t *const heap_count_out)
 {
    struct pvr_srv_heap_count_cmd cmd = {

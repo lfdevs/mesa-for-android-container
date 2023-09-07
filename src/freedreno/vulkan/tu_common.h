@@ -118,6 +118,17 @@
 #define A6XX_TEX_CONST_DWORDS 16
 #define A6XX_TEX_SAMP_DWORDS 4
 
+/* We sample the fragment density map on the CPU, so technically the
+ * minimum/maximum texel size is arbitrary. However sizes smaller than the
+ * minimum tile width alignment of 32 are likely pointless, so we use that as
+ * the minimum value. For the maximum just pick a value larger than anyone
+ * would reasonably need.
+ */
+#define MIN_FDM_TEXEL_SIZE_LOG2 5
+#define MIN_FDM_TEXEL_SIZE (1u << MIN_FDM_TEXEL_SIZE_LOG2)
+#define MAX_FDM_TEXEL_SIZE_LOG2 10
+#define MAX_FDM_TEXEL_SIZE (1u << MAX_FDM_TEXEL_SIZE_LOG2)
+
 #define TU_FROM_HANDLE(__tu_type, __name, __handle)                          \
    VK_FROM_HANDLE(__tu_type, __name, __handle)
 

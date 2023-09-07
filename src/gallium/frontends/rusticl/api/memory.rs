@@ -4,6 +4,7 @@ use crate::api::event::create_and_queue;
 use crate::api::icd::*;
 use crate::api::types::*;
 use crate::api::util::*;
+use crate::core::context::Context;
 use crate::core::device::*;
 use crate::core::format::*;
 use crate::core::memory::*;
@@ -12,8 +13,13 @@ use crate::*;
 use mesa_rust_util::properties::Properties;
 use mesa_rust_util::ptr::*;
 use rusticl_opencl_gen::*;
+use rusticl_proc_macros::cl_entrypoint;
+use rusticl_proc_macros::cl_info_entrypoint;
 
+use std::alloc;
+use std::alloc::Layout;
 use std::cmp::Ordering;
+use std::mem::{self, MaybeUninit};
 use std::os::raw::c_void;
 use std::ptr;
 use std::slice;
@@ -56,7 +62,7 @@ fn validate_mem_flags(flags: cl_mem_flags, images: bool) -> CLResult<()> {
     Ok(())
 }
 
-fn validate_map_flags(m: &Mem, map_flags: cl_mem_flags) -> CLResult<()> {
+fn validate_map_flags_common(map_flags: cl_mem_flags) -> CLResult<()> {
     // CL_INVALID_VALUE ... if values specified in map_flags are not valid.
     let valid_flags =
         cl_bitfield::from(CL_MAP_READ | CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION);
@@ -68,6 +74,12 @@ fn validate_map_flags(m: &Mem, map_flags: cl_mem_flags) -> CLResult<()> {
     {
         return Err(CL_INVALID_VALUE);
     }
+
+    Ok(())
+}
+
+fn validate_map_flags(m: &Mem, map_flags: cl_mem_flags) -> CLResult<()> {
+    validate_map_flags_common(map_flags)?;
 
     // CL_INVALID_OPERATION if buffer has been created with CL_MEM_HOST_WRITE_ONLY or
     // CL_MEM_HOST_NO_ACCESS and CL_MAP_READ is set in map_flags
@@ -197,8 +209,9 @@ fn validate_matching_buffer_flags(mem: &Mem, flags: cl_mem_flags) -> CLResult<()
     Ok(())
 }
 
+#[cl_info_entrypoint(cl_get_mem_object_info)]
 impl CLInfo<cl_mem_info> for cl_mem {
-    fn query(&self, q: cl_mem_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_mem_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let mem = self.get_ref()?;
         Ok(match *q {
             CL_MEM_ASSOCIATED_MEMOBJECT => {
@@ -223,13 +236,16 @@ impl CLInfo<cl_mem_info> for cl_mem {
             CL_MEM_REFERENCE_COUNT => cl_prop::<cl_uint>(self.refcnt()?),
             CL_MEM_SIZE => cl_prop::<usize>(mem.size),
             CL_MEM_TYPE => cl_prop::<cl_mem_object_type>(mem.mem_type),
-            CL_MEM_USES_SVM_POINTER => cl_prop::<cl_bool>(CL_FALSE),
+            CL_MEM_USES_SVM_POINTER | CL_MEM_USES_SVM_POINTER_ARM => {
+                cl_prop::<cl_bool>(mem.is_svm().into())
+            }
             _ => return Err(CL_INVALID_VALUE),
         })
     }
 }
 
-pub fn create_buffer_with_properties(
+#[cl_entrypoint]
+fn create_buffer_with_properties(
     context: cl_context,
     properties: *const cl_mem_properties,
     flags: cl_mem_flags,
@@ -247,10 +263,8 @@ pub fn create_buffer_with_properties(
     }
 
     // ... or if size is greater than CL_DEVICE_MAX_MEM_ALLOC_SIZE for all devices in context.
-    for dev in &c.devs {
-        if checked_compare(size, Ordering::Greater, dev.max_mem_alloc()) {
-            return Err(CL_INVALID_BUFFER_SIZE);
-        }
+    if checked_compare(size, Ordering::Greater, c.max_mem_alloc()) {
+        return Err(CL_INVALID_BUFFER_SIZE);
     }
 
     validate_host_ptr(host_ptr, flags)?;
@@ -269,7 +283,8 @@ pub fn create_buffer_with_properties(
     )?))
 }
 
-pub fn create_buffer(
+#[cl_entrypoint]
+fn create_buffer(
     context: cl_context,
     flags: cl_mem_flags,
     size: usize,
@@ -278,7 +293,8 @@ pub fn create_buffer(
     create_buffer_with_properties(context, ptr::null(), flags, size, host_ptr)
 }
 
-pub fn create_sub_buffer(
+#[cl_entrypoint]
+fn create_sub_buffer(
     buffer: cl_mem,
     mut flags: cl_mem_flags,
     buffer_create_type: cl_buffer_create_type,
@@ -331,7 +347,8 @@ pub fn create_sub_buffer(
     // CL_MISALIGNED_SUB_BUFFER_OFFSET if there are no devices in context associated with buffer for which the origin field of the cl_buffer_region structure passed in buffer_create_info is aligned to the CL_DEVICE_MEM_BASE_ADDR_ALIGN value.
 }
 
-pub fn set_mem_object_destructor_callback(
+#[cl_entrypoint]
+fn set_mem_object_destructor_callback(
     memobj: cl_mem,
     pfn_notify: Option<MemCB>,
     user_data: *mut ::std::os::raw::c_void,
@@ -362,9 +379,9 @@ fn validate_image_format<'a>(
     // special validation
     let valid_combination = match format.image_channel_data_type {
         CL_UNORM_SHORT_565 | CL_UNORM_SHORT_555 | CL_UNORM_INT_101010 => {
-            [CL_RGB, CL_RGBx].contains(&format.image_channel_data_type)
+            [CL_RGB, CL_RGBx].contains(&format.image_channel_order)
         }
-        CL_UNORM_INT_101010_2 => format.image_channel_data_type == CL_RGBA,
+        CL_UNORM_INT_101010_2 => format.image_channel_order == CL_RGBA,
         _ => true,
     };
     if !valid_combination {
@@ -378,7 +395,7 @@ fn validate_image_desc(
     image_desc: *const cl_image_desc,
     host_ptr: *mut ::std::os::raw::c_void,
     elem_size: usize,
-    devs: &[Arc<Device>],
+    devs: &[&Device],
 ) -> CLResult<(cl_image_desc, Option<Arc<Mem>>)> {
     // CL_INVALID_IMAGE_DESCRIPTOR if values specified in image_desc are not valid
     const err: cl_int = CL_INVALID_IMAGE_DESCRIPTOR;
@@ -528,10 +545,26 @@ fn validate_image_desc(
 }
 
 fn validate_image_bounds(i: &Mem, origin: CLVec<usize>, region: CLVec<usize>) -> CLResult<()> {
+    let dims = i.image_desc.dims_with_array();
     let bound = region + origin;
-    if bound > i.image_desc.api_size() {
+    if bound > i.image_desc.size() {
         return Err(CL_INVALID_VALUE);
     }
+
+    // If image is a 2D image object, origin[2] must be 0. If image is a 1D image or 1D image buffer
+    // object, origin[1] and origin[2] must be 0. If image is a 1D image array object, origin[2]
+    // must be 0.
+    if dims < 3 && origin[2] != 0 || dims < 2 && origin[1] != 0 {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // If image is a 2D image object, region[2] must be 1. If image is a 1D image or 1D image buffer
+    // object, region[1] and region[2] must be 1. If image is a 1D image array object, region[2]
+    // must be 1. The values in region cannot be 0.
+    if dims < 3 && region[2] != 1 || dims < 2 && region[1] != 1 || region.contains(&0) {
+        return Err(CL_INVALID_VALUE);
+    }
+
     Ok(())
 }
 
@@ -669,8 +702,9 @@ fn validate_buffer(
     Ok(flags)
 }
 
+#[cl_info_entrypoint(cl_get_image_info)]
 impl CLInfo<cl_image_info> for cl_mem {
-    fn query(&self, q: cl_image_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_image_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let mem = self.get_ref()?;
         Ok(match *q {
             CL_IMAGE_ARRAY_SIZE => cl_prop::<usize>(mem.image_desc.image_array_size),
@@ -689,7 +723,8 @@ impl CLInfo<cl_image_info> for cl_mem {
     }
 }
 
-pub fn create_image_with_properties(
+#[cl_entrypoint]
+fn create_image_with_properties(
     context: cl_context,
     properties: *const cl_mem_properties,
     mut flags: cl_mem_flags,
@@ -753,7 +788,8 @@ pub fn create_image_with_properties(
     )?))
 }
 
-pub fn create_image(
+#[cl_entrypoint]
+fn create_image(
     context: cl_context,
     flags: cl_mem_flags,
     image_format: *const cl_image_format,
@@ -770,7 +806,8 @@ pub fn create_image(
     )
 }
 
-pub fn create_image_2d(
+#[cl_entrypoint]
+fn create_image_2d(
     context: cl_context,
     flags: cl_mem_flags,
     image_format: *const cl_image_format,
@@ -790,7 +827,8 @@ pub fn create_image_2d(
     create_image(context, flags, image_format, &image_desc, host_ptr)
 }
 
-pub fn create_image_3d(
+#[cl_entrypoint]
+fn create_image_3d(
     context: cl_context,
     flags: cl_mem_flags,
     image_format: *const cl_image_format,
@@ -814,7 +852,8 @@ pub fn create_image_3d(
     create_image(context, flags, image_format, &image_desc, host_ptr)
 }
 
-pub fn get_supported_image_formats(
+#[cl_entrypoint]
+fn get_supported_image_formats(
     context: cl_context,
     flags: cl_mem_flags,
     image_type: cl_mem_object_type,
@@ -858,8 +897,9 @@ pub fn get_supported_image_formats(
     Ok(())
 }
 
+#[cl_info_entrypoint(cl_get_sampler_info)]
 impl CLInfo<cl_sampler_info> for cl_sampler {
-    fn query(&self, q: cl_sampler_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_sampler_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let sampler = self.get_ref()?;
         Ok(match q {
             CL_SAMPLER_ADDRESSING_MODE => cl_prop::<cl_addressing_mode>(sampler.addressing_mode),
@@ -911,7 +951,8 @@ fn create_sampler_impl(
     Ok(cl_sampler::from_arc(sampler))
 }
 
-pub fn create_sampler(
+#[cl_entrypoint]
+fn create_sampler(
     context: cl_context,
     normalized_coords: cl_bool,
     addressing_mode: cl_addressing_mode,
@@ -926,7 +967,8 @@ pub fn create_sampler(
     )
 }
 
-pub fn create_sampler_with_properties(
+#[cl_entrypoint]
+fn create_sampler_with_properties(
     context: cl_context,
     sampler_properties: *const cl_sampler_properties,
 ) -> CLResult<cl_sampler> {
@@ -962,7 +1004,18 @@ pub fn create_sampler_with_properties(
     )
 }
 
-pub fn enqueue_read_buffer(
+#[cl_entrypoint]
+fn retain_sampler(sampler: cl_sampler) -> CLResult<()> {
+    sampler.retain()
+}
+
+#[cl_entrypoint]
+fn release_sampler(sampler: cl_sampler) -> CLResult<()> {
+    sampler.release()
+}
+
+#[cl_entrypoint]
+fn enqueue_read_buffer(
     command_queue: cl_command_queue,
     buffer: cl_mem,
     blocking_read: cl_bool,
@@ -1014,7 +1067,8 @@ pub fn enqueue_read_buffer(
     // CL_MISALIGNED_SUB_BUFFER_OFFSET if buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue.
 }
 
-pub fn enqueue_write_buffer(
+#[cl_entrypoint]
+fn enqueue_write_buffer(
     command_queue: cl_command_queue,
     buffer: cl_mem,
     blocking_write: cl_bool,
@@ -1066,7 +1120,8 @@ pub fn enqueue_write_buffer(
     // CL_MISALIGNED_SUB_BUFFER_OFFSET if buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue.
 }
 
-pub fn enqueue_copy_buffer(
+#[cl_entrypoint]
+fn enqueue_copy_buffer(
     command_queue: cl_command_queue,
     src_buffer: cl_mem,
     dst_buffer: cl_mem,
@@ -1133,7 +1188,8 @@ pub fn enqueue_copy_buffer(
     //• CL_MEM_OBJECT_ALLOCATION_FAILURE if there is a failure to allocate memory for data store associated with src_buffer or dst_buffer.
 }
 
-pub fn enqueue_read_buffer_rect(
+#[cl_entrypoint]
+fn enqueue_read_buffer_rect(
     command_queue: cl_command_queue,
     buffer: cl_mem,
     blocking_read: cl_bool,
@@ -1220,12 +1276,7 @@ pub fn enqueue_read_buffer_rect(
 
     // CL_INVALID_VALUE if the region being read or written specified by (buffer_origin, region,
     // buffer_row_pitch, buffer_slice_pitch) is out of bounds.
-    if !CLVec::is_in_bound(
-        r,
-        buf_ori,
-        [1, buffer_row_pitch, buffer_slice_pitch],
-        buf.size,
-    ) {
+    if CLVec::calc_size(r + buf_ori, [1, buffer_row_pitch, buffer_slice_pitch]) > buf.size {
         return Err(CL_INVALID_VALUE);
     }
 
@@ -1260,7 +1311,8 @@ pub fn enqueue_read_buffer_rect(
     // CL_MISALIGNED_SUB_BUFFER_OFFSET if buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue.
 }
 
-pub fn enqueue_write_buffer_rect(
+#[cl_entrypoint]
+fn enqueue_write_buffer_rect(
     command_queue: cl_command_queue,
     buffer: cl_mem,
     blocking_write: cl_bool,
@@ -1347,12 +1399,7 @@ pub fn enqueue_write_buffer_rect(
 
     // CL_INVALID_VALUE if the region being read or written specified by (buffer_origin, region,
     // buffer_row_pitch, buffer_slice_pitch) is out of bounds.
-    if !CLVec::is_in_bound(
-        r,
-        buf_ori,
-        [1, buffer_row_pitch, buffer_slice_pitch],
-        buf.size,
-    ) {
+    if CLVec::calc_size(r + buf_ori, [1, buffer_row_pitch, buffer_slice_pitch]) > buf.size {
         return Err(CL_INVALID_VALUE);
     }
 
@@ -1387,7 +1434,8 @@ pub fn enqueue_write_buffer_rect(
     // CL_MISALIGNED_SUB_BUFFER_OFFSET if buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue.
 }
 
-pub fn enqueue_copy_buffer_rect(
+#[cl_entrypoint]
+fn enqueue_copy_buffer_rect(
     command_queue: cl_command_queue,
     src_buffer: cl_mem,
     dst_buffer: cl_mem,
@@ -1470,8 +1518,8 @@ pub fn enqueue_copy_buffer_rect(
     // CL_INVALID_VALUE if (src_origin, region, src_row_pitch, src_slice_pitch) or (dst_origin,
     // region, dst_row_pitch, dst_slice_pitch) require accessing elements outside the src_buffer
     // and dst_buffer buffer objects respectively.
-    if !CLVec::is_in_bound(r, src_ori, [1, src_row_pitch, src_slice_pitch], src.size)
-        || !CLVec::is_in_bound(r, dst_ori, [1, dst_row_pitch, dst_slice_pitch], dst.size)
+    if CLVec::calc_size(r + src_ori, [1, src_row_pitch, src_slice_pitch]) > src.size
+        || CLVec::calc_size(r + dst_ori, [1, dst_row_pitch, dst_slice_pitch]) > dst.size
     {
         return Err(CL_INVALID_VALUE);
     }
@@ -1525,7 +1573,8 @@ pub fn enqueue_copy_buffer_rect(
     // CL_MISALIGNED_SUB_BUFFER_OFFSET if src_buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue.
 }
 
-pub fn enqueue_fill_buffer(
+#[cl_entrypoint]
+fn enqueue_fill_buffer(
     command_queue: cl_command_queue,
     buffer: cl_mem,
     pattern: *const ::std::os::raw::c_void,
@@ -1578,7 +1627,8 @@ pub fn enqueue_fill_buffer(
     //• CL_MEM_OBJECT_ALLOCATION_FAILURE if there is a failure to allocate memory for data store associated with buffer.
 }
 
-pub fn enqueue_map_buffer(
+#[cl_entrypoint]
+fn enqueue_map_buffer(
     command_queue: cl_command_queue,
     buffer: cl_mem,
     blocking_map: cl_bool,
@@ -1631,7 +1681,8 @@ pub fn enqueue_map_buffer(
     // CL_INVALID_OPERATION if mapping would lead to overlapping regions being mapped for writing.
 }
 
-pub fn enqueue_read_image(
+#[cl_entrypoint]
+fn enqueue_read_image(
     command_queue: cl_command_queue,
     image: cl_mem,
     blocking_read: cl_bool,
@@ -1677,6 +1728,8 @@ pub fn enqueue_read_image(
 
     // CL_INVALID_VALUE if the region being read or written specified by origin and region is out of
     // bounds.
+    // CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument
+    // description for origin and region.
     validate_image_bounds(&i, o, r)?;
 
     // If row_pitch (or input_row_pitch) is set to 0, the appropriate row pitch is calculated based
@@ -1713,14 +1766,14 @@ pub fn enqueue_read_image(
         }),
     )
 
-    //• CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument description for origin and region.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for image are not supported by device associated with queue.
     //• CL_INVALID_OPERATION if the device associated with command_queue does not support images (i.e. CL_DEVICE_IMAGE_SUPPORT specified in the Device Queries table is CL_FALSE).
     //• CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST if the read and write operations are blocking and the execution status of any of the events in event_wait_list is a negative integer value.
 }
 
-pub fn enqueue_write_image(
+#[cl_entrypoint]
+fn enqueue_write_image(
     command_queue: cl_command_queue,
     image: cl_mem,
     blocking_write: cl_bool,
@@ -1766,6 +1819,8 @@ pub fn enqueue_write_image(
 
     // CL_INVALID_VALUE if the region being read or written specified by origin and region is out of
     // bounds.
+    // CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument
+    // description for origin and region.
     validate_image_bounds(&i, o, r)?;
 
     // If row_pitch (or input_row_pitch) is set to 0, the appropriate row pitch is calculated based
@@ -1802,14 +1857,14 @@ pub fn enqueue_write_image(
         }),
     )
 
-    //• CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument description for origin and region.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for image are not supported by device associated with queue.
     //• CL_INVALID_OPERATION if the device associated with command_queue does not support images (i.e. CL_DEVICE_IMAGE_SUPPORT specified in the Device Queries table is CL_FALSE).
     //• CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST if the read and write operations are blocking and the execution status of any of the events in event_wait_list is a negative integer value.
 }
 
-pub fn enqueue_copy_image(
+#[cl_entrypoint]
+fn enqueue_copy_image(
     command_queue: cl_command_queue,
     src_image: cl_mem,
     dst_image: cl_mem,
@@ -1845,11 +1900,11 @@ pub fn enqueue_copy_image(
     let src_origin = unsafe { CLVec::from_raw(src_origin) };
 
     // CL_INVALID_VALUE if the 2D or 3D rectangular region specified by src_origin and
-    // src_origin + region refers to a region outside src_image, ...
+    // src_origin + region refers to a region outside src_image, or if the 2D or 3D rectangular
+    // region specified by dst_origin and dst_origin + region refers to a region outside dst_image.
+    // CL_INVALID_VALUE if values in src_origin, dst_origin and region do not follow rules described
+    // in the argument description for src_origin, dst_origin and region.
     validate_image_bounds(&src_image, src_origin, region)?;
-
-    // ... or if the 2D or 3D rectangular region specified by dst_origin and dst_origin + region
-    // refers to a region outside dst_image.
     validate_image_bounds(&dst_image, dst_origin, region)?;
 
     create_and_queue(
@@ -1863,14 +1918,14 @@ pub fn enqueue_copy_image(
         }),
     )
 
-    //• CL_INVALID_VALUE if values in src_origin, dst_origin and region do not follow rules described in the argument description for src_origin, dst_origin and region.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for src_image or dst_image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for src_image or dst_image are not supported by device associated with queue.
     //• CL_INVALID_OPERATION if the device associated with command_queue does not support images (i.e. CL_DEVICE_IMAGE_SUPPORT specified in the Device Queries table is CL_FALSE).
     //• CL_MEM_COPY_OVERLAP if src_image and dst_image are the same image object and the source and destination regions overlap.
 }
 
-pub fn enqueue_fill_image(
+#[cl_entrypoint]
+fn enqueue_fill_image(
     command_queue: cl_command_queue,
     image: cl_mem,
     fill_color: *const ::std::os::raw::c_void,
@@ -1900,6 +1955,8 @@ pub fn enqueue_fill_image(
 
     // CL_INVALID_VALUE if the region being filled as specified by origin and region is out of
     // bounds.
+    // CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument
+    // description for origin and region.
     validate_image_bounds(&i, origin, region)?;
 
     // we have to copy memory and it's always a 4 component int value
@@ -1914,13 +1971,13 @@ pub fn enqueue_fill_image(
         Box::new(move |q, ctx| i.fill_image(q, ctx, &fill_color, &origin, &region)),
     )
 
-    //• CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument description for origin and region.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for
     //image are not supported by device associated with queue.
 }
 
-pub fn enqueue_copy_buffer_to_image(
+#[cl_entrypoint]
+fn enqueue_copy_buffer_to_image(
     command_queue: cl_command_queue,
     src_buffer: cl_mem,
     dst_image: cl_mem,
@@ -1951,6 +2008,12 @@ pub fn enqueue_copy_buffer_to_image(
     let src_origin = CLVec::new([src_offset, 0, 0]);
     let dst_origin = unsafe { CLVec::from_raw(dst_origin) };
 
+    // CL_INVALID_VALUE if values in dst_origin and region do not follow rules described in the
+    // argument description for dst_origin and region.
+    // CL_INVALID_VALUE if the 1D, 2D or 3D rectangular region specified by dst_origin and
+    // dst_origin + region refer to a region outside dst_image,
+    validate_image_bounds(&dst, dst_origin, region)?;
+
     create_and_queue(
         q,
         CL_COMMAND_COPY_BUFFER_TO_IMAGE,
@@ -1961,8 +2024,7 @@ pub fn enqueue_copy_buffer_to_image(
     )
 
     //• CL_INVALID_MEM_OBJECT if src_buffer is not a valid buffer object or dst_image is not a valid image object or if dst_image is a 1D image buffer object created from src_buffer.
-    //• CL_INVALID_VALUE if the 1D, 2D or 3D rectangular region specified by dst_origin and dst_origin + region refer to a region outside dst_image, or if the region specified by src_offset and src_offset + src_cb refer to a region outside src_buffer.
-    //• CL_INVALID_VALUE if values in dst_origin and region do not follow rules described in the argument description for dst_origin and region.
+    //• CL_INVALID_VALUE ... if the region specified by src_offset and src_offset + src_cb refer to a region outside src_buffer.
     //• CL_MISALIGNED_SUB_BUFFER_OFFSET if src_buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for dst_image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for dst_image are not supported by device associated with queue.
@@ -1970,7 +2032,8 @@ pub fn enqueue_copy_buffer_to_image(
     //• CL_INVALID_OPERATION if the device associated with command_queue does not support images (i.e. CL_DEVICE_IMAGE_SUPPORT specified in the Device Queries table is CL_FALSE).
 }
 
-pub fn enqueue_copy_image_to_buffer(
+#[cl_entrypoint]
+fn enqueue_copy_image_to_buffer(
     command_queue: cl_command_queue,
     src_image: cl_mem,
     dst_buffer: cl_mem,
@@ -2001,6 +2064,13 @@ pub fn enqueue_copy_image_to_buffer(
     let src_origin = unsafe { CLVec::from_raw(src_origin) };
     let dst_origin = CLVec::new([dst_offset, 0, 0]);
 
+    // CL_INVALID_VALUE if values in src_origin and region do not follow rules described in the
+    // argument description for src_origin and region.
+    // CL_INVALID_VALUE if the 1D, 2D or 3D rectangular region specified by src_origin and
+    // src_origin + region refers to a region outside src_image, or if the region specified by
+    // dst_offset and dst_offset + dst_cb to a region outside dst_buffer.
+    validate_image_bounds(&src, src_origin, region)?;
+
     create_and_queue(
         q,
         CL_COMMAND_COPY_IMAGE_TO_BUFFER,
@@ -2011,8 +2081,7 @@ pub fn enqueue_copy_image_to_buffer(
     )
 
     //• CL_INVALID_MEM_OBJECT if src_image is not a valid image object or dst_buffer is not a valid buffer object or if src_image is a 1D image buffer object created from dst_buffer.
-    //• CL_INVALID_VALUE if the 1D, 2D or 3D rectangular region specified by src_origin and src_origin + region refers to a region outside src_image, or if the region specified by dst_offset and dst_offset + dst_cb to a region outside dst_buffer.
-    //• CL_INVALID_VALUE if values in src_origin and region do not follow rules described in the argument description for src_origin and region.
+    //• CL_INVALID_VALUE ... if the region specified by dst_offset and dst_offset + dst_cb to a region outside dst_buffer.
     //• CL_MISALIGNED_SUB_BUFFER_OFFSET if dst_buffer is a sub-buffer object and offset specified when the sub-buffer object is created is not aligned to CL_DEVICE_MEM_BASE_ADDR_ALIGN value for device associated with queue. This error code is missing before version 1.1.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for src_image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for src_image are not supported by device associated with queue.
@@ -2020,7 +2089,8 @@ pub fn enqueue_copy_image_to_buffer(
     //• CL_INVALID_OPERATION if the device associated with command_queue does not support images (i.e. CL_DEVICE_IMAGE_SUPPORT specified in the Device Queries table is CL_FALSE).
 }
 
-pub fn enqueue_map_image(
+#[cl_entrypoint]
+fn enqueue_map_image(
     command_queue: cl_command_queue,
     image: cl_mem,
     blocking_map: cl_bool,
@@ -2056,6 +2126,8 @@ pub fn enqueue_map_image(
     let origin = unsafe { CLVec::from_raw(origin) };
 
     // CL_INVALID_VALUE if region being mapped given by (origin, origin + region) is out of bounds
+    // CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument
+    // description for origin and region.
     validate_image_bounds(&i, origin, region)?;
 
     let mut dummy_slice_pitch: usize = 0;
@@ -2089,7 +2161,6 @@ pub fn enqueue_map_image(
 
     Ok(ptr)
 
-    //• CL_INVALID_VALUE if values in origin and region do not follow rules described in the argument description for origin and region.
     //• CL_INVALID_IMAGE_SIZE if image dimensions (image width, height, specified or compute row and/or slice pitch) for image are not supported by device associated with queue.
     //• CL_IMAGE_FORMAT_NOT_SUPPORTED if image format (image channel order and data type) for image are not supported by device associated with queue.
     //• CL_MAP_FAILURE if there is a failure to map the requested region into the host address space. This error cannot occur for image objects created with CL_MEM_USE_HOST_PTR or CL_MEM_ALLOC_HOST_PTR.
@@ -2098,7 +2169,18 @@ pub fn enqueue_map_image(
     //• CL_INVALID_OPERATION if mapping would lead to overlapping regions being mapped for writing.
 }
 
-pub fn enqueue_unmap_mem_object(
+#[cl_entrypoint]
+fn retain_mem_object(mem: cl_mem) -> CLResult<()> {
+    mem.retain()
+}
+
+#[cl_entrypoint]
+fn release_mem_object(mem: cl_mem) -> CLResult<()> {
+    mem.release()
+}
+
+#[cl_entrypoint]
+fn enqueue_unmap_mem_object(
     command_queue: cl_command_queue,
     memobj: cl_mem,
     mapped_ptr: *mut ::std::os::raw::c_void,
@@ -2131,7 +2213,8 @@ pub fn enqueue_unmap_mem_object(
     )
 }
 
-pub fn enqueue_migrate_mem_objects(
+#[cl_entrypoint]
+fn enqueue_migrate_mem_objects(
     command_queue: cl_command_queue,
     num_mem_objects: cl_uint,
     mem_objects: *const cl_mem,
@@ -2178,9 +2261,628 @@ pub fn enqueue_migrate_mem_objects(
     //• CL_MEM_OBJECT_ALLOCATION_FAILURE if there is a failure to allocate memory for the specified set of memory objects in mem_objects.
 }
 
+#[cl_info_entrypoint(cl_get_pipe_info)]
 impl CLInfo<cl_pipe_info> for cl_mem {
-    fn query(&self, _q: cl_pipe_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, _q: cl_pipe_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         // CL_INVALID_MEM_OBJECT if pipe is a not a valid pipe object.
         Err(CL_INVALID_MEM_OBJECT)
     }
+}
+
+pub fn svm_alloc(
+    context: cl_context,
+    flags: cl_svm_mem_flags,
+    size: usize,
+    mut alignment: cl_uint,
+) -> CLResult<*mut c_void> {
+    // clSVMAlloc will fail if
+
+    // context is not a valid context
+    let c = context.get_ref()?;
+
+    // or no devices in context support SVM.
+    if !c.has_svm_devs() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    // flags does not contain CL_MEM_SVM_FINE_GRAIN_BUFFER but does contain CL_MEM_SVM_ATOMICS.
+    if !bit_check(flags, CL_MEM_SVM_FINE_GRAIN_BUFFER) && bit_check(flags, CL_MEM_SVM_ATOMICS) {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // size is 0 or > CL_DEVICE_MAX_MEM_ALLOC_SIZE value for any device in context.
+    if size == 0 || checked_compare(size, Ordering::Greater, c.max_mem_alloc()) {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    if alignment == 0 {
+        alignment = mem::size_of::<[u64; 16]>() as cl_uint;
+    }
+
+    // alignment is not a power of two
+    if !alignment.is_power_of_two() {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    let layout;
+    let ptr;
+
+    // SAFETY: we already verify the parameters to from_size_align above and layout is of non zero
+    // size
+    unsafe {
+        layout = Layout::from_size_align_unchecked(size, alignment as usize);
+        ptr = alloc::alloc(layout);
+    }
+
+    if ptr.is_null() {
+        return Err(CL_OUT_OF_HOST_MEMORY);
+    }
+
+    c.add_svm_ptr(ptr.cast(), layout);
+    Ok(ptr.cast())
+
+    // Values specified in flags do not follow rules described for supported values in the SVM Memory Flags table.
+    // CL_MEM_SVM_FINE_GRAIN_BUFFER or CL_MEM_SVM_ATOMICS is specified in flags and these are not supported by at least one device in context.
+    // The values specified in flags are not valid, i.e. don’t match those defined in the SVM Memory Flags table.
+    // the OpenCL implementation cannot support the specified alignment for at least one device in context.
+    // There was a failure to allocate resources.
+}
+
+fn svm_free_impl(c: &Context, svm_pointer: *mut c_void) {
+    if let Some(layout) = c.remove_svm_ptr(svm_pointer) {
+        // SAFETY: we make sure that svm_pointer is a valid allocation and reuse the same layout
+        // from the allocation
+        unsafe {
+            alloc::dealloc(svm_pointer.cast(), layout);
+        }
+    }
+}
+
+pub fn svm_free(context: cl_context, svm_pointer: *mut c_void) -> CLResult<()> {
+    let c = context.get_ref()?;
+    svm_free_impl(c, svm_pointer);
+    Ok(())
+}
+
+fn enqueue_svm_free_impl(
+    command_queue: cl_command_queue,
+    num_svm_pointers: cl_uint,
+    svm_pointers: *mut *mut c_void,
+    pfn_free_func: Option<SVMFreeCb>,
+    user_data: *mut c_void,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+    cmd_type: cl_command_type,
+) -> CLResult<()> {
+    let q = command_queue.get_arc()?;
+    let evs = event_list_from_cl(&q, num_events_in_wait_list, event_wait_list)?;
+
+    // CL_INVALID_VALUE if num_svm_pointers is 0 and svm_pointers is non-NULL, or if svm_pointers is
+    // NULL and num_svm_pointers is not 0.
+    if num_svm_pointers == 0 && !svm_pointers.is_null()
+        || num_svm_pointers != 0 && svm_pointers.is_null()
+    {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // CL_INVALID_OPERATION if the device associated with command queue does not support SVM.
+    if !q.device.svm_supported() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    create_and_queue(
+        q,
+        cmd_type,
+        evs,
+        event,
+        false,
+        Box::new(move |q, _| {
+            if let Some(cb) = pfn_free_func {
+                // SAFETY: it's undefined behavior if the application screws up
+                unsafe {
+                    cb(command_queue, num_svm_pointers, svm_pointers, user_data);
+                }
+            } else {
+                // SAFETY: num_svm_pointers specifies the amount of elements in svm_pointers
+                let svm_pointers =
+                    unsafe { slice::from_raw_parts(svm_pointers, num_svm_pointers as usize) };
+                for &ptr in svm_pointers {
+                    svm_free_impl(&q.context, ptr);
+                }
+            }
+
+            Ok(())
+        }),
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_free(
+    command_queue: cl_command_queue,
+    num_svm_pointers: cl_uint,
+    svm_pointers: *mut *mut c_void,
+    pfn_free_func: Option<SVMFreeCb>,
+    user_data: *mut c_void,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_free_impl(
+        command_queue,
+        num_svm_pointers,
+        svm_pointers,
+        pfn_free_func,
+        user_data,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_FREE,
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_free_arm(
+    command_queue: cl_command_queue,
+    num_svm_pointers: cl_uint,
+    svm_pointers: *mut *mut c_void,
+    pfn_free_func: Option<SVMFreeCb>,
+    user_data: *mut c_void,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_free_impl(
+        command_queue,
+        num_svm_pointers,
+        svm_pointers,
+        pfn_free_func,
+        user_data,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_FREE_ARM,
+    )
+}
+
+fn enqueue_svm_memcpy_impl(
+    command_queue: cl_command_queue,
+    blocking_copy: cl_bool,
+    dst_ptr: *mut c_void,
+    src_ptr: *const c_void,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+    cmd_type: cl_command_type,
+) -> CLResult<()> {
+    let q = command_queue.get_arc()?;
+    let evs = event_list_from_cl(&q, num_events_in_wait_list, event_wait_list)?;
+    let block = check_cl_bool(blocking_copy).ok_or(CL_INVALID_VALUE)?;
+
+    // CL_INVALID_OPERATION if the device associated with command queue does not support SVM.
+    if !q.device.svm_supported() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    // CL_INVALID_VALUE if dst_ptr or src_ptr is NULL.
+    if dst_ptr.is_null() || src_ptr.is_null() {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // CL_MEM_COPY_OVERLAP if the values specified for dst_ptr, src_ptr and size result in an
+    // overlapping copy.
+    let dst_ptr_addr = dst_ptr as usize;
+    let src_ptr_addr = src_ptr as usize;
+    if (src_ptr_addr <= dst_ptr_addr && dst_ptr_addr < src_ptr_addr + size)
+        || (dst_ptr_addr <= src_ptr_addr && src_ptr_addr < dst_ptr_addr + size)
+    {
+        return Err(CL_MEM_COPY_OVERLAP);
+    }
+
+    create_and_queue(
+        q,
+        cmd_type,
+        evs,
+        event,
+        block,
+        Box::new(move |_, _| {
+            // SAFETY: We check for overlapping copies already and alignment doesn't matter for void
+            // pointers. And we also trust applications to provide properly allocated memory regions
+            // and if not it's all undefined anyway.
+            unsafe {
+                ptr::copy_nonoverlapping(src_ptr, dst_ptr, size);
+            }
+            Ok(())
+        }),
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_memcpy(
+    command_queue: cl_command_queue,
+    blocking_copy: cl_bool,
+    dst_ptr: *mut c_void,
+    src_ptr: *const c_void,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_memcpy_impl(
+        command_queue,
+        blocking_copy,
+        dst_ptr,
+        src_ptr,
+        size,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_MEMCPY,
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_memcpy_arm(
+    command_queue: cl_command_queue,
+    blocking_copy: cl_bool,
+    dst_ptr: *mut c_void,
+    src_ptr: *const c_void,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_memcpy_impl(
+        command_queue,
+        blocking_copy,
+        dst_ptr,
+        src_ptr,
+        size,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_MEMCPY_ARM,
+    )
+}
+
+fn enqueue_svm_mem_fill_impl(
+    command_queue: cl_command_queue,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    pattern: *const ::std::os::raw::c_void,
+    pattern_size: usize,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+    cmd_type: cl_command_type,
+) -> CLResult<()> {
+    let q = command_queue.get_arc()?;
+    let evs = event_list_from_cl(&q, num_events_in_wait_list, event_wait_list)?;
+    let svm_ptr_addr = svm_ptr as usize;
+
+    // CL_INVALID_OPERATION if the device associated with command queue does not support SVM.
+    if !q.device.svm_supported() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    // CL_INVALID_VALUE if svm_ptr is NULL.
+    if svm_ptr.is_null() {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // CL_INVALID_VALUE if svm_ptr is not aligned to pattern_size bytes.
+    if svm_ptr_addr & (pattern_size - 1) != 0 {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // CL_INVALID_VALUE if pattern is NULL or if pattern_size is 0 or if pattern_size is not one of
+    // {1, 2, 4, 8, 16, 32, 64, 128}.
+    if pattern.is_null()
+        || pattern_size == 0
+        || !pattern_size.is_power_of_two()
+        || pattern_size > 128
+    {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // CL_INVALID_VALUE if size is not a multiple of pattern_size.
+    if size % pattern_size != 0 {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    create_and_queue(
+        q,
+        cmd_type,
+        evs,
+        event,
+        false,
+        Box::new(move |_, _| {
+            let mut offset = 0;
+            while offset < size {
+                // SAFETY: pointer are either valid or undefined behavior
+                unsafe {
+                    ptr::copy(pattern, svm_ptr.add(offset), pattern_size);
+                }
+                offset += pattern_size;
+            }
+
+            Ok(())
+        }),
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_mem_fill(
+    command_queue: cl_command_queue,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    pattern: *const ::std::os::raw::c_void,
+    pattern_size: usize,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_mem_fill_impl(
+        command_queue,
+        svm_ptr,
+        pattern,
+        pattern_size,
+        size,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_MEMFILL,
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_mem_fill_arm(
+    command_queue: cl_command_queue,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    pattern: *const ::std::os::raw::c_void,
+    pattern_size: usize,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_mem_fill_impl(
+        command_queue,
+        svm_ptr,
+        pattern,
+        pattern_size,
+        size,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_MEMFILL_ARM,
+    )
+}
+
+fn enqueue_svm_map_impl(
+    command_queue: cl_command_queue,
+    blocking_map: cl_bool,
+    flags: cl_map_flags,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+    cmd_type: cl_command_type,
+) -> CLResult<()> {
+    let q = command_queue.get_arc()?;
+    let evs = event_list_from_cl(&q, num_events_in_wait_list, event_wait_list)?;
+    let block = check_cl_bool(blocking_map).ok_or(CL_INVALID_VALUE)?;
+
+    // CL_INVALID_OPERATION if the device associated with command queue does not support SVM.
+    if !q.device.svm_supported() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    // CL_INVALID_VALUE if svm_ptr is NULL.
+    if svm_ptr.is_null() {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // CL_INVALID_VALUE if size is 0 ...
+    if size == 0 {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    // ... or if values specified in map_flags are not valid.
+    validate_map_flags_common(flags)?;
+
+    create_and_queue(q, cmd_type, evs, event, block, Box::new(|_, _| Ok(())))
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_map(
+    command_queue: cl_command_queue,
+    blocking_map: cl_bool,
+    flags: cl_map_flags,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_map_impl(
+        command_queue,
+        blocking_map,
+        flags,
+        svm_ptr,
+        size,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_MAP,
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_map_arm(
+    command_queue: cl_command_queue,
+    blocking_map: cl_bool,
+    flags: cl_map_flags,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    size: usize,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_map_impl(
+        command_queue,
+        blocking_map,
+        flags,
+        svm_ptr,
+        size,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_MAP_ARM,
+    )
+}
+
+fn enqueue_svm_unmap_impl(
+    command_queue: cl_command_queue,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+    cmd_type: cl_command_type,
+) -> CLResult<()> {
+    let q = command_queue.get_arc()?;
+    let evs = event_list_from_cl(&q, num_events_in_wait_list, event_wait_list)?;
+
+    // CL_INVALID_OPERATION if the device associated with command queue does not support SVM.
+    if !q.device.svm_supported() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    // CL_INVALID_VALUE if svm_ptr is NULL.
+    if svm_ptr.is_null() {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    create_and_queue(q, cmd_type, evs, event, false, Box::new(|_, _| Ok(())))
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_unmap(
+    command_queue: cl_command_queue,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_unmap_impl(
+        command_queue,
+        svm_ptr,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_UNMAP,
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_unmap_arm(
+    command_queue: cl_command_queue,
+    svm_ptr: *mut ::std::os::raw::c_void,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    enqueue_svm_unmap_impl(
+        command_queue,
+        svm_ptr,
+        num_events_in_wait_list,
+        event_wait_list,
+        event,
+        CL_COMMAND_SVM_UNMAP_ARM,
+    )
+}
+
+#[cl_entrypoint]
+fn enqueue_svm_migrate_mem(
+    command_queue: cl_command_queue,
+    num_svm_pointers: cl_uint,
+    svm_pointers: *mut *const ::std::os::raw::c_void,
+    sizes: *const usize,
+    flags: cl_mem_migration_flags,
+    num_events_in_wait_list: cl_uint,
+    event_wait_list: *const cl_event,
+    event: *mut cl_event,
+) -> CLResult<()> {
+    let q = command_queue.get_arc()?;
+    let evs = event_list_from_cl(&q, num_events_in_wait_list, event_wait_list)?;
+
+    // CL_INVALID_OPERATION if the device associated with command queue does not support SVM.
+    if !q.device.svm_supported() {
+        return Err(CL_INVALID_OPERATION);
+    }
+
+    // CL_INVALID_VALUE if num_svm_pointers is zero or svm_pointers is NULL.
+    if num_svm_pointers == 0 || svm_pointers.is_null() {
+        return Err(CL_INVALID_VALUE);
+    }
+
+    let num_svm_pointers = num_svm_pointers as usize;
+    // SAFETY: Just hoping the application is alright.
+    let mut svm_pointers =
+        unsafe { slice::from_raw_parts(svm_pointers, num_svm_pointers) }.to_owned();
+    // if sizes is NULL, every allocation containing the pointers need to be migrated
+    let mut sizes = if sizes.is_null() {
+        vec![0; num_svm_pointers]
+    } else {
+        unsafe { slice::from_raw_parts(sizes, num_svm_pointers) }.to_owned()
+    };
+
+    // CL_INVALID_VALUE if sizes[i] is non-zero range [svm_pointers[i], svm_pointers[i]+sizes[i]) is
+    // not contained within an existing clSVMAlloc allocation.
+    for (ptr, size) in svm_pointers.iter_mut().zip(&mut sizes) {
+        if let Some((alloc, layout)) = q.context.find_svm_alloc(ptr.cast()) {
+            let ptr_addr = *ptr as usize;
+            let alloc_addr = alloc as usize;
+
+            // if the offset + size is bigger than the allocation we are out of bounds
+            if (ptr_addr - alloc_addr) + *size <= layout.size() {
+                // if the size is 0, the entire allocation should be migrated
+                if *size == 0 {
+                    *ptr = alloc.cast();
+                    *size = layout.size();
+                }
+                continue;
+            }
+        }
+
+        return Err(CL_INVALID_VALUE);
+    }
+
+    let to_device = !bit_check(flags, CL_MIGRATE_MEM_OBJECT_HOST);
+    let content_undefined = bit_check(flags, CL_MIGRATE_MEM_OBJECT_CONTENT_UNDEFINED);
+
+    create_and_queue(
+        q,
+        CL_COMMAND_SVM_MIGRATE_MEM,
+        evs,
+        event,
+        false,
+        Box::new(move |_, ctx| {
+            ctx.svm_migrate(&svm_pointers, &sizes, to_device, content_undefined);
+            Ok(())
+        }),
+    )
+}
+
+#[cl_entrypoint]
+fn create_pipe(
+    _context: cl_context,
+    _flags: cl_mem_flags,
+    _pipe_packet_size: cl_uint,
+    _pipe_max_packets: cl_uint,
+    _properties: *const cl_pipe_properties,
+) -> CLResult<cl_mem> {
+    Err(CL_INVALID_OPERATION)
 }

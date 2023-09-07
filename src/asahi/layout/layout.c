@@ -56,6 +56,8 @@ ail_get_max_tile_size(unsigned blocksize_B)
    case  4: return (struct ail_tile) {  64,  64 };
    case  8: return (struct ail_tile) {  64,  32 };
    case 16: return (struct ail_tile) {  32,  32 };
+   case 32: return (struct ail_tile) {  32,  16 };
+   case 64: return (struct ail_tile) {  16,  16 };
    default: unreachable("Invalid blocksize");
    }
    /* clang-format on */
@@ -177,29 +179,35 @@ ail_initialize_compression(struct ail_layout *layout)
           "Compressed pixel formats not supported");
    assert(util_format_get_blockwidth(layout->format) == 1);
    assert(util_format_get_blockheight(layout->format) == 1);
-   assert(layout->width_px >= 16 && "Small textures are never compressed");
-   assert(layout->height_px >= 16 && "Small textures are never compressed");
+
+   unsigned width_sa =
+      ail_effective_width_sa(layout->width_px, layout->sample_count_sa);
+   unsigned height_sa =
+      ail_effective_height_sa(layout->height_px, layout->sample_count_sa);
+
+   assert(width_sa >= 16 && "Small textures are never compressed");
+   assert(height_sa >= 16 && "Small textures are never compressed");
 
    layout->metadata_offset_B = layout->size_B;
 
-   unsigned width_px = ALIGN_POT(layout->width_px, 16);
-   unsigned height_px = ALIGN_POT(layout->height_px, 16);
+   width_sa = ALIGN_POT(width_sa, 16);
+   height_sa = ALIGN_POT(height_sa, 16);
 
    unsigned compbuf_B = 0;
 
    for (unsigned l = 0; l < layout->levels; ++l) {
-      if (width_px < 16 && height_px < 16)
+      if (width_sa < 16 && height_sa < 16)
          break;
 
       layout->level_offsets_compressed_B[l] = compbuf_B;
 
-      /* The compression buffer seems to have 8 bytes per 16 x 16 pixel block. */
-      unsigned cmpw_el = DIV_ROUND_UP(util_next_power_of_two(width_px), 16);
-      unsigned cmph_el = DIV_ROUND_UP(util_next_power_of_two(height_px), 16);
+      /* The compression buffer seems to have 8 bytes per 16 x 16 sample block. */
+      unsigned cmpw_el = DIV_ROUND_UP(util_next_power_of_two(width_sa), 16);
+      unsigned cmph_el = DIV_ROUND_UP(util_next_power_of_two(height_sa), 16);
       compbuf_B += ALIGN_POT(cmpw_el * cmph_el * 8, AIL_CACHELINE);
 
-      width_px = DIV_ROUND_UP(width_px, 2);
-      height_px = DIV_ROUND_UP(height_px, 2);
+      width_sa = DIV_ROUND_UP(width_sa, 2);
+      height_sa = DIV_ROUND_UP(height_sa, 2);
    }
 
    layout->compression_layer_stride_B = compbuf_B;

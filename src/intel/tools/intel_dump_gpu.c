@@ -43,6 +43,7 @@
 #include "intel_aub.h"
 #include "aub_write.h"
 
+#include "c11/threads.h"
 #include "dev/intel_debug.h"
 #include "dev/intel_device_info.h"
 #include "common/intel_gem.h"
@@ -488,8 +489,8 @@ maybe_init(int fd)
              output_filename, device, devinfo.ver);
 }
 
-__attribute__ ((visibility ("default"))) int
-ioctl(int fd, unsigned long request, ...)
+static int
+intercept_ioctl(int fd, unsigned long request, ...)
 {
    va_list args;
    void *argp;
@@ -731,6 +732,31 @@ ioctl(int fd, unsigned long request, ...)
       }
    } else {
       return libc_ioctl(fd, request, argp);
+   }
+}
+
+__attribute__ ((visibility ("default"))) int
+ioctl(int fd, unsigned long request, ...)
+{
+   static thread_local bool entered = false;
+   va_list args;
+   void *argp;
+   int ret;
+
+   va_start(args, request);
+   argp = va_arg(args, void *);
+   va_end(args);
+
+   /* Some of the functions called by intercept_ioctl call ioctls of their
+    * own. These need to go to the libc ioctl instead of being passed back to
+    * intercept_ioctl to avoid a stack overflow. */
+   if (entered) {
+      return libc_ioctl(fd, request, argp);
+   } else {
+      entered = true;
+      ret = intercept_ioctl(fd, request, argp);
+      entered = false;
+      return ret;
    }
 }
 

@@ -34,7 +34,8 @@ BEGIN_TEST(validate.sdwa.allow)
       //>> Validation results:
       //! Validation passed
 
-      SDWA_instruction *sdwa = &bld.vop2_sdwa(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], inputs[1])->sdwa();
+      SDWA_instruction* sdwa =
+         &bld.vop2_sdwa(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], inputs[1])->sdwa();
       sdwa->neg[0] = sdwa->neg[1] = sdwa->abs[0] = sdwa->abs[1] = true;
 
       bld.vop2_sdwa(aco_opcode::v_mul_f32, bld.def(v1b), inputs[0], inputs[1]);
@@ -105,7 +106,9 @@ BEGIN_TEST(validate.sdwa.vopc)
       bld.vopc_sdwa(aco_opcode::v_cmp_lt_f32, bld.def(bld.lm), inputs[0], inputs[1]);
 
       //~gfx(9|10)! SDWA VOPC clamp only supported on GFX8: s2: %_:vcc = v_cmp_eq_f32 %vgpr0, %vgpr1 clamp src0_sel:dword src1_sel:dword
-      bld.vopc_sdwa(aco_opcode::v_cmp_eq_f32, bld.def(bld.lm, vcc), inputs[0], inputs[1])->sdwa().clamp = true;
+      bld.vopc_sdwa(aco_opcode::v_cmp_eq_f32, bld.def(bld.lm, vcc), inputs[0], inputs[1])
+         ->sdwa()
+         .clamp = true;
 
       //! Validation failed
 
@@ -138,11 +141,13 @@ BEGIN_TEST(validate.sdwa.vcc)
 
       //! 3rd operand must be fixed to vcc with SDWA: v1: %_ = v_cndmask_b32 %vgpr0, %vgpr1, %_ dst_sel:dword src0_sel:dword src1_sel:dword
       bld.vop2_sdwa(aco_opcode::v_cndmask_b32, bld.def(v1), inputs[0], inputs[1], inputs[2]);
-      bld.vop2_sdwa(aco_opcode::v_cndmask_b32, bld.def(v1), inputs[0], inputs[1], bld.vcc(inputs[2]));
+      bld.vop2_sdwa(aco_opcode::v_cndmask_b32, bld.def(v1), inputs[0], inputs[1],
+                    bld.vcc(inputs[2]));
 
       //! 2nd definition must be fixed to vcc with SDWA: v1: %_, s2: %_ = v_add_co_u32 %vgpr0, %vgpr1 dst_sel:dword src0_sel:dword src1_sel:dword
       bld.vop2_sdwa(aco_opcode::v_add_co_u32, bld.def(v1), bld.def(bld.lm), inputs[0], inputs[1]);
-      bld.vop2_sdwa(aco_opcode::v_add_co_u32, bld.def(v1), bld.def(bld.lm, vcc), inputs[0], inputs[1]);
+      bld.vop2_sdwa(aco_opcode::v_add_co_u32, bld.def(v1), bld.def(bld.lm, vcc), inputs[0],
+                    inputs[1]);
 
       //! Validation failed
 
@@ -152,125 +157,127 @@ END_TEST
 
 BEGIN_TEST(optimize.sdwa.extract)
    for (unsigned i = GFX7; i <= GFX10; i++) {
-   for (unsigned is_signed = 0; is_signed <= 1; is_signed++) {
-      //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
-      if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i, CHIP_UNKNOWN, is_signed ? "_signed" : "_unsigned"))
-         continue;
+      for (unsigned is_signed = 0; is_signed <= 1; is_signed++) {
+         //>> v1: %a, v1: %b, s1: %c, s1: %d = p_startpgm
+         if (!setup_cs("v1 v1 s1 s1", (amd_gfx_level)i, CHIP_UNKNOWN,
+                       is_signed ? "_signed" : "_unsigned"))
+            continue;
 
-      //; def standard_test(index, sel):
-      //;    res = 'v1: %%res%s = v_mul_f32 %%a, %%b dst_sel:dword src0_sel:dword src1_sel:%c%s\n' % (index, 's' if variant.endswith('_signed') else 'u', sel)
-      //;    res += 'p_unit_test %s, %%res%s' % (index, index)
-      //;    return res
-      //; funcs['standard_test'] = lambda a: standard_test(*(v for v in a.split(',')))
+         //; def standard_test(index, sel):
+         //;    res = 'v1: %%res%s = v_mul_f32 %%a, %%b dst_sel:dword src0_sel:dword src1_sel:%c%s\n' % (index, 's' if variant.endswith('_signed') else 'u', sel)
+         //;    res += 'p_unit_test %s, %%res%s' % (index, index)
+         //;    return res
+         //; funcs['standard_test'] = lambda a: standard_test(*(v for v in a.split(',')))
 
-      aco_opcode ext = aco_opcode::p_extract;
-      aco_opcode ins = aco_opcode::p_insert;
+         aco_opcode ext = aco_opcode::p_extract;
+         aco_opcode ins = aco_opcode::p_insert;
 
-      {
-      //~gfx[^7].*! @standard_test(0,byte0)
-      Temp bfe_byte0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(0, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte0_b));
+         {
+            //~gfx[^7].*! @standard_test(0,byte0)
+            Temp bfe_byte0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(0, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte0_b));
 
-      //~gfx[^7].*! @standard_test(1,byte1)
-      Temp bfe_byte1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(1, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte1_b));
+            //~gfx[^7].*! @standard_test(1,byte1)
+            Temp bfe_byte1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(1, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte1_b));
 
-      //~gfx[^7].*! @standard_test(2,byte2)
-      Temp bfe_byte2_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(2u), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(2, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte2_b));
+            //~gfx[^7].*! @standard_test(2,byte2)
+            Temp bfe_byte2_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(2u),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(2, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte2_b));
 
-      //~gfx[^7].*! @standard_test(3,byte3)
-      Temp bfe_byte3_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(3u), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(3, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte3_b));
+            //~gfx[^7].*! @standard_test(3,byte3)
+            Temp bfe_byte3_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(3u),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(3, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_byte3_b));
 
-      //~gfx[^7].*! @standard_test(4,word0)
-      Temp bfe_word0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(16u),
-                                    Operand::c32(is_signed));
-      writeout(4, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_word0_b));
+            //~gfx[^7].*! @standard_test(4,word0)
+            Temp bfe_word0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(),
+                                          Operand::c32(16u), Operand::c32(is_signed));
+            writeout(4, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_word0_b));
 
-      //~gfx[^7].*! @standard_test(5,word1)
-      Temp bfe_word1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
-                                    Operand::c32(16u), Operand::c32(is_signed));
-      writeout(5, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_word1_b));
+            //~gfx[^7].*! @standard_test(5,word1)
+            Temp bfe_word1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
+                                          Operand::c32(16u), Operand::c32(is_signed));
+            writeout(5, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfe_word1_b));
 
-      //~gfx[^7]_unsigned! @standard_test(6,byte0)
-      Temp bfi_byte0_b = bld.pseudo(ins, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(8u));
-      writeout(6, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfi_byte0_b));
+            //~gfx[^7]_unsigned! @standard_test(6,byte0)
+            Temp bfi_byte0_b =
+               bld.pseudo(ins, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(8u));
+            writeout(6, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfi_byte0_b));
 
-      //~gfx[^7]_unsigned! @standard_test(7,word0)
-      Temp bfi_word0_b =
-         bld.pseudo(ins, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(16u));
-      writeout(7, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfi_word0_b));
+            //~gfx[^7]_unsigned! @standard_test(7,word0)
+            Temp bfi_word0_b =
+               bld.pseudo(ins, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(16u));
+            writeout(7, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfi_word0_b));
+         }
+
+         //>> p_unit_test 63
+         writeout(63);
+
+         {
+            //! v1: %tmp8 = p_insert %b, 1, 8
+            //! v1: %res8 = v_mul_f32 %a, %tmp8
+            //! p_unit_test 8, %res8
+            Temp bfi_byte1_b =
+               bld.pseudo(ins, bld.def(v1), inputs[1], Operand::c32(1u), Operand::c32(8u));
+            writeout(8, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfi_byte1_b));
+
+            /* v_cvt_f32_ubyte[0-3] can be used instead of v_cvt_f32_u32+sdwa */
+            //~gfx7_signed! v1: %bfe_byte0_b = p_extract %b, 0, 8, 1
+            //~gfx7_signed! v1: %res9 = v_cvt_f32_u32 %bfe_byte0_b
+            //~gfx[^7]+_signed! v1: %res9 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte0
+            //~gfx\d+_unsigned! v1: %res9 = v_cvt_f32_ubyte0 %b
+            //! p_unit_test 9, %res9
+            Temp bfe_byte0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(9, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte0_b));
+
+            //~gfx7_signed! v1: %bfe_byte1_b = p_extract %b, 1, 8, 1
+            //~gfx7_signed! v1: %res10 = v_cvt_f32_u32 %bfe_byte1_b
+            //~gfx[^7]+_signed! v1: %res10 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte1
+            //~gfx\d+_unsigned! v1: %res10 = v_cvt_f32_ubyte1 %b
+            //! p_unit_test 10, %res10
+            Temp bfe_byte1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(10, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte1_b));
+
+            //~gfx7_signed! v1: %bfe_byte2_b = p_extract %b, 2, 8, 1
+            //~gfx7_signed! v1: %res11 = v_cvt_f32_u32 %bfe_byte2_b
+            //~gfx[^7]+_signed! v1: %res11 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte2
+            //~gfx\d+_unsigned! v1: %res11 = v_cvt_f32_ubyte2 %b
+            //! p_unit_test 11, %res11
+            Temp bfe_byte2_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(2u),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(11, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte2_b));
+
+            //~gfx7_signed! v1: %bfe_byte3_b = p_extract %b, 3, 8, 1
+            //~gfx7_signed! v1: %res12 = v_cvt_f32_u32 %bfe_byte3_b
+            //~gfx[^7]+_signed! v1: %res12 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte3
+            //~gfx\d+_unsigned! v1: %res12 = v_cvt_f32_ubyte3 %b
+            //! p_unit_test 12, %res12
+            Temp bfe_byte3_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(3u),
+                                          Operand::c32(8u), Operand::c32(is_signed));
+            writeout(12, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte3_b));
+
+            /* VOP3-only instructions can't use SDWA but they can use opsel on GFX9+ instead */
+            //~gfx(9|10).*! v1: %res13 = v_add_i16 %a, %b
+            //~gfx(9|10).*! p_unit_test 13, %res13
+            Temp bfe_word0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(),
+                                          Operand::c32(16u), Operand::c32(is_signed));
+            writeout(13, bld.vop3(aco_opcode::v_add_i16, bld.def(v1), inputs[0], bfe_word0_b));
+
+            //~gfx(9|10).*! v1: %res14 = v_add_i16 %a, hi(%b)
+            //~gfx(9|10).*! p_unit_test 14, %res14
+            Temp bfe_word1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
+                                          Operand::c32(16u), Operand::c32(is_signed));
+            writeout(14, bld.vop3(aco_opcode::v_add_i16, bld.def(v1), inputs[0], bfe_word1_b));
+         }
+
+         finish_opt_test();
       }
-
-      //>> p_unit_test 63
-      writeout(63);
-
-      {
-      //! v1: %tmp8 = p_insert %b, 1, 8
-      //! v1: %res8 = v_mul_f32 %a, %tmp8
-      //! p_unit_test 8, %res8
-      Temp bfi_byte1_b =
-         bld.pseudo(ins, bld.def(v1), inputs[1], Operand::c32(1u), Operand::c32(8u));
-      writeout(8, bld.vop2(aco_opcode::v_mul_f32, bld.def(v1), inputs[0], bfi_byte1_b));
-
-      /* v_cvt_f32_ubyte[0-3] can be used instead of v_cvt_f32_u32+sdwa */
-      //~gfx7_signed! v1: %bfe_byte0_b = p_extract %b, 0, 8, 1
-      //~gfx7_signed! v1: %res9 = v_cvt_f32_u32 %bfe_byte0_b
-      //~gfx[^7]+_signed! v1: %res9 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte0
-      //~gfx\d+_unsigned! v1: %res9 = v_cvt_f32_ubyte0 %b
-      //! p_unit_test 9, %res9
-      Temp bfe_byte0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(9, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte0_b));
-
-      //~gfx7_signed! v1: %bfe_byte1_b = p_extract %b, 1, 8, 1
-      //~gfx7_signed! v1: %res10 = v_cvt_f32_u32 %bfe_byte1_b
-      //~gfx[^7]+_signed! v1: %res10 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte1
-      //~gfx\d+_unsigned! v1: %res10 = v_cvt_f32_ubyte1 %b
-      //! p_unit_test 10, %res10
-      Temp bfe_byte1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(10, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte1_b));
-
-      //~gfx7_signed! v1: %bfe_byte2_b = p_extract %b, 2, 8, 1
-      //~gfx7_signed! v1: %res11 = v_cvt_f32_u32 %bfe_byte2_b
-      //~gfx[^7]+_signed! v1: %res11 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte2
-      //~gfx\d+_unsigned! v1: %res11 = v_cvt_f32_ubyte2 %b
-      //! p_unit_test 11, %res11
-      Temp bfe_byte2_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(2u), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(11, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte2_b));
-
-      //~gfx7_signed! v1: %bfe_byte3_b = p_extract %b, 3, 8, 1
-      //~gfx7_signed! v1: %res12 = v_cvt_f32_u32 %bfe_byte3_b
-      //~gfx[^7]+_signed! v1: %res12 = v_cvt_f32_u32 %b dst_sel:dword src0_sel:sbyte3
-      //~gfx\d+_unsigned! v1: %res12 = v_cvt_f32_ubyte3 %b
-      //! p_unit_test 12, %res12
-      Temp bfe_byte3_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(3u), Operand::c32(8u),
-                                    Operand::c32(is_signed));
-      writeout(12, bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), bfe_byte3_b));
-
-      /* VOP3-only instructions can't use SDWA but they can use opsel on GFX9+ instead */
-      //~gfx(9|10).*! v1: %res13 = v_add_i16 %a, %b
-      //~gfx(9|10).*! p_unit_test 13, %res13
-      Temp bfe_word0_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::zero(), Operand::c32(16u),
-                                    Operand::c32(is_signed));
-      writeout(13, bld.vop3(aco_opcode::v_add_i16, bld.def(v1), inputs[0], bfe_word0_b));
-
-      //~gfx(9|10).*! v1: %res14 = v_add_i16 %a, hi(%b)
-      //~gfx(9|10).*! p_unit_test 14, %res14
-      Temp bfe_word1_b = bld.pseudo(ext, bld.def(v1), inputs[1], Operand::c32(1u),
-                                    Operand::c32(16u), Operand::c32(is_signed));
-      writeout(14, bld.vop3(aco_opcode::v_add_i16, bld.def(v1), inputs[0], bfe_word1_b));
-      }
-
-      finish_opt_test();
-   }
    }
 END_TEST
 
@@ -551,7 +558,7 @@ BEGIN_TEST(optimize.sdwa.insert_modifiers)
       writeout(2, val);
 
       //! v1: %tmp3 = v_rcp_f32 %a dst_sel:ubyte0 src0_sel:dword
-      //! v1: %res3 = v_med3_f32 %tmp3, 0, 1.0
+      //! v1: %res3 = v_add_f32 %tmp3, 0 clamp
       //! p_unit_test 3, %res3
       val = bld.vop1(aco_opcode::v_rcp_f32, bld.def(v1), inputs[0]);
       val = bld.pseudo(ins, bld.def(v1), val, Operand::zero(), Operand::c32(8u));

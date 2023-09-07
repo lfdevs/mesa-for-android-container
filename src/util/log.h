@@ -94,7 +94,7 @@ struct log_stream {
    enum mesa_log_level level;
 };
 
-struct log_stream *_mesa_log_stream_create(enum mesa_log_level level, char *tag);
+struct log_stream *_mesa_log_stream_create(enum mesa_log_level level, const char *tag);
 #define mesa_log_streame() _mesa_log_stream_create(MESA_LOG_ERROR, (MESA_LOG_TAG))
 #define mesa_log_streamw() _mesa_log_stream_create(MESA_LOG_WARN, (MESA_LOG_TAG))
 #define mesa_log_streami() _mesa_log_stream_create(MESA_LOG_INFO, (MESA_LOG_TAG))

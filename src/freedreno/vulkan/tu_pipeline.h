@@ -22,31 +22,13 @@ enum tu_dynamic_state
    /* re-use VK_DYNAMIC_STATE_ enums for non-extended dynamic states */
    TU_DYNAMIC_STATE_SAMPLE_LOCATIONS = VK_DYNAMIC_STATE_STENCIL_REFERENCE + 1,
    TU_DYNAMIC_STATE_SAMPLE_LOCATIONS_ENABLE,
-   TU_DYNAMIC_STATE_RB_DEPTH_CNTL,
-   TU_DYNAMIC_STATE_RB_STENCIL_CNTL,
+   TU_DYNAMIC_STATE_DS,
    TU_DYNAMIC_STATE_VB_STRIDE,
    TU_DYNAMIC_STATE_PC_RASTER_CNTL,
    TU_DYNAMIC_STATE_BLEND,
    TU_DYNAMIC_STATE_VERTEX_INPUT,
    TU_DYNAMIC_STATE_PATCH_CONTROL_POINTS,
    TU_DYNAMIC_STATE_COUNT,
-   /* no associated draw state: */
-   TU_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY = TU_DYNAMIC_STATE_COUNT,
-   TU_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE,
-   TU_DYNAMIC_STATE_LOGIC_OP,
-   TU_DYNAMIC_STATE_LOGIC_OP_ENABLE,
-   TU_DYNAMIC_STATE_COLOR_WRITE_ENABLE,
-   TU_DYNAMIC_STATE_POLYGON_MODE,
-   TU_DYNAMIC_STATE_TESS_DOMAIN_ORIGIN,
-   TU_DYNAMIC_STATE_MSAA_SAMPLES,
-   TU_DYNAMIC_STATE_ALPHA_TO_COVERAGE,
-   TU_DYNAMIC_STATE_DEPTH_CLIP_RANGE,
-   TU_DYNAMIC_STATE_VIEWPORT_RANGE,
-   TU_DYNAMIC_STATE_LINE_MODE,
-   TU_DYNAMIC_STATE_PROVOKING_VTX,
-   TU_DYNAMIC_STATE_BLEND_ENABLE,
-   TU_DYNAMIC_STATE_BLEND_EQUATION,
-   TU_DYNAMIC_STATE_COLOR_WRITE_MASK,
    /* re-use the line width enum as it uses GRAS_SU_CNTL: */
    TU_DYNAMIC_STATE_RAST = VK_DYNAMIC_STATE_LINE_WIDTH,
 };
@@ -64,6 +46,15 @@ struct tu_lrz_pipeline
    } fs;
 
    bool force_late_z;
+   bool blend_valid;
+};
+
+struct tu_bandwidth
+{
+   uint32_t color_bandwidth_per_sample;
+   uint32_t depth_cpp_per_sample;
+   uint32_t stencil_cpp_per_sample;
+   bool valid;
 };
 
 struct tu_compiled_shaders
@@ -119,9 +110,16 @@ struct tu_pipeline_executable {
    char *disasm;
 };
 
+enum tu_pipeline_type {
+   TU_PIPELINE_GRAPHICS,
+   TU_PIPELINE_GRAPHICS_LIB,
+   TU_PIPELINE_COMPUTE,
+};
+
 struct tu_pipeline
 {
    struct vk_object_base base;
+   enum tu_pipeline_type type;
 
    struct tu_cs cs;
    struct tu_suballoc_bo bo;
@@ -133,69 +131,29 @@ struct tu_pipeline
    uint32_t active_desc_sets;
 
    /* mask of enabled dynamic states
-    * if BIT(i) is set, pipeline->dynamic_state[i] is *NOT* used
+    * if BIT(i) is set, pipeline->dynamic_state[i] is used
     */
-   uint64_t dynamic_state_mask;
+   uint32_t set_state_mask;
    struct tu_draw_state dynamic_state[TU_DYNAMIC_STATE_COUNT];
 
-   VkGraphicsPipelineLibraryFlagsEXT state;
+   struct {
+      unsigned patch_type;
+   } tess;
 
    /* for dynamic states which use the same register: */
    struct {
-      uint32_t gras_su_cntl, gras_su_cntl_mask;
-      uint32_t gras_cl_cntl, gras_cl_cntl_mask;
-      uint32_t pc_raster_cntl, pc_raster_cntl_mask;
-      uint32_t vpc_unknown_9107, vpc_unknown_9107_mask;
-      uint32_t rb_depth_cntl, rb_depth_cntl_mask;
-      enum a5xx_line_mode line_mode;
-      enum a6xx_polygon_mode polygon_mode;
-      bool provoking_vertex_last;
-      bool override_depth_clip;
-
-      uint32_t multiview_mask;
-   } rast;
-
-   /* RB_DEPTH_CNTL state comes from both rast and depth/stencil state.
-    */
-   struct {
-      uint32_t rb_depth_cntl, rb_depth_cntl_mask;
-   } rast_ds;
+      bool per_view_viewport;
+   } viewport;
 
    struct {
-      uint32_t rb_depth_cntl, rb_depth_cntl_mask;
-      uint32_t rb_stencil_cntl, rb_stencil_cntl_mask;
-      uint32_t stencil_wrmask;
       bool raster_order_attachment_access;
-      bool write_enable;
    } ds;
-
-   struct {
-      unsigned num_rts;
-      uint32_t rb_mrt_control[MAX_RTS], rb_mrt_control_mask;
-      uint32_t rb_mrt_control_rop;
-      uint32_t rb_mrt_blend_control[MAX_RTS];
-      uint32_t sp_blend_cntl, sp_blend_cntl_mask;
-      uint32_t rb_blend_cntl, rb_blend_cntl_mask;
-      uint32_t color_write_enable, blend_enable;
-      bool logic_op_enabled, rop_reads_dst;
-      bool raster_order_attachment_access;
-   } blend;
 
    /* Misc. info from the fragment output interface state that is used
     * elsewhere.
     */
    struct {
-      /* memory bandwidth cost (in bytes) for color attachments */
-      uint32_t color_bandwidth_per_sample;
-      uint32_t depth_cpp_per_sample;
-      uint32_t stencil_cpp_per_sample;
-
-      bool rb_depth_cntl_disable;
-
-      VkSampleCountFlagBits samples;
-
-      bool subpass_feedback_loop_color, subpass_feedback_loop_ds;
-      bool feedback_loop_may_involve_textures;
+      bool raster_order_attachment_access;
    } output;
 
    /* In other words - framebuffer fetch support */
@@ -207,10 +165,6 @@ struct tu_pipeline
 
    /* draw states for the pipeline */
    struct tu_draw_state load_state;
-
-   struct {
-      uint32_t num_vbs;
-   } vi;
 
    struct tu_push_constant_range shared_consts;
 
@@ -226,42 +180,36 @@ struct tu_pipeline
       uint32_t hs_param_stride;
       uint32_t hs_param_dwords;
       uint32_t hs_vertices_out;
-      uint32_t cs_instrlen;
+
+      bool per_view_viewport;
+      bool per_samp;
+
+      enum a6xx_tess_output tess_output_upper_left, tess_output_lower_left;
+      enum a6xx_tess_spacing tess_spacing;
    } program;
 
-   struct
-   {
-      enum pc_di_primtype primtype;
-      bool primitive_restart;
-   } ia;
-
-   struct
-   {
-      uint32_t patch_type;
-      uint32_t patch_control_points;
-      bool upper_left_domain_origin;
-   } tess;
-
-   struct
-   {
-      uint32_t local_size[3];
-      uint32_t subgroup_size;
-   } compute;
-
    struct tu_lrz_pipeline lrz;
+   struct tu_bandwidth bandwidth;
 
-   struct {
-      VkViewport viewports[MAX_VIEWPORTS];
-      unsigned num_viewports;
-      bool set_dynamic_vp_to_static;
-      bool z_negative_one_to_one;
-   } viewport;
+   void *executables_mem_ctx;
+   /* tu_pipeline_executable */
+   struct util_dynarray executables;
+};
 
-   /* Used only for libraries. compiled_shaders only contains variants compiled
-    * by this pipeline, and it owns them, so when it is freed they disappear.
-    * Similarly, nir_shaders owns the link-time NIR. shaders points to the
-    * shaders from this pipeline and all libraries included in it, for
-    * convenience.
+struct tu_graphics_lib_pipeline {
+   struct tu_pipeline base;
+
+   VkGraphicsPipelineLibraryFlagsEXT state;
+
+   struct vk_graphics_pipeline_state graphics_state;
+
+   /* For vk_graphics_pipeline_state */
+   void *state_data;
+
+   /* compiled_shaders only contains variants compiled by this pipeline, and
+    * it owns them, so when it is freed they disappear.  Similarly,
+    * nir_shaders owns the link-time NIR. shaders points to the shaders from
+    * this pipeline and all libraries included in it, for convenience.
     */
    struct tu_compiled_shaders *compiled_shaders;
    struct tu_nir_shaders *nir_shaders;
@@ -274,63 +222,48 @@ struct tu_pipeline
 
    struct ir3_shader_key ir3_key;
 
-   /* Used for libraries, to stitch together an overall layout for the final
-    * pipeline.
-    */
+   /* Used to stitch together an overall layout for the final pipeline. */
    struct tu_descriptor_set_layout *layouts[MAX_SETS];
    unsigned num_sets;
    unsigned push_constant_size;
    bool independent_sets;
-
-   void *executables_mem_ctx;
-   /* tu_pipeline_executable */
-   struct util_dynarray executables;
 };
+
+struct tu_graphics_pipeline {
+   struct tu_pipeline base;
+
+   struct vk_dynamic_graphics_state dynamic_state;
+   bool feedback_loop_color, feedback_loop_ds;
+   bool feedback_loop_may_involve_textures;
+   bool has_fdm;
+};
+
+struct tu_compute_pipeline {
+   struct tu_pipeline base;
+
+   uint32_t local_size[3];
+   uint32_t subgroup_size;
+   uint32_t instrlen;
+};
+
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_pipeline, base, VkPipeline,
                                VK_OBJECT_TYPE_PIPELINE)
 
-void
-tu6_emit_viewport(struct tu_cs *cs, const VkViewport *viewport, uint32_t num_viewport,
-                  bool z_negative_one_to_one);
+#define TU_DECL_PIPELINE_DOWNCAST(pipe_type, pipe_enum)              \
+   static inline struct tu_##pipe_type##_pipeline *                  \
+   tu_pipeline_to_##pipe_type(struct tu_pipeline *pipeline)          \
+   {                                                                 \
+      assert(pipeline->type == pipe_enum);                           \
+      return (struct tu_##pipe_type##_pipeline *) pipeline;          \
+   }
 
-void
-tu6_emit_scissor(struct tu_cs *cs, const VkRect2D *scs, uint32_t scissor_count);
+TU_DECL_PIPELINE_DOWNCAST(graphics, TU_PIPELINE_GRAPHICS)
+TU_DECL_PIPELINE_DOWNCAST(graphics_lib, TU_PIPELINE_GRAPHICS_LIB)
+TU_DECL_PIPELINE_DOWNCAST(compute, TU_PIPELINE_COMPUTE)
 
-void
-tu6_emit_sample_locations(struct tu_cs *cs, const VkSampleLocationsInfoEXT *samp_loc);
+VkOffset2D tu_fdm_per_bin_offset(VkExtent2D frag_area, VkRect2D bin);
 
-void
-tu6_emit_sample_locations_enable(struct tu_cs *cs, bool enable);
-
-void
-tu6_emit_depth_bias(struct tu_cs *cs,
-                    float constant_factor,
-                    float clamp,
-                    float slope_factor);
-
-#define TU6_EMIT_VERTEX_INPUT_MAX_DWORDS (MAX_VERTEX_ATTRIBS * 2 + 1)
-
-void tu6_emit_vertex_input(struct tu_cs *cs,
-                           uint32_t binding_count,
-                           const VkVertexInputBindingDescription2EXT *bindings,
-                           uint32_t attr_count,
-                           const VkVertexInputAttributeDescription2EXT *attrs);
-
-#define EMIT_CONST_DWORDS(const_dwords) (4 + const_dwords)
-#define TU6_EMIT_PATCH_CONTROL_POINTS_DWORDS(hs_param_dwords) \
-   (EMIT_CONST_DWORDS(4) + EMIT_CONST_DWORDS(hs_param_dwords) + 2 + 2 + 2)
-void tu6_emit_patch_control_points(struct tu_cs *cs,
-                                   const struct tu_pipeline *pipeline,
-                                   unsigned patch_control_points);
-
-uint32_t tu6_rast_size(struct tu_device *dev);
-
-void tu6_emit_rast(struct tu_cs *cs,
-                   uint32_t gras_su_cntl,
-                   uint32_t gras_cl_cntl,
-                   enum a6xx_polygon_mode polygon_mode);
-
-uint32_t tu6_rb_mrt_control_rop(VkLogicOp op, bool *rop_reads_dst);
+uint32_t tu_emit_draw_state(struct tu_cmd_buffer *cmd);
 
 struct tu_pvtmem_config {
    uint64_t iova;
@@ -361,5 +294,10 @@ tu6_emit_vpc(struct tu_cs *cs,
 
 void
 tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs);
+
+void
+tu_fill_render_pass_state(struct vk_render_pass_state *rp,
+                          const struct tu_render_pass *pass,
+                          const struct tu_subpass *subpass);
 
 #endif /* TU_PIPELINE_H */

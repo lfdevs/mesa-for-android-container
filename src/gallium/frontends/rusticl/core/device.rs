@@ -1,6 +1,7 @@
 use crate::api::icd::*;
 use crate::api::util::*;
 use crate::core::format::*;
+use crate::core::platform::*;
 use crate::core::util::*;
 use crate::core::version::*;
 use crate::impl_cl_type_trait;
@@ -14,6 +15,8 @@ use mesa_rust::pipe::resource::*;
 use mesa_rust::pipe::screen::*;
 use mesa_rust::pipe::transfer::*;
 use mesa_rust_gen::*;
+use mesa_rust_util::math::SetBitIndices;
+use mesa_rust_util::static_assert;
 use rusticl_opencl_gen::*;
 
 use std::cmp::max;
@@ -21,6 +24,7 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::env;
+use std::ffi::CString;
 use std::os::raw::*;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -34,8 +38,10 @@ pub struct Device {
     pub clc_versions: Vec<cl_name_version>,
     pub custom: bool,
     pub embedded: bool,
+    pub has_timestamp: bool, // Cached to keep API fast
     pub extension_string: String,
     pub extensions: Vec<cl_name_version>,
+    pub spirv_extensions: Vec<CString>,
     pub clc_features: Vec<cl_name_version>,
     pub formats: HashMap<cl_image_format, HashMap<cl_mem_object_type, cl_mem_flags>>,
     pub lib_clc: NirShader,
@@ -76,6 +82,7 @@ pub trait HelperContextWrapper {
     fn create_compute_state(&self, nir: &NirShader, static_local_mem: u32) -> *mut c_void;
     fn delete_compute_state(&self, cso: *mut c_void);
     fn compute_state_info(&self, state: *mut c_void) -> pipe_compute_state_object_info;
+    fn compute_state_subgroup_size(&self, state: *mut c_void, block: &[u32; 3]) -> u32;
 
     fn unmap(&self, tx: PipeTransfer);
 }
@@ -101,7 +108,7 @@ impl<'a> HelperContext<'a> {
         bx: &pipe_box,
         data: *const c_void,
         stride: u32,
-        layer_stride: u32,
+        layer_stride: usize,
     ) {
         self.lock
             .texture_subdata(res, bx, data, stride, layer_stride)
@@ -164,6 +171,10 @@ impl<'a> HelperContextWrapper for HelperContext<'a> {
         self.lock.compute_state_info(state)
     }
 
+    fn compute_state_subgroup_size(&self, state: *mut c_void, block: &[u32; 3]) -> u32 {
+        self.lock.compute_state_subgroup_size(state, block)
+    }
+
     fn unmap(&self, tx: PipeTransfer) {
         tx.with_ctx(&self.lock);
     }
@@ -177,6 +188,9 @@ impl Device {
             return None;
         }
 
+        // Create before loading libclc as llvmpipe only creates the shader cache with the first
+        // context being created.
+        let helper_ctx = screen.create_context()?;
         let lib_clc = spirv::SPIRVBin::get_lib_clc(&screen);
         if lib_clc.is_none() {
             eprintln!("Libclc failed to load. Please make sure it is installed and provides spirv-mesa3d-.spv and/or spirv64-mesa3d-.spv");
@@ -184,15 +198,17 @@ impl Device {
 
         let mut d = Self {
             base: CLObjectBase::new(),
-            helper_ctx: Mutex::new(screen.create_context().unwrap()),
+            helper_ctx: Mutex::new(helper_ctx),
             screen: screen,
             cl_version: CLVersion::Cl3_0,
             clc_version: CLVersion::Cl3_0,
             clc_versions: Vec::new(),
             custom: false,
             embedded: false,
+            has_timestamp: false,
             extension_string: String::from(""),
             extensions: Vec::new(),
+            spirv_extensions: Vec::new(),
             clc_features: Vec::new(),
             formats: HashMap::new(),
             lib_clc: lib_clc?,
@@ -206,6 +222,10 @@ impl Device {
         // check if we have to report it as a custom device
         d.custom = d.check_custom();
 
+        let cap_timestamp = d.screen.param(pipe_cap::PIPE_CAP_QUERY_TIMESTAMP);
+        let cap_timestamp_res = d.timer_resolution();
+        d.has_timestamp = cap_timestamp != 0 && cap_timestamp_res > 0;
+
         // query supported extensions
         d.fill_extensions();
 
@@ -213,6 +233,19 @@ impl Device {
         d.check_version();
 
         Some(Arc::new(d))
+    }
+
+    /// Converts a temporary reference to a static if and only if this device lives inside static
+    /// memory.
+    pub fn to_static(&self) -> Option<&'static Self> {
+        for dev in devs() {
+            let dev = dev.as_ref();
+            if self == dev {
+                return Some(dev);
+            }
+        }
+
+        None
     }
 
     fn fill_format_tables(&mut self) {
@@ -227,22 +260,31 @@ impl Device {
                 ) {
                     flags |= CL_MEM_READ_ONLY;
                 }
-                if self.screen.is_format_supported(
-                    f.pipe,
-                    cl_mem_type_to_texture_target(t),
-                    PIPE_BIND_SHADER_IMAGE,
-                ) {
+
+                // TODO: cl_khr_srgb_image_writes
+                if !f.is_srgb
+                    && self.screen.is_format_supported(
+                        f.pipe,
+                        cl_mem_type_to_texture_target(t),
+                        PIPE_BIND_SHADER_IMAGE,
+                    )
+                {
                     flags |= CL_MEM_WRITE_ONLY;
                     // TODO: enable once we support it
                     // flags |= CL_MEM_KERNEL_READ_AND_WRITE;
                 }
-                if self.screen.is_format_supported(
-                    f.pipe,
-                    cl_mem_type_to_texture_target(t),
-                    PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE,
-                ) {
+
+                // TODO: cl_khr_srgb_image_writes
+                if !f.is_srgb
+                    && self.screen.is_format_supported(
+                        f.pipe,
+                        cl_mem_type_to_texture_target(t),
+                        PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE,
+                    )
+                {
                     flags |= CL_MEM_READ_WRITE;
                 }
+
                 fs.insert(t, flags as cl_mem_flags);
             }
             self.formats.insert(f.cl_image_format, fs);
@@ -359,7 +401,7 @@ impl Device {
 
             // TODO check req formats
         }
-        !self.long_supported()
+        !self.int64_supported()
     }
 
     fn parse_env_device_type() -> Option<cl_device_type> {
@@ -471,62 +513,97 @@ impl Device {
 
     fn fill_extensions(&mut self) {
         let mut exts_str: Vec<String> = Vec::new();
-        let mut exts = Vec::new();
+        let mut exts = PLATFORM_EXTENSIONS.to_vec();
         let mut feats = Vec::new();
-        let mut add_ext = |major, minor, patch, ext: &str, feat: &str| {
-            if !ext.is_empty() {
-                exts.push(mk_cl_version_ext(major, minor, patch, ext));
-                exts_str.push(ext.to_owned());
-            }
-
-            if !feat.is_empty() {
-                feats.push(mk_cl_version_ext(major, minor, patch, feat));
-            }
+        let mut spirv_exts = Vec::new();
+        let mut add_ext = |major, minor, patch, ext: &str| {
+            exts.push(mk_cl_version_ext(major, minor, patch, ext));
+            exts_str.push(ext.to_owned());
+        };
+        let mut add_feat = |major, minor, patch, feat: &str| {
+            feats.push(mk_cl_version_ext(major, minor, patch, feat));
+        };
+        let mut add_spirv = |ext: &str| {
+            spirv_exts.push(CString::new(ext).unwrap());
         };
 
-        // add extensions all drivers support
-        add_ext(1, 0, 0, "cl_khr_byte_addressable_store", "");
-        add_ext(1, 0, 0, "cl_khr_global_int32_base_atomics", "");
-        add_ext(1, 0, 0, "cl_khr_global_int32_extended_atomics", "");
-        add_ext(1, 0, 0, "cl_khr_il_program", "");
-        add_ext(1, 0, 0, "cl_khr_local_int32_base_atomics", "");
-        add_ext(1, 0, 0, "cl_khr_local_int32_extended_atomics", "");
+        // add extensions all drivers support for now
+        add_ext(1, 0, 0, "cl_khr_global_int32_base_atomics");
+        add_ext(1, 0, 0, "cl_khr_global_int32_extended_atomics");
+        add_ext(2, 0, 0, "cl_khr_integer_dot_product");
+        add_feat(
+            2,
+            0,
+            0,
+            "__opencl_c_integer_dot_product_input_4x8bit_packed",
+        );
+        add_feat(2, 0, 0, "__opencl_c_integer_dot_product_input_4x8bit");
+        add_ext(1, 0, 0, "cl_khr_local_int32_base_atomics");
+        add_ext(1, 0, 0, "cl_khr_local_int32_extended_atomics");
 
-        if self.doubles_supported() {
-            add_ext(1, 0, 0, "cl_khr_fp64", "__opencl_c_fp64");
+        add_spirv("SPV_KHR_float_controls");
+        add_spirv("SPV_KHR_integer_dot_product");
+        add_spirv("SPV_KHR_no_integer_wrap_decoration");
+
+        if self.fp16_supported() {
+            add_ext(1, 0, 0, "cl_khr_fp16");
         }
 
-        if self.long_supported() {
-            let ext = if self.embedded { "cles_khr_int64" } else { "" };
+        if self.fp64_supported() {
+            add_ext(1, 0, 0, "cl_khr_fp64");
+            add_feat(1, 0, 0, "__opencl_c_fp64");
+        }
 
-            add_ext(1, 0, 0, ext, "__opencl_c_int64");
+        if self.int64_supported() {
+            if self.embedded {
+                add_ext(1, 0, 0, "cles_khr_int64");
+            };
+
+            add_feat(1, 0, 0, "__opencl_c_int64");
         }
 
         if self.image_supported() {
-            add_ext(1, 0, 0, "", "__opencl_c_images");
+            add_feat(1, 0, 0, "__opencl_c_images");
 
             if self.image2d_from_buffer_supported() {
-                add_ext(1, 0, 0, "cl_khr_image2d_from_buffer", "");
+                add_ext(1, 0, 0, "cl_khr_image2d_from_buffer");
             }
 
             if self.image_read_write_supported() {
-                add_ext(1, 0, 0, "", "__opencl_c_read_write_images");
+                add_feat(1, 0, 0, "__opencl_c_read_write_images");
             }
 
             if self.image_3d_write_supported() {
-                add_ext(
-                    1,
-                    0,
-                    0,
-                    "cl_khr_3d_image_writes",
-                    "__opencl_c_3d_image_writes",
-                );
+                add_ext(1, 0, 0, "cl_khr_3d_image_writes");
+                add_feat(1, 0, 0, "__opencl_c_3d_image_writes");
             }
+        }
+
+        if self.pci_info().is_some() {
+            add_ext(1, 0, 0, "cl_khr_pci_bus_info");
+        }
+
+        if self.screen().device_uuid().is_some() && self.screen().driver_uuid().is_some() {
+            static_assert!(PIPE_UUID_SIZE == CL_UUID_SIZE_KHR);
+            static_assert!(PIPE_LUID_SIZE == CL_LUID_SIZE_KHR);
+
+            add_ext(1, 0, 0, "cl_khr_device_uuid");
+        }
+
+        if self.subgroups_supported() {
+            // requires CL_DEVICE_SUB_GROUP_INDEPENDENT_FORWARD_PROGRESS
+            //add_ext(1, 0, 0, "cl_khr_subgroups");
+            add_feat(1, 0, 0, "__opencl_c_subgroups");
+        }
+
+        if self.svm_supported() {
+            add_ext(1, 0, 0, "cl_arm_shared_virtual_memory");
         }
 
         self.extensions = exts;
         self.clc_features = feats;
-        self.extension_string = exts_str.join(" ");
+        self.extension_string = format!("{} {}", PLATFORM_EXTENSION_STR, exts_str.join(" "));
+        self.spirv_extensions = spirv_exts;
     }
 
     fn shader_param(&self, cap: pipe_shader_cap) -> i32 {
@@ -577,23 +654,54 @@ impl Device {
         res as cl_device_type
     }
 
-    pub fn doubles_supported(&self) -> bool {
-        false
-        /*
-        if self.screen.param(pipe_cap::PIPE_CAP_DOUBLES) == 0 {
+    pub fn fp16_supported(&self) -> bool {
+        if !Platform::features().fp16 {
             return false;
         }
-        let nir_options = self
-            .screen
-            .nir_shader_compiler_options(pipe_shader_type::PIPE_SHADER_COMPUTE);
-        !bit_check(
-            unsafe { *nir_options }.lower_doubles_options as u32,
-            nir_lower_doubles_options::nir_lower_fp64_full_software as u32,
-        )
-        */
+
+        self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_FP16) != 0
     }
 
-    pub fn long_supported(&self) -> bool {
+    pub fn fp64_supported(&self) -> bool {
+        if !Platform::features().fp64 {
+            return false;
+        }
+
+        self.screen.param(pipe_cap::PIPE_CAP_DOUBLES) == 1
+    }
+
+    pub fn get_nir_options(&self) -> nir_shader_compiler_options {
+        unsafe {
+            *self
+                .screen
+                .nir_shader_compiler_options(pipe_shader_type::PIPE_SHADER_COMPUTE)
+        }
+    }
+
+    pub fn sdot_4x8_supported(&self) -> bool {
+        self.get_nir_options().has_sdot_4x8
+    }
+
+    pub fn udot_4x8_supported(&self) -> bool {
+        self.get_nir_options().has_udot_4x8
+    }
+
+    pub fn sudot_4x8_supported(&self) -> bool {
+        self.get_nir_options().has_sudot_4x8
+    }
+
+    pub fn pack_32_4x8_supported(&self) -> bool {
+        self.get_nir_options().has_pack_32_4x8
+    }
+
+    pub fn fp64_is_softfp(&self) -> bool {
+        bit_check(
+            self.get_nir_options().lower_doubles_options as u32,
+            nir_lower_doubles_options::nir_lower_fp64_full_software as u32,
+        )
+    }
+
+    pub fn int64_supported(&self) -> bool {
         self.screen.param(pipe_cap::PIPE_CAP_INT64) == 1
     }
 
@@ -665,7 +773,7 @@ impl Device {
     pub fn image_3d_write_supported(&self) -> bool {
         !FORMATS
             .iter()
-            .filter(|f| f.req_for_3d_image_write_ext)
+            .filter(|f| f.req_for_full_read_or_write)
             .map(|f| self.formats.get(&f.cl_image_format).unwrap())
             .map(|f| f.get(&CL_MEM_OBJECT_IMAGE3D).unwrap())
             .any(|f| *f & cl_mem_flags::from(CL_MEM_WRITE_ONLY) == 0)
@@ -730,22 +838,71 @@ impl Device {
     }
 
     pub fn param_max_size(&self) -> usize {
-        self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE) as usize
+        min(
+            self.shader_param(pipe_shader_cap::PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE),
+            32 * 1024,
+        ) as usize
     }
 
     pub fn printf_buffer_size(&self) -> usize {
         1024 * 1024
     }
 
+    pub fn pci_info(&self) -> Option<cl_device_pci_bus_info_khr> {
+        if self.screen.device_type() != pipe_loader_device_type::PIPE_LOADER_DEVICE_PCI {
+            return None;
+        }
+
+        let pci_domain = self.screen.param(pipe_cap::PIPE_CAP_PCI_GROUP) as cl_uint;
+        let pci_bus = self.screen.param(pipe_cap::PIPE_CAP_PCI_BUS) as cl_uint;
+        let pci_device = self.screen.param(pipe_cap::PIPE_CAP_PCI_DEVICE) as cl_uint;
+        let pci_function = self.screen.param(pipe_cap::PIPE_CAP_PCI_FUNCTION) as cl_uint;
+
+        Some(cl_device_pci_bus_info_khr {
+            pci_domain,
+            pci_bus,
+            pci_device,
+            pci_function,
+        })
+    }
+
     pub fn screen(&self) -> &Arc<PipeScreen> {
         &self.screen
     }
 
-    pub fn subgroups(&self) -> u32 {
+    pub fn subgroup_sizes(&self) -> Vec<usize> {
+        let subgroup_size = ComputeParam::<u32>::compute_param(
+            self.screen.as_ref(),
+            pipe_compute_cap::PIPE_COMPUTE_CAP_SUBGROUP_SIZES,
+        );
+
+        SetBitIndices::from_msb(subgroup_size)
+            .map(|bit| 1 << bit)
+            .collect()
+    }
+
+    pub fn max_subgroups(&self) -> u32 {
         ComputeParam::<u32>::compute_param(
             self.screen.as_ref(),
-            pipe_compute_cap::PIPE_COMPUTE_CAP_SUBGROUP_SIZE,
+            pipe_compute_cap::PIPE_COMPUTE_CAP_MAX_SUBGROUPS,
         )
+    }
+
+    pub fn subgroups_supported(&self) -> bool {
+        let subgroup_sizes = self.subgroup_sizes().len();
+
+        // we need to be able to query a CSO for subgroup sizes if multiple sub group sizes are
+        // supported, doing it without shareable shaders isn't practical
+        self.max_subgroups() > 0
+            && (subgroup_sizes == 1 || (subgroup_sizes > 1 && self.shareable_shaders()))
+    }
+
+    pub fn svm_supported(&self) -> bool {
+        self.screen.param(pipe_cap::PIPE_CAP_SYSTEM_SVM) == 1
+    }
+
+    pub fn timer_resolution(&self) -> usize {
+        self.screen.param(pipe_cap::PIPE_CAP_TIMER_RESOLUTION) as usize
     }
 
     pub fn unified_memory(&self) -> bool {
@@ -780,14 +937,28 @@ impl Device {
 
     pub fn cl_features(&self) -> clc_optional_features {
         clc_optional_features {
-            fp16: false,
-            fp64: self.doubles_supported(),
-            int64: self.long_supported(),
+            fp16: self.fp16_supported(),
+            fp64: self.fp64_supported(),
+            int64: self.int64_supported(),
             images: self.image_supported(),
             images_read_write: self.image_read_write_supported(),
             images_write_3d: self.image_3d_write_supported(),
+            integer_dot_product: true,
             intel_subgroups: false,
-            subgroups: false,
+            subgroups: self.subgroups_supported(),
+            subgroups_ifp: false,
         }
     }
+}
+
+fn devs() -> &'static Vec<Arc<Device>> {
+    &Platform::get().devs
+}
+
+pub fn get_devs_for_type(device_type: cl_device_type) -> Vec<&'static Device> {
+    devs()
+        .iter()
+        .filter(|d| device_type & d.device_type(true) != 0)
+        .map(Arc::as_ref)
+        .collect()
 }

@@ -1,24 +1,7 @@
 /*
  * Copyright © 2016 Bas Nieuwenhuizen
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -38,6 +21,18 @@ ac_nir_load_arg_at_offset(nir_builder *b, const struct ac_shader_args *ac_args,
       return nir_load_scalar_arg_amd(b, num_components, .base = arg_index);
    else
       return nir_load_vector_arg_amd(b, num_components, .base = arg_index);
+}
+
+void
+ac_nir_store_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg,
+                 nir_ssa_def *val)
+{
+   assert(nir_cursor_current_block(b->cursor)->cf_node.parent->type == nir_cf_node_function);
+
+   if (ac_args->args[arg.arg_index].file == AC_ARG_SGPR)
+      nir_store_scalar_arg_amd(b, val, .base = arg.arg_index);
+   else
+      nir_store_vector_arg_amd(b, val, .base = arg.arg_index);
 }
 
 nir_ssa_def *
@@ -191,7 +186,7 @@ ac_nir_export_position(nir_builder *b,
       } else if (force_vrs) {
          /* If Pos.W != 1 (typical for non-GUI elements), use coarse shading. */
          nir_ssa_def *pos_w = nir_channel(b, pos, 3);
-         nir_ssa_def *cond = nir_fneu(b, pos_w, nir_imm_float(b, 1));
+         nir_ssa_def *cond = nir_fneu_imm(b, pos_w, 1);
          rates = nir_bcsel(b, cond, nir_load_force_vrs_rates_amd(b), nir_imm_int(b, 0));
       }
 
@@ -267,10 +262,11 @@ ac_nir_export_position(nir_builder *b,
     * the pixel shader starts.
     */
    if (gfx_level >= GFX10 && no_param_export && b->shader->info.writes_memory) {
-      nir_intrinsic_instr *wait_instr =
-         nir_intrinsic_instr_create(b->shader, nir_intrinsic_memory_barrier_buffer);
-
-      nir_instr_insert_before(&final_exp->instr, &wait_instr->instr);
+      nir_cursor cursor = b->cursor;
+      b->cursor = nir_before_instr(&final_exp->instr);
+      nir_scoped_memory_barrier(b, SCOPE_DEVICE, NIR_MEMORY_RELEASE,
+                                nir_var_mem_ssbo | nir_var_mem_global | nir_var_image);
+      b->cursor = cursor;
    }
 }
 
@@ -524,7 +520,7 @@ emit_streamout(nir_builder *b, unsigned stream, nir_xfb_info *info,
       nir_ssa_def *zero = nir_imm_int(b, 0);
       nir_store_buffer_amd(b, data, so_buffers[buffer], so_write_offset[buffer], zero, zero,
                            .base = output->offset, .write_mask = mask,
-                           .access = ACCESS_COHERENT | ACCESS_STREAM_CACHE_POLICY);
+                           .access = ACCESS_COHERENT | ACCESS_NON_TEMPORAL);
    }
 
    nir_pop_if(b, NULL);
@@ -581,7 +577,7 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
             outputs.data[i][j] =
                nir_load_buffer_amd(&b, 1, 32, gsvs_ring, vtx_offset, zero, zero,
                                    .base = offset,
-                                   .access = ACCESS_COHERENT | ACCESS_STREAM_CACHE_POLICY);
+                                   .access = ACCESS_COHERENT | ACCESS_NON_TEMPORAL);
 
             /* clamp legacy color output */
             if (i == VARYING_SLOT_COL0 || i == VARYING_SLOT_COL1 ||
@@ -607,7 +603,7 @@ ac_nir_create_gs_copy_shader(const nir_shader *gs_nir,
             nir_ssa_def *data =
                nir_load_buffer_amd(&b, 1, 32, gsvs_ring, vtx_offset, zero, zero,
                                    .base = offset,
-                                   .access = ACCESS_COHERENT | ACCESS_STREAM_CACHE_POLICY);
+                                   .access = ACCESS_COHERENT | ACCESS_NON_TEMPORAL);
 
             if (has_lo_16bit)
                outputs.data_16bit_lo[i][j] = nir_unpack_32_2x16_split_x(&b, data);
@@ -704,9 +700,7 @@ ac_nir_lower_legacy_vs(nir_shader *nir,
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    nir_metadata preserved = nir_metadata_block_index | nir_metadata_dominance;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_after_cf_list(&impl->body);
+   nir_builder b = nir_builder_at(nir_after_cf_list(&impl->body));
 
    nir_alu_type output_types_16bit_lo[16][4];
    nir_alu_type output_types_16bit_hi[16][4];
@@ -781,7 +775,7 @@ ac_nir_gs_shader_query(nir_builder *b,
 
    nir_if *if_shader_query = nir_push_if(b, shader_query_enabled);
 
-   nir_ssa_def *active_threads_mask = nir_ballot(b, 1, wave_size, nir_imm_bool(b, true));
+   nir_ssa_def *active_threads_mask = nir_ballot(b, 1, wave_size, nir_imm_true(b));
    nir_ssa_def *num_active_threads = nir_bit_count(b, active_threads_mask);
 
    /* Calculate the "real" number of emitted primitives from the emitted GS vertices and primitives.
@@ -944,7 +938,7 @@ lower_legacy_gs_emit_vertex_with_counter(nir_builder *b, nir_intrinsic_instr *in
          nir_ssa_def *data = nir_u2uN(b, output, 32);
 
          nir_store_buffer_amd(b, data, gsvs_ring, voffset, soffset, nir_imm_int(b, 0),
-                              .access = ACCESS_COHERENT | ACCESS_STREAM_CACHE_POLICY |
+                              .access = ACCESS_COHERENT | ACCESS_NON_TEMPORAL |
                                         ACCESS_IS_SWIZZLED_AMD,
                               .base = base,
                               /* For ACO to not reorder this store around EmitVertex/EndPrimitve */
@@ -988,15 +982,18 @@ lower_legacy_gs_emit_vertex_with_counter(nir_builder *b, nir_intrinsic_instr *in
 
          nir_store_buffer_amd(b, nir_pack_32_2x16_split(b, output_lo, output_hi),
                               gsvs_ring, voffset, soffset, nir_imm_int(b, 0),
-                              .access = ACCESS_COHERENT | ACCESS_STREAM_CACHE_POLICY |
+                              .access = ACCESS_COHERENT | ACCESS_NON_TEMPORAL |
                                         ACCESS_IS_SWIZZLED_AMD,
                               /* For ACO to not reorder this store around EmitVertex/EndPrimitve */
                               .memory_modes = nir_var_shader_out);
       }
    }
 
-   /* Keep this instruction to signal vertex emission. */
+   /* Signal vertex emission. */
+   nir_sendmsg_amd(b, nir_load_gs_wave_id_amd(b),
+                   .base = AC_SENDMSG_GS_OP_EMIT | AC_SENDMSG_GS | (stream << 8));
 
+   nir_instr_remove(&intrin->instr);
    return true;
 }
 
@@ -1016,6 +1013,21 @@ lower_legacy_gs_set_vertex_and_primitive_count(nir_builder *b, nir_intrinsic_ins
 }
 
 static bool
+lower_legacy_gs_end_primitive_with_counter(nir_builder *b, nir_intrinsic_instr *intrin,
+                                               lower_legacy_gs_state *s)
+{
+   b->cursor = nir_before_instr(&intrin->instr);
+   const unsigned stream = nir_intrinsic_stream_id(intrin);
+
+   /* Signal primitive emission. */
+   nir_sendmsg_amd(b, nir_load_gs_wave_id_amd(b),
+                   .base = AC_SENDMSG_GS_OP_CUT | AC_SENDMSG_GS | (stream << 8));
+
+   nir_instr_remove(&intrin->instr);
+   return true;
+}
+
+static bool
 lower_legacy_gs_intrinsic(nir_builder *b, nir_instr *instr, void *state)
 {
    lower_legacy_gs_state *s = (lower_legacy_gs_state *) state;
@@ -1029,6 +1041,8 @@ lower_legacy_gs_intrinsic(nir_builder *b, nir_instr *instr, void *state)
       return lower_legacy_gs_store_output(b, intrin, s);
    else if (intrin->intrinsic == nir_intrinsic_emit_vertex_with_counter)
       return lower_legacy_gs_emit_vertex_with_counter(b, intrin, s);
+   else if (intrin->intrinsic == nir_intrinsic_end_primitive_with_counter)
+      return lower_legacy_gs_end_primitive_with_counter(b, intrin, s);
    else if (intrin->intrinsic == nir_intrinsic_set_vertex_and_primitive_count)
       return lower_legacy_gs_set_vertex_and_primitive_count(b, intrin, s);
 
@@ -1047,13 +1061,13 @@ ac_nir_lower_legacy_gs(nir_shader *nir,
 
    unsigned num_vertices_per_primitive = 0;
    switch (nir->info.gs.output_primitive) {
-   case SHADER_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       num_vertices_per_primitive = 1;
       break;
-   case SHADER_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINE_STRIP:
       num_vertices_per_primitive = 2;
       break;
-   case SHADER_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
       num_vertices_per_primitive = 3;
       break;
    default:
@@ -1066,11 +1080,8 @@ ac_nir_lower_legacy_gs(nir_shader *nir,
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-   nir_builder builder;
+   nir_builder builder = nir_builder_at(nir_after_cf_list(&impl->body));
    nir_builder *b = &builder;
-   nir_builder_init(b, impl);
-
-   b->cursor = nir_after_cf_list(&impl->body);
 
    /* Emit shader query for mix use legacy/NGG GS */
    bool progress = ac_nir_gs_shader_query(b,
@@ -1080,6 +1091,18 @@ ac_nir_lower_legacy_gs(nir_shader *nir,
                                           64,
                                           s.vertex_count,
                                           s.primitive_count);
+
+   /* Wait for all stores to finish. */
+   nir_scoped_barrier(b, .execution_scope = SCOPE_INVOCATION,
+                      .memory_scope = SCOPE_DEVICE,
+                      .memory_semantics = NIR_MEMORY_RELEASE,
+                      .memory_modes = nir_var_shader_out | nir_var_mem_ssbo |
+                                      nir_var_mem_global | nir_var_image);
+
+   /* Signal that the GS is done. */
+   nir_sendmsg_amd(b, nir_load_gs_wave_id_amd(b),
+                   .base = AC_SENDMSG_GS_OP_NOP | AC_SENDMSG_GS_DONE);
+
    if (progress)
       nir_metadata_preserve(impl, nir_metadata_none);
 }

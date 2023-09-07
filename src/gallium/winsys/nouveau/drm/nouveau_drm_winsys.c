@@ -5,6 +5,7 @@
 #include "pipe/p_state.h"
 #include "util/format/u_format.h"
 #include "util/os_file.h"
+#include "util/simple_mtx.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_hash_table.h"
@@ -21,7 +22,7 @@
 
 static struct hash_table *fd_tab = NULL;
 
-static mtx_t nouveau_screen_mutex = _MTX_INITIALIZER_NP;
+static simple_mtx_t nouveau_screen_mutex = SIMPLE_MTX_INITIALIZER;
 
 bool nouveau_drm_screen_unref(struct nouveau_screen *screen)
 {
@@ -29,12 +30,12 @@ bool nouveau_drm_screen_unref(struct nouveau_screen *screen)
 	if (screen->refcount == -1)
 		return true;
 
-	mtx_lock(&nouveau_screen_mutex);
+	simple_mtx_lock(&nouveau_screen_mutex);
 	ret = --screen->refcount;
 	assert(ret >= 0);
 	if (ret == 0)
 		_mesa_hash_table_remove_key(fd_tab, intptr_to_pointer(screen->drm->fd));
-	mtx_unlock(&nouveau_screen_mutex);
+	simple_mtx_unlock(&nouveau_screen_mutex);
 	return ret == 0;
 }
 
@@ -47,11 +48,11 @@ nouveau_drm_screen_create(int fd)
 	struct nouveau_screen *screen = NULL;
 	int ret, dupfd;
 
-	mtx_lock(&nouveau_screen_mutex);
+	simple_mtx_lock(&nouveau_screen_mutex);
 	if (!fd_tab) {
 		fd_tab = util_hash_table_create_fd_keys();
 		if (!fd_tab) {
-			mtx_unlock(&nouveau_screen_mutex);
+			simple_mtx_unlock(&nouveau_screen_mutex);
 			return NULL;
 		}
 	}
@@ -59,7 +60,7 @@ nouveau_drm_screen_create(int fd)
 	screen = util_hash_table_get(fd_tab, intptr_to_pointer(fd));
 	if (screen) {
 		screen->refcount++;
-		mtx_unlock(&nouveau_screen_mutex);
+		simple_mtx_unlock(&nouveau_screen_mutex);
 		return &screen->base;
 	}
 
@@ -108,6 +109,7 @@ nouveau_drm_screen_create(int fd)
 	case 0x140:
 	case 0x160:
 	case 0x170:
+	case 0x190:
 		init = nvc0_screen_create;
 		break;
 	default:
@@ -126,7 +128,7 @@ nouveau_drm_screen_create(int fd)
 	 */
 	_mesa_hash_table_insert(fd_tab, intptr_to_pointer(dupfd), screen);
 	screen->refcount = 1;
-	mtx_unlock(&nouveau_screen_mutex);
+	simple_mtx_unlock(&nouveau_screen_mutex);
 	return &screen->base;
 
 err:
@@ -137,6 +139,6 @@ err:
 		nouveau_drm_del(&drm);
 		close(dupfd);
 	}
-	mtx_unlock(&nouveau_screen_mutex);
+	simple_mtx_unlock(&nouveau_screen_mutex);
 	return NULL;
 }

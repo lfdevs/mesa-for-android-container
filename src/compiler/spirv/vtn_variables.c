@@ -251,7 +251,7 @@ vtn_variable_resource_index(struct vtn_builder *b, struct vtn_variable *var,
    nir_address_format addr_format = vtn_mode_to_address_format(b, var->mode);
    nir_ssa_dest_init(&instr->instr, &instr->dest,
                      nir_address_format_num_components(addr_format),
-                     nir_address_format_bit_size(addr_format), NULL);
+                     nir_address_format_bit_size(addr_format));
    instr->num_components = instr->dest.ssa.num_components;
    nir_builder_instr_insert(&b->nb, &instr->instr);
 
@@ -274,7 +274,7 @@ vtn_resource_reindex(struct vtn_builder *b, enum vtn_variable_mode mode,
    nir_address_format addr_format = vtn_mode_to_address_format(b, mode);
    nir_ssa_dest_init(&instr->instr, &instr->dest,
                      nir_address_format_num_components(addr_format),
-                     nir_address_format_bit_size(addr_format), NULL);
+                     nir_address_format_bit_size(addr_format));
    instr->num_components = instr->dest.ssa.num_components;
    nir_builder_instr_insert(&b->nb, &instr->instr);
 
@@ -296,7 +296,7 @@ vtn_descriptor_load(struct vtn_builder *b, enum vtn_variable_mode mode,
    nir_address_format addr_format = vtn_mode_to_address_format(b, mode);
    nir_ssa_dest_init(&desc_load->instr, &desc_load->dest,
                      nir_address_format_num_components(addr_format),
-                     nir_address_format_bit_size(addr_format), NULL);
+                     nir_address_format_bit_size(addr_format));
    desc_load->num_components = desc_load->dest.ssa.num_components;
    nir_builder_instr_insert(&b->nb, &desc_load->instr);
 
@@ -982,6 +982,8 @@ vtn_get_builtin_location(struct vtn_builder *b,
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInSubgroupSize:
+   /* TODO once we support non uniform work groups we have to fix this */
+   case SpvBuiltInSubgroupMaxSize:
       *location = SYSTEM_VALUE_SUBGROUP_SIZE;
       set_mode_system_value(b, mode);
       break;
@@ -994,6 +996,8 @@ vtn_get_builtin_location(struct vtn_builder *b,
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInNumSubgroups:
+   /* TODO once we support non uniform work groups we have to fix this */
+   case SpvBuiltInNumEnqueuedSubgroups:
       *location = SYSTEM_VALUE_NUM_SUBGROUPS;
       set_mode_system_value(b, mode);
       break;
@@ -1180,6 +1184,18 @@ vtn_get_builtin_location(struct vtn_builder *b,
       break;
    case SpvBuiltInFragInvocationCountEXT:
       *location = SYSTEM_VALUE_FRAG_INVOCATION_COUNT;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInHitTriangleVertexPositionsKHR:
+      *location = SYSTEM_VALUE_RAY_TRIANGLE_VERTEX_POSITIONS;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordKHR:
+      *location = SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordNoPerspKHR:
+      *location = SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD;
       set_mode_system_value(b, mode);
       break;
 
@@ -1371,6 +1387,12 @@ apply_var_decoration(struct vtn_builder *b,
       vtn_fail_if(b->shader->info.stage != MESA_SHADER_MESH,
                   "PerViewNV decoration only allowed in Mesh shaders");
       var_data->per_view = true;
+      break;
+
+   case SpvDecorationPerVertexKHR:
+      vtn_fail_if(b->shader->info.stage != MESA_SHADER_FRAGMENT,
+                  "PerVertexKHR decoration only allowed in Fragment shaders");
+      var_data->per_vertex = true;
       break;
 
    default:
@@ -2262,10 +2284,10 @@ vtn_assert_types_equal(struct vtn_builder *b, SpvOp opcode,
       return;
    }
 
-   vtn_fail("Source and destination types of %s do not match: %s vs. %s",
+   vtn_fail("Source and destination types of %s do not match: %s (%%%u) vs. %s (%%%u)",
             spirv_op_to_string(opcode),
-            glsl_get_type_name(dst_type->type),
-            glsl_get_type_name(src_type->type));
+            glsl_get_type_name(dst_type->type), dst_type->id,
+            glsl_get_type_name(src_type->type), src_type->id);
 }
 
 static nir_ssa_def *
@@ -2345,7 +2367,7 @@ spv_access_to_gl_access(SpvMemoryAccessMask access)
    if (access & SpvMemoryAccessVolatileMask)
       result |= ACCESS_VOLATILE;
    if (access & SpvMemoryAccessNontemporalMask)
-      result |= ACCESS_STREAM_CACHE_POLICY;
+      result |= ACCESS_NON_TEMPORAL;
 
    return result;
 }
@@ -2653,7 +2675,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
                   "OpArrayLength must take a pointer to a structure type");
       vtn_fail_if(field != ptr->type->length - 1 ||
                   ptr->type->members[field]->base_type != vtn_base_type_array,
-                  "OpArrayLength must reference the last memeber of the "
+                  "OpArrayLength must reference the last member of the "
                   "structure and that must be an array");
 
       struct vtn_access_chain chain = {
@@ -2665,9 +2687,9 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
       struct vtn_pointer *array = vtn_pointer_dereference(b, ptr, &chain);
 
       nir_ssa_def *array_length =
-         nir_build_deref_buffer_array_length(&b->nb, 32,
-                                             vtn_pointer_to_ssa(b, array),
-                                             .access=ptr->access | ptr->type->access);
+         nir_deref_buffer_array_length(&b->nb, 32,
+                                       vtn_pointer_to_ssa(b, array),
+                                       .access=ptr->access | ptr->type->access);
 
       vtn_push_nir_ssa(b, w[2], array_length);
       break;
@@ -2798,8 +2820,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
          nir_intrinsic_instr_create(b->nb.shader,
                                     nir_intrinsic_load_deref_block_intel);
       load->src[0] = nir_src_for_ssa(&src->dest.ssa);
-      nir_ssa_dest_init_for_type(&load->instr, &load->dest,
-                                 res_type->type, NULL);
+      nir_ssa_dest_init_for_type(&load->instr, &load->dest, res_type->type);
       load->num_components = load->dest.ssa.num_components;
       nir_builder_instr_insert(&b->nb, &load->instr);
 

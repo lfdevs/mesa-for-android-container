@@ -33,6 +33,7 @@
 #include "brw_fs.h"
 #include "brw_nir.h"
 #include "brw_prim.h"
+#include "brw_private.h"
 #include "dev/intel_debug.h"
 
 namespace brw {
@@ -561,21 +562,21 @@ vec4_gs_visitor::gs_end_primitive()
    emit(OR(dst_reg(this->control_data_bits), this->control_data_bits, mask));
 }
 
-static const GLuint gl_prim_to_hw_prim[SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY+1] = {
-   [SHADER_PRIM_POINTS] =_3DPRIM_POINTLIST,
-   [SHADER_PRIM_LINES] = _3DPRIM_LINELIST,
-   [SHADER_PRIM_LINE_LOOP] = _3DPRIM_LINELOOP,
-   [SHADER_PRIM_LINE_STRIP] = _3DPRIM_LINESTRIP,
-   [SHADER_PRIM_TRIANGLES] = _3DPRIM_TRILIST,
-   [SHADER_PRIM_TRIANGLE_STRIP] = _3DPRIM_TRISTRIP,
-   [SHADER_PRIM_TRIANGLE_FAN] = _3DPRIM_TRIFAN,
-   [SHADER_PRIM_QUADS] = _3DPRIM_QUADLIST,
-   [SHADER_PRIM_QUAD_STRIP] = _3DPRIM_QUADSTRIP,
-   [SHADER_PRIM_POLYGON] = _3DPRIM_POLYGON,
-   [SHADER_PRIM_LINES_ADJACENCY] = _3DPRIM_LINELIST_ADJ,
-   [SHADER_PRIM_LINE_STRIP_ADJACENCY] = _3DPRIM_LINESTRIP_ADJ,
-   [SHADER_PRIM_TRIANGLES_ADJACENCY] = _3DPRIM_TRILIST_ADJ,
-   [SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
+static const GLuint gl_prim_to_hw_prim[MESA_PRIM_TRIANGLE_STRIP_ADJACENCY+1] = {
+   [MESA_PRIM_POINTS] =_3DPRIM_POINTLIST,
+   [MESA_PRIM_LINES] = _3DPRIM_LINELIST,
+   [MESA_PRIM_LINE_LOOP] = _3DPRIM_LINELOOP,
+   [MESA_PRIM_LINE_STRIP] = _3DPRIM_LINESTRIP,
+   [MESA_PRIM_TRIANGLES] = _3DPRIM_TRILIST,
+   [MESA_PRIM_TRIANGLE_STRIP] = _3DPRIM_TRISTRIP,
+   [MESA_PRIM_TRIANGLE_FAN] = _3DPRIM_TRIFAN,
+   [MESA_PRIM_QUADS] = _3DPRIM_QUADLIST,
+   [MESA_PRIM_QUAD_STRIP] = _3DPRIM_QUADSTRIP,
+   [MESA_PRIM_POLYGON] = _3DPRIM_POLYGON,
+   [MESA_PRIM_LINES_ADJACENCY] = _3DPRIM_LINELIST_ADJ,
+   [MESA_PRIM_LINE_STRIP_ADJACENCY] = _3DPRIM_LINESTRIP_ADJ,
+   [MESA_PRIM_TRIANGLES_ADJACENCY] = _3DPRIM_TRILIST_ADJ,
+   [MESA_PRIM_TRIANGLE_STRIP_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
 };
 
 } /* namespace brw */
@@ -594,7 +595,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
    c.key = *key;
 
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_GEOMETRY];
-   const bool debug_enabled = INTEL_DEBUG(DEBUG_GS);
+   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_GS);
 
    prog_data->base.base.stage = MESA_SHADER_GEOMETRY;
    prog_data->base.base.ray_queries = nir->info.ray_queries;
@@ -613,10 +614,10 @@ brw_compile_gs(const struct brw_compiler *compiler,
                        &c.input_vue_map, inputs_read,
                        nir->info.separate_shader, 1);
 
-   brw_nir_apply_key(nir, compiler, &key->base, 8, is_scalar);
+   brw_nir_apply_key(nir, compiler, &key->base, 8);
    brw_nir_lower_vue_inputs(nir, &c.input_vue_map);
    brw_nir_lower_vue_outputs(nir);
-   brw_postprocess_nir(nir, compiler, is_scalar, debug_enabled,
+   brw_postprocess_nir(nir, compiler, debug_enabled,
                        key->base.robust_buffer_access);
 
    prog_data->base.clip_distance_mask =
@@ -635,7 +636,7 @@ brw_compile_gs(const struct brw_compiler *compiler,
          nir, &prog_data->static_vertex_count, nullptr, 1u);
 
    if (compiler->devinfo->ver >= 7) {
-      if (nir->info.gs.output_primitive == SHADER_PRIM_POINTS) {
+      if (nir->info.gs.output_primitive == MESA_PRIM_POINTS) {
          /* When the output type is points, the geometry shader may output data
           * to multiple streams, and EndPrimitive() has no effect.  So we
           * configure the hardware to interpret the control data as stream ID.

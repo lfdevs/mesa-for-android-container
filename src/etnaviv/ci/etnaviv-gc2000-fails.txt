@@ -156,27 +156,23 @@ fast_color_clear@fcc-read-after-clear blit tex,Fail
 fast_color_clear@fcc-read-after-clear copy rb,Fail
 fast_color_clear@fcc-read-after-clear copy tex,Fail
 
-hiz@hiz-stencil-test-fbo-d0-s8,Fail
-
 shaders@glsl-bug-110796,Fail
 shaders@glsl-fs-flat-color,Fail
-shaders@glsl-fs-loop-nested,Crash
 shaders@glsl-fs-pointcoord,Fail
-shaders@glsl-kwin-blur-1,Fail
-shaders@glsl-kwin-blur-2,Fail
+
+# segfault
+shaders@glsl-kwin-blur-1,Crash
+shaders@glsl-kwin-blur-2,Crash
+
 shaders@glsl-max-varyings,Crash
 shaders@glsl-max-varyings >max_varying_components,Crash
 shaders@glsl-novertexdata,Fail
-shaders@glsl-routing,Crash
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Timeout
 shaders@glsl-uniform-interstage-limits@subdivide 5,Timeout
-shaders@glsl-vs-loop-nested,Crash
 shaders@glsl-vs-point-size,Fail
-
-spec@amd_shader_trinary_minmax@execution@built-in-functions@fs-max3-float-float-float,Fail
+shaders@glsl-vs-statechange-1,Fail
 
 spec@arb_arrays_of_arrays@execution@glsl-arrays-copy-size-mismatch,Fail
-spec@arb_depth_texture@fbo-depth-gl_depth_component16-drawpixels,Fail
 spec@arb_depth_texture@fbo-depth-gl_depth_component16-tex1d,Fail
 spec@arb_depth_texture@fbo-depth-gl_depth_component24-blit,Fail
 spec@arb_depth_texture@texwrap formats bordercolor,Fail
@@ -195,13 +191,14 @@ spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizz
 spec@arb_fragment_program@fp-fragment-position,Crash
 spec@arb_fragment_program@fp-indirections2,Fail
 spec@arb_fragment_program@sparse-samplers,Crash
+
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_depth24_stencil8,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index16,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index1,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index4,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index8,Fail
 spec@arb_framebuffer_object@fbo-alpha,Crash
-spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Crash
+spec@arb_framebuffer_object@fbo-attachments-blit-scaled-linear,Fail
 spec@arb_framebuffer_object@fbo-blit-stretch,Fail
 
 spec@arb_framebuffer_object@fbo-generatemipmap-cubemap s3tc_dxt1,Crash
@@ -234,7 +231,6 @@ spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-07,Fail
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-08,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1dshadow,Fail
@@ -289,8 +285,6 @@ spec@ati_texture_compression_3dc@texwrap formats bordercolor@GL_COMPRESSED_LUMIN
 
 spec@arb_texture_cube_map@cubemap npot,Fail
 
-spec@arb_texture_rectangle@copyteximage rect,Fail
-spec@arb_texture_rectangle@fbo-blit rect,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-07,Fail
 spec@arb_texture_rectangle@texwrap rect bordercolor,Fail
 spec@arb_texture_rectangle@texwrap rect bordercolor@GL_RGBA8- border color only,Fail
@@ -302,10 +296,6 @@ spec@arb_texture_storage@texture-storage,Fail
 spec@arb_vertex_buffer_object@pos-array,Fail
 spec@arb_vertex_program@big-param,Fail
 spec@arb_vertex_program@clip-plane-transformation arb,Fail
-spec@arb_vertex_program@vp-arl-constant-array-huge-offset,Fail
-spec@arb_vertex_program@vp-arl-constant-array-varying,Fail
-
-spec@glsl-1.10@execution@copy-propagation@glsl-fs-copy-propagation-texcoords-2,Fail
 
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_ext_protected_content@conformance,Fail
@@ -323,18 +313,18 @@ spec@ext_direct_state_access@textures@TextureParameteriEXT + display list GL_COM
 spec@ext_direct_state_access@textures@TextureParameterivEXT + display list GL_COMPILE_AND_EXECUTE,Fail
 spec@ext_direct_state_access@textures@TextureParameterivEXT + display list GL_COMPILE,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples color depthstencil,Crash
-spec@ext_framebuffer_multisample@accuracy all_samples color depthstencil linear,Crash
-spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil,Crash
-spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil linear,Crash
+spec@ext_framebuffer_multisample@accuracy all_samples color depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples color depthstencil linear,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil linear,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples depth_draw depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples depth_draw small depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples depth_resolve small depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Crash
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Crash
-spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil,Crash
-spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil linear,Crash
+spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil,Fail
+spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil linear,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw small depthstencil,Fail
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve depthstencil,Fail
@@ -369,6 +359,7 @@ spec@ext_packed_depth_stencil@fbo-clear-formats stencil,Fail
 spec@ext_packed_depth_stencil@fbo-clear-formats stencil@GL_DEPTH24_STENCIL8,Fail
 spec@ext_packed_depth_stencil@fbo-clear-formats stencil@GL_DEPTH_STENCIL,Fail
 spec@ext_packed_depth_stencil@fbo-depth-gl_depth24_stencil8-copypixels,Fail
+spec@ext_packed_depth_stencil@fbo-depth-gl_depth24_stencil8-tex1d,Fail
 spec@ext_packed_depth_stencil@fbo-stencil-gl_depth24_stencil8-blit,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor,Fail
 spec@ext_packed_depth_stencil@texwrap formats bordercolor@GL_DEPTH24_STENCIL8- border color only,Fail
@@ -389,8 +380,7 @@ spec@ext_texture_array@maxlayers,Fail
 spec@ext_texture_array@render-1darray,Fail
 spec@ext_texture_array@texsubimage array,Fail
 
-spec@ext_texture_compression_s3tc@getteximage-targets 2d s3tc,Fail
-spec@ext_texture_compression_s3tc@s3tc-teximage,Fail
+spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_srgb_alpha_s3tc_dxt1_ext,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- border color only,Fail
@@ -401,6 +391,7 @@ spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRE
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- swizzled- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT- swizzled- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
+spec@ext_texture_env_combine@texture-env-combine,Crash
 spec@ext_texture_format_bgra8888@api-errors,Fail
 spec@ext_texture_srgb@fbo-alphatest-formats,Crash
 spec@ext_texture_srgb@texwrap formats bordercolor,Fail
@@ -431,58 +422,45 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SR
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA- swizzled- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- swizzled- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor-swizzled@GL_COMPRESSED_SRGB- swizzled- border color only,Fail
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-int-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-ivec2-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-ivec2-ivec2,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-ivec3-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-ivec3-ivec3,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-ivec4-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-assign-div-ivec4-ivec4,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-ivec2,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-ivec3,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-ivec4,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec2-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec2-ivec2,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec3-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec3-ivec3,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec4-int,Crash
-spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec4-ivec4,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-int-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec2-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec2-ivec2,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec3-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec3-ivec3,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec4-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec4-ivec4,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec2,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec3,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec4,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec2-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec2-ivec2,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec3-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec3-ivec3,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec4-int,Crash
-spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec4-ivec4,Crash
+spec@glsl-1.10@execution@built-in-functions@fs-faceforward-vec2-vec2-vec2,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-int,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-ivec2,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-int-ivec4,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec2-ivec2,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec3-int,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec3-ivec3,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec4-int,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-div-ivec4-ivec4,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-smoothstep-vec3-vec3-vec3,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-int-int,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec2-ivec2,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec3-int,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec3-ivec3,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec4-int,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-assign-div-ivec4-ivec4,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-int,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec2,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec4,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec2-ivec2,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec3-int,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec3-ivec3,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec4-int,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-ivec4-ivec4,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-op-lt-int-int-using-if,Fail
 spec@glsl-1.10@execution@clipping@clip-plane-transformation clipvert_pos,Fail
 spec@glsl-1.10@execution@clipping@clip-plane-transformation fixed,Fail
 spec@glsl-1.10@execution@clipping@clip-plane-transformation pos_clipvert,Fail
 spec@glsl-1.10@execution@glsl-fs-convolution-2,Fail
 spec@glsl-1.10@execution@glsl-fs-uniform-array-7,Fail
 spec@glsl-1.10@execution@glsl-vs-large-uniform-array,Fail
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-fixed,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-none,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-vertex,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-smooth-fixed,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-smooth-none,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-smooth-vertex,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-fixed,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-none,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-vertex,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-smooth-fixed,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-smooth-none,Crash
-spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-smooth-vertex,Crash
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-fixed,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-none,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-flat-vertex,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backsecondarycolor-smooth-vertex,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-fixed,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-none,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-flat-vertex,Fail
+spec@glsl-1.10@execution@interpolation@interpolation-none-gl_backcolor-smooth-vertex,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_frontcolor-flat-fixed,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_frontcolor-flat-none,Fail
 spec@glsl-1.10@execution@interpolation@interpolation-none-gl_frontcolor-flat-vertex,Fail
@@ -496,6 +474,7 @@ spec@glsl-1.10@execution@interpolation@interpolation-none-other-smooth-vertex,Fa
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-07,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-07,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-clamp-z,Fail
+spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat4-col-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat4-index-col-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat4-index-col-row-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat4-index-col-rd,Fail
@@ -506,6 +485,7 @@ spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat4-index-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat4-index-row-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat4-index-row-wr,Fail
 spec@glsl-1.10@execution@variable-indexing@vs-varying-array-mat4-index-wr,Fail
+spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail
 spec@glsl-1.10@execution@varying-packing@simple float array,Crash
 spec@glsl-1.10@execution@varying-packing@simple float separate,Crash
 spec@glsl-1.10@execution@varying-packing@simple mat2 array,Crash
@@ -532,6 +512,7 @@ spec@glsl-1.10@execution@varying-packing@simple vec3 array,Crash
 spec@glsl-1.10@execution@varying-packing@simple vec3 separate,Crash
 spec@glsl-1.10@execution@varying-packing@simple vec4 array,Crash
 spec@glsl-1.10@execution@varying-packing@simple vec4 separate,Crash
+spec@glsl-1.20@execution@built-in-functions@vs-op-mult,Fail
 spec@glsl-1.20@execution@clipping@fixed-clip-enables,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-const-reject,Fail
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-different-from-position,Fail
@@ -542,9 +523,13 @@ spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 spec@glsl-1.20@execution@const-builtin@glsl-const-builtin-normalize,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-max,Fail
 spec@glsl-1.20@execution@fs-nan-builtin-min,Fail
+spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-064-elements,Fail
+spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-128-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
 spec@glsl-1.20@execution@out-parameter-indexing@fs-inout-index-two-level,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Fail
+spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-col-rd,Fail
+spec@glsl-1.20@execution@variable-indexing@vs-uniform-array-mat3-index-col-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-varying-array-mat4-index-col-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-varying-array-mat4-index-col-row-rd,Fail
 spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat4-index-col-rd,Fail
@@ -564,15 +549,25 @@ spec@khr_texture_compression_astc@miptree-gles srgb,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
+spec@nv_conditional_render@copypixels,Fail
+spec@nv_conditional_render@copyteximage,Fail
+spec@nv_conditional_render@copytexsubimage,Fail
+spec@nv_conditional_render@dlist,Fail
+spec@nv_conditional_render@drawpixels,Fail
+spec@nv_conditional_render@vertex_array,Fail
 spec@nv_copy_image@nv_copy_image-simple --tex-to-tex,Fail
+spec@nv_fog_distance@simple draw - gl_eye_plane,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-lines,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-triangles,Fail
+
+# segfault
+spec@sgis_generate_mipmap@gen-nonzero-unit,Crash
+
 spec@!opengl 1.0@gl-1.0-blend-func,Fail
 
 spec@!opengl 1.0@gl-1.0-dlist-materials,Fail
 spec@!opengl 1.0@gl-1.0-dlist-shademodel,Fail
 spec@!opengl 1.0@gl-1.0-drawbuffer-modes,Fail
-spec@!opengl 1.0@gl-1.0-drawpixels-depth-test,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
@@ -594,7 +589,6 @@ spec@!opengl 1.0@gl-1.0-logicop@GL_XOR,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
 spec@!opengl 1.0@gl-1.0-ortho-pos,Fail
 spec@!opengl 1.0@gl-1.0-scissor-stencil-clear,Fail
-spec@!opengl 1.0@gl-1.0-spot-light,Fail
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
 spec@!opengl 1.1@clipflat,Fail
@@ -1895,7 +1889,6 @@ spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)-
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: FIRST,Fail
 spec@!opengl 1.1@clipflat@glDrawElements(GL_TRIANGLE_STRIP)- glFrontFace(GL_CW)- glPolygonMode(GL_LINE)- quadrant: right top PV: LAST,Fail
 spec@!opengl 1.1@depthstencil-default_fb-copypixels,Fail
-spec@!opengl 1.1@fog-modes,Fail
 spec@!opengl 1.1@getteximage-luminance,Crash
 spec@!opengl 1.1@gl-1.1-xor-copypixels,Fail
 spec@!opengl 1.1@gl-1.1-xor,Fail
@@ -1906,7 +1899,6 @@ spec@!opengl 1.1@linestipple,Fail
 spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
 spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
-spec@!opengl 1.1@line-smooth-coverage,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected blue pixel in center,Fail
@@ -2013,37 +2005,33 @@ spec@!opengl 1.1@two-sided-lighting,Fail
 spec@!opengl 1.1@user-clip,Fail
 spec@!opengl 1.2@copyteximage 3d,Fail
 spec@!opengl 1.2@lodclamp-between-max,Fail
+spec@!opengl 1.2@texture-packed-formats,Fail
 spec@!opengl 1.2@texwrap 3d bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d bordercolor@GL_RGBA8- border color only,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor@GL_RGBA8- projected- border color only,Fail
+
+# segfault
+spec@!opengl 1.2@tex-skipped-unit,Crash
+
 spec@!opengl 1.2@two-sided-lighting-separate-specular,Fail
 spec@!opengl 1.3@gl-1.3-texture-env,Fail
 spec@!opengl 1.3@tex3d-depth1,Fail
 spec@!opengl 1.3@tex-border-1,Fail
 
-spec@!opengl 1.4@blendminmax,Fail
-
 spec@!opengl 1.4@gl-1.4-polygon-offset,Fail
 spec@!opengl 1.5@depth-tex-compare,Fail
+spec@!opengl 2.0@fragment-and-vertex-texturing,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag,Fail
 spec@!opengl 2.0@gl-2.0-edgeflag-immediate,Fail
 spec@!opengl 2.0@gl-2.0-two-sided-stencil,Fail
 spec@!opengl 2.0@occlusion-query-discard,Fail
-spec@!opengl 2.0@vertex-program-two-side back2,Crash
-spec@!opengl 2.0@vertex-program-two-side back back2,Crash
-spec@!opengl 2.0@vertex-program-two-side back,Crash
-spec@!opengl 2.0@vertex-program-two-side back front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side back front2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back front2 back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled back front2,Crash
+spec@!opengl 2.0@vertex-program-two-side enabled back front2 back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled back front2 back2@vs and fs,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back back2,Fail
+spec@!opengl 2.0@vertex-program-two-side enabled front back back2@vs and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front2 back2@vs and fs,Fail
-spec@!opengl 2.0@vertex-program-two-side enabled front back2,Crash
-spec@!opengl 2.0@vertex-program-two-side enabled front back back2,Crash
 spec@!opengl 2.0@vertex-program-two-side enabled front back,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front back front2 back2@vs and fs,Fail
@@ -2052,8 +2040,8 @@ spec@!opengl 2.0@vertex-program-two-side enabled front back front2@vs and fs,Fai
 spec@!opengl 2.0@vertex-program-two-side enabled front back@vs and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front front2 back2@vs and fs,Fail
-spec@!opengl 2.0@vertex-program-two-side front back2,Crash
-spec@!opengl 2.0@vertex-program-two-side front back back2,Crash
+spec@!opengl 2.0@vertex-program-two-side front back2,Fail
+spec@!opengl 2.0@vertex-program-two-side front back2@vs and fs,Fail
 spec@!opengl 2.0@vs-point_size-zero,Fail
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail

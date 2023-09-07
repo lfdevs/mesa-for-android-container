@@ -47,8 +47,7 @@ build_nir_fs(struct radv_device *dev)
 }
 
 static VkResult
-create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkFormat format,
-                VkPipeline *pipeline)
+create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkFormat format, VkPipeline *pipeline)
 {
    VkResult result;
    VkDevice device_h = radv_device_to_handle(device);
@@ -69,14 +68,13 @@ create_pipeline(struct radv_device *device, VkShaderModule vs_module_h, VkFormat
    };
 
    if (!device->meta_state.resolve.p_layout) {
-      result =
-         radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info,
-                                   &device->meta_state.alloc, &device->meta_state.resolve.p_layout);
+      result = radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info, &device->meta_state.alloc,
+                                         &device->meta_state.resolve.p_layout);
       if (result != VK_SUCCESS)
          goto cleanup;
    }
 
-   VkFormat color_formats[2] = { format, format };
+   VkFormat color_formats[2] = {format, format};
    const VkPipelineRenderingCreateInfo rendering_create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
       .colorAttachmentCount = 2,
@@ -191,11 +189,9 @@ radv_device_finish_meta_resolve_state(struct radv_device *device)
    struct radv_meta_state *state = &device->meta_state;
 
    for (uint32_t j = 0; j < NUM_META_FS_KEYS; j++) {
-      radv_DestroyPipeline(radv_device_to_handle(device), state->resolve.pipeline[j],
-                           &state->alloc);
+      radv_DestroyPipeline(radv_device_to_handle(device), state->resolve.pipeline[j], &state->alloc);
    }
-   radv_DestroyPipelineLayout(radv_device_to_handle(device), state->resolve.p_layout,
-                              &state->alloc);
+   radv_DestroyPipelineLayout(radv_device_to_handle(device), state->resolve.p_layout, &state->alloc);
 }
 
 VkResult
@@ -230,8 +226,8 @@ cleanup:
 }
 
 static void
-emit_resolve(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *src_image,
-             const struct radv_image *dst_image, VkFormat vk_format)
+emit_resolve(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *src_image, const struct radv_image *dst_image,
+             VkFormat vk_format)
 {
    struct radv_device *device = cmd_buffer->device;
    VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
@@ -242,12 +238,10 @@ emit_resolve(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *src_im
       radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT, src_image) |
       radv_dst_access_flush(cmd_buffer, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, dst_image);
 
-   radv_CmdBindPipeline(cmd_buffer_h, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        device->meta_state.resolve.pipeline[fs_key]);
+   radv_CmdBindPipeline(cmd_buffer_h, VK_PIPELINE_BIND_POINT_GRAPHICS, device->meta_state.resolve.pipeline[fs_key]);
 
    radv_CmdDraw(cmd_buffer_h, 3, 1, 0, 0);
-   cmd_buffer->state.flush_bits |=
-      radv_src_access_flush(cmd_buffer, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, dst_image);
+   cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, dst_image);
 }
 
 enum radv_resolve_method {
@@ -257,28 +251,22 @@ enum radv_resolve_method {
 };
 
 static bool
-image_hw_resolve_compat(const struct radv_device *device, struct radv_image *src_image,
-                        struct radv_image *dst_image)
+image_hw_resolve_compat(const struct radv_device *device, struct radv_image *src_image, struct radv_image *dst_image)
 {
    if (device->physical_device->rad_info.gfx_level >= GFX9) {
-      return dst_image->planes[0].surface.u.gfx9.swizzle_mode ==
-             src_image->planes[0].surface.u.gfx9.swizzle_mode;
+      return dst_image->planes[0].surface.u.gfx9.swizzle_mode == src_image->planes[0].surface.u.gfx9.swizzle_mode;
    } else {
-      return dst_image->planes[0].surface.micro_tile_mode ==
-             src_image->planes[0].surface.micro_tile_mode;
+      return dst_image->planes[0].surface.micro_tile_mode == src_image->planes[0].surface.micro_tile_mode;
    }
 }
 
 static void
-radv_pick_resolve_method_images(struct radv_device *device, struct radv_image *src_image,
-                                VkFormat src_format, struct radv_image *dest_image,
-                                unsigned dest_level, VkImageLayout dest_image_layout,
-                                struct radv_cmd_buffer *cmd_buffer,
-                                enum radv_resolve_method *method)
+radv_pick_resolve_method_images(struct radv_device *device, struct radv_image *src_image, VkFormat src_format,
+                                struct radv_image *dst_image, unsigned dst_level, VkImageLayout dst_image_layout,
+                                struct radv_cmd_buffer *cmd_buffer, enum radv_resolve_method *method)
 
 {
-   uint32_t queue_mask = radv_image_queue_family_mask(dest_image, cmd_buffer->qf,
-                                                      cmd_buffer->qf);
+   uint32_t queue_mask = radv_image_queue_family_mask(dst_image, cmd_buffer->qf, cmd_buffer->qf);
 
    if (vk_format_is_color(src_format)) {
       /* Using the fragment resolve path is currently a hint to
@@ -286,10 +274,9 @@ radv_pick_resolve_method_images(struct radv_device *device, struct radv_image *s
        * re-initialize it after resolving using compute.
        * TODO: Add support for layered and int to the fragment path.
        */
-      if (radv_layout_dcc_compressed(device, dest_image, dest_level, dest_image_layout,
-                                     queue_mask)) {
+      if (radv_layout_dcc_compressed(device, dst_image, dst_level, dst_image_layout, queue_mask)) {
          *method = RESOLVE_FRAGMENT;
-      } else if (!image_hw_resolve_compat(device, src_image, dest_image)) {
+      } else if (!image_hw_resolve_compat(device, src_image, dst_image)) {
          /* The micro tile mode only needs to match for the HW
           * resolve path which is the default path for non-DCC
           * resolves.
@@ -301,11 +288,11 @@ radv_pick_resolve_method_images(struct radv_device *device, struct radv_image *s
          *method = RESOLVE_COMPUTE;
       else if (vk_format_is_int(src_format))
          *method = RESOLVE_COMPUTE;
-      else if (src_image->info.array_size > 1 || dest_image->info.array_size > 1)
+      else if (src_image->vk.array_layers > 1 || dst_image->vk.array_layers > 1)
          *method = RESOLVE_COMPUTE;
    } else {
-      if (src_image->info.array_size > 1 || dest_image->info.array_size > 1 ||
-          (dest_image->planes[0].surface.flags & RADEON_SURF_NO_RENDER_TARGET))
+      if (src_image->vk.array_layers > 1 || dst_image->vk.array_layers > 1 ||
+          (dst_image->planes[0].surface.flags & RADEON_SURF_NO_RENDER_TARGET))
          *method = RESOLVE_COMPUTE;
       else
          *method = RESOLVE_FRAGMENT;
@@ -347,8 +334,8 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 
    radv_meta_save(&saved_state, cmd_buffer, RADV_META_SAVE_GRAPHICS_PIPELINE);
 
-   assert(src_image->info.samples > 1);
-   assert(dst_image->info.samples == 1);
+   assert(src_image->vk.samples > 1);
+   assert(dst_image->vk.samples == 1);
 
    unsigned fs_key = radv_format_meta_fs_key(device, dst_image->vk.format);
 
@@ -364,11 +351,9 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
    assert(region->dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
    assert(region->srcSubresource.layerCount == region->dstSubresource.layerCount);
 
-   const uint32_t src_base_layer =
-      radv_meta_get_iview_layer(src_image, &region->srcSubresource, &region->srcOffset);
+   const uint32_t src_base_layer = radv_meta_get_iview_layer(src_image, &region->srcSubresource, &region->srcOffset);
 
-   const uint32_t dst_base_layer =
-      radv_meta_get_iview_layer(dst_image, &region->dstSubresource, &region->dstOffset);
+   const uint32_t dst_base_layer = radv_meta_get_iview_layer(dst_image, &region->dstSubresource, &region->dstOffset);
 
    /**
     * From Vulkan 1.0.6 spec: 18.6 Resolving Multisample Images
@@ -386,11 +371,10 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
    const struct VkExtent3D extent = vk_image_sanitize_extent(&src_image->vk, region->extent);
    const struct VkOffset3D dstOffset = vk_image_sanitize_offset(&dst_image->vk, region->dstOffset);
 
-   uint32_t queue_mask = radv_image_queue_family_mask(dst_image, cmd_buffer->qf,
-                                                      cmd_buffer->qf);
+   uint32_t queue_mask = radv_image_queue_family_mask(dst_image, cmd_buffer->qf, cmd_buffer->qf);
 
-   if (radv_layout_dcc_compressed(cmd_buffer->device, dst_image, region->dstSubresource.mipLevel,
-                                  dst_image_layout, queue_mask)) {
+   if (radv_layout_dcc_compressed(cmd_buffer->device, dst_image, region->dstSubresource.mipLevel, dst_image_layout,
+                                  queue_mask)) {
       VkImageSubresourceRange range = {
          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
          .baseMipLevel = region->dstSubresource.mipLevel,
@@ -403,8 +387,8 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
    }
 
    VkRect2D resolve_area = {
-      .offset = { dstOffset.x, dstOffset.y },
-      .extent = { extent.width, extent.height },
+      .offset = {dstOffset.x, dstOffset.y},
+      .extent = {extent.width, extent.height},
    };
 
    radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1,
@@ -500,27 +484,24 @@ radv_meta_resolve_hardware_image(struct radv_cmd_buffer *cmd_buffer, struct radv
 }
 
 static void
-resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
-              VkImageLayout src_image_layout, struct radv_image *dst_image,
-              VkImageLayout dst_image_layout, const VkImageResolve2 *region,
+resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkImageLayout src_image_layout,
+              struct radv_image *dst_image, VkImageLayout dst_image_layout, const VkImageResolve2 *region,
               enum radv_resolve_method resolve_method)
 {
    switch (resolve_method) {
    case RESOLVE_HW:
-      radv_meta_resolve_hardware_image(cmd_buffer, src_image, src_image_layout, dst_image,
-                                       dst_image_layout, region);
+      radv_meta_resolve_hardware_image(cmd_buffer, src_image, src_image_layout, dst_image, dst_image_layout, region);
       break;
    case RESOLVE_FRAGMENT:
       radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout, region);
 
-      radv_meta_resolve_fragment_image(cmd_buffer, src_image, src_image_layout, dst_image,
-                                       dst_image_layout, region);
+      radv_meta_resolve_fragment_image(cmd_buffer, src_image, src_image_layout, dst_image, dst_image_layout, region);
       break;
    case RESOLVE_COMPUTE:
       radv_decompress_resolve_src(cmd_buffer, src_image, src_image_layout, region);
 
-      radv_meta_resolve_compute_image(cmd_buffer, src_image, src_image->vk.format, src_image_layout,
-                                      dst_image, dst_image->vk.format, dst_image_layout, region);
+      radv_meta_resolve_compute_image(cmd_buffer, src_image, src_image->vk.format, src_image_layout, dst_image,
+                                      dst_image->vk.format, dst_image_layout, region);
       break;
    default:
       assert(!"Invalid resolve method selected");
@@ -528,8 +509,7 @@ resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-radv_CmdResolveImage2(VkCommandBuffer commandBuffer,
-                      const VkResolveImageInfo2 *pResolveImageInfo)
+radv_CmdResolveImage2(VkCommandBuffer commandBuffer, const VkResolveImageInfo2 *pResolveImageInfo)
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    RADV_FROM_HANDLE(radv_image, src_image, pResolveImageInfo->srcImage);
@@ -537,21 +517,20 @@ radv_CmdResolveImage2(VkCommandBuffer commandBuffer,
    VkImageLayout src_image_layout = pResolveImageInfo->srcImageLayout;
    VkImageLayout dst_image_layout = pResolveImageInfo->dstImageLayout;
    const struct radv_physical_device *pdevice = cmd_buffer->device->physical_device;
-   enum radv_resolve_method resolve_method =
-      pdevice->rad_info.gfx_level >= GFX11 ? RESOLVE_FRAGMENT : RESOLVE_HW;
+   enum radv_resolve_method resolve_method = pdevice->rad_info.gfx_level >= GFX11 ? RESOLVE_FRAGMENT : RESOLVE_HW;
 
    /* we can use the hw resolve only for single full resolves */
    if (pResolveImageInfo->regionCount == 1) {
-      if (pResolveImageInfo->pRegions[0].srcOffset.x ||
-          pResolveImageInfo->pRegions[0].srcOffset.y || pResolveImageInfo->pRegions[0].srcOffset.z)
+      if (pResolveImageInfo->pRegions[0].srcOffset.x || pResolveImageInfo->pRegions[0].srcOffset.y ||
+          pResolveImageInfo->pRegions[0].srcOffset.z)
          resolve_method = RESOLVE_COMPUTE;
-      if (pResolveImageInfo->pRegions[0].dstOffset.x ||
-          pResolveImageInfo->pRegions[0].dstOffset.y || pResolveImageInfo->pRegions[0].dstOffset.z)
+      if (pResolveImageInfo->pRegions[0].dstOffset.x || pResolveImageInfo->pRegions[0].dstOffset.y ||
+          pResolveImageInfo->pRegions[0].dstOffset.z)
          resolve_method = RESOLVE_COMPUTE;
 
-      if (pResolveImageInfo->pRegions[0].extent.width != src_image->info.width ||
-          pResolveImageInfo->pRegions[0].extent.height != src_image->info.height ||
-          pResolveImageInfo->pRegions[0].extent.depth != src_image->info.depth)
+      if (pResolveImageInfo->pRegions[0].extent.width != src_image->vk.extent.width ||
+          pResolveImageInfo->pRegions[0].extent.height != src_image->vk.extent.height ||
+          pResolveImageInfo->pRegions[0].extent.depth != src_image->vk.extent.depth)
          resolve_method = RESOLVE_COMPUTE;
    } else
       resolve_method = RESOLVE_COMPUTE;
@@ -560,11 +539,9 @@ radv_CmdResolveImage2(VkCommandBuffer commandBuffer,
       const VkImageResolve2 *region = &pResolveImageInfo->pRegions[r];
 
       radv_pick_resolve_method_images(cmd_buffer->device, src_image, src_image->vk.format, dst_image,
-                                      region->dstSubresource.mipLevel, dst_image_layout,
-                                      cmd_buffer, &resolve_method);
+                                      region->dstSubresource.mipLevel, dst_image_layout, cmd_buffer, &resolve_method);
 
-      resolve_image(cmd_buffer, src_image, src_image_layout, dst_image, dst_image_layout, region,
-                    resolve_method);
+      resolve_image(cmd_buffer, src_image, src_image_layout, dst_image, dst_image_layout, region, resolve_method);
    }
 }
 
@@ -573,8 +550,7 @@ radv_cmd_buffer_resolve_rendering_hw(struct radv_cmd_buffer *cmd_buffer)
 {
    struct radv_meta_saved_state saved_state;
 
-   radv_meta_save(&saved_state, cmd_buffer,
-                  RADV_META_SAVE_GRAPHICS_PIPELINE | RADV_META_SAVE_RENDER);
+   radv_meta_save(&saved_state, cmd_buffer, RADV_META_SAVE_GRAPHICS_PIPELINE | RADV_META_SAVE_RENDER);
 
    VkRect2D *resolve_area = &saved_state.render.area;
 
@@ -600,11 +576,10 @@ radv_cmd_buffer_resolve_rendering_hw(struct radv_cmd_buffer *cmd_buffer)
       VkImageLayout dst_layout = saved_state.render.color_att[i].resolve_layout;
       struct radv_image *dst_img = dst_iview->image;
 
-      uint32_t queue_mask = radv_image_queue_family_mask(dst_img, cmd_buffer->qf,
-                                                         cmd_buffer->qf);
+      uint32_t queue_mask = radv_image_queue_family_mask(dst_img, cmd_buffer->qf, cmd_buffer->qf);
 
-      if (radv_layout_dcc_compressed(cmd_buffer->device, dst_img, dst_iview->vk.base_mip_level,
-                                     dst_layout, queue_mask)) {
+      if (radv_layout_dcc_compressed(cmd_buffer->device, dst_img, dst_iview->vk.base_mip_level, dst_layout,
+                                     queue_mask)) {
          VkImageSubresourceRange range = {
             .aspectMask = dst_iview->vk.aspects,
             .baseMipLevel = dst_iview->vk.base_mip_level,
@@ -644,8 +619,8 @@ radv_cmd_buffer_resolve_rendering_hw(struct radv_cmd_buffer *cmd_buffer)
 
       radv_CmdBeginRendering(radv_cmd_buffer_to_handle(cmd_buffer), &rendering_info);
 
-      VkResult ret = build_resolve_pipeline(
-         cmd_buffer->device, radv_format_meta_fs_key(cmd_buffer->device, dst_iview->vk.format));
+      VkResult ret =
+         build_resolve_pipeline(cmd_buffer->device, radv_format_meta_fs_key(cmd_buffer->device, dst_iview->vk.format));
       if (ret != VK_SUCCESS) {
          vk_command_buffer_set_error(&cmd_buffer->vk, ret);
          continue;
@@ -667,8 +642,7 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer)
 {
    const struct radv_physical_device *pdevice = cmd_buffer->device->physical_device;
    const struct radv_rendering_state *render = &cmd_buffer->state.render;
-   enum radv_resolve_method resolve_method =
-      pdevice->rad_info.gfx_level >= GFX11 ? RESOLVE_FRAGMENT : RESOLVE_HW;
+   enum radv_resolve_method resolve_method = pdevice->rad_info.gfx_level >= GFX11 ? RESOLVE_FRAGMENT : RESOLVE_HW;
 
    bool has_color_resolve = false;
    for (uint32_t i = 0; i < render->color_att_count; ++i) {
@@ -687,19 +661,15 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer)
       struct radv_image_view *dst_iview = render->ds_att.resolve_iview;
       VkImageLayout dst_layout = render->ds_att.resolve_layout;
 
-      radv_pick_resolve_method_images(cmd_buffer->device, src_iview->image, src_iview->vk.format,
-                                      dst_iview->image, dst_iview->vk.base_mip_level, dst_layout,
-                                      cmd_buffer, &resolve_method);
+      radv_pick_resolve_method_images(cmd_buffer->device, src_iview->image, src_iview->vk.format, dst_iview->image,
+                                      dst_iview->vk.base_mip_level, dst_layout, cmd_buffer, &resolve_method);
 
-      if ((src_iview->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-          render->ds_att.resolve_mode != VK_RESOLVE_MODE_NONE) {
+      if ((src_iview->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && render->ds_att.resolve_mode != VK_RESOLVE_MODE_NONE) {
          if (resolve_method == RESOLVE_FRAGMENT) {
-            radv_depth_stencil_resolve_rendering_fs(cmd_buffer, VK_IMAGE_ASPECT_DEPTH_BIT,
-                                                    render->ds_att.resolve_mode);
+            radv_depth_stencil_resolve_rendering_fs(cmd_buffer, VK_IMAGE_ASPECT_DEPTH_BIT, render->ds_att.resolve_mode);
          } else {
             assert(resolve_method == RESOLVE_COMPUTE);
-            radv_depth_stencil_resolve_rendering_cs(cmd_buffer, VK_IMAGE_ASPECT_DEPTH_BIT,
-                                                    render->ds_att.resolve_mode);
+            radv_depth_stencil_resolve_rendering_cs(cmd_buffer, VK_IMAGE_ASPECT_DEPTH_BIT, render->ds_att.resolve_mode);
          }
       }
 
@@ -765,15 +735,15 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer)
          struct radv_image *dst_img = dst_iview->image;
 
          radv_pick_resolve_method_images(cmd_buffer->device, src_img, src_iview->vk.format, dst_img,
-                                         dst_iview->vk.base_mip_level, dst_layout,
-                                         cmd_buffer, &resolve_method);
+                                         dst_iview->vk.base_mip_level, dst_layout, cmd_buffer, &resolve_method);
          VkImageResolve2 region = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_RESOLVE_2,
-            .extent = {
-               .width = resolve_area.extent.width,
-               .height = resolve_area.extent.height,
-               .depth = 1,
-            },
+            .extent =
+               {
+                  .width = resolve_area.extent.width,
+                  .height = resolve_area.extent.height,
+                  .depth = 1,
+               },
             .srcSubresource =
                (VkImageSubresourceLayers){
                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -788,8 +758,8 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer)
                   .baseArrayLayer = dst_iview->vk.base_array_layer,
                   .layerCount = layer_count,
                },
-            .srcOffset = { resolve_area.offset.x, resolve_area.offset.y, 0 },
-            .dstOffset = { resolve_area.offset.x, resolve_area.offset.y, 0 },
+            .srcOffset = {resolve_area.offset.x, resolve_area.offset.y, 0},
+            .dstOffset = {resolve_area.offset.x, resolve_area.offset.y, 0},
          };
 
          switch (resolve_method) {
@@ -799,14 +769,12 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer)
          case RESOLVE_COMPUTE:
             radv_decompress_resolve_src(cmd_buffer, src_iview->image, src_layout, &region);
 
-            radv_cmd_buffer_resolve_rendering_cs(cmd_buffer, src_iview, src_layout, dst_iview,
-                                                 dst_layout, &region);
+            radv_cmd_buffer_resolve_rendering_cs(cmd_buffer, src_iview, src_layout, dst_iview, dst_layout, &region);
             break;
          case RESOLVE_FRAGMENT:
             radv_decompress_resolve_src(cmd_buffer, src_iview->image, src_layout, &region);
 
-            radv_cmd_buffer_resolve_rendering_fs(cmd_buffer, src_iview, src_layout, dst_iview,
-                                                 dst_layout);
+            radv_cmd_buffer_resolve_rendering_fs(cmd_buffer, src_iview, src_layout, dst_iview, dst_layout);
             break;
          default:
             unreachable("Invalid resolve method");
@@ -856,8 +824,7 @@ void
 radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
                             VkImageLayout src_image_layout, const VkImageResolve2 *region)
 {
-   const uint32_t src_base_layer =
-      radv_meta_get_iview_layer(src_image, &region->srcSubresource, &region->srcOffset);
+   const uint32_t src_base_layer = radv_meta_get_iview_layer(src_image, &region->srcSubresource, &region->srcOffset);
 
    VkImageMemoryBarrier2 barrier = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -868,13 +835,14 @@ radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
       .oldLayout = src_image_layout,
       .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
       .image = radv_image_to_handle(src_image),
-      .subresourceRange = (VkImageSubresourceRange){
-         .aspectMask = region->srcSubresource.aspectMask,
-         .baseMipLevel = region->srcSubresource.mipLevel,
-         .levelCount = 1,
-         .baseArrayLayer = src_base_layer,
-         .layerCount = region->srcSubresource.layerCount,
-      }
+      .subresourceRange =
+         (VkImageSubresourceRange){
+            .aspectMask = region->srcSubresource.aspectMask,
+            .baseMipLevel = region->srcSubresource.mipLevel,
+            .levelCount = 1,
+            .baseArrayLayer = src_base_layer,
+            .layerCount = region->srcSubresource.layerCount,
+         },
    };
 
    VkSampleLocationsInfoEXT sample_loc_info;
@@ -882,8 +850,7 @@ radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
       /* If the depth/stencil image uses different sample
        * locations, we need them during HTILE decompressions.
        */
-      struct radv_sample_locations_state *sample_locs =
-         &cmd_buffer->state.render.sample_locations;
+      struct radv_sample_locations_state *sample_locs = &cmd_buffer->state.render.sample_locations;
 
       sample_loc_info = (VkSampleLocationsInfoEXT){
          .sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT,

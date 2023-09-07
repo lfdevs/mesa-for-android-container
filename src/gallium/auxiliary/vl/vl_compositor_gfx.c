@@ -27,7 +27,7 @@
 
 #include <assert.h>
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_context.h"
 
 #include "util/u_memory.h"
@@ -667,7 +667,7 @@ draw_layers(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rec
          c->pipe->set_sampler_views(c->pipe, PIPE_SHADER_FRAGMENT, 0,
                                     num_sampler_views, 0, false, samplers);
 
-         util_draw_arrays(c->pipe, PIPE_PRIM_QUADS, vb_index * 4, 4);
+         util_draw_arrays(c->pipe, MESA_PRIM_QUADS, vb_index * 4, 4);
          vb_index++;
 
          if (dirty) {

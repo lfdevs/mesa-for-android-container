@@ -30,13 +30,13 @@
 #include "qpu/qpu_disasm.h"
 
 #include "compiler/nir/nir_builder.h"
-#include "nir/nir_vulkan.h"
 #include "nir/nir_serialize.h"
 
 #include "util/u_atomic.h"
 #include "util/u_prim.h"
 #include "util/os_time.h"
 
+#include "vk_nir_convert_ycbcr.h"
 #include "vk_pipeline.h"
 #include "vulkan/util/vk_format.h"
 
@@ -238,7 +238,7 @@ const nir_shader_compiler_options v3dv_nir_options = {
    .max_unroll_iterations = 16,
    .force_indirect_unrolling = (nir_var_shader_in | nir_var_function_temp),
    .divergence_analysis_options =
-      nir_divergence_multiple_workgroup_per_compute_subgroup
+      nir_divergence_multiple_workgroup_per_compute_subgroup,
 };
 
 const nir_shader_compiler_options *
@@ -629,8 +629,8 @@ lower_tex_src(nir_builder *b,
          }
 
          index = nir_iadd(b, index,
-                          nir_imul(b, nir_imm_int(b, array_elements),
-                                   nir_ssa_for_src(b, deref->arr.index, 1)));
+                          nir_imul_imm(b, nir_ssa_for_src(b, deref->arr.index, 1),
+                                       array_elements));
       }
 
       array_elements *= glsl_get_length(parent->type);
@@ -658,7 +658,7 @@ lower_tex_src(nir_builder *b,
    uint32_t set = deref->var->data.descriptor_set;
    uint32_t binding = deref->var->data.binding;
    /* FIXME: this is a really simplified check for the precision to be used
-    * for the sampling. Right now we are ony checking for the variables used
+    * for the sampling. Right now we are only checking for the variables used
     * on the operation itself, but there are other cases that we could use to
     * infer the precision requirement.
     */
@@ -767,8 +767,8 @@ lower_image_deref(nir_builder *b,
          }
 
          index = nir_iadd(b, index,
-                          nir_imul(b, nir_imm_int(b, array_elements),
-                                   nir_ssa_for_src(b, deref->arr.index, 1)));
+                          nir_imul_imm(b, nir_ssa_for_src(b, deref->arr.index, 1),
+                                       array_elements));
       }
 
       array_elements *= glsl_get_length(parent->type);
@@ -840,16 +840,8 @@ lower_intrinsic(nir_builder *b,
 
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_store:
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
       lower_image_deref(b, instr, state);
@@ -1050,17 +1042,17 @@ pipeline_populate_v3d_key(struct v3d_key *key,
 /* FIXME: anv maps to hw primitive type. Perhaps eventually we would do the
  * same. For not using prim_mode that is the one already used on v3d
  */
-static const enum pipe_prim_type vk_to_pipe_prim_type[] = {
-   [VK_PRIMITIVE_TOPOLOGY_POINT_LIST] = PIPE_PRIM_POINTS,
-   [VK_PRIMITIVE_TOPOLOGY_LINE_LIST] = PIPE_PRIM_LINES,
-   [VK_PRIMITIVE_TOPOLOGY_LINE_STRIP] = PIPE_PRIM_LINE_STRIP,
-   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST] = PIPE_PRIM_TRIANGLES,
-   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP] = PIPE_PRIM_TRIANGLE_STRIP,
-   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN] = PIPE_PRIM_TRIANGLE_FAN,
-   [VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY] = PIPE_PRIM_LINES_ADJACENCY,
-   [VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY] = PIPE_PRIM_LINE_STRIP_ADJACENCY,
-   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY] = PIPE_PRIM_TRIANGLES_ADJACENCY,
-   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY] = PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY,
+static const enum mesa_prim vk_to_mesa_prim[] = {
+   [VK_PRIMITIVE_TOPOLOGY_POINT_LIST] = MESA_PRIM_POINTS,
+   [VK_PRIMITIVE_TOPOLOGY_LINE_LIST] = MESA_PRIM_LINES,
+   [VK_PRIMITIVE_TOPOLOGY_LINE_STRIP] = MESA_PRIM_LINE_STRIP,
+   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST] = MESA_PRIM_TRIANGLES,
+   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP] = MESA_PRIM_TRIANGLE_STRIP,
+   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN] = MESA_PRIM_TRIANGLE_FAN,
+   [VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY] = MESA_PRIM_LINES_ADJACENCY,
+   [VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY] = MESA_PRIM_LINE_STRIP_ADJACENCY,
+   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY] = MESA_PRIM_TRIANGLES_ADJACENCY,
+   [VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY] = MESA_PRIM_TRIANGLE_STRIP_ADJACENCY,
 };
 
 static const enum pipe_logicop vk_to_pipe_logicop[] = {
@@ -1100,11 +1092,11 @@ pipeline_populate_v3d_fs_key(struct v3d_fs_key *key,
 
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
       pCreateInfo->pInputAssemblyState;
-   uint8_t topology = vk_to_pipe_prim_type[ia_info->topology];
+   uint8_t topology = vk_to_mesa_prim[ia_info->topology];
 
-   key->is_points = (topology == PIPE_PRIM_POINTS);
-   key->is_lines = (topology >= PIPE_PRIM_LINES &&
-                    topology <= PIPE_PRIM_LINE_STRIP);
+   key->is_points = (topology == MESA_PRIM_POINTS);
+   key->is_lines = (topology >= MESA_PRIM_LINES &&
+                    topology <= MESA_PRIM_LINE_STRIP);
    key->has_gs = has_geometry_shader;
 
    const VkPipelineColorBlendStateCreateInfo *cb_info =
@@ -1271,11 +1263,11 @@ pipeline_populate_v3d_vs_key(struct v3d_vs_key *key,
     */
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
       pCreateInfo->pInputAssemblyState;
-   uint8_t topology = vk_to_pipe_prim_type[ia_info->topology];
+   uint8_t topology = vk_to_mesa_prim[ia_info->topology];
 
    /* FIXME: PRIM_POINTS is not enough, in gallium the full check is
-    * PIPE_PRIM_POINTS && v3d->rasterizer->base.point_size_per_vertex */
-   key->per_vertex_point_size = (topology == PIPE_PRIM_POINTS);
+    * MESA_PRIM_POINTS && v3d->rasterizer->base.point_size_per_vertex */
+   key->per_vertex_point_size = (topology == MESA_PRIM_POINTS);
 
    key->is_coord = broadcom_shader_stage_is_binning(p_stage->stage);
 
@@ -1340,8 +1332,10 @@ pipeline_populate_v3d_vs_key(struct v3d_vs_key *key,
       const VkVertexInputAttributeDescription *desc =
          &vi_info->pVertexAttributeDescriptions[i];
       assert(desc->location < MAX_VERTEX_ATTRIBS);
-      if (desc->format == VK_FORMAT_B8G8R8A8_UNORM)
+      if (desc->format == VK_FORMAT_B8G8R8A8_UNORM ||
+          desc->format == VK_FORMAT_A2R10G10B10_UNORM_PACK32) {
          key->va_swap_rb_mask |= 1 << (VERT_ATTRIB_GENERIC0 + desc->location);
+      }
    }
 }
 
@@ -1790,7 +1784,7 @@ pipeline_stage_get_nir(struct v3dv_pipeline_stage *p_stage,
    if (nir) {
       assert(nir->info.stage == broadcom_shader_stage_to_gl(p_stage->stage));
 
-      /* A NIR cach hit doesn't avoid the large majority of pipeline stage
+      /* A NIR cache hit doesn't avoid the large majority of pipeline stage
        * creation so the cache hit is not recorded in the pipeline feedback
        * flags
        */
@@ -1933,7 +1927,7 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
 
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
       pCreateInfo->pInputAssemblyState;
-   key->topology = vk_to_pipe_prim_type[ia_info->topology];
+   key->topology = vk_to_mesa_prim[ia_info->topology];
 
    const VkPipelineColorBlendStateCreateInfo *cb_info =
       raster_enabled ? pCreateInfo->pColorBlendState : NULL;
@@ -1998,8 +1992,10 @@ pipeline_populate_graphics_key(struct v3dv_pipeline *pipeline,
       const VkVertexInputAttributeDescription *desc =
          &vi_info->pVertexAttributeDescriptions[i];
       assert(desc->location < MAX_VERTEX_ATTRIBS);
-      if (desc->format == VK_FORMAT_B8G8R8A8_UNORM)
+      if (desc->format == VK_FORMAT_B8G8R8A8_UNORM ||
+          desc->format == VK_FORMAT_A2R10G10B10_UNORM_PACK32) {
          key->va_swap_rb_mask |= 1 << (VERT_ATTRIB_GENERIC0 + desc->location);
+      }
    }
 
    assert(pipeline->subpass);
@@ -2130,19 +2126,19 @@ write_creation_feedback(struct v3dv_pipeline *pipeline,
    }
 }
 
-static enum shader_prim
+static enum mesa_prim
 multiview_gs_input_primitive_from_pipeline(struct v3dv_pipeline *pipeline)
 {
    switch (pipeline->topology) {
-   case PIPE_PRIM_POINTS:
-      return SHADER_PRIM_POINTS;
-   case PIPE_PRIM_LINES:
-   case PIPE_PRIM_LINE_STRIP:
-      return SHADER_PRIM_LINES;
-   case PIPE_PRIM_TRIANGLES:
-   case PIPE_PRIM_TRIANGLE_STRIP:
-   case PIPE_PRIM_TRIANGLE_FAN:
-      return SHADER_PRIM_TRIANGLES;
+   case MESA_PRIM_POINTS:
+      return MESA_PRIM_POINTS;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+      return MESA_PRIM_LINES;
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+      return MESA_PRIM_TRIANGLES;
    default:
       /* Since we don't allow GS with multiview, we can only see non-adjacency
        * primitives.
@@ -2151,19 +2147,19 @@ multiview_gs_input_primitive_from_pipeline(struct v3dv_pipeline *pipeline)
    }
 }
 
-static enum shader_prim
+static enum mesa_prim
 multiview_gs_output_primitive_from_pipeline(struct v3dv_pipeline *pipeline)
 {
    switch (pipeline->topology) {
-   case PIPE_PRIM_POINTS:
-      return SHADER_PRIM_POINTS;
-   case PIPE_PRIM_LINES:
-   case PIPE_PRIM_LINE_STRIP:
-      return SHADER_PRIM_LINE_STRIP;
-   case PIPE_PRIM_TRIANGLES:
-   case PIPE_PRIM_TRIANGLE_STRIP:
-   case PIPE_PRIM_TRIANGLE_FAN:
-      return SHADER_PRIM_TRIANGLE_STRIP;
+   case MESA_PRIM_POINTS:
+      return MESA_PRIM_POINTS;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+      return MESA_PRIM_LINE_STRIP;
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+      return MESA_PRIM_TRIANGLE_STRIP;
    default:
       /* Since we don't allow GS with multiview, we can only see non-adjacency
        * primitives.
@@ -2909,7 +2905,7 @@ pipeline_init(struct v3dv_pipeline *pipeline,
 
    const VkPipelineInputAssemblyStateCreateInfo *ia_info =
       pCreateInfo->pInputAssemblyState;
-   pipeline->topology = vk_to_pipe_prim_type[ia_info->topology];
+   pipeline->topology = vk_to_mesa_prim[ia_info->topology];
 
    /* If rasterization is not enabled, various CreateInfo structs must be
     * ignored.

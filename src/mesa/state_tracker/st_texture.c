@@ -349,7 +349,7 @@ print_center_pixel(struct pipe_context *pipe, struct pipe_resource *src)
 {
    struct pipe_transfer *xfer;
    struct pipe_box region;
-   ubyte *map;
+   uint8_t *map;
 
    region.x = src->width0 / 2;
    region.y = src->height0 / 2;

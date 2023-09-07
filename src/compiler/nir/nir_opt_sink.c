@@ -203,14 +203,11 @@ nir_opt_sink(nir_shader *shader, nir_move_options options)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_metadata_require(function->impl,
+   nir_foreach_function_impl(impl, shader) {
+      nir_metadata_require(impl,
                            nir_metadata_block_index | nir_metadata_dominance);
 
-      nir_foreach_block_reverse(block, function->impl) {
+      nir_foreach_block_reverse(block, impl) {
          nir_foreach_instr_reverse_safe(instr, block) {
             if (!nir_can_move_instr(instr, options))
                continue;
@@ -233,7 +230,7 @@ nir_opt_sink(nir_shader *shader, nir_move_options options)
          }
       }
 
-      nir_metadata_preserve(function->impl,
+      nir_metadata_preserve(impl,
                             nir_metadata_block_index | nir_metadata_dominance);
    }
 

@@ -58,8 +58,8 @@ reset_obj(struct zink_screen *screen, struct zink_batch_state *bs, struct zink_r
          /* prune all existing views */
          obj->view_prune_count = util_dynarray_num_elements(&obj->views, VkBufferView);
          /* prune them when the views will definitely not be in use */
-         obj->view_prune_timeline = MAX2(obj->bo->reads ? obj->bo->reads->usage : 0,
-                                         obj->bo->writes ? obj->bo->writes->usage : 0);
+         obj->view_prune_timeline = MAX2(obj->bo->reads.u ? obj->bo->reads.u->usage : 0,
+                                         obj->bo->writes.u ? obj->bo->writes.u->usage : 0);
       }
       simple_mtx_unlock(&obj->view_lock);
    }
@@ -111,11 +111,18 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
    /* queries must only be destroyed once they are inactive */
    set_foreach_remove(&bs->active_queries, entry) {
       struct zink_query *query = (void*)entry->key;
-      zink_prune_query(screen, bs, query);
+      zink_prune_query(bs, query);
    }
    util_dynarray_foreach(&bs->dead_querypools, VkQueryPool, pool)
       VKSCR(DestroyQueryPool)(screen->dev, *pool, NULL);
    util_dynarray_clear(&bs->dead_querypools);
+
+   util_dynarray_foreach(&bs->dgc.pipelines, VkPipeline, pipeline)
+      VKSCR(DestroyPipeline)(screen->dev, *pipeline, NULL);
+   util_dynarray_clear(&bs->dgc.pipelines);
+   util_dynarray_foreach(&bs->dgc.layouts, VkIndirectCommandsLayoutNV, iclayout)
+      VKSCR(DestroyIndirectCommandsLayoutNV)(screen->dev, *iclayout, NULL);
+   util_dynarray_clear(&bs->dgc.layouts);
 
    /* framebuffers are appended to the batch state in which they are destroyed
     * to ensure deferred deletion without destroying in-use objects
@@ -162,7 +169,7 @@ zink_reset_batch_state(struct zink_context *ctx, struct zink_batch_state *bs)
 
    /* only increment batch generation if previously in-use to avoid false detection of batch completion */
    if (bs->fence.submitted)
-      bs->submit_count++;
+      bs->usage.submit_count++;
    /* only reset submitted here so that tc fence desync can pick up the 'completed' flag
     * before the state is reused
     */
@@ -274,6 +281,8 @@ zink_batch_state_destroy(struct zink_screen *screen, struct zink_batch_state *bs
    free(bs->slab_objs.objs);
    free(bs->sparse_objs.objs);
    util_dynarray_fini(&bs->dead_querypools);
+   util_dynarray_fini(&bs->dgc.pipelines);
+   util_dynarray_fini(&bs->dgc.layouts);
    util_dynarray_fini(&bs->swapchain_obj);
    util_dynarray_fini(&bs->zombie_samplers);
    util_dynarray_fini(&bs->dead_framebuffers);
@@ -335,6 +344,8 @@ create_batch_state(struct zink_context *ctx)
    SET_CREATE_OR_FAIL(&bs->active_queries);
    util_dynarray_init(&bs->wait_semaphores, NULL);
    util_dynarray_init(&bs->dead_querypools, NULL);
+   util_dynarray_init(&bs->dgc.pipelines, NULL);
+   util_dynarray_init(&bs->dgc.layouts, NULL);
    util_dynarray_init(&bs->wait_semaphore_stages, NULL);
    util_dynarray_init(&bs->zombie_samplers, NULL);
    util_dynarray_init(&bs->dead_framebuffers, NULL);
@@ -452,6 +463,7 @@ zink_batch_bind_db(struct zink_context *ctx)
 void
 zink_start_batch(struct zink_context *ctx, struct zink_batch *batch)
 {
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
    zink_reset_batch(ctx, batch);
 
    batch->state->usage.unflushed = true;
@@ -475,7 +487,6 @@ zink_start_batch(struct zink_context *ctx, struct zink_batch *batch)
    }
 
 #ifdef HAVE_RENDERDOC_APP_H
-   struct zink_screen *screen = zink_screen(ctx->base.screen);
    if (VKCTX(CmdInsertDebugUtilsLabelEXT) && screen->renderdoc_api) {
       VkDebugUtilsLabelEXT capture_label;
       /* Magic fallback which lets us bridge the Wine barrier over to Linux RenderDoc. */
@@ -498,6 +509,9 @@ zink_start_batch(struct zink_context *ctx, struct zink_batch *batch)
    /* descriptor buffers must always be bound at the start of a batch */
    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB && !(ctx->flags & ZINK_CONTEXT_COPY_ONLY))
       zink_batch_bind_db(ctx);
+   /* zero init for unordered blits */
+   if (screen->info.have_EXT_attachment_feedback_loop_dynamic_state)
+      VKCTX(CmdSetAttachmentFeedbackLoopEnableEXT)(ctx->batch.state->barrier_cmdbuf, 0);
 }
 
 /* common operations to run post submit; split out for clarity */
@@ -516,7 +530,7 @@ post_submit(void *data, void *gdata, int thread_index)
       screen->device_lost = true;
    } else if (bs->ctx->batch_states_count > 5000) {
       /* throttle in case something crazy is happening */
-      zink_screen_timeline_wait(screen, bs->fence.batch_id - 2500, PIPE_TIMEOUT_INFINITE);
+      zink_screen_timeline_wait(screen, bs->fence.batch_id - 2500, OS_TIMEOUT_INFINITE);
    }
    /* this resets the buffer hashlist for the state's next use */
    memset(&bs->buffer_indices_hashlist, -1, sizeof(bs->buffer_indices_hashlist));
@@ -610,7 +624,7 @@ submit_queue(void *data, void *gdata, int thread_index)
       bs->is_device_lost = true;
    }
    simple_mtx_unlock(&screen->queue_lock);
-   bs->submit_count++;
+   bs->usage.submit_count++;
 end:
    cnd_broadcast(&bs->usage.flush);
 

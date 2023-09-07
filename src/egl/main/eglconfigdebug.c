@@ -23,18 +23,18 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-#include <stdarg.h>
 
+#include "util/macros.h"
 #include "eglarray.h"
 #include "eglconfig.h"
 #include "eglconfigdebug.h"
 #include "egldisplay.h"
 #include "egllog.h"
 #include "egltypedefs.h"
-#include "util/macros.h"
 
 /* Max debug message length */
 #define CONFIG_DEBUG_MSG_MAX 1000
@@ -43,7 +43,7 @@
  * These are X visual types, so if you're running eglinfo under
  * something not X, they probably don't make sense.
  */
-static const char *const vnames[] = { "SG", "GS", "SC", "PC", "TC", "DC" };
+static const char *const vnames[] = {"SG", "GS", "SC", "PC", "TC", "DC"};
 
 static void
 _printHeaderFormat(void)
@@ -78,11 +78,13 @@ _printHeaderFormat(void)
     * supported
     * surfaces ------------- EGL_SURFACE_TYPE
     */
+   /* clang-format off */
    _eglLog(_EGL_DEBUG, "---------------");
    _eglLog(_EGL_DEBUG, "Configurations:");
    _eglLog(_EGL_DEBUG, "cho       bf lv colourbuffer dp st  ms           vis  cav  bi     renderable           supported");
    _eglLog(_EGL_DEBUG, "sen    id sz  l  r  g  b  a  th cl ns b           id  eat  nd  gl es es2 es3 vg         surfaces");
    _eglLog(_EGL_DEBUG, "---------------");
+   /* clang-format on */
 }
 
 /* Append a formatted string to the buffer, up to the buffer size */
@@ -97,7 +99,7 @@ _strnAppend(char *const buf, const int bufSize, const char *fmt, ...)
    assert(maxAllowed >= 0);
 
    va_start(args, fmt);
-   (void) vsnprintf(&buf[bufLen], maxAllowed, fmt, args);
+   (void)vsnprintf(&buf[bufLen], maxAllowed, fmt, args);
    va_end(args);
 }
 
@@ -134,10 +136,10 @@ _eglPrintConfig(_EGLConfig *const conf, const int chosenIndex)
 
    _strnAppend(printMsg, sizeof(printMsg),
                "0x%03x %2d %2d %2d %2d %2d %2d  %2d %2d %2d%2d 0x%08x%2s     ",
-               conf->ConfigID, conf->BufferSize, conf->Level,
-               conf->RedSize, conf->GreenSize, conf->BlueSize, conf->AlphaSize,
-               conf->DepthSize, conf->StencilSize,
-               conf->Samples, conf->SampleBuffers, conf->NativeVisualID,
+               conf->ConfigID, conf->BufferSize, conf->Level, conf->RedSize,
+               conf->GreenSize, conf->BlueSize, conf->AlphaSize,
+               conf->DepthSize, conf->StencilSize, conf->Samples,
+               conf->SampleBuffers, conf->NativeVisualID,
                vtype < 6 ? vnames[vtype] : "--");
 
    bindRgb = conf->BindToTextureRGB;
@@ -147,20 +149,22 @@ _eglPrintConfig(_EGLConfig *const conf, const int chosenIndex)
    _strnAppend(printMsg, sizeof(printMsg),
                "%c  %c   %c  %c   %c   %c   %c %15s",
                (conf->ConfigCaveat != EGL_NONE) ? 'y' : ' ',
-               (bindRgba) ? 'a' : (bindRgb) ? 'y' : ' ',
+               (bindRgba)  ? 'a'
+               : (bindRgb) ? 'y'
+                           : ' ',
                (renderable & EGL_OPENGL_BIT) ? 'y' : ' ',
                (renderable & EGL_OPENGL_ES_BIT) ? 'y' : ' ',
                (renderable & EGL_OPENGL_ES2_BIT) ? 'y' : ' ',
                (renderable & EGL_OPENGL_ES3_BIT) ? 'y' : ' ',
-               (renderable & EGL_OPENVG_BIT) ? 'y' : ' ',
-               surfString);
+               (renderable & EGL_OPENVG_BIT) ? 'y' : ' ', surfString);
 
    _eglLog(_EGL_DEBUG, printMsg);
 }
 
-void eglPrintConfigDebug(const _EGLDisplay *const disp,
-                         const EGLConfig *const configs,
-                         const EGLint numConfigs, const EGLBoolean printChosen)
+void
+eglPrintConfigDebug(const _EGLDisplay *const disp,
+                    const EGLConfig *const configs, const EGLint numConfigs,
+                    const EGLBoolean printChosen)
 {
    EGLint numConfigsToPrint;
    _EGLConfig **configsToPrint;
@@ -176,11 +180,11 @@ void eglPrintConfigDebug(const _EGLDisplay *const disp,
     * configs are printed, and the "chosen" configs are marked.
     */
    if (printChosen) {
-      configsToPrint = (_EGLConfig **) disp->Configs->Elements;
+      configsToPrint = (_EGLConfig **)disp->Configs->Elements;
       numConfigsToPrint = disp->Configs->Size;
-      chosenConfigs = (_EGLConfig **) configs;
+      chosenConfigs = (_EGLConfig **)configs;
    } else {
-      configsToPrint = (_EGLConfig **) configs;
+      configsToPrint = (_EGLConfig **)configs;
       numConfigsToPrint = numConfigs;
       chosenConfigs = NULL;
    }

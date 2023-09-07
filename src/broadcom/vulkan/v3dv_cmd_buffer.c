@@ -1434,7 +1434,7 @@ cmd_buffer_emit_subpass_clears(struct v3dv_cmd_buffer *cmd_buffer)
                  "VK_ATTACHMENT_LOAD_OP_CLEAR.\n");
    } else if (subpass->do_depth_clear_with_draw ||
               subpass->do_stencil_clear_with_draw) {
-      perf_debug("Subpass clears DEPTH but loads STENCIL (or viceversa), "
+      perf_debug("Subpass clears DEPTH but loads STENCIL (or vice versa), "
                  "falling back to vkCmdClearAttachments for "
                  "VK_ATTACHMENT_LOAD_OP_CLEAR.\n");
    }
@@ -2161,7 +2161,7 @@ v3dv_viewport_compute_xform(const VkViewport *viewport,
     */
    const float min_abs_scale = 0.000009f;
    if (fabs(scale[2]) < min_abs_scale)
-      scale[2] = min_abs_scale * (scale[2] < 0 ? -1.0f : 1.0f);
+      scale[2] = scale[2] < 0 ? -min_abs_scale : min_abs_scale;
 }
 
 /* Considers the pipeline's negative_one_to_one state and applies it to the
@@ -2264,11 +2264,14 @@ emit_scissor(struct v3dv_cmd_buffer *cmd_buffer)
     */
    float *vptranslate = dynamic->viewport.translate[0];
    float *vpscale = dynamic->viewport.scale[0];
+   assert(vpscale[0] >= 0);
 
-   float vp_minx = -fabsf(vpscale[0]) + vptranslate[0];
-   float vp_maxx = fabsf(vpscale[0]) + vptranslate[0];
-   float vp_miny = -fabsf(vpscale[1]) + vptranslate[1];
-   float vp_maxy = fabsf(vpscale[1]) + vptranslate[1];
+   float vp_minx = vptranslate[0] - vpscale[0];
+   float vp_maxx = vptranslate[0] + vpscale[0];
+
+   /* With KHR_maintenance1 viewport may have negative Y */
+   float vp_miny = vptranslate[1] - fabsf(vpscale[1]);
+   float vp_maxy = vptranslate[1] + fabsf(vpscale[1]);
 
    /* Quoting from v3dx_emit:
     * "Clip to the scissor if it's enabled, but still clip to the
@@ -2296,11 +2299,6 @@ emit_scissor(struct v3dv_cmd_buffer *cmd_buffer)
                         cmd_buffer->state.render_area.extent.width);
    maxy = MIN2(vp_maxy, cmd_buffer->state.render_area.offset.y +
                         cmd_buffer->state.render_area.extent.height);
-
-   minx = vp_minx;
-   miny = vp_miny;
-   maxx = vp_maxx;
-   maxy = vp_maxy;
 
    /* Clip against user provided scissor if needed.
     *
@@ -3309,24 +3307,6 @@ v3dv_CmdBindVertexBuffers(VkCommandBuffer commandBuffer,
       cmd_buffer->state.dirty |= V3DV_CMD_DIRTY_VERTEX_BUFFER;
 }
 
-static uint32_t
-get_index_size(VkIndexType index_type)
-{
-   switch (index_type) {
-   case VK_INDEX_TYPE_UINT8_EXT:
-      return 1;
-      break;
-   case VK_INDEX_TYPE_UINT16:
-      return 2;
-      break;
-   case VK_INDEX_TYPE_UINT32:
-      return 4;
-      break;
-   default:
-      unreachable("Unsupported index type");
-   }
-}
-
 VKAPI_ATTR void VKAPI_CALL
 v3dv_CmdBindIndexBuffer(VkCommandBuffer commandBuffer,
                         VkBuffer buffer,
@@ -3335,7 +3315,7 @@ v3dv_CmdBindIndexBuffer(VkCommandBuffer commandBuffer,
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   const uint32_t index_size = get_index_size(indexType);
+   const uint32_t index_size = vk_index_type_to_bytes(indexType);
    if (buffer == cmd_buffer->state.index_buffer.buffer &&
        offset == cmd_buffer->state.index_buffer.offset &&
        index_size == cmd_buffer->state.index_buffer.index_size) {
@@ -3873,7 +3853,7 @@ v3dv_cmd_buffer_rewrite_indirect_csd_job(
       /* Make sure the GPU is not currently accessing the indirect CL for this
        * job, since we are about to overwrite some of the uniform data.
        */
-      v3dv_bo_wait(job->device, job->indirect.bo, PIPE_TIMEOUT_INFINITE);
+      v3dv_bo_wait(job->device, job->indirect.bo, OS_TIMEOUT_INFINITE);
 
       for (uint32_t i = 0; i < 3; i++) {
          if (info->wg_uniform_offsets[i]) {

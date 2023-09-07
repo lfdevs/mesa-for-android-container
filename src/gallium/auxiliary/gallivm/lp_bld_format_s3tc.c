@@ -192,7 +192,7 @@ lp_build_shuffle1undef(struct gallivm_state *gallivm,
    return LLVMBuildShuffleVector(gallivm->builder, a, a, shuf, "");
 }
 
-static boolean
+static bool
 format_dxt1_variant(enum pipe_format format)
 {
   return format == PIPE_FORMAT_DXT1_RGB ||
@@ -245,8 +245,8 @@ lp_build_gather_s3tc(struct gallivm_state *gallivm,
 
    for (i = 0; i < length; ++i) {
       elems[i] = lp_build_gather_elem(gallivm, length,
-                                      block_bits, block_bits, TRUE,
-                                      base_ptr, offsets, i, FALSE);
+                                      block_bits, block_bits, true,
+                                      base_ptr, offsets, i, false);
       elems[i] = LLVMBuildBitCast(builder, elems[i], type32dxt, "");
    }
    if (length == 1) {
@@ -523,7 +523,7 @@ lp_build_lerp23(struct lp_build_context *bld,
    assert(!type.floating && !type.fixed && !type.norm && type.width == 8);
 
    lp_build_context_init(&bld2, gallivm, i16_type);
-   bld2.type.sign = TRUE;
+   bld2.type.sign = true;
    x = lp_build_const_int_vec(gallivm, bld->type, 255*1/3);
 
    /* FIXME: use native avx256 unpack/pack */
@@ -573,7 +573,7 @@ s3tc_dxt1_full_to_rgba_aos(struct gallivm_state *gallivm,
    LLVMValueRef bit_pos, sel_mask, sel_lo, sel_hi, indices;
    struct lp_type type, type8;
    struct lp_build_context bld8, bld32;
-   boolean is_dxt1_variant = format_dxt1_variant(format);
+   bool is_dxt1_variant = format_dxt1_variant(format);
 
    memset(&type, 0, sizeof type);
    type.width = 32;
@@ -653,7 +653,7 @@ s3tc_dxt1_full_to_rgba_aos(struct gallivm_state *gallivm,
          LLVMValueRef v0_lo, v0_hi, v1_lo, v1_hi, addlo, addhi;
 
          lp_build_context_init(&bld2, gallivm, i16_type);
-         bld2.type.sign = TRUE;
+         bld2.type.sign = true;
 
          /*
           * This isn't as expensive as it looks (the unpack is the same as
@@ -678,11 +678,11 @@ s3tc_dxt1_full_to_rgba_aos(struct gallivm_state *gallivm,
 
       /* select between colors2/3 */
       /* signed compare is faster saves some xors */
-      type.sign = TRUE;
+      type.sign = true;
       sel_mask = lp_build_compare(gallivm, type, PIPE_FUNC_GREATER, col0, col1);
       color2 = lp_build_select(&bld32, sel_mask, color2, color2_2);
       color3 = lp_build_select(&bld32, sel_mask, color3, color3_2);
-      type.sign = FALSE;
+      type.sign = false;
 
       if (format == PIPE_FORMAT_DXT1_RGBA ||
           format == PIPE_FORMAT_DXT1_SRGBA) {
@@ -853,7 +853,7 @@ lp_build_lerpdxta(struct gallivm_state *gallivm,
    memset(&type16, 0, sizeof type16);
    type16.width = 16;
    type16.length = 2*n;
-   type16.sign = TRUE;
+   type16.sign = true;
    memset(&type8, 0, sizeof type8);
    type8.width = 8;
    type8.length = 4*n;
@@ -991,7 +991,7 @@ s3tc_dxt5_alpha_channel(struct gallivm_state *gallivm,
    }
 
    /* signed compare is faster saves some xors */
-   type.sign = TRUE;
+   type.sign = true;
    /* alpha0 > alpha1 selection */
    sel_mask = lp_build_compare(gallivm, type, PIPE_FUNC_GREATER,
                                alpha0, alpha1);
@@ -1226,7 +1226,7 @@ lp_build_lerp23_single(struct lp_build_context *bld,
    assert(!type.floating && !type.fixed && !type.norm && type.width == 8);
 
    lp_build_context_init(&bld2, gallivm, i16_type);
-   bld2.type.sign = TRUE;
+   bld2.type.sign = true;
 
    /* weights 256/3, 256*2/3, with correct rounding */
    elems[0] = elems[1] = elems[2] = elems[3] =
@@ -1269,12 +1269,12 @@ s3tc_decode_block_dxt1(struct gallivm_state *gallivm,
    struct lp_type type8, type32, type16, type64;
    struct lp_build_context bld8, bld32, bld16, bld64;
    unsigned i;
-   boolean is_dxt1_variant = format_dxt1_variant(format);
+   bool is_dxt1_variant = format_dxt1_variant(format);
 
    memset(&type32, 0, sizeof type32);
    type32.width = 32;
    type32.length = 4;
-   type32.sign = TRUE;
+   type32.sign = true;
 
    memset(&type8, 0, sizeof type8);
    type8.width = 8;
@@ -1567,7 +1567,7 @@ lp_build_lerpdxta_block(struct gallivm_state *gallivm,
    memset(&type16, 0, sizeof type16);
    type16.width = 16;
    type16.length = 8;
-   type16.sign = TRUE;
+   type16.sign = true;
 
    lp_build_context_init(&bld, gallivm, type16);
    /*
@@ -1686,10 +1686,10 @@ s3tc_decode_block_dxt5(struct gallivm_state *gallivm,
    alpha0 = LLVMBuildShuffleVector(builder, alpha0, alpha0, shuffle1, "");
    alpha1 = LLVMBuildShuffleVector(builder, alpha1, alpha1, shuffle1, "");
 
-   type16.sign = TRUE;
+   type16.sign = true;
    sel_mask = lp_build_compare(gallivm, type16, PIPE_FUNC_GREATER,
                                alpha0, alpha1);
-   type16.sign = FALSE;
+   type16.sign = false;
    sel_mask = LLVMBuildBitCast(builder, sel_mask, bld8.vec_type, "");
 
    if (!util_get_cpu_caps()->has_ssse3) {
@@ -1718,9 +1718,9 @@ s3tc_decode_block_dxt5(struct gallivm_state *gallivm,
       tmp1 =  LLVMBuildLShr(builder, acode,
                             lp_build_const_int_vec(gallivm, type32, 6), "");
       /* use signed pack doesn't matter and otherwise need sse41 */
-      type32.sign = type16.sign = TRUE;
+      type32.sign = type16.sign = true;
       acode = lp_build_pack2(gallivm, type32, type16, tmp0, tmp1);
-      type32.sign = type16.sign = FALSE;
+      type32.sign = type16.sign = false;
       /* now have 8x6bit in 8x16bit, 01, 45, 89, ..., 23, 67, ... */
       acode0 = LLVMBuildAnd(builder, acode,
                             lp_build_const_int_vec(gallivm, type16, 0x7), "");
@@ -2344,8 +2344,8 @@ lp_build_gather_rgtc(struct gallivm_state *gallivm,
 
    for (i = 0; i < length; ++i) {
       elems[i] = lp_build_gather_elem(gallivm, length,
-                                      block_bits, block_bits, TRUE,
-                                      base_ptr, offsets, i, FALSE);
+                                      block_bits, block_bits, true,
+                                      base_ptr, offsets, i, false);
       elems[i] = LLVMBuildBitCast(builder, elems[i], type32dxt, "");
    }
    if (length == 1) {

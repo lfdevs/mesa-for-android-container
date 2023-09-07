@@ -31,10 +31,10 @@
 
 
 #include "util/list.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_state.h"
-#include "tgsi/tgsi_scan.h" /* for tgsi_shader_info */
 #include "gallivm/lp_bld_sample.h" /* for struct lp_sampler_static_state */
+#include "gallivm/lp_bld_jit_sample.h"
 #include "gallivm/lp_bld_tgsi.h" /* for lp_tgsi_info */
 #include "lp_bld_interp.h" /* for struct lp_shader_input */
 #include "util/u_inlines.h"
@@ -58,23 +58,6 @@ enum lp_fs_kind
    LP_FS_KIND_LLVM_LINEAR
 };
 
-
-struct lp_sampler_static_state
-{
-   /*
-    * These attributes are effectively interleaved for more sane key handling.
-    * However, there might be lots of null space if the amount of samplers and
-    * textures isn't the same.
-    */
-   struct lp_static_sampler_state sampler_state;
-   struct lp_static_texture_state texture_state;
-};
-
-
-struct lp_image_static_state
-{
-   struct lp_static_texture_state image_state;
-};
 
 struct lp_depth_state
 {
@@ -176,6 +159,8 @@ struct lp_fragment_shader_variant
    LLVMTypeRef jit_context_type;
    LLVMTypeRef jit_context_ptr_type;
    LLVMTypeRef jit_thread_data_type;
+   LLVMTypeRef jit_resources_type;
+   LLVMTypeRef jit_resources_ptr_type;
    LLVMTypeRef jit_thread_data_ptr_type;
    LLVMTypeRef jit_linear_context_type;
    LLVMTypeRef jit_linear_context_ptr_type;

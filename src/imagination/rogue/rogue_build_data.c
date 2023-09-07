@@ -187,27 +187,6 @@ static void collect_io_data_fs(struct rogue_common_build_data *common_data,
 }
 
 /**
- * \brief Allocates the vertex shader input registers.
- *
- * \param[in] inputs The vertex shader input data.
- * \return The total number of vertex input registers required.
- */
-static unsigned alloc_vs_inputs(struct rogue_vertex_inputs *inputs)
-{
-   unsigned vs_inputs = 0;
-
-   for (unsigned u = 0; u < inputs->num_input_vars; ++u) {
-      /* Ensure there aren't any gaps. */
-      assert(inputs->base[u] == ~0);
-
-      inputs->base[u] = vs_inputs;
-      vs_inputs += inputs->components[u];
-   }
-
-   return vs_inputs;
-}
-
-/**
  * \brief Allocates the vertex shader outputs.
  *
  * \param[in] outputs The vertex shader output data.
@@ -301,28 +280,6 @@ static void collect_io_data_vs(struct rogue_common_build_data *common_data,
    ASSERTED bool out_pos_present = false;
    ASSERTED unsigned num_outputs =
       nir_count_variables_with_modes(nir, nir_var_shader_out);
-
-   /* Process inputs. */
-   nir_foreach_shader_in_variable (var, nir) {
-      unsigned components = glsl_get_components(var->type);
-      unsigned i = var->data.location - VERT_ATTRIB_GENERIC0;
-
-      /* Check that inputs are F32. */
-      /* TODO: Support other types. */
-      assert(glsl_get_base_type(var->type) == GLSL_TYPE_FLOAT);
-      assert(glsl_type_is_32bit(var->type));
-
-      /* Check input location. */
-      assert(var->data.location >= VERT_ATTRIB_GENERIC0 &&
-             var->data.location <= VERT_ATTRIB_GENERIC15);
-
-      reserve_vs_input(&vs_data->inputs, i, components);
-   }
-
-   vs_data->num_vertex_input_regs = alloc_vs_inputs(&vs_data->inputs);
-   assert(vs_data->num_vertex_input_regs);
-   assert(vs_data->num_vertex_input_regs <
-          rogue_reg_infos[ROGUE_REG_CLASS_VTXIN].num);
 
    /* Process outputs. */
 

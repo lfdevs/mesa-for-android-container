@@ -86,7 +86,7 @@ build_binary_int_overflow(struct gallivm_state *gallivm,
    oelems[0] = type_ref;
    oelems[1] = LLVMInt1TypeInContext(gallivm->context);
 
-   otype = LLVMStructTypeInContext(gallivm->context, oelems, 2, FALSE);
+   otype = LLVMStructTypeInContext(gallivm->context, oelems, 2, false);
    oresult = lp_build_intrinsic_binary(builder, intr_str,
                                        otype, a, b);
    if (ofbit) {

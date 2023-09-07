@@ -28,8 +28,7 @@
 #include "radv_private.h"
 
 static void
-radv_destroy_event(struct radv_device *device, const VkAllocationCallbacks *pAllocator,
-                   struct radv_event *event)
+radv_destroy_event(struct radv_device *device, const VkAllocationCallbacks *pAllocator, struct radv_event *event)
 {
    if (event->bo)
       device->ws->buffer_destroy(device->ws, event->bo);
@@ -47,8 +46,7 @@ radv_create_event(struct radv_device *device, const VkEventCreateInfo *pCreateIn
    struct radv_event *event;
    VkResult result;
 
-   event = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*event), 8,
-                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   event = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*event), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!event)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -62,10 +60,9 @@ radv_create_event(struct radv_device *device, const VkEventCreateInfo *pCreateIn
       bo_flags = RADEON_FLAG_CPU_ACCESS;
    }
 
-   result = device->ws->buffer_create(
-      device->ws, 8, 8, bo_domain,
-      RADEON_FLAG_VA_UNCACHED | RADEON_FLAG_NO_INTERPROCESS_SHARING | bo_flags,
-      RADV_BO_PRIORITY_FENCE, 0, &event->bo);
+   result = device->ws->buffer_create(device->ws, 8, 8, bo_domain,
+                                      RADEON_FLAG_VA_UNCACHED | RADEON_FLAG_NO_INTERPROCESS_SHARING | bo_flags,
+                                      RADV_BO_PRIORITY_FENCE, 0, &event->bo);
    if (result != VK_SUCCESS) {
       radv_destroy_event(device, pAllocator, event);
       return vk_error(device, result);
@@ -85,8 +82,8 @@ radv_create_event(struct radv_device *device, const VkEventCreateInfo *pCreateIn
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-radv_CreateEvent(VkDevice _device, const VkEventCreateInfo *pCreateInfo,
-                 const VkAllocationCallbacks *pAllocator, VkEvent *pEvent)
+radv_CreateEvent(VkDevice _device, const VkEventCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
+                 VkEvent *pEvent)
 {
    RADV_FROM_HANDLE(radv_device, device, _device);
    VkResult result = radv_create_event(device, pCreateInfo, pAllocator, pEvent, false);

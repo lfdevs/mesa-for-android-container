@@ -237,6 +237,9 @@ fail:
 void
 dxil_destroy_validator(struct dxil_validator *val)
 {
+   if (!val)
+      return;
+
    /* if we have a validator, we have these */
    val->dxc_validator->Release();
    FreeLibrary(val->dxil_mod);
@@ -299,6 +302,9 @@ public:
 bool
 dxil_validate_module(struct dxil_validator *val, void *data, size_t size, char **error)
 {
+   if (!val)
+      return false;
+
    ShaderBlob source(data, size);
 
    ComPtr<IDxcOperationResult> result;
@@ -337,6 +343,9 @@ dxil_validate_module(struct dxil_validator *val, void *data, size_t size, char *
 char *
 dxil_disasm_module(struct dxil_validator *val, void *data, size_t size)
 {
+   if (!val)
+      return NULL;
+
    if (!val->dxc_compiler || !val->dxc_library) {
       fprintf(stderr, "DXIL: disassembly requires IDxcLibrary and "
               "IDxcCompiler from dxcompiler.dll\n");
@@ -364,5 +373,5 @@ dxil_disasm_module(struct dxil_validator *val, void *data, size_t size)
 enum dxil_validator_version
 dxil_get_validator_version(struct dxil_validator *val)
 {
-   return val->version;
+   return val ? val->version : NO_DXIL_VALIDATION;
 }

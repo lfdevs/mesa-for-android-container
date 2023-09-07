@@ -2,7 +2,6 @@ spec@!opengl 1.0@gl-1.0-beginend-coverage,Fail
 spec@!opengl 1.0@gl-1.0-beginend-coverage@glFlush,Fail
 spec@!opengl 1.0@gl-1.0-blend-func,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
-spec@!opengl 1.0@gl-1.0-spot-light,Fail
 spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
@@ -22,7 +21,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 4: Expected white pixel on top edge,
 spec@!opengl 1.1@polygon-offset,Fail
 spec@!opengl 1.1@vertex-fallbacks,Crash
 spec@!opengl 1.1@windowoverlap,Missing
-spec@!opengl 2.0@gl-2.0-two-sided-stencil,Fail
 spec@!opengl 3.0@sampler-cube-shadow,Fail
 spec@!opengl 3.1@default-vao,Fail
 spec@!opengl 3.1@genned-names,Fail
@@ -34,6 +32,7 @@ spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-last,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-last,Fail
 spec@arb_draw_indirect@arb_draw_indirect-api-errors,Crash
+spec@arb_clear_texture@arb_clear_texture-integer,Fail
 spec@arb_explicit_attrib_location@overlapping-locations-input-attribs api,Crash
 spec@arb_explicit_attrib_location@overlapping-locations-input-attribs shader,Crash
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail

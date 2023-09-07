@@ -350,7 +350,7 @@ struct vc4_vs_key {
         bool per_vertex_point_size;
 };
 
-/** A basic block of QIR intructions. */
+/** A basic block of QIR instructions. */
 struct qblock {
         struct list_head link;
 

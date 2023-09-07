@@ -23,49 +23,43 @@
 
 #pragma once
 
-#include <egldriver.h>
-#include <egldisplay.h>
 #include <eglconfig.h>
+#include <egldisplay.h>
+#include <egldriver.h>
 #include <eglimage.h>
 #include <eglsync.h>
 
-#include <stw_pixelformat.h>
 #include <windows.h>
+#include <stw_pixelformat.h>
 
-struct wgl_egl_display
-{
+struct wgl_egl_display {
    struct pipe_frontend_screen base;
    _EGLDisplay *parent;
    int ref_count;
    struct pipe_screen *screen;
 };
 
-struct wgl_egl_config
-{
-   _EGLConfig                         base;
+struct wgl_egl_config {
+   _EGLConfig base;
    const struct stw_pixelformat_info *stw_config[2];
 };
 
-struct wgl_egl_context
-{
+struct wgl_egl_context {
    _EGLContext base;
    struct stw_context *ctx;
 };
 
-struct wgl_egl_surface
-{
+struct wgl_egl_surface {
    _EGLSurface base;
    struct stw_framebuffer *fb;
 };
 
-struct wgl_egl_image
-{
+struct wgl_egl_image {
    _EGLImage base;
    struct stw_image *img;
 };
 
-struct wgl_egl_sync
-{
+struct wgl_egl_sync {
    _EGLSync base;
    int refcount;
    struct pipe_fence_handle *fence;

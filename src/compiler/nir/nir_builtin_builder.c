@@ -84,7 +84,7 @@ nir_nextafter(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
       }
 
       /* Flush denorm to zero to avoid returning a denorm when condeq is true. */
-      x = nir_fmul(b, x, nir_imm_floatN_t(b, 1.0, x->bit_size));
+      x = nir_fmul_imm(b, x, 1.0);
    }
 
    /* beware of: +/-0.0 - 1 == NaN */
@@ -285,8 +285,7 @@ nir_atan2(nir_builder *b, nir_ssa_def *y, nir_ssa_def *x)
     * 24-bit representation.
     */
    const double huge_val = bit_size >= 32 ? 1e18 : 16384;
-   nir_ssa_def *huge = nir_imm_floatN_t(b,  huge_val, bit_size);
-   nir_ssa_def *scale = nir_bcsel(b, nir_fge(b, nir_fabs(b, t), huge),
+   nir_ssa_def *scale = nir_bcsel(b, nir_fge_imm(b, nir_fabs(b, t), huge_val),
                                   nir_imm_floatN_t(b, 0.25, bit_size), one);
    nir_ssa_def *rcp_scaled_t = nir_frcp(b, nir_fmul(b, t, scale));
    nir_ssa_def *s_over_t = nir_fmul(b, nir_fmul(b, s, scale), rcp_scaled_t);
@@ -372,11 +371,10 @@ nir_get_texture_size(nir_builder *b, nir_tex_instr *tex)
       }
    }
    /* Add in an LOD because some back-ends require it */
-   txs->src[idx].src = nir_src_for_ssa(nir_imm_int(b, 0));
-   txs->src[idx].src_type = nir_tex_src_lod;
+   txs->src[idx] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));
 
-   nir_ssa_dest_init(&txs->instr, &txs->dest,
-                     nir_tex_instr_dest_size(txs), 32, NULL);
+   nir_ssa_dest_init(&txs->instr, &txs->dest, nir_tex_instr_dest_size(txs),
+                     32);
    nir_builder_instr_insert(b, &txs->instr);
 
    return &txs->dest.ssa;
@@ -427,7 +425,7 @@ nir_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
       }
    }
 
-   nir_ssa_dest_init(&tql->instr, &tql->dest, 2, 32, NULL);
+   nir_ssa_dest_init(&tql->instr, &tql->dest, 2, 32);
    nir_builder_instr_insert(b, &tql->instr);
 
    /* The LOD is the y component of the result */

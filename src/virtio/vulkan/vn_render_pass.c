@@ -210,6 +210,16 @@ vn_CreateRenderPass(VkDevice device,
       pCreateInfo = &local_pass_info;
    }
 
+   const struct VkRenderPassMultiviewCreateInfo *multiview_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           RENDER_PASS_MULTIVIEW_CREATE_INFO);
+
+   /* Store the viewMask of each subpass for query feedback */
+   if (multiview_info) {
+      for (uint32_t i = 0; i < multiview_info->subpassCount; i++)
+         pass->subpasses[i].view_mask = multiview_info->pViewMasks[i];
+   }
+
    VkRenderPass pass_handle = vn_render_pass_to_handle(pass);
    vn_async_vkCreateRenderPass(dev->instance, device, pCreateInfo, NULL,
                                &pass_handle);
@@ -261,6 +271,10 @@ vn_CreateRenderPass2(VkDevice device,
       local_pass_info.pAttachments = temp_atts;
       pCreateInfo = &local_pass_info;
    }
+
+   /* Store the viewMask of each subpass for query feedback */
+   for (uint32_t i = 0; i < pCreateInfo->subpassCount; i++)
+      pass->subpasses[i].view_mask = pCreateInfo->pSubpasses[i].viewMask;
 
    VkRenderPass pass_handle = vn_render_pass_to_handle(pass);
    vn_async_vkCreateRenderPass2(dev->instance, device, pCreateInfo, NULL,

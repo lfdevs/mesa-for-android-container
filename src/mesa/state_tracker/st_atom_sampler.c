@@ -269,6 +269,11 @@ update_shader_samplers(struct st_context *st,
             /* no additional views needed */
             break;
          FALLTHROUGH;
+      case PIPE_FORMAT_NV21:
+         if (stObj->pt->format == PIPE_FORMAT_G8_B8R8_420_UNORM)
+            /* no additional views needed */
+            break;
+         FALLTHROUGH;
       case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P012:
       case PIPE_FORMAT_P016:
@@ -277,8 +282,12 @@ update_shader_samplers(struct st_context *st,
       case PIPE_FORMAT_Y212:
       case PIPE_FORMAT_Y216:
       case PIPE_FORMAT_YUYV:
+      case PIPE_FORMAT_YVYU:
       case PIPE_FORMAT_UYVY:
+      case PIPE_FORMAT_VYUY:
          if (stObj->pt->format == PIPE_FORMAT_R8G8_R8B8_UNORM ||
+             stObj->pt->format == PIPE_FORMAT_R8B8_R8G8_UNORM ||
+             stObj->pt->format == PIPE_FORMAT_B8R8_G8R8_UNORM ||
              stObj->pt->format == PIPE_FORMAT_G8R8_B8R8_UNORM) {
             /* no additional views needed */
             break;

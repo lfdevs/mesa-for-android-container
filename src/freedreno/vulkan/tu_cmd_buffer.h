@@ -29,6 +29,7 @@ enum tu_draw_state_group_id
    TU_DRAW_STATE_DESC_SETS,
    TU_DRAW_STATE_DESC_SETS_LOAD,
    TU_DRAW_STATE_VS_PARAMS,
+   TU_DRAW_STATE_FS_PARAMS,
    TU_DRAW_STATE_INPUT_ATTACHMENTS_GMEM,
    TU_DRAW_STATE_INPUT_ATTACHMENTS_SYSMEM,
    TU_DRAW_STATE_LRZ_AND_DEPTH_PLANE,
@@ -54,21 +55,18 @@ struct tu_descriptor_state
 enum tu_cmd_dirty_bits
 {
    TU_CMD_DIRTY_VERTEX_BUFFERS = BIT(0),
-   TU_CMD_DIRTY_VB_STRIDE = BIT(1),
-   TU_CMD_DIRTY_RAST = BIT(2),
-   TU_CMD_DIRTY_RB_DEPTH_CNTL = BIT(3),
-   TU_CMD_DIRTY_RB_STENCIL_CNTL = BIT(4),
-   TU_CMD_DIRTY_DESC_SETS = BIT(5),
-   TU_CMD_DIRTY_COMPUTE_DESC_SETS = BIT(6),
-   TU_CMD_DIRTY_SHADER_CONSTS = BIT(7),
-   TU_CMD_DIRTY_LRZ = BIT(8),
-   TU_CMD_DIRTY_VS_PARAMS = BIT(9),
-   TU_CMD_DIRTY_PC_RASTER_CNTL = BIT(10),
-   TU_CMD_DIRTY_VIEWPORTS = BIT(11),
-   TU_CMD_DIRTY_BLEND = BIT(12),
-   TU_CMD_DIRTY_PATCH_CONTROL_POINTS = BIT(13),
+   TU_CMD_DIRTY_DESC_SETS = BIT(1),
+   TU_CMD_DIRTY_COMPUTE_DESC_SETS = BIT(2),
+   TU_CMD_DIRTY_SHADER_CONSTS = BIT(3),
+   TU_CMD_DIRTY_LRZ = BIT(4),
+   TU_CMD_DIRTY_VS_PARAMS = BIT(5),
+   TU_CMD_DIRTY_TESS_PARAMS = BIT(6),
+   TU_CMD_DIRTY_SUBPASS = BIT(7),
+   TU_CMD_DIRTY_FDM = BIT(8),
+   TU_CMD_DIRTY_PER_VIEW_VIEWPORT = BIT(9),
+   TU_CMD_DIRTY_PIPELINE = BIT(10),
    /* all draw states were disabled and need to be re-enabled: */
-   TU_CMD_DIRTY_DRAW_STATE = BIT(14)
+   TU_CMD_DIRTY_DRAW_STATE = BIT(11)
 };
 
 /* There are only three cache domains we have to care about: the CCU, or
@@ -264,11 +262,10 @@ struct tu_vs_params {
    uint32_t draw_id;
 };
 
-struct tu_primitive_params {
+struct tu_tess_params {
    bool valid;
-   bool primitive_restart;
-   bool provoking_vtx_last;
-   bool tess_upper_left_domain_origin;
+   enum a6xx_tess_output output_upper_left, output_lower_left;
+   enum a6xx_tess_spacing spacing;
 };
 
 /* This should be for state that is set inside a renderpass and used at
@@ -283,6 +280,7 @@ struct tu_render_pass_state
    bool has_prim_generated_query_in_rp;
    bool disable_gmem;
    bool sysmem_single_prim_mode;
+   bool shared_viewport;
 
    /* Track whether conditional predicate for COND_REG_EXEC is changed in draw_cs */
    bool draw_cs_writes_to_cond_pred;
@@ -408,49 +406,30 @@ struct tu_cmd_state
 {
    uint32_t dirty;
 
-   struct tu_pipeline *pipeline;
-   struct tu_pipeline *compute_pipeline;
+   struct tu_graphics_pipeline *pipeline;
+   struct tu_compute_pipeline *compute_pipeline;
 
    struct tu_render_pass_state rp;
 
-   /* Vertex buffers, viewports, and scissors
+   struct vk_render_pass_state vk_rp;
+   struct vk_vertex_input_state vi;
+   struct vk_sample_locations_state sl;
+
+   struct tu_bandwidth bandwidth;
+
+   /* Vertex buffers
     * the states for these can be updated partially, so we need to save these
     * to be able to emit a complete draw state
     */
    struct {
       uint64_t base;
       uint32_t size;
-      uint32_t stride;
    } vb[MAX_VBS];
 
    uint32_t max_vbs_bound;
 
-   VkViewport viewport[MAX_VIEWPORTS];
-   VkRect2D scissor[MAX_SCISSORS];
-   uint32_t max_viewport, max_scissor;
-
-   /* for dynamic states that can't be emitted directly */
-   uint32_t dynamic_stencil_mask;
-   uint32_t dynamic_stencil_wrmask;
-   uint32_t dynamic_stencil_ref;
-   bool stencil_front_write;
-   bool stencil_back_write;
-
-   uint32_t gras_su_cntl, gras_cl_cntl, rb_depth_cntl, rb_stencil_cntl;
-   uint32_t pc_raster_cntl, vpc_unknown_9107;
-   enum a6xx_polygon_mode polygon_mode;
-   uint32_t rb_mrt_control[MAX_RTS], rb_mrt_blend_control[MAX_RTS];
-   uint32_t rb_mrt_control_rop;
-   uint32_t rb_blend_cntl, sp_blend_cntl;
-   uint32_t pipeline_color_write_enable, blend_enable;
-   uint32_t color_write_enable;
-   bool logic_op_enabled;
-   bool rop_reads_dst;
-   bool alpha_to_coverage;
-   enum pc_di_primtype primtype;
-   bool primitive_restart_enable;
-   bool tess_upper_left_domain_origin;
-   bool provoking_vertex_last;
+   bool per_view_viewport;
+   bool pipeline_has_fdm;
 
    /* saved states to re-emit in TU_CMD_DIRTY_DRAW_STATE case */
    struct tu_draw_state dynamic_state[TU_DYNAMIC_STATE_COUNT];
@@ -460,6 +439,7 @@ struct tu_cmd_state
    struct tu_draw_state msaa;
 
    struct tu_draw_state vs_params;
+   struct tu_draw_state fs_params;
 
    /* Index buffer */
    uint64_t index_va;
@@ -515,12 +495,10 @@ struct tu_cmd_state
 
    bool tessfactor_addr_set;
    bool predication_active;
-   enum a5xx_line_mode line_mode;
-   VkSampleCountFlagBits samples;
    bool msaa_disable;
-   bool z_negative_one_to_one;
-
-   unsigned patch_control_points;
+   bool blend_reads_dest;
+   bool stencil_front_write;
+   bool stencil_back_write;
 
    /* VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT and
     * VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT are allowed to run simultaniously,
@@ -540,7 +518,7 @@ struct tu_cmd_state
 
    struct tu_vs_params last_vs_params;
 
-   struct tu_primitive_params last_prim_params;
+   struct tu_tess_params tess_params;
 
    uint64_t descriptor_buffer_iova[MAX_SETS];
 };
@@ -558,6 +536,9 @@ struct tu_cmd_buffer
    struct list_head renderpass_autotune_results;
    struct tu_autotune_results_buffer* autotune_buffer;
 
+   void *patchpoints_ctx;
+   struct util_dynarray fdm_bin_patchpoints;
+
    VkCommandBufferUsageFlags usage_flags;
 
    VkQueryPipelineStatisticFlags inherited_pipeline_statistics;
@@ -571,10 +552,10 @@ struct tu_cmd_buffer
 
    struct tu_descriptor_state descriptors[MAX_BIND_POINTS];
 
-   struct tu_render_pass_attachment dynamic_rp_attachments[2 * (MAX_RTS + 1)];
+   struct tu_render_pass_attachment dynamic_rp_attachments[2 * (MAX_RTS + 1) + 1];
    struct tu_subpass_attachment dynamic_color_attachments[MAX_RTS];
    struct tu_subpass_attachment dynamic_resolve_attachments[MAX_RTS + 1];
-   const struct tu_image_view *dynamic_attachments[2 * (MAX_RTS + 1)];
+   const struct tu_image_view *dynamic_attachments[2 * (MAX_RTS + 1) + 1];
 
    struct tu_render_pass dynamic_pass;
    struct tu_subpass dynamic_subpass;
@@ -602,6 +583,9 @@ struct tu_cmd_buffer
       struct u_trace_iterator trace_renderpass_start, trace_renderpass_end;
 
       struct tu_render_pass_state state;
+
+      struct util_dynarray fdm_bin_patchpoints;
+      void *patchpoints_ctx;
    } pre_chain;
 
    uint32_t vsc_draw_strm_pitch;
@@ -693,5 +677,56 @@ void tu6_apply_depth_bounds_workaround(struct tu_device *device,
 
 void
 update_stencil_mask(uint32_t *value, VkStencilFaceFlags face, uint32_t mask);
+
+typedef void (*tu_fdm_bin_apply_t)(struct tu_cs *cs, void *data, VkRect2D bin,
+                                   unsigned views, VkExtent2D *frag_areas);
+
+struct tu_fdm_bin_patchpoint {
+   uint64_t iova;
+   uint32_t size;
+   void *data;
+   tu_fdm_bin_apply_t apply;
+};
+
+static inline void
+_tu_create_fdm_bin_patchpoint(struct tu_cmd_buffer *cmd,
+                              struct tu_cs *cs,
+                              unsigned size,
+                              tu_fdm_bin_apply_t apply,
+                              void *state,
+                              unsigned state_size)
+{
+   void *data = ralloc_size(cmd->patchpoints_ctx, state_size);
+   memcpy(data, state, state_size);
+   assert(cs->writeable);
+   tu_cs_reserve_space(cs, size);
+   struct tu_fdm_bin_patchpoint patch = {
+      .iova = tu_cs_get_cur_iova(cs),
+      .size = size,
+      .data = data,
+      .apply = apply,
+   };
+
+   /* Apply the "default" setup where there is no scaling. This is used if
+    * sysmem is required, and uses up the dwords that have been reserved.
+    */
+   unsigned num_views = MAX2(cmd->state.pass->num_views, 1);
+   VkExtent2D unscaled_frag_areas[num_views];
+   for (unsigned i = 0; i < num_views; i++) {
+      unscaled_frag_areas[i] = (VkExtent2D) { 1, 1 };
+   }
+   apply(cs, state, (VkRect2D) {
+         { 0, 0 },
+         { MAX_VIEWPORT_SIZE, MAX_VIEWPORT_SIZE },
+        }, num_views, unscaled_frag_areas);
+   assert(tu_cs_get_cur_iova(cs) == patch.iova + patch.size * sizeof(uint32_t));
+
+   util_dynarray_append(&cmd->fdm_bin_patchpoints,
+                        struct tu_fdm_bin_patchpoint,
+                        patch);
+}
+
+#define tu_create_fdm_bin_patchpoint(cmd, cs, size, apply, state) \
+   _tu_create_fdm_bin_patchpoint(cmd, cs, size, apply, &state, sizeof(state))
 
 #endif /* TU_CMD_BUFFER_H */

@@ -186,12 +186,8 @@ nir_opt_rematerialize_compares(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl == NULL)
-         continue;
-
-      progress = nir_opt_rematerialize_compares_impl(shader, function->impl)
-         || progress;
+   nir_foreach_function_impl(impl, shader) {
+      progress = nir_opt_rematerialize_compares_impl(shader, impl) || progress;
    }
 
    return progress;

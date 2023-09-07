@@ -1,24 +1,7 @@
 /*
  * Copyright 2023 Advanced Micro Devices, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -28,6 +11,14 @@
 
 typedef struct {
    const ac_nir_lower_ps_options *options;
+
+   nir_variable *persp_center;
+   nir_variable *persp_centroid;
+   nir_variable *persp_sample;
+   nir_variable *linear_center;
+   nir_variable *linear_centroid;
+   nir_variable *linear_sample;
+   bool lower_load_barycentric;
 
    /* Add one for dual source blend second output. */
    nir_ssa_def *outputs[FRAG_RESULT_MAX + 1][4];
@@ -41,6 +32,166 @@ typedef struct {
 } lower_ps_state;
 
 #define DUAL_SRC_BLEND_SLOT FRAG_RESULT_MAX
+
+static void
+create_interp_param(nir_builder *b, lower_ps_state *s)
+{
+   if (s->options->force_persp_sample_interp) {
+      s->persp_center =
+         nir_local_variable_create(b->impl, glsl_vec_type(2), "persp_center");
+   }
+
+   if (s->options->bc_optimize_for_persp ||
+       s->options->force_persp_sample_interp ||
+       s->options->force_persp_center_interp) {
+      s->persp_centroid =
+         nir_local_variable_create(b->impl, glsl_vec_type(2), "persp_centroid");
+   }
+
+   if (s->options->force_persp_center_interp) {
+      s->persp_sample =
+         nir_local_variable_create(b->impl, glsl_vec_type(2), "persp_sample");
+   }
+
+   if (s->options->force_linear_sample_interp) {
+      s->linear_center =
+         nir_local_variable_create(b->impl, glsl_vec_type(2), "linear_center");
+   }
+
+   if (s->options->bc_optimize_for_linear ||
+       s->options->force_linear_sample_interp ||
+       s->options->force_linear_center_interp) {
+      s->linear_centroid =
+         nir_local_variable_create(b->impl, glsl_vec_type(2), "linear_centroid");
+   }
+
+   if (s->options->force_linear_center_interp) {
+      s->linear_sample =
+         nir_local_variable_create(b->impl, glsl_vec_type(2), "linear_sample");
+   }
+
+   s->lower_load_barycentric =
+      s->persp_center || s->persp_centroid || s->persp_sample ||
+      s->linear_center || s->linear_centroid || s->linear_sample;
+}
+
+static void
+init_interp_param(nir_builder *b, lower_ps_state *s)
+{
+   b->cursor = nir_before_cf_list(&b->impl->body);
+
+   /* The shader should do: if (PRIM_MASK[31]) CENTROID = CENTER;
+    * The hw doesn't compute CENTROID if the whole wave only
+    * contains fully-covered quads.
+    */
+   if (s->options->bc_optimize_for_persp || s->options->bc_optimize_for_linear) {
+      nir_ssa_def *bc_optimize = nir_load_barycentric_optimize_amd(b);
+
+      if (s->options->bc_optimize_for_persp) {
+         nir_ssa_def *center =
+            nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
+         nir_ssa_def *centroid =
+            nir_load_barycentric_centroid(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
+
+         nir_ssa_def *value = nir_bcsel(b, bc_optimize, center, centroid);
+         nir_store_var(b, s->persp_centroid, value, 0x3);
+      }
+
+      if (s->options->bc_optimize_for_linear) {
+         nir_ssa_def *center =
+            nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
+         nir_ssa_def *centroid =
+            nir_load_barycentric_centroid(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
+
+         nir_ssa_def *value = nir_bcsel(b, bc_optimize, center, centroid);
+         nir_store_var(b, s->linear_centroid, value, 0x3);
+      }
+   }
+
+   if (s->options->force_persp_sample_interp) {
+      nir_ssa_def *sample =
+         nir_load_barycentric_sample(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
+      nir_store_var(b, s->persp_center, sample, 0x3);
+      nir_store_var(b, s->persp_centroid, sample, 0x3);
+   }
+
+   if (s->options->force_linear_sample_interp) {
+      nir_ssa_def *sample =
+         nir_load_barycentric_sample(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
+      nir_store_var(b, s->linear_center, sample, 0x3);
+      nir_store_var(b, s->linear_centroid, sample, 0x3);
+   }
+
+   if (s->options->force_persp_center_interp) {
+      nir_ssa_def *center =
+         nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_SMOOTH);
+      nir_store_var(b, s->persp_sample, center, 0x3);
+      nir_store_var(b, s->persp_centroid, center, 0x3);
+   }
+
+   if (s->options->force_linear_center_interp) {
+      nir_ssa_def *center =
+         nir_load_barycentric_pixel(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE);
+      nir_store_var(b, s->linear_sample, center, 0x3);
+      nir_store_var(b, s->linear_centroid, center, 0x3);
+   }
+}
+
+static bool
+lower_ps_load_barycentric(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_state *s)
+{
+   enum glsl_interp_mode mode = nir_intrinsic_interp_mode(intrin);
+   nir_variable *var = NULL;
+
+   switch (mode) {
+   case INTERP_MODE_NONE:
+   case INTERP_MODE_SMOOTH:
+      switch (intrin->intrinsic) {
+      case nir_intrinsic_load_barycentric_pixel:
+         var = s->persp_center;
+         break;
+      case nir_intrinsic_load_barycentric_centroid:
+         var = s->persp_centroid;
+         break;
+      case nir_intrinsic_load_barycentric_sample:
+         var = s->persp_sample;
+         break;
+      default:
+         break;
+      }
+      break;
+
+   case INTERP_MODE_NOPERSPECTIVE:
+      switch (intrin->intrinsic) {
+      case nir_intrinsic_load_barycentric_pixel:
+         var = s->linear_center;
+         break;
+      case nir_intrinsic_load_barycentric_centroid:
+         var = s->linear_centroid;
+         break;
+      case nir_intrinsic_load_barycentric_sample:
+         var = s->linear_sample;
+         break;
+      default:
+         break;
+      }
+      break;
+
+   default:
+      break;
+   }
+
+   if (!var)
+      return false;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   nir_ssa_def *replacement = nir_load_var(b, var);
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, replacement);
+
+   nir_instr_remove(&intrin->instr);
+   return true;
+}
 
 static bool
 gather_ps_store_output(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_state *s)
@@ -66,6 +217,46 @@ gather_ps_store_output(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_sta
 
    s->output_types[slot] = type;
 
+   /* Keep color output instruction if not exported in nir. */
+   if (!s->options->no_color_export ||
+       (slot < FRAG_RESULT_DATA0 && slot != FRAG_RESULT_COLOR)) {
+      nir_instr_remove(&intrin->instr);
+   }
+
+   return true;
+}
+
+static bool
+lower_ps_load_sample_mask_in(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_state *s)
+{
+   /* Section 15.2.2 (Shader Inputs) of the OpenGL 4.5 (Core Profile) spec
+    * says:
+    *
+    *    "When per-sample shading is active due to the use of a fragment
+    *     input qualified by sample or due to the use of the gl_SampleID
+    *     or gl_SamplePosition variables, only the bit for the current
+    *     sample is set in gl_SampleMaskIn. When state specifies multiple
+    *     fragment shader invocations for a given fragment, the sample
+    *     mask for any single fragment shader invocation may specify a
+    *     subset of the covered samples for the fragment. In this case,
+    *     the bit corresponding to each covered sample will be set in
+    *     exactly one fragment shader invocation."
+    *
+    * The samplemask loaded by hardware is always the coverage of the
+    * entire pixel/fragment, so mask bits out based on the sample ID.
+    */
+
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   uint32_t ps_iter_mask = ac_get_ps_iter_mask(s->options->ps_iter_samples);
+   nir_ssa_def *sampleid = nir_load_sample_id(b);
+   nir_ssa_def *submask = nir_ishl(b, nir_imm_int(b, ps_iter_mask), sampleid);
+
+   nir_ssa_def *sample_mask = nir_load_sample_mask_in(b);
+   nir_ssa_def *replacement = nir_iand(b, sample_mask, submask);
+
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, replacement);
+
    nir_instr_remove(&intrin->instr);
    return true;
 }
@@ -80,8 +271,22 @@ lower_ps_intrinsic(nir_builder *b, nir_instr *instr, void *state)
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
-   if (intrin->intrinsic == nir_intrinsic_store_output)
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_store_output:
       return gather_ps_store_output(b, intrin, s);
+   case nir_intrinsic_load_barycentric_pixel:
+   case nir_intrinsic_load_barycentric_centroid:
+   case nir_intrinsic_load_barycentric_sample:
+      if (s->lower_load_barycentric)
+         return lower_ps_load_barycentric(b, intrin, s);
+      break;
+   case nir_intrinsic_load_sample_mask_in:
+      if (s->options->ps_iter_samples > 1)
+         return lower_ps_load_sample_mask_in(b, intrin, s);
+      break;
+   default:
+      break;
+   }
 
    return false;
 }
@@ -117,9 +322,9 @@ emit_ps_color_clamp_and_alpha_test(nir_builder *b, lower_ps_state *s)
       }
 
       if (slot == FRAG_RESULT_COLOR || slot == FRAG_RESULT_DATA0) {
-         if (s->options->alpha_func == PIPE_FUNC_ALWAYS) {
+         if (s->options->alpha_func == COMPARE_FUNC_ALWAYS) {
             /* always pass, do nothing */
-         } else if (s->options->alpha_func == PIPE_FUNC_NEVER) {
+         } else if (s->options->alpha_func == COMPARE_FUNC_NEVER) {
             nir_discard(b);
          } else if (s->outputs[slot][3]) {
             nir_ssa_def *ref = nir_load_alpha_reference_amd(b);
@@ -134,6 +339,8 @@ emit_ps_color_clamp_and_alpha_test(nir_builder *b, lower_ps_state *s)
 static void
 emit_ps_mrtz_export(nir_builder *b, lower_ps_state *s)
 {
+   uint64_t outputs_written = b->shader->info.outputs_written;
+
    nir_ssa_def *mrtz_alpha = NULL;
    if (s->options->alpha_to_coverage_via_mrtz) {
       mrtz_alpha = s->outputs[FRAG_RESULT_COLOR][3] ?
@@ -145,14 +352,18 @@ emit_ps_mrtz_export(nir_builder *b, lower_ps_state *s)
    nir_ssa_def *stencil = s->outputs[FRAG_RESULT_STENCIL][0];
    nir_ssa_def *sample_mask = s->outputs[FRAG_RESULT_SAMPLE_MASK][0];
 
+   if (s->options->kill_samplemask) {
+      sample_mask = NULL;
+      outputs_written &= ~BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
+   }
+
    /* skip mrtz export if no one has written to any of them */
    if (!depth && !stencil && !sample_mask && !mrtz_alpha)
       return;
 
-   uint64_t outputs_written = b->shader->info.outputs_written;
    /* use outputs_written to determine export format as we use it to set
-    * R_028710_SPI_SHADER_Z_FORMAT instead of relying on the real store ouput,
-    * because store ouput may be optimized out.
+    * R_028710_SPI_SHADER_Z_FORMAT instead of relying on the real store output,
+    * because store output may be optimized out.
     */
    unsigned format =
       ac_get_spi_shader_z_format(outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH),
@@ -377,7 +588,7 @@ emit_ps_color_export(nir_builder *b, lower_ps_state *s, gl_frag_result slot, uns
          pack_op = nir_op_pack_snorm_2x16;
          break;
       default:
-         unreachable("unsupport color export format");
+         unreachable("unsupported color export format");
          break;
       }
 
@@ -452,6 +663,14 @@ emit_ps_dual_src_blend_swizzle(nir_builder *b, lower_ps_state *s, unsigned first
    /* Swizzle code is right before mrt0_exp. */
    b->cursor = nir_before_instr(&mrt0_exp->instr);
 
+   /* ACO need to emit the swizzle code by a pseudo instruction. */
+   if (s->options->use_aco) {
+      nir_export_dual_src_blend_amd(b, mrt0_arg, mrt1_arg, .write_mask = write_mask);
+      nir_instr_remove(&mrt0_exp->instr);
+      nir_instr_remove(&mrt1_exp->instr);
+      return;
+   }
+
    nir_ssa_def *undef = nir_ssa_undef(b, 1, 32);
    nir_ssa_def *arg0_vec[4] = {undef, undef, undef, undef};
    nir_ssa_def *arg1_vec[4] = {undef, undef, undef, undef};
@@ -496,11 +715,26 @@ emit_ps_dual_src_blend_swizzle(nir_builder *b, lower_ps_state *s, unsigned first
 static void
 emit_ps_null_export(nir_builder *b, lower_ps_state *s)
 {
+   const bool pops = b->shader->info.fs.sample_interlock_ordered ||
+                     b->shader->info.fs.sample_interlock_unordered ||
+                     b->shader->info.fs.pixel_interlock_ordered ||
+                     b->shader->info.fs.pixel_interlock_unordered;
+
    /* Gfx10+ doesn't need to export anything if we don't need to export the EXEC mask
     * for discard.
+    * In Primitive Ordered Pixel Shading, however, GFX11+ explicitly uses the `done` export to exit
+    * the ordered section, and before GFX11, shaders with POPS also need an export.
     */
-   if (s->options->gfx_level >= GFX10 && !s->options->uses_discard)
+   if (s->options->gfx_level >= GFX10 && !s->options->uses_discard && !pops)
       return;
+
+   /* The `done` export exits the POPS ordered section on GFX11+, make sure UniformMemory and
+    * ImageMemory (in SPIR-V terms) accesses from the ordered section may not be reordered below it.
+    */
+   if (s->options->gfx_level >= GFX11 && pops)
+      nir_scoped_memory_barrier(b, SCOPE_QUEUE_FAMILY, NIR_MEMORY_RELEASE,
+                                nir_var_image | nir_var_mem_ubo | nir_var_mem_ssbo |
+                                nir_var_mem_global);
 
    /* Gfx11 doesn't support null exports, and mrt0 should be exported instead. */
    unsigned target = s->options->gfx_level >= GFX11 ?
@@ -515,19 +749,17 @@ emit_ps_null_export(nir_builder *b, lower_ps_state *s)
 }
 
 static void
-export_ps_outputs(nir_shader *nir, lower_ps_state *s)
+export_ps_outputs(nir_builder *b, lower_ps_state *s)
 {
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-
-   nir_builder builder;
-   nir_builder *b = &builder;
-   nir_builder_init(b, impl);
-
-   b->cursor = nir_after_cf_list(&impl->body);
+   b->cursor = nir_after_cf_list(&b->impl->body);
 
    emit_ps_color_clamp_and_alpha_test(b, s);
 
    emit_ps_mrtz_export(b, s);
+
+   /* When non-monolithic shader, RADV export mrtz in main part and export color in epilog. */
+   if (s->options->no_color_export)
+      return;
 
    unsigned first_color_export = s->exp_num;
 
@@ -582,14 +814,35 @@ export_ps_outputs(nir_shader *nir, lower_ps_state *s)
    }
 
    if (s->exp_num) {
-      if (s->options->dual_src_blend_swizzle)
+      if (s->options->dual_src_blend_swizzle) {
          emit_ps_dual_src_blend_swizzle(b, s, first_color_export);
+         /* Skip last export flag setting because they have been replaced by
+          * a pseudo instruction.
+          */
+         if (s->options->use_aco)
+            return;
+      }
 
       /* Specify that this is the last export */
       nir_intrinsic_instr *final_exp = s->exp[s->exp_num - 1];
       unsigned final_exp_flags = nir_intrinsic_flags(final_exp);
       final_exp_flags |= AC_EXP_FLAG_DONE | AC_EXP_FLAG_VALID_MASK;
       nir_intrinsic_set_flags(final_exp, final_exp_flags);
+
+      /* The `done` export exits the POPS ordered section on GFX11+, make sure UniformMemory and
+       * ImageMemory (in SPIR-V terms) accesses from the ordered section may not be reordered below
+       * it.
+       */
+      if (s->options->gfx_level >= GFX11 &&
+          (b->shader->info.fs.sample_interlock_ordered ||
+           b->shader->info.fs.sample_interlock_unordered ||
+           b->shader->info.fs.pixel_interlock_ordered ||
+           b->shader->info.fs.pixel_interlock_unordered)) {
+         b->cursor = nir_before_instr(&final_exp->instr);
+         nir_scoped_memory_barrier(b, SCOPE_QUEUE_FAMILY, NIR_MEMORY_RELEASE,
+                                   nir_var_image | nir_var_mem_ubo | nir_var_mem_ssbo |
+                                   nir_var_mem_global);
+      }
    } else {
       emit_ps_null_export(b, s);
    }
@@ -598,13 +851,27 @@ export_ps_outputs(nir_shader *nir, lower_ps_state *s)
 void
 ac_nir_lower_ps(nir_shader *nir, const ac_nir_lower_ps_options *options)
 {
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+
+   nir_builder builder = nir_builder_create(impl);
+   nir_builder *b = &builder;
+
    lower_ps_state state = {
       .options = options,
    };
+
+   create_interp_param(b, &state);
 
    nir_shader_instructions_pass(nir, lower_ps_intrinsic,
                                 nir_metadata_block_index | nir_metadata_dominance,
                                 &state);
 
-   export_ps_outputs(nir, &state);
+   /* Must be after lower_ps_intrinsic() to prevent it lower added intrinsic here. */
+   init_interp_param(b, &state);
+
+   export_ps_outputs(b, &state);
+
+   /* Cleanup nir variable, as RADV won't do this. */
+   if (state.lower_load_barycentric)
+      nir_lower_vars_to_ssa(nir);
 }

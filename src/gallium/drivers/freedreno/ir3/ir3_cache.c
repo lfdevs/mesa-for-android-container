@@ -97,6 +97,8 @@ ir3_cache_lookup(struct ir3_cache *cache, const struct ir3_cache_key *key,
       return entry->data;
    }
 
+   MESA_TRACE_FUNC();
+
    if (key->hs)
       assert(key->ds);
 

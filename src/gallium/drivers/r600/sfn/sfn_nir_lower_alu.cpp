@@ -111,15 +111,15 @@ LowerSinCos::lower(nir_instr *instr)
    assert(alu->op == nir_op_fsin || alu->op == nir_op_fcos);
 
    auto fract = nir_ffract(b,
-                           nir_ffma(b,
-                                    nir_ssa_for_alu_src(b, alu, 0),
-                                    nir_imm_float(b, 0.15915494),
-                                    nir_imm_float(b, 0.5)));
+                           nir_ffma_imm12(b,
+                                          nir_ssa_for_alu_src(b, alu, 0),
+                                          0.15915494,
+                                          0.5));
 
    auto normalized =
       m_gxf_level != R600
-         ? nir_fadd(b, fract, nir_imm_float(b, -0.5))
-         : nir_ffma(b, fract, nir_imm_float(b, 2.0f * M_PI), nir_imm_float(b, -M_PI));
+         ? nir_fadd_imm(b, fract, -0.5)
+         : nir_ffma_imm12(b, fract, 2.0f * M_PI, -M_PI);
 
    if (alu->op == nir_op_fsin)
       return nir_fsin_amd(b, normalized);

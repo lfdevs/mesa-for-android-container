@@ -31,7 +31,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_text.h"
 
@@ -155,7 +154,7 @@ main(int argc, char **argv)
    shader.compiler = compiler;
 
    struct util_debug_callback debug = {}; // TODO: proper debug callback
-   struct etna_shader_variant *v = etna_shader_variant(&shader, &key, &debug);
+   struct etna_shader_variant *v = etna_shader_variant(&shader, &key, &debug, false);
    if (!v) {
       fprintf(stderr, "shader variant creation failed!\n");
       return 1;

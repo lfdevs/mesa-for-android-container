@@ -99,11 +99,7 @@ opt_constant_if(nir_if *if_stmt, bool condition)
        * correct source.
        */
       nir_block *after = nir_cf_node_as_block(nir_cf_node_next(&if_stmt->cf_node));
-      nir_foreach_instr_safe(instr, after) {
-         if (instr->type != nir_instr_type_phi)
-            break;
-
-         nir_phi_instr *phi = nir_instr_as_phi(instr);
+      nir_foreach_phi_safe(phi, after) {
          nir_ssa_def *def = NULL;
          nir_foreach_phi_src(phi_src, phi) {
             if (phi_src->pred != last_block)
@@ -322,11 +318,12 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
       switch (cur->type) {
       case nir_cf_node_block: {
          nir_block *block = nir_cf_node_as_block(cur);
-         if (dead_cf_block(block)) {
-            /* We just deleted the if or loop after this block, so we may have
-             * deleted the block before or after it -- which one is an
-             * implementation detail. Therefore, to recover the place we were
-             * at, we have to use the previous cf_node.
+         while (dead_cf_block(block)) {
+            /* We just deleted the if or loop after this block.
+             * nir_cf_node_remove may have deleted the block before
+             * or after it -- which one is an implementation detail.
+             * Therefore, to recover the place we were at, we have
+             * to use the previous cf_node.
              */
 
             if (prev) {
@@ -402,6 +399,7 @@ opt_dead_cf_impl(nir_function_impl *impl)
 
    if (progress) {
       nir_metadata_preserve(impl, nir_metadata_none);
+      nir_rematerialize_derefs_in_use_blocks_impl(impl);
 
       /* The CF manipulation code called by this pass is smart enough to keep
        * from breaking any SSA use/def chains by replacing any uses of removed
@@ -425,9 +423,8 @@ nir_opt_dead_cf(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader)
-      if (function->impl)
-         progress |= opt_dead_cf_impl(function->impl);
+   nir_foreach_function_impl(impl, shader)
+      progress |= opt_dead_cf_impl(impl);
 
    return progress;
 }

@@ -657,7 +657,7 @@ vc4_bo_map(struct vc4_bo *bo)
 {
         void *map = vc4_bo_map_unsynchronized(bo);
 
-        bool ok = vc4_bo_wait(bo, PIPE_TIMEOUT_INFINITE, "bo map");
+        bool ok = vc4_bo_wait(bo, OS_TIMEOUT_INFINITE, "bo map");
         if (!ok) {
                 fprintf(stderr, "BO wait for map failed\n");
                 abort();

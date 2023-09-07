@@ -2,3 +2,14 @@
 # Likely fixed by VK-GL-CTS a3ac66a77e14 ("Zero initialize XFB counter buffer")
 dEQP-VK.rasterization.provoking_vertex.transform_feedback.first.line_strip_with_adjacency,Fail
 dEQP-VK.rasterization.provoking_vertex.transform_feedback.per_pipeline.triangle_strip_with_adjacency,Fail
+
+dEQP-VK.binding_model.descriptor_buffer.basic.limits,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_after_bind,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_after_bind_in_loop,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_after_bind_in_loop_lifetime,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_after_bind_lifetime,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_in_loop,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_in_loop_lifetime,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_lifetime,Fail
+dEQP-VK.descriptor_indexing.storage_texel_buffer_minNonUniform,Fail

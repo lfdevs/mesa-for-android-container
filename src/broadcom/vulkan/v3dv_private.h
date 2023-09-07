@@ -222,7 +222,9 @@ void v3dv_meta_texel_buffer_copy_finish(struct v3dv_device *device);
 
 bool v3dv_meta_can_use_tlb(struct v3dv_image *image,
                            uint8_t plane,
+                           uint8_t miplevel,
                            const VkOffset3D *offset,
+                           const VkExtent3D *extent,
                            VkFormat *compat_format);
 
 struct v3dv_instance {
@@ -670,6 +672,8 @@ struct v3d_resource_slice {
    uint32_t offset;
    uint32_t stride;
    uint32_t padded_height;
+   uint32_t width;
+   uint32_t height;
    /* Size of a single pane of the slice.  For 3D textures, there will be
     * a number of panes equal to the minified, power-of-two-aligned
     * depth.
@@ -916,7 +920,7 @@ struct v3dv_framebuffer {
    uint32_t layers;
 
    /* Typically, edge tiles in the framebuffer have padding depending on the
-    * underlying tiling layout. One consequnce of this is that when the
+    * underlying tiling layout. One consequence of this is that when the
     * framebuffer dimensions are not aligned to tile boundaries, tile stores
     * would still write full tiles on the edges and write to the padded area.
     * If the framebuffer is aliasing a smaller region of a larger image, then
@@ -1482,7 +1486,7 @@ struct v3dv_cmd_buffer_state {
    /* FIXME: we have just one client-side BO for the push constants,
     * independently of the stageFlags in vkCmdPushConstants, and the
     * pipelineBindPoint in vkCmdBindPipeline. We could probably do more stage
-    * tunning in the future if it makes sense.
+    * tuning in the future if it makes sense.
     */
    uint32_t push_constants_size;
    uint32_t push_constants_data[MAX_PUSH_CONSTANTS_SIZE / 4];
@@ -2277,7 +2281,7 @@ struct v3dv_pipeline {
    } va[MAX_VERTEX_ATTRIBS];
    uint32_t va_count;
 
-   enum pipe_prim_type topology;
+   enum mesa_prim topology;
 
    struct v3dv_pipeline_shared_data *shared_data;
 

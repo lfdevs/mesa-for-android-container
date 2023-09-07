@@ -89,12 +89,12 @@ emit_quads_workaround(nir_builder *b, nir_block *block)
    nir_ssa_def *outer = load_output(b, 4, 1, 0);
 
    nir_ssa_def *any_greater_than_1 =
-       nir_ior(b, nir_bany(b, nir_flt(b, nir_imm_float(b, 1.0f), outer)),
-                  nir_bany(b, nir_flt(b, nir_imm_float(b, 1.0f), inner)));
+       nir_ior(b, nir_bany(b, nir_fgt_imm(b, outer, 1.0f)),
+                  nir_bany(b, nir_fgt_imm(b, inner, 1.0f)));
 
    nir_push_if(b, any_greater_than_1);
 
-   inner = nir_bcsel(b, nir_fge(b, nir_imm_float(b, 1.0f), inner),
+   inner = nir_bcsel(b, nir_fle_imm(b, inner, 1.0f),
                         nir_imm_float(b, 2.0f), inner);
 
    nir_store_output(b, inner, nir_imm_int(b, 0),
@@ -111,8 +111,7 @@ brw_nir_apply_tcs_quads_workaround(nir_shader *nir)
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* emit_quads_workaround() inserts an if statement into each block,
     * which splits it in two.  This changes the set of predecessors of

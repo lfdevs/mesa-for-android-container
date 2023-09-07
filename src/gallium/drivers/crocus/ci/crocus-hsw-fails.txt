@@ -96,6 +96,8 @@ spec@arb_sample_shading@samplemask 8@1.000000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
 
+spec@arb_viewport_array@display-list,Fail
+
 spec@arb_shader_image_load_store@early-z,Fail
 spec@arb_shader_image_load_store@early-z@occlusion query test/early-z pass,Fail
 
@@ -196,6 +198,10 @@ KHR-GL46.sample_variables.mask.rgba8i.samples_1.mask_5,Fail
 KHR-GL46.sample_variables.mask.rgba8i.samples_1.mask_6,Fail
 KHR-GL46.sample_variables.mask.rgba8i.samples_1.mask_7,Fail
 KHR-GL46.sample_variables.mask.rgba8i.samples_1.mask_zero,Fail
+
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/8900
+KHR-GL46.shader_texture_image_samples_tests.texture_functional_test,Fail
+
 KHR-GL46.shader_multisample_interpolation.render.base.rgba8i.samples_1,Fail
 KHR-GL46.shader_multisample_interpolation.render.centroid.rgba8i.samples_1,Fail
 KHR-GL46.shader_multisample_interpolation.render.interpolate_at_centroid.rgba8i.samples_1,Fail
@@ -952,7 +958,3 @@ KHR-GL46.tessellation_shader.tessellation_shader_tessellation.TES,Fail
 spec@arb_tessellation_shader@execution@vs-tes-tessinner-tessouter-inputs-quads,Fail
 spec@arb_tessellation_shader@execution@vs-tes-tessinner-tessouter-inputs-quads-dlist,Fail
 spec@arb_tessellation_shader@execution@vs-tes-tessinner-tessouter-inputs-tris,Fail
-
-# New CTS failures in 1.3.5.0
-KHR-GL46.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
-KHR-GL46.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail

@@ -36,7 +36,6 @@
 
 #include "nir/tgsi_to_nir.h"
 #include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_text.h"
 
 #include "ir3/instr-a3xx.h"

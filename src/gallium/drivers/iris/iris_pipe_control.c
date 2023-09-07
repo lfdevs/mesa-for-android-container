@@ -409,7 +409,16 @@ iris_memory_barrier(struct pipe_context *ctx, unsigned flags)
               PIPE_CONTROL_CONST_CACHE_INVALIDATE;
    }
 
-   if (flags & (PIPE_BARRIER_TEXTURE | PIPE_BARRIER_FRAMEBUFFER)) {
+   if (flags & PIPE_BARRIER_TEXTURE)
+      bits |= PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE;
+
+   if (flags & PIPE_BARRIER_FRAMEBUFFER) {
+      /* The caller may have issued a render target read and a data cache data
+       * port write in the same draw call. Depending on the hardware, iris
+       * performs render target reads with either the sampler or the render
+       * cache data port. If the next framebuffer access is a render target
+       * read, the previously affected caches must be invalidated.
+       */
       bits |= PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
               PIPE_CONTROL_RENDER_TARGET_FLUSH;
    }

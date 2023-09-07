@@ -43,7 +43,7 @@
 #include "dri_helpers.h"
 #include "dri_query_renderer.h"
 
-DEBUG_GET_ONCE_BOOL_OPTION(swrast_no_present, "SWRAST_NO_PRESENT", FALSE);
+DEBUG_GET_ONCE_BOOL_OPTION(swrast_no_present, "SWRAST_NO_PRESENT", false);
 
 static inline void
 get_drawable_info(struct dri_drawable *drawable, int *x, int *y, int *w, int *h)
@@ -128,16 +128,16 @@ get_image_shm(struct dri_drawable *drawable, int x, int y, int width, int height
    whandle.type = WINSYS_HANDLE_TYPE_SHMID;
 
    if (loader->base.version < 4 || !loader->getImageShm)
-      return FALSE;
+      return false;
 
    if (!res->screen->resource_get_handle(res->screen, NULL, res, &whandle, PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE))
-      return FALSE;
+      return false;
 
    if (loader->base.version > 5 && loader->getImageShm2)
       return loader->getImageShm2(opaque_dri_drawable(drawable), x, y, width, height, whandle.handle, drawable->loaderPrivate);
 
    loader->getImageShm(opaque_dri_drawable(drawable), x, y, width, height, whandle.handle, drawable->loaderPrivate);
-   return TRUE;
+   return true;
 }
 
 static void
@@ -253,7 +253,7 @@ drisw_swap_buffers(struct dri_drawable *drawable)
       }
 
       screen->base.screen->fence_finish(screen->base.screen, ctx->st->pipe,
-                                        fence, PIPE_TIMEOUT_INFINITE);
+                                        fence, OS_TIMEOUT_INFINITE);
       screen->base.screen->fence_reference(screen->base.screen, &fence, NULL);
       drisw_copy_to_front(ctx->st->pipe, drawable, ptex);
 
@@ -288,7 +288,7 @@ drisw_copy_sub_buffer(struct dri_drawable *drawable, int x, int y,
       st_context_flush(ctx->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
 
       screen->base.screen->fence_finish(screen->base.screen, ctx->st->pipe,
-                                        fence, PIPE_TIMEOUT_INFINITE);
+                                        fence, OS_TIMEOUT_INFINITE);
       screen->base.screen->fence_reference(screen->base.screen, &fence, NULL);
 
       if (drawable->stvis.samples > 1) {
@@ -350,7 +350,7 @@ drisw_allocate_textures(struct dri_context *stctx,
    const __DRIswrastLoaderExtension *loader = drawable->screen->swrast_loader;
    struct pipe_resource templ;
    unsigned width, height;
-   boolean resized;
+   bool resized;
    unsigned i;
 
    /* Wait for glthread to finish because we can't use pipe_context from
@@ -522,7 +522,7 @@ static const struct drisw_loader_funcs drisw_shm_lf = {
 
 static struct dri_drawable *
 drisw_create_drawable(struct dri_screen *screen, const struct gl_config * visual,
-                      boolean isPixmap, void *loaderPrivate)
+                      bool isPixmap, void *loaderPrivate)
 {
    struct dri_drawable *drawable = dri_create_drawable(screen, visual, isPixmap,
                                                        loaderPrivate);
@@ -560,15 +560,15 @@ drisw_init_screen(struct dri_screen *screen)
 #endif
    if (!success)
       success = pipe_loader_sw_probe_dri(&screen->dev, lf);
-   if (success) {
+
+   if (success)
       pscreen = pipe_loader_create_screen(screen->dev);
-      dri_init_options(screen);
-   }
 
    if (!pscreen)
       goto fail;
 
-   configs = dri_init_screen_helper(screen, pscreen);
+   dri_init_options(screen);
+   configs = dri_init_screen(screen, pscreen);
    if (!configs)
       goto fail;
 
@@ -593,9 +593,7 @@ drisw_init_screen(struct dri_screen *screen)
 
    return configs;
 fail:
-   dri_destroy_screen_helper(screen);
-   if (screen->dev)
-      pipe_loader_release(&screen->dev, 1);
+   dri_release_screen(screen);
    return NULL;
 }
 

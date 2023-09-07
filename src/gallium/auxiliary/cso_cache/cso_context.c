@@ -43,7 +43,6 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_vbuf.h"
-#include "tgsi/tgsi_parse.h"
 
 #include "cso_cache/cso_context.h"
 #include "cso_cache/cso_cache.h"
@@ -71,10 +70,11 @@ struct cso_context {
    bool always_use_vbuf;
    bool sampler_format;
 
-   boolean has_geometry_shader;
-   boolean has_tessellation;
-   boolean has_compute_shader;
-   boolean has_streamout;
+   bool has_geometry_shader;
+   bool has_tessellation;
+   bool has_compute_shader;
+   bool has_task_mesh_shader;
+   bool has_streamout;
 
    uint32_t max_fs_samplerviews : 16;
 
@@ -83,7 +83,7 @@ struct cso_context {
 
    struct sampler_info fragment_samplers_saved;
    struct sampler_info compute_samplers_saved;
-   struct sampler_info samplers[PIPE_SHADER_TYPES];
+   struct sampler_info samplers[PIPE_SHADER_MESH_TYPES];
 
    /* Temporary number until cso_single_sampler_done is called.
     * It tracks the highest sampler seen in cso_single_sampler.
@@ -110,8 +110,8 @@ struct cso_context {
    void *compute_shader, *compute_shader_saved;
    void *velements, *velements_saved;
    struct pipe_query *render_condition, *render_condition_saved;
-   uint render_condition_mode, render_condition_mode_saved;
-   boolean render_condition_cond, render_condition_cond_saved;
+   enum pipe_render_cond_flag render_condition_mode, render_condition_mode_saved;
+   bool render_condition_cond, render_condition_cond_saved;
    bool flatshade_first, flatshade_first_saved;
 
    struct pipe_framebuffer_state fb, fb_saved;
@@ -125,7 +125,7 @@ struct cso_context {
 };
 
 
-static inline boolean
+static inline bool
 delete_cso(struct cso_context *ctx,
            void *state, enum cso_cache_type type)
 {
@@ -182,13 +182,13 @@ sanitize_hash(struct cso_hash *hash, enum cso_cache_type type,
       return;
 
    if (type == CSO_SAMPLER) {
-      samplers_to_restore = MALLOC((PIPE_SHADER_TYPES + 2) * PIPE_MAX_SAMPLERS *
+      samplers_to_restore = MALLOC((PIPE_SHADER_MESH_TYPES + 2) * PIPE_MAX_SAMPLERS *
                                    sizeof(*samplers_to_restore));
 
       /* Temporarily remove currently bound sampler states from the hash
        * table, to prevent them from being deleted
        */
-      for (int i = 0; i < PIPE_SHADER_TYPES; i++) {
+      for (int i = 0; i < PIPE_SHADER_MESH_TYPES; i++) {
          for (int j = 0; j < PIPE_MAX_SAMPLERS; j++) {
             struct cso_sampler *sampler = ctx->samplers[i].cso_samplers[j];
 
@@ -312,11 +312,11 @@ cso_create_context(struct pipe_context *pipe, unsigned flags)
 
    if (pipe->screen->get_shader_param(pipe->screen, PIPE_SHADER_GEOMETRY,
                                 PIPE_SHADER_CAP_MAX_INSTRUCTIONS) > 0) {
-      ctx->has_geometry_shader = TRUE;
+      ctx->has_geometry_shader = true;
    }
    if (pipe->screen->get_shader_param(pipe->screen, PIPE_SHADER_TESS_CTRL,
                                 PIPE_SHADER_CAP_MAX_INSTRUCTIONS) > 0) {
-      ctx->has_tessellation = TRUE;
+      ctx->has_tessellation = true;
    }
    if (pipe->screen->get_shader_param(pipe->screen, PIPE_SHADER_COMPUTE,
                                       PIPE_SHADER_CAP_MAX_INSTRUCTIONS) > 0) {
@@ -325,12 +325,16 @@ cso_create_context(struct pipe_context *pipe, unsigned flags)
                                         PIPE_SHADER_CAP_SUPPORTED_IRS);
       if (supported_irs & ((1 << PIPE_SHADER_IR_TGSI) |
                            (1 << PIPE_SHADER_IR_NIR))) {
-         ctx->has_compute_shader = TRUE;
+         ctx->has_compute_shader = true;
       }
+   }
+   if (pipe->screen->get_shader_param(pipe->screen, PIPE_SHADER_MESH,
+                                PIPE_SHADER_CAP_MAX_INSTRUCTIONS) > 0) {
+      ctx->has_task_mesh_shader = true;
    }
    if (pipe->screen->get_param(pipe->screen,
                                PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS) != 0) {
-      ctx->has_streamout = TRUE;
+      ctx->has_streamout = true;
    }
 
    if (pipe->screen->get_param(pipe->screen,
@@ -365,7 +369,7 @@ cso_unbind_context(struct cso_context *ctx)
          static void *zeros[PIPE_MAX_SAMPLERS] = { NULL };
          struct pipe_screen *scr = ctx->base.pipe->screen;
          enum pipe_shader_type sh;
-         for (sh = 0; sh < PIPE_SHADER_TYPES; sh++) {
+         for (sh = 0; sh < PIPE_SHADER_MESH_TYPES; sh++) {
             switch (sh) {
             case PIPE_SHADER_GEOMETRY:
                if (!ctx->has_geometry_shader)
@@ -378,6 +382,11 @@ cso_unbind_context(struct cso_context *ctx)
                break;
             case PIPE_SHADER_COMPUTE:
                if (!ctx->has_compute_shader)
+                  continue;
+               break;
+            case PIPE_SHADER_MESH:
+            case PIPE_SHADER_TASK:
+               if (!ctx->has_task_mesh_shader)
                   continue;
                break;
             default:
@@ -433,6 +442,10 @@ cso_unbind_context(struct cso_context *ctx)
       }
       if (ctx->has_compute_shader) {
          ctx->base.pipe->bind_compute_state(ctx->base.pipe, NULL);
+      }
+      if (ctx->has_task_mesh_shader) {
+         ctx->base.pipe->bind_ts_state(ctx->base.pipe, NULL);
+         ctx->base.pipe->bind_ms_state(ctx->base.pipe, NULL);
       }
       ctx->base.pipe->bind_vertex_elements_state(ctx->base.pipe, NULL);
 
@@ -806,7 +819,7 @@ cso_set_viewport(struct cso_context *ctx,
  */
 void
 cso_set_viewport_dims(struct cso_context *ctx,
-                      float width, float height, boolean invert)
+                      float width, float height, bool invert)
 {
    struct pipe_viewport_state vp;
    vp.scale[0] = width * 0.5f;
@@ -920,7 +933,7 @@ cso_restore_stencil_ref(struct cso_context *ctx)
 void
 cso_set_render_condition(struct cso_context *ctx,
                          struct pipe_query *query,
-                         boolean condition,
+                         bool condition,
                          enum pipe_render_cond_flag mode)
 {
    struct pipe_context *pipe = ctx->base.pipe;
@@ -1532,7 +1545,7 @@ cso_set_stream_outputs(struct cso_context *ctx,
                        const unsigned *offsets)
 {
    struct pipe_context *pipe = ctx->base.pipe;
-   uint i;
+   unsigned i;
 
    if (!ctx->has_streamout) {
       assert(num_targets == 0);
@@ -1579,7 +1592,7 @@ static void
 cso_restore_stream_outputs(struct cso_context *ctx)
 {
    struct pipe_context *pipe = ctx->base.pipe;
-   uint i;
+   unsigned i;
    unsigned offset[PIPE_MAX_SO_BUFFERS];
 
    if (!ctx->has_streamout) {
@@ -1770,7 +1783,7 @@ cso_restore_compute_state(struct cso_context *cso)
 /* drawing */
 
 void
-cso_draw_arrays(struct cso_context *cso, uint mode, uint start, uint count)
+cso_draw_arrays(struct cso_context *cso, unsigned mode, unsigned start, unsigned count)
 {
    struct pipe_draw_info info;
    struct pipe_draw_start_count_bias draw;
@@ -1791,9 +1804,9 @@ cso_draw_arrays(struct cso_context *cso, uint mode, uint start, uint count)
 
 
 void
-cso_draw_arrays_instanced(struct cso_context *cso, uint mode,
-                          uint start, uint count,
-                          uint start_instance, uint instance_count)
+cso_draw_arrays_instanced(struct cso_context *cso, unsigned mode,
+                          unsigned start, unsigned count,
+                          unsigned start_instance, unsigned instance_count)
 {
    struct pipe_draw_info info;
    struct pipe_draw_start_count_bias draw;

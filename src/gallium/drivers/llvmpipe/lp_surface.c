@@ -92,16 +92,16 @@ lp_resource_copy(struct pipe_context *pipe,
 {
    llvmpipe_flush_resource(pipe,
                            dst, dst_level,
-                           FALSE, /* read_only */
-                           TRUE, /* cpu_access */
-                           FALSE, /* do_not_block */
+                           false, /* read_only */
+                           true, /* cpu_access */
+                           false, /* do_not_block */
                            "blit dest");
 
    llvmpipe_flush_resource(pipe,
                            src, src_level,
-                           TRUE, /* read_only */
-                           TRUE, /* cpu_access */
-                           FALSE, /* do_not_block */
+                           true, /* read_only */
+                           true, /* cpu_access */
+                           false, /* do_not_block */
                            "blit src");
 
    if (dst->nr_samples > 1 &&
@@ -281,10 +281,10 @@ llvmpipe_get_sample_position(struct pipe_context *pipe,
 
 static void
 lp_clear_color_texture_helper(struct pipe_transfer *dst_trans,
-                                ubyte *dst_map,
-                                enum pipe_format format,
-                                const union pipe_color_union *color,
-                                unsigned width, unsigned height,
+                              uint8_t *dst_map,
+                              enum pipe_format format,
+                              const union pipe_color_union *color,
+                              unsigned width, unsigned height,
                               unsigned depth)
 {
    union util_color uc;
@@ -308,7 +308,7 @@ lp_clear_color_texture_msaa(struct pipe_context *pipe,
                             const struct pipe_box *box)
 {
    struct pipe_transfer *dst_trans;
-   ubyte *dst_map;
+   uint8_t *dst_map;
 
    dst_map = llvmpipe_transfer_map_ms(pipe, texture, 0, PIPE_MAP_WRITE,
                                       sample, box, &dst_trans);
@@ -366,20 +366,20 @@ lp_clear_depth_stencil_texture_msaa(struct pipe_context *pipe,
                                     const struct pipe_box *box)
 {
    struct pipe_transfer *dst_trans;
-   boolean need_rmw = FALSE;
+   bool need_rmw = false;
 
    if ((clear_flags & PIPE_CLEAR_DEPTHSTENCIL) &&
        ((clear_flags & PIPE_CLEAR_DEPTHSTENCIL) != PIPE_CLEAR_DEPTHSTENCIL) &&
        util_format_is_depth_and_stencil(format)) {
-      need_rmw = TRUE;
+      need_rmw = true;
    }
 
-   ubyte *dst_map = llvmpipe_transfer_map_ms(pipe,
-                                             texture,
-                                             0,
-                                             (need_rmw ? PIPE_MAP_READ_WRITE :
-                                              PIPE_MAP_WRITE),
-                                             sample, box, &dst_trans);
+   uint8_t *dst_map = llvmpipe_transfer_map_ms(pipe,
+                                               texture,
+                                               0,
+                                               (need_rmw ? PIPE_MAP_READ_WRITE :
+                                                PIPE_MAP_WRITE),
+                                               sample, box, &dst_trans);
    assert(dst_map);
    if (!dst_map)
       return;
@@ -442,7 +442,7 @@ llvmpipe_clear_texture(struct pipe_context *pipe,
    const struct util_format_description *desc =
           util_format_description(tex->format);
    if (tex->nr_samples <= 1) {
-      util_clear_texture(pipe, tex, level, box, data);
+      util_clear_texture_sw(pipe, tex, level, box, data);
       return;
    }
    union pipe_color_union color;

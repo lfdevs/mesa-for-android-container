@@ -11,6 +11,7 @@
 #include "vn_common.h"
 
 #include <stdarg.h>
+#include <sys/syscall.h>
 
 #include "util/log.h"
 #include "util/os_misc.h"
@@ -45,6 +46,7 @@ static const struct debug_control vn_perf_options[] = {
    { "no_memory_suballoc", VN_PERF_NO_MEMORY_SUBALLOC },
    { "no_cmd_batching", VN_PERF_NO_CMD_BATCHING },
    { "no_timeline_sem_feedback", VN_PERF_NO_TIMELINE_SEM_FEEDBACK },
+   { "no_query_feedback", VN_PERF_NO_QUERY_FEEDBACK },
    { NULL, 0 },
    /* clang-format on */
 };
@@ -126,7 +128,7 @@ vn_extension_get_spec_version(const char *name)
 static bool
 vn_ring_monitor_acquire(struct vn_ring *ring)
 {
-   pid_t tid = gettid();
+   pid_t tid = syscall(SYS_gettid);
    if (!ring->monitor.threadid && tid != ring->monitor.threadid &&
        mtx_trylock(&ring->monitor.mutex) == thrd_success) {
       /* register as the only waiting thread that monitors the ring. */
@@ -138,7 +140,7 @@ vn_ring_monitor_acquire(struct vn_ring *ring)
 void
 vn_ring_monitor_release(struct vn_ring *ring)
 {
-   if (gettid() != ring->monitor.threadid)
+   if (syscall(SYS_gettid) != ring->monitor.threadid)
       return;
 
    ring->monitor.threadid = 0;

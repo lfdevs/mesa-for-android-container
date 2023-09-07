@@ -54,7 +54,7 @@ draw_prim_assembler_create(struct draw_context *draw);
 void
 draw_prim_assembler_destroy(struct draw_assembler *ia);
 
-boolean
+bool
 draw_prim_assembler_is_required(const struct draw_context *draw,
                                 const struct draw_prim_info *prim_info,
                                 const struct draw_vertex_info *vert_info);

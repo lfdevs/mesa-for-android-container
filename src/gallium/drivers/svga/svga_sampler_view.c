@@ -65,7 +65,7 @@ svga_get_tex_sampler_view(struct pipe_context *pipe,
    SVGA3dSurface1Flags flags = SVGA3D_SURFACE_HINT_TEXTURE;
    SVGA3dSurfaceFormat format = svga_translate_format(ss, pt->format,
                                                       PIPE_BIND_SAMPLER_VIEW);
-   boolean view = TRUE;
+   bool view = true;
 
    assert(pt);
    assert(min_lod <= max_lod);
@@ -80,13 +80,13 @@ svga_get_tex_sampler_view(struct pipe_context *pipe,
        * results as a view.
        */
       if (min_lod == 0 && max_lod >= pt->last_level)
-         view = FALSE;
+         view = false;
 
       if (ss->debug.no_sampler_view)
-         view = FALSE;
+         view = false;
 
       if (ss->debug.force_sampler_view)
-         view = TRUE;
+         view = true;
    }
 
    /* First try the cache */
@@ -151,7 +151,7 @@ svga_get_tex_sampler_view(struct pipe_context *pipe,
                                           flags, format,
                                           min_lod,
                                           max_lod - min_lod + 1,
-                                          -1, 1, -1, FALSE,
+                                          -1, 1, -1, false,
                                           &sv->key);
 
    if (!sv->handle) {

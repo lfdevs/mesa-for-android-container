@@ -79,8 +79,8 @@ visit_vulkan_resource_index(nir_builder *b, apply_layout_state *state, nir_intri
    nir_ssa_def *set_ptr;
    if (layout->binding[binding].type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
        layout->binding[binding].type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) {
-      unsigned idx = state->pipeline_layout->set[desc_set].dynamic_offset_start +
-                     layout->binding[binding].dynamic_offset_offset;
+      unsigned idx =
+         state->pipeline_layout->set[desc_set].dynamic_offset_start + layout->binding[binding].dynamic_offset_offset;
       set_ptr = get_scalar_arg(b, 1, state->args->ac.push_constants);
       offset = state->pipeline_layout->push_constant_size + idx * 16;
       stride = 16;
@@ -99,15 +99,13 @@ visit_vulkan_resource_index(nir_builder *b, apply_layout_state *state, nir_intri
       assert(stride == 16);
       nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_pack_64_2x32_split(b, set_ptr, binding_ptr));
    } else {
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                               nir_vec3(b, set_ptr, binding_ptr, nir_imm_int(b, stride)));
+      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_vec3(b, set_ptr, binding_ptr, nir_imm_int(b, stride)));
    }
    nir_instr_remove(&intrin->instr);
 }
 
 static void
-visit_vulkan_resource_reindex(nir_builder *b, apply_layout_state *state,
-                              nir_intrinsic_instr *intrin)
+visit_vulkan_resource_reindex(nir_builder *b, apply_layout_state *state, nir_intrinsic_instr *intrin)
 {
    VkDescriptorType desc_type = nir_intrinsic_desc_type(intrin);
    if (desc_type == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
@@ -121,8 +119,7 @@ visit_vulkan_resource_reindex(nir_builder *b, apply_layout_state *state,
 
       nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_pack_64_2x32_split(b, set_ptr, binding_ptr));
    } else {
-      assert(desc_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-             desc_type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+      assert(desc_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || desc_type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
       nir_ssa_def *binding_ptr = nir_channel(b, intrin->src[0].ssa, 1);
       nir_ssa_def *stride = nir_channel(b, intrin->src[0].ssa, 2);
@@ -132,8 +129,7 @@ visit_vulkan_resource_reindex(nir_builder *b, apply_layout_state *state,
 
       binding_ptr = nir_iadd_nuw(b, binding_ptr, index);
 
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                               nir_vector_insert_imm(b, intrin->src[0].ssa, binding_ptr, 1));
+      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_vector_insert_imm(b, intrin->src[0].ssa, binding_ptr, 1));
    }
    nir_instr_remove(&intrin->instr);
 }
@@ -142,16 +138,14 @@ static void
 visit_load_vulkan_descriptor(nir_builder *b, apply_layout_state *state, nir_intrinsic_instr *intrin)
 {
    if (nir_intrinsic_desc_type(intrin) == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
-      nir_ssa_def *addr =
-         convert_pointer_to_64_bit(b, state,
-                                   nir_iadd(b, nir_unpack_64_2x32_split_x(b, intrin->src[0].ssa),
-                                            nir_unpack_64_2x32_split_y(b, intrin->src[0].ssa)));
+      nir_ssa_def *addr = convert_pointer_to_64_bit(b, state,
+                                                    nir_iadd(b, nir_unpack_64_2x32_split_x(b, intrin->src[0].ssa),
+                                                             nir_unpack_64_2x32_split_y(b, intrin->src[0].ssa)));
       nir_ssa_def *desc = nir_build_load_global(b, 1, 64, addr, .access = ACCESS_NON_WRITEABLE);
 
       nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
    } else {
-      nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
-                               nir_vector_insert_imm(b, intrin->src[0].ssa, nir_imm_int(b, 0), 2));
+      nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_vector_insert_imm(b, intrin->src[0].ssa, nir_imm_int(b, 0), 2));
    }
    nir_instr_remove(&intrin->instr);
 }
@@ -159,27 +153,24 @@ visit_load_vulkan_descriptor(nir_builder *b, apply_layout_state *state, nir_intr
 static nir_ssa_def *
 load_inline_buffer_descriptor(nir_builder *b, apply_layout_state *state, nir_ssa_def *rsrc)
 {
-   uint32_t desc_type =
-      S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) | S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
-      S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) | S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
+   uint32_t desc_type = S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) | S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
+                        S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) | S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
    if (state->gfx_level >= GFX11) {
-      desc_type |= S_008F0C_FORMAT(V_008F0C_GFX11_FORMAT_32_FLOAT) |
-                   S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW);
+      desc_type |= S_008F0C_FORMAT(V_008F0C_GFX11_FORMAT_32_FLOAT) | S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW);
    } else if (state->gfx_level >= GFX10) {
-      desc_type |= S_008F0C_FORMAT(V_008F0C_GFX10_FORMAT_32_FLOAT) |
-                   S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW) | S_008F0C_RESOURCE_LEVEL(1);
+      desc_type |= S_008F0C_FORMAT(V_008F0C_GFX10_FORMAT_32_FLOAT) | S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW) |
+                   S_008F0C_RESOURCE_LEVEL(1);
    } else {
-      desc_type |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
-                   S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
+      desc_type |=
+         S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) | S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
    }
 
-   return nir_vec4(b, rsrc, nir_imm_int(b, S_008F04_BASE_ADDRESS_HI(state->address32_hi)),
-                   nir_imm_int(b, 0xffffffff), nir_imm_int(b, desc_type));
+   return nir_vec4(b, rsrc, nir_imm_int(b, S_008F04_BASE_ADDRESS_HI(state->address32_hi)), nir_imm_int(b, 0xffffffff),
+                   nir_imm_int(b, desc_type));
 }
 
 static nir_ssa_def *
-load_buffer_descriptor(nir_builder *b, apply_layout_state *state, nir_ssa_def *rsrc,
-                       unsigned access)
+load_buffer_descriptor(nir_builder *b, apply_layout_state *state, nir_ssa_def *rsrc, unsigned access)
 {
    nir_binding binding = nir_chase_binding(nir_src_for_ssa(rsrc));
 
@@ -187,8 +178,7 @@ load_buffer_descriptor(nir_builder *b, apply_layout_state *state, nir_ssa_def *r
     * VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK.
     */
    if (binding.success) {
-      struct radv_descriptor_set_layout *layout =
-         state->pipeline_layout->set[binding.desc_set].layout;
+      struct radv_descriptor_set_layout *layout = state->pipeline_layout->set[binding.desc_set].layout;
       if (layout->binding[binding.binding].type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK) {
          rsrc = nir_iadd(b, nir_channel(b, rsrc, 0), nir_channel(b, rsrc, 1));
          return load_inline_buffer_descriptor(b, state, rsrc);
@@ -212,9 +202,8 @@ visit_get_ssbo_size(nir_builder *b, apply_layout_state *state, nir_intrinsic_ins
       nir_ssa_def *ptr = nir_iadd(b, nir_channel(b, rsrc, 0), nir_channel(b, rsrc, 1));
       ptr = nir_iadd_imm(b, ptr, 8);
       ptr = convert_pointer_to_64_bit(b, state, ptr);
-      size =
-         nir_build_load_global(b, 4, 32, ptr, .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER,
-                               .align_mul = 16, .align_offset = 4);
+      size = nir_build_load_global(b, 4, 32, ptr, .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER, .align_mul = 16,
+                                   .align_offset = 4);
    } else {
       /* load the entire descriptor so it can be CSE'd */
       nir_ssa_def *ptr = convert_pointer_to_64_bit(b, state, nir_channel(b, rsrc, 0));
@@ -227,9 +216,8 @@ visit_get_ssbo_size(nir_builder *b, apply_layout_state *state, nir_intrinsic_ins
 }
 
 static nir_ssa_def *
-get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *deref,
-                 enum ac_descriptor_type desc_type, bool non_uniform, nir_tex_instr *tex,
-                 bool write)
+get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *deref, enum ac_descriptor_type desc_type,
+                 bool non_uniform, nir_tex_instr *tex, bool write)
 {
    nir_variable *var = nir_deref_instr_get_variable(deref);
    assert(var);
@@ -259,9 +247,8 @@ get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *der
 
       uint32_t dword0_mask = tex->op == nir_texop_tg4 ? C_008F30_TRUNC_COORD : 0xffffffffu;
       const uint32_t *samplers = radv_immutable_samplers(layout, binding);
-      return nir_imm_ivec4(b, samplers[constant_index * 4 + 0] & dword0_mask,
-                           samplers[constant_index * 4 + 1], samplers[constant_index * 4 + 2],
-                           samplers[constant_index * 4 + 3]);
+      return nir_imm_ivec4(b, samplers[constant_index * 4 + 0] & dword0_mask, samplers[constant_index * 4 + 1],
+                           samplers[constant_index * 4 + 2], samplers[constant_index * 4 + 3]);
    }
 
    unsigned size = 8;
@@ -322,8 +309,7 @@ get_sampler_desc(nir_builder *b, apply_layout_state *state, nir_deref_instr *der
     * use the tail from plane 1 so that we can store only the first 16 bytes
     * of the last plane. */
    if (desc_type == AC_DESC_PLANE_2) {
-      nir_ssa_def *desc2 =
-         get_sampler_desc(b, state, deref, AC_DESC_PLANE_1, non_uniform, tex, write);
+      nir_ssa_def *desc2 = get_sampler_desc(b, state, deref, AC_DESC_PLANE_1, non_uniform, tex, write);
 
       nir_ssa_def *comp[8];
       for (unsigned i = 0; i < 4; i++)
@@ -364,12 +350,11 @@ update_image_intrinsic(nir_builder *b, apply_layout_state *state, nir_intrinsic_
 {
    nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
    const enum glsl_sampler_dim dim = glsl_get_sampler_dim(deref->type);
-   bool is_load = intrin->intrinsic == nir_intrinsic_image_deref_load ||
-                  intrin->intrinsic == nir_intrinsic_image_deref_sparse_load;
+   bool is_load =
+      intrin->intrinsic == nir_intrinsic_image_deref_load || intrin->intrinsic == nir_intrinsic_image_deref_sparse_load;
 
-   nir_ssa_def *desc = get_sampler_desc(
-      b, state, deref, dim == GLSL_SAMPLER_DIM_BUF ? AC_DESC_BUFFER : AC_DESC_IMAGE,
-      nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM, NULL, !is_load);
+   nir_ssa_def *desc = get_sampler_desc(b, state, deref, dim == GLSL_SAMPLER_DIM_BUF ? AC_DESC_BUFFER : AC_DESC_IMAGE,
+                                        nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM, NULL, !is_load);
 
    if (intrin->intrinsic == nir_intrinsic_image_deref_descriptor_amd) {
       nir_ssa_def_rewrite_uses(&intrin->dest.ssa, desc);
@@ -397,19 +382,8 @@ apply_layout_to_intrin(nir_builder *b, apply_layout_state *state, nir_intrinsic_
       break;
    case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ssbo:
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_fmin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_fmax:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
       rsrc = load_buffer_descriptor(b, state, intrin->src[0].ssa, nir_intrinsic_access(intrin));
       nir_instr_rewrite_src_ssa(&intrin->instr, &intrin->src[0], rsrc);
       break;
@@ -423,21 +397,8 @@ apply_layout_to_intrin(nir_builder *b, apply_layout_state *state, nir_intrinsic_
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_sparse_load:
    case nir_intrinsic_image_deref_store:
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_fmin:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_fmax:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_fadd:
-   case nir_intrinsic_image_deref_atomic_inc_wrap:
-   case nir_intrinsic_image_deref_atomic_dec_wrap:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
    case nir_intrinsic_image_deref_descriptor_amd:
@@ -478,25 +439,20 @@ apply_layout_to_tex(nir_builder *b, apply_layout_state *state, nir_tex_instr *te
    if (plane >= 0) {
       assert(tex->op != nir_texop_txf_ms && tex->op != nir_texop_samples_identical);
       assert(tex->sampler_dim != GLSL_SAMPLER_DIM_BUF);
-      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_PLANE_0 + plane,
-                               tex->texture_non_uniform, tex, false);
+      image =
+         get_sampler_desc(b, state, texture_deref_instr, AC_DESC_PLANE_0 + plane, tex->texture_non_uniform, tex, false);
    } else if (tex->sampler_dim == GLSL_SAMPLER_DIM_BUF) {
-      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_BUFFER,
-                               tex->texture_non_uniform, tex, false);
+      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_BUFFER, tex->texture_non_uniform, tex, false);
    } else if (tex->op == nir_texop_fragment_mask_fetch_amd) {
-      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_FMASK,
-                               tex->texture_non_uniform, tex, false);
+      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_FMASK, tex->texture_non_uniform, tex, false);
    } else {
-      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_IMAGE,
-                               tex->texture_non_uniform, tex, false);
+      image = get_sampler_desc(b, state, texture_deref_instr, AC_DESC_IMAGE, tex->texture_non_uniform, tex, false);
    }
 
    if (sampler_deref_instr) {
-      sampler = get_sampler_desc(b, state, sampler_deref_instr, AC_DESC_SAMPLER,
-                                 tex->sampler_non_uniform, tex, false);
+      sampler = get_sampler_desc(b, state, sampler_deref_instr, AC_DESC_SAMPLER, tex->sampler_non_uniform, tex, false);
 
-      if (state->disable_aniso_single_level && tex->sampler_dim < GLSL_SAMPLER_DIM_RECT &&
-          state->gfx_level < GFX8) {
+      if (state->disable_aniso_single_level && tex->sampler_dim < GLSL_SAMPLER_DIM_RECT && state->gfx_level < GFX8) {
          /* Disable anisotropic filtering if BASE_LEVEL == LAST_LEVEL.
           *
           * GFX6-GFX7:
@@ -543,8 +499,7 @@ apply_layout_to_tex(nir_builder *b, apply_layout_state *state, nir_tex_instr *te
 
 void
 radv_nir_apply_pipeline_layout(nir_shader *shader, struct radv_device *device,
-                               const struct radv_pipeline_layout *layout,
-                               const struct radv_shader_info *info,
+                               const struct radv_pipeline_layout *layout, const struct radv_shader_info *info,
                                const struct radv_shader_args *args)
 {
    apply_layout_state state = {
@@ -563,7 +518,7 @@ radv_nir_apply_pipeline_layout(nir_shader *shader, struct radv_device *device,
       if (!function->impl)
          continue;
 
-      nir_builder_init(&b, function->impl);
+      b = nir_builder_create(function->impl);
 
       /* Iterate in reverse so load_ubo lowering can look at
        * the vulkan_resource_index to tell if it's an inline

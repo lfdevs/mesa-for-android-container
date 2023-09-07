@@ -126,8 +126,8 @@ repair_ssa_def(nir_ssa_def *def, void *void_state)
          cast->parent = nir_src_for_ssa(block_def);
          cast->cast.ptr_stride = nir_deref_instr_array_stride(deref);
 
-         nir_ssa_dest_init(&cast->instr, &cast->dest,
-                           def->num_components, def->bit_size, NULL);
+         nir_ssa_dest_init(&cast->instr, &cast->dest, def->num_components,
+                           def->bit_size);
          nir_instr_insert(nir_before_instr(src->parent_instr),
                           &cast->instr);
          block_def = &cast->dest.ssa;
@@ -184,9 +184,8 @@ nir_repair_ssa(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress = nir_repair_ssa_impl(function->impl) || progress;
+   nir_foreach_function_impl(impl, shader) {
+      progress = nir_repair_ssa_impl(impl) || progress;
    }
 
    return progress;

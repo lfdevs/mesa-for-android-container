@@ -194,7 +194,7 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
                                                type, 1 << channel, num_channels), "");
 
       type2 = type;
-      type2.floating = FALSE;
+      type2.floating = false;
       type2.width *= 2;
       type2.length /= 2;
 
@@ -271,7 +271,7 @@ lp_build_swizzle_scalar_aos(struct lp_build_context *bld,
        */
 
       struct lp_type type4 = type;
-      type4.floating = FALSE;
+      type4.floating = false;
       type4.width *= 4;
       type4.length /= 4;
 
@@ -470,7 +470,7 @@ lp_build_swizzle_aos(struct lp_build_context *bld,
        * channels.
        */
       struct lp_type type4 = type;
-      type4.floating = FALSE;
+      type4.floating = false;
       type4.width *= 4;
       type4.length /= 4;
 

@@ -58,6 +58,8 @@ def to_yn(b):
      - ${to_yn('associative' in op.algebraic_properties)}
      - ${to_yn('2src_commutative' in op.algebraic_properties)}
 
+${("**Description:** " + op.description) if op.description != "" else ""}
+
 **Constant-folding:**
 
 .. code-block:: c

@@ -85,8 +85,8 @@ dx_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
     * check for is_array though, in the worst case we create an additional
     * move the the optimization will remove later again. */
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
-   nir_ssa_def *ssa_src = nir_channels(b, tex->src[coord_index].src.ssa,
-                                       (1 << coord_components) - 1);
+   nir_ssa_def *ssa_src = nir_trim_vector(b, tex->src[coord_index].src.ssa,
+                                          coord_components);
    nir_src src = nir_src_for_ssa(ssa_src);
    nir_src_copy(&tql->src[0].src, &src, &tql->instr);
    tql->src[0].src_type = nir_tex_src_coord;
@@ -105,7 +105,7 @@ dx_get_texture_lod(nir_builder *b, nir_tex_instr *tex)
       }
    }
 
-   nir_ssa_dest_init(&tql->instr, &tql->dest, 2, 32, NULL);
+   nir_ssa_dest_init(&tql->instr, &tql->dest, 2, 32);
    nir_builder_instr_insert(b, &tql->instr);
 
    /* DirectX LOD only has a value in x channel */
@@ -128,7 +128,7 @@ static void
 wrap_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
 {
    /* clamp(coord, 0, size - 1) */
-   wrap_params->coords = nir_fmin(b, nir_fsub(b, size, nir_imm_float(b, 1.0f)),
+   wrap_params->coords = nir_fmin(b, nir_fadd_imm(b, size, -1.0f),
                                   nir_fmax(b, wrap_params->coords, nir_imm_float(b, 0.0f)));
 }
 
@@ -146,32 +146,32 @@ static nir_ssa_def *
 mirror(nir_builder *b, nir_ssa_def *coord)
 {
    /* coord if >= 0, otherwise -(1 + coord) */
-   return nir_bcsel(b, nir_fge(b, coord, nir_imm_float(b, 0.0f)), coord,
-                    nir_fneg(b, nir_fadd(b, nir_imm_float(b, 1.0f), coord)));
+   return nir_bcsel(b, nir_fge_imm(b, coord, 0.0f), coord,
+                    nir_fneg(b, nir_fadd_imm(b, coord, 1.0f)));
 }
 
 static void
 wrap_mirror_repeat(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
 {
    /* (size − 1) − mirror(mod(coord, 2 * size) − size) */
-   nir_ssa_def *coord_mod2size = nir_fmod(b, wrap_params->coords, nir_fmul(b, nir_imm_float(b, 2.0f), size));
+   nir_ssa_def *coord_mod2size = nir_fmod(b, wrap_params->coords, nir_fmul_imm(b, size, 2.0f));
    nir_instr_as_alu(coord_mod2size->parent_instr)->exact = true;
    nir_ssa_def *a = nir_fsub(b, coord_mod2size, size);
-   wrap_params->coords = nir_fsub(b, nir_fsub(b, size, nir_imm_float(b, 1.0f)), mirror(b, a));
+   wrap_params->coords = nir_fsub(b, nir_fadd_imm(b, size, -1.0f), mirror(b, a));
 }
 
 static void
 wrap_mirror_clamp_to_edge(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
 {
    /* clamp(mirror(coord), 0, size - 1) */
-   wrap_params->coords = nir_fmin(b, nir_fsub(b, size, nir_imm_float(b, 1.0f)),
+   wrap_params->coords = nir_fmin(b, nir_fadd_imm(b, size, -1.0f),
                                   nir_fmax(b, mirror(b, wrap_params->coords), nir_imm_float(b, 0.0f)));
 }
 
 static void
 wrap_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
 {
-   nir_ssa_def *is_low = nir_flt(b, wrap_params->coords, nir_imm_float(b, 0.0));
+   nir_ssa_def *is_low = nir_flt_imm(b, wrap_params->coords, 0.0);
    nir_ssa_def *is_high = nir_fge(b, wrap_params->coords, size);
    wrap_params->use_border_color = nir_ior(b, is_low, is_high);
 }
@@ -180,8 +180,8 @@ static void
 wrap_mirror_clamp(nir_builder *b, wrap_result_t *wrap_params, nir_ssa_def *size)
 {
    /* We have to take care of the boundaries */
-   nir_ssa_def *is_low = nir_flt(b, wrap_params->coords, nir_fmul(b, size, nir_imm_float(b, -1.0)));
-   nir_ssa_def *is_high = nir_flt(b, nir_fmul(b, size, nir_imm_float(b, 2.0)), wrap_params->coords);
+   nir_ssa_def *is_low = nir_flt(b, wrap_params->coords, nir_fmul_imm(b, size, -1.0));
+   nir_ssa_def *is_high = nir_flt(b, nir_fmul_imm(b, size, 2.0), wrap_params->coords);
    wrap_params->use_border_color = nir_ior(b, is_low, is_high);
 
    /* Within the boundaries this acts like mirror_repeat */
@@ -296,8 +296,8 @@ create_txf_from_tex(nir_builder *b, nir_tex_instr *tex)
       }
    }
 
-   nir_ssa_dest_init(&txf->instr, &txf->dest,
-                     nir_tex_instr_dest_size(txf), 32, NULL);
+   nir_ssa_dest_init(&txf->instr, &txf->dest, nir_tex_instr_dest_size(txf),
+                     32);
    nir_builder_instr_insert(b, &txf->instr);
 
    return txf;

@@ -147,6 +147,49 @@ typedef struct tagGLYPHMETRICSFLOAT {
   FLOAT      gmfCellIncY;
 } GLYPHMETRICSFLOAT, *PGLYPHMETRICSFLOAT, *LPGLYPHMETRICSFLOAT;
 
+/* Bitmap Header */
+
+typedef long FXPT2DOT30;
+
+typedef struct tagCIEXYZ {
+   FXPT2DOT30 ciexyzX;
+   FXPT2DOT30 ciexyzY;
+   FXPT2DOT30 ciexyzZ;
+} CIEXYZ;
+
+typedef struct tagICEXYZTRIPLE {
+   CIEXYZ ciexyzRed;
+   CIEXYZ ciexyzGreen;
+   CIEXYZ ciexyzBlue;
+} CIEXYZTRIPLE;
+
+typedef struct {
+   DWORD        bV5Size;
+   LONG         bV5Width;
+   LONG         bV5Height;
+   WORD         bV5Planes;
+   WORD         bV5BitCount;
+   DWORD        bV5Compression;
+   DWORD        bV5SizeImage;
+   LONG         bV5XPelsPerMeter;
+   LONG         bV5YPelsPerMeter;
+   DWORD        bV5ClrUsed;
+   DWORD        bV5ClrImportant;
+   DWORD        bV5RedMask;
+   DWORD        bV5GreenMask;
+   DWORD        bV5BlueMask;
+   DWORD        bV5AlphaMask;
+   DWORD        bV5CSType;
+   CIEXYZTRIPLE bV5Endpoints;
+   DWORD        bV5GammaRed;
+   DWORD        bV5GammaGreen;
+   DWORD        bV5GammaBlue;
+   DWORD        bV5Intent;
+   DWORD        bV5ProfileData;
+   DWORD        bV5ProfileSize;
+   DWORD        bV5Reserved;
+} BITMAPV5HEADER, *LPBITMAPV5HEADER, *PBITMAPV5HEADER;
+
 #endif /* _GAMING_XBOX */
 
 #endif /* STW_PIXELFORMAT_H */

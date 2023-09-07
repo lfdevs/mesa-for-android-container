@@ -177,7 +177,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
                                           PIPE_MAP_READ, &ib_transfer);
       }
 
-      draw_set_indexes(draw, (ubyte *)mapped_indices, info->index_size, ~0);
+      draw_set_indexes(draw, (uint8_t *)mapped_indices, info->index_size, ~0);
    }
 
    /* set constant buffer 0 */

@@ -43,24 +43,24 @@ struct radv_shader_args;
 struct radv_device;
 
 void radv_nir_apply_pipeline_layout(nir_shader *shader, struct radv_device *device,
-                                    const struct radv_pipeline_layout *layout,
-                                    const struct radv_shader_info *info,
+                                    const struct radv_pipeline_layout *layout, const struct radv_shader_info *info,
                                     const struct radv_shader_args *args);
 
-void radv_nir_lower_abi(nir_shader *shader, enum amd_gfx_level gfx_level,
-                        const struct radv_shader_info *info, const struct radv_shader_args *args,
-                        const struct radv_pipeline_key *pl_key, uint32_t address32_hi);
+void radv_nir_lower_abi(nir_shader *shader, enum amd_gfx_level gfx_level, const struct radv_shader_info *info,
+                        const struct radv_shader_args *args, const struct radv_pipeline_key *pl_key,
+                        uint32_t address32_hi);
 
 bool radv_nir_lower_ray_queries(struct nir_shader *shader, struct radv_device *device);
 
 bool radv_nir_lower_vs_inputs(nir_shader *shader, const struct radv_pipeline_stage *vs_stage,
-                              const struct radv_pipeline_key *pl_key,
-                              const struct radeon_info *rad_info);
+                              const struct radv_pipeline_key *pl_key, const struct radeon_info *rad_info);
 
 bool radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_level);
 
 bool radv_nir_lower_fs_intrinsics(nir_shader *nir, const struct radv_pipeline_stage *fs_stage,
                                   const struct radv_pipeline_key *key);
+
+bool radv_nir_lower_fs_barycentric(nir_shader *shader, const struct radv_pipeline_key *key, unsigned rast_prim);
 
 bool radv_nir_lower_intrinsics_early(nir_shader *nir, const struct radv_pipeline_key *key);
 
@@ -75,6 +75,8 @@ void radv_nir_lower_io_to_scalar_early(nir_shader *nir, nir_variable_mode mask);
 void radv_nir_lower_io(struct radv_device *device, nir_shader *nir);
 
 bool radv_nir_lower_io_to_mem(struct radv_device *device, struct radv_pipeline_stage *stage);
+
+void radv_nir_lower_poly_line_smooth(nir_shader *nir, const struct radv_pipeline_key *key);
 
 #ifdef __cplusplus
 }

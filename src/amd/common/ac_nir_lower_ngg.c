@@ -1,25 +1,7 @@
 /*
  * Copyright © 2021 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -376,7 +358,7 @@ repack_invocations_in_workgroup(nir_builder *b, nir_ssa_def *input_bool,
 
    nir_store_shared(b, nir_u2u8(b, surviving_invocations_in_current_wave), lds_offset);
 
-   nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                          .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
    nir_ssa_def *packed_counts =
@@ -424,26 +406,40 @@ pervertex_lds_addr(nir_builder *b, nir_ssa_def *vertex_idx, unsigned per_vtx_byt
 
 static nir_ssa_def *
 emit_pack_ngg_prim_exp_arg(nir_builder *b, unsigned num_vertices_per_primitives,
-                           nir_ssa_def *vertex_indices[3], nir_ssa_def *is_null_prim,
-                           bool use_edgeflags)
+                           nir_ssa_def *vertex_indices[3], nir_ssa_def *is_null_prim)
 {
-   nir_ssa_def *arg = use_edgeflags
-                      ? nir_load_initial_edgeflags_amd(b)
-                      : nir_imm_int(b, 0);
+   nir_ssa_def *arg = nir_load_initial_edgeflags_amd(b);
 
    for (unsigned i = 0; i < num_vertices_per_primitives; ++i) {
       assert(vertex_indices[i]);
-      arg = nir_ior(b, arg, nir_ishl(b, vertex_indices[i], nir_imm_int(b, 10u * i)));
+      arg = nir_ior(b, arg, nir_ishl_imm(b, vertex_indices[i], 10u * i));
    }
 
    if (is_null_prim) {
       if (is_null_prim->bit_size == 1)
          is_null_prim = nir_b2i32(b, is_null_prim);
       assert(is_null_prim->bit_size == 32);
-      arg = nir_ior(b, arg, nir_ishl(b, is_null_prim, nir_imm_int(b, 31u)));
+      arg = nir_ior(b, arg, nir_ishl_imm(b, is_null_prim, 31u));
    }
 
    return arg;
+}
+
+static void
+alloc_vertices_and_primitives(nir_builder *b,
+                              nir_ssa_def *num_vtx,
+                              nir_ssa_def *num_prim)
+{
+   /* The caller should only call this conditionally on wave 0.
+    *
+    * Send GS Alloc Request message from the first wave of the group to SPI.
+    * Message payload (in the m0 register) is:
+    * - bits 0..10: number of vertices in group
+    * - bits 12..22: number of primitives in group
+    */
+
+   nir_ssa_def *m0 = nir_ior(b, nir_ishl_imm(b, num_prim, 12), num_vtx);
+   nir_sendmsg_amd(b, m0, .base = AC_SENDMSG_GS_ALLOC_REQ);
 }
 
 static void
@@ -461,7 +457,7 @@ alloc_vertices_and_primitives_gfx10_workaround(nir_builder *b,
    nir_if *if_prim_cnt_0 = nir_push_if(b, is_prim_cnt_0);
    {
       nir_ssa_def *one = nir_imm_int(b, 1);
-      nir_alloc_vertices_and_primitives_amd(b, one, one);
+      alloc_vertices_and_primitives(b, one, one);
 
       nir_ssa_def *tid = nir_load_subgroup_invocation(b);
       nir_ssa_def *is_thread_0 = nir_ieq_imm(b, tid, 0);
@@ -485,7 +481,7 @@ alloc_vertices_and_primitives_gfx10_workaround(nir_builder *b,
    }
    nir_push_else(b, if_prim_cnt_0);
    {
-      nir_alloc_vertices_and_primitives_amd(b, num_vtx, num_prim);
+      alloc_vertices_and_primitives(b, num_vtx, num_prim);
    }
    nir_pop_if(b, if_prim_cnt_0);
 }
@@ -497,10 +493,10 @@ ngg_nogs_init_vertex_indices_vars(nir_builder *b, nir_function_impl *impl, lower
       s->gs_vtx_indices_vars[v] = nir_local_variable_create(impl, glsl_uint_type(), "gs_vtx_addr");
 
       nir_ssa_def *vtx = s->options->passthrough ?
-         nir_ubfe(b, nir_load_packed_passthrough_primitive_amd(b),
-                  nir_imm_int(b, 10 * v), nir_imm_int(b, 9)) :
-         nir_ubfe(b, nir_load_gs_vertex_offset_amd(b, .base = v / 2u),
-                  nir_imm_int(b, (v & 1u) * 16u), nir_imm_int(b, 16u));
+         nir_ubfe_imm(b, nir_load_packed_passthrough_primitive_amd(b),
+                      10 * v, 9) :
+         nir_ubfe_imm(b, nir_load_gs_vertex_offset_amd(b, .base = v / 2u),
+                      (v & 1u) * 16u, 16u);
 
       nir_store_var(b, s->gs_vtx_indices_vars[v], vtx, 0x1);
    }
@@ -517,8 +513,7 @@ emit_ngg_nogs_prim_exp_arg(nir_builder *b, lower_ngg_nogs_state *s)
       for (unsigned v = 0; v < s->options->num_vertices_per_primitive; ++v)
          vtx_idx[v] = nir_load_var(b, s->gs_vtx_indices_vars[v]);
 
-      return emit_pack_ngg_prim_exp_arg(b, s->options->num_vertices_per_primitive, vtx_idx, NULL,
-                                        s->options->use_edgeflags);
+      return emit_pack_ngg_prim_exp_arg(b, s->options->num_vertices_per_primitive, vtx_idx, NULL);
    }
 }
 
@@ -547,8 +542,8 @@ nogs_prim_gen_query(nir_builder *b, lower_ngg_nogs_state *s)
       nir_if *if_elected = nir_push_if(b, nir_elect(b, 1));
       {
          /* Number of input primitives in the current wave. */
-         nir_ssa_def *num_input_prims = nir_ubfe(b, nir_load_merged_wave_info_amd(b),
-                                                 nir_imm_int(b, 8), nir_imm_int(b, 8));
+         nir_ssa_def *num_input_prims = nir_ubfe_imm(b, nir_load_merged_wave_info_amd(b),
+                                                     8, 8);
 
          /* Add to stream 0 primitive generated counter. */
          nir_atomic_add_gen_prim_count_amd(b, num_input_prims, .stream_id = 0);
@@ -569,12 +564,12 @@ emit_ngg_nogs_prim_export(nir_builder *b, lower_ngg_nogs_state *s, nir_ssa_def *
       /* pack user edge flag info into arg */
       if (s->has_user_edgeflags) {
          /* Workgroup barrier: wait for ES threads store user edge flags to LDS */
-         nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                            .memory_scope = NIR_SCOPE_WORKGROUP,
+         nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                            .memory_scope = SCOPE_WORKGROUP,
                             .memory_semantics = NIR_MEMORY_ACQ_REL,
                             .memory_modes = nir_var_mem_shared);
 
-         unsigned edge_flag_bits = (1u << 9) | (1u << 19) | (1u << 29);
+         unsigned edge_flag_bits = ac_get_all_edge_flag_bits();
          nir_ssa_def *mask = nir_imm_intN_t(b, ~edge_flag_bits, 32);
 
          unsigned edge_flag_offset = 0;
@@ -655,7 +650,7 @@ emit_store_ngg_nogs_es_primitive_id(nir_builder *b, lower_ngg_nogs_state *s)
 static void
 add_clipdist_bit(nir_builder *b, nir_ssa_def *dist, unsigned index, nir_variable *mask)
 {
-   nir_ssa_def *is_neg = nir_flt(b, dist, nir_imm_float(b, 0));
+   nir_ssa_def *is_neg = nir_flt_imm(b, dist, 0);
    nir_ssa_def *neg_mask = nir_ishl_imm(b, nir_b2i32(b, is_neg), index);
    neg_mask = nir_ior(b, neg_mask, nir_load_var(b, mask));
    nir_store_var(b, mask, neg_mask, 1);
@@ -874,8 +869,7 @@ cleanup_culling_shader_after_dce(nir_shader *shader,
    bool uses_tes_patch_id = false;
 
    bool progress = false;
-   nir_builder b;
-   nir_builder_init(&b, function_impl);
+   nir_builder b = nir_builder_create(function_impl);
 
    nir_foreach_block_reverse_safe(block, function_impl) {
       nir_foreach_instr_reverse_safe(instr, block) {
@@ -885,7 +879,7 @@ cleanup_culling_shader_after_dce(nir_shader *shader,
          nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
          switch (intrin->intrinsic) {
-         case nir_intrinsic_alloc_vertices_and_primitives_amd:
+         case nir_intrinsic_sendmsg_amd:
             goto cleanup_culling_shader_after_dce_done;
          case nir_intrinsic_load_vertex_id:
          case nir_intrinsic_load_vertex_id_zero_base:
@@ -998,7 +992,7 @@ compact_vertices_after_culling(nir_builder *b,
     * Waves that have no vertices and primitives left can s_endpgm right here.
     */
 
-   nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                          .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
    nir_ssa_def *es_survived = nir_ilt(b, invocation_index, num_live_vertices_in_workgroup);
@@ -1042,7 +1036,7 @@ compact_vertices_after_culling(nir_builder *b,
 
       nir_ssa_def *prim_exp_arg =
          emit_pack_ngg_prim_exp_arg(b, s->options->num_vertices_per_primitive,
-                                    exporter_vtx_indices, NULL, s->options->use_edgeflags);
+                                    exporter_vtx_indices, NULL);
       nir_store_var(b, prim_exp_arg_var, prim_exp_arg, 0x1u);
    }
    nir_pop_if(b, if_gs_accepted);
@@ -1089,6 +1083,16 @@ analyze_shader_before_culling_walk(nir_ssa_def *ssa,
 
       for (unsigned i = 0; i < num_srcs; ++i) {
          analyze_shader_before_culling_walk(alu->src[i].src.ssa, flag, s);
+      }
+
+      break;
+   }
+   case nir_instr_type_tex: {
+      nir_tex_instr *tex = nir_instr_as_tex(instr);
+      unsigned num_srcs = tex->num_srcs;
+
+      for (unsigned i = 0; i < num_srcs; ++i) {
+         analyze_shader_before_culling_walk(tex->src[i].src.ssa, flag, s);
       }
 
       break;
@@ -1210,6 +1214,9 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *s)
    ASSERTED int vec_ok = u_vector_init(&s->reusable_nondeferred_variables, 4, sizeof(reusable_nondeferred_variable));
    assert(vec_ok);
 
+   /* Upper limit on reusable uniforms in order to reduce SGPR spilling. */
+   unsigned remaining_reusable_uniforms = 48;
+
    nir_block *block = nir_start_block(b->impl);
    while (block) {
       /* Process the instructions in the current block. */
@@ -1227,6 +1234,13 @@ save_reusable_variables(nir_builder *b, lower_ngg_nogs_state *s)
          const struct glsl_type *t = glsl_uint_type_for_ssa(ssa);
          if (!t)
             continue;
+
+         if (!ssa->divergent) {
+            if (remaining_reusable_uniforms < ssa->num_components)
+               continue;
+
+            remaining_reusable_uniforms -= ssa->num_components;
+         }
 
          reusable_nondeferred_variable *saved = (reusable_nondeferred_variable *) u_vector_add(&s->reusable_nondeferred_variables);
          assert(saved);
@@ -1298,7 +1312,7 @@ apply_reusable_variables(nir_builder *b, lower_ngg_nogs_state *s)
          /* When we found any of these intrinsics, it means
           * we reached the top part and we must stop.
           */
-         if (intrin->intrinsic == nir_intrinsic_alloc_vertices_and_primitives_amd)
+         if (intrin->intrinsic == nir_intrinsic_sendmsg_amd)
             goto done;
 
          if (intrin->intrinsic != nir_intrinsic_store_deref)
@@ -1495,7 +1509,7 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
    /* Run culling algorithms if culling is enabled.
     *
     * NGG culling can be enabled or disabled in runtime.
-    * This is determined by a SGPR shader argument which is acccessed
+    * This is determined by a SGPR shader argument which is accessed
     * by the following NIR intrinsic.
     */
 
@@ -1524,10 +1538,10 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
       }
       nir_pop_if(b, if_es_thread);
 
-      nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                             .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
-      nir_store_var(b, s->gs_accepted_var, nir_imm_bool(b, false), 0x1u);
+      nir_store_var(b, s->gs_accepted_var, nir_imm_false(b), 0x1u);
       nir_store_var(b, s->prim_exp_arg_var, nir_imm_int(b, 1u << 31), 0x1u);
 
       /* GS invocations load the vertex data and perform the culling. */
@@ -1567,7 +1581,7 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
             /* primitive is culled if any plane's clipdist of all vertices are negative */
             accepted_by_clipdist = nir_ieq_imm(b, clipdist_neg_mask, 0);
          } else {
-            accepted_by_clipdist = nir_imm_bool(b, true);
+            accepted_by_clipdist = nir_imm_true(b);
          }
 
          /* See if the current primitive is accepted */
@@ -1577,17 +1591,17 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
       }
       nir_pop_if(b, if_gs_thread);
 
-      nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                             .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
-      nir_store_var(b, s->es_accepted_var, nir_imm_bool(b, false), 0x1u);
+      nir_store_var(b, s->es_accepted_var, nir_imm_false(b), 0x1u);
 
       /* ES invocations load their accepted flag from LDS. */
       if_es_thread = nir_push_if(b, es_thread);
       if_es_thread->control = nir_selection_control_divergent_always_taken;
       {
          nir_ssa_def *accepted = nir_load_shared(b, 1, 8u, es_vertex_lds_addr, .base = lds_es_vertex_accepted, .align_mul = 4u);
-         nir_ssa_def *accepted_bool = nir_ine(b, accepted, nir_imm_intN_t(b, 0, 8));
+         nir_ssa_def *accepted_bool = nir_ine_imm(b, nir_u2u32(b, accepted), 0);
          nir_store_var(b, s->es_accepted_var, accepted_bool, 0x1u);
       }
       nir_pop_if(b, if_es_thread);
@@ -1607,14 +1621,14 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
       num_exported_prims = nir_bcsel(b, fully_culled, nir_imm_int(b, 0u), num_exported_prims);
       nir_store_var(b, s->gs_exported_var, nir_iand(b, nir_inot(b, fully_culled), has_input_primitive(b)), 0x1u);
 
-      nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_load_subgroup_id(b), nir_imm_int(b, 0)));
+      nir_if *if_wave_0 = nir_push_if(b, nir_ieq_imm(b, nir_load_subgroup_id(b), 0));
       {
          /* Tell the final vertex and primitive count to the HW. */
          if (s->options->gfx_level == GFX10) {
             alloc_vertices_and_primitives_gfx10_workaround(
                b, num_live_vertices_in_workgroup, num_exported_prims);
          } else {
-            nir_alloc_vertices_and_primitives_amd(
+            alloc_vertices_and_primitives(
                b, num_live_vertices_in_workgroup, num_exported_prims);
          }
       }
@@ -1630,11 +1644,11 @@ add_deferred_attribute_culling(nir_builder *b, nir_cf_list *original_extracted_c
    nir_push_else(b, if_cull_en);
    {
       /* When culling is disabled, we do the same as we would without culling. */
-      nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_load_subgroup_id(b), nir_imm_int(b, 0)));
+      nir_if *if_wave_0 = nir_push_if(b, nir_ieq_imm(b, nir_load_subgroup_id(b), 0));
       {
          nir_ssa_def *vtx_cnt = nir_load_workgroup_num_input_vertices_amd(b);
          nir_ssa_def *prim_cnt = nir_load_workgroup_num_input_primitives_amd(b);
-         nir_alloc_vertices_and_primitives_amd(b, vtx_cnt, prim_cnt);
+         alloc_vertices_and_primitives(b, vtx_cnt, prim_cnt);
       }
       nir_pop_if(b, if_wave_0);
       nir_store_var(b, s->prim_exp_arg_var, emit_ngg_nogs_prim_exp_arg(b, s), 0x1u);
@@ -1856,7 +1870,7 @@ ngg_build_streamout_buffer_info(nir_builder *b,
       nir_ssa_def *emit_prim[4];
       memcpy(emit_prim, gen_prim, 4 * sizeof(nir_ssa_def *));
 
-      nir_ssa_def *any_overflow = nir_imm_bool(b, false);
+      nir_ssa_def *any_overflow = nir_imm_false(b);
       nir_ssa_def *overflow_amount[4] = {undef, undef, undef, undef};
 
       for (unsigned buffer = 0; buffer < 4; buffer++) {
@@ -1889,9 +1903,9 @@ ngg_build_streamout_buffer_info(nir_builder *b,
        */
       nir_if *if_any_overflow = nir_push_if(b, any_overflow);
       {
-         nir_build_xfb_counter_sub_amd(b, nir_vec(b, overflow_amount, 4),
-                                       /* mask of buffers to update */
-                                       .write_mask = info->buffers_written);
+         nir_xfb_counter_sub_amd(b, nir_vec(b, overflow_amount, 4),
+                                 /* mask of buffers to update */
+                                 .write_mask = info->buffers_written);
       }
       nir_pop_if(b, if_any_overflow);
 
@@ -1917,8 +1931,8 @@ ngg_build_streamout_buffer_info(nir_builder *b,
    }
    nir_pop_if(b, if_invocation_0);
 
-   nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                      .memory_scope = NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                      .memory_scope = SCOPE_WORKGROUP,
                       .memory_semantics = NIR_MEMORY_ACQ_REL,
                       .memory_modes = nir_var_mem_shared);
 
@@ -2018,7 +2032,8 @@ ngg_build_streamout_vertex(nir_builder *b, nir_xfb_info *info,
                            vtx_buffer_offsets[out->buffer],
                            zero, zero,
                            .base = out->offset,
-                           .access = ACCESS_STREAM_CACHE_POLICY);
+                           .memory_modes = nir_var_mem_ssbo,
+                           .access = ACCESS_NON_TEMPORAL);
    }
 }
 
@@ -2052,7 +2067,7 @@ ngg_nogs_build_streamout(nir_builder *b, lower_ngg_nogs_state *s)
 
       for (unsigned i = 0; i < s->options->num_vertices_per_primitive; i++) {
          nir_if *if_valid_vertex =
-            nir_push_if(b, nir_ilt(b, nir_imm_int(b, i), num_vert_per_prim));
+            nir_push_if(b, nir_igt_imm(b, num_vert_per_prim, i));
          {
             nir_ssa_def *vtx_lds_idx = nir_load_var(b, s->gs_vtx_indices_vars[i]);
             nir_ssa_def *vtx_lds_addr = pervertex_lds_addr(b, vtx_lds_idx, vtx_lds_stride);
@@ -2077,7 +2092,7 @@ ngg_nogs_build_streamout(nir_builder *b, lower_ngg_nogs_state *s)
     * TODO: not sure if we need this barrier when late prim export, as I
     *       can't observe test fail without this barrier.
     */
-   nir_memory_barrier_buffer(b);
+   nir_scoped_memory_barrier(b, SCOPE_DEVICE, NIR_MEMORY_RELEASE, nir_var_mem_ssbo);
 }
 
 static unsigned
@@ -2343,9 +2358,8 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
       shader->info.outputs_written |= VARYING_BIT_PRIMITIVE_ID;
    }
 
-   nir_builder builder;
+   nir_builder builder = nir_builder_create(impl);
    nir_builder *b = &builder; /* This is to avoid the & */
-   nir_builder_init(b, impl);
 
    if (options->can_cull) {
       analyze_shader_before_culling(shader, &state);
@@ -2372,11 +2386,11 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
       /* Newer chips can use PRIMGEN_PASSTHRU_NO_MSG to skip gs_alloc_req for NGG passthrough. */
       if (!(options->passthrough && options->family >= CHIP_NAVI23)) {
          /* Allocate export space on wave 0 - confirm to the HW that we want to use all possible space */
-         nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_load_subgroup_id(b), nir_imm_int(b, 0)));
+         nir_if *if_wave_0 = nir_push_if(b, nir_ieq_imm(b, nir_load_subgroup_id(b), 0));
          {
             nir_ssa_def *vtx_cnt = nir_load_workgroup_num_input_vertices_amd(b);
             nir_ssa_def *prim_cnt = nir_load_workgroup_num_input_primitives_amd(b);
-            nir_alloc_vertices_and_primitives_amd(b, vtx_cnt, prim_cnt);
+            alloc_vertices_and_primitives(b, vtx_cnt, prim_cnt);
          }
          nir_pop_if(b, if_wave_0);
       }
@@ -2395,8 +2409,8 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
 
       /* Wait for culling to finish using LDS. */
       if (need_prim_id_store_shared || has_user_edgeflags) {
-         nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                               .memory_scope = NIR_SCOPE_WORKGROUP,
+         nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                               .memory_scope = SCOPE_WORKGROUP,
                                .memory_semantics = NIR_MEMORY_ACQ_REL,
                                .memory_modes = nir_var_mem_shared);
       }
@@ -2414,7 +2428,7 @@ ac_nir_lower_ngg_nogs(nir_shader *shader, const ac_nir_lower_ngg_options *option
       emit_ngg_nogs_prim_id_store_shared(b, &state);
 
       /* Wait for GS threads to store primitive ID in LDS. */
-      nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP, .memory_scope = NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_WORKGROUP,
                             .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_shared);
    }
 
@@ -2622,8 +2636,7 @@ ngg_gs_clear_primflags(nir_builder *b, nir_ssa_def *num_vertices, unsigned strea
    nir_loop *loop = nir_push_loop(b);
    {
       nir_ssa_def *clear_primflag_idx = nir_load_var(b, clear_primflag_idx_var);
-      nir_if *if_break = nir_push_if(
-         b, nir_uge(b, clear_primflag_idx, nir_imm_int(b, b->shader->info.gs.vertices_out)));
+      nir_if *if_break = nir_push_if(b, nir_uge_imm(b, clear_primflag_idx, b->shader->info.gs.vertices_out));
       {
          nir_jump(b, nir_jump_break);
       }
@@ -2826,13 +2839,13 @@ lower_ngg_gs_emit_vertex_with_counter(nir_builder *b, nir_intrinsic_instr *intri
          ? nir_ishl_imm(b, nir_b2i32(b, nir_inot(b, nir_load_cull_any_enabled_amd(b))), 2)
          : nir_imm_int(b, 0b100);
 
-   nir_ssa_def *completes_prim = nir_ige(b, current_vtx_per_prim, nir_imm_int(b, s->num_vertices_per_primitive - 1));
+   nir_ssa_def *completes_prim = nir_ige_imm(b, current_vtx_per_prim, s->num_vertices_per_primitive - 1);
    nir_ssa_def *complete_flag = nir_b2i32(b, completes_prim);
 
    nir_ssa_def *prim_flag = nir_ior(b, vertex_live_flag, complete_flag);
    if (s->num_vertices_per_primitive == 3) {
       nir_ssa_def *odd = nir_iand(b, current_vtx_per_prim, complete_flag);
-      nir_ssa_def *odd_flag = nir_ishl(b, odd, nir_imm_int(b, 1));
+      nir_ssa_def *odd_flag = nir_ishl_imm(b, odd, 1);
       prim_flag = nir_ior(b, prim_flag, odd_flag);
    }
 
@@ -2917,9 +2930,9 @@ ngg_gs_export_primitives(nir_builder *b, nir_ssa_def *max_num_out_prims, nir_ssa
    nir_ssa_def *vtx_indices[3] = {0};
    vtx_indices[s->num_vertices_per_primitive - 1] = exporter_tid_in_tg;
    if (s->num_vertices_per_primitive >= 2)
-      vtx_indices[s->num_vertices_per_primitive - 2] = nir_isub(b, exporter_tid_in_tg, nir_imm_int(b, 1));
+      vtx_indices[s->num_vertices_per_primitive - 2] = nir_iadd_imm(b, exporter_tid_in_tg, -1);
    if (s->num_vertices_per_primitive == 3)
-      vtx_indices[s->num_vertices_per_primitive - 3] = nir_isub(b, exporter_tid_in_tg, nir_imm_int(b, 2));
+      vtx_indices[s->num_vertices_per_primitive - 3] = nir_iadd_imm(b, exporter_tid_in_tg, -2);
 
    if (s->num_vertices_per_primitive == 3) {
       /* API GS outputs triangle strips, but NGG HW understands triangles.
@@ -2927,7 +2940,7 @@ ngg_gs_export_primitives(nir_builder *b, nir_ssa_def *max_num_out_prims, nir_ssa
        * make sure the vertex order is so that the front/back is correct, and the provoking vertex is kept.
        */
 
-      nir_ssa_def *is_odd = nir_ubfe(b, primflag_0, nir_imm_int(b, 1), nir_imm_int(b, 1));
+      nir_ssa_def *is_odd = nir_ubfe_imm(b, primflag_0, 1, 1);
       nir_ssa_def *provoking_vertex_index = nir_load_provoking_vtx_in_prim_amd(b);
       nir_ssa_def *provoking_vertex_first = nir_ieq_imm(b, provoking_vertex_index, 0);
 
@@ -2940,7 +2953,8 @@ ngg_gs_export_primitives(nir_builder *b, nir_ssa_def *max_num_out_prims, nir_ssa
                                  nir_isub(b, vtx_indices[2], is_odd), vtx_indices[2]);
    }
 
-   nir_ssa_def *arg = emit_pack_ngg_prim_exp_arg(b, s->num_vertices_per_primitive, vtx_indices, is_null_prim, false);
+   nir_ssa_def *arg = emit_pack_ngg_prim_exp_arg(b, s->num_vertices_per_primitive, vtx_indices,
+                                                 is_null_prim);
    ac_nir_export_primitive(b, arg);
    nir_pop_if(b, if_prim_export_thread);
 }
@@ -3098,7 +3112,7 @@ ngg_gs_out_prim_all_vtxptr(nir_builder *b, nir_ssa_def *last_vtxidx, nir_ssa_def
 
    bool primitive_is_triangle = s->num_vertices_per_primitive == 3;
    nir_ssa_def *is_odd = primitive_is_triangle ?
-      nir_ubfe(b, last_vtx_primflag, nir_imm_int(b, 1), nir_imm_int(b, 1)) : NULL;
+      nir_ubfe_imm(b, last_vtx_primflag, 1, 1) : NULL;
 
    for (unsigned i = 0; i < s->num_vertices_per_primitive - 1; i++) {
       nir_ssa_def *vtxidx = nir_iadd_imm(b, last_vtxidx, -(last_vtx - i));
@@ -3150,7 +3164,7 @@ ngg_gs_cull_primitive(nir_builder *b, nir_ssa_def *tid_in_tg, nir_ssa_def *max_v
       }
 
       /* TODO: support clipdist culling in GS */
-      nir_ssa_def *accepted_by_clipdist = nir_imm_bool(b, true);
+      nir_ssa_def *accepted_by_clipdist = nir_imm_true(b);
 
       nir_ssa_def *accepted = ac_nir_cull_primitive(
          b, accepted_by_clipdist, pos, s->num_vertices_per_primitive, NULL, NULL);
@@ -3168,8 +3182,8 @@ ngg_gs_cull_primitive(nir_builder *b, nir_ssa_def *tid_in_tg, nir_ssa_def *max_v
    nir_pop_if(b, if_prim_enable);
 
    /* Wait for LDS primflag access done. */
-   nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                         .memory_scope = NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                         .memory_scope = SCOPE_WORKGROUP,
                          .memory_semantics = NIR_MEMORY_ACQ_REL,
                          .memory_modes = nir_var_mem_shared);
 
@@ -3239,7 +3253,7 @@ ngg_gs_build_streamout(nir_builder *b, lower_ngg_gs_state *s)
 
       /* We want to export primitives to streamout buffer in sequence,
        * but not all vertices are alive or mark end of a primitive, so
-       * there're "holes". We don't need continous invocations to write
+       * there're "holes". We don't need continuous invocations to write
        * primitives to streamout buffer like final vertex export, so
        * just repack to get the sequence (export_seq) is enough, no need
        * to do compaction.
@@ -3262,8 +3276,8 @@ ngg_gs_build_streamout(nir_builder *b, lower_ngg_gs_state *s)
    }
 
    /* Workgroup barrier: wait for LDS scratch reads finish. */
-   nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                      .memory_scope = NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                      .memory_scope = SCOPE_WORKGROUP,
                       .memory_semantics = NIR_MEMORY_ACQ_REL,
                       .memory_modes = nir_var_mem_shared);
 
@@ -3318,8 +3332,8 @@ ngg_gs_finale(nir_builder *b, lower_ngg_gs_state *s)
       /* When the output is compile-time known, the GS writes all possible vertices and primitives it can.
        * The gs_alloc_req needs to happen on one wave only, otherwise the HW hangs.
        */
-      nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_load_subgroup_id(b), nir_imm_zero(b, 1, 32)));
-      nir_alloc_vertices_and_primitives_amd(b, max_vtxcnt, max_prmcnt);
+      nir_if *if_wave_0 = nir_push_if(b, nir_ieq_imm(b, nir_load_subgroup_id(b), 0));
+      alloc_vertices_and_primitives(b, max_vtxcnt, max_prmcnt);
       nir_pop_if(b, if_wave_0);
    }
 
@@ -3352,7 +3366,7 @@ ngg_gs_finale(nir_builder *b, lower_ngg_gs_state *s)
     * requires that the invocations that export vertices are packed (ie. compact).
     * To ensure this, we need to repack invocations that have a live vertex.
     */
-   nir_ssa_def *vertex_live = nir_ine(b, out_vtx_primflag_0, nir_imm_zero(b, 1, out_vtx_primflag_0->bit_size));
+   nir_ssa_def *vertex_live = nir_ine_imm(b, out_vtx_primflag_0, 0);
    wg_repack_result rep = repack_invocations_in_workgroup(b, vertex_live, s->lds_addr_gs_scratch,
                                                           s->max_num_waves, s->options->wave_size);
 
@@ -3360,16 +3374,16 @@ ngg_gs_finale(nir_builder *b, lower_ngg_gs_state *s)
    nir_ssa_def *exporter_tid_in_tg = rep.repacked_invocation_index;
 
    /* When the workgroup emits 0 total vertices, we also must export 0 primitives (otherwise the HW can hang). */
-   nir_ssa_def *any_output = nir_ine(b, workgroup_num_vertices, nir_imm_int(b, 0));
+   nir_ssa_def *any_output = nir_ine_imm(b, workgroup_num_vertices, 0);
    max_prmcnt = nir_bcsel(b, any_output, max_prmcnt, nir_imm_int(b, 0));
 
    /* Allocate export space. We currently don't compact primitives, just use the maximum number. */
-   nir_if *if_wave_0 = nir_push_if(b, nir_ieq(b, nir_load_subgroup_id(b), nir_imm_zero(b, 1, 32)));
+   nir_if *if_wave_0 = nir_push_if(b, nir_ieq_imm(b, nir_load_subgroup_id(b), 0));
    {
       if (s->options->gfx_level == GFX10)
          alloc_vertices_and_primitives_gfx10_workaround(b, workgroup_num_vertices, max_prmcnt);
       else
-         nir_alloc_vertices_and_primitives_amd(b, workgroup_num_vertices, max_prmcnt);
+         alloc_vertices_and_primitives(b, workgroup_num_vertices, max_prmcnt);
    }
    nir_pop_if(b, if_wave_0);
 
@@ -3377,7 +3391,7 @@ ngg_gs_finale(nir_builder *b, lower_ngg_gs_state *s)
    ngg_gs_setup_vertex_compaction(b, vertex_live, tid_in_tg, exporter_tid_in_tg, s);
 
    /* Workgroup barrier: wait for all LDS stores to finish. */
-   nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                         .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
    ngg_gs_export_primitives(b, max_prmcnt, tid_in_tg, exporter_tid_in_tg, out_vtx_primflag_0, s);
@@ -3407,11 +3421,11 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options)
          state.const_out_prmcnt[0] != -1;
    }
 
-   if (shader->info.gs.output_primitive == SHADER_PRIM_POINTS)
+   if (shader->info.gs.output_primitive == MESA_PRIM_POINTS)
       state.num_vertices_per_primitive = 1;
-   else if (shader->info.gs.output_primitive == SHADER_PRIM_LINE_STRIP)
+   else if (shader->info.gs.output_primitive == MESA_PRIM_LINE_STRIP)
       state.num_vertices_per_primitive = 2;
-   else if (shader->info.gs.output_primitive == SHADER_PRIM_TRIANGLE_STRIP)
+   else if (shader->info.gs.output_primitive == MESA_PRIM_TRIANGLE_STRIP)
       state.num_vertices_per_primitive = 3;
    else
       unreachable("Invalid GS output primitive.");
@@ -3420,13 +3434,11 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options)
    nir_cf_list extracted;
    nir_cf_extract(&extracted, nir_before_cf_list(&impl->body), nir_after_cf_list(&impl->body));
 
-   nir_builder builder;
+   nir_builder builder = nir_builder_at(nir_before_cf_list(&impl->body));
    nir_builder *b = &builder; /* This is to avoid the & */
-   nir_builder_init(b, impl);
-   b->cursor = nir_before_cf_list(&impl->body);
 
    /* Workgroup barrier: wait for ES threads */
-   nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                          .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
    state.lds_addr_gs_out_vtx = nir_load_lds_ngg_gs_out_vertex_base_amd(b);
@@ -3440,7 +3452,7 @@ ac_nir_lower_ngg_gs(nir_shader *shader, const ac_nir_lower_ngg_options *options)
    nir_pop_if(b, if_gs_thread);
 
    /* Workgroup barrier: wait for all GS threads to finish */
-   nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                          .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_mem_shared);
 
    if (state.streamout_enabled)
@@ -4021,7 +4033,7 @@ ms_emit_arrayed_outputs(nir_builder *b,
    nir_ssa_def *zero = nir_imm_int(b, 0);
 
    u_foreach_bit64(slot, mask) {
-      /* Should not occour here, handled separately. */
+      /* Should not occur here, handled separately. */
       assert(slot != VARYING_SLOT_PRIMITIVE_COUNT && slot != VARYING_SLOT_PRIMITIVE_INDICES);
 
       unsigned component_mask = s->output_info[slot].components_mask;
@@ -4096,15 +4108,15 @@ ms_emit_legacy_workgroup_index(nir_builder *b, lower_ngg_ms_state *s)
       nir_if *if_wave_0 = nir_push_if(b, nir_ieq_imm(b, wave_id, 0));
       {
          nir_store_shared(b, workgroup_index, zero, .base = workgroup_index_lds_addr);
-         nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                               .memory_scope = NIR_SCOPE_WORKGROUP,
+         nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                               .memory_scope = SCOPE_WORKGROUP,
                                .memory_semantics = NIR_MEMORY_ACQ_REL,
                                .memory_modes = nir_var_mem_shared);
       }
       nir_push_else(b, if_wave_0);
       {
-         nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                               .memory_scope = NIR_SCOPE_WORKGROUP,
+         nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                               .memory_scope = SCOPE_WORKGROUP,
                                .memory_semantics = NIR_MEMORY_ACQ_REL,
                                .memory_modes = nir_var_mem_shared);
          loaded_workgroup_index = nir_load_shared(b, 1, 32, zero, .base = workgroup_index_lds_addr);
@@ -4136,7 +4148,7 @@ set_ms_final_output_counts(nir_builder *b,
 
    if (s->hw_workgroup_size <= s->wave_size) {
       /* Single-wave mesh shader workgroup. */
-      nir_alloc_vertices_and_primitives_amd(b, num_vtx, num_prm);
+      alloc_vertices_and_primitives(b, num_vtx, num_prm);
       *out_num_prm = num_prm;
       *out_num_vtx = num_vtx;
       return;
@@ -4162,17 +4174,17 @@ set_ms_final_output_counts(nir_builder *b,
       }
       nir_pop_if(b, if_elected);
 
-      nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                            .memory_scope = NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                            .memory_scope = SCOPE_WORKGROUP,
                             .memory_semantics = NIR_MEMORY_ACQ_REL,
                             .memory_modes = nir_var_mem_shared);
 
-      nir_alloc_vertices_and_primitives_amd(b, num_vtx, num_prm);
+      alloc_vertices_and_primitives(b, num_vtx, num_prm);
    }
    nir_push_else(b, if_wave_0);
    {
-      nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                            .memory_scope = NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                            .memory_scope = SCOPE_WORKGROUP,
                             .memory_semantics = NIR_MEMORY_ACQ_REL,
                             .memory_modes = nir_var_mem_shared);
 
@@ -4293,7 +4305,7 @@ emit_ms_finale(nir_builder *b, lower_ngg_ms_state *s)
    nir_block *last_block = nir_impl_last_block(b->impl);
    b->cursor = nir_after_block(last_block);
 
-   nir_scoped_barrier(b, .execution_scope=NIR_SCOPE_WORKGROUP, .memory_scope=NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope=SCOPE_WORKGROUP, .memory_scope=SCOPE_WORKGROUP,
                          .memory_semantics=NIR_MEMORY_ACQ_REL, .memory_modes=nir_var_shader_out|nir_var_mem_shared);
 
    nir_ssa_def *num_prm;
@@ -4392,7 +4404,8 @@ emit_ms_finale(nir_builder *b, lower_ngg_ms_state *s)
          indices[i] = nir_umin(b, indices[i], max_vtx_idx);
       }
 
-      nir_ssa_def *prim_exp_arg = emit_pack_ngg_prim_exp_arg(b, s->vertices_per_prim, indices, cull_flag, false);
+      nir_ssa_def *prim_exp_arg = emit_pack_ngg_prim_exp_arg(b, s->vertices_per_prim, indices,
+                                                             cull_flag);
 
       ms_emit_primitive_export(b, prim_exp_arg, per_primitive_outputs, s);
 
@@ -4449,7 +4462,7 @@ handle_smaller_ms_api_workgroup(nir_builder *b,
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
             bool is_workgroup_barrier =
                intrin->intrinsic == nir_intrinsic_scoped_barrier &&
-               nir_intrinsic_execution_scope(intrin) == NIR_SCOPE_WORKGROUP;
+               nir_intrinsic_execution_scope(intrin) == SCOPE_WORKGROUP;
 
             if (!is_workgroup_barrier)
                continue;
@@ -4459,8 +4472,8 @@ handle_smaller_ms_api_workgroup(nir_builder *b,
                 * In this case, we can change the barriers to subgroup scope
                 * and avoid adding additional barriers.
                 */
-               nir_intrinsic_set_memory_scope(intrin, NIR_SCOPE_SUBGROUP);
-               nir_intrinsic_set_execution_scope(intrin, NIR_SCOPE_SUBGROUP);
+               nir_intrinsic_set_memory_scope(intrin, SCOPE_SUBGROUP);
+               nir_intrinsic_set_execution_scope(intrin, SCOPE_SUBGROUP);
             } else {
                has_any_workgroup_barriers = true;
             }
@@ -4487,13 +4500,13 @@ handle_smaller_ms_api_workgroup(nir_builder *b,
       }
       nir_pop_if(b, if_first_in_workgroup);
 
-      nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                            .memory_scope = NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                            .memory_scope = SCOPE_WORKGROUP,
                             .memory_semantics = NIR_MEMORY_ACQ_REL,
                             .memory_modes = nir_var_shader_out | nir_var_mem_shared);
    }
 
-   nir_ssa_def *has_api_ms_invocation = nir_ult(b, invocation_index, nir_imm_int(b, s->api_workgroup_size));
+   nir_ssa_def *has_api_ms_invocation = nir_ult_imm(b, invocation_index, s->api_workgroup_size);
    nir_if *if_has_api_ms_invocation = nir_push_if(b, has_api_ms_invocation);
    {
       nir_cf_reinsert(&extracted, b->cursor);
@@ -4503,12 +4516,14 @@ handle_smaller_ms_api_workgroup(nir_builder *b,
          /* One invocation in each API wave decrements the number of API waves in flight. */
          nir_if *if_elected_again = nir_push_if(b, nir_elect(b, 1));
          {
-            nir_shared_atomic_add(b, 32, zero, nir_imm_int(b, -1u), .base = api_waves_in_flight_addr);
+            nir_shared_atomic(b, 32, zero, nir_imm_int(b, -1u),
+                              .base = api_waves_in_flight_addr,
+                              .atomic_op = nir_atomic_op_iadd);
          }
          nir_pop_if(b, if_elected_again);
 
-         nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                               .memory_scope = NIR_SCOPE_WORKGROUP,
+         nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                               .memory_scope = SCOPE_WORKGROUP,
                                .memory_semantics = NIR_MEMORY_ACQ_REL,
                                .memory_modes = nir_var_shader_out | nir_var_mem_shared);
       }
@@ -4530,8 +4545,8 @@ handle_smaller_ms_api_workgroup(nir_builder *b,
          {
             nir_loop *loop = nir_push_loop(b);
             {
-               nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                                     .memory_scope = NIR_SCOPE_WORKGROUP,
+               nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                                     .memory_scope = SCOPE_WORKGROUP,
                                      .memory_semantics = NIR_MEMORY_ACQ_REL,
                                      .memory_modes = nir_var_shader_out | nir_var_mem_shared);
 
@@ -4744,10 +4759,8 @@ ac_nir_lower_ngg_ms(nir_shader *shader,
    state.primitive_count_var =
       nir_local_variable_create(impl, glsl_uint_type(), "primitive_count_var");
 
-   nir_builder builder;
+   nir_builder builder = nir_builder_at(nir_before_cf_list(&impl->body));
    nir_builder *b = &builder; /* This is to avoid the & */
-   nir_builder_init(b, impl);
-   b->cursor = nir_before_cf_list(&impl->body);
 
    handle_smaller_ms_api_workgroup(b, &state);
    ms_emit_legacy_workgroup_index(b, &state);

@@ -209,7 +209,7 @@ the ``(rptN`)`` interpretation.
 An ``<override>`` in a bitset allows to redefine the display string, and/or
 field definitions from the default case.  If the override's expr(ession)
 evaluates to non-zero, ``<display>``, ``<field>``, and ``<derived>``
-elements take precedence over what is defined in the toplevel of the
+elements take precedence over what is defined in the top-level of the
 bitset (i.e. the default case).
 
 Expressions

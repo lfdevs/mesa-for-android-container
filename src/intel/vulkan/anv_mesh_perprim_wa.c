@@ -25,7 +25,7 @@
 #include "nir_builder.h"
 
 /*
- * Wa_14015590813 for gfx 12.5.
+ * Wa_18019110168 for gfx 12.5.
  *
  * This file implements workaround for HW bug, which leads to fragment shader
  * reading incorrect per-primitive data if mesh shader, in addition to writing
@@ -153,16 +153,14 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
          num_mesh_vertices_per_primitive(nir->info.mesh.primitive_type);
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_after_cf_list(&impl->body);
+   nir_builder b = nir_builder_at(nir_after_cf_list(&impl->body));
 
    /* wait for all subgroups to finish */
-   nir_scoped_barrier(&b, NIR_SCOPE_WORKGROUP);
+   nir_scoped_barrier(&b, SCOPE_WORKGROUP);
 
    nir_ssa_def *zero = nir_imm_int(&b, 0);
 
-   nir_ssa_def *local_invocation_index = nir_build_load_local_invocation_index(&b);
+   nir_ssa_def *local_invocation_index = nir_load_local_invocation_index(&b);
 
    nir_ssa_def *cmp = nir_ieq(&b, local_invocation_index, zero);
    nir_if *if_stmt = nir_push_if(&b, cmp);
@@ -230,11 +228,8 @@ anv_mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
 
       /* Update types of derefs to match type of variables they (de)reference. */
       if (dup_vertices) {
-         nir_foreach_function(function, b.shader) {
-            if (!function->impl)
-               continue;
-
-            nir_foreach_block(block, function->impl) {
+         nir_foreach_function_impl(impl, b.shader) {
+            nir_foreach_block(block, impl) {
                nir_foreach_instr(instr, block) {
                   if (instr->type != nir_instr_type_deref)
                      continue;
@@ -495,9 +490,7 @@ anv_frag_convert_attrs_prim_to_vert(struct nir_shader *nir,
    nir_deref_instr *new_derefs[VARYING_SLOT_MAX] = {NULL, };
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_before_cf_list(&impl->body);
+   nir_builder b = nir_builder_at(nir_before_cf_list(&impl->body));
 
    nir_foreach_shader_in_variable_safe(var, nir) {
       gl_varying_slot location = var->data.location;
@@ -532,7 +525,7 @@ anv_apply_per_prim_attr_wa(struct nir_shader *ms_nir,
    int mesh_conv_prim_attrs_to_vert_attrs =
          device->physical->instance->mesh_conv_prim_attrs_to_vert_attrs;
    if (mesh_conv_prim_attrs_to_vert_attrs < 0 &&
-         !intel_needs_workaround(devinfo, 14015590813))
+         !intel_needs_workaround(devinfo, 18019110168))
       mesh_conv_prim_attrs_to_vert_attrs = 0;
 
    if (mesh_conv_prim_attrs_to_vert_attrs != 0) {

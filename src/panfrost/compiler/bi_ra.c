@@ -171,8 +171,7 @@ lcra_solve(struct lcra_state *l)
 
       bool succ = false;
 
-      u_foreach_bit64(r, l->affinity[step])
-      {
+      u_foreach_bit64(r, l->affinity[step]) {
          l->solutions[step] = r;
 
          if (lcra_test_linear(l, l->solutions, step)) {

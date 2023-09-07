@@ -235,6 +235,13 @@ struct intel_batch_decode_ctx {
    unsigned (*get_state_size)(void *user_data,
                               uint64_t address,
                               uint64_t base_address);
+
+   void (*shader_binary)(void *user_data,
+                         const char *short_name,
+                         uint64_t address,
+                         const void *data,
+                         unsigned data_length);
+
    void *user_data;
 
    FILE *fp;

@@ -22,8 +22,24 @@
  * SOFTWARE.
  */
 
+#include "util/bitscan.h"
 #include "compiler.h"
 #include "midgard_ops.h"
+
+static bool
+identity_swizzle(midgard_instruction *mov)
+{
+   /* Write mask should be minimal in SSA form */
+   assert(mir_is_ssa(mov->src[1]));
+   assert(mov->mask == BITFIELD_MASK(util_last_bit(mov->mask)));
+
+   for (unsigned i = 0; i < util_last_bit(mov->mask); ++i) {
+      if (mov->swizzle[1][i] != i)
+         return false;
+   }
+
+   return true;
+}
 
 bool
 midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
@@ -65,7 +81,7 @@ midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
        * component and even that is restricted. Fragment writeout
        * doesn't even get that much */
 
-      bool skip = false;
+      bool no_swizzle = false;
 
       mir_foreach_instr_global(ctx, q) {
          bool is_tex = q->type == TAG_TEXTURE_4;
@@ -83,13 +99,13 @@ midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
 
          mir_foreach_src(q, s) {
             if ((s >= start) && q->src[s] == to) {
-               skip = true;
+               no_swizzle = true;
                break;
             }
          }
       }
 
-      if (skip)
+      if (no_swizzle && !identity_swizzle(ins))
          continue;
 
       if (ctx->blend_src1 == to)

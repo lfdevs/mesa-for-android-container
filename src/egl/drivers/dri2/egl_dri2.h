@@ -32,11 +32,11 @@
 #include <stdint.h>
 
 #ifdef HAVE_X11_PLATFORM
-#include <xcb/xcb.h>
+#include <X11/Xlib-xcb.h>
 #include <xcb/dri2.h>
 #include <xcb/randr.h>
+#include <xcb/xcb.h>
 #include <xcb/xfixes.h>
-#include <X11/Xlib-xcb.h>
 
 #include "loader_dri_helper.h"
 #ifdef HAVE_DRI3
@@ -82,18 +82,18 @@ struct zwp_linux_dmabuf_feedback_v1;
 
 #include "eglconfig.h"
 #include "eglcontext.h"
+#include "eglcurrent.h"
 #include "egldevice.h"
 #include "egldisplay.h"
 #include "egldriver.h"
-#include "eglcurrent.h"
+#include "eglimage.h"
 #include "egllog.h"
 #include "eglsurface.h"
-#include "eglimage.h"
 #include "eglsync.h"
 
-#include "util/u_vector.h"
-#include "util/u_dynarray.h"
 #include "util/bitset.h"
+#include "util/u_dynarray.h"
+#include "util/u_vector.h"
 
 struct wl_buffer;
 
@@ -102,17 +102,17 @@ struct dri2_egl_display_vtbl {
    int (*authenticate)(_EGLDisplay *disp, uint32_t id);
 
    /* mandatory */
-   _EGLSurface* (*create_window_surface)(_EGLDisplay *disp, _EGLConfig *config,
+   _EGLSurface *(*create_window_surface)(_EGLDisplay *disp, _EGLConfig *config,
                                          void *native_window,
                                          const EGLint *attrib_list);
 
    /* optional */
-   _EGLSurface* (*create_pixmap_surface)(_EGLDisplay *disp, _EGLConfig *config,
+   _EGLSurface *(*create_pixmap_surface)(_EGLDisplay *disp, _EGLConfig *config,
                                          void *native_pixmap,
                                          const EGLint *attrib_list);
 
    /* optional */
-   _EGLSurface* (*create_pbuffer_surface)(_EGLDisplay *disp, _EGLConfig *config,
+   _EGLSurface *(*create_pbuffer_surface)(_EGLDisplay *disp, _EGLConfig *config,
                                           const EGLint *attrib_list);
 
    /* mandatory */
@@ -123,7 +123,7 @@ struct dri2_egl_display_vtbl {
                                EGLint interval);
 
    /* mandatory */
-   _EGLImage* (*create_image)(_EGLDisplay *disp, _EGLContext *ctx,
+   _EGLImage *(*create_image)(_EGLDisplay *disp, _EGLContext *ctx,
                               EGLenum target, EGLClientBuffer buffer,
                               const EGLint *attr_list);
 
@@ -131,7 +131,8 @@ struct dri2_egl_display_vtbl {
    EGLBoolean (*swap_buffers)(_EGLDisplay *disp, _EGLSurface *surf);
 
    /* optional - falls back to .swap_buffers */
-   EGLBoolean (*swap_buffers_with_damage)(_EGLDisplay *disp, _EGLSurface *surface,
+   EGLBoolean (*swap_buffers_with_damage)(_EGLDisplay *disp,
+                                          _EGLSurface *surface,
                                           const EGLint *rects, EGLint n_rects);
 
    /* optional */
@@ -139,9 +140,8 @@ struct dri2_egl_display_vtbl {
                                      EGLint numRects, const EGLint *rects);
 
    /* optional */
-   EGLBoolean (*post_sub_buffer)(_EGLDisplay *disp, _EGLSurface *surf,
-                                 EGLint x, EGLint y,
-                                 EGLint width, EGLint height);
+   EGLBoolean (*post_sub_buffer)(_EGLDisplay *disp, _EGLSurface *surf, EGLint x,
+                                 EGLint y, EGLint width, EGLint height);
 
    /* optional */
    EGLBoolean (*copy_buffers)(_EGLDisplay *disp, _EGLSurface *surf,
@@ -155,7 +155,7 @@ struct dri2_egl_display_vtbl {
                                EGLint attribute, EGLint *value);
 
    /* optional */
-   struct wl_buffer* (*create_wayland_buffer_from_image)(_EGLDisplay *disp,
+   struct wl_buffer *(*create_wayland_buffer_from_image)(_EGLDisplay *disp,
                                                          _EGLImage *img);
 
    /* optional */
@@ -215,8 +215,7 @@ struct dmabuf_feedback {
 };
 #endif
 
-struct dri2_egl_display
-{
+struct dri2_egl_display {
    const struct dri2_egl_display_vtbl *vtbl;
 
    mtx_t lock;
@@ -224,11 +223,11 @@ struct dri2_egl_display
    int dri2_major;
    int dri2_minor;
    __DRIscreen *dri_screen_render_gpu;
-   /* dri_screen_display_gpu holds display GPU in case of prime gpu offloading else
-    * dri_screen_render_gpu and dri_screen_display_gpu is same.
-    * In case of prime gpu offloading, if display and render driver names are different
-    * (potentially not compatible), dri_screen_display_gpu will be NULL but fd_display_gpu
-    * will still hold fd for display driver.
+   /* dri_screen_display_gpu holds display GPU in case of prime gpu offloading
+    * else dri_screen_render_gpu and dri_screen_display_gpu is same. In case of
+    * prime gpu offloading, if display and render driver names are different
+    * (potentially not compatible), dri_screen_display_gpu will be NULL but
+    * fd_display_gpu will still hold fd for display driver.
     */
    __DRIscreen *dri_screen_display_gpu;
    bool own_dri_screen;
@@ -319,14 +318,12 @@ struct dri2_egl_display
    bool is_render_node;
 };
 
-struct dri2_egl_context
-{
+struct dri2_egl_context {
    _EGLContext base;
    __DRIcontext *dri_context;
 };
 
-struct dri2_egl_surface
-{
+struct dri2_egl_surface {
    _EGLSurface base;
    __DRIdrawable *dri_drawable;
    __DRIbuffer buffers[5];
@@ -418,14 +415,12 @@ struct dri2_egl_surface
    char *swrast_device_buffer;
 };
 
-struct dri2_egl_config
-{
+struct dri2_egl_config {
    _EGLConfig base;
    const __DRIconfig *dri_config[2][2];
 };
 
-struct dri2_egl_image
-{
+struct dri2_egl_image {
    _EGLImage base;
    __DRIimage *dri_image;
 };
@@ -455,7 +450,8 @@ dri2_egl_display_lock(_EGLDisplay *disp)
 }
 
 static inline EGLBoolean
-dri2_egl_error_unlock(struct dri2_egl_display *dri2_dpy, EGLint err, const char *msg)
+dri2_egl_error_unlock(struct dri2_egl_display *dri2_dpy, EGLint err,
+                      const char *msg)
 {
    mtx_unlock(&dri2_dpy->lock);
    return _eglError(err, msg);
@@ -502,13 +498,12 @@ dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data);
 
 void
 dri2_get_shifts_and_sizes(const __DRIcoreExtension *core,
-		          const __DRIconfig *config, int *shifts,
-			  unsigned int *sizes);
+                          const __DRIconfig *config, int *shifts,
+                          unsigned int *sizes);
 
 void
 dri2_get_render_type_float(const __DRIcoreExtension *core,
-                           const __DRIconfig *config,
-                           bool *is_float);
+                           const __DRIconfig *config, bool *is_float);
 
 unsigned int
 dri2_image_format_for_pbuffer_config(struct dri2_egl_display *dri2_dpy,
@@ -547,7 +542,9 @@ dri2_initialize_x11(_EGLDisplay *disp)
    return _eglError(EGL_NOT_INITIALIZED, "X11 platform not built");
 }
 static inline void
-dri2_teardown_x11(struct dri2_egl_display *dri2_dpy) {}
+dri2_teardown_x11(struct dri2_egl_display *dri2_dpy)
+{
+}
 static inline unsigned int
 dri2_x11_get_red_mask_for_depth(struct dri2_egl_display *dri2_dpy, int depth)
 {
@@ -567,7 +564,9 @@ dri2_initialize_drm(_EGLDisplay *disp)
    return _eglError(EGL_NOT_INITIALIZED, "GBM/DRM platform not built");
 }
 static inline void
-dri2_teardown_drm(struct dri2_egl_display *dri2_dpy) {}
+dri2_teardown_drm(struct dri2_egl_display *dri2_dpy)
+{
+}
 #endif
 
 #ifdef HAVE_WAYLAND_PLATFORM
@@ -576,7 +575,7 @@ dri2_initialize_wayland(_EGLDisplay *disp);
 void
 dri2_teardown_wayland(struct dri2_egl_display *dri2_dpy);
 bool
-dri2_wl_is_format_supported(void* user_data, uint32_t format);
+dri2_wl_is_format_supported(void *user_data, uint32_t format);
 #else
 static inline EGLBoolean
 dri2_initialize_wayland(_EGLDisplay *disp)
@@ -584,7 +583,9 @@ dri2_initialize_wayland(_EGLDisplay *disp)
    return _eglError(EGL_NOT_INITIALIZED, "Wayland platform not built");
 }
 static inline void
-dri2_teardown_wayland(struct dri2_egl_display *dri2_dpy) {}
+dri2_teardown_wayland(struct dri2_egl_display *dri2_dpy)
+{
+}
 #endif
 
 #ifdef HAVE_ANDROID_PLATFORM
@@ -604,11 +605,14 @@ dri2_initialize_surfaceless(_EGLDisplay *disp);
 EGLBoolean
 dri2_initialize_device(_EGLDisplay *disp);
 static inline void
-dri2_teardown_device(struct dri2_egl_display *dri2_dpy) { /* noop */ }
+dri2_teardown_device(struct dri2_egl_display *dri2_dpy)
+{ /* noop */
+}
 
 void
-dri2_flush_drawable_for_swapbuffers_flags(_EGLDisplay *disp, _EGLSurface *draw,
-                                          enum __DRI2throttleReason throttle_reason);
+dri2_flush_drawable_for_swapbuffers_flags(
+   _EGLDisplay *disp, _EGLSurface *draw,
+   enum __DRI2throttleReason throttle_reason);
 void
 dri2_flush_drawable_for_swapbuffers(_EGLDisplay *disp, _EGLSurface *draw);
 
@@ -623,17 +627,17 @@ dri2_set_WL_bind_wayland_display(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
    if (dri2_dpy->device_name && dri2_dpy->image) {
-       if (dri2_dpy->image->base.version >= 10 &&
-           dri2_dpy->image->getCapabilities != NULL) {
-           int capabilities;
+      if (dri2_dpy->image->base.version >= 10 &&
+          dri2_dpy->image->getCapabilities != NULL) {
+         int capabilities;
 
-           capabilities =
-               dri2_dpy->image->getCapabilities(dri2_dpy->dri_screen_render_gpu);
-           disp->Extensions.WL_bind_wayland_display =
-               (capabilities & __DRI_IMAGE_CAP_GLOBAL_NAMES) != 0;
-       } else {
-           disp->Extensions.WL_bind_wayland_display = EGL_TRUE;
-       }
+         capabilities =
+            dri2_dpy->image->getCapabilities(dri2_dpy->dri_screen_render_gpu);
+         disp->Extensions.WL_bind_wayland_display =
+            (capabilities & __DRI_IMAGE_CAP_GLOBAL_NAMES) != 0;
+      } else {
+         disp->Extensions.WL_bind_wayland_display = EGL_TRUE;
+      }
    }
 #endif
 }
@@ -650,8 +654,8 @@ dri2_egl_surface_free_local_buffers(struct dri2_egl_surface *dri2_surf);
 
 EGLBoolean
 dri2_init_surface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
-        _EGLConfig *conf, const EGLint *attrib_list,
-        EGLBoolean enable_out_fence, void *native_surface);
+                  _EGLConfig *conf, const EGLint *attrib_list,
+                  EGLBoolean enable_out_fence, void *native_surface);
 
 void
 dri2_fini_surface(_EGLSurface *surf);
@@ -659,13 +663,12 @@ dri2_fini_surface(_EGLSurface *surf);
 EGLBoolean
 dri2_create_drawable(struct dri2_egl_display *dri2_dpy,
                      const __DRIconfig *config,
-                     struct dri2_egl_surface *dri2_surf,
-                     void *loaderPrivate);
+                     struct dri2_egl_surface *dri2_surf, void *loaderPrivate);
 
 static inline uint64_t
 combine_u32_into_u64(uint32_t hi, uint32_t lo)
 {
-   return (((uint64_t) hi) << 32) | (((uint64_t) lo) & 0xffffffff);
+   return (((uint64_t)hi) << 32) | (((uint64_t)lo) & 0xffffffff);
 }
 
 #endif /* EGL_DRI2_INCLUDED */

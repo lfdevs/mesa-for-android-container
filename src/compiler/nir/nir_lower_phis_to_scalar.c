@@ -186,25 +186,12 @@ lower_phis_to_scalar_block(nir_block *block,
                            struct lower_phis_to_scalar_state *state)
 {
    bool progress = false;
-
-   /* Find the last phi node in the block */
-   nir_phi_instr *last_phi = NULL;
-   nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      last_phi = nir_instr_as_phi(instr);
-   }
+   nir_phi_instr *last_phi = nir_block_last_phi_instr(block);
 
    /* We have to handle the phi nodes in their own pass due to the way
     * we're modifying the linked list of instructions.
     */
-   nir_foreach_instr_safe(instr, block) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
-
+   nir_foreach_phi_safe(phi, block) {
       if (!should_lower_phi(phi, state))
          continue;
 
@@ -218,14 +205,13 @@ lower_phis_to_scalar_block(nir_block *block,
 
       nir_alu_instr *vec = nir_alu_instr_create(state->shader, vec_op);
       nir_ssa_dest_init(&vec->instr, &vec->dest.dest,
-                        phi->dest.ssa.num_components,
-                        bit_size, NULL);
+                        phi->dest.ssa.num_components, bit_size);
       vec->dest.write_mask = (1 << phi->dest.ssa.num_components) - 1;
 
       for (unsigned i = 0; i < phi->dest.ssa.num_components; i++) {
          nir_phi_instr *new_phi = nir_phi_instr_create(state->shader);
          nir_ssa_dest_init(&new_phi->instr, &new_phi->dest, 1,
-                           phi->dest.ssa.bit_size, NULL);
+                           phi->dest.ssa.bit_size);
 
          vec->src[i].src = nir_src_for_ssa(&new_phi->dest.ssa);
 
@@ -233,7 +219,7 @@ lower_phis_to_scalar_block(nir_block *block,
             /* We need to insert a mov to grab the i'th component of src */
             nir_alu_instr *mov = nir_alu_instr_create(state->shader,
                                                       nir_op_mov);
-            nir_ssa_dest_init(&mov->instr, &mov->dest.dest, 1, bit_size, NULL);
+            nir_ssa_dest_init(&mov->instr, &mov->dest.dest, 1, bit_size);
             mov->dest.write_mask = 1;
             nir_src_copy(&mov->src[0].src, &src->src, &mov->instr);
             mov->src[0].swizzle[0] = i;
@@ -267,7 +253,7 @@ lower_phis_to_scalar_block(nir_block *block,
        * the last phi node so once we get here, we can't trust even the
        * safe iterator to stop properly.  We have to break manually.
        */
-      if (instr == &last_phi->instr)
+      if (phi == last_phi)
          break;
    }
 
@@ -312,9 +298,8 @@ nir_lower_phis_to_scalar(nir_shader *shader, bool lower_all)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress = lower_phis_to_scalar_impl(function->impl, lower_all) || progress;
+   nir_foreach_function_impl(impl, shader) {
+      progress = lower_phis_to_scalar_impl(impl, lower_all) || progress;
    }
 
    return progress;

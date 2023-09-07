@@ -39,16 +39,7 @@ nir_lower_image_bitsize(nir_builder *b, nir_instr *instr, UNUSED void *data)
    switch (intr->intrinsic) {
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_store:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_xor:
+   case nir_intrinsic_image_texel_address:
       break;
    default:
       return false;

@@ -40,7 +40,7 @@ namespace r600 {
 
 #ifndef HAVE_MEMORY_RESOURCE
 /* Fallback memory resource if the C++17 memory resource is not
- * avaliable
+ * available
  */
 struct MemoryBacking {
    ~MemoryBacking();

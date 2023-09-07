@@ -253,12 +253,14 @@ def get_srgb_to_linear_map(formats):
             ('_SRGB',   ''),
             ('SRGB',    'RGB'),
             ('U8SRGB',  'FLT16'),
+            # Quirk: ETC2_EAC_SRGB8_A8 -> ETC2_EAC_RGBA8
+            ('SRGB8_A8', 'RGBA8'),
         ]
 
         found = False
         for rep in replacements:
             rgb_name = fmt.name.replace(rep[0], rep[1])
-            if rgb_name in names:
+            if rgb_name in names and rgb_name != fmt.name:
                 found = True
                 yield fmt.name, rgb_name
                 break

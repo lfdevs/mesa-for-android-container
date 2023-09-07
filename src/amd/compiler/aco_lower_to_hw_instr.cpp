@@ -38,6 +38,94 @@ struct lower_context {
    std::vector<aco_ptr<Instruction>> instructions;
 };
 
+/* Class for obtaining where s_sendmsg(MSG_ORDERED_PS_DONE) must be done in a Primitive Ordered
+ * Pixel Shader on GFX9-10.3.
+ *
+ * MSG_ORDERED_PS_DONE must be sent once after the ordered section is done along all execution paths
+ * from the POPS packer ID hardware register setting to s_endpgm. It is, however, also okay to send
+ * it if the packer ID is not going to be set at all by the wave, so some conservativeness is fine.
+ *
+ * For simplicity, sending the message from top-level blocks as dominance and post-dominance
+ * checking for any location in the shader is trivial in them. Also, for simplicity, sending it
+ * regardless of whether the POPS packer ID hardware register has already potentially been set up.
+ *
+ * Note that there can be multiple interlock end instructions in the shader.
+ * SPV_EXT_fragment_shader_interlock requires OpEndInvocationInterlockEXT to be executed exactly
+ * once by the invocation. However, there may be, for instance, multiple ordered sections, and which
+ * one will be executed may depend on divergent control flow (some lanes may execute one ordered
+ * section, other lanes may execute another). MSG_ORDERED_PS_DONE, however, is sent via a scalar
+ * instruction, so it must be ensured that the message is sent after the last ordered section in the
+ * entire wave.
+ */
+class gfx9_pops_done_msg_bounds {
+public:
+   explicit gfx9_pops_done_msg_bounds() = default;
+
+   explicit gfx9_pops_done_msg_bounds(const Program* const program)
+   {
+      /* Find the top-level location after the last ordered section end pseudo-instruction in the
+       * program.
+       * Consider `p_pops_gfx9_overlapped_wave_wait_done` a boundary too - make sure the message
+       * isn't sent if any wait hasn't been fully completed yet (if a begin-end-begin situation
+       * occurs somehow, as the location of `p_pops_gfx9_ordered_section_done` is controlled by the
+       * application) for safety, assuming that waits are the only thing that need the packer
+       * hardware register to be set at some point during or before them, and it won't be set
+       * anymore after the last wait.
+       */
+      int last_top_level_block_idx = -1;
+      for (int block_idx = (int)program->blocks.size() - 1; block_idx >= 0; block_idx--) {
+         const Block& block = program->blocks[block_idx];
+         if (block.kind & block_kind_top_level) {
+            last_top_level_block_idx = block_idx;
+         }
+         for (size_t instr_idx = block.instructions.size() - 1; instr_idx + size_t(1) > 0;
+              instr_idx--) {
+            const aco_opcode opcode = block.instructions[instr_idx]->opcode;
+            if (opcode == aco_opcode::p_pops_gfx9_ordered_section_done ||
+                opcode == aco_opcode::p_pops_gfx9_overlapped_wave_wait_done) {
+               end_block_idx_ = last_top_level_block_idx;
+               /* The same block if it's already a top-level block, or the beginning of the next
+                * top-level block.
+                */
+               instr_after_end_idx_ = block_idx == end_block_idx_ ? instr_idx + 1 : 0;
+               break;
+            }
+         }
+         if (end_block_idx_ != -1) {
+            break;
+         }
+      }
+   }
+
+   /* If this is not -1, during the normal execution flow (not early exiting), MSG_ORDERED_PS_DONE
+    * must be sent in this block.
+    */
+   int end_block_idx() const { return end_block_idx_; }
+
+   /* If end_block_idx() is an existing block, during the normal execution flow (not early exiting),
+    * MSG_ORDERED_PS_DONE must be sent before this instruction in the block end_block_idx().
+    * If this is out of the bounds of the instructions in the end block, it must be sent in the end
+    * of that block.
+    */
+   size_t instr_after_end_idx() const { return instr_after_end_idx_; }
+
+   /* Whether an instruction doing early exit (such as discard) needs to send MSG_ORDERED_PS_DONE
+    * before actually ending the program.
+    */
+   bool early_exit_needs_done_msg(const int block_idx, const size_t instr_idx) const
+   {
+      return block_idx <= end_block_idx_ &&
+             (block_idx != end_block_idx_ || instr_idx < instr_after_end_idx_);
+   }
+
+private:
+   /* Initialize to an empty range for which "is inside" comparisons will be failing for any
+    * block.
+    */
+   int end_block_idx_ = -1;
+   size_t instr_after_end_idx_ = 0;
+};
+
 /* used by handle_operands() indirectly through Builder::copy */
 uint8_t int8_mul_table[512] = {
    0, 20,  1,  1,   1,  2,   1,  3,   1,  4,   1, 5,   1,  6,   1,  7,   1,  8,   1,  9,
@@ -71,7 +159,7 @@ aco_opcode
 get_reduce_opcode(amd_gfx_level gfx_level, ReduceOp op)
 {
    /* Because some 16-bit instructions are already VOP3 on GFX10, we use the
-    * 32-bit opcodes (VOP2) which allows to remove the tempory VGPR and to use
+    * 32-bit opcodes (VOP2) which allows to remove the temporary VGPR and to use
     * DPP with the arithmetic instructions. This requires to sign-extend.
     */
    switch (op) {
@@ -488,19 +576,20 @@ emit_reduction(lower_context* ctx, aco_opcode op, ReduceOp reduce_op, unsigned c
    bld.sop1(Builder::s_or_saveexec, Definition(stmp, bld.lm), Definition(scc, s1),
             Definition(exec, bld.lm), Operand::c64(UINT64_MAX), Operand(exec, bld.lm));
 
-   for (unsigned i = 0; i < src.size(); i++) {
-      /* p_exclusive_scan needs it to be a sgpr or inline constant for the v_writelane_b32
-       * except on GFX10, where v_writelane_b32 can take a literal. */
-      if (identity[i].isLiteral() && op == aco_opcode::p_exclusive_scan &&
-          ctx->program->gfx_level < GFX10) {
-         bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg{sitmp + i}, s1), identity[i]);
-         identity[i] = Operand(PhysReg{sitmp + i}, s1);
+   /* On GFX10+ v_writelane_b32/v_cndmask_b32_e64 can take a literal */
+   if (ctx->program->gfx_level < GFX10) {
+      for (unsigned i = 0; i < src.size(); i++) {
+         /* p_exclusive_scan uses identity for v_writelane_b32 */
+         if (identity[i].isLiteral() && op == aco_opcode::p_exclusive_scan) {
+            bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg{sitmp + i}, s1), identity[i]);
+            identity[i] = Operand(PhysReg{sitmp + i}, s1);
 
-         bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{tmp + i}, v1), identity[i]);
-         vcndmask_identity[i] = Operand(PhysReg{tmp + i}, v1);
-      } else if (identity[i].isLiteral()) {
-         bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{tmp + i}, v1), identity[i]);
-         vcndmask_identity[i] = Operand(PhysReg{tmp + i}, v1);
+            bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{tmp + i}, v1), identity[i]);
+            vcndmask_identity[i] = Operand(PhysReg{tmp + i}, v1);
+         } else if (identity[i].isLiteral()) {
+            bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{tmp + i}, v1), identity[i]);
+            vcndmask_identity[i] = Operand(PhysReg{tmp + i}, v1);
+         }
       }
    }
 
@@ -648,7 +737,8 @@ emit_reduction(lower_context* ctx, aco_opcode op, ReduceOp reduce_op, unsigned c
 
          /* fill in the gaps in rows 1 and 3 */
          bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand::c32(0x10000u));
-         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand::c32(0x10000u));
+         if (ctx->program->wave_size == 64)
+            bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand::c32(0x10000u));
          for (unsigned i = 0; i < src.size(); i++) {
             Instruction* perm =
                bld.vop3(aco_opcode::v_permlanex16_b32, Definition(PhysReg{vtmp + i}, v1),
@@ -718,7 +808,7 @@ emit_reduction(lower_context* ctx, aco_opcode op, ReduceOp reduce_op, unsigned c
 
       for (unsigned i = 0; i < src.size(); i++) {
          if (!identity[i].isConstant() ||
-             identity[i].constantValue()) { /* bound_ctrl should take care of this overwise */
+             identity[i].constantValue()) { /* bound_ctrl should take care of this otherwise */
             if (ctx->program->gfx_level < GFX10)
                assert((identity[i].isConstant() && !identity[i].isLiteral()) ||
                       identity[i].physReg() == PhysReg{sitmp + i});
@@ -781,8 +871,10 @@ emit_reduction(lower_context* ctx, aco_opcode op, ReduceOp reduce_op, unsigned c
       if (ctx->program->gfx_level >= GFX10) {
          bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_lo, s1), Operand::c32(16u),
                   Operand::c32(16u));
-         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_hi, s1), Operand::c32(16u),
-                  Operand::c32(16u));
+         if (ctx->program->wave_size == 64) {
+            bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_hi, s1), Operand::c32(16u),
+                     Operand::c32(16u));
+         }
          for (unsigned i = 0; i < src.size(); i++) {
             Instruction* perm =
                bld.vop3(aco_opcode::v_permlanex16_b32, Definition(PhysReg{vtmp + i}, v1),
@@ -2139,9 +2231,75 @@ hw_init_scratch(Builder& bld, Definition def, Operand scratch_addr, Operand scra
 }
 
 void
+lower_image_sample(lower_context* ctx, aco_ptr<Instruction>& instr)
+{
+   Operand linear_vgpr = instr->operands[3];
+
+   unsigned nsa_size = ctx->program->dev.max_nsa_vgprs;
+   unsigned vaddr_size = linear_vgpr.size();
+   unsigned num_copied_vgprs = instr->operands.size() - 4;
+   nsa_size = num_copied_vgprs > 0 && (ctx->program->gfx_level >= GFX11 || vaddr_size <= nsa_size)
+                 ? nsa_size
+                 : 0;
+
+   Operand vaddr[16];
+   unsigned num_vaddr = 0;
+
+   if (nsa_size) {
+      assert(num_copied_vgprs <= nsa_size);
+      for (unsigned i = 0; i < num_copied_vgprs; i++)
+         vaddr[num_vaddr++] = instr->operands[4 + i];
+      for (unsigned i = num_copied_vgprs; i < std::min(vaddr_size, nsa_size); i++)
+         vaddr[num_vaddr++] = Operand(linear_vgpr.physReg().advance(i * 4), v1);
+      if (vaddr_size > nsa_size) {
+         RegClass rc = RegClass::get(RegType::vgpr, (vaddr_size - nsa_size) * 4);
+         vaddr[num_vaddr++] = Operand(PhysReg(linear_vgpr.physReg().advance(nsa_size * 4)), rc);
+      }
+   } else {
+      PhysReg reg = linear_vgpr.physReg();
+      std::map<PhysReg, copy_operation> copy_operations;
+      for (unsigned i = 4; i < instr->operands.size(); i++) {
+         Operand arg = instr->operands[i];
+         Definition def(reg, RegClass::get(RegType::vgpr, arg.bytes()));
+         copy_operations[def.physReg()] = {arg, def, def.bytes()};
+         reg = reg.advance(arg.bytes());
+      }
+      vaddr[num_vaddr++] = linear_vgpr;
+
+      Pseudo_instruction pi = {};
+      handle_operands(copy_operations, ctx, ctx->program->gfx_level, &pi);
+   }
+
+   instr->mimg().strict_wqm = false;
+
+   if ((3 + num_vaddr) > instr->operands.size()) {
+      MIMG_instruction* new_instr = create_instruction<MIMG_instruction>(
+         instr->opcode, Format::MIMG, 3 + num_vaddr, instr->definitions.size());
+      std::copy(instr->definitions.cbegin(), instr->definitions.cend(),
+                new_instr->definitions.begin());
+      new_instr->operands[0] = instr->operands[0];
+      new_instr->operands[1] = instr->operands[1];
+      new_instr->operands[2] = instr->operands[2];
+      memcpy((uint8_t*)new_instr + sizeof(Instruction), (uint8_t*)instr.get() + sizeof(Instruction),
+             sizeof(MIMG_instruction) - sizeof(Instruction));
+      instr.reset(new_instr);
+   } else {
+      while (instr->operands.size() > (3 + num_vaddr))
+         instr->operands.pop_back();
+   }
+   std::copy(vaddr, vaddr + num_vaddr, std::next(instr->operands.begin(), 3));
+}
+
+void
 lower_to_hw_instr(Program* program)
 {
-   Block* discard_block = NULL;
+   gfx9_pops_done_msg_bounds pops_done_msg_bounds;
+   if (program->has_pops_overlapped_waves_wait && program->gfx_level < GFX11) {
+      pops_done_msg_bounds = gfx9_pops_done_msg_bounds(program);
+   }
+
+   Block* discard_exit_block = NULL;
+   Block* discard_pops_done_and_exit_block = NULL;
 
    bool should_dealloc_vgprs = dealloc_vgprs(program);
 
@@ -2157,6 +2315,19 @@ lower_to_hw_instr(Program* program)
 
       for (size_t instr_idx = 0; instr_idx < block->instructions.size(); instr_idx++) {
          aco_ptr<Instruction>& instr = block->instructions[instr_idx];
+
+         /* Send the ordered section done message from the middle of the block if needed (if the
+          * ordered section is ended by an instruction inside this block).
+          * Also make sure the done message is sent if it's needed in case early exit happens for
+          * any reason.
+          */
+         if ((block_idx == pops_done_msg_bounds.end_block_idx() &&
+              instr_idx == pops_done_msg_bounds.instr_after_end_idx()) ||
+             (instr->opcode == aco_opcode::s_endpgm &&
+              pops_done_msg_bounds.early_exit_needs_done_msg(block_idx, instr_idx))) {
+            bld.sopp(aco_opcode::s_sendmsg, -1, sendmsg_ordered_ps_done);
+         }
+
          aco_ptr<Instruction> mov;
          if (instr->isPseudo() && instr->opcode != aco_opcode::p_unit_test) {
             Pseudo_instruction* pi = &instr->pseudo();
@@ -2233,6 +2404,19 @@ lower_to_hw_instr(Program* program)
                handle_operands(copy_operations, &ctx, program->gfx_level, pi);
                break;
             }
+            case aco_opcode::p_start_linear_vgpr: {
+               if (instr->operands.empty())
+                  break;
+
+               Definition def(instr->definitions[0].physReg(),
+                              RegClass::get(RegType::vgpr, instr->definitions[0].bytes()));
+
+               std::map<PhysReg, copy_operation> copy_operations;
+               copy_operations[def.physReg()] = {instr->operands[0], def,
+                                                 instr->operands[0].bytes()};
+               handle_operands(copy_operations, &ctx, program->gfx_level, pi);
+               break;
+            }
             case aco_opcode::p_exit_early_if: {
                /* don't bother with an early exit near the end of the program */
                if ((block->instructions.size() - 1 - instr_idx) <= 4 &&
@@ -2262,19 +2446,46 @@ lower_to_hw_instr(Program* program)
                      break;
                }
 
+               const bool discard_sends_pops_done =
+                  pops_done_msg_bounds.early_exit_needs_done_msg(block_idx, instr_idx);
+
+               Block* discard_block =
+                  discard_sends_pops_done ? discard_pops_done_and_exit_block : discard_exit_block;
                if (!discard_block) {
                   discard_block = program->create_and_insert_block();
                   discard_block->kind = block_kind_discard_early_exit;
+                  if (discard_sends_pops_done) {
+                     discard_pops_done_and_exit_block = discard_block;
+                  } else {
+                     discard_exit_block = discard_block;
+                  }
                   block = &program->blocks[block_idx];
 
                   bld.reset(discard_block);
+                  if (program->has_pops_overlapped_waves_wait &&
+                      (program->gfx_level >= GFX11 || discard_sends_pops_done)) {
+                     /* If this discard early exit potentially exits the POPS ordered section, do
+                      * the waitcnt necessary before resuming overlapping waves as the normal
+                      * waitcnt insertion doesn't work in a discard early exit block.
+                      */
+                     if (program->gfx_level >= GFX10)
+                        bld.sopk(aco_opcode::s_waitcnt_vscnt, Definition(sgpr_null, s1), 0);
+                     wait_imm pops_exit_wait_imm;
+                     pops_exit_wait_imm.vm = 0;
+                     if (program->has_smem_buffer_or_global_loads)
+                        pops_exit_wait_imm.lgkm = 0;
+                     bld.sopp(aco_opcode::s_waitcnt, -1,
+                              pops_exit_wait_imm.pack(program->gfx_level));
+                  }
+                  if (discard_sends_pops_done)
+                     bld.sopp(aco_opcode::s_sendmsg, -1, sendmsg_ordered_ps_done);
                   unsigned target = V_008DFC_SQ_EXP_NULL;
                   if (program->gfx_level >= GFX11)
                      target =
                         program->has_color_exports ? V_008DFC_SQ_EXP_MRT : V_008DFC_SQ_EXP_MRTZ;
                   if (program->stage == fragment_fs)
-                     bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1),
-                             0, target, false, true, true);
+                     bld.exp(aco_opcode::exp, Operand(v1), Operand(v1), Operand(v1), Operand(v1), 0,
+                             target, false, true, true);
                   if (should_dealloc_vgprs)
                      bld.sopp(aco_opcode::s_sendmsg, -1, sendmsg_dealloc_vgprs);
                   bld.sopp(aco_opcode::s_endpgm);
@@ -2329,6 +2540,11 @@ lower_to_hw_instr(Program* program)
                }
                break;
             }
+            case aco_opcode::p_pops_gfx9_add_exiting_wave_id: {
+               bld.sop2(aco_opcode::s_add_i32, instr->definitions[0], instr->definitions[1],
+                        Operand(pops_exiting_wave_id, s1), instr->operands[0]);
+               break;
+            }
             case aco_opcode::p_bpermute_gfx6: {
                emit_gfx6_bpermute(program, instr, bld);
                break;
@@ -2347,6 +2563,28 @@ lower_to_hw_instr(Program* program)
                bld.sop1(aco_opcode::p_constaddr_getpc, instr->definitions[0], Operand::c32(id));
                bld.sop2(aco_opcode::p_constaddr_addlo, Definition(reg, s1), bld.def(s1, scc),
                         Operand(reg, s1), instr->operands[0], Operand::c32(id));
+               /* s_addc_u32 not needed because the program is in a 32-bit VA range */
+               break;
+            }
+            case aco_opcode::p_resume_shader_address: {
+               /* Find index of resume block. */
+               unsigned resume_idx = instr->operands[0].constantValue();
+               unsigned resume_block_idx = 0;
+               for (Block& resume_block : program->blocks) {
+                  if (resume_block.kind & block_kind_resume) {
+                     if (resume_idx == 0) {
+                        resume_block_idx = resume_block.index;
+                        break;
+                     }
+                     resume_idx--;
+                  }
+               }
+               assert(resume_block_idx != 0);
+               unsigned id = instr->definitions[0].tempId();
+               PhysReg reg = instr->definitions[0].physReg();
+               bld.sop1(aco_opcode::p_resumeaddr_getpc, instr->definitions[0], Operand::c32(id));
+               bld.sop2(aco_opcode::p_resumeaddr_addlo, Definition(reg, s1), bld.def(s1, scc),
+                        Operand(reg, s1), Operand::c32(resume_block_idx), Operand::c32(id));
                /* s_addc_u32 not needed because the program is in a 32-bit VA range */
                break;
             }
@@ -2423,8 +2661,7 @@ lower_to_hw_instr(Program* program)
                         create_bperm(bld, ext_swiz, dst, Operand::zero());
                      }
                   } else {
-                     SDWA_instruction& sdwa =
-                        bld.vop1_sdwa(aco_opcode::v_mov_b32, dst, op)->sdwa();
+                     SDWA_instruction& sdwa = bld.vop1_sdwa(aco_opcode::v_mov_b32, dst, op)->sdwa();
                      sdwa.sel[0] = SubdwordSel(bits / 8, offset / 8, signext);
                   }
                }
@@ -2479,7 +2716,8 @@ lower_to_hw_instr(Program* program)
                } else {
                   assert(dst.regClass() == v2b);
                   bld.vop2_sdwa(aco_opcode::v_lshlrev_b32, dst, Operand::c32(offset), op)
-                     ->sdwa().sel[1] = SubdwordSel::ubyte;
+                     ->sdwa()
+                     .sel[1] = SubdwordSel::ubyte;
                }
                break;
             }
@@ -2489,7 +2727,14 @@ lower_to_hw_instr(Program* program)
                   break;
 
                Operand scratch_addr = instr->operands[0];
-               if (program->stage.hw != HWStage::CS) {
+               if (scratch_addr.isUndefined()) {
+                  PhysReg reg = instr->definitions[0].physReg();
+                  bld.sop1(aco_opcode::p_load_symbol, Definition(reg, s1),
+                           Operand::c32(aco_symbol_scratch_addr_lo));
+                  bld.sop1(aco_opcode::p_load_symbol, Definition(reg.advance(4), s1),
+                           Operand::c32(aco_symbol_scratch_addr_hi));
+                  scratch_addr.setFixed(reg);
+               } else if (program->stage.hw != AC_HW_COMPUTE_SHADER) {
                   bld.smem(aco_opcode::s_load_dwordx2, instr->definitions[0], scratch_addr,
                            Operand::zero());
                   scratch_addr.setFixed(instr->definitions[0].physReg());
@@ -2499,6 +2744,9 @@ lower_to_hw_instr(Program* program)
                break;
             }
             case aco_opcode::p_jump_to_epilog: {
+               if (pops_done_msg_bounds.early_exit_needs_done_msg(block_idx, instr_idx)) {
+                  bld.sopp(aco_opcode::s_sendmsg, -1, sendmsg_ordered_ps_done);
+               }
                bld.sop1(aco_opcode::s_setpc_b64, instr->operands[0]);
                break;
             }
@@ -2665,7 +2913,8 @@ lower_to_hw_instr(Program* program)
                      bool is_break_continue =
                         program->blocks[i].kind & (block_kind_break | block_kind_continue);
                      bool discard_early_exit =
-                        discard_block && (unsigned)inst->sopp().block == discard_block->index;
+                        inst->sopp().block != -1 &&
+                        (program->blocks[inst->sopp().block].kind & block_kind_discard_early_exit);
                      if ((inst->opcode != aco_opcode::s_cbranch_scc0 &&
                           inst->opcode != aco_opcode::s_cbranch_scc1) ||
                          (!discard_early_exit && !is_break_continue))
@@ -2782,10 +3031,23 @@ lower_to_hw_instr(Program* program)
             ctx.instructions.emplace_back(std::move(instr));
 
             emit_set_mode(bld, block->fp_mode, set_round, false);
+         } else if (instr->isMIMG() && instr->mimg().strict_wqm) {
+            lower_image_sample(&ctx, instr);
+            ctx.instructions.emplace_back(std::move(instr));
          } else {
             ctx.instructions.emplace_back(std::move(instr));
          }
       }
+
+      /* Send the ordered section done message from this block if it's needed in this block, but
+       * instr_after_end_idx() points beyond the end of its instructions. This may commonly happen
+       * if the common post-dominator of multiple end locations turns out to be an empty block.
+       */
+      if (block_idx == pops_done_msg_bounds.end_block_idx() &&
+          pops_done_msg_bounds.instr_after_end_idx() >= block->instructions.size()) {
+         bld.sopp(aco_opcode::s_sendmsg, -1, sendmsg_ordered_ps_done);
+      }
+
       block->instructions = std::move(ctx.instructions);
    }
 }

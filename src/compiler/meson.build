@@ -54,43 +54,9 @@ libcompiler = static_library(
   build_by_default : false,
 )
 
-subdir('spirv')
-
 subdir('nir')
 
-# These are here because putting it in spirv/meson.build would create a circular
-# dependency with nir/meson.build.
-spirv2nir = executable(
-  'spirv2nir',
-  files('spirv/spirv2nir.c'),
-  dependencies : [dep_m, idep_nir, idep_mesautil],
-  include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, include_directories('spirv')],
-  c_args : [c_msvc_compat_args, no_override_init_args],
-  gnu_symbol_visibility : 'hidden',
-  build_by_default : with_tools.contains('nir'),
-  install : with_tools.contains('nir'),
-)
-
-if with_tests
-  test(
-    'spirv_tests',
-    executable(
-      'spirv_tests',
-      files(
-        'spirv/tests/helpers.h',
-        'spirv/tests/avail_vis.cpp',
-        'spirv/tests/volatile.cpp',
-        'spirv/tests/control_flow_tests.cpp',
-      ),
-      c_args : [c_msvc_compat_args, no_override_init_args],
-      gnu_symbol_visibility : 'hidden',
-      include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux],
-      dependencies : [dep_thread, idep_gtest, idep_nir, idep_mesautil],
-    ),
-    suite : ['compiler', 'spirv'],
-    protocol : 'gtest',
-  )
-endif
+subdir('spirv')
 
 if with_clc
   subdir('clc')

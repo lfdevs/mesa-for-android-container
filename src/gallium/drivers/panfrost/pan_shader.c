@@ -218,7 +218,7 @@ panfrost_build_key(struct panfrost_context *ctx,
    }
 
    /* Point sprite lowering needed on Bifrost and newer */
-   if (dev->arch >= 6 && rast && ctx->active_prim == PIPE_PRIM_POINTS) {
+   if (dev->arch >= 6 && rast && ctx->active_prim == MESA_PRIM_POINTS) {
       key->fs.sprite_coord_enable = rast->sprite_coord_enable;
    }
 
@@ -499,7 +499,8 @@ panfrost_get_compute_state_info(struct pipe_context *pipe, void *cso,
    info->max_threads =
       panfrost_max_thread_count(dev->arch, cs->info.work_reg_count);
    info->private_memory = cs->info.tls_size;
-   info->preferred_simd_size = pan_subgroup_size(dev->arch);
+   info->simd_sizes = pan_subgroup_size(dev->arch);
+   info->preferred_simd_size = info->simd_sizes;
 }
 
 void

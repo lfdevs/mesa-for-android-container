@@ -225,8 +225,6 @@ int
 anv_gem_set_tiling(struct anv_device *device,
                    uint32_t gem_handle, uint32_t stride, uint32_t tiling)
 {
-   int ret;
-
    /* On discrete platforms we don't have DRM_IOCTL_I915_GEM_SET_TILING. So
     * nothing needs to be done.
     */
@@ -236,17 +234,13 @@ anv_gem_set_tiling(struct anv_device *device,
    /* set_tiling overwrites the input on the error path, so we have to open
     * code intel_ioctl.
     */
-   do {
-      struct drm_i915_gem_set_tiling set_tiling = {
-         .handle = gem_handle,
-         .tiling_mode = tiling,
-         .stride = stride,
-      };
+   struct drm_i915_gem_set_tiling set_tiling = {
+      .handle = gem_handle,
+      .tiling_mode = tiling,
+      .stride = stride,
+   };
 
-      ret = ioctl(device->fd, DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling);
-   } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
-
-   return ret;
+   return intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling);
 }
 
 bool

@@ -27,8 +27,7 @@ lower_multiview_mask(nir_shader *nir, uint32_t *mask)
       return false;
    }
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    uint32_t old_mask = *mask;
    *mask = BIT(util_logbase2(old_mask) + 1) - 1;

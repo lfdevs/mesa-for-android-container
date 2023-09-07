@@ -19,9 +19,12 @@ struct vn_command_pool {
    struct vn_object_base base;
 
    VkAllocationCallbacks allocator;
+   struct vn_device *device;
    uint32_t queue_family_index;
 
    struct list_head command_buffers;
+
+   struct list_head free_query_batches;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vn_command_pool,
                                base.base,
@@ -53,9 +56,8 @@ struct vn_command_buffer_builder {
 struct vn_command_buffer {
    struct vn_object_base base;
 
-   struct vn_device *device;
+   struct vn_command_pool *pool;
 
-   VkAllocationCallbacks allocator;
    VkCommandBufferLevel level;
    uint32_t queue_family_index;
 
@@ -67,6 +69,20 @@ struct vn_command_buffer {
    struct vn_cs_encoder cs;
 
    uint32_t draw_cmd_batched;
+
+   /* For batching query feedback in render passes */
+   /* in_render_pass remains true when a render pass is suspended */
+   bool in_render_pass;
+   bool suspends;
+   /* viewMask is stored per subpass for legacy render pass */
+   const struct vn_render_pass *render_pass;
+   uint32_t subpass_index;
+   /* view_mask is set when passed in by dynamic rendering/secondary cmd
+    * buffers or on each subpass iteration for legacy render pass with
+    * the above variables.
+    */
+   uint32_t view_mask;
+   struct list_head query_batches;
 };
 VK_DEFINE_HANDLE_CASTS(vn_command_buffer,
                        base.base,

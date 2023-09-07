@@ -1,6 +1,6 @@
 # These definitely hang the GPU (VK_ERROR_DEVICE_LOST), and they take other
 # tests out with them.
-dEQP-VK.compute.basic.empty_workgroup_*
+dEQP-VK.compute.basic.empty_workgroup_.*
 
 # Events are not implemented on gen7, and we seem to get GPU hangs that leak
 # into other tests when these tests fail.

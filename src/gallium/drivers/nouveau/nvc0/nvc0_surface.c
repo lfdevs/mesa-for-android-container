@@ -22,16 +22,18 @@
 
 #include <stdint.h>
 
+#include "compiler/nir/nir.h"
+#include "compiler/nir/nir_builder.h"
+
 #include "pipe/p_defines.h"
 
 #include "util/u_inlines.h"
 #include "util/u_pack_color.h"
 #include "util/format/u_format.h"
 #include "util/u_surface.h"
-
-#include "tgsi/tgsi_ureg.h"
-
 #include "util/u_thread.h"
+
+#include "nv50_ir_driver.h"
 
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_resource.h"
@@ -850,24 +852,45 @@ struct nvc0_blitctx
 static void *
 nvc0_blitter_make_vp(struct pipe_context *pipe)
 {
-   struct ureg_program *ureg;
-   struct ureg_src ipos, itex;
-   struct ureg_dst opos, otex;
+   const nir_shader_compiler_options *options =
+      nv50_ir_nir_shader_compiler_options(nouveau_screen(pipe->screen)->device->chipset,
+                                          PIPE_SHADER_VERTEX);
 
-   ureg = ureg_create(PIPE_SHADER_VERTEX);
-   if (!ureg)
-      return NULL;
+   struct nir_builder b =
+      nir_builder_init_simple_shader(MESA_SHADER_VERTEX, options,
+                                     "blitter_vp");
 
-   opos = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 0);
-   ipos = ureg_DECL_vs_input(ureg, 0);
-   otex = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 0);
-   itex = ureg_DECL_vs_input(ureg, 1);
+   const struct glsl_type* float2 = glsl_vector_type(GLSL_TYPE_FLOAT, 2);
+   const struct glsl_type* float3 = glsl_vector_type(GLSL_TYPE_FLOAT, 3);
 
-   ureg_MOV(ureg, ureg_writemask(opos, TGSI_WRITEMASK_XY ), ipos);
-   ureg_MOV(ureg, ureg_writemask(otex, TGSI_WRITEMASK_XYZ), itex);
-   ureg_END(ureg);
+   nir_variable *ipos =
+      nir_variable_create(b.shader, nir_var_shader_in, float2, "ipos");
+   ipos->data.location = VERT_ATTRIB_GENERIC0;
+   ipos->data.driver_location = 0;
 
-   return ureg_create_shader_and_destroy(ureg, pipe);
+   nir_variable *opos =
+      nir_variable_create(b.shader, nir_var_shader_out, float2, "opos");
+   opos->data.location = VARYING_SLOT_POS;
+   opos->data.driver_location = 0;
+
+   nir_variable *itex =
+      nir_variable_create(b.shader, nir_var_shader_in, float3, "itex");
+   itex->data.location = VERT_ATTRIB_GENERIC1;
+   itex->data.driver_location = 1;
+
+   nir_variable *otex =
+      nir_variable_create(b.shader, nir_var_shader_out, float3, "otex");
+   otex->data.location = VARYING_SLOT_VAR0;
+   otex->data.driver_location = 1;
+
+   nir_copy_var(&b, opos, ipos);
+   nir_copy_var(&b, otex, itex);
+
+   NIR_PASS_V(b.shader, nir_lower_var_copies);
+
+   struct pipe_shader_state state;
+   pipe_shader_state_from_nir(&state, b.shader);
+   return pipe->create_vs_state(pipe, &state);
 }
 
 static void
@@ -1744,10 +1767,16 @@ nvc0_blitter_destroy(struct nvc0_screen *screen)
          struct nvc0_program *prog = blitter->fp[i][m];
          if (prog) {
             nvc0_program_destroy(NULL, prog);
-            FREE((void *)prog->pipe.tokens);
+            ralloc_free((void *)prog->pipe.ir.nir);
             FREE(prog);
          }
       }
+   }
+   if (blitter->vp) {
+      struct nvc0_program *prog = blitter->vp;
+      nvc0_program_destroy(NULL, prog);
+      ralloc_free((void *)prog->pipe.ir.nir);
+      FREE(prog);
    }
 
    mtx_destroy(&blitter->mutex);
@@ -1786,7 +1815,7 @@ nvc0_init_surface_functions(struct nvc0_context *nvc0)
    pipe->flush_resource = nvc0_flush_resource;
    pipe->clear_render_target = nvc0_clear_render_target;
    pipe->clear_depth_stencil = nvc0_clear_depth_stencil;
-   pipe->clear_texture = nv50_clear_texture;
+   pipe->clear_texture = u_default_clear_texture;
    pipe->clear_buffer = nvc0_clear_buffer;
    if (nvc0->screen->base.class_3d >= GM200_3D_CLASS)
       pipe->evaluate_depth_buffer = gm200_evaluate_depth_buffer;

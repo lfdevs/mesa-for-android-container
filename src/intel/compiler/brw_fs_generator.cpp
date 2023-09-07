@@ -343,7 +343,8 @@ fs_generator::generate_send(fs_inst *inst,
        */
       brw_send_indirect_split_message(p, inst->sfid, dst, payload, payload2,
                                       desc, desc_imm, ex_desc, ex_desc_imm,
-                                      inst->send_ex_desc_scratch, inst->eot);
+                                      inst->send_ex_desc_scratch,
+                                      inst->send_ex_bso, inst->eot);
       if (inst->check_tdr)
          brw_inst_set_opcode(p->isa, brw_last_inst,
                              devinfo->ver >= 12 ? BRW_OPCODE_SENDC : BRW_OPCODE_SENDSC);
@@ -965,51 +966,6 @@ fs_generator::generate_linterp(fs_inst *inst,
 
       return true;
    }
-}
-
-void
-fs_generator::generate_get_buffer_size(fs_inst *inst,
-                                       struct brw_reg dst,
-                                       struct brw_reg src,
-                                       struct brw_reg surf_index)
-{
-   assert(devinfo->ver >= 7);
-   assert(surf_index.file == BRW_IMMEDIATE_VALUE);
-
-   uint32_t simd_mode;
-   int rlen = 4;
-
-   switch (inst->exec_size) {
-   case 8:
-      simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD8;
-      break;
-   case 16:
-      simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD16;
-      break;
-   default:
-      unreachable("Invalid width for texture instruction");
-   }
-
-   if (simd_mode == BRW_SAMPLER_SIMD_MODE_SIMD16) {
-      rlen = 8;
-      dst = vec16(dst);
-   }
-
-   uint32_t return_format =
-      devinfo->ver >= 8 ? GFX8_SAMPLER_RETURN_FORMAT_32BITS :
-                          BRW_SAMPLER_RETURN_FORMAT_SINT32;
-   brw_SAMPLE(p,
-              retype(dst, BRW_REGISTER_TYPE_UW),
-              inst->base_mrf,
-              src,
-              surf_index.ud,
-              0,
-              GFX5_SAMPLER_MESSAGE_SAMPLE_RESINFO,
-              rlen, /* response length */
-              inst->mlen,
-              inst->header_size > 0,
-              simd_mode,
-              return_format);
 }
 
 void
@@ -2097,10 +2053,6 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          send_count++;
          break;
 
-      case SHADER_OPCODE_GET_BUFFER_SIZE:
-         generate_get_buffer_size(inst, dst, src[0], src[1]);
-         send_count++;
-         break;
       case SHADER_OPCODE_TEX:
       case FS_OPCODE_TXB:
       case SHADER_OPCODE_TXD:
@@ -2155,7 +2107,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
 
       case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
          assert(inst->force_writemask_all);
-	 generate_uniform_pull_constant_load(inst, dst, src[0], src[1]);
+	 generate_uniform_pull_constant_load(inst, dst,
+                                             src[PULL_UNIFORM_CONSTANT_SRC_SURFACE],
+                                             src[PULL_UNIFORM_CONSTANT_SRC_OFFSET]);
          send_count++;
 	 break;
 

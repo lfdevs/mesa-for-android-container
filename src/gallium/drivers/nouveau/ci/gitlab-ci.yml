@@ -1,4 +1,4 @@
-# General settings for bare-metal nouveau testing on either arm64 or armhf.
+# General settings for bare-metal nouveau testing on either arm64 or arm32.
 .nouveau-bm-test:
   extends:
     - .nouveau-rules
@@ -12,7 +12,7 @@
 
 .gk20a-test:
   extends:
-    - .baremetal-test-armhf
+    - .baremetal-test-arm32
     - .nouveau-bm-test
   variables:
     BM_BOOTFS: /baremetal-files/jetson-tk1/

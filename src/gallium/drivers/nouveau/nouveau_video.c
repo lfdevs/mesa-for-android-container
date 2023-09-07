@@ -637,6 +637,20 @@ vl:
    return vl_create_decoder(context, templ);
 }
 
+static void
+nouveau_video_buffer_resources(struct pipe_video_buffer *buffer,
+                               struct pipe_resource **resources)
+{
+   struct nouveau_video_buffer *buf = (struct nouveau_video_buffer *)buffer;
+   unsigned i;
+
+   assert(buf);
+
+   for (i = 0; i < buf->num_planes; ++i) {
+      resources[i] = buf->resources[i];
+   }
+}
+
 static struct pipe_sampler_view **
 nouveau_video_buffer_sampler_view_planes(struct pipe_video_buffer *buffer)
 {
@@ -790,6 +804,7 @@ nouveau_video_buffer_create(struct pipe_context *pipe,
 
    buffer->base.context = pipe;
    buffer->base.destroy = nouveau_video_buffer_destroy;
+   buffer->base.get_resources = nouveau_video_buffer_resources;
    buffer->base.get_sampler_view_planes = nouveau_video_buffer_sampler_view_planes;
    buffer->base.get_sampler_view_components = nouveau_video_buffer_sampler_view_components;
    buffer->base.get_surfaces = nouveau_video_buffer_surfaces;

@@ -313,9 +313,6 @@ compare_xfb_out(const void *pa, const void *pb)
 
 /**
  * Gather transform feedback info from lowered IO intrinsics.
- *
- * Optionally return slot_to_register, an optional table to translate
- * gl_varying_slot to "base" indices.
  */
 void
 nir_gather_xfb_info_from_intrinsics(nir_shader *nir)

@@ -72,13 +72,13 @@ has_ply = run_command(
   prog_python, '-c',
   '''
 import ply
-  ''')
+  ''', check : false)
 if has_ply.returncode() != 0
   error('Python (3.x) ply module required to build GRL kernels.')
 endif
 
 r = run_command(prog_python, 'grl_cl_kernel_gen.py',
-                grl_lib_args, '--ls-kernels', grl_grl_files)
+                grl_lib_args, '--ls-kernels', grl_grl_files, check : false)
 assert(r.returncode() == 0, 'Failed to fetch GRL CL kernels')
 grl_kernels = r.stdout().strip().split()
 

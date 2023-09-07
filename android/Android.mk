@@ -34,7 +34,7 @@ MESA_VK_LIB_SUFFIX_intel_hasvk := intel_hasvk
 MESA_VK_LIB_SUFFIX_freedreno := freedreno
 MESA_VK_LIB_SUFFIX_broadcom := broadcom
 MESA_VK_LIB_SUFFIX_panfrost := panfrost
-MESA_VK_LIB_SUFFIX_virtio-experimental := virtio
+MESA_VK_LIB_SUFFIX_virtio := virtio
 MESA_VK_LIB_SUFFIX_swrast := lvp
 
 include $(CLEAR_VARS)

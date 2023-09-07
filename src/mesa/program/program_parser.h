@@ -208,7 +208,7 @@ struct asm_parser_state {
 
    struct {
       unsigned PositionInvariant:1;
-      unsigned Fog:2;
+      unsigned Fog:2; /* gl_fog_mode */
       unsigned PrecisionHint:2;
       unsigned DrawBuffers:1;
       unsigned Shadow:1;
@@ -223,10 +223,6 @@ struct asm_parser_state {
    } fragment;
 };
 
-#define OPTION_NONE        0
-#define OPTION_FOG_EXP     1
-#define OPTION_FOG_EXP2    2
-#define OPTION_FOG_LINEAR  3
 #define OPTION_NICEST      1
 #define OPTION_FASTEST     2
 

@@ -555,7 +555,7 @@ xa_surface_handle(struct xa_surface *srf,
     struct winsys_handle whandle;
 
     struct pipe_screen *screen = srf->xa->screen;
-    boolean res;
+    bool res;
 
     memset(&whandle, 0, sizeof(whandle));
     whandle.type = handle_type(type);

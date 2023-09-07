@@ -37,7 +37,7 @@ BEGIN_TEST(regalloc.subdword_alloc.reuse_16bit_operands)
 
    /* TODO: is this possible to do on GFX11? */
    for (amd_gfx_level cc = GFX8; cc <= GFX10_3; cc = (amd_gfx_level)((unsigned)cc + 1)) {
-      for (bool pessimistic : { false, true }) {
+      for (bool pessimistic : {false, true}) {
          const char* subvariant = pessimistic ? "/pessimistic" : "/optimistic";
 
          //>> v1: %_:v[#a] = p_startpgm
@@ -45,7 +45,8 @@ BEGIN_TEST(regalloc.subdword_alloc.reuse_16bit_operands)
             return;
 
          //! v2b: %_:v[#a][0:16], v2b: %res1:v[#a][16:32] = p_split_vector %_:v[#a]
-         Builder::Result tmp = bld.pseudo(aco_opcode::p_split_vector, bld.def(v2b), bld.def(v2b), inputs[0]);
+         Builder::Result tmp =
+            bld.pseudo(aco_opcode::p_split_vector, bld.def(v2b), bld.def(v2b), inputs[0]);
 
          //! v1: %_:v[#b] = v_cvt_f32_f16 %_:v[#a][16:32] dst_sel:dword src0_sel:uword1
          //! v1: %_:v[#a] = v_cvt_f32_f16 %_:v[#a][0:16]
@@ -55,19 +56,20 @@ BEGIN_TEST(regalloc.subdword_alloc.reuse_16bit_operands)
          writeout(0, result1);
          writeout(1, result2);
 
-         finish_ra_test(ra_test_policy { pessimistic });
+         finish_ra_test(ra_test_policy{pessimistic});
       }
    }
 END_TEST
 
-BEGIN_TEST(regalloc.32bit_partial_write)
+BEGIN_TEST(regalloc._32bit_partial_write)
    //>> v1: %_:v[0] = p_startpgm
    if (!setup_cs("v1", GFX10))
       return;
 
    /* ensure high 16 bits are occupied */
    //! v2b: %_:v[0][0:16], v2b: %_:v[0][16:32] = p_split_vector %_:v[0]
-   Temp hi = bld.pseudo(aco_opcode::p_split_vector, bld.def(v2b), bld.def(v2b), inputs[0]).def(1).getTemp();
+   Temp hi =
+      bld.pseudo(aco_opcode::p_split_vector, bld.def(v2b), bld.def(v2b), inputs[0]).def(1).getTemp();
 
    /* This test checks if this instruction uses SDWA. */
    //! v2b: %_:v[0][0:16] = v_not_b32 0 dst_sel:uword0 dst_preserve src0_sel:dword
@@ -168,9 +170,9 @@ BEGIN_TEST(regalloc.precolor.multiple_operands)
 
    //! v1: %tmp3_2:v[0], v1: %tmp0_2:v[1], v1: %tmp1_2:v[2], v1: %tmp2_2:v[3] = p_parallelcopy %tmp3:v[3], %tmp0:v[0], %tmp1:v[1], %tmp2:v[2]
    //! p_unit_test %tmp3_2:v[0], %tmp0_2:v[1], %tmp1_2:v[2], %tmp2_2:v[3]
-   bld.pseudo(aco_opcode::p_unit_test, Operand(inputs[3], PhysReg(256+0)),
-              Operand(inputs[0], PhysReg(256+1)), Operand(inputs[1], PhysReg(256+2)),
-              Operand(inputs[2], PhysReg(256+3)));
+   bld.pseudo(aco_opcode::p_unit_test, Operand(inputs[3], PhysReg(256 + 0)),
+              Operand(inputs[0], PhysReg(256 + 1)), Operand(inputs[1], PhysReg(256 + 2)),
+              Operand(inputs[2], PhysReg(256 + 3)));
 
    finish_ra_test(ra_test_policy());
 END_TEST
@@ -182,8 +184,8 @@ BEGIN_TEST(regalloc.precolor.different_regs)
 
    //! v1: %tmp1:v[1], v1: %tmp2:v[2] = p_parallelcopy %tmp0:v[0], %tmp0:v[0]
    //! p_unit_test %tmp0:v[0], %tmp1:v[1], %tmp2:v[2]
-   bld.pseudo(aco_opcode::p_unit_test, Operand(inputs[0], PhysReg(256+0)),
-              Operand(inputs[0], PhysReg(256+1)), Operand(inputs[0], PhysReg(256+2)));
+   bld.pseudo(aco_opcode::p_unit_test, Operand(inputs[0], PhysReg(256 + 0)),
+              Operand(inputs[0], PhysReg(256 + 1)), Operand(inputs[0], PhysReg(256 + 2)));
 
    finish_ra_test(ra_test_policy());
 END_TEST
@@ -256,7 +258,8 @@ BEGIN_TEST(regalloc.linear_vgpr.live_range_split.get_reg_impl)
 
    //! s1: %scc_tmp:scc, s1: %1:s[0] = p_unit_test
    Temp s0_tmp = bld.tmp(s1);
-   Temp scc_tmp = bld.pseudo(aco_opcode::p_unit_test, bld.def(s1, scc), Definition(s0_tmp.id(), PhysReg{0}, s1));
+   Temp scc_tmp = bld.pseudo(aco_opcode::p_unit_test, bld.def(s1, scc),
+                             Definition(s0_tmp.id(), PhysReg{0}, s1));
 
    //! lv1: %tmp1:v[1] = p_unit_test
    Temp tmp = bld.pseudo(aco_opcode::p_unit_test, bld.def(v1.as_linear(), reg_v1));
@@ -273,7 +276,8 @@ BEGIN_TEST(regalloc.linear_vgpr.live_range_split.get_reg_impl)
    //>> lv1: %5:v[2] = p_parallelcopy %3:v[1] scc:1 scratch:s1
    Pseudo_instruction& parallelcopy = program->blocks[0].instructions[3]->pseudo();
    aco_print_instr(program->gfx_level, &parallelcopy, output);
-   fprintf(output, " scc:%u scratch:s%u\n", parallelcopy.tmp_in_scc, parallelcopy.scratch_sgpr.reg());
+   fprintf(output, " scc:%u scratch:s%u\n", parallelcopy.tmp_in_scc,
+           parallelcopy.scratch_sgpr.reg());
 END_TEST
 
 BEGIN_TEST(regalloc.linear_vgpr.live_range_split.get_regs_for_copies)
@@ -392,13 +396,15 @@ BEGIN_TEST(regalloc.vinterp_fp16)
 
    //! v1: %tmp0:v[1] = v_interp_p10_f16_f32_inreg %lo:v[3][0:16], %in1:v[1], hi(%hi:v[3][16:32])
    //! p_unit_test %tmp0:v[1]
-   Temp tmp0 = bld.vinterp_inreg(aco_opcode::v_interp_p10_f16_f32_inreg, bld.def(v1), lo, inputs[1], hi);
+   Temp tmp0 =
+      bld.vinterp_inreg(aco_opcode::v_interp_p10_f16_f32_inreg, bld.def(v1), lo, inputs[1], hi);
    bld.pseudo(aco_opcode::p_unit_test, tmp0);
 
    //! v2b: %tmp1:v[0][16:32] = v_interp_p2_f16_f32_inreg %in0:v[0], %in2:v[2], %tmp0:v[1] opsel_hi
    //! v1: %tmp2:v[0] = p_create_vector 0, %tmp1:v[0][16:32]
    //! p_unit_test %tmp2:v[0]
-   Temp tmp1 = bld.vinterp_inreg(aco_opcode::v_interp_p2_f16_f32_inreg, bld.def(v2b), inputs[0], inputs[2], tmp0);
+   Temp tmp1 = bld.vinterp_inreg(aco_opcode::v_interp_p2_f16_f32_inreg, bld.def(v2b), inputs[0],
+                                 inputs[2], tmp0);
    Temp tmp2 = bld.pseudo(aco_opcode::p_create_vector, bld.def(v1), Operand::zero(2), tmp1);
    bld.pseudo(aco_opcode::p_unit_test, tmp2);
 

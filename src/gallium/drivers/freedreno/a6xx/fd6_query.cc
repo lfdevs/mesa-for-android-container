@@ -36,6 +36,12 @@
 #include "fd6_emit.h"
 #include "fd6_query.h"
 
+/* g++ is a picky about offsets that cannot be resolved at compile time, so
+ * roll our own __offsetof()
+ */
+#define __offsetof(type, field)                                                \
+   ({ type _x = {}; ((uint8_t *)&_x.field) - ((uint8_t *)&_x);})
+
 struct PACKED fd6_query_sample {
    struct fd_acc_query_sample base;
 
@@ -110,7 +116,7 @@ occlusion_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
 
    OUT_PKT7(epilogue, CP_WAIT_REG_MEM, 6);
    OUT_RING(epilogue, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_NE) |
-                      CP_WAIT_REG_MEM_0_POLL_MEMORY);
+                      CP_WAIT_REG_MEM_0_POLL(POLL_MEMORY));
    OUT_RELOC(epilogue, query_sample(aq, stop));
    OUT_RING(epilogue, CP_WAIT_REG_MEM_3_REF(0xffffffff));
    OUT_RING(epilogue, CP_WAIT_REG_MEM_4_MASK(0xffffffff));
@@ -166,7 +172,7 @@ occlusion_predicate_result_resource(struct fd_acc_query *aq, struct fd_ringbuffe
     */
    OUT_PKT7(ring, CP_COND_WRITE5, 9);
    OUT_RING(ring, CP_COND_WRITE5_0_FUNCTION(WRITE_NE) |
-                  CP_COND_WRITE5_0_POLL_MEMORY |
+                  CP_WAIT_REG_MEM_0_POLL(POLL_MEMORY) |
                   CP_COND_WRITE5_0_WRITE_MEMORY);
    OUT_RELOC(ring, query_sample(aq, result)); /* POLL_ADDR_LO/HI */
    OUT_RING(ring, CP_COND_WRITE5_3_REF(0));
@@ -220,8 +226,6 @@ timestamp_resume(struct fd_acc_query *aq, struct fd_batch *batch)
             CP_EVENT_WRITE_0_EVENT(RB_DONE_TS) | CP_EVENT_WRITE_0_TIMESTAMP);
    OUT_RELOC(ring, query_sample(aq, start));
    OUT_RING(ring, 0x00000000);
-
-   fd_reset_wfi(batch);
 }
 
 static void
@@ -235,8 +239,7 @@ time_elapsed_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    OUT_RELOC(ring, query_sample(aq, stop));
    OUT_RING(ring, 0x00000000);
 
-   fd_reset_wfi(batch);
-   fd_wfi(batch, ring);
+   OUT_WFI5(ring);
 
    /* result += stop - start: */
    OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
@@ -341,6 +344,211 @@ static const struct fd_acc_sample_provider timestamp = {
    .result_resource = timestamp_result_resource,
 };
 
+struct PACKED fd6_pipeline_stats_sample {
+   struct fd_acc_query_sample base;
+
+   uint64_t start, stop, result;
+};
+DEFINE_CAST(fd_acc_query_sample, fd6_pipeline_stats_sample);
+
+#define stats_reloc(ring, aq, field)                                           \
+   OUT_RELOC(ring, fd_resource((aq)->prsc)->bo,                                \
+             __offsetof(struct fd6_pipeline_stats_sample, field), 0, 0);
+
+/* Mapping of counters to pipeline stats:
+ *
+ *   Gallium (PIPE_STAT_QUERY_x) | Vulkan (VK_QUERY_PIPELINE_STATISTIC_x_BIT) | hw counter
+ *   ----------------------------+--------------------------------------------+----------------
+ *   IA_VERTICES                 | INPUT_ASSEMBLY_VERTICES                    | RBBM_PRIMCTR_0
+ *   IA_PRIMITIVES               | INPUT_ASSEMBLY_PRIMITIVES                  | RBBM_PRIMCTR_1
+ *   VS_INVOCATIONS              | VERTEX_SHADER_INVOCATIONS                  | RBBM_PRIMCTR_0
+ *   GS_INVOCATIONS              | GEOMETRY_SHADER_INVOCATIONS                | RBBM_PRIMCTR_5
+ *   GS_PRIMITIVES               | GEOMETRY_SHADER_PRIMITIVES                 | RBBM_PRIMCTR_6
+ *   C_INVOCATIONS               | CLIPPING_INVOCATIONS                       | RBBM_PRIMCTR_7
+ *   C_PRIMITIVES                | CLIPPING_PRIMITIVES                        | RBBM_PRIMCTR_8
+ *   PS_INVOCATIONS              | FRAGMENT_SHADER_INVOCATIONS                | RBBM_PRIMCTR_9
+ *   HS_INVOCATIONS              | TESSELLATION_CONTROL_SHADER_PATCHES        | RBBM_PRIMCTR_2
+ *   DS_INVOCATIONS              | TESSELLATION_EVALUATION_SHADER_INVOCATIONS | RBBM_PRIMCTR_4
+ *   CS_INVOCATIONS              | COMPUTE_SHADER_INVOCATIONS                 | RBBM_PRIMCTR_10
+ *
+ * Note that "Vertices corresponding to incomplete primitives may contribute to the count.",
+ * in our case they do not, so IA_VERTICES and VS_INVOCATIONS are the same thing.
+ */
+
+enum stats_type {
+   STATS_PRIMITIVE,
+   STATS_FRAGMENT,
+   STATS_COMPUTE,
+};
+
+static const struct {
+   enum vgt_event_type start, stop;
+} stats_counter_events[] = {
+      [STATS_PRIMITIVE] = { START_PRIMITIVE_CTRS, STOP_PRIMITIVE_CTRS },
+      [STATS_FRAGMENT]  = { START_FRAGMENT_CTRS,  STOP_FRAGMENT_CTRS },
+      [STATS_COMPUTE]   = { START_COMPUTE_CTRS,   STOP_COMPUTE_CTRS },
+};
+
+static enum stats_type
+get_stats_type(struct fd_acc_query *aq)
+{
+   if (aq->provider->query_type == PIPE_QUERY_PRIMITIVES_GENERATED)
+      return STATS_PRIMITIVE;
+
+   switch (aq->base.index) {
+   case PIPE_STAT_QUERY_PS_INVOCATIONS: return STATS_FRAGMENT;
+   case PIPE_STAT_QUERY_CS_INVOCATIONS: return STATS_COMPUTE;
+   default:
+      return STATS_PRIMITIVE;
+   }
+}
+
+static unsigned
+stats_counter_index(struct fd_acc_query *aq)
+{
+   if (aq->provider->query_type == PIPE_QUERY_PRIMITIVES_GENERATED)
+      return 7;
+
+   switch (aq->base.index) {
+   case PIPE_STAT_QUERY_IA_VERTICES:    return 0;
+   case PIPE_STAT_QUERY_IA_PRIMITIVES:  return 1;
+   case PIPE_STAT_QUERY_VS_INVOCATIONS: return 0;
+   case PIPE_STAT_QUERY_GS_INVOCATIONS: return 5;
+   case PIPE_STAT_QUERY_GS_PRIMITIVES:  return 6;
+   case PIPE_STAT_QUERY_C_INVOCATIONS:  return 7;
+   case PIPE_STAT_QUERY_C_PRIMITIVES:   return 8;
+   case PIPE_STAT_QUERY_PS_INVOCATIONS: return 9;
+   case PIPE_STAT_QUERY_HS_INVOCATIONS: return 2;
+   case PIPE_STAT_QUERY_DS_INVOCATIONS: return 4;
+   case PIPE_STAT_QUERY_CS_INVOCATIONS: return 10;
+   default:
+      return 0;
+   }
+}
+
+static void
+log_pipeline_stats(struct fd6_pipeline_stats_sample *ps, unsigned idx)
+{
+#ifdef DEBUG_COUNTERS
+   const char *labels[] = {
+      "VS_INVOCATIONS",
+      "IA_PRIMITIVES",
+      "HS_INVOCATIONS",
+      "??",
+      "DS_INVOCATIONS",
+      "GS_INVOCATIONS",
+      "GS_PRIMITIVES",
+      "C_INVOCATIONS",
+      "C_PRIMITIVES",
+      "PS_INVOCATIONS",
+      "CS_INVOCATIONS",
+   };
+
+   mesa_logd("  counter\t\tstart\t\t\tstop\t\t\tdiff");
+   mesa_logd("  RBBM_PRIMCTR_%d\t0x%016" PRIx64 "\t0x%016" PRIx64 "\t%" PRIi64 "\t%s",
+             idx, ps->start, ps->stop, ps->stop - ps->start, labels[idx]);
+#endif
+}
+
+static void
+pipeline_stats_resume(struct fd_acc_query *aq, struct fd_batch *batch)
+   assert_dt
+{
+   struct fd_ringbuffer *ring = batch->draw;
+   enum stats_type type = get_stats_type(aq);
+   unsigned idx = stats_counter_index(aq);
+   unsigned reg = REG_A6XX_RBBM_PRIMCTR_0_LO + (2 * idx);
+
+   OUT_WFI5(ring);
+
+   OUT_PKT7(ring, CP_REG_TO_MEM, 3);
+   OUT_RING(ring, CP_REG_TO_MEM_0_64B |
+                  CP_REG_TO_MEM_0_CNT(2) |
+                  CP_REG_TO_MEM_0_REG(reg));
+   stats_reloc(ring, aq, start);
+
+   assert(type < ARRAY_SIZE(batch->pipeline_stats_queries_active));
+
+   if (!batch->pipeline_stats_queries_active[type])
+      fd6_event_write(batch, ring, stats_counter_events[type].start, false);
+   batch->pipeline_stats_queries_active[type]++;
+}
+
+static void
+pipeline_stats_pause(struct fd_acc_query *aq, struct fd_batch *batch)
+   assert_dt
+{
+   struct fd_ringbuffer *ring = batch->draw;
+   enum stats_type type = get_stats_type(aq);
+   unsigned idx = stats_counter_index(aq);
+   unsigned reg = REG_A6XX_RBBM_PRIMCTR_0_LO + (2 * idx);
+
+   OUT_WFI5(ring);
+
+   /* snapshot the end values: */
+   OUT_PKT7(ring, CP_REG_TO_MEM, 3);
+   OUT_RING(ring, CP_REG_TO_MEM_0_64B |
+                  CP_REG_TO_MEM_0_CNT(2) |
+                  CP_REG_TO_MEM_0_REG(reg));
+   stats_reloc(ring, aq, stop);
+
+   assert(type < ARRAY_SIZE(batch->pipeline_stats_queries_active));
+   assert(batch->pipeline_stats_queries_active[type] > 0);
+
+   batch->pipeline_stats_queries_active[type]--;
+   if (batch->pipeline_stats_queries_active[type])
+      fd6_event_write(batch, ring, stats_counter_events[type].stop, false);
+
+   /* result += stop - start: */
+   OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
+   OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_NEG_C | 0x40000000);
+   stats_reloc(ring, aq, result);
+   stats_reloc(ring, aq, result);
+   stats_reloc(ring, aq, stop)
+   stats_reloc(ring, aq, start);
+}
+
+static void
+pipeline_stats_result(struct fd_acc_query *aq,
+                      struct fd_acc_query_sample *s,
+                      union pipe_query_result *result)
+{
+   struct fd6_pipeline_stats_sample *ps = fd6_pipeline_stats_sample(s);
+
+   log_pipeline_stats(ps, stats_counter_index(aq));
+
+   result->u64 = ps->result;
+}
+
+static void
+pipeline_stats_result_resource(struct fd_acc_query *aq,
+                               struct fd_ringbuffer *ring,
+                               enum pipe_query_value_type result_type,
+                               int index, struct fd_resource *dst,
+                               unsigned offset)
+{
+   copy_result(ring, result_type, dst, offset, fd_resource(aq->prsc),
+               offsetof(struct fd6_pipeline_stats_sample, result));
+}
+
+static const struct fd_acc_sample_provider primitives_generated = {
+   .query_type = PIPE_QUERY_PRIMITIVES_GENERATED,
+   .size = sizeof(struct fd6_pipeline_stats_sample),
+   .resume = pipeline_stats_resume,
+   .pause = pipeline_stats_pause,
+   .result = pipeline_stats_result,
+   .result_resource = pipeline_stats_result_resource,
+};
+
+static const struct fd_acc_sample_provider pipeline_statistics_single = {
+   .query_type = PIPE_QUERY_PIPELINE_STATISTICS_SINGLE,
+   .size = sizeof(struct fd6_pipeline_stats_sample),
+   .resume = pipeline_stats_resume,
+   .pause = pipeline_stats_pause,
+   .result = pipeline_stats_result,
+   .result_resource = pipeline_stats_result_resource,
+};
+
 struct PACKED fd6_primitives_sample {
    struct fd_acc_query_sample base;
 
@@ -350,48 +558,17 @@ struct PACKED fd6_primitives_sample {
    struct {
       uint64_t emitted, generated;
    } start[4], stop[4], result;
-
-   uint64_t prim_start[16], prim_stop[16], prim_emitted;
 };
 DEFINE_CAST(fd_acc_query_sample, fd6_primitives_sample);
 
-/* g++ is a picky about offsets that cannot be resolved at compile time, so
- * roll our own __offsetof()
- */
-#define __offsetof(type, field)                                                \
-   ({ type _x = {}; ((uint8_t *)&_x.field) - ((uint8_t *)&_x);})
-
-#define primitives_relocw(ring, aq, field)                                     \
-   OUT_RELOC(ring, fd_resource((aq)->prsc)->bo,                                \
-             __offsetof(struct fd6_primitives_sample, field), 0, 0);
 #define primitives_reloc(ring, aq, field)                                      \
    OUT_RELOC(ring, fd_resource((aq)->prsc)->bo,                                \
              __offsetof(struct fd6_primitives_sample, field), 0, 0);
 
-#ifdef DEBUG_COUNTERS
-static const unsigned counter_count = 10;
-static const unsigned counter_base = REG_A6XX_RBBM_PRIMCTR_0_LO;
-
 static void
-log_counters(struct fd6_primitives_sample *ps)
+log_primitives_sample(struct fd6_primitives_sample *ps)
 {
-   const char *labels[] = {
-      "vs_vertices_in",    "vs_primitives_out",
-      "hs_vertices_in",    "hs_patches_out",
-      "ds_vertices_in",    "ds_primitives_out",
-      "gs_primitives_in",  "gs_primitives_out",
-      "ras_primitives_in", "x",
-   };
-
-   mesa_logd("  counter\t\tstart\t\t\tstop\t\t\tdiff");
-   for (int i = 0; i < ARRAY_SIZE(labels); i++) {
-      int register_idx = i + (counter_base - REG_A6XX_RBBM_PRIMCTR_0_LO) / 2;
-      mesa_logd("  RBBM_PRIMCTR_%d\t0x%016" PRIx64 "\t0x%016" PRIx64 "\t%" PRIi64
-             "\t%s",
-             register_idx, ps->prim_start[i], ps->prim_stop[i],
-             ps->prim_stop[i] - ps->prim_start[i], labels[register_idx]);
-   }
-
+#ifdef DEBUG_COUNTERS
    mesa_logd("  so counts");
    for (int i = 0; i < ARRAY_SIZE(ps->start); i++) {
       mesa_logd("  CHANNEL %d emitted\t0x%016" PRIx64 "\t0x%016" PRIx64
@@ -406,94 +583,8 @@ log_counters(struct fd6_primitives_sample *ps)
 
    mesa_logd("generated %" PRIu64 ", emitted %" PRIu64, ps->result.generated,
           ps->result.emitted);
-}
-
-#else
-
-static const unsigned counter_count = 1;
-static const unsigned counter_base = REG_A6XX_RBBM_PRIMCTR_7_LO;
-
-static void
-log_counters(struct fd6_primitives_sample *ps)
-{
-}
-
 #endif
-
-static void
-primitives_generated_resume(struct fd_acc_query *aq,
-                            struct fd_batch *batch) assert_dt
-{
-   struct fd_ringbuffer *ring = batch->draw;
-
-   fd_wfi(batch, ring);
-
-   OUT_PKT7(ring, CP_REG_TO_MEM, 3);
-   OUT_RING(ring, CP_REG_TO_MEM_0_64B | CP_REG_TO_MEM_0_CNT(counter_count * 2) |
-                     CP_REG_TO_MEM_0_REG(counter_base));
-   primitives_relocw(ring, aq, prim_start);
-
-   fd6_event_write(batch, ring, START_PRIMITIVE_CTRS, false);
 }
-
-static void
-primitives_generated_pause(struct fd_acc_query *aq,
-                           struct fd_batch *batch) assert_dt
-{
-   struct fd_ringbuffer *ring = batch->draw;
-
-   fd_wfi(batch, ring);
-
-   /* snapshot the end values: */
-   OUT_PKT7(ring, CP_REG_TO_MEM, 3);
-   OUT_RING(ring, CP_REG_TO_MEM_0_64B | CP_REG_TO_MEM_0_CNT(counter_count * 2) |
-                     CP_REG_TO_MEM_0_REG(counter_base));
-   primitives_relocw(ring, aq, prim_stop);
-
-   fd6_event_write(batch, ring, STOP_PRIMITIVE_CTRS, false);
-
-   /* result += stop - start: */
-   OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
-   OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_NEG_C | 0x40000000);
-   primitives_relocw(ring, aq, result.generated);
-   primitives_reloc(ring, aq, prim_emitted);
-   primitives_reloc(ring, aq,
-                    prim_stop[(REG_A6XX_RBBM_PRIMCTR_7_LO - counter_base) / 2])
-      primitives_reloc(
-         ring, aq, prim_start[(REG_A6XX_RBBM_PRIMCTR_7_LO - counter_base) / 2]);
-}
-
-static void
-primitives_generated_result(struct fd_acc_query *aq,
-                            struct fd_acc_query_sample *s,
-                            union pipe_query_result *result)
-{
-   struct fd6_primitives_sample *ps = fd6_primitives_sample(s);
-
-   log_counters(ps);
-
-   result->u64 = ps->result.generated;
-}
-
-static void
-primitives_generated_result_resource(struct fd_acc_query *aq,
-                                     struct fd_ringbuffer *ring,
-                                     enum pipe_query_value_type result_type,
-                                     int index, struct fd_resource *dst,
-                                     unsigned offset)
-{
-   copy_result(ring, result_type, dst, offset, fd_resource(aq->prsc),
-               offsetof(struct fd6_primitives_sample, result.generated));
-}
-
-static const struct fd_acc_sample_provider primitives_generated = {
-   .query_type = PIPE_QUERY_PRIMITIVES_GENERATED,
-   .size = sizeof(struct fd6_primitives_sample),
-   .resume = primitives_generated_resume,
-   .pause = primitives_generated_pause,
-   .result = primitives_generated_result,
-   .result_resource = primitives_generated_result_resource,
-};
 
 static void
 primitives_emitted_resume(struct fd_acc_query *aq,
@@ -501,14 +592,42 @@ primitives_emitted_resume(struct fd_acc_query *aq,
 {
    struct fd_ringbuffer *ring = batch->draw;
 
-   fd_wfi(batch, ring);
+   OUT_WFI5(ring);
 
    ASSERT_ALIGNED(struct fd6_primitives_sample, start[0], 32);
 
    OUT_PKT4(ring, REG_A6XX_VPC_SO_STREAM_COUNTS, 2);
-   primitives_relocw(ring, aq, start[0]);
+   primitives_reloc(ring, aq, start[0]);
 
    fd6_event_write(batch, ring, WRITE_PRIMITIVE_COUNTS, false);
+}
+
+static void
+accumultate_primitives_emitted(struct fd_acc_query *aq,
+                               struct fd_ringbuffer *ring,
+                               int idx)
+{
+   /* result += stop - start: */
+   OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
+   OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_NEG_C | 0x80000000);
+   primitives_reloc(ring, aq, result.emitted);
+   primitives_reloc(ring, aq, result.emitted);
+   primitives_reloc(ring, aq, stop[idx].emitted);
+   primitives_reloc(ring, aq, start[idx].emitted);
+}
+
+static void
+accumultate_primitives_generated(struct fd_acc_query *aq,
+                                 struct fd_ringbuffer *ring,
+                                 int idx)
+{
+   /* result += stop - start: */
+   OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
+   OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_NEG_C | 0x80000000);
+   primitives_reloc(ring, aq, result.generated);
+   primitives_reloc(ring, aq, result.generated);
+   primitives_reloc(ring, aq, stop[idx].generated);
+   primitives_reloc(ring, aq, start[idx].generated);
 }
 
 static void
@@ -517,24 +636,29 @@ primitives_emitted_pause(struct fd_acc_query *aq,
 {
    struct fd_ringbuffer *ring = batch->draw;
 
-   fd_wfi(batch, ring);
+   OUT_WFI5(ring);
 
    ASSERT_ALIGNED(struct fd6_primitives_sample, stop[0], 32);
 
    OUT_PKT4(ring, REG_A6XX_VPC_SO_STREAM_COUNTS, 2);
-   primitives_relocw(ring, aq, stop[0]);
+   primitives_reloc(ring, aq, stop[0]);
 
    fd6_event_write(batch, ring, WRITE_PRIMITIVE_COUNTS, false);
 
    fd6_event_write(batch, batch->draw, CACHE_FLUSH_TS, true);
 
-   /* result += stop - start: */
-   OUT_PKT7(ring, CP_MEM_TO_MEM, 9);
-   OUT_RING(ring, CP_MEM_TO_MEM_0_DOUBLE | CP_MEM_TO_MEM_0_NEG_C | 0x80000000);
-   primitives_relocw(ring, aq, result.emitted);
-   primitives_reloc(ring, aq, result.emitted);
-   primitives_reloc(ring, aq, stop[aq->base.index].emitted);
-   primitives_reloc(ring, aq, start[aq->base.index].emitted);
+   if (aq->provider->query_type == PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE) {
+      /* Need results from all channels: */
+      for (int i = 0; i < PIPE_MAX_SO_BUFFERS; i++) {
+         accumultate_primitives_emitted(aq, ring, i);
+         accumultate_primitives_generated(aq, ring, i);
+      }
+   } else {
+      accumultate_primitives_emitted(aq, ring, aq->base.index);
+      /* Only need primitives generated counts for the overflow queries: */
+      if (aq->provider->query_type == PIPE_QUERY_SO_OVERFLOW_PREDICATE)
+         accumultate_primitives_generated(aq, ring, aq->base.index);
+   }
 }
 
 static void
@@ -544,7 +668,7 @@ primitives_emitted_result(struct fd_acc_query *aq,
 {
    struct fd6_primitives_sample *ps = fd6_primitives_sample(s);
 
-   log_counters(ps);
+   log_primitives_sample(ps);
 
    result->u64 = ps->result.emitted;
 }
@@ -560,6 +684,48 @@ primitives_emitted_result_resource(struct fd_acc_query *aq,
                offsetof(struct fd6_primitives_sample, result.emitted));
 }
 
+static void
+so_overflow_predicate_result(struct fd_acc_query *aq,
+                             struct fd_acc_query_sample *s,
+                             union pipe_query_result *result)
+{
+   struct fd6_primitives_sample *ps = fd6_primitives_sample(s);
+
+   log_primitives_sample(ps);
+
+   result->b = ps->result.emitted != ps->result.generated;
+}
+
+static void
+so_overflow_predicate_result_resource(struct fd_acc_query *aq,
+                                      struct fd_ringbuffer *ring,
+                                      enum pipe_query_value_type result_type,
+                                      int index, struct fd_resource *dst,
+                                      unsigned offset)
+{
+   /* result = generated - emitted: */
+   OUT_PKT7(ring, CP_MEM_TO_MEM, 7);
+   OUT_RING(ring, CP_MEM_TO_MEM_0_NEG_B |
+            COND(result_type >= PIPE_QUERY_TYPE_I64, CP_MEM_TO_MEM_0_DOUBLE));
+   OUT_RELOC(ring, dst->bo, offset, 0, 0);
+   primitives_reloc(ring, aq, result.generated);
+   primitives_reloc(ring, aq, result.emitted);
+
+   /* This is a bit awkward, but glcts expects the result to be 1 or 0
+    * rather than non-zero vs zero:
+    */
+   OUT_PKT7(ring, CP_COND_WRITE5, 9);
+   OUT_RING(ring, CP_COND_WRITE5_0_FUNCTION(WRITE_NE) |
+                  CP_COND_WRITE5_0_POLL(POLL_MEMORY) |
+                  CP_COND_WRITE5_0_WRITE_MEMORY);
+   OUT_RELOC(ring, dst->bo, offset, 0, 0);    /* POLL_ADDR_LO/HI */
+   OUT_RING(ring, CP_COND_WRITE5_3_REF(0));
+   OUT_RING(ring, CP_COND_WRITE5_4_MASK(~0));
+   OUT_RELOC(ring, dst->bo, offset, 0, 0);    /* WRITE_ADDR_LO/HI */
+   OUT_RING(ring, 1);
+   OUT_RING(ring, 0);
+}
+
 static const struct fd_acc_sample_provider primitives_emitted = {
    .query_type = PIPE_QUERY_PRIMITIVES_EMITTED,
    .size = sizeof(struct fd6_primitives_sample),
@@ -567,6 +733,24 @@ static const struct fd_acc_sample_provider primitives_emitted = {
    .pause = primitives_emitted_pause,
    .result = primitives_emitted_result,
    .result_resource = primitives_emitted_result_resource,
+};
+
+static const struct fd_acc_sample_provider so_overflow_any_predicate = {
+   .query_type = PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE,
+   .size = sizeof(struct fd6_primitives_sample),
+   .resume = primitives_emitted_resume,
+   .pause = primitives_emitted_pause,
+   .result = so_overflow_predicate_result,
+   .result_resource = so_overflow_predicate_result_resource,
+};
+
+static const struct fd_acc_sample_provider so_overflow_predicate = {
+   .query_type = PIPE_QUERY_SO_OVERFLOW_PREDICATE,
+   .size = sizeof(struct fd6_primitives_sample),
+   .resume = primitives_emitted_resume,
+   .pause = primitives_emitted_pause,
+   .result = so_overflow_predicate_result,
+   .result_resource = so_overflow_predicate_result_resource,
 };
 
 /*
@@ -599,7 +783,7 @@ perfcntr_resume(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    unsigned counters_per_group[screen->num_perfcntr_groups];
    memset(counters_per_group, 0, sizeof(counters_per_group));
 
-   fd_wfi(batch, ring);
+   OUT_WFI5(ring);
 
    /* configure performance counters for the requested queries: */
    for (unsigned i = 0; i < data->num_query_entries; i++) {
@@ -639,7 +823,7 @@ perfcntr_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    unsigned counters_per_group[screen->num_perfcntr_groups];
    memset(counters_per_group, 0, sizeof(counters_per_group));
 
-   fd_wfi(batch, ring);
+   OUT_WFI5(ring);
 
    /* TODO do we need to bother to turn anything off? */
 
@@ -786,5 +970,9 @@ fd6_query_context_init(struct pipe_context *pctx) disable_thread_safety_analysis
    fd_acc_query_register_provider(pctx, &timestamp);
 
    fd_acc_query_register_provider(pctx, &primitives_generated);
+   fd_acc_query_register_provider(pctx, &pipeline_statistics_single);
+
    fd_acc_query_register_provider(pctx, &primitives_emitted);
+   fd_acc_query_register_provider(pctx, &so_overflow_any_predicate);
+   fd_acc_query_register_provider(pctx, &so_overflow_predicate);
 }

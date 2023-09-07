@@ -1616,7 +1616,7 @@ __ftrunc64(uint64_t __a)
 uint64_t
 __ffloor64(uint64_t a)
 {
-   /* The big assumtion is that when 'a' is NaN, __ftrunc(a) returns a.  Based
+   /* The big assumption is that when 'a' is NaN, __ftrunc(a) returns a.  Based
     * on that assumption, NaN values that don't have the sign bit will safely
     * return NaN (identity).  This is guarded by RELAXED_NAN_PROPAGATION
     * because otherwise the NaN should have the "signal" bit set.  The

@@ -23,14 +23,11 @@
 
 #include "anv_private.h"
 #include "drm-uapi/drm_fourcc.h"
+#include "vk_android.h"
 #include "vk_enum_defines.h"
 #include "vk_enum_to_str.h"
 #include "vk_format.h"
 #include "vk_util.h"
-
-#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
-#include "vk_android.h"
-#endif
 
 /*
  * gcc-4 and earlier don't allow compound literals where a constant
@@ -1357,8 +1354,8 @@ static const VkExternalMemoryProperties android_buffer_props = {
 
 
 static const VkExternalMemoryProperties android_image_props = {
-   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
-                             VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT |
+   /* VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT will be set dynamically */
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT |
                              VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT,
    .exportFromImportedHandleTypes =
       VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
@@ -1427,7 +1424,6 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
    bool ahw_supported =
       physical_device->vk.supported_extensions.ANDROID_external_memory_android_hardware_buffer;
 
-#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
    if (ahw_supported && android_usage) {
       android_usage->androidHardwareBufferUsage =
          vk_image_usage_to_ahb_usage(base_info->flags,
@@ -1436,7 +1432,6 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
       /* Limit maxArrayLayers to 1 for AHardwareBuffer based images for now. */
       base_props->imageFormatProperties.maxArrayLayers = 1;
    }
-#endif
 
    /* From the Vulkan 1.0.42 spec:
     *
@@ -1551,6 +1546,10 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
           */
          if (ahw_supported && external_props) {
             external_props->externalMemoryProperties = android_image_props;
+            if (anv_ahb_format_for_vk_format(base_info->format)) {
+               external_props->externalMemoryProperties.externalMemoryFeatures |=
+                  VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
+            }
             break;
          }
          FALLTHROUGH; /* If ahw not supported */
@@ -1659,83 +1658,4 @@ void anv_GetPhysicalDeviceExternalBufferProperties(
       (VkExternalMemoryProperties) {
          .compatibleHandleTypes = pExternalBufferInfo->handleType,
       };
-}
-
-VkResult anv_CreateSamplerYcbcrConversion(
-    VkDevice                                    _device,
-    const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkSamplerYcbcrConversion*                   pYcbcrConversion)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   struct anv_ycbcr_conversion *conversion;
-
-   /* Search for VkExternalFormatANDROID and resolve the format. */
-   struct anv_format *ext_format = NULL;
-   const VkExternalFormatANDROID *ext_info =
-      vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_FORMAT_ANDROID);
-
-   uint64_t format = ext_info ? ext_info->externalFormat : 0;
-   if (format) {
-      assert(pCreateInfo->format == VK_FORMAT_UNDEFINED);
-      ext_format = (struct anv_format *) (uintptr_t) format;
-   }
-
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO);
-
-   conversion = vk_object_zalloc(&device->vk, pAllocator, sizeof(*conversion),
-                                 VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION);
-   if (!conversion)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   conversion->format = anv_get_format(pCreateInfo->format);
-   conversion->ycbcr_model = pCreateInfo->ycbcrModel;
-   conversion->ycbcr_range = pCreateInfo->ycbcrRange;
-
-   /* The Vulkan 1.1.95 spec says "When creating an external format conversion,
-    * the value of components if ignored."
-    */
-   if (!ext_format) {
-      conversion->mapping[0] = pCreateInfo->components.r;
-      conversion->mapping[1] = pCreateInfo->components.g;
-      conversion->mapping[2] = pCreateInfo->components.b;
-      conversion->mapping[3] = pCreateInfo->components.a;
-   }
-
-   conversion->chroma_offsets[0] = pCreateInfo->xChromaOffset;
-   conversion->chroma_offsets[1] = pCreateInfo->yChromaOffset;
-   conversion->chroma_filter = pCreateInfo->chromaFilter;
-
-   /* Setup external format. */
-   if (ext_format)
-      conversion->format = ext_format;
-
-   bool has_chroma_subsampled = false;
-   for (uint32_t p = 0; p < conversion->format->n_planes; p++) {
-      if (conversion->format->planes[p].has_chroma &&
-          (conversion->format->planes[p].denominator_scales[0] > 1 ||
-           conversion->format->planes[p].denominator_scales[1] > 1))
-         has_chroma_subsampled = true;
-   }
-   conversion->chroma_reconstruction = has_chroma_subsampled &&
-      (conversion->chroma_offsets[0] == VK_CHROMA_LOCATION_COSITED_EVEN ||
-       conversion->chroma_offsets[1] == VK_CHROMA_LOCATION_COSITED_EVEN);
-
-   *pYcbcrConversion = anv_ycbcr_conversion_to_handle(conversion);
-
-   return VK_SUCCESS;
-}
-
-void anv_DestroySamplerYcbcrConversion(
-    VkDevice                                    _device,
-    VkSamplerYcbcrConversion                    YcbcrConversion,
-    const VkAllocationCallbacks*                pAllocator)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   ANV_FROM_HANDLE(anv_ycbcr_conversion, conversion, YcbcrConversion);
-
-   if (!conversion)
-      return;
-
-   vk_object_free(&device->vk, pAllocator, conversion);
 }

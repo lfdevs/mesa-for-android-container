@@ -222,8 +222,6 @@ void panfrost_upload_sample_positions(struct panfrost_device *dev);
 
 mali_ptr panfrost_sample_positions(const struct panfrost_device *dev,
                                    enum mali_sample_pattern pattern);
-void panfrost_query_sample_position(enum mali_sample_pattern pattern,
-                                    unsigned sample_idx, float *out);
 
 unsigned panfrost_query_l2_slices(const struct panfrost_device *dev);
 

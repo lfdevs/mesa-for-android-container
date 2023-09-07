@@ -44,6 +44,6 @@ uint32_t
 v3d_translate_pipe_swizzle(enum pipe_swizzle swizzle);
 
 uint32_t
-v3d_hw_prim_type(enum pipe_prim_type prim_type);
+v3d_hw_prim_type(enum mesa_prim prim_type);
 
 #endif

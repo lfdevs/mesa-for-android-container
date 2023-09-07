@@ -63,13 +63,13 @@ static inline nir_ssa_def *
 brw_nir_rt_load_const(nir_builder *b, unsigned components,
                       nir_ssa_def *addr, nir_ssa_def *pred)
 {
-   return nir_build_load_global_const_block_intel(b, components, addr, pred);
+   return nir_load_global_const_block_intel(b, components, addr, pred);
 }
 
 static inline nir_ssa_def *
 brw_load_btd_dss_id(nir_builder *b)
 {
-   return nir_build_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_DSS);
+   return nir_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_DSS);
 }
 
 static inline nir_ssa_def *
@@ -84,7 +84,7 @@ brw_nir_rt_load_num_simd_lanes_per_dss(nir_builder *b,
 static inline nir_ssa_def *
 brw_load_eu_thread_simd(nir_builder *b)
 {
-   return nir_build_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_EU_THREAD_SIMD);
+   return nir_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_EU_THREAD_SIMD);
 }
 
 static inline nir_ssa_def *
@@ -313,7 +313,7 @@ brw_nir_rt_load_globals_addr(nir_builder *b,
 {
    nir_ssa_def *data;
    data = brw_nir_rt_load_const(b, 16, addr, nir_imm_true(b));
-   defs->base_mem_addr = nir_pack_64_2x32(b, nir_channels(b, data, 0x3));
+   defs->base_mem_addr = nir_pack_64_2x32(b, nir_trim_vector(b, data, 2));
 
    defs->call_stack_handler_addr =
       nir_pack_64_2x32(b, nir_channels(b, data, 0x3 << 2));
@@ -781,7 +781,7 @@ brw_nir_rt_load_mem_ray_from_addr(nir_builder *b,
       brw_nir_rt_load(b, nir_iadd_imm(b, ray_addr, 48), 16, 4, 32),
    };
 
-   defs->orig = nir_channels(b, data[0], 0x7);
+   defs->orig = nir_trim_vector(b, data[0], 3);
    defs->dir = nir_vec3(b, nir_channel(b, data[0], 3),
                            nir_channel(b, data[1], 0),
                            nir_channel(b, data[1], 1));
@@ -837,12 +837,12 @@ brw_nir_rt_load_bvh_instance_leaf(nir_builder *b,
                                   struct brw_nir_rt_bvh_instance_leaf_defs *defs,
                                   nir_ssa_def *leaf_addr)
 {
+   nir_ssa_def *leaf_desc = brw_nir_rt_load(b, leaf_addr, 4, 2, 32);
+
    defs->shader_index =
-      nir_iand_imm(b, brw_nir_rt_load(b, leaf_addr, 4, 1, 32), (1 << 24) - 1);
+      nir_iand_imm(b, nir_channel(b, leaf_desc, 0), (1 << 24) - 1);
    defs->contribution_to_hit_group_index =
-      nir_iand_imm(b,
-                   brw_nir_rt_load(b, nir_iadd_imm(b, leaf_addr, 4), 4, 1, 32),
-                   (1 << 24) - 1);
+      nir_iand_imm(b, nir_channel(b, leaf_desc, 1), (1 << 24) - 1);
 
    defs->world_to_object[0] =
       brw_nir_rt_load(b, nir_iadd_imm(b, leaf_addr, 16), 4, 3, 32);
@@ -904,6 +904,21 @@ brw_nir_rt_load_bvh_primitive_leaf(nir_builder *b,
                             nir_imm_int(b, 31), nir_imm_int(b, 30));
 }
 
+struct brw_nir_rt_bvh_primitive_leaf_positions_defs {
+   nir_ssa_def *positions[3];
+};
+
+static inline void
+brw_nir_rt_load_bvh_primitive_leaf_positions(nir_builder *b,
+                                             struct brw_nir_rt_bvh_primitive_leaf_positions_defs *defs,
+                                             nir_ssa_def *leaf_addr)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(defs->positions); i++) {
+      defs->positions[i] =
+         brw_nir_rt_load(b, nir_iadd_imm(b, leaf_addr, 16 + i * 4 * 3), 4, 3, 32);
+   }
+}
+
 static inline nir_ssa_def *
 brw_nir_rt_load_primitive_id_from_hit(nir_builder *b,
                                       nir_ssa_def *is_procedural,
@@ -911,8 +926,8 @@ brw_nir_rt_load_primitive_id_from_hit(nir_builder *b,
 {
    if (!is_procedural) {
       is_procedural =
-         nir_ieq(b, defs->leaf_type,
-                    nir_imm_int(b, BRW_RT_BVH_NODE_TYPE_PROCEDURAL));
+         nir_ieq_imm(b, defs->leaf_type,
+                        BRW_RT_BVH_NODE_TYPE_PROCEDURAL);
    }
 
    nir_ssa_def *prim_id_proc, *prim_id_quad;
@@ -958,7 +973,7 @@ brw_nir_rt_acceleration_structure_to_root_node(nir_builder *b,
     * BVH, we can find the root node at a given offset.
     */
    nir_ssa_def *root_node_ptr, *null_node_ptr;
-   nir_push_if(b, nir_ieq(b, as_addr, nir_imm_int64(b, 0)));
+   nir_push_if(b, nir_ieq_imm(b, as_addr, 0));
    {
       null_node_ptr = nir_imm_int64(b, 0);
    }

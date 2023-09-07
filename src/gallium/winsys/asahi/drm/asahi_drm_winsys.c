@@ -23,7 +23,7 @@ static struct pipe_screen *
 asahi_screen_create(int fd, const struct pipe_screen_config *config,
                     struct renderonly *ro)
 {
-   return agx_screen_create(fd, ro, NULL);
+   return agx_screen_create(fd, ro);
 }
 
 struct pipe_screen *

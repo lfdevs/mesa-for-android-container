@@ -55,7 +55,6 @@ struct gl_extensions
    GLboolean ARB_bindless_texture;
    GLboolean ARB_blend_func_extended;
    GLboolean ARB_buffer_storage;
-   GLboolean ARB_clear_texture;
    GLboolean ARB_clip_control;
    GLboolean ARB_color_buffer_float;
    GLboolean ARB_compatibility;
@@ -940,6 +939,15 @@ struct gl_constants
 
    /** Is the drivers uniform storage packed or padded to 16 bytes. */
    bool PackedDriverUniformStorage;
+
+   bool HasFBFetch;
+
+   /** Whether the backend supports reading from outputs */
+   bool SupportsReadingOutputs;
+
+   bool CombinedClipCullDistanceArrays;
+
+   bool PointSizeFixed;
 
    /** Wether or not glBitmap uses red textures rather than alpha */
    bool BitmapUsesRed;

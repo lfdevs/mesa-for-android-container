@@ -49,7 +49,7 @@ nir_lod_errata_instr(nir_builder *b, nir_instr *instr, void *data)
    nir_intrinsic_instr *l = nir_intrinsic_instr_create(
       b->shader, nir_intrinsic_load_sampler_lod_parameters_pan);
    l->num_components = 3;
-   nir_ssa_dest_init(&l->instr, &l->dest, 3, 32, NULL);
+   nir_ssa_dest_init(&l->instr, &l->dest, 3, 32);
 
    /* TODO: Indirect samplers, separate sampler objects XXX */
    nir_src idx = nir_src_for_ssa(nir_imm_int(b, tex->texture_index));

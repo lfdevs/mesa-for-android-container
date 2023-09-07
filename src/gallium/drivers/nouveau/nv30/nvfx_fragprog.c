@@ -9,9 +9,7 @@
 
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_parse.h"
-#include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_ureg.h"
 
 #include "nouveau_debug.h"
 #include "nv_object.xml.h"

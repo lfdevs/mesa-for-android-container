@@ -4,27 +4,27 @@
 #include "util/u_prim.h"
 
 struct test_info {
-   enum pipe_prim_type prim_type;
+   enum mesa_prim prim_type;
    uint32_t count;
    uint32_t expected;
 };
 
 struct test_info tests[] = {
-   { PIPE_PRIM_POINTS, 0, 0 },
-   { PIPE_PRIM_POINTS, 1, 1 },
-   { PIPE_PRIM_POINTS, 2, 2 },
+   { MESA_PRIM_POINTS, 0, 0 },
+   { MESA_PRIM_POINTS, 1, 1 },
+   { MESA_PRIM_POINTS, 2, 2 },
 
-   { PIPE_PRIM_LINES, 0, 0 },
-   { PIPE_PRIM_LINES, 1, 2 },
-   { PIPE_PRIM_LINES, 2, 4 },
+   { MESA_PRIM_LINES, 0, 0 },
+   { MESA_PRIM_LINES, 1, 2 },
+   { MESA_PRIM_LINES, 2, 4 },
 
-   { PIPE_PRIM_TRIANGLES, 0, 0 },
-   { PIPE_PRIM_TRIANGLES, 1, 3 },
-   { PIPE_PRIM_TRIANGLES, 2, 6 },
+   { MESA_PRIM_TRIANGLES, 0, 0 },
+   { MESA_PRIM_TRIANGLES, 1, 3 },
+   { MESA_PRIM_TRIANGLES, 2, 6 },
 
-   { PIPE_PRIM_QUADS, 0, 0 },
-   { PIPE_PRIM_QUADS, 1, 4 },
-   { PIPE_PRIM_QUADS, 2, 8 },
+   { MESA_PRIM_QUADS, 0, 0 },
+   { MESA_PRIM_QUADS, 1, 4 },
+   { MESA_PRIM_QUADS, 2, 8 },
 };
 
 int

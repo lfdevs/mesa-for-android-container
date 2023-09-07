@@ -498,7 +498,14 @@ v3d_setup_render_target(struct v3d_job *job, int cbuf,
            *rt_bpp = MAX2(*rt_bpp, bsurf->internal_bpp);
         }
         *rt_type = surf->internal_type;
-        *rt_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
+        if (util_format_is_srgb(surf->base.format))
+                *rt_clamp = V3D_RENDER_TARGET_CLAMP_NORM;
+#if V3D_VERSION >= 42
+        else if (util_format_is_pure_integer(surf->base.format))
+                *rt_clamp = V3D_RENDER_TARGET_CLAMP_INT;
+#endif
+        else
+                *rt_clamp = V3D_RENDER_TARGET_CLAMP_NONE;
 }
 
 #else /* V3D_VERSION < 40 */

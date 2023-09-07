@@ -45,7 +45,7 @@
  * Compare pipe_framebuffer_state objects.
  * \return TRUE if same, FALSE if different
  */
-boolean
+bool
 util_framebuffer_state_equal(const struct pipe_framebuffer_state *dst,
                              const struct pipe_framebuffer_state *src)
 {
@@ -53,31 +53,31 @@ util_framebuffer_state_equal(const struct pipe_framebuffer_state *dst,
 
    if (dst->width != src->width ||
        dst->height != src->height)
-      return FALSE;
+      return false;
 
    if (dst->samples != src->samples ||
        dst->layers  != src->layers)
-      return FALSE;
+      return false;
 
    if (dst->nr_cbufs != src->nr_cbufs) {
-      return FALSE;
+      return false;
    }
 
    for (i = 0; i < src->nr_cbufs; i++) {
       if (dst->cbufs[i] != src->cbufs[i]) {
-         return FALSE;
+         return false;
       }
    }
 
    if (dst->zsbuf != src->zsbuf) {
-      return FALSE;
+      return false;
    }
 
    if (dst->resolve != src->resolve) {
-      return FALSE;
+      return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -147,7 +147,7 @@ util_unreference_framebuffer_state(struct pipe_framebuffer_state *fb)
 /* Where multiple sizes are allowed for framebuffer surfaces, find the
  * minimum width and height of all bound surfaces.
  */
-boolean
+bool
 util_framebuffer_min_size(const struct pipe_framebuffer_state *fb,
                           unsigned *width,
                           unsigned *height)
@@ -172,12 +172,12 @@ util_framebuffer_min_size(const struct pipe_framebuffer_state *fb,
    if (w == ~0u) {
       *width = 0;
       *height = 0;
-      return FALSE;
+      return false;
    }
    else {
       *width = w;
       *height = h;
-      return TRUE;
+      return true;
    }
 }
 

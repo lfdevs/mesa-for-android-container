@@ -747,7 +747,7 @@ static void virgl_video_flush(struct pipe_video_codec *codec)
 
     ctx->flush(ctx, &fence, 0);
     if (fence) {
-        ctx->screen->fence_finish(ctx->screen, NULL, fence, PIPE_TIMEOUT_INFINITE);
+        ctx->screen->fence_finish(ctx->screen, NULL, fence, OS_TIMEOUT_INFINITE);
         ctx->screen->fence_reference(ctx->screen, &fence, NULL);
     }
 }

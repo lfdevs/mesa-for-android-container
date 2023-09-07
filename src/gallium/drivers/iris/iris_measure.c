@@ -121,7 +121,7 @@ iris_init_batch_measure(struct iris_context *ice, struct iris_batch *batch)
                                config->batch_size * sizeof(uint64_t), 8,
                                IRIS_MEMZONE_OTHER, BO_ALLOC_ZEROED);
    measure->base.timestamps = iris_bo_map(NULL, measure->bo, MAP_READ);
-   measure->base.framebuffer =
+   measure->base.renderpass =
       (uintptr_t)util_hash_crc32(&ice->state.framebuffer,
                                  sizeof(ice->state.framebuffer));
 }
@@ -155,7 +155,7 @@ measure_start_snapshot(struct iris_context *ice,
    if (measure_batch->frame == 0)
       measure_batch->frame = screen_frame;
 
-   uintptr_t framebuffer = measure_batch->framebuffer;
+   uintptr_t renderpass = measure_batch->renderpass;
 
    if (measure_batch->index == config->batch_size) {
       /* Snapshot buffer is full.  The batch must be flushed before additional
@@ -175,12 +175,23 @@ measure_start_snapshot(struct iris_context *ice,
 
    unsigned index = measure_batch->index++;
    assert(index < config->batch_size);
+   if (event_name == NULL)
+      event_name = intel_measure_snapshot_string(type);
+
+   if(config->cpu_measure) {
+      intel_measure_print_cpu_result(measure_batch->frame,
+                                     measure_batch->batch_count,
+                                     index/2,
+                                     measure_batch->event_count,
+                                     count,
+                                     event_name);
+      return;
+   }
+
    iris_emit_pipe_control_write(batch, "measurement snapshot",
                                 PIPE_CONTROL_WRITE_TIMESTAMP |
                                 PIPE_CONTROL_CS_STALL,
                                 batch->measure->bo, index * sizeof(uint64_t), 0ull);
-   if (event_name == NULL)
-      event_name = intel_measure_snapshot_string(type);
 
    struct intel_measure_snapshot *snapshot = &(measure_batch->snapshots[index]);
    memset(snapshot, 0, sizeof(*snapshot));
@@ -188,7 +199,7 @@ measure_start_snapshot(struct iris_context *ice,
    snapshot->count = (unsigned) count;
    snapshot->event_count = measure_batch->event_count;
    snapshot->event_name = event_name;
-   snapshot->framebuffer = framebuffer;
+   snapshot->renderpass = renderpass;
 
    if (type == INTEL_SNAPSHOT_COMPUTE) {
       snapshot->cs = (uintptr_t) ice->shaders.prog[MESA_SHADER_COMPUTE];
@@ -206,9 +217,12 @@ measure_end_snapshot(struct iris_batch *batch,
                      uint32_t event_count)
 {
    struct intel_measure_batch *measure_batch = &batch->measure->base;
+   const struct intel_measure_config *config = config_from_context(batch->ice);
 
    unsigned index = measure_batch->index++;
    assert(index % 2 == 1);
+   if(config->cpu_measure)
+      return;
 
    iris_emit_pipe_control_write(batch, "measurement snapshot",
                                 PIPE_CONTROL_WRITE_TIMESTAMP |
@@ -255,7 +269,7 @@ iris_measure_renderpass(struct iris_context *ice)
       return;
    uint32_t framebuffer_crc = util_hash_crc32(&ice->state.framebuffer,
                                               sizeof(ice->state.framebuffer));
-   if (framebuffer_crc == batch->framebuffer)
+   if (framebuffer_crc == batch->renderpass)
       return;
    bool filtering = config->flags & INTEL_MEASURE_RENDERPASS;
    if (filtering && batch->index % 2 == 1) {
@@ -265,7 +279,7 @@ iris_measure_renderpass(struct iris_context *ice)
       batch->event_count = 0;
    }
 
-   batch->framebuffer = framebuffer_crc;
+   batch->renderpass = framebuffer_crc;
 }
 
 void
@@ -288,6 +302,10 @@ _iris_measure_snapshot(struct iris_context *ice,
 
    assert(type != INTEL_SNAPSHOT_END);
    iris_measure_renderpass(ice);
+
+   static unsigned batch_count = 0;
+   if (measure_batch->event_count == 0)
+      measure_batch->batch_count = p_atomic_inc_return(&batch_count);
 
    if (!state_changed(ice, batch, type)) {
       /* filter out this event */
@@ -359,9 +377,6 @@ iris_measure_batch_end(struct iris_context *ice, struct iris_batch *batch)
 
    assert(measure_batch);
    assert(measure_device);
-
-   static unsigned batch_count = 0;
-   measure_batch->batch_count = p_atomic_inc_return(&batch_count);
 
    if (measure_batch->index % 2) {
       /* We hit the end of the batch, but never terminated our section of

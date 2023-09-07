@@ -1273,7 +1273,7 @@ lp_build_div(struct lp_build_context *bld,
       return bld->undef;
 
    /* fast rcp is disabled (just uses div), so makes no sense to try that */
-   if (FALSE &&
+   if (false &&
       ((util_get_cpu_caps()->has_sse && type.width == 32 && type.length == 4) ||
        (util_get_cpu_caps()->has_avx && type.width == 32 && type.length == 8)) &&
       type.floating)
@@ -1854,23 +1854,23 @@ lp_build_int_to_float(struct lp_build_context *bld,
 }
 
 
-static boolean
+static bool
 arch_rounding_available(const struct lp_type type)
 {
    if ((util_get_cpu_caps()->has_sse4_1 &&
        (type.length == 1 || type.width*type.length == 128)) ||
        (util_get_cpu_caps()->has_avx && type.width*type.length == 256) ||
        (util_get_cpu_caps()->has_avx512f && type.width*type.length == 512))
-      return TRUE;
+      return true;
    else if ((util_get_cpu_caps()->has_altivec &&
             (type.width == 32 && type.length == 4)))
-      return TRUE;
+      return true;
    else if (util_get_cpu_caps()->has_neon)
-      return TRUE;
+      return true;
    else if (util_get_cpu_caps()->family == CPU_S390X)
-      return TRUE;
+      return true;
 
-   return FALSE;
+   return false;
 }
 
 enum lp_build_round_mode
@@ -2644,7 +2644,7 @@ lp_build_rcp(struct lp_build_context *bld,
     * particular uses that require less workarounds.
     */
 
-   if (FALSE && ((util_get_cpu_caps()->has_sse && type.width == 32 && type.length == 4) ||
+   if (false && ((util_get_cpu_caps()->has_sse && type.width == 32 && type.length == 4) ||
          (util_get_cpu_caps()->has_avx && type.width == 32 && type.length == 8))){
       const unsigned num_iterations = 0;
       LLVMValueRef res;
@@ -2760,7 +2760,7 @@ lp_build_rsqrt(struct lp_build_context *bld,
  * unavailable it would result in sqrt/div/mul so obviously
  * much better to just call sqrt, skipping both div and mul).
  */
-boolean
+bool
 lp_build_fast_rsqrt_available(struct lp_type type)
 {
    assert(type.floating);
@@ -2817,7 +2817,7 @@ lp_build_fast_rsqrt(struct lp_build_context *bld,
 static LLVMValueRef
 lp_build_sin_or_cos(struct lp_build_context *bld,
                     LLVMValueRef a,
-                    boolean cos)
+                    bool cos)
 {
    struct gallivm_state *gallivm = bld->gallivm;
    LLVMBuilderRef b = gallivm->builder;
@@ -3035,7 +3035,7 @@ lp_build_sin(struct lp_build_context *bld,
       return lp_build_intrinsic(builder, intrinsic, vec_type, args, 1, 0);
    }
 
-   return lp_build_sin_or_cos(bld, a, FALSE);
+   return lp_build_sin_or_cos(bld, a, false);
 }
 
 
@@ -3057,7 +3057,7 @@ lp_build_cos(struct lp_build_context *bld,
       return lp_build_intrinsic(builder, intrinsic, vec_type, args, 1, 0);
    }
 
-   return lp_build_sin_or_cos(bld, a, TRUE);
+   return lp_build_sin_or_cos(bld, a, true);
 }
 
 
@@ -3408,7 +3408,7 @@ lp_build_log2_approx(struct lp_build_context *bld,
                      LLVMValueRef *p_exp,
                      LLVMValueRef *p_floor_log2,
                      LLVMValueRef *p_log2,
-                     boolean handle_edge_cases)
+                     bool handle_edge_cases)
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
    const struct lp_type type = bld->type;
@@ -3535,7 +3535,7 @@ lp_build_log2(struct lp_build_context *bld,
               LLVMValueRef x)
 {
    LLVMValueRef res;
-   lp_build_log2_approx(bld, x, NULL, NULL, &res, FALSE);
+   lp_build_log2_approx(bld, x, NULL, NULL, &res, false);
    return res;
 }
 
@@ -3550,7 +3550,7 @@ lp_build_log2_safe(struct lp_build_context *bld,
                    LLVMValueRef x)
 {
    LLVMValueRef res;
-   lp_build_log2_approx(bld, x, NULL, NULL, &res, TRUE);
+   lp_build_log2_approx(bld, x, NULL, NULL, &res, true);
    return res;
 }
 
@@ -3735,7 +3735,7 @@ lp_build_fpstate_get(struct gallivm_state *gallivm)
 
 void
 lp_build_fpstate_set_denorms_zero(struct gallivm_state *gallivm,
-                                  boolean zero)
+                                  bool zero)
 {
    if (util_get_cpu_caps()->has_sse) {
       /* turn on DAZ (64) | FTZ (32768) = 32832 if available */

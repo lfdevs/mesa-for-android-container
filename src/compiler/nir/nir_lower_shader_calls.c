@@ -136,14 +136,12 @@ can_remat_instr(nir_instr *instr, struct sized_bitset *remat)
     *   - Derefs which are either complete or casts of any of the above
     *
     * Because this pass rewrites things in-order and phis are always turned
-    * into register writes, We can use "is it SSA?" to answer the question
-    * "can my source be re-materialized?".
+    * into register writes, we can use "is it SSA?" to answer the question
+    * "can my source be re-materialized?". Register writes happen via
+    * non-rematerializable intrinsics.
     */
    switch (instr->type) {
    case nir_instr_type_alu:
-      if (!nir_instr_as_alu(instr)->dest.dest.is_ssa)
-         return false;
-
       return nir_foreach_src(instr, src_is_in_bitset, remat);
 
    case nir_instr_type_deref:
@@ -197,6 +195,9 @@ can_remat_instr(nir_instr *instr, struct sized_bitset *remat)
           */
          return true;
 
+      case nir_intrinsic_resource_intel:
+         return nir_foreach_src(instr, src_is_in_bitset, remat);
+
       default:
          return false;
       }
@@ -225,9 +226,6 @@ struct add_instr_data {
 static bool
 add_src_instr(nir_src *src, void *state)
 {
-   if (!src->is_ssa)
-      return false;
-
    struct add_instr_data *data = state;
    if (BITSET_TEST(data->remat->set, src->ssa->index))
       return true;
@@ -420,9 +418,19 @@ spill_fill(nir_builder *before, nir_builder *after, nir_ssa_def *def,
                          .align_mul = MIN2(comp_size, stack_alignment));
 }
 
+static bool
+add_src_to_call_live_bitset(nir_src *src, void *state)
+{
+   BITSET_WORD *call_live = state;
+
+   assert(src->is_ssa);
+   BITSET_SET(call_live, src->ssa->index);
+   return true;
+}
+
 static void
 spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
-                                      unsigned stack_alignment)
+                                      const nir_lower_shader_calls_options *options)
 {
    /* TODO: If a SSA def is filled more than once, we probably want to just
     *       spill it at the LCM of the fill sites so we avoid unnecessary
@@ -505,9 +513,50 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
       }
    }
 
+   /* If a should_remat_callback is given, call it on each of the live values
+    * for each call site. If it returns true we need to rematerialize that
+    * instruction (instead of spill/fill). Therefore we need to add the
+    * sources as live values so that we can rematerialize on top of those
+    * spilled/filled sources.
+    */
+   if (options->should_remat_callback) {
+      BITSET_WORD **updated_call_live =
+         rzalloc_array(mem_ctx, BITSET_WORD *, num_calls);
+
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            nir_ssa_def *def = nir_instr_ssa_def(instr);
+            if (def == NULL)
+               continue;
+
+            for (unsigned c = 0; c < num_calls; c++) {
+               if (!BITSET_TEST(call_live[c], def->index))
+                  continue;
+
+               if (!options->should_remat_callback(def->parent_instr,
+                                                   options->should_remat_data))
+                  continue;
+
+               if (updated_call_live[c] == NULL) {
+                  const unsigned bitset_words = BITSET_WORDS(impl->ssa_alloc);
+                  updated_call_live[c] = ralloc_array(mem_ctx, BITSET_WORD, bitset_words);
+                  memcpy(updated_call_live[c], call_live[c], bitset_words * sizeof(BITSET_WORD));
+               }
+
+               nir_foreach_src(instr, add_src_to_call_live_bitset, updated_call_live[c]);
+            }
+         }
+      }
+
+      for (unsigned c = 0; c < num_calls; c++) {
+         if (updated_call_live[c] != NULL)
+            call_live[c] = updated_call_live[c];
+      }
+   }
+
    nir_builder before, after;
-   nir_builder_init(&before, impl);
-   nir_builder_init(&after, impl);
+   before = nir_builder_create(impl);
+   after = nir_builder_create(impl);
 
    call_idx = 0;
    unsigned max_scratch_size = shader->scratch_size;
@@ -583,7 +632,7 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
 
                   new_def = spill_fill(&before, &after, def,
                                        index, call_idx,
-                                       offset, stack_alignment);
+                                       offset, options->stack_alignment);
 
                   if (is_bool)
                      new_def = nir_b2b1(&after, new_def);
@@ -611,7 +660,7 @@ spill_ssa_defs_and_lower_shader_calls(nir_shader *shader, uint32_t num_calls,
 
          nir_builder *b = &before;
 
-         offset = ALIGN(offset, stack_alignment);
+         offset = ALIGN(offset, options->stack_alignment);
          max_scratch_size = MAX2(max_scratch_size, offset);
 
          /* First thing on the called shader's stack is the resume address
@@ -783,7 +832,7 @@ find_resume_instr(nir_function_impl *impl, unsigned call_idx)
 static bool
 duplicate_loop_bodies(nir_function_impl *impl, nir_instr *resume_instr)
 {
-   nir_register *resume_reg = NULL;
+   nir_ssa_def *resume_reg = NULL;
    for (nir_cf_node *node = resume_instr->block->cf_node.parent;
         node->type != nir_cf_node_function; node = node->parent) {
       if (node->type != nir_cf_node_loop)
@@ -792,25 +841,24 @@ duplicate_loop_bodies(nir_function_impl *impl, nir_instr *resume_instr)
       nir_loop *loop = nir_cf_node_as_loop(node);
       assert(!nir_loop_has_continue_construct(loop));
 
+      nir_builder b = nir_builder_create(impl);
+
       if (resume_reg == NULL) {
          /* We only create resume_reg if we encounter a loop.  This way we can
-          * avoid re-validating the shader and calling ssa_to_regs in the case
-          * where it's just if-ladders.
+          * avoid re-validating the shader and calling ssa_to_reg_intrinsics in
+          * the case where it's just if-ladders.
           */
-         resume_reg = nir_local_reg_create(impl);
-         resume_reg->num_components = 1;
-         resume_reg->bit_size = 1;
+         resume_reg = nir_decl_reg(&b, 1, 1, 0);
 
-         nir_builder b;
-         nir_builder_init(&b, impl);
-
-         /* Initialize resume to true */
-         b.cursor = nir_before_cf_list(&impl->body);
-         nir_store_reg(&b, resume_reg, nir_imm_true(&b), 1);
+         /* Initialize resume to true at the start of the shader, right after
+          * the register is declared at the start.
+          */
+         b.cursor = nir_after_instr(resume_reg->parent_instr);
+         nir_store_reg(&b, nir_imm_true(&b), resume_reg);
 
          /* Set resume to false right after the resume instruction */
          b.cursor = nir_after_instr(resume_instr);
-         nir_store_reg(&b, resume_reg, nir_imm_false(&b), 1);
+         nir_store_reg(&b, nir_imm_false(&b), resume_reg);
       }
 
       /* Before we go any further, make sure that everything which exits the
@@ -827,7 +875,8 @@ duplicate_loop_bodies(nir_function_impl *impl, nir_instr *resume_instr)
       nir_cf_list_extract(&cf_list, &loop->body);
 
       nir_if *_if = nir_if_create(impl->function->shader);
-      _if->condition = nir_src_for_reg(resume_reg);
+      b.cursor = nir_after_cf_list(&loop->body);
+      _if->condition = nir_src_for_ssa(nir_load_reg(&b, resume_reg));
       nir_cf_node_insert(nir_after_cf_list(&loop->body), &_if->cf_node);
 
       nir_cf_list clone;
@@ -860,12 +909,7 @@ cf_node_contains_block(nir_cf_node *node, nir_block *block)
 static void
 rewrite_phis_to_pred(nir_block *block, nir_block *pred)
 {
-   nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
-
+   nir_foreach_phi(phi, block) {
       ASSERTED bool found = false;
       nir_foreach_phi_src(phi_src, phi) {
          if (phi_src->pred == pred) {
@@ -1054,9 +1098,7 @@ flatten_resume_if_ladder(nir_builder *b,
             /* We want to place anything re-materialized from inside the loop
              * at the top of the resume half of the loop.
              */
-            nir_builder bl;
-            nir_builder_init(&bl, b->impl);
-            bl.cursor = nir_before_cf_list(&_if->then_list);
+            nir_builder bl = nir_builder_at(nir_before_cf_list(&_if->then_list));
 
             ASSERTED bool found =
                flatten_resume_if_ladder(&bl, &_if->cf_node, &_if->then_list,
@@ -1161,10 +1203,13 @@ found_resume:
    return true;
 }
 
+typedef bool (*wrap_instr_callback)(nir_instr *instr);
+
 static bool
-wrap_jump_instr(nir_builder *b, nir_instr *instr, void *data)
+wrap_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-   if (instr->type != nir_instr_type_jump)
+   wrap_instr_callback callback = data;
+   if (!callback(instr))
       return false;
 
    b->cursor = nir_before_instr(instr);
@@ -1185,16 +1230,22 @@ wrap_jump_instr(nir_builder *b, nir_instr *instr, void *data)
  * do not allow.
  */
 static bool
-wrap_jumps(nir_shader *shader)
+wrap_instrs(nir_shader *shader, wrap_instr_callback callback)
 {
-   return nir_shader_instructions_pass(shader, wrap_jump_instr,
-                                       nir_metadata_none, NULL);
+   return nir_shader_instructions_pass(shader, wrap_instr,
+                                       nir_metadata_none, callback);
+}
+
+static bool
+instr_is_jump(nir_instr *instr)
+{
+   return instr->type == nir_instr_type_jump;
 }
 
 static nir_instr *
 lower_resume(nir_shader *shader, int call_idx)
 {
-   wrap_jumps(shader);
+   wrap_instrs(shader, instr_is_jump);
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
    nir_instr *resume_instr = find_resume_instr(impl, call_idx);
@@ -1202,10 +1253,10 @@ lower_resume(nir_shader *shader, int call_idx)
    if (duplicate_loop_bodies(impl, resume_instr)) {
       nir_validate_shader(shader, "after duplicate_loop_bodies in "
                                   "nir_lower_shader_calls");
-      /* If we duplicated the bodies of any loops, run regs_to_ssa to get rid
-       * of all those pesky registers we just added.
+      /* If we duplicated the bodies of any loops, run reg_intrinsics_to_ssa to
+       * get rid of all those pesky registers we just added.
        */
-      NIR_PASS_V(shader, nir_lower_regs_to_ssa);
+      NIR_PASS_V(shader, nir_lower_reg_intrinsics_to_ssa);
    }
 
    /* Re-index nir_ssa_def::index.  We don't care about actual liveness in
@@ -1226,9 +1277,7 @@ lower_resume(nir_shader *shader, int call_idx)
    /* Create a nop instruction to use as a cursor as we extract and re-insert
     * stuff into the CFG.
     */
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_before_cf_list(&impl->body);
+   nir_builder b = nir_builder_at(nir_before_cf_list(&impl->body));
    ASSERTED bool found =
       flatten_resume_if_ladder(&b, &impl->cf_node, &impl->body,
                                true, resume_instr, &remat);
@@ -1249,8 +1298,7 @@ replace_resume_with_halt(nir_shader *shader, nir_instr *keep)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block_safe(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -1472,9 +1520,7 @@ nir_opt_trim_stack_values(nir_shader *shader)
             continue;
          }
 
-         nir_builder b;
-         nir_builder_init(&b, impl);
-         b.cursor = nir_before_instr(instr);
+         nir_builder b = nir_builder_at(nir_before_instr(instr));
 
          nir_ssa_def *value = nir_channels(&b, intrin->src[0].ssa, read_mask);
          nir_instr_rewrite_src_ssa(instr, &intrin->src[0], value);
@@ -1760,15 +1806,12 @@ nir_opt_stack_loads(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(func, shader) {
-      if (!func->impl)
-         continue;
-
-      nir_metadata_require(func->impl, nir_metadata_dominance |
-                                       nir_metadata_block_index);
+   nir_foreach_function_impl(impl, shader) {
+      nir_metadata_require(impl, nir_metadata_dominance |
+                                 nir_metadata_block_index);
 
       bool func_progress = false;
-      nir_foreach_block_safe(block, func->impl) {
+      nir_foreach_block_safe(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -1778,7 +1821,7 @@ nir_opt_stack_loads(nir_shader *shader)
                continue;
 
             nir_ssa_def *value = &intrin->dest.ssa;
-            nir_block *new_block = find_last_dominant_use_block(func->impl, value);
+            nir_block *new_block = find_last_dominant_use_block(impl, value);
             if (new_block == block)
                continue;
 
@@ -1790,7 +1833,7 @@ nir_opt_stack_loads(nir_shader *shader)
          }
       }
 
-      nir_metadata_preserve(func->impl,
+      nir_metadata_preserve(impl,
                             func_progress ? (nir_metadata_block_index |
                                              nir_metadata_dominance |
                                              nir_metadata_loop_analysis) :
@@ -1926,9 +1969,6 @@ nir_lower_shader_calls(nir_shader *shader,
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
-
    int num_calls = 0;
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -1957,15 +1997,24 @@ nir_lower_shader_calls(nir_shader *shader,
    /* Deref chains contain metadata information that is needed by other passes
     * after this one. If we don't rematerialize the derefs in the blocks where
     * they're used here, the following lowerings will insert phis which can
-    * prevent other passes from chasing deref chains.
+    * prevent other passes from chasing deref chains. Additionally, derefs need
+    * to be rematerialized after shader call instructions to avoid spilling.
     */
-   nir_rematerialize_derefs_in_use_blocks_impl(impl);
+   {
+      bool progress = false;
+      NIR_PASS(progress, shader, wrap_instrs, instr_is_shader_call);
+
+      nir_rematerialize_derefs_in_use_blocks_impl(impl);
+
+      if (progress)
+         NIR_PASS(_, shader, nir_opt_dead_cf); 
+   }
 
    /* Save the start point of the call stack in scratch */
    unsigned start_call_scratch = shader->scratch_size;
 
    NIR_PASS_V(shader, spill_ssa_defs_and_lower_shader_calls,
-              num_calls, options->stack_alignment);
+              num_calls, options);
 
    NIR_PASS_V(shader, nir_opt_remove_phis);
 

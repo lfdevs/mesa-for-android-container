@@ -41,7 +41,7 @@
 #include "xm_api.h"
 #include "main/errors.h"
 #include "main/config.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -1176,7 +1176,7 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
 {
    GLXContext glxCtx = ctx;
    GLXContext current = GetCurrentContext();
-   static boolean firsttime = 1, no_rast = 0;
+   static bool firsttime = 1, no_rast = 0;
 
    if (firsttime) {
       no_rast = getenv("SP_NO_RAST") != NULL;
@@ -1420,7 +1420,7 @@ PUBLIC void
 glXSwapBuffers( Display *dpy, GLXDrawable drawable )
 {
    XMesaBuffer buffer = XMesaFindBuffer( dpy, drawable );
-   static boolean firsttime = 1, no_rast = 0;
+   static bool firsttime = 1, no_rast = 0;
 
    if (firsttime) {
       no_rast = getenv("SP_NO_RAST") != NULL;

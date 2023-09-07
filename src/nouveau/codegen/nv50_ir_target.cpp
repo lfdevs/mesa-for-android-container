@@ -154,6 +154,7 @@ Target *Target::create(unsigned int chipset)
    STATIC_ASSERT(ARRAY_SIZE(operationSrcNr) == OP_LAST + 1);
    STATIC_ASSERT(ARRAY_SIZE(operationClass) == OP_LAST + 1);
    switch (chipset & ~0xf) {
+   case 0x190:
    case 0x170:
    case 0x160:
    case 0x140:

@@ -1,6 +1,6 @@
 ############### LAVA
 # job prefixes: radeonsi (OpenGL), radv (Vulkan), amd (radeonsi+radv)
-.stoney-test:amd64:
+.stoney-test:x86_64:
   variables:
     BOOT_METHOD: depthcharge
     DEQP_EXPECTED_RENDERER: STONEY
@@ -9,10 +9,11 @@
     HWCI_FREQ_MAX: "true"
     HWCI_KERNEL_MODULES: amdgpu
     KERNEL_IMAGE_TYPE: ""
+    FLAKES_CHANNEL: "#amd-ci"
 
-.radeonsi-stoney-test:amd64:
+.radeonsi-stoney-test:x86_64:
   extends:
-    - .stoney-test:amd64
+    - .stoney-test:x86_64
     - .radeonsi-rules
   variables:
     GPU_VERSION: radeonsi-stoney
@@ -22,9 +23,9 @@
     DEVICE_TYPE: acer-R721T-grunt
     PIGLIT_PLATFORM: mixed_glx_egl
 
-.radv-stoney-test:amd64:
+.radv-stoney-test:x86_64:
   extends:
-    - .stoney-test:amd64
+    - .stoney-test:x86_64
     - .radv-collabora-rules
   variables:
     DEQP_VER: vk
@@ -36,34 +37,54 @@
     RUNNER_TAG: mesa-ci-x86-64-lava-hp-14-db0003na-grunt
 
 # Run five jobs in parallel each running 1/55th of the test suite
-radv-stoney-vkcts:amd64:
+radv-stoney-vkcts:x86_64:
   extends:
-    - .lava-test-deqp:amd64
-    - .radv-stoney-test:amd64
+    - .lava-test-deqp:x86_64
+    - .radv-stoney-test:x86_64
   parallel: 5
   variables:
     DEQP_FRACTION: 11
 
-radeonsi-stoney-gl:amd64:
+radv-stoney-angle:
   extends:
-    - .lava-test-deqp:amd64
-    - .radeonsi-stoney-test:amd64
+    - .lava-test-deqp:x86_64
+    - .radv-stoney-test:x86_64
+    - .radeonsi+radv-rules # Note: Xorg uses radeonsi, so depend on both gl and vulkan
+  variables:
+    DEQP_SUITE: radv-stoney-angle
+    USE_ANGLE: 1
+    HWCI_START_XORG: 1
+    GPU_VERSION: angle-radv-stoney-aco
+
+radv-stoney-angle-full:
+  extends:
+    - radv-stoney-angle
+    - .radv-valve-manual-rules
+  parallel: 2
+  variables:
+    DEQP_SUITE: radv-stoney-angle-full
+    JOB_TIMEOUT: 60
+
+radeonsi-stoney-gl:x86_64:
+  extends:
+    - .lava-test-deqp:x86_64
+    - .radeonsi-stoney-test:x86_64
   parallel: 11
   variables:
     DEQP_SUITE: radeonsi-stoney
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
 
-radeonsi-stoney-traces:amd64:
+radeonsi-stoney-traces:x86_64:
   extends:
-    - .lava-piglit-traces:amd64
-    - .radeonsi-stoney-test:amd64
+    - .lava-piglit-traces:x86_64
+    - .radeonsi-stoney-test:x86_64
   variables:
     EGL_PLATFORM: surfaceless
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
     PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
 
 # 10 devices (2023-01-17)
-.lava-asus-CM1400CXA-dalboz:amd64:
+.lava-asus-CM1400CXA-dalboz:x86_64:
   variables:
     BOOT_METHOD: depthcharge
     DEVICE_TYPE: asus-CM1400CXA-dalboz
@@ -73,8 +94,8 @@ radeonsi-stoney-traces:amd64:
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-asus-CM1400CXA-dalboz
 
-# 5 devices (2023-04-10) # FIXME currently only 2 available
-.lava-lenovo-TPad-C13-Yoga-zork:amd64:
+# 5 devices (2023-05-03)
+.lava-lenovo-TPad-C13-Yoga-zork:x86_64:
   variables:
     BOOT_METHOD: depthcharge
     DEVICE_TYPE: lenovo-TPad-C13-Yoga-zork
@@ -84,21 +105,21 @@ radeonsi-stoney-traces:amd64:
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-lenovo-TPad-C13-Yoga-zork
 
-.radeonsi-raven-test:amd64:
+.radeonsi-raven-test:x86_64:
   extends:
     - .radeonsi-rules
   variables:
     GPU_VERSION: radeonsi-raven
     DRIVER_NAME: radeonsi
 
-.radv-raven-test:amd64:
+.radv-raven-test:x86_64:
   extends:
     - .radv-collabora-rules
   variables:
     GPU_VERSION: radv-raven
     VK_DRIVER: radeon
 
-.amd-raven-test:amd64:
+.amd-raven-test:x86_64:
   extends:
     - .radeonsi+radv-rules
   variables:
@@ -106,65 +127,65 @@ radeonsi-stoney-traces:amd64:
     GPU_VERSION: amd-raven
     VK_DRIVER: radeon
 
-radv-raven-vkcts:amd64:
+radv-raven-vkcts:x86_64:
   extends:
-    - .lava-test-deqp:amd64
-    - .radv-raven-test:amd64
-    - .lava-asus-CM1400CXA-dalboz:amd64
+    - .lava-test-deqp:x86_64
+    - .radv-raven-test:x86_64
+    - .lava-asus-CM1400CXA-dalboz:x86_64
   parallel: 9
   variables:
     DEQP_VER: vk
     DEQP_FRACTION: 6
 
-amd-raven-skqp:amd64:
+amd-raven-skqp:x86_64:
   extends:
-    - .lava-test-deqp:amd64
-    - .amd-raven-test:amd64
-    - .lava-lenovo-TPad-C13-Yoga-zork:amd64
+    - .lava-test-deqp:x86_64
+    - .amd-raven-test:x86_64
+    - .lava-lenovo-TPad-C13-Yoga-zork:x86_64
   variables:
     HWCI_START_WESTON: 1
     DEQP_SUITE: amd-raven-skqp
 
 .radv-traces:
   extends:
-    - .lava-piglit-traces:amd64
+    - .lava-piglit-traces:x86_64
   variables:
     PIGLIT_PLATFORM: mixed_glx_egl  # TODO, take wine/VK in account
     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
     PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
 
-.radv-raven-traces:amd64:  # FIXME: when TPad-C13 gets back, restore
+radv-raven-traces:x86_64:
   extends:
     - .radv-traces
-    - .radv-raven-test:amd64
-    - .lava-lenovo-TPad-C13-Yoga-zork:amd64
+    - .radv-raven-test:x86_64
+    - .lava-lenovo-TPad-C13-Yoga-zork:x86_64
   variables:
     HWCI_START_XORG: 1
     PIGLIT_REPLAY_DEVICE_NAME: "vk-${GPU_VERSION}"
 
-radeonsi-raven-piglit-quick_gl:amd64:
+radeonsi-raven-piglit-quick_gl:x86_64:
   extends:
-    - .lava-piglit:amd64
-    - .radeonsi-raven-test:amd64
-    - .lava-lenovo-TPad-C13-Yoga-zork:amd64
+    - .lava-piglit:x86_64
+    - .radeonsi-raven-test:x86_64
+    - .lava-lenovo-TPad-C13-Yoga-zork:x86_64
   variables:
     PIGLIT_PLATFORM: mixed_glx_egl
     PIGLIT_PROFILES: quick_gl
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
 
-radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, restore
+radeonsi-raven-piglit-quick_shader:x86_64:
   extends:
-    - radeonsi-raven-piglit-quick_gl:amd64
+    - radeonsi-raven-piglit-quick_gl:x86_64
   variables:
     PIGLIT_PROFILES: quick_shader
     PIGLIT_FRACTION: 2
 
-.radeonsi-raven-va:amd64:  # FIXME: when TPad-C13 gets back, restore
+radeonsi-raven-va:x86_64:
   extends:
-    - .lava-test-deqp:amd64
-    - .radeonsi-raven-test:amd64
+    - .lava-test-deqp:x86_64
+    - .radeonsi-raven-test:x86_64
     - .radeonsi-vaapi-rules
-    - .lava-asus-CM1400CXA-dalboz:amd64
+    - .lava-asus-CM1400CXA-dalboz:x86_64
   variables:
     HWCI_TEST_SCRIPT: "/install/gtest-runner.sh"
     # While the tests don't need Xorg, it's an easy way to keep DRM open so we don't
@@ -180,6 +201,14 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
     # https://github.com/google/googletest/issues/3614 would probably help.
     GTEST_FRACTION: 2
 
+radeonsi-raven-va-full:x86_64:
+  extends:
+    - radeonsi-raven-va:x86_64
+    - .radeonsi-vaapi-manual-rules
+  variables:
+    JOB_TIMEOUT: 60
+    GTEST_FRACTION: null
+
 ############### Valve Infra
 .test-radv:
   variables:
@@ -190,7 +219,6 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
     # size getting too big. Since it's not feasible right now
     # to fix these shaders in the CTS, instead, ignore warnings from
     # the code generator.
-    MESA_SPIRV_LOG_LEVEL: error
     ACO_DEBUG: validateir,validatera
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
     B2C_JOB_VOLUME_EXCLUSIONS: "*.shader_cache,install/*,*/install/*,*/vkd3d-proton.cache*,vkd3d-proton.cache*,*.qpa"
@@ -210,12 +238,14 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
 
 .kabini-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: mupuf
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=8g'
   tags:
     - amdgpu:codename:KABINI
 
 .polaris10-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: keywords
     FDO_CI_CONCURRENT: 16
     B2C_TIMEOUT_BOOT_RETRIES: 4
     # (2022-01) tsc=unstable was added in response to this message in kmsg,
@@ -226,6 +256,7 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
 
 .vega10-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: keywords
     FDO_CI_CONCURRENT: 16
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
@@ -233,6 +264,7 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
 
 .renoir-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: mupuf
     FDO_CI_CONCURRENT: 24
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
     B2C_TIMEOUT_BOOT_MINUTES: 60
@@ -242,6 +274,7 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
 
 .navi10-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: mupuf
     FDO_CI_CONCURRENT: 24
     # (2022-01) noapic is set because the serial adapter on this
     # machine is using non-MSI IRQs and is generating a lot of
@@ -253,6 +286,7 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
 
 .navi21-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: keywords
     FDO_CI_CONCURRENT: 32
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
@@ -260,13 +294,14 @@ radeonsi-raven-piglit-quick_shader:amd64:  # FIXME: when TPad-C13 gets back, res
 
 .vangogh-test-valve:
   variables:
+    RUNNER_FARM_LOCATION: mupuf
     FDO_CI_CONCURRENT: 8
     B2C_TIMEOUT_BOOT_MINUTES: 85
     B2C_TIMEOUT_OVERALL_MINUTES: 120
-    B2C_TIMEOUT_MINUTES: 3
     B2C_KERNEL_CMDLINE_EXTRAS: 'b2c.swap=16g'
   tags:
     - amdgpu:codename:VANGOGH
+    - $VALVE_INFRA_VANGOGH_JOB_PRIORITY
 
 ############### VKCTS tests ###############
 
@@ -355,6 +390,10 @@ vkcts-navi10-valve:
     # Use Linux 5.17 to work around hitting __vm_enough_memory then hanging on Linux 6.1
     # See https://gitlab.freedesktop.org/mesa/mesa/-/issues/7888 for details
     B2C_KERNEL_URL: 'https://gitlab.freedesktop.org/mupuf/valve-infra/-/package_files/144/download'  # 5.17.1
+    # NAVI10 hangs quite often while running vkcts. This is being investigated,
+    # but in the mean time, retry up to 2 times.
+    B2C_SESSION_REBOOT_REGEX: '(GPU hang detected!|\*ERROR\* ring [^\s]+ timeout(?!, but soft recovered)|The CS has been cancelled because the context is lost)'
+    B2C_TIMEOUT_BOOT_RETRIES: 2
 
 vkcts-navi21-valve:
   parallel: 3
@@ -364,7 +403,8 @@ vkcts-navi21-valve:
   variables:
     GPU_VERSION: radv-navi21-aco
 
-vkcts-navi21-llvm-valve:
+# Disabled due to its extremelly-broken nature
+.vkcts-navi21-llvm-valve:
   extends:
     - .vkcts-test-valve
     - .navi21-test-valve
@@ -383,6 +423,17 @@ vkcts-vangogh-valve:
   variables:
     GPU_VERSION: radv-vangogh-aco
 
+glcts-vangogh-valve:
+  extends:
+    - .b2c-test-gl
+    - .deqp-test-valve
+    - .vangogh-test-valve
+    - .radeonsi-valve-manual-rules
+  timeout: 40m
+  variables:
+    GPU_VERSION: radeonsi-vangogh
+    DEQP_SUITE: radeonsi-vangogh
+
 ############### Fossilize
 radv-fossils:
   extends:
@@ -391,34 +442,35 @@ radv-fossils:
     - .test-radv
     - .fossilize-test
   script:
+    - export LD_PRELOAD=$PWD/install/lib/libamdgpu_noop_drm_shim.so
     # Pitcairn (GFX6)
-    - export RADV_FORCE_FAMILY="PITCAIRN"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="PITCAIRN"
+      ./install/fossilize-runner.sh
     # Bonaire (GFX7)
-    - export RADV_FORCE_FAMILY="BONAIRE"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="BONAIRE"
+      ./install/fossilize-runner.sh
     # Polaris10 (GFX8)
-    - export RADV_FORCE_FAMILY="POLARIS10"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="POLARIS10"
+      ./install/fossilize-runner.sh
     # Vega10 (GFX9)
-    - export RADV_FORCE_FAMILY="VEGA10"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="VEGA10"
+      ./install/fossilize-runner.sh
     # Navi10 (GFX10)
-    - export RADV_FORCE_FAMILY="NAVI10"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="NAVI10"
+      ./install/fossilize-runner.sh
     # Navi21 (GFX10_3)
-    - export RADV_FORCE_FAMILY="NAVI21"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="NAVI21"
+      ./install/fossilize-runner.sh
     # RDNA3 (GFX11)
-    - export RADV_FORCE_FAMILY="GFX1100"
-    - ./install/fossilize-runner.sh
+    - AMDGPU_GPU_ID="GFX1100"
+      ./install/fossilize-runner.sh
 
 ############### vkd3d-proton
 .vkd3d-test-valve:
   extends:
     - .b2c-test-radv-vk
   variables:
-    B2C_JOB_SUCCESS_REGEX: 'SUCCESS: No changes found!\r$'
+    B2C_JOB_SUCCESS_REGEX: 'vkd3d-proton execution: SUCCESS\r$'
     HWCI_TEST_SCRIPT: ./install/vkd3d-proton/run.sh
 
 .vkd3d-kabini-valve:
@@ -468,6 +520,7 @@ vkd3d-navi21-valve:
     - .radv-valve-manual-rules
   variables:
     VKD3D_PROTON_RESULTS: radv-navi21-vkd3d
+    VKD3D_CONFIG: dxr11
 
 vkd3d-vangogh-valve:
   extends:

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2038 # TODO: rewrite the find
+# shellcheck disable=SC2086 # we want word splitting
 
 section_switch prepare-artifacts "artifacts: prepare"
 
@@ -53,11 +55,11 @@ cp -Rp .gitlab-ci/common artifacts/ci-common
 cp -Rp .gitlab-ci/lava artifacts/
 cp -Rp .gitlab-ci/b2c artifacts/
 
-if [ -n "$MINIO_ARTIFACT_NAME" ]; then
+if [ -n "$S3_ARTIFACT_NAME" ]; then
     # Pass needed files to the test stage
-    MINIO_ARTIFACT_NAME="$MINIO_ARTIFACT_NAME.tar.zst"
-    zstd artifacts/install.tar -o ${MINIO_ARTIFACT_NAME}
-    ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" ${MINIO_ARTIFACT_NAME} https://${PIPELINE_ARTIFACTS_BASE}/${MINIO_ARTIFACT_NAME}
+    S3_ARTIFACT_NAME="$S3_ARTIFACT_NAME.tar.zst"
+    zstd artifacts/install.tar -o ${S3_ARTIFACT_NAME}
+    ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" ${S3_ARTIFACT_NAME} https://${PIPELINE_ARTIFACTS_BASE}/${S3_ARTIFACT_NAME}
 fi
 
 section_end prepare-artifacts

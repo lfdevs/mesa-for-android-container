@@ -2774,6 +2774,42 @@ is_allowed_invariant(ir_variable *var, struct _mesa_glsl_parse_state *state)
    if (is_varying_var(var, state->stage))
       return true;
 
+   /* ES2 says:
+    *
+    * "For the built-in special variables, gl_FragCoord can only be declared
+    *  invariant if and only if gl_Position is declared invariant. Similarly
+    *  gl_PointCoord can only be declared invariant if and only if gl_PointSize
+    *  is declared invariant. It is an error to declare gl_FrontFacing as
+    *  invariant. The invariance of gl_FrontFacing is the same as the invariance
+    *  of gl_Position."
+    *
+    * ES3.1 says about invariance:
+    *
+    * "How does this rule apply to the built-in special variables?
+    *
+    *  Option 1: It should be the same as for varyings. But gl_Position is used
+    *  internally by the rasterizer as well as for gl_FragCoord so there may be
+    *  cases where rasterization is required to be invariant but gl_FragCoord is
+    *  not.
+    *
+    *  RESOLUTION: Option 1."
+    *
+    * and the ES3 spec has similar text but the "RESOLUTION" is missing.
+    *
+    * Any system values should be from built-in special variables.
+    */
+   if (var->data.mode == ir_var_system_value) {
+      if (state->is_version(0, 300)) {
+         return true;
+      } else {
+         /* Note: We don't actually have a check that the VS's PointSize is
+          * invariant, even when it's treated as a varying.
+          */
+         if (var->data.location == SYSTEM_VALUE_POINT_COORD)
+            return true;
+      }
+   }
+
    /* From Section 4.6.1 ("The Invariant Qualifier") GLSL 1.20 spec:
     * "Only variables output from a vertex shader can be candidates
     * for invariance".
@@ -7074,8 +7110,7 @@ ast_case_label::hir(exec_list *instructions,
 
          /* Check if int->uint implicit conversion is supported. */
          bool integer_conversion_supported =
-            glsl_type::int_type->can_implicitly_convert_to(glsl_type::uint_type,
-                                                           state);
+            _mesa_glsl_can_implicitly_convert(glsl_type::int_type, glsl_type::uint_type, state);
 
          if ((!type_a->is_integer_32() || !type_b->is_integer_32()) ||
               !integer_conversion_supported) {
@@ -7665,7 +7700,7 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
          /* Offset can only be used with std430 and std140 layouts an initial
           * value of 0 is used for error detection.
           */
-         unsigned align = 0;
+         unsigned base_alignment = 0;
          unsigned size = 0;
          if (layout) {
             bool row_major;
@@ -7677,10 +7712,10 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
             }
 
             if(layout->flags.q.std140) {
-               align = field_type->std140_base_alignment(row_major);
+               base_alignment = field_type->std140_base_alignment(row_major);
                size = field_type->std140_size(row_major);
             } else if (layout->flags.q.std430) {
-               align = field_type->std430_base_alignment(row_major);
+               base_alignment = field_type->std430_base_alignment(row_major);
                size = field_type->std430_size(row_major);
             }
          }
@@ -7689,12 +7724,12 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
             unsigned qual_offset;
             if (process_qualifier_constant(state, &loc, "offset",
                                            qual->offset, &qual_offset)) {
-               if (align != 0 && size != 0) {
+               if (base_alignment != 0 && size != 0) {
                    if (next_offset > qual_offset)
                       _mesa_glsl_error(&loc, state, "layout qualifier "
                                        "offset overlaps previous member");
 
-                  if (qual_offset % align) {
+                  if (qual_offset % base_alignment) {
                      _mesa_glsl_error(&loc, state, "layout qualifier offset "
                                       "must be a multiple of the base "
                                       "alignment of %s", field_type->name);
@@ -7711,7 +7746,7 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
          if (qual->flags.q.explicit_align || expl_align != 0) {
             unsigned offset = fields[i].offset != -1 ? fields[i].offset :
                next_offset;
-            if (align == 0 || size == 0) {
+            if (base_alignment == 0 || size == 0) {
                _mesa_glsl_error(&loc, state, "align can only be used with "
                                 "std430 and std140 layouts");
             } else if (qual->flags.q.explicit_align) {
@@ -7723,17 +7758,17 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
                      _mesa_glsl_error(&loc, state, "align layout qualifier "
                                       "is not a power of 2");
                   } else {
-                     fields[i].offset = glsl_align(offset, member_align);
+                     fields[i].offset = align(offset, member_align);
                      next_offset = fields[i].offset + size;
                   }
                }
             } else {
-               fields[i].offset = glsl_align(offset, expl_align);
+               fields[i].offset = align(offset, expl_align);
                next_offset = fields[i].offset + size;
             }
          } else if (!qual->flags.q.explicit_offset) {
-            if (align != 0 && size != 0)
-               next_offset = glsl_align(next_offset, align) + size;
+            if (base_alignment != 0 && size != 0)
+               next_offset = align(next_offset, base_alignment) + size;
          }
 
          /* From the ARB_enhanced_layouts spec:
@@ -7755,8 +7790,8 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
             }
          } else {
             if (layout && layout->flags.q.explicit_xfb_offset) {
-               unsigned align = field_type->is_64bit() ? 8 : 4;
-               fields[i].offset = glsl_align(block_xfb_offset, align);
+               unsigned base_alignment = field_type->is_64bit() ? 8 : 4;
+               fields[i].offset = align(block_xfb_offset, base_alignment);
                block_xfb_offset += 4 * field_type->component_slots();
             }
          }

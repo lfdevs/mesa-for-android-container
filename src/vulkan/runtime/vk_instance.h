@@ -29,6 +29,7 @@
 
 #include "c11/threads.h"
 #include "util/list.h"
+#include "util/u_debug.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +58,14 @@ struct vk_app_info {
 
 struct _drmDevice;
 struct vk_physical_device;
+
+enum vk_trace_mode {
+   /** Radeon Memory Visualizer */
+   VK_TRACE_MODE_RMV = 1 << 0,
+
+   /** Number of common trace modes. */
+   VK_TRACE_MODE_COUNT = 1,
+};
 
 /** Base struct for all `VkInstance` implementations
  *
@@ -158,6 +167,12 @@ struct vk_instance {
 
       mtx_t mutex;
    } physical_devices;
+
+   /** Enabled tracing modes */
+   uint64_t trace_mode;
+
+   uint32_t trace_frame;
+   char *trace_trigger_file;
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_instance, base, VkInstance,
@@ -223,6 +238,10 @@ vk_instance_get_proc_addr_unchecked(const struct vk_instance *instance,
 PFN_vkVoidFunction
 vk_instance_get_physical_device_proc_addr(const struct vk_instance *instance,
                                           const char *name);
+
+void
+vk_instance_add_driver_trace_modes(struct vk_instance *instance,
+                                   const struct debug_control *modes);
 
 #ifdef __cplusplus
 }

@@ -308,7 +308,7 @@ name( struct NineDevice9 *device ARGS_FOR_DECLARATION( __VA_ARGS__ ) ) \
     assert(args); \
     args->instr.func = &name##_rx; \
     ARGS_FOR_ASSIGN( __VA_ARGS__ ) \
-    ctx->processed = FALSE; \
+    ctx->processed = false; \
     nine_queue_flush(ctx->pool); \
     nine_csmt_wait_processed(ctx); \
 } \

@@ -108,7 +108,6 @@ INVERT_COND = immediate("invert_cond")
 NEST = immediate("nest")
 TARGET = immediate("target", "agx_block *")
 ZS = immediate("zs")
-PERSPECTIVE = immediate("perspective", "bool")
 SR = enum("sr", {
    0:  'threadgroup_position_in_grid.x',
    1:  'threadgroup_position_in_grid.y',
@@ -119,6 +118,8 @@ SR = enum("sr", {
    8:  'dispatch_threads_per_threadgroup.x',
    9:  'dispatch_threads_per_threadgroup.y',
    10: 'dispatch_threads_per_threadgroup.z',
+   20: 'core_index',
+   21: 'vm_slot',
    48: 'thread_position_in_threadgroup.x',
    49: 'thread_position_in_threadgroup.y',
    50: 'thread_position_in_threadgroup.z',
@@ -132,6 +133,10 @@ SR = enum("sr", {
    80: 'thread_position_in_grid.x',
    81: 'thread_position_in_grid.y',
    82: 'thread_position_in_grid.z',
+   124: 'input_sample_mask',
+   144: 'opfifo_cmd',
+   146: 'opfifo_data_l',
+   147: 'opfifo_data_h',
 })
 
 ATOMIC_OPC = enum("atomic_opc", {
@@ -146,6 +151,14 @@ ATOMIC_OPC = enum("atomic_opc", {
 	8: 'and',
 	9: 'or',
 	10: 'xor',
+})
+
+INTERPOLATION = enum("interpolation", {
+    0: 'center',
+    1: 'sample',
+    2: 'centroid',
+    # We translate sample -> sample_register at pack time for simplicity
+    3: 'sample_register',
 })
 
 FUNOP = lambda x: (x << 28)
@@ -287,7 +300,7 @@ op("wait", (0x38, 0xFF, 2, _), dests = 0,
 
 op("get_sr", (0x72, 0x7F | L, 4, _), dests = 1, imms = [SR])
 
-op("sample_mask", (0x7fc1, 0xffff, 6, _), dests = 0, srcs = 1, can_eliminate = False)
+op("sample_mask", (0x7fc1, 0xffff, 6, _), dests = 0, srcs = 2, can_eliminate = False)
 
 # Sources: sample mask, combined depth/stencil
 op("zs_emit", (0x41, 0xFF | L, 4, _), dests = 0, srcs = 2,
@@ -322,7 +335,14 @@ for is_float in [False, True]:
 
 op("bitop", (0x7E, 0x7F, 6, _), srcs = 2, imms = [TRUTH_TABLE])
 op("convert", (0x3E | L, 0x7F | L | (0x3 << 38), 6, _), srcs = 2, imms = [ROUND]) 
-op("iter", (0x21, 0xBF, 8, _), srcs = 2, imms = [CHANNELS, PERSPECTIVE])
+
+# Sources are the coeffient register and the sample index (if applicable)
+op("iter", (0x21, 0xBF, 8, _), srcs = 2, imms = [CHANNELS, INTERPOLATION])
+
+# Sources are the coeffient register for the varying, the coefficient register
+# for W, and the sample index (if applicable)
+op("iterproj", (0x21, 0xBF, 8, _), srcs = 3, imms = [CHANNELS, INTERPOLATION])
+
 op("ldcf", (0xA1, 0xBF, 8, _), srcs = 1, imms = [CHANNELS])
 op("st_vary", None, dests = 0, srcs = 2, can_eliminate = False)
 op("no_varyings", (0x80000051, 0xFFFFFFFF, 4, _), dests = 0, can_eliminate = False)

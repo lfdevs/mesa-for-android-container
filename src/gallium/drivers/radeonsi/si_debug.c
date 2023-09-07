@@ -1,25 +1,7 @@
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_debug.h"
@@ -33,6 +15,7 @@
 #include "util/u_dump.h"
 #include "util/u_log.h"
 #include "util/u_memory.h"
+#include "util/u_process.h"
 #include "util/u_string.h"
 
 static void si_dump_bo_list(struct si_context *sctx, const struct radeon_saved_cs *saved, FILE *f);
@@ -255,20 +238,21 @@ bool si_replace_shader(unsigned num, struct si_shader_binary *binary)
    if (fseek(f, 0, SEEK_SET) != 0)
       goto file_error;
 
-   binary->elf_buffer = MALLOC(filesize);
-   if (!binary->elf_buffer) {
+   binary->code_buffer = MALLOC(filesize);
+   if (!binary->code_buffer) {
       fprintf(stderr, "out of memory\n");
       goto out_close;
    }
 
-   nread = fread((void *)binary->elf_buffer, 1, filesize, f);
+   nread = fread((void *)binary->code_buffer, 1, filesize, f);
    if (nread != filesize) {
-      FREE((void *)binary->elf_buffer);
-      binary->elf_buffer = NULL;
+      FREE((void *)binary->code_buffer);
+      binary->code_buffer = NULL;
       goto file_error;
    }
 
-   binary->elf_size = nread;
+   binary->type = SI_SHADER_BINARY_ELF;
+   binary->code_size = nread;
    replaced = true;
 
 out_close:
@@ -536,7 +520,7 @@ static void si_dump_bo_list(struct si_context *sctx, const struct radeon_saved_c
    if (!saved->bo_list)
       return;
 
-   /* Sort the list according to VM adddresses first. */
+   /* Sort the list according to VM addresses first. */
    qsort(saved->bo_list, saved->bo_count, sizeof(saved->bo_list[0]), (void *)bo_list_compare_va);
 
    fprintf(f, "Buffer list (in units of pages = 4kB):\n" COLOR_YELLOW
@@ -834,8 +818,8 @@ static void si_add_split_disasm(struct si_screen *screen, struct ac_rtld_binary 
                                      .shader_type = stage,
                                      .wave_size = wave_size,
                                      .num_parts = 1,
-                                     .elf_ptrs = &binary->elf_buffer,
-                                     .elf_sizes = &binary->elf_size}))
+                                     .elf_ptrs = &binary->code_buffer,
+                                     .elf_sizes = &binary->code_size}))
       return;
 
    const char *disasm;
@@ -1059,7 +1043,7 @@ void si_check_vm_faults(struct si_context *sctx, struct radeon_saved_cs *saved, 
    uint64_t addr;
    char cmd_line[4096];
 
-   if (!ac_vm_fault_occured(sctx->gfx_level, &sctx->dmesg_timestamp, &addr))
+   if (!ac_vm_fault_occurred(sctx->gfx_level, &sctx->dmesg_timestamp, &addr))
       return;
 
    f = dd_get_debug_file(false);
@@ -1109,5 +1093,5 @@ void si_init_debug_functions(struct si_context *sctx)
     * only new messages will be checked for VM faults.
     */
    if (sctx->screen->debug_flags & DBG(CHECK_VM))
-      ac_vm_fault_occured(sctx->gfx_level, &sctx->dmesg_timestamp, NULL);
+      ac_vm_fault_occurred(sctx->gfx_level, &sctx->dmesg_timestamp, NULL);
 }

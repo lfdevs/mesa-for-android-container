@@ -77,9 +77,9 @@ struct aaline_stage
    float half_line_width;
 
    /** For AA lines, this is the vertex attrib slot for new generic */
-   uint coord_slot;
+   unsigned coord_slot;
    /** position, not necessarily output zero */
-   uint pos_slot;
+   unsigned pos_slot;
 
 
    /*
@@ -135,7 +135,7 @@ aa_transform_decl(struct tgsi_transform_context *ctx,
       }
    }
    else if (decl->Declaration.File == TGSI_FILE_TEMPORARY) {
-      uint i;
+      unsigned i;
       for (i = decl->Range.First;
            i <= decl->Range.Last; i++) {
          /*
@@ -285,7 +285,7 @@ aa_transform_inst(struct tgsi_transform_context *ctx,
                   struct tgsi_full_instruction *inst)
 {
    struct aa_transform_context *aactx = (struct aa_transform_context *) ctx;
-   uint i;
+   unsigned i;
 
    /*
     * Look for writes to result.color and replace with colorTemp reg.
@@ -307,14 +307,14 @@ aa_transform_inst(struct tgsi_transform_context *ctx,
  * Generate the frag shader we'll use for drawing AA lines.
  * This will be the user's shader plus some arithmetic instructions.
  */
-static boolean
+static bool
 generate_aaline_fs(struct aaline_stage *aaline)
 {
    struct pipe_context *pipe = aaline->stage.draw->pipe;
    const struct pipe_shader_state *orig_fs = &aaline->fs->state;
    struct pipe_shader_state aaline_fs;
    struct aa_transform_context transform;
-   const uint newLen = tgsi_num_tokens(orig_fs->tokens) + NUM_NEW_TOKENS;
+   const unsigned newLen = tgsi_num_tokens(orig_fs->tokens) + NUM_NEW_TOKENS;
 
    aaline_fs = *orig_fs; /* copy to init */
 
@@ -349,7 +349,7 @@ generate_aaline_fs(struct aaline_stage *aaline)
    return aaline->fs->aaline_fs != NULL;
 }
 
-static boolean
+static bool
 generate_aaline_fs_nir(struct aaline_stage *aaline)
 {
    struct pipe_context *pipe = aaline->stage.draw->pipe;
@@ -359,21 +359,21 @@ generate_aaline_fs_nir(struct aaline_stage *aaline)
    aaline_fs = *orig_fs; /* copy to init */
    aaline_fs.ir.nir = nir_shader_clone(NULL, orig_fs->ir.nir);
    if (!aaline_fs.ir.nir)
-      return FALSE;
+      return false;
 
    nir_lower_aaline_fs(aaline_fs.ir.nir, &aaline->fs->generic_attrib, NULL, NULL);
    aaline->fs->aaline_fs = aaline->driver_create_fs_state(pipe, &aaline_fs);
    if (aaline->fs->aaline_fs == NULL)
-      return FALSE;
+      return false;
 
-   return TRUE;
+   return true;
 }
 
 /**
  * When we're about to draw our first AA line in a batch, this function is
  * called to tell the driver to bind our modified fragment shader.
  */
-static boolean
+static bool
 bind_aaline_fragment_shader(struct aaline_stage *aaline)
 {
    struct draw_context *draw = aaline->stage.draw;
@@ -382,17 +382,17 @@ bind_aaline_fragment_shader(struct aaline_stage *aaline)
    if (!aaline->fs->aaline_fs) {
       if (aaline->fs->state.type == PIPE_SHADER_IR_NIR) {
          if (!generate_aaline_fs_nir(aaline))
-            return FALSE;
+            return false;
       } else
          if (!generate_aaline_fs(aaline))
-            return FALSE;
+            return false;
    }
 
-   draw->suspend_flushing = TRUE;
+   draw->suspend_flushing = true;
    aaline->driver_bind_fs_state(pipe, aaline->fs->aaline_fs);
-   draw->suspend_flushing = FALSE;
+   draw->suspend_flushing = false;
 
-   return TRUE;
+   return true;
 }
 
 
@@ -415,8 +415,8 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
    const float half_width = aaline->half_line_width;
    struct prim_header tri;
    struct vertex_header *v[8];
-   uint coordPos = aaline->coord_slot;
-   uint posPos = aaline->pos_slot;
+   unsigned coordPos = aaline->coord_slot;
+   unsigned posPos = aaline->pos_slot;
    float *pos, *tex;
    float dx = header->v[1]->data[posPos][0] - header->v[0]->data[posPos][0];
    float dy = header->v[1]->data[posPos][1] - header->v[0]->data[posPos][1];
@@ -424,7 +424,7 @@ aaline_line(struct draw_stage *stage, struct prim_header *header)
    float c_a = dx / length, s_a = dy / length;
    float half_length = 0.5 * length;
    float t_l, t_w;
-   uint i;
+   unsigned i;
 
    half_length = half_length + 0.5f;
 
@@ -527,13 +527,13 @@ aaline_first_line(struct draw_stage *stage, struct prim_header *header)
 
    draw_aaline_prepare_outputs(draw, draw->pipeline.aaline);
 
-   draw->suspend_flushing = TRUE;
+   draw->suspend_flushing = true;
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
    r = draw_get_rasterizer_no_cull(draw, rast);
    pipe->bind_rasterizer_state(pipe, r);
 
-   draw->suspend_flushing = FALSE;
+   draw->suspend_flushing = false;
 
    /* now really draw first line */
    stage->line = aaline_line;
@@ -552,7 +552,7 @@ aaline_flush(struct draw_stage *stage, unsigned flags)
    stage->next->flush(stage->next, flags);
 
    /* restore original frag shader */
-   draw->suspend_flushing = TRUE;
+   draw->suspend_flushing = true;
    aaline->driver_bind_fs_state(pipe, aaline->fs ? aaline->fs->driver_fs : NULL);
 
    /* restore original rasterizer state */
@@ -560,7 +560,7 @@ aaline_flush(struct draw_stage *stage, unsigned flags)
       pipe->bind_rasterizer_state(pipe, draw->rast_handle);
    }
 
-   draw->suspend_flushing = FALSE;
+   draw->suspend_flushing = false;
 
    draw_remove_extra_vertex_attribs(draw);
 }
@@ -731,7 +731,7 @@ draw_aaline_prepare_outputs(struct draw_context *draw,
  * into the draw module's pipeline.  This will not be used if the
  * hardware has native support for AA lines.
  */
-boolean
+bool
 draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
 {
    struct aaline_stage *aaline;
@@ -743,7 +743,7 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
     */
    aaline = draw_aaline_stage(draw);
    if (!aaline)
-      return FALSE;
+      return false;
 
    /* save original driver functions */
    aaline->driver_create_fs_state = pipe->create_fs_state;
@@ -759,5 +759,5 @@ draw_install_aaline_stage(struct draw_context *draw, struct pipe_context *pipe)
     */
    draw->pipeline.aaline = &aaline->stage;
 
-   return TRUE;
+   return true;
 }

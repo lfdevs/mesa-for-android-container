@@ -808,6 +808,12 @@ brw_vecn_grf(unsigned width, unsigned nr, unsigned subnr)
 
 
 static inline struct brw_reg
+brw_uw1_grf(unsigned nr, unsigned subnr)
+{
+   return brw_uw1_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);
+}
+
+static inline struct brw_reg
 brw_uw8_grf(unsigned nr, unsigned subnr)
 {
    return brw_uw8_reg(BRW_GENERAL_REGISTER_FILE, nr, subnr);

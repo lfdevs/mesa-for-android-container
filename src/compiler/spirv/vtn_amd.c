@@ -33,13 +33,17 @@ vtn_handle_amd_gcn_shader_instruction(struct vtn_builder *b, SpvOp ext_opcode,
    nir_ssa_def *def;
    switch ((enum GcnShaderAMD)ext_opcode) {
    case CubeFaceIndexAMD:
-      def = nir_cube_face_index_amd(&b->nb, vtn_get_nir_ssa(b, w[5]));
+      def = nir_channel(&b->nb, nir_cube_amd(&b->nb, vtn_get_nir_ssa(b, w[5])), 3);
       break;
-   case CubeFaceCoordAMD:
-      def = nir_cube_face_coord_amd(&b->nb, vtn_get_nir_ssa(b, w[5]));
+   case CubeFaceCoordAMD: {
+      def = nir_cube_amd(&b->nb, vtn_get_nir_ssa(b, w[5]));
+      nir_ssa_def *st = nir_swizzle(&b->nb, def, (unsigned[]){1, 0}, 2);
+      nir_ssa_def *invma = nir_frcp(&b->nb, nir_channel(&b->nb, def, 2));
+      def = nir_ffma_imm2(&b->nb, st, invma, 0.5);
       break;
+   }
    case TimeAMD: {
-      def = nir_pack_64_2x32(&b->nb, nir_shader_clock(&b->nb, NIR_SCOPE_SUBGROUP));
+      def = nir_pack_64_2x32(&b->nb, nir_shader_clock(&b->nb, SCOPE_SUBGROUP));
       break;
    }
    default:
@@ -80,7 +84,7 @@ vtn_handle_amd_shader_ballot_instruction(struct vtn_builder *b, SpvOp ext_opcode
 
    const struct glsl_type *dest_type = vtn_get_type(b, w[1])->type;
    nir_intrinsic_instr *intrin = nir_intrinsic_instr_create(b->nb.shader, op);
-   nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest, dest_type, NULL);
+   nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest, dest_type);
    if (nir_intrinsic_infos[op].src_components[0] == 0)
       intrin->num_components = intrin->dest.ssa.num_components;
 
@@ -214,7 +218,7 @@ vtn_handle_amd_shader_explicit_vertex_parameter_instruction(struct vtn_builder *
    intrin->num_components = glsl_get_vector_elements(deref->type);
    nir_ssa_dest_init(&intrin->instr, &intrin->dest,
                      glsl_get_vector_elements(deref->type),
-                     glsl_get_bit_size(deref->type), NULL);
+                     glsl_get_bit_size(deref->type));
 
    nir_builder_instr_insert(&b->nb, &intrin->instr);
 

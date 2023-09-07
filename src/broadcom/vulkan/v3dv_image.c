@@ -70,26 +70,38 @@ v3d_get_ub_pad(uint32_t cpp, uint32_t height)
    return 0;
 }
 
+/**
+ * Computes the dimension with required padding for mip levels.
+ *
+ * This padding is required for width and height dimensions when the mip
+ * level is greater than 1, and for the depth dimension when the mip level
+ * is greater than 0. This function expects to be passed a mip level >= 1.
+ *
+ * Note: Hardware documentation seems to suggest that the third argument
+ * should be the utile dimensions, but through testing it was found that
+ * the block dimension should be used instead.
+ */
+static uint32_t
+v3d_get_dimension_mpad(uint32_t dimension, uint32_t level, uint32_t block_dimension)
+{
+   assert(level >= 1);
+   uint32_t pot_dim = u_minify(dimension, 1);
+   pot_dim = util_next_power_of_two(DIV_ROUND_UP(pot_dim, block_dimension));
+   uint32_t padded_dim = block_dimension * pot_dim;
+   return u_minify(padded_dim, level - 1);
+}
+
 static void
 v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
                        uint32_t plane_offset)
 {
    assert(image->planes[plane].cpp > 0);
-   /* Texture Base Adress needs to be 64-byte aligned */
+   /* Texture Base Address needs to be 64-byte aligned */
    assert(plane_offset % 64 == 0);
 
    uint32_t width = image->planes[plane].width;
    uint32_t height = image->planes[plane].height;
    uint32_t depth = image->vk.extent.depth;
-
-   /* Note that power-of-two padding is based on level 1.  These are not
-    * equivalent to just util_next_power_of_two(dimension), because at a
-    * level 0 dimension of 9, the level 1 power-of-two padded value is 4,
-    * not 8.
-    */
-   uint32_t pot_width = 2 * util_next_power_of_two(u_minify(width, 1));
-   uint32_t pot_height = 2 * util_next_power_of_two(u_minify(height, 1));
-   uint32_t pot_depth = 2 * util_next_power_of_two(u_minify(depth, 1));
 
    uint32_t utile_w = v3d_utile_width(image->planes[plane].cpp);
    uint32_t utile_h = v3d_utile_height(image->planes[plane].cpp);
@@ -98,6 +110,21 @@ v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
 
    uint32_t block_width = vk_format_get_blockwidth(image->vk.format);
    uint32_t block_height = vk_format_get_blockheight(image->vk.format);
+
+   /* Note that power-of-two padding is based on level 1.  These are not
+    * equivalent to just util_next_power_of_two(dimension), because at a
+    * level 0 dimension of 9, the level 1 power-of-two padded value is 4,
+    * not 8. Additionally the pot padding is based on the block size.
+    */
+   uint32_t pot_width = 2 * v3d_get_dimension_mpad(width,
+                                                   1,
+                                                   block_width);
+   uint32_t pot_height = 2 * v3d_get_dimension_mpad(height,
+                                                    1,
+                                                    block_height);
+   uint32_t pot_depth = 2 * v3d_get_dimension_mpad(depth,
+                                                   1,
+                                                   1);
 
    assert(image->vk.samples == VK_SAMPLE_COUNT_1_BIT ||
           image->vk.samples == VK_SAMPLE_COUNT_4_BIT);
@@ -113,10 +140,13 @@ v3d_setup_plane_slices(struct v3dv_image *image, uint8_t plane,
    for (int32_t i = image->vk.mip_levels - 1; i >= 0; i--) {
       struct v3d_resource_slice *slice = &image->planes[plane].slices[i];
 
+      slice->width = u_minify(width, i);
+      slice->height = u_minify(height, i);
+
       uint32_t level_width, level_height, level_depth;
       if (i < 2) {
-         level_width = u_minify(width, i);
-         level_height = u_minify(height, i);
+         level_width = slice->width;
+         level_height = slice->height;
       } else {
          level_width = u_minify(pot_width, i);
          level_height = u_minify(pot_height, i);

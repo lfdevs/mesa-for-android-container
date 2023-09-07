@@ -119,6 +119,61 @@ vn_encode_VkSamplerCustomBorderColorCreateInfoEXT(struct vn_cs_encoder *enc, con
     vn_encode_VkSamplerCustomBorderColorCreateInfoEXT_self(enc, val);
 }
 
+/* struct VkSamplerBorderColorComponentMappingCreateInfoEXT chain */
+
+static inline size_t
+vn_sizeof_VkSamplerBorderColorComponentMappingCreateInfoEXT_pnext(const void *val)
+{
+    /* no known/supported struct */
+    return vn_sizeof_simple_pointer(NULL);
+}
+
+static inline size_t
+vn_sizeof_VkSamplerBorderColorComponentMappingCreateInfoEXT_self(const VkSamplerBorderColorComponentMappingCreateInfoEXT *val)
+{
+    size_t size = 0;
+    /* skip val->{sType,pNext} */
+    size += vn_sizeof_VkComponentMapping(&val->components);
+    size += vn_sizeof_VkBool32(&val->srgb);
+    return size;
+}
+
+static inline size_t
+vn_sizeof_VkSamplerBorderColorComponentMappingCreateInfoEXT(const VkSamplerBorderColorComponentMappingCreateInfoEXT *val)
+{
+    size_t size = 0;
+
+    size += vn_sizeof_VkStructureType(&val->sType);
+    size += vn_sizeof_VkSamplerBorderColorComponentMappingCreateInfoEXT_pnext(val->pNext);
+    size += vn_sizeof_VkSamplerBorderColorComponentMappingCreateInfoEXT_self(val);
+
+    return size;
+}
+
+static inline void
+vn_encode_VkSamplerBorderColorComponentMappingCreateInfoEXT_pnext(struct vn_cs_encoder *enc, const void *val)
+{
+    /* no known/supported struct */
+    vn_encode_simple_pointer(enc, NULL);
+}
+
+static inline void
+vn_encode_VkSamplerBorderColorComponentMappingCreateInfoEXT_self(struct vn_cs_encoder *enc, const VkSamplerBorderColorComponentMappingCreateInfoEXT *val)
+{
+    /* skip val->{sType,pNext} */
+    vn_encode_VkComponentMapping(enc, &val->components);
+    vn_encode_VkBool32(enc, &val->srgb);
+}
+
+static inline void
+vn_encode_VkSamplerBorderColorComponentMappingCreateInfoEXT(struct vn_cs_encoder *enc, const VkSamplerBorderColorComponentMappingCreateInfoEXT *val)
+{
+    assert(val->sType == VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT);
+    vn_encode_VkStructureType(enc, &(VkStructureType){ VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT });
+    vn_encode_VkSamplerBorderColorComponentMappingCreateInfoEXT_pnext(enc, val->pNext);
+    vn_encode_VkSamplerBorderColorComponentMappingCreateInfoEXT_self(enc, val);
+}
+
 /* struct VkSamplerCreateInfo chain */
 
 static inline size_t
@@ -148,6 +203,14 @@ vn_sizeof_VkSamplerCreateInfo_pnext(const void *val)
             size += vn_sizeof_VkStructureType(&pnext->sType);
             size += vn_sizeof_VkSamplerCreateInfo_pnext(pnext->pNext);
             size += vn_sizeof_VkSamplerCustomBorderColorCreateInfoEXT_self((const VkSamplerCustomBorderColorCreateInfoEXT *)pnext);
+            return size;
+        case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(412 /* VK_EXT_border_color_swizzle */))
+                break;
+            size += vn_sizeof_simple_pointer(pnext);
+            size += vn_sizeof_VkStructureType(&pnext->sType);
+            size += vn_sizeof_VkSamplerCreateInfo_pnext(pnext->pNext);
+            size += vn_sizeof_VkSamplerBorderColorComponentMappingCreateInfoEXT_self((const VkSamplerBorderColorComponentMappingCreateInfoEXT *)pnext);
             return size;
         default:
             /* ignore unknown/unsupported struct */
@@ -221,6 +284,14 @@ vn_encode_VkSamplerCreateInfo_pnext(struct vn_cs_encoder *enc, const void *val)
             vn_encode_VkStructureType(enc, &pnext->sType);
             vn_encode_VkSamplerCreateInfo_pnext(enc, pnext->pNext);
             vn_encode_VkSamplerCustomBorderColorCreateInfoEXT_self(enc, (const VkSamplerCustomBorderColorCreateInfoEXT *)pnext);
+            return;
+        case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
+            if (!vn_cs_renderer_protocol_has_extension(412 /* VK_EXT_border_color_swizzle */))
+                break;
+            vn_encode_simple_pointer(enc, pnext);
+            vn_encode_VkStructureType(enc, &pnext->sType);
+            vn_encode_VkSamplerCreateInfo_pnext(enc, pnext->pNext);
+            vn_encode_VkSamplerBorderColorComponentMappingCreateInfoEXT_self(enc, (const VkSamplerBorderColorComponentMappingCreateInfoEXT *)pnext);
             return;
         default:
             /* ignore unknown/unsupported struct */

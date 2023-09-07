@@ -129,6 +129,33 @@ enum pipe_video_cap
       when it has reached its maximum async depth capacity
    */
    PIPE_VIDEO_CAP_ENC_SUPPORTS_ASYNC_OPERATION = 33,
+   PIPE_VIDEO_CAP_MIN_WIDTH = 34,
+   PIPE_VIDEO_CAP_MIN_HEIGHT = 35,
+   PIPE_VIDEO_CAP_ENC_RATE_CONTROL_QVBR = 36,
+   /*
+      AV1 encoding features list
+   */
+   PIPE_VIDEO_CAP_ENC_AV1_FEATURE = 37,
+   PIPE_VIDEO_CAP_ENC_AV1_FEATURE_EXT1 = 38,
+   PIPE_VIDEO_CAP_ENC_AV1_FEATURE_EXT2 = 39,
+   PIPE_VIDEO_CAP_ENC_SUPPORTS_TILE = 40,
+};
+
+enum pipe_video_av1_enc_filter_mode
+{
+   PIPE_VIDEO_CAP_ENC_AV1_INTERPOLATION_FILTER_EIGHT_TAP = (1 << 0),
+   PIPE_VIDEO_CAP_ENC_AV1_INTERPOLATION_FILTER_EIGHT_TAP_SMOOTH = (1 << 1),
+   PIPE_VIDEO_CAP_ENC_AV1_INTERPOLATION_FILTER_EIGHT_TAP_SHARP = (1 << 2),
+   PIPE_VIDEO_CAP_ENC_AV1_INTERPOLATION_FILTER_BILINEAR = (1 << 3),
+   PIPE_VIDEO_CAP_ENC_AV1_INTERPOLATION_FILTER_SWITCHABLE = (1 << 4),
+
+};
+
+enum pipe_video_av1_enc_tx_mode
+{
+   PIPE_VIDEO_CAP_ENC_AV1_TX_MODE_ONLY_4X4 = (1 << 0),
+   PIPE_VIDEO_CAP_ENC_AV1_TX_MODE_LARGEST = (1 << 1),
+   PIPE_VIDEO_CAP_ENC_AV1_TX_MODE_SELECT = (1 << 2),
 };
 
 /* To be used with PIPE_VIDEO_CAP_VPP_ORIENTATION_MODES and for VPP state*/
@@ -183,7 +210,6 @@ enum pipe_video_cap_slice_structure
    *  to the previous slices. */
    PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS = 0x00000020,
 };
-
 
 enum pipe_video_entrypoint
 {

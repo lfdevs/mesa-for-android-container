@@ -1,25 +1,7 @@
 /*
  * Copyright 2020 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "si_pipe.h"
@@ -481,7 +463,7 @@ static void si_llvm_emit_polygon_stipple(struct si_shader_context *ctx,
  * - polygon stippling
  *
  * All preloaded SGPRs and VGPRs are passed through unmodified unless they are
- * overriden by other states. (e.g. per-sample interpolation)
+ * overridden by other states. (e.g. per-sample interpolation)
  * Interpolated colors are stored after the preloaded VGPRs.
  */
 void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part_key *key,
@@ -705,15 +687,8 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
     * entire pixel/fragment, so mask bits out based on the sample ID.
     */
    if (key->ps_prolog.states.samplemask_log_ps_iter) {
-      /* The bit pattern matches that used by fixed function fragment
-       * processing. */
-      static const uint16_t ps_iter_masks[] = {
-         0xffff, /* not used */
-         0x5555, 0x1111, 0x0101, 0x0001,
-      };
-      assert(key->ps_prolog.states.samplemask_log_ps_iter < ARRAY_SIZE(ps_iter_masks));
-
-      uint32_t ps_iter_mask = ps_iter_masks[key->ps_prolog.states.samplemask_log_ps_iter];
+      uint32_t ps_iter_mask =
+         ac_get_ps_iter_mask(1 << key->ps_prolog.states.samplemask_log_ps_iter);
       LLVMValueRef sampleid = si_unpack_param(ctx, ancillary, 8, 4);
       LLVMValueRef samplemask = ac_get_arg(&ctx->ac, param_sample_mask);
 
@@ -848,28 +823,3 @@ void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part
    LLVMBuildRetVoid(ctx->ac.builder);
 }
 
-void si_llvm_build_monolithic_ps(struct si_shader_context *ctx, struct si_shader *shader)
-{
-   union si_shader_part_key prolog_key;
-   si_get_ps_prolog_key(shader, &prolog_key, false);
-
-   /* If no prolog is needed, we only have the main part, no need to build wrapper function. */
-   if (!si_need_ps_prolog(&prolog_key))
-      return;
-
-   struct ac_llvm_pointer main_fn = ctx->main_fn;
-
-   /* Preserve main arguments. */
-   enum ac_arg_type main_arg_types[AC_MAX_ARGS];
-   for (int i = 0; i < ctx->args->ac.arg_count; i++)
-      main_arg_types[i] = ctx->args->ac.args[i].type;
-
-   si_llvm_build_ps_prolog(ctx, &prolog_key, false);
-
-   struct ac_llvm_pointer parts[2] = {
-      ctx->main_fn, /* prolog */
-      main_fn,      /* main */
-   };
-
-   si_build_wrapper_function(ctx, parts, 2, 1, 0, main_arg_types, false);
-}

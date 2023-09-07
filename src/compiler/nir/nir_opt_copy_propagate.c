@@ -57,14 +57,12 @@ is_swizzleless_move(nir_alu_instr *instr)
 }
 
 static bool
-rewrite_to_vec(nir_function_impl *impl, nir_alu_instr *mov, nir_alu_instr *vec)
+rewrite_to_vec(nir_alu_instr *mov, nir_alu_instr *vec)
 {
    if (mov->op != nir_op_mov)
       return false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_after_instr(&mov->instr);
+   nir_builder b = nir_builder_at(nir_after_instr(&mov->instr));
 
    unsigned num_comp = mov->dest.dest.ssa.num_components;
    nir_alu_instr *new_vec = nir_alu_instr_create(b.shader, nir_op_vec(num_comp));
@@ -81,7 +79,7 @@ rewrite_to_vec(nir_function_impl *impl, nir_alu_instr *mov, nir_alu_instr *vec)
 }
 
 static bool
-copy_propagate_alu(nir_function_impl *impl, nir_alu_src *src, nir_alu_instr *copy)
+copy_propagate_alu(nir_alu_src *src, nir_alu_instr *copy)
 {
    nir_ssa_def *def = NULL;
    nir_alu_instr *user = nir_instr_as_alu(src->src.parent_instr);
@@ -99,7 +97,7 @@ copy_propagate_alu(nir_function_impl *impl, nir_alu_src *src, nir_alu_instr *cop
 
       for (unsigned i = 1; i < num_comp; i++) {
          if (copy->src[src->swizzle[i]].src.ssa != def)
-            return rewrite_to_vec(impl, user, copy);
+            return rewrite_to_vec(user, copy);
       }
 
       for (unsigned i = 0; i < num_comp; i++)
@@ -123,7 +121,7 @@ copy_propagate(nir_src *src, nir_alu_instr *copy)
 }
 
 static bool
-copy_prop_instr(nir_function_impl *impl, nir_instr *instr)
+copy_prop_instr(nir_instr *instr)
 {
    if (instr->type != nir_instr_type_alu)
       return false;
@@ -137,7 +135,7 @@ copy_prop_instr(nir_function_impl *impl, nir_instr *instr)
 
    nir_foreach_use_including_if_safe(src, &mov->dest.dest.ssa) {
       if (!src->is_if && src->parent_instr->type == nir_instr_type_alu)
-         progress |= copy_propagate_alu(impl, container_of(src, nir_alu_src, src), mov);
+         progress |= copy_propagate_alu(container_of(src, nir_alu_src, src), mov);
       else
          progress |= copy_propagate(src, mov);
    }
@@ -155,7 +153,7 @@ nir_copy_prop_impl(nir_function_impl *impl)
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
-         progress |= copy_prop_instr(impl, instr);
+         progress |= copy_prop_instr(instr);
       }
    }
 
@@ -174,8 +172,8 @@ nir_copy_prop(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl && nir_copy_prop_impl(function->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (nir_copy_prop_impl(impl))
          progress = true;
    }
 

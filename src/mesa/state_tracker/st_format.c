@@ -1140,7 +1140,7 @@ find_supported_format(struct pipe_screen *screen,
                       unsigned sample_count,
                       unsigned storage_sample_count,
                       unsigned bindings,
-                      boolean allow_dxt)
+                      bool allow_dxt)
 {
    uint i;
    for (i = 0; formats[i]; i++) {

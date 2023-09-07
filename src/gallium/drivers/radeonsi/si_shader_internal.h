@@ -1,31 +1,14 @@
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef SI_SHADER_PRIVATE_H
 #define SI_SHADER_PRIVATE_H
 
 #include "ac_shader_abi.h"
+#include "ac_llvm_build.h"
 #include "si_shader.h"
 
 struct util_debug_callback;
@@ -60,28 +43,22 @@ struct si_shader_args {
     *   [0:5] = the number of patches per threadgroup - 1, max = 63
     * # 5 bits
     *   [6:10] = the number of output vertices per patch - 1, max = 31
-    * # 21 bits
-    *   [11:31] = the offset of per patch attributes in the buffer in bytes.
-    *             max = NUM_PATCHES*32*32*16 = 1M
+    * # 5 bits
+    *   [11:15] = the number of input vertices per patch - 1, max = 31 (TCS only)
+    * # 16 bits
+    *   [16:31] = the offset of per patch attributes in the buffer in bytes.
+    *       64 outputs are implied by SI_UNIQUE_SLOT_* values.
+    *       max = 32(CPs) * 64(outputs) * 16(vec4) * 64(num_patches) = 2M,
+    *       clamped to 32K(LDS limit) = 32K
     */
    struct ac_arg tcs_offchip_layout;
 
-   /* API TCS */
-   /* Offsets where TCS outputs and TCS patch outputs live in LDS (<= 16K):
-    *   [16:31] = TCS output patch0 offset for per-patch / 4, max = 16K / 4 = 4K
-    */
-   struct ac_arg tcs_out_lds_offsets;
-   /* Layout of TCS outputs / TES inputs:
-    *   [13:18] = gl_PatchVerticesIn, max = 32
-    *   [19:31] = high 13 bits of the 32-bit address of tessellation ring buffers
-    */
-   struct ac_arg tcs_out_lds_layout;
-
-   /* API TES */
+   /* API TCS & TES */
    struct ac_arg tes_offchip_addr;
    /* PS */
    struct ac_arg pos_fixed_pt;
    struct ac_arg alpha_reference;
+   struct ac_arg color_start;
    /* CS */
    struct ac_arg block_size;
    struct ac_arg cs_user_data;
@@ -114,9 +91,6 @@ struct si_shader_context {
    struct ac_llvm_compiler *compiler;
 
    /* Preloaded descriptors. */
-   LLVMValueRef esgs_ring;
-   LLVMValueRef gsvs_ring[4];
-   LLVMValueRef tess_offchip_ring;
    LLVMValueRef instance_divisor_constbuf;
 
    LLVMValueRef gs_ngg_emit;
@@ -152,8 +126,7 @@ struct nir_shader *si_get_nir_shader(struct si_shader *shader, struct si_shader_
                                      ac_nir_gs_output_info *output_info);
 void si_get_tcs_epilog_key(struct si_shader *shader, union si_shader_part_key *key);
 bool si_need_ps_prolog(const union si_shader_part_key *key);
-void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_key *key,
-                          bool separate_prolog);
+void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_key *key);
 void si_get_ps_epilog_key(struct si_shader *shader, union si_shader_part_key *key);
 
 /* gfx10_shader_ngg.c */
@@ -199,7 +172,6 @@ LLVMValueRef si_insert_input_ret_float(struct si_shader_context *ctx, LLVMValueR
 LLVMValueRef si_insert_input_ptr(struct si_shader_context *ctx, LLVMValueRef ret,
                                  struct ac_arg param, unsigned return_index);
 LLVMValueRef si_prolog_get_internal_bindings(struct si_shader_context *ctx);
-void si_llvm_declare_esgs_ring(struct si_shader_context *ctx);
 LLVMValueRef si_unpack_param(struct si_shader_context *ctx, struct ac_arg param, unsigned rshift,
                              unsigned bitwidth);
 void si_build_wrapper_function(struct si_shader_context *ctx, struct ac_llvm_pointer *parts,
@@ -215,14 +187,10 @@ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *
 LLVMValueRef si_is_es_thread(struct si_shader_context *ctx);
 LLVMValueRef si_is_gs_thread(struct si_shader_context *ctx);
 void si_llvm_es_build_end(struct si_shader_context *ctx);
-void si_preload_esgs_ring(struct si_shader_context *ctx);
-void si_preload_gs_rings(struct si_shader_context *ctx);
 void si_llvm_gs_build_end(struct si_shader_context *ctx);
-void si_llvm_init_gs_callbacks(struct si_shader_context *ctx);
 
 /* si_shader_llvm_tess.c */
 LLVMValueRef si_get_rel_patch_id(struct si_shader_context *ctx);
-void si_llvm_preload_tess_rings(struct si_shader_context *ctx);
 void si_llvm_ls_build_end(struct si_shader_context *ctx);
 void si_llvm_build_tcs_epilog(struct si_shader_context *ctx, union si_shader_part_key *key,
                               bool separate_epilog);
@@ -234,11 +202,17 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
                              bool separate_prolog);
 void si_llvm_build_ps_epilog(struct si_shader_context *ctx, union si_shader_part_key *key,
                              bool separate_epilog);
-void si_llvm_build_monolithic_ps(struct si_shader_context *ctx, struct si_shader *shader);
 void si_llvm_ps_build_end(struct si_shader_context *ctx);
 
 /* si_shader_llvm_vs.c */
 void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part_key *key,
                              bool separate_prolog);
+
+/* si_shader_aco.c */
+bool si_aco_compile_shader(struct si_shader *shader,
+                           struct si_shader_args *args,
+                           struct nir_shader *nir,
+                           struct util_debug_callback *debug);
+void si_aco_resolve_symbols(struct si_shader *shader, uint32_t *code, uint64_t scratch_va);
 
 #endif

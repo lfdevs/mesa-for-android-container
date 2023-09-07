@@ -25,22 +25,25 @@
 
 using namespace aco;
 
-void create_mubuf(unsigned offset, PhysReg dst=PhysReg(256), PhysReg vaddr=PhysReg(256))
+void
+create_mubuf(unsigned offset, PhysReg dst = PhysReg(256), PhysReg vaddr = PhysReg(256))
 {
    bld.mubuf(aco_opcode::buffer_load_dword, Definition(dst, v1), Operand(PhysReg(0), s4),
              Operand(vaddr, v1), Operand::zero(), offset, true);
 }
 
-void create_mubuf_store(PhysReg src=PhysReg(256))
+void
+create_mubuf_store(PhysReg src = PhysReg(256))
 {
-   bld.mubuf(aco_opcode::buffer_store_dword, Operand(PhysReg(0), s4),
-             Operand(src, v1), Operand::zero(), Operand(src, v1), 0, true);
+   bld.mubuf(aco_opcode::buffer_store_dword, Operand(PhysReg(0), s4), Operand(src, v1),
+             Operand::zero(), Operand(src, v1), 0, true);
 }
 
-void create_mimg(bool nsa, unsigned addrs, unsigned instr_dwords)
+void
+create_mimg(bool nsa, unsigned addrs, unsigned instr_dwords)
 {
-   aco_ptr<MIMG_instruction> mimg{create_instruction<MIMG_instruction>(
-      aco_opcode::image_sample, Format::MIMG, 3 + addrs, 1)};
+   aco_ptr<MIMG_instruction> mimg{
+      create_instruction<MIMG_instruction>(aco_opcode::image_sample, Format::MIMG, 3 + addrs, 1)};
    mimg->definitions[0] = Definition(PhysReg(256), v1);
    mimg->operands[0] = Operand(PhysReg(0), s8);
    mimg->operands[1] = Operand(PhysReg(0), s4);
@@ -216,7 +219,8 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
    //! s_waitcnt_depctr vm_vsrc(0)
    //! s1: %0:m0 = s_mov_b32 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1), Operand(m0, s1));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1),
+          Operand(m0, s1));
    bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero());
 
    //! p_unit_test 5
@@ -224,7 +228,8 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
    //! s_waitcnt_depctr vm_vsrc(0)
    //! s2: %0:exec = s_mov_b64 -1
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1), Operand(m0, s1));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1),
+          Operand(m0, s1));
    bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand::c64(-1));
 
    /* no hazard: LDS */
@@ -232,7 +237,8 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
    //! v1: %0:v[0] = ds_read_b32 %0:v[0], %0:m0
    //! s1: %0:s[0] = s_mov_b32 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(6));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1), Operand(m0, s1));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1),
+          Operand(m0, s1));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(0), s1), Operand::zero());
 
    /* no hazard: LDS with VALU in-between */
@@ -241,7 +247,8 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
    //! v_nop
    //! s1: %0:m0 = s_mov_b32 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(7));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1), Operand(m0, s1));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1),
+          Operand(m0, s1));
    bld.vop1(aco_opcode::v_nop);
    bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero());
 
@@ -269,7 +276,8 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
    //! s_waitcnt lgkmcnt(0)
    //! s1: %0:m0 = s_mov_b32 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(10));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1), Operand(m0, s1));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1),
+          Operand(m0, s1));
    bld.sopp(aco_opcode::s_waitcnt, -1, 0xc07f);
    bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero());
 
@@ -300,7 +308,8 @@ BEGIN_TEST(insert_nops.vmem_to_scalar_write)
    //! s_waitcnt_depctr vm_vsrc(0)
    //! s1: %0:m0 = s_mov_b32 0
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(13));
-   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1), Operand(m0, s1));
+   bld.ds(aco_opcode::ds_read_b32, Definition(PhysReg(256), v1), Operand(PhysReg(256), v1),
+          Operand(m0, s1));
    bld.sopp(aco_opcode::s_waitcnt, -1, 0x3f70);
    bld.sop1(aco_opcode::s_mov_b32, Definition(m0, s1), Operand::zero());
 
@@ -932,8 +941,8 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    //! s_waitcnt_depctr sa_sdst(0)
    //! s1: %0:s[2] = s_mov_b32 %0:s[1]
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(0));
-   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1),
-                Operand::zero(), Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
 
@@ -944,8 +953,8 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    //! s1: %0:s[1] = s_mov_b32 0
    //! s1: %0:s[2] = s_mov_b32 %0:s[1]
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1));
-   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1),
-                Operand::zero(), Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
    bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg(257), v1), Operand(PhysReg(1), s1));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
@@ -957,8 +966,8 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    //! s1: %0:s[2] = s_mov_b32 %0:s[1]
    //! s1: %0:s[2] = s_mov_b32 %0:s[1]
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2));
-   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1),
-                Operand::zero(), Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
@@ -969,8 +978,8 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    //! s_waitcnt_depctr sa_sdst(0)
    //! s1: %0:s[2] = s_mov_b32 %0:s[1]
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3));
-   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1),
-                Operand::zero(), Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand::zero(),
+                Operand::zero(), Operand(PhysReg(0), s2));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
    bld.sopp(aco_opcode::s_waitcnt_depctr, -1, 0xfffe);
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
@@ -982,8 +991,8 @@ BEGIN_TEST(insert_nops.valu_mask_write)
    //! s_waitcnt_depctr sa_sdst(0)
    //! s1: %0:s[2] = s_mov_b32 %0:s[1]
    bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4));
-   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1),
-                Operand(PhysReg(2), s1), Operand::zero(), Operand(PhysReg(0), s2));
+   bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg(256), v1), Operand(PhysReg(2), s1),
+                Operand::zero(), Operand(PhysReg(0), s2));
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(1), s1), Operand::zero());
    bld.sop1(aco_opcode::s_mov_b32, Definition(PhysReg(2), s1), Operand(PhysReg(1), s1));
 

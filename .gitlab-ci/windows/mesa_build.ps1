@@ -59,6 +59,7 @@ meson setup `
 -Dopencl-spirv=true `
 -Dmicrosoft-clc=enabled `
 -Dstatic-libclc=all `
+-Dopencl-external-clang-headers=disabled `
 -Dspirv-to-dxil=true `
 -Dbuild-tests=true `
 -Dwerror=true `

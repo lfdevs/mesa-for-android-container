@@ -25,6 +25,7 @@ v3dv_entrypoints = custom_target(
   command : [
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'v3dv',
+    '--beta', with_vulkan_beta.to_string(),
     '--device-prefix', 'ver42',
   ],
   depend_files : vk_entrypoints_gen_depend_files,

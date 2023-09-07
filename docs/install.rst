@@ -87,8 +87,8 @@ The general approach is:
 .. code-block:: console
 
      meson setup builddir/
-     ninja -C builddir/
-     sudo ninja -C builddir/ install
+     meson compile -C builddir/
+     sudo meson install -C builddir/
 
 On Windows you can also use the Visual Studio backend
 
@@ -116,7 +116,7 @@ First, configure Mesa and install in the temporary location:
 .. code-block:: console
 
    meson setup builddir/ -Dprefix="$MESA_INSTALLDIR" OTHER_OPTIONS
-   ninja -C builddir/ install
+   meson install -C builddir/
 
 where ``OTHER_OPTIONS`` is replaced by any meson configuration options you may
 want.  For instance, if you want to build the LLVMpipe drivers, it would look
@@ -126,7 +126,7 @@ like this:
 
    meson setup builddir/ -Dprefix="$MESA_INSTALLDIR" \
       -Dgallium-drivers=swrast -Dvulkan-drivers=swrast
-   ninja -C builddir/ install
+   meson install -C builddir/
 
 Once Mesa has built and installed to ``$MESA_INSTALLDIR``, you can run any app
 against your temporary install by setting the right environment variables.
@@ -226,7 +226,7 @@ Gallium-based versions of libGL and device drivers.
 6. Building OpenGL programs with pkg-config
 -------------------------------------------
 
-Running ``ninja install`` will install package configuration files for
+Running ``meson install`` will install package configuration files for
 the pkg-config utility.
 
 When compiling your OpenGL application you can use pkg-config to

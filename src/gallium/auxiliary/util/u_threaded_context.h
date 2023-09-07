@@ -395,8 +395,8 @@ struct tc_call_base {
 #if !defined(NDEBUG) && TC_DEBUG >= 1
    uint32_t sentinel;
 #endif
-   ushort num_slots;
-   ushort call_id;
+   uint16_t num_slots;
+   uint16_t call_id;
 };
 
 /**

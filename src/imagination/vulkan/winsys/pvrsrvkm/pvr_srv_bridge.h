@@ -46,6 +46,7 @@
 
 #define PVR_SRV_BRIDGE_SYNC_ALLOCSYNCPRIMITIVEBLOCK 0UL
 #define PVR_SRV_BRIDGE_SYNC_FREESYNCPRIMITIVEBLOCK 1UL
+#define PVR_SRV_BRIDGE_SYNC_SYNCPRIMSET 2UL
 
 #define PVR_SRV_BRIDGE_MM 6UL
 
@@ -244,6 +245,20 @@ struct pvr_srv_bridge_free_sync_primitive_block_cmd {
 } PACKED;
 
 struct pvr_srv_bridge_free_sync_primitive_block_ret {
+   enum pvr_srv_error error;
+} PACKED;
+
+/******************************************************************************
+   PVR_SRV_BRIDGE_SYNC_SYNCPRIMSET structs
+ ******************************************************************************/
+
+struct pvr_srv_bridge_sync_prim_set_cmd {
+   void *handle;
+   uint32_t index;
+   uint32_t value;
+} PACKED;
+
+struct pvr_srv_bridge_sync_prim_set_ret {
    enum pvr_srv_error error;
 } PACKED;
 
@@ -885,6 +900,10 @@ VkResult pvr_srv_alloc_sync_primitive_block(int fd,
                                             uint32_t *const size_out,
                                             uint32_t *const addr_out);
 void pvr_srv_free_sync_primitive_block(int fd, void *handle);
+VkResult pvr_srv_set_sync_primitive(int fd,
+                                    void *handle,
+                                    uint32_t index,
+                                    uint32_t value);
 
 VkResult pvr_srv_get_heap_count(int fd, uint32_t *const heap_count_out);
 VkResult pvr_srv_get_heap_details(int fd,

@@ -7,14 +7,10 @@ dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.f
 
 # Some of these consistently time out after a minute, some are >30s and would
 # flake as timeouts in CI.
-KHR-GL45.arrays_of_arrays_gl.SizedDeclarationsPrimitive
 KHR-GL45.copy_image.functional
 KHR-GL45.texture_size_promotion.functional
 KHR-GL45.texture_swizzle.functional
 KHR-GL45.texture_swizzle.smoke
-KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing2
-KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing3
-KHR-Single-GL45.arrays_of_arrays_gl.SubroutineArgumentAliasing4
 arb_pipeline_statistics_query-comp
 gl-1.0-blend-func
 

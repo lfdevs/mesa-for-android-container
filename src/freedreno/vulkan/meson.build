@@ -11,6 +11,7 @@ tu_entrypoints = custom_target(
     '--include', 'adreno_common.xml.h',
     '--tmpl-prefix', 'tu', '--tmpl-param', 'chip CHIP',
     '--tmpl-variants', '<A6XX>', '<A7XX>',
+    '--beta', with_vulkan_beta.to_string(),
   ],
   depend_files : vk_entrypoints_gen_depend_files,
 )

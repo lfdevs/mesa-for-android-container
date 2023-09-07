@@ -23,7 +23,7 @@
     - .llvmpipe-clover-rules
   needs:
     - .debian-clover-testing
-    - debian/x86_test-gl
+    - debian/x86_64_test-gl
   variables:
     LP_CL: 1
     DEQP_SUITE: llvmpipe-clover
@@ -35,7 +35,7 @@ llvmpipe-piglit-rusticl:
     - .llvmpipe-rusticl-rules
   needs:
     - debian-rusticl-testing
-    - debian/x86_test-gl
+    - debian/x86_64_test-gl
   variables:
     RUSTICL_ENABLE: "llvmpipe"
     DEQP_SUITE: llvmpipe-rusticl
@@ -85,5 +85,5 @@ llvmpipe-deqp-asan:
     LP_NUM_THREADS: 0
   extends: .llvmpipe-deqp-test
   needs:
-    - debian/x86_test-gl
+    - debian/x86_64_test-gl
     - debian-testing-asan

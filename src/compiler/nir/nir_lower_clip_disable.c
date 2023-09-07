@@ -50,7 +50,7 @@ recursive_if_chain(nir_builder *b, nir_deref_instr *deref, nir_ssa_def *value, u
    }
 
    unsigned mid = start + (end - start) / 2;
-   nir_push_if(b, nir_ilt(b, index, nir_imm_int(b, mid)));
+   nir_push_if(b, nir_ilt_imm(b, index, mid));
    recursive_if_chain(b, deref, value, clip_plane_enable, index, start, mid);
    nir_push_else(b, NULL);
    recursive_if_chain(b, deref, value, clip_plane_enable, index, mid, end);

@@ -181,7 +181,7 @@ d3d12_reset_batch(struct d3d12_context *ctx, struct d3d12_batch *batch, uint64_t
 void
 d3d12_destroy_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
 {
-   d3d12_reset_batch(ctx, batch, PIPE_TIMEOUT_INFINITE);
+   d3d12_reset_batch(ctx, batch, OS_TIMEOUT_INFINITE);
    batch->cmdalloc->Release();
    d3d12_descriptor_heap_free(batch->sampler_heap);
    d3d12_descriptor_heap_free(batch->view_heap);
@@ -201,7 +201,7 @@ d3d12_start_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
    ID3D12DescriptorHeap* heaps[2] = { d3d12_descriptor_heap_get(batch->view_heap),
                                       d3d12_descriptor_heap_get(batch->sampler_heap) };
 
-   d3d12_reset_batch(ctx, batch, PIPE_TIMEOUT_INFINITE);
+   d3d12_reset_batch(ctx, batch, OS_TIMEOUT_INFINITE);
 
    /* Create or reset global command list */
    if (ctx->cmdlist) {
@@ -217,6 +217,9 @@ d3d12_start_batch(struct d3d12_context *ctx, struct d3d12_batch *batch)
          debug_printf("D3D12: creating ID3D12GraphicsCommandList failed\n");
          batch->has_errors = true;
          return;
+      }
+      if (FAILED(ctx->cmdlist->QueryInterface(IID_PPV_ARGS(&ctx->cmdlist8)))) {
+         ctx->cmdlist8 = nullptr;
       }
    }
 

@@ -1,6 +1,6 @@
 # x11
 [[deqp]]
-deqp = "/deqp/modules/egl/deqp-egl"
+deqp = "/deqp/modules/egl/deqp-egl-x11"
 caselists = ["/deqp/mustpass/egl-master.txt"]
 skips = ["/install/iris-skips.txt"]
 deqp_args = [

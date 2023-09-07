@@ -16,5 +16,9 @@ dEQP-VK.robustness.buffer_access.through_pointers.graphics.reads.fragment.16B_in
 dEQP-VK.robustness.buffer_access.through_pointers.graphics.reads.fragment.3B_out_of_memory_with_vec4_s32
 dEQP-VK.robustness.buffer_access.through_pointers.graphics.reads.fragment.3B_out_of_memory_with_vec4_u32
 dEQP-VK.robustness.buffer_access.through_pointers.graphics.reads.fragment.4B_in_memory_with_vec4_s32
+dEQP-VK.robustness.buffer_access.through_pointers.graphics.writes.fragment.16B_in_memory_with_vec4_s32
 dEQP-VK.robustness.buffer_access.through_pointers.graphics.writes.fragment.16B_in_memory_with_vec4_u32
+dEQP-VK.robustness.buffer_access.through_pointers.graphics.writes.fragment.16B_in_memory_with_scalar_f32
 dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_uvec4
+dEQP-VK.robustness.buffer_access.fragment.scalar_copy.r32_uint.oob_uniform_read.range_4_bytes
+dEQP-VK.memory_model.message_passing.ext.u64.noncoherent.atomic_atomic.atomicwrite.device.payload_local.physbuffer.guard_local.image.comp

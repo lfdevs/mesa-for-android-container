@@ -55,7 +55,7 @@ struct intel_perf_query_info;
 
 #define INTEL_PERF_INVALID_CTX_ID (0xffffffff)
 
-enum PACKED intel_perf_counter_type {
+enum ENUM_PACKED intel_perf_counter_type {
    INTEL_PERF_COUNTER_TYPE_EVENT,
    INTEL_PERF_COUNTER_TYPE_DURATION_NORM,
    INTEL_PERF_COUNTER_TYPE_DURATION_RAW,
@@ -64,7 +64,7 @@ enum PACKED intel_perf_counter_type {
    INTEL_PERF_COUNTER_TYPE_TIMESTAMP,
 };
 
-enum PACKED intel_perf_counter_data_type {
+enum ENUM_PACKED intel_perf_counter_data_type {
    INTEL_PERF_COUNTER_DATA_TYPE_BOOL32,
    INTEL_PERF_COUNTER_DATA_TYPE_UINT32,
    INTEL_PERF_COUNTER_DATA_TYPE_UINT64,
@@ -72,7 +72,7 @@ enum PACKED intel_perf_counter_data_type {
    INTEL_PERF_COUNTER_DATA_TYPE_DOUBLE,
 };
 
-enum PACKED intel_perf_counter_units {
+enum ENUM_PACKED intel_perf_counter_units {
    /* size */
    INTEL_PERF_COUNTER_UNITS_BYTES,
    INTEL_PERF_COUNTER_UNITS_GBPS,

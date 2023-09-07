@@ -273,7 +273,7 @@ lp_build_clamped_float_to_unsigned_norm(struct gallivm_state *gallivm,
 
    assert(src_type.floating);
    assert(dst_width <= src_type.width);
-   src_type.sign = FALSE;
+   src_type.sign = false;
 
    mantissa = lp_mantissa(src_type);
 
@@ -860,7 +860,7 @@ lp_build_conv(struct gallivm_state *gallivm,
                                                              dst_type.width,
                                                              tmp[i]);
          }
-         tmp_type.floating = FALSE;
+         tmp_type.floating = false;
       }
       else {
          double dst_scale = lp_const_scale(dst_type);
@@ -885,12 +885,12 @@ lp_build_conv(struct gallivm_state *gallivm,
             for(i = 0; i < num_tmps; ++i) {
                tmp[i] = lp_build_iround(&bld, tmp[i]);
             }
-            tmp_type.floating = FALSE;
+            tmp_type.floating = false;
          }
          else {
             LLVMTypeRef tmp_vec_type;
 
-            tmp_type.floating = FALSE;
+            tmp_type.floating = false;
             tmp_vec_type = lp_build_vec_type(gallivm, tmp_type);
             for(i = 0; i < num_tmps; ++i) {
 #if 0
@@ -971,15 +971,15 @@ lp_build_conv(struct gallivm_state *gallivm,
                                                      dst_type,
                                                      tmp[i]);
          }
-         tmp_type.floating = TRUE;
+         tmp_type.floating = true;
       }
       else {
          double src_scale = lp_const_scale(src_type);
          LLVMTypeRef tmp_vec_type;
 
          /* Use an equally sized integer for intermediate computations */
-         tmp_type.floating = TRUE;
-         tmp_type.sign = TRUE;
+         tmp_type.floating = true;
+         tmp_type.sign = true;
          tmp_vec_type = lp_build_vec_type(gallivm, tmp_type);
          for(i = 0; i < num_tmps; ++i) {
 #if 0
@@ -1083,15 +1083,15 @@ lp_build_conv_mask(struct gallivm_state *gallivm,
     * We assume all values are 0 or -1
     */
 
-   src_type.floating = FALSE;
-   src_type.fixed = FALSE;
-   src_type.sign = TRUE;
-   src_type.norm = FALSE;
+   src_type.floating = false;
+   src_type.fixed = false;
+   src_type.sign = true;
+   src_type.norm = false;
 
-   dst_type.floating = FALSE;
-   dst_type.fixed = FALSE;
-   dst_type.sign = TRUE;
-   dst_type.norm = FALSE;
+   dst_type.floating = false;
+   dst_type.fixed = false;
+   dst_type.sign = true;
+   dst_type.norm = false;
 
    /*
     * Truncate or expand bit width

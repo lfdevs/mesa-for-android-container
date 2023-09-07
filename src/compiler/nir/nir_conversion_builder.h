@@ -93,7 +93,7 @@ nir_round_float_to_float(nir_builder *b, nir_ssa_def *src,
       return nir_bcsel(b, cmp, nir_nextafter(b, lower_prec, neg_inf), lower_prec);
    }
    case nir_rounding_mode_rtz:
-      return nir_bcsel(b, nir_flt(b, src, nir_imm_zero(b, 1, src->bit_size)),
+      return nir_bcsel(b, nir_flt_imm(b, src, 1),
                           nir_round_float_to_float(b, src, dest_bit_size,
                                                    nir_rounding_mode_ru),
                           nir_round_float_to_float(b, src, dest_bit_size,

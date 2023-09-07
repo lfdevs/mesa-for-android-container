@@ -29,6 +29,7 @@
 #include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_serialize.h"
+#include "nir/tgsi_to_nir.h"
 
 #include "nvc0/nvc0_stateobj.h"
 #include "nvc0/nvc0_context.h"
@@ -610,7 +611,8 @@ nvc0_sp_state_create(struct pipe_context *pipe,
 
    switch(cso->type) {
    case PIPE_SHADER_IR_TGSI:
-      prog->pipe.tokens = tgsi_dup_tokens(cso->tokens);
+      prog->pipe.type = PIPE_SHADER_IR_NIR;
+      prog->pipe.ir.nir = tgsi_to_nir(cso->tokens, pipe->screen, false);
       break;
    case PIPE_SHADER_IR_NIR:
       prog->pipe.ir.nir = cso->ir.nir;
@@ -745,9 +747,12 @@ nvc0_cp_state_create(struct pipe_context *pipe,
    prog->parm_size = cso->req_input_mem;
 
    switch(cso->ir_type) {
-   case PIPE_SHADER_IR_TGSI:
-      prog->pipe.tokens = tgsi_dup_tokens((const struct tgsi_token *)cso->prog);
+   case PIPE_SHADER_IR_TGSI: {
+      const struct tgsi_token *tokens = cso->prog;
+      prog->pipe.type = PIPE_SHADER_IR_NIR;
+      prog->pipe.ir.nir = tgsi_to_nir(tokens, pipe->screen, false);
       break;
+   }
    case PIPE_SHADER_IR_NIR:
       prog->pipe.ir.nir = (nir_shader *)cso->prog;
       break;
@@ -806,6 +811,7 @@ nvc0_get_compute_state_info(struct pipe_context *pipe, void *hwcso,
    info->max_threads = MIN2(ROUND_DOWN_TO(threads, 32), 1024);
    info->private_memory = prog->hdr[1] & 0xfffff0;
    info->preferred_simd_size = 32;
+   info->simd_sizes = 32;
 }
 
 static void

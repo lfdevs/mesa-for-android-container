@@ -493,7 +493,7 @@ gmem_key_init(struct fd_batch *batch, bool assume_zs, bool no_scis_opt)
        * u_blitter will show up as a normal draw with depth and/or
        * stencil enabled.
        */
-      unsigned zsclear = batch->fast_cleared & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
+      unsigned zsclear = batch->cleared & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
       if (zsclear) {
          const struct util_format_description *desc =
                util_format_description(pfb->zsbuf->format);
@@ -672,7 +672,11 @@ render_sysmem(struct fd_batch *batch) assert_dt
       trace_start_draw_ib(&batch->trace, batch->gmem);
    }
    /* emit IB to drawcmds: */
-   ctx->screen->emit_ib(batch->gmem, batch->draw);
+   if (ctx->emit_sysmem) {
+      ctx->emit_sysmem(batch);
+   } else {
+      ctx->screen->emit_ib(batch->gmem, batch->draw);
+   }
 
    if (!batch->nondraw) {
       trace_end_draw_ib(&batch->trace, batch->gmem);
@@ -719,7 +723,7 @@ fd_gmem_render_tiles(struct fd_batch *batch)
    /* Sometimes we need to flush a batch just to get a fence, with no
     * clears or draws.. in this case promote to nondraw:
     */
-   if (!(batch->fast_cleared || batch->num_draws))
+   if (!(batch->cleared || batch->num_draws))
       sysmem = true;
 
    if (!batch->nondraw) {

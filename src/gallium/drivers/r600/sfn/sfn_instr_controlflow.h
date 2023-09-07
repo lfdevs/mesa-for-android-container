@@ -80,6 +80,7 @@ public:
    void set_predicate(AluInstr *new_predicate);
 
    AluInstr *predicate() const { return m_predicate; }
+   AluInstr *predicate() { return m_predicate; }
 
    void accept(ConstInstrVisitor& visitor) const override;
    void accept(InstrVisitor& visitor) override;

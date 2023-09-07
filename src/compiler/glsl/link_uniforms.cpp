@@ -32,6 +32,7 @@
 #include "main/shader_types.h"
 #include "main/consts_exts.h"
 #include "util/strndup.h"
+#include "util/u_math.h"
 
 /**
  * \file link_uniforms.cpp
@@ -278,6 +279,6 @@ link_calculate_matrix_stride(const glsl_type *matrix, bool row_major,
     *    vec4.
     */
    return packing == GLSL_INTERFACE_PACKING_STD430
-      ? (items < 3 ? items * N : glsl_align(items * N, 16))
-      : glsl_align(items * N, 16);
+      ? (items < 3 ? items * N : align(items * N, 16))
+      : align(items * N, 16);
 }

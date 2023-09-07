@@ -74,8 +74,6 @@ instrs_equal(const void *_i1, const void *_i2)
 
    if (i1->imm != i2->imm)
       return false;
-   if (i1->perspective != i2->perspective)
-      return false;
    if (i1->invert_cond != i2->invert_cond)
       return false;
    if (i1->dim != i2->dim)

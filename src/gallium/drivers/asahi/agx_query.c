@@ -1,8 +1,10 @@
 /*
  * Copyright 2022 Alyssa Rosenzweig
+ * Copyright 2019-2020 Collabora, Ltd.
  * SPDX-License-Identifier: MIT
  */
 
+#include "util/u_prim.h"
 #include "agx_state.h"
 
 static struct pipe_query *
@@ -39,12 +41,13 @@ agx_begin_query(struct pipe_context *pctx, struct pipe_query *pquery)
    struct agx_context *ctx = agx_context(pctx);
    struct agx_query *query = (struct agx_query *)pquery;
 
+   ctx->dirty |= AGX_DIRTY_QUERY;
+
    switch (query->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       ctx->occlusion_query = query;
-      ctx->dirty |= AGX_DIRTY_QUERY;
 
       /* begin_query zeroes, flush so we can do that write. If anything (i.e.
        * other than piglit) actually hits this, we could shadow the query to
@@ -60,6 +63,16 @@ agx_begin_query(struct pipe_context *pctx, struct pipe_query *pquery)
       query->value = 0;
       return true;
 
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+      ctx->prims_generated = query;
+      query->value = 0;
+      return true;
+
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      ctx->tf_prims_generated = query;
+      query->value = 0;
+      return true;
+
    default:
       return false;
    }
@@ -71,14 +84,20 @@ agx_end_query(struct pipe_context *pctx, struct pipe_query *pquery)
    struct agx_context *ctx = agx_context(pctx);
    struct agx_query *query = (struct agx_query *)pquery;
 
+   ctx->dirty |= AGX_DIRTY_QUERY;
+
    switch (query->type) {
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       ctx->occlusion_query = NULL;
-      ctx->dirty |= AGX_DIRTY_QUERY;
       return true;
-
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+      ctx->prims_generated = NULL;
+      return true;
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      ctx->tf_prims_generated = NULL;
+      return true;
    default:
       return false;
    }
@@ -115,6 +134,11 @@ agx_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
       else
          vresult->b = query->value;
 
+      return true;
+
+   case PIPE_QUERY_PRIMITIVES_GENERATED:
+   case PIPE_QUERY_PRIMITIVES_EMITTED:
+      vresult->u64 = query->value;
       return true;
 
    default:

@@ -82,7 +82,6 @@ void st_init_limits(struct pipe_screen *screen,
                     struct gl_constants *c, struct gl_extensions *extensions,
                     gl_api api)
 {
-   int supported_irs;
    unsigned sh;
    bool can_ubo = true;
    int temp;
@@ -169,14 +168,20 @@ void st_init_limits(struct pipe_screen *screen,
     */
    c->MaxUniformBlockSize &= ~3;
 
+   c->HasFBFetch = screen->get_param(screen, PIPE_CAP_FBFETCH);
+
+   c->SupportsReadingOutputs = screen->get_param(screen, PIPE_CAP_SHADER_CAN_READ_OUTPUTS);
+
+   c->CombinedClipCullDistanceArrays = !screen->get_param(screen, PIPE_CAP_CULL_DISTANCE_NOCOMBINE);
+
+   c->PointSizeFixed = screen->get_param(screen, PIPE_CAP_POINT_SIZE_FIXED);
+
    for (sh = 0; sh < PIPE_SHADER_TYPES; ++sh) {
       const gl_shader_stage stage = tgsi_processor_to_shader_stage(sh);
       struct gl_shader_compiler_options *options =
          &c->ShaderCompilerOptions[stage];
       struct gl_program_constants *pc = &c->Program[stage];
 
-      bool prefer_nir = PIPE_SHADER_IR_NIR ==
-         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_PREFERRED_IR);
       if (screen->get_compiler_options)
          options->NirOptions = screen->get_compiler_options(screen, PIPE_SHADER_IR_NIR, sh);
 
@@ -187,11 +192,6 @@ void st_init_limits(struct pipe_screen *screen,
 
       if (sh == PIPE_SHADER_COMPUTE) {
          if (!screen->get_param(screen, PIPE_CAP_COMPUTE))
-            continue;
-         supported_irs =
-            screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_SUPPORTED_IRS);
-         if (!(supported_irs & ((1 << PIPE_SHADER_IR_TGSI) |
-                                (1 << PIPE_SHADER_IR_NIR))))
             continue;
       }
 
@@ -363,21 +363,16 @@ void st_init_limits(struct pipe_screen *screen,
             options->LowerBuiltinVariablesXfb |= VARYING_BIT_PSIZ;
       }
 
-      /* Note: If the driver doesn't prefer NIR, then st_create_nir_shader()
-       * will call nir_to_tgsi, and TGSI doesn't support 16-bit ops.
-       */
-      if (prefer_nir) {
-         options->LowerPrecisionFloat16 =
-            screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16);
-         options->LowerPrecisionDerivatives =
-            screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16_DERIVATIVES);
-         options->LowerPrecisionInt16 =
-            screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_INT16);
-         options->LowerPrecisionConstants =
-            screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_GLSL_16BIT_CONSTS);
-         options->LowerPrecisionFloat16Uniforms =
-            screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16_CONST_BUFFERS);
-      }
+      options->LowerPrecisionFloat16 =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16);
+      options->LowerPrecisionDerivatives =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16_DERIVATIVES);
+      options->LowerPrecisionInt16 =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_INT16);
+      options->LowerPrecisionConstants =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_GLSL_16BIT_CONSTS);
+      options->LowerPrecisionFloat16Uniforms =
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_FP16_CONST_BUFFERS);
    }
 
    c->MaxUserAssignableUniformLocations =
@@ -764,7 +759,6 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_base_instance),                PIPE_CAP_START_INSTANCE                   },
       { o(ARB_bindless_texture),             PIPE_CAP_BINDLESS_TEXTURE                 },
       { o(ARB_buffer_storage),               PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT   },
-      { o(ARB_clear_texture),                PIPE_CAP_CLEAR_TEXTURE                    },
       { o(ARB_clip_control),                 PIPE_CAP_CLIP_HALFZ                       },
       { o(ARB_color_buffer_float),           PIPE_CAP_VERTEX_COLOR_UNCLAMPED           },
       { o(ARB_conditional_render_inverted),  PIPE_CAP_CONDITIONAL_RENDER_INVERTED      },
@@ -1633,63 +1627,54 @@ void st_init_extensions(struct pipe_screen *screen,
       extensions->GREMEDY_string_marker = GL_TRUE;
 
    if (screen->get_param(screen, PIPE_CAP_COMPUTE)) {
-      int compute_supported_irs =
-         screen->get_shader_param(screen, PIPE_SHADER_COMPUTE,
-                                  PIPE_SHADER_CAP_SUPPORTED_IRS);
-      if (compute_supported_irs & ((1 << PIPE_SHADER_IR_TGSI) |
-                                   (1 << PIPE_SHADER_IR_NIR))) {
-         enum pipe_shader_ir ir =
-            (compute_supported_irs & PIPE_SHADER_IR_NIR) ?
-            PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
-         uint64_t grid_size[3], block_size[3];
-         uint64_t max_local_size, max_threads_per_block;
+      uint64_t grid_size[3], block_size[3];
+      uint64_t max_local_size, max_threads_per_block;
 
-         screen->get_compute_param(screen, ir,
-                                   PIPE_COMPUTE_CAP_MAX_GRID_SIZE, grid_size);
-         screen->get_compute_param(screen, ir,
-                                   PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE, block_size);
-         screen->get_compute_param(screen, ir,
-                                   PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK,
-                                   &max_threads_per_block);
-         screen->get_compute_param(screen, ir,
-                                   PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE,
-                                   &max_local_size);
+      screen->get_compute_param(screen, PIPE_SHADER_IR_NIR,
+                                 PIPE_COMPUTE_CAP_MAX_GRID_SIZE, grid_size);
+      screen->get_compute_param(screen, PIPE_SHADER_IR_NIR,
+                                 PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE, block_size);
+      screen->get_compute_param(screen, PIPE_SHADER_IR_NIR,
+                                 PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK,
+                                 &max_threads_per_block);
+      screen->get_compute_param(screen, PIPE_SHADER_IR_NIR,
+                                 PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE,
+                                 &max_local_size);
 
-         consts->MaxComputeWorkGroupInvocations = max_threads_per_block;
-         consts->MaxComputeSharedMemorySize = max_local_size;
+      consts->MaxComputeWorkGroupInvocations = max_threads_per_block;
+      consts->MaxComputeSharedMemorySize = max_local_size;
+
+      for (i = 0; i < 3; i++) {
+         /* There are tests that fail if we report more that INT_MAX - 1. */
+         consts->MaxComputeWorkGroupCount[i] = MIN2(grid_size[i], INT_MAX - 1);
+         consts->MaxComputeWorkGroupSize[i] = block_size[i];
+      }
+
+      extensions->ARB_compute_shader =
+         max_threads_per_block >= 1024 &&
+         extensions->ARB_shader_image_load_store &&
+         extensions->ARB_shader_atomic_counters;
+
+      if (extensions->ARB_compute_shader) {
+         uint64_t max_variable_threads_per_block = 0;
+
+         screen->get_compute_param(screen, PIPE_SHADER_IR_NIR,
+                                    PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK,
+                                    &max_variable_threads_per_block);
 
          for (i = 0; i < 3; i++) {
-            /* There are tests that fail if we report more that INT_MAX - 1. */
-            consts->MaxComputeWorkGroupCount[i] = MIN2(grid_size[i], INT_MAX - 1);
-            consts->MaxComputeWorkGroupSize[i] = block_size[i];
+            /* Clamp the values to avoid having a local work group size
+               * greater than the maximum number of invocations.
+               */
+            consts->MaxComputeVariableGroupSize[i] =
+               MIN2(consts->MaxComputeWorkGroupSize[i],
+                     max_variable_threads_per_block);
          }
+         consts->MaxComputeVariableGroupInvocations =
+            max_variable_threads_per_block;
 
-         extensions->ARB_compute_shader =
-            max_threads_per_block >= 1024 &&
-            extensions->ARB_shader_image_load_store &&
-            extensions->ARB_shader_atomic_counters;
-
-         if (extensions->ARB_compute_shader) {
-            uint64_t max_variable_threads_per_block = 0;
-
-            screen->get_compute_param(screen, ir,
-                                      PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK,
-                                      &max_variable_threads_per_block);
-
-            for (i = 0; i < 3; i++) {
-               /* Clamp the values to avoid having a local work group size
-                * greater than the maximum number of invocations.
-                */
-               consts->MaxComputeVariableGroupSize[i] =
-                  MIN2(consts->MaxComputeWorkGroupSize[i],
-                       max_variable_threads_per_block);
-            }
-            consts->MaxComputeVariableGroupInvocations =
-               max_variable_threads_per_block;
-
-            extensions->ARB_compute_variable_group_size =
-               max_variable_threads_per_block > 0;
-         }
+         extensions->ARB_compute_variable_group_size =
+            max_variable_threads_per_block > 0;
       }
    }
 
@@ -1840,15 +1825,12 @@ void st_init_extensions(struct pipe_screen *screen,
       screen->get_param(screen, PIPE_CAP_ALLOW_DRAW_OUT_OF_ORDER);
    consts->GLThreadNopCheckFramebufferStatus = options->glthread_nop_check_framebuffer_status;
 
-   bool prefer_nir = PIPE_SHADER_IR_NIR ==
-         screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_PREFERRED_IR);
    const struct nir_shader_compiler_options *nir_options =
       consts->ShaderCompilerOptions[MESA_SHADER_FRAGMENT].NirOptions;
 
-   if (prefer_nir &&
-       screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS) &&
+   if (screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS) &&
        extensions->ARB_stencil_texturing &&
        screen->get_param(screen, PIPE_CAP_DOUBLES) &&
        !(nir_options->lower_doubles_options & nir_lower_fp64_full_software))
-      extensions->NV_copy_depth_to_color = TRUE;
+      extensions->NV_copy_depth_to_color = true;
 }

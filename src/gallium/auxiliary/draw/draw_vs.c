@@ -51,7 +51,7 @@
 
 #include "nir/nir_to_tgsi.h"
 
-DEBUG_GET_ONCE_BOOL_OPTION(gallium_dump_vs, "GALLIUM_DUMP_VS", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(gallium_dump_vs, "GALLIUM_DUMP_VS", false)
 
 
 struct draw_vertex_shader *
@@ -70,11 +70,8 @@ draw_create_vertex_shader(struct draw_context *draw,
    if (draw->pt.middle.llvm) {
       struct pipe_screen *screen = draw->pipe->screen;
       if (shader->type == PIPE_SHADER_IR_NIR &&
-          ((!screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
-                                     PIPE_SHADER_CAP_INTEGERS)) ||
-           (screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
-                                     PIPE_SHADER_CAP_PREFERRED_IR) ==
-            PIPE_SHADER_IR_TGSI))) {
+          !screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
+                                    PIPE_SHADER_CAP_INTEGERS)) {
         state.type = PIPE_SHADER_IR_TGSI;
         state.tokens = nir_to_tgsi(shader->ir.nir, screen);
         is_allocated = true;
@@ -94,7 +91,7 @@ draw_create_vertex_shader(struct draw_context *draw,
 #endif
 
    if (vs) {
-      bool found_clipvertex = FALSE;
+      bool found_clipvertex = false;
       vs->position_output = -1;
       for (unsigned i = 0; i < vs->info.num_outputs; i++) {
          if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_POSITION &&
@@ -105,7 +102,7 @@ draw_create_vertex_shader(struct draw_context *draw,
             vs->edgeflag_output = i;
          } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_CLIPVERTEX &&
                   vs->info.output_semantic_index[i] == 0) {
-            found_clipvertex = TRUE;
+            found_clipvertex = true;
             vs->clipvertex_output = i;
          } else if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_VIEWPORT_INDEX) {
             vs->viewport_index_output = i;
@@ -161,7 +158,7 @@ draw_delete_vertex_shader(struct draw_context *draw,
 }
 
 
-boolean
+bool
 draw_vs_init(struct draw_context *draw)
 {
    draw->dump_vs = debug_get_option_gallium_dump_vs();
@@ -169,18 +166,18 @@ draw_vs_init(struct draw_context *draw)
    if (!draw->llvm) {
       draw->vs.tgsi.machine = tgsi_exec_machine_create(PIPE_SHADER_VERTEX);
       if (!draw->vs.tgsi.machine)
-         return FALSE;
+         return false;
    }
 
    draw->vs.emit_cache = translate_cache_create();
    if (!draw->vs.emit_cache)
-      return FALSE;
+      return false;
 
    draw->vs.fetch_cache = translate_cache_create();
    if (!draw->vs.fetch_cache)
-      return FALSE;
+      return false;
 
-   return TRUE;
+   return true;
 }
 
 

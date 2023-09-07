@@ -29,8 +29,6 @@
 #include "util/u_memory.h"
 #include "util/u_math.h"
 #include "tgsi/tgsi_parse.h"
-#include "tgsi/tgsi_text.h"
-#include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_dump.h"
 #include "lp_debug.h"
 #include "lp_state.h"
@@ -84,19 +82,19 @@
  *  performance impact it has. The ultimate purpose of detecting these shaders
  *  is to override with nearest texture filtering.
  */
-static inline boolean
+static inline bool
 match_aero_minification_shader(const struct tgsi_token *tokens,
                                const struct lp_tgsi_info *info)
 {
    struct tgsi_parse_context parse;
    unsigned coord_mask;
-   boolean has_quarter_imm;
+   bool has_quarter_imm;
    unsigned index, chan;
 
    if ((info->base.opcode_count[TGSI_OPCODE_TEX] != 4 &&
         info->base.opcode_count[TGSI_OPCODE_SAMPLE] != 4) ||
        info->num_texs != 4) {
-      return FALSE;
+      return false;
    }
 
    /*
@@ -113,20 +111,20 @@ match_aero_minification_shader(const struct tgsi_token *tokens,
           tex->coord[0].u.index != tex->coord[1].u.index ||
           (tex->coord[0].swizzle % 2) != 0 ||
           tex->coord[1].swizzle != tex->coord[0].swizzle + 1) {
-         return FALSE;
+         return false;
       }
 
       coord_mask |= 1 << (tex->coord[0].u.index*2 + tex->coord[0].swizzle/2);
    }
    if (coord_mask != 0xf) {
-      return FALSE;
+      return false;
    }
 
    /*
     * Ensure it has the 0.25 immediate.
     */
 
-   has_quarter_imm = FALSE;
+   has_quarter_imm = false;
 
    tgsi_parse_init(&parse, tokens);
 
@@ -147,7 +145,7 @@ match_aero_minification_shader(const struct tgsi_token *tokens,
             assert(size <= 4);
             for (chan = 0; chan < size; ++chan) {
                if (parse.FullToken.FullImmediate.u[chan].Float == 0.25f) {
-                  has_quarter_imm = TRUE;
+                  has_quarter_imm = true;
                   goto finished;
                }
             }
@@ -167,10 +165,10 @@ finished:
    tgsi_parse_free(&parse);
 
    if (!has_quarter_imm) {
-      return FALSE;
+      return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -397,7 +395,7 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
                   return false;
                nir_load_const_instr *load =
                   nir_instr_as_load_const(intrin->src[0].ssa->parent_instr);
-               if (load->value[0].u32 != 0)
+               if (load->value[0].u32 != 0 || load->def.num_components > 1)
                   return false;
             } else if (intrin->intrinsic == nir_intrinsic_store_deref) {
                /*
@@ -427,6 +425,9 @@ llvmpipe_nir_fn_is_linear_compat(const struct nir_shader *shader,
                      //debug nir_print_shader((nir_shader *) shader, stdout);
                      return false;
                   }
+               } else if (tex->src[i].src_type == nir_tex_src_texture_handle ||
+                          tex->src[i].src_type == nir_tex_src_sampler_handle) {
+                  return false;
                }
             }
 
@@ -511,12 +512,13 @@ static bool
 llvmpipe_nir_is_linear_compat(struct nir_shader *shader,
                               struct lp_tgsi_info *info)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         if (!llvmpipe_nir_fn_is_linear_compat(shader, function->impl, info))
-            return false;
-      }
+   int num_tex = info->num_texs;
+   info->num_texs = 0;
+   nir_foreach_function_impl(impl, shader) {
+      if (!llvmpipe_nir_fn_is_linear_compat(shader, impl, info))
+         return false;
    }
+   info->num_texs = num_tex;
    return true;
 }
 

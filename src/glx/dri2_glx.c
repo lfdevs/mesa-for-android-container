@@ -812,7 +812,7 @@ driIsThreadSafe(void *loaderPrivate)
    /* Check Xlib is running in thread safe mode
     *
     * 'lock_fns' is the XLockDisplay function pointer of the X11 display 'dpy'.
-    * It wll be NULL if XInitThreads wasn't called.
+    * It will be NULL if XInitThreads wasn't called.
     */
    return pcp->psc->dpy->lock_fns != NULL;
 }

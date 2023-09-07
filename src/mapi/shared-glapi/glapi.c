@@ -53,127 +53,29 @@ _glapi_get_dispatch_table_size(void)
 }
 
 /**
- * Fill-in the dispatch stub for the named function.
- *
- * This function is intended to be called by a hardware driver.  When called,
- * a dispatch stub may be created created for the function.  A pointer to this
- * dispatch function will be returned by glXGetProcAddress.
- *
- * \param function_names       Array of pointers to function names that should
- *                             share a common dispatch offset.
- * \param parameter_signature  String representing the types of the parameters
- *                             passed to the named function.  Parameter types
- *                             are converted to characters using the following
- *                             rules:
- *                               - 'i' for \c GLint, \c GLuint, and \c GLenum
- *                               - 'p' for any pointer type
- *                               - 'f' for \c GLfloat and \c GLclampf
- *                               - 'd' for \c GLdouble and \c GLclampd
- *
- * \returns
- * The offset in the dispatch table of the named function.  A pointer to the
- * driver's implementation of the named function should be stored at
- * \c dispatch_table[\c offset].  Return -1 if error/problem.
- *
- * \sa glXGetProcAddress
- *
- * \warning
- * This function can only handle up to 8 names at a time.  As far as I know,
- * the maximum number of names ever associated with an existing GL function is
- * 4 (\c glPointParameterfSGIS, \c glPointParameterfEXT,
- * \c glPointParameterfARB, and \c glPointParameterf), so this should not be
- * too painful of a limitation.
- *
- * \todo
- * Check parameter_signature.
+ * Initializes the glapi relocs table (no-op for shared-glapi), and returns the
+ * offset of the given function in the dispatch table.
  */
 int
-_glapi_add_dispatch( const char * const * function_names,
-		     const char * parameter_signature )
+_glapi_add_dispatch( const char * function_name )
 {
-   const struct mapi_stub *function_stubs[8];
-   const struct mapi_stub *alias = NULL;
-   unsigned i;
+   assert(function_name[0] == 'g' && function_name[1] == 'l');
 
-   (void) memset((void*)function_stubs, 0, sizeof(function_stubs));
+   const struct mapi_stub *stub = stub_find_public(function_name + 2);
+   if (!stub)
+      return -1;
 
-   /* find the missing stubs, and decide the alias */
-   for (i = 0; function_names[i] != NULL && i < 8; i++) {
-      const char * funcName = function_names[i];
-      const struct mapi_stub *stub;
-      int slot;
-
-      if (!funcName || funcName[0] != 'g' || funcName[1] != 'l')
-         return -1;
-      funcName += 2;
-
-      stub = stub_find_public(funcName);
-      if (!stub)
-         stub = stub_find_dynamic(funcName, 0);
-
-      slot = (stub) ? stub_get_slot(stub) : -1;
-      if (slot >= 0) {
-         if (alias && stub_get_slot(alias) != slot)
-            return -1;
-         /* use the first existing stub as the alias */
-         if (!alias)
-            alias = stub;
-
-         function_stubs[i] = stub;
-      }
-   }
-
-   /* generate missing stubs */
-   for (i = 0; function_names[i] != NULL && i < 8; i++) {
-      const char * funcName = function_names[i] + 2;
-      struct mapi_stub *stub;
-
-      if (function_stubs[i])
-         continue;
-
-      stub = stub_find_dynamic(funcName, 1);
-      if (!stub)
-         return -1;
-
-      stub_fix_dynamic(stub, alias);
-      if (!alias)
-         alias = stub;
-   }
-
-   return (alias) ? stub_get_slot(alias) : -1;
+   return stub_get_slot(stub);
 }
-
-#if defined(ANDROID) && ANDROID_API_LEVEL <= 30
-static int is_debug_marker_func(const char *name)
-{
-   return (!strcmp(name, "InsertEventMarkerEXT") ||
-           !strcmp(name, "PushGroupMarkerEXT") ||
-           !strcmp(name, "PopGroupMarkerEXT"));
-}
-#endif
 
 static const struct mapi_stub *
-_glapi_get_stub(const char *name, int generate)
+_glapi_get_stub(const char *name)
 {
-   const struct mapi_stub *stub;
-
    if (!name || name[0] != 'g' || name[1] != 'l')
       return NULL;
    name += 2;
 
-   stub = stub_find_public(name);
-#if defined(ANDROID) && ANDROID_API_LEVEL <= 30
-   /* Android framework till API Level 30 uses function pointers from
-    * eglGetProcAddress without checking GL_EXT_debug_marker.
-    * Make sure we don't return stub function pointers if we don't
-    * support GL_EXT_debug_marker */
-   if (!stub && !is_debug_marker_func(name))
-#else
-   if (!stub)
-#endif
-      stub = stub_find_dynamic(name, generate);
-
-   return stub;
+   return stub_find_public(name);
 }
 
 /**
@@ -182,7 +84,7 @@ _glapi_get_stub(const char *name, int generate)
 int
 _glapi_get_proc_offset(const char *funcName)
 {
-   const struct mapi_stub *stub = _glapi_get_stub(funcName, 0);
+   const struct mapi_stub *stub = _glapi_get_stub(funcName);
    return (stub) ? stub_get_slot(stub) : -1;
 }
 
@@ -194,7 +96,7 @@ _glapi_get_proc_offset(const char *funcName)
 _glapi_proc
 _glapi_get_proc_address(const char *funcName)
 {
-   const struct mapi_stub *stub = _glapi_get_stub(funcName, 1);
+   const struct mapi_stub *stub = _glapi_get_stub(funcName);
    return (stub) ? (_glapi_proc) stub_get_addr(stub) : NULL;
 }
 

@@ -24,6 +24,8 @@
 #include "nir.h"
 #include "nir_builder.h"
 
+#include "util/u_math.h"
+
 static bool
 nir_scale_fdiv_instr(nir_builder *b, nir_instr *instr, UNUSED void *_data)
 {
@@ -39,8 +41,8 @@ nir_scale_fdiv_instr(nir_builder *b, nir_instr *instr, UNUSED void *_data)
    nir_ssa_def *orig_a = nir_ssa_for_alu_src(b, alu, 0);
    nir_ssa_def *orig_b = nir_ssa_for_alu_src(b, alu, 1);
    nir_ssa_def *fabs = nir_fabs(b, orig_b);
-   nir_ssa_def *big = nir_flt(b, nir_imm_int(b, 0x7e800000), fabs);
-   nir_ssa_def *small = nir_flt(b, fabs, nir_imm_int(b, 0x00800000));
+   nir_ssa_def *big = nir_fgt_imm(b, fabs, uif(0x7e800000));
+   nir_ssa_def *small = nir_flt_imm(b, fabs, uif(0x00800000));
 
    nir_ssa_def *scaled_down_a = nir_fmul_imm(b, orig_a, 0.25);
    nir_ssa_def *scaled_down_b = nir_fmul_imm(b, orig_b, 0.25);

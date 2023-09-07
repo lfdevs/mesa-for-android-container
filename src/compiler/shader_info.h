@@ -63,6 +63,7 @@ struct spirv_supported_capabilities {
    bool float64_atomic_add;
    bool float64_atomic_min_max;
    bool float64;
+   bool fragment_barycentric;
    bool fragment_density;
    bool fragment_fully_covered;
    bool fragment_shader_pixel_interlock;
@@ -97,6 +98,7 @@ struct spirv_supported_capabilities {
    bool ray_query;
    bool ray_tracing;
    bool ray_traversal_primitive_culling;
+   bool ray_tracing_position_fetch;
    bool runtime_descriptor_array;
    bool shader_clock;
    bool shader_viewport_index_layer;
@@ -245,6 +247,7 @@ typedef struct shader_info {
    uint16_t workgroup_size[3];
 
    enum gl_subgroup_size subgroup_size;
+   uint8_t num_subgroups;
 
    /**
     * Uses subgroup intrinsics which can communicate across a quad.

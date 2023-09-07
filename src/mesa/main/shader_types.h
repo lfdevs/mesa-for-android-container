@@ -90,12 +90,12 @@ struct gl_shader_info
        * GL_TRIANGLES_ADJACENCY, or PRIM_UNKNOWN if it's not set in this
        * shader.
        */
-      enum shader_prim InputType;
+      enum mesa_prim InputType;
        /**
         * GL_POINTS, GL_LINE_STRIP or GL_TRIANGLE_STRIP, or PRIM_UNKNOWN if
         * it's not set in this shader.
         */
-      enum shader_prim OutputType;
+      enum mesa_prim OutputType;
    } Geom;
 
    /**
@@ -685,6 +685,9 @@ struct gl_program
           * programs.
           */
          GLboolean IsPositionInvariant;
+
+         /** Used by ARB_fp programs, enum gl_fog_mode */
+         unsigned Fog;
       } arb;
    };
 };
@@ -697,10 +700,10 @@ struct gl_vertex_program
    struct gl_program Base;
 
    uint32_t vert_attrib_mask; /**< mask of sourced vertex attribs */
-   ubyte num_inputs;
+   uint8_t num_inputs;
 
    /** Maps VARYING_SLOT_x to slot */
-   ubyte result_to_output[VARYING_SLOT_MAX];
+   uint8_t result_to_output[VARYING_SLOT_MAX];
 };
 
 /**

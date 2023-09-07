@@ -1,26 +1,7 @@
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
+ * SPDX-License-Identifier: MIT
  */
 /* based on pieces from si_pipe.c and radeon_llvm_emit.c */
 #include "ac_llvm_util.h"
@@ -53,13 +34,9 @@ static void ac_init_llvm_target(void)
       /* error messages prefix */
       "mesa",
       "-amdgpu-atomic-optimizations=true",
-#if LLVM_VERSION_MAJOR == 11
-      /* This fixes variable indexing on LLVM 11. It also breaks atomic.cmpswap on LLVM >= 12. */
-      "-structurizecfg-skip-uniform-regions",
-#endif
    };
 
-   ac_reset_llvm_all_options_occurences();
+   ac_reset_llvm_all_options_occurrences();
    LLVMParseCommandLineOptions(ARRAY_SIZE(argv), argv, NULL);
 
    ac_llvm_run_atexit_for_destructors();
@@ -167,17 +144,17 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
    case CHIP_NAVI21:
       return "gfx1030";
    case CHIP_NAVI22:
-      return LLVM_VERSION_MAJOR >= 12 ? "gfx1031" : "gfx1030";
+      return "gfx1031";
    case CHIP_NAVI23:
-      return LLVM_VERSION_MAJOR >= 12 ? "gfx1032" : "gfx1030";
+      return "gfx1032";
    case CHIP_VANGOGH:
-      return LLVM_VERSION_MAJOR >= 12 ? "gfx1033" : "gfx1030";
+      return "gfx1033";
    case CHIP_NAVI24:
-      return LLVM_VERSION_MAJOR >= 13 ? "gfx1034" : "gfx1030";
+      return "gfx1034";
    case CHIP_REMBRANDT:
-      return LLVM_VERSION_MAJOR >= 13 ? "gfx1035" : "gfx1030";
+      return "gfx1035";
    case CHIP_RAPHAEL_MENDOCINO:
-      return LLVM_VERSION_MAJOR >= 15 ? "gfx1036" : "gfx1030";
+      return "gfx1036";
    case CHIP_GFX1100:
       return "gfx1100";
    case CHIP_GFX1101:
@@ -255,16 +232,17 @@ void ac_llvm_set_workgroup_size(LLVMValueRef F, unsigned size)
    LLVMAddTargetDependentFunctionAttr(F, "amdgpu-flat-work-group-size", str);
 }
 
-void ac_llvm_set_target_features(LLVMValueRef F, struct ac_llvm_context *ctx)
+void ac_llvm_set_target_features(LLVMValueRef F, struct ac_llvm_context *ctx, bool wgp_mode)
 {
    char features[2048];
 
-   snprintf(features, sizeof(features), "+DumpCode%s%s",
+   snprintf(features, sizeof(features), "+DumpCode%s%s%s",
             /* GFX9 has broken VGPR indexing, so always promote alloca to scratch. */
             ctx->gfx_level == GFX9 ? ",-promote-alloca" : "",
             /* Wave32 is the default. */
             ctx->gfx_level >= GFX10 && ctx->wave_size == 64 ?
-               ",+wavefrontsize64,-wavefrontsize32" : "");
+               ",+wavefrontsize64,-wavefrontsize32" : "",
+            ctx->gfx_level >= GFX10 && !wgp_mode ? ",+cumode" : "");
 
    LLVMAddTargetDependentFunctionAttr(F, "target-features", features);
 }

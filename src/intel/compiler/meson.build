@@ -78,7 +78,6 @@ libintel_compiler_files = files(
   'brw_ir_performance.cpp',
   'brw_ir_vec4.h',
   'brw_isa_info.h',
-  'brw_kernel.c',
   'brw_lower_logical_sends.cpp',
   'brw_mesh.cpp',
   'brw_nir.h',
@@ -92,6 +91,7 @@ libintel_compiler_files = files(
   'brw_nir_lower_cs_intrinsics.c',
   'brw_nir_lower_alpha_to_coverage.c',
   'brw_nir_lower_intersection_shader.c',
+  'brw_nir_lower_non_uniform_resource_intel.c',
   'brw_nir_lower_ray_queries.c',
   'brw_nir_lower_rt_intrinsics.c',
   'brw_nir_lower_shader_calls.c',
@@ -161,7 +161,6 @@ libintel_compiler = static_library(
   [libintel_compiler_files, brw_nir_trig, ir_expression_operation_h],
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
   c_args : [no_override_init_args],
-  override_options: ['cpp_std=c++17'],
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_nir_headers, idep_mesautil, idep_intel_dev],
   build_by_default : false,
@@ -171,14 +170,14 @@ libintel_compiler = static_library(
 if with_intel_clc
   prog_intel_clc = executable(
     'intel_clc',
-    ['intel_clc.c'],
+    ['intel_clc.c', 'brw_kernel.c'],
     link_with : [
       libintel_compiler, libintel_common,libisl,
     ],
     include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_intel],
     c_args : [pre_args, no_override_init_args],
     link_args : [ld_args_build_id],
-    dependencies : [idep_nir, idep_clc, idep_mesautil, idep_intel_dev],
+    dependencies : [idep_nir, idep_vtn, idep_mesaclc, idep_mesautil, idep_intel_dev],
     native : true,
   )
 endif
@@ -207,7 +206,6 @@ if with_tests
       link_with : [
         libintel_compiler, libintel_common, libisl
       ],
-      override_options: ['cpp_std=c++17'],
       dependencies : [idep_gtest, idep_nir, idep_mesautil, idep_intel_dev],
     ),
     suite : ['intel'],

@@ -73,6 +73,7 @@ if host_machine.system() == 'windows'
     link_depends : va_link_depends,
     install : true,
     name_suffix : 'dll',
+    name_prefix : '',  # otherwise mingw will create libvaon12_drv_video.dll
   )
 else
   libva_gallium = shared_library(

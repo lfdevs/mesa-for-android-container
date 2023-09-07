@@ -40,7 +40,7 @@ caselists = [
     "/deqp/mustpass/gles2-khr-master.txt",
     "/deqp/mustpass/gles3-khr-master.txt",
     "/deqp/mustpass/gles31-khr-master.txt",
-    "/deqp/mustpass/gl45-master.txt",
+    "/deqp/mustpass/gl46-master.txt",
 ]
 skips = ["install/freedreno-a618-premerge-skips.txt"]
 deqp_args = [

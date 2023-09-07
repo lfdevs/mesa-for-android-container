@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1003 # works for us now...
+# shellcheck disable=SC2086 # we want word splitting
 
 section_switch meson-configure "meson: configure"
 
@@ -19,9 +21,9 @@ printf > native.file "%s\n" \
 # tweak the cross file or generate a native file to do so.
 if test -n "$LLVM_VERSION"; then
     LLVM_CONFIG="llvm-config-${LLVM_VERSION}"
-    echo "llvm-config = '`which $LLVM_CONFIG`'" >> native.file
+    echo "llvm-config = '$(which "$LLVM_CONFIG")'" >> native.file
     if [ -n "$CROSS" ]; then
-        sed -i -e '/\[binaries\]/a\' -e "llvm-config = '`which $LLVM_CONFIG`'" $CROSS_FILE
+      sed -i -e '/\[binaries\]/a\' -e "llvm-config = '$(which "$LLVM_CONFIG")'" $CROSS_FILE
     fi
     $LLVM_CONFIG --version
 fi
@@ -71,9 +73,9 @@ meson setup _build \
       --wrap-mode=nofallback \
       --force-fallback-for perfetto \
       ${CROSS+--cross "$CROSS_FILE"} \
-      -D prefix=`pwd`/install \
+      -D prefix=$PWD/install \
       -D libdir=lib \
-      -D buildtype=${BUILDTYPE:-debug} \
+      -D buildtype=${BUILDTYPE:?} \
       -D build-tests=true \
       -D c_args="$(echo -n $C_ARGS)" \
       -D c_link_args="$(echo -n $C_LINK_ARGS)" \
@@ -101,7 +103,7 @@ fi
 
 
 uncollapsed_section_switch meson-test "meson: test"
-LC_ALL=C.UTF-8 meson test --num-processes ${FDO_CI_CONCURRENT:-4} --print-errorlogs ${MESON_TEST_ARGS}
+LC_ALL=C.UTF-8 meson test --num-processes "${FDO_CI_CONCURRENT:-4}" --print-errorlogs ${MESON_TEST_ARGS}
 if command -V mold &> /dev/null ; then
     mold --run ninja install
 else

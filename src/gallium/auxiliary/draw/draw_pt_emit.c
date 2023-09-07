@@ -51,7 +51,7 @@ struct pt_emit {
 
 void
 draw_pt_emit_prepare(struct pt_emit *emit,
-                     enum pipe_prim_type prim,
+                     enum mesa_prim prim,
                      unsigned *max_vertices)
 {
    struct draw_context *draw = emit->draw;
@@ -137,7 +137,7 @@ draw_pt_emit(struct pt_emit *emit,
    const float (*vertex_data)[4] = (const float (*)[4])vert_info->verts->data;
    unsigned vertex_count = vert_info->count;
    unsigned stride = vert_info->stride;
-   const ushort *elts = prim_info->elts;
+   const uint16_t *elts = prim_info->elts;
    struct draw_context *draw = emit->draw;
    struct translate *translate = emit->translate;
    struct vbuf_render *render = draw->render;
@@ -160,8 +160,8 @@ draw_pt_emit(struct pt_emit *emit,
 
    assert(vertex_count <= 65535);
    render->allocate_vertices(render,
-                             (ushort)translate->key.output_stride,
-                             (ushort)vertex_count);
+                             (uint16_t)translate->key.output_stride,
+                             (uint16_t)vertex_count);
 
    hw_verts = render->map_vertices(render);
    if (!hw_verts) {
@@ -188,6 +188,15 @@ draw_pt_emit(struct pt_emit *emit,
                   0,
                   0,
                   hw_verts);
+
+   if (0) {
+      for (unsigned i = 0; i < vertex_count; i++) {
+         debug_printf("\n\n%s vertex %d:\n", __func__, i);
+         draw_dump_emitted_vertex(emit->vinfo,
+                                  (const uint8_t *)hw_verts +
+                                  translate->key.output_stride * i);
+      }
+   }
 
    render->unmap_vertices(render, 0, vertex_count - 1);
 
@@ -233,8 +242,8 @@ draw_pt_emit_linear(struct pt_emit *emit,
 
    assert(count <= 65535);
    if (!render->allocate_vertices(render,
-                                  (ushort)translate->key.output_stride,
-                                  (ushort)count))
+                                  (uint16_t)translate->key.output_stride,
+                                  (uint16_t)count))
       goto fail;
 
    hw_verts = render->map_vertices(render);

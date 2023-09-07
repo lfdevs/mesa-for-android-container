@@ -32,7 +32,7 @@
 
 #include "gallivm/lp_bld.h"
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_string.h"
 
 
@@ -80,7 +80,7 @@ void
 lp_debug_dump_value(LLVMValueRef value);
 
 
-boolean
+bool
 lp_check_alignment(const void *ptr, unsigned alignment);
 
 

@@ -99,6 +99,7 @@ xe_engine_get_info(int fd)
 
       intel_engine->engine_class = xe_engine_class_to_intel(xe_engine->engine_class);
       intel_engine->engine_instance = xe_engine->engine_instance;
+      intel_engine->gt_id = xe_engine->gt_id;
    }
 
    intel_engines_info->num_engines = engines_count;

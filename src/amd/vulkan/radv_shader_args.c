@@ -38,8 +38,7 @@ struct user_sgpr_info {
 };
 
 static void
-allocate_inline_push_consts(const struct radv_shader_info *info,
-                            struct user_sgpr_info *user_sgpr_info)
+allocate_inline_push_consts(const struct radv_shader_info *info, struct user_sgpr_info *user_sgpr_info)
 {
    uint8_t remaining_sgprs = user_sgpr_info->remaining_sgprs;
 
@@ -52,8 +51,8 @@ allocate_inline_push_consts(const struct radv_shader_info *info,
    /* Disable the default push constants path if all constants can be inlined and if shaders don't
     * use dynamic descriptors.
     */
-   if (num_push_consts <= MIN2(remaining_sgprs + 1, AC_MAX_INLINE_PUSH_CONSTS) &&
-       info->can_inline_all_push_constants && !info->loads_dynamic_offsets) {
+   if (num_push_consts <= MIN2(remaining_sgprs + 1, AC_MAX_INLINE_PUSH_CONSTS) && info->can_inline_all_push_constants &&
+       !info->loads_dynamic_offsets) {
       user_sgpr_info->inlined_all_push_consts = true;
       remaining_sgprs++;
    } else {
@@ -85,8 +84,7 @@ add_ud_arg(struct radv_shader_args *args, unsigned size, enum ac_arg_type type, 
 }
 
 static void
-add_descriptor_set(struct radv_shader_args *args, enum ac_arg_type type, struct ac_arg *arg,
-                   uint32_t set)
+add_descriptor_set(struct radv_shader_args *args, enum ac_arg_type type, struct ac_arg *arg, uint32_t set)
 {
    ac_add_arg(&args->ac, AC_ARG_SGPR, 1, type, arg);
 
@@ -99,8 +97,7 @@ add_descriptor_set(struct radv_shader_args *args, enum ac_arg_type type, struct 
 }
 
 static void
-declare_global_input_sgprs(const struct radv_shader_info *info,
-                           const struct user_sgpr_info *user_sgpr_info,
+declare_global_input_sgprs(const struct radv_shader_info *info, const struct user_sgpr_info *user_sgpr_info,
                            struct radv_shader_args *args)
 {
    if (user_sgpr_info) {
@@ -114,8 +111,7 @@ declare_global_input_sgprs(const struct radv_shader_info *info,
             add_descriptor_set(args, AC_ARG_CONST_PTR, &args->descriptor_sets[i], i);
          }
       } else {
-         add_ud_arg(args, 1, AC_ARG_CONST_PTR_PTR, &args->descriptor_sets[0],
-                    AC_UD_INDIRECT_DESCRIPTOR_SETS);
+         add_ud_arg(args, 1, AC_ARG_CONST_PTR_PTR, &args->descriptor_sets[0], AC_UD_INDIRECT_DESCRIPTOR_SETS);
       }
 
       if (info->loads_push_constants && !user_sgpr_info->inlined_all_push_consts) {
@@ -124,8 +120,7 @@ declare_global_input_sgprs(const struct radv_shader_info *info,
       }
 
       for (unsigned i = 0; i < util_bitcount64(user_sgpr_info->inline_push_constant_mask); i++) {
-         add_ud_arg(args, 1, AC_ARG_INT, &args->ac.inline_push_consts[i],
-                    AC_UD_INLINE_PUSH_CONSTANTS);
+         add_ud_arg(args, 1, AC_ARG_INT, &args->ac.inline_push_consts[i], AC_UD_INLINE_PUSH_CONSTANTS);
       }
       args->ac.inline_push_const_mask = user_sgpr_info->inline_push_constant_mask;
    }
@@ -142,11 +137,10 @@ declare_vs_specific_input_sgprs(const struct radv_shader_info *info, struct radv
    if (info->vs.has_prolog)
       add_ud_arg(args, 2, AC_ARG_INT, &args->prolog_inputs, AC_UD_VS_PROLOG_INPUTS);
 
-   if (args->type != RADV_SHADER_TYPE_GS_COPY &&
+   if (info->type != RADV_SHADER_TYPE_GS_COPY &&
        (stage == MESA_SHADER_VERTEX || previous_stage == MESA_SHADER_VERTEX)) {
       if (info->vs.vb_desc_usage_mask) {
-         add_ud_arg(args, 1, AC_ARG_CONST_DESC_PTR, &args->ac.vertex_buffers,
-                    AC_UD_VS_VERTEX_BUFFERS);
+         add_ud_arg(args, 1, AC_ARG_CONST_DESC_PTR, &args->ac.vertex_buffers, AC_UD_VS_VERTEX_BUFFERS);
       }
 
       add_ud_arg(args, 1, AC_ARG_INT, &args->ac.base_vertex, AC_UD_VS_BASE_VERTEX_START_INSTANCE);
@@ -154,18 +148,17 @@ declare_vs_specific_input_sgprs(const struct radv_shader_info *info, struct radv
          add_ud_arg(args, 1, AC_ARG_INT, &args->ac.draw_id, AC_UD_VS_BASE_VERTEX_START_INSTANCE);
       }
       if (info->vs.needs_base_instance) {
-         add_ud_arg(args, 1, AC_ARG_INT, &args->ac.start_instance,
-                    AC_UD_VS_BASE_VERTEX_START_INSTANCE);
+         add_ud_arg(args, 1, AC_ARG_INT, &args->ac.start_instance, AC_UD_VS_BASE_VERTEX_START_INSTANCE);
       }
    }
 }
 
 static void
-declare_vs_input_vgprs(enum amd_gfx_level gfx_level, const struct radv_shader_info *info,
-                       struct radv_shader_args *args, bool merged_vs_tcs)
+declare_vs_input_vgprs(enum amd_gfx_level gfx_level, const struct radv_shader_info *info, struct radv_shader_args *args,
+                       bool merged_vs_tcs)
 {
    ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.vertex_id);
-   if (args->type != RADV_SHADER_TYPE_GS_COPY) {
+   if (info->type != RADV_SHADER_TYPE_GS_COPY) {
       if (info->vs.as_ls || merged_vs_tcs) {
 
          if (gfx_level >= GFX11) {
@@ -215,8 +208,7 @@ declare_vs_input_vgprs(enum amd_gfx_level gfx_level, const struct radv_shader_in
 }
 
 static void
-declare_streamout_sgprs(const struct radv_shader_info *info, struct radv_shader_args *args,
-                        gl_shader_stage stage)
+declare_streamout_sgprs(const struct radv_shader_info *info, struct radv_shader_args *args, gl_shader_stage stage)
 {
    int i;
 
@@ -272,8 +264,6 @@ declare_ms_input_vgprs(struct radv_shader_args *args)
 static void
 declare_ps_input_vgprs(const struct radv_shader_info *info, struct radv_shader_args *args)
 {
-   unsigned spi_ps_input = info->ps.spi_ps_input;
-
    ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_INT, &args->ac.persp_sample);
    ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_INT, &args->ac.persp_center);
    ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_INT, &args->ac.persp_centroid);
@@ -291,30 +281,13 @@ declare_ps_input_vgprs(const struct radv_shader_info *info, struct radv_shader_a
    ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.sample_coverage);
    ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* fixed pt */
 
-   if (args->remap_spi_ps_input) {
-      /* LLVM optimizes away unused FS inputs and computes spi_ps_input_addr itself and then
-       * communicates the results back via the ELF binary. Mirror what LLVM does by re-mapping the
-       * VGPR arguments here.
-       */
-      for (unsigned i = 0, vgpr_arg = 0, vgpr_reg = 0; i < args->ac.arg_count; i++) {
-         if (args->ac.args[i].file != AC_ARG_VGPR) {
-            continue;
-         }
-
-         if (!(spi_ps_input & (1 << vgpr_arg))) {
-            args->ac.args[i].skip = true;
-         } else {
-            args->ac.args[i].offset = vgpr_reg;
-            vgpr_reg += args->ac.args[i].size;
-         }
-         vgpr_arg++;
-      }
-   }
+   if (args->remap_spi_ps_input)
+      ac_compact_ps_vgpr_args(&args->ac, info->ps.spi_ps_input);
 }
 
 static void
-declare_ngg_sgprs(const struct radv_shader_info *info, struct radv_shader_args *args,
-                  bool has_ngg_query, bool has_ngg_provoking_vtx)
+declare_ngg_sgprs(const struct radv_shader_info *info, struct radv_shader_args *args, bool has_ngg_query,
+                  bool has_ngg_provoking_vtx)
 {
    if (has_ngg_query)
       add_ud_arg(args, 1, AC_ARG_INT, &args->ngg_query_state, AC_UD_NGG_QUERY_STATE);
@@ -332,15 +305,13 @@ declare_ngg_sgprs(const struct radv_shader_info *info, struct radv_shader_args *
 }
 
 static void
-radv_init_shader_args(const struct radv_device *device, gl_shader_stage stage,
-                      enum radv_shader_type type, struct radv_shader_args *args)
+radv_init_shader_args(const struct radv_device *device, gl_shader_stage stage, struct radv_shader_args *args)
 {
    memset(args, 0, sizeof(*args));
 
    args->explicit_scratch_args = !radv_use_llvm_for_stage(device, stage);
    args->remap_spi_ps_input = !radv_use_llvm_for_stage(device, stage);
    args->load_grid_size_from_user_sgpr = device->load_grid_size_from_user_sgpr;
-   args->type = type;
 
    for (int i = 0; i < MAX_SETS; i++)
       args->user_sgprs_locs.descriptor_sets[i].sgpr_idx = -1;
@@ -351,33 +322,70 @@ radv_init_shader_args(const struct radv_device *device, gl_shader_stage stage,
 void
 radv_declare_rt_shader_args(enum amd_gfx_level gfx_level, struct radv_shader_args *args)
 {
-   add_ud_arg(args, 2, AC_ARG_CONST_PTR, &args->ac.rt_shader_pc, AC_UD_SCRATCH_RING_OFFSETS);
-   add_ud_arg(args, 1, AC_ARG_CONST_PTR_PTR, &args->descriptor_sets[0],
-              AC_UD_INDIRECT_DESCRIPTOR_SETS);
+   add_ud_arg(args, 2, AC_ARG_CONST_PTR, &args->ac.rt.shader_pc, AC_UD_SCRATCH_RING_OFFSETS);
+   add_ud_arg(args, 1, AC_ARG_CONST_PTR_PTR, &args->descriptor_sets[0], AC_UD_INDIRECT_DESCRIPTOR_SETS);
    ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_CONST_PTR, &args->ac.push_constants);
-   ac_add_arg(&args->ac, AC_ARG_SGPR, 2, AC_ARG_CONST_DESC_PTR, &args->ac.sbt_descriptors);
-   ac_add_arg(&args->ac, AC_ARG_SGPR, 3, AC_ARG_INT, &args->ac.ray_launch_size);
+   ac_add_arg(&args->ac, AC_ARG_SGPR, 2, AC_ARG_CONST_DESC_PTR, &args->ac.rt.sbt_descriptors);
+   ac_add_arg(&args->ac, AC_ARG_SGPR, 2, AC_ARG_CONST_PTR, &args->ac.rt.traversal_shader);
+   ac_add_arg(&args->ac, AC_ARG_SGPR, 3, AC_ARG_INT, &args->ac.rt.launch_size);
    if (gfx_level < GFX9) {
       ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.scratch_offset);
       ac_add_arg(&args->ac, AC_ARG_SGPR, 2, AC_ARG_CONST_DESC_PTR, &args->ac.ring_offsets);
    }
 
-   ac_add_arg(&args->ac, AC_ARG_VGPR, 3, AC_ARG_INT, &args->ac.ray_launch_id);
-   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt_dynamic_callable_stack_base);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 3, AC_ARG_INT, &args->ac.rt.launch_id);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.dynamic_callable_stack_base);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_CONST_PTR, &args->ac.rt.next_shader);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_CONST_PTR, &args->ac.rt.shader_record);
+
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.payload_offset);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 3, AC_ARG_FLOAT, &args->ac.rt.ray_origin);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 3, AC_ARG_FLOAT, &args->ac.rt.ray_direction);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_FLOAT, &args->ac.rt.ray_tmin);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_FLOAT, &args->ac.rt.ray_tmax);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.cull_mask_and_flags);
+
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_CONST_PTR, &args->ac.rt.accel_struct);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.sbt_offset);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.sbt_stride);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.miss_index);
+
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_CONST_PTR, &args->ac.rt.instance_addr);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.primitive_id);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.geometry_id_and_flags);
+   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.rt.hit_kind);
+}
+
+static bool
+radv_ps_needs_state_sgpr(const struct radv_shader_info *info, const struct radv_pipeline_key *key)
+{
+   if (info->ps.needs_sample_positions && key->dynamic_rasterization_samples)
+      return true;
+
+   if (key->dynamic_line_rast_mode)
+      return true;
+
+   if (info->ps.reads_sample_mask_in && (info->ps.uses_sample_shading || key->ps.sample_shading_enable))
+      return true;
+
+   /* For computing barycentrics when the primitive topology is unknown at compile time (GPL). */
+   if (info->ps.load_rasterization_prim && key->unknown_rast_prim)
+      return true;
+
+   return false;
 }
 
 static void
 declare_shader_args(const struct radv_device *device, const struct radv_pipeline_key *key,
-                    const struct radv_shader_info *info, gl_shader_stage stage,
-                    gl_shader_stage previous_stage, enum radv_shader_type type,
+                    const struct radv_shader_info *info, gl_shader_stage stage, gl_shader_stage previous_stage,
                     struct radv_shader_args *args, struct user_sgpr_info *user_sgpr_info)
 {
    const enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
    bool needs_view_index = info->uses_view_index;
    bool has_ngg_query = info->has_ngg_prim_query || info->has_ngg_xfb_query ||
                         (stage == MESA_SHADER_GEOMETRY && info->gs.has_ngg_pipeline_stat_query);
-   bool has_ngg_provoking_vtx = (stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_GEOMETRY) &&
-                                key->dynamic_provoking_vtx_mode;
+   bool has_ngg_provoking_vtx =
+      (stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_GEOMETRY) && key->dynamic_provoking_vtx_mode;
 
    if (gfx_level >= GFX10 && info->is_ngg && stage != MESA_SHADER_GEOMETRY) {
       /* Handle all NGG shaders as GS to simplify the code here. */
@@ -385,7 +393,7 @@ declare_shader_args(const struct radv_device *device, const struct radv_pipeline
       stage = MESA_SHADER_GEOMETRY;
    }
 
-   radv_init_shader_args(device, stage, type, args);
+   radv_init_shader_args(device, stage, args);
 
    if (gl_shader_stage_is_rt(stage)) {
       radv_declare_rt_shader_args(gfx_level, args);
@@ -394,8 +402,7 @@ declare_shader_args(const struct radv_device *device, const struct radv_pipeline
 
    add_ud_arg(args, 2, AC_ARG_CONST_DESC_PTR, &args->ac.ring_offsets, AC_UD_SCRATCH_RING_OFFSETS);
    if (stage == MESA_SHADER_TASK) {
-      add_ud_arg(args, 2, AC_ARG_CONST_DESC_PTR, &args->task_ring_offsets,
-                 AC_UD_CS_TASK_RING_OFFSETS);
+      add_ud_arg(args, 2, AC_ARG_CONST_DESC_PTR, &args->task_ring_offsets, AC_UD_CS_TASK_RING_OFFSETS);
    }
 
    /* For merged shaders the user SGPRs start at 8, with 8 system SGPRs in front (including
@@ -421,13 +428,10 @@ declare_shader_args(const struct radv_device *device, const struct radv_pipeline
       }
 
       if (info->cs.is_rt_shader) {
-         add_ud_arg(args, 2, AC_ARG_CONST_DESC_PTR, &args->ac.sbt_descriptors,
-                    AC_UD_CS_SBT_DESCRIPTORS);
-         add_ud_arg(args, 2, AC_ARG_CONST_PTR, &args->ac.ray_launch_size_addr,
-                    AC_UD_CS_RAY_LAUNCH_SIZE_ADDR);
-         add_ud_arg(args, 2, AC_ARG_CONST_PTR, &args->ac.rt_traversal_shader_addr,
-                    AC_UD_CS_TRAVERSAL_SHADER_ADDR);
-         add_ud_arg(args, 1, AC_ARG_INT, &args->ac.rt_dynamic_callable_stack_base,
+         add_ud_arg(args, 2, AC_ARG_CONST_DESC_PTR, &args->ac.rt.sbt_descriptors, AC_UD_CS_SBT_DESCRIPTORS);
+         add_ud_arg(args, 2, AC_ARG_CONST_PTR, &args->ac.rt.traversal_shader, AC_UD_CS_TRAVERSAL_SHADER_ADDR);
+         add_ud_arg(args, 2, AC_ARG_CONST_PTR, &args->ac.rt.launch_size_addr, AC_UD_CS_RAY_LAUNCH_SIZE_ADDR);
+         add_ud_arg(args, 1, AC_ARG_INT, &args->ac.rt.dynamic_callable_stack_base,
                     AC_UD_CS_RAY_DYNAMIC_CALLABLE_STACK_BASE);
       }
 
@@ -659,11 +663,19 @@ declare_shader_args(const struct radv_device *device, const struct radv_pipeline
          add_ud_arg(args, 1, AC_ARG_INT, &args->ps_epilog_pc, AC_UD_PS_EPILOG_PC);
       }
 
-      if (info->ps.needs_sample_positions && key->dynamic_rasterization_samples) {
-         add_ud_arg(args, 1, AC_ARG_INT, &args->ps_num_samples, AC_UD_PS_NUM_SAMPLES);
-      }
+      if (radv_ps_needs_state_sgpr(info, key))
+         add_ud_arg(args, 1, AC_ARG_INT, &args->ps_state, AC_UD_PS_STATE);
 
       ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.prim_mask);
+
+      if (info->ps.pops && gfx_level < GFX11) {
+         ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.pops_collision_wave_id);
+      }
+
+      if (info->ps.load_provoking_vtx) {
+         ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.load_provoking_vtx);
+      }
+
       if (args->explicit_scratch_args && gfx_level < GFX11) {
          ac_add_arg(&args->ac, AC_ARG_SGPR, 1, AC_ARG_INT, &args->ac.scratch_offset);
       }
@@ -677,11 +689,10 @@ declare_shader_args(const struct radv_device *device, const struct radv_pipeline
 
 void
 radv_declare_shader_args(const struct radv_device *device, const struct radv_pipeline_key *key,
-                         const struct radv_shader_info *info, gl_shader_stage stage,
-                         gl_shader_stage previous_stage, enum radv_shader_type type,
+                         const struct radv_shader_info *info, gl_shader_stage stage, gl_shader_stage previous_stage,
                          struct radv_shader_args *args)
 {
-   declare_shader_args(device, key, info, stage, previous_stage, type, args, NULL);
+   declare_shader_args(device, key, info, stage, previous_stage, args, NULL);
 
    if (gl_shader_stage_is_rt(stage))
       return;
@@ -691,8 +702,7 @@ radv_declare_shader_args(const struct radv_device *device, const struct radv_pip
       num_user_sgprs++;
 
    const enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
-   uint32_t available_sgprs =
-      gfx_level >= GFX9 && stage != MESA_SHADER_COMPUTE && stage != MESA_SHADER_TASK ? 32 : 16;
+   uint32_t available_sgprs = gfx_level >= GFX9 && stage != MESA_SHADER_COMPUTE && stage != MESA_SHADER_TASK ? 32 : 16;
    uint32_t remaining_sgprs = available_sgprs - num_user_sgprs;
 
    struct user_sgpr_info user_sgpr_info = {
@@ -710,7 +720,7 @@ radv_declare_shader_args(const struct radv_device *device, const struct radv_pip
 
    allocate_inline_push_consts(info, &user_sgpr_info);
 
-   declare_shader_args(device, key, info, stage, previous_stage, type, args, &user_sgpr_info);
+   declare_shader_args(device, key, info, stage, previous_stage, args, &user_sgpr_info);
 }
 
 void
@@ -719,7 +729,7 @@ radv_declare_ps_epilog_args(const struct radv_device *device, const struct radv_
 {
    const enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
 
-   radv_init_shader_args(device, MESA_SHADER_FRAGMENT, RADV_SHADER_TYPE_DEFAULT, args);
+   radv_init_shader_args(device, MESA_SHADER_FRAGMENT, args);
 
    ac_add_arg(&args->ac, AC_ARG_SGPR, 2, AC_ARG_CONST_DESC_PTR, &args->ac.ring_offsets);
    if (gfx_level < GFX11)

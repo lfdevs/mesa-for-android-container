@@ -36,6 +36,8 @@ static const struct debug_control tu_debug_options[] = {
    { "log_skip_gmem_ops", TU_DEBUG_LOG_SKIP_GMEM_OPS },
    { "dynamic", TU_DEBUG_DYNAMIC },
    { "bos", TU_DEBUG_BOS },
+   { "3d_load", TU_DEBUG_3D_LOAD },
+   { "fdm", TU_DEBUG_FDM },
    { NULL, 0 }
 };
 
@@ -121,13 +123,7 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
     *   used.
     */
 
-   uint32_t layers = fb->layers;
-   if (pass->subpasses[0].multiview_mask) {
-      uint32_t view_mask = 0;
-      for (unsigned i = 0; i < pass->subpass_count; i++)
-         view_mask |= pass->subpasses[i].multiview_mask;
-      layers = util_logbase2(view_mask) + 1;
-   }
+   uint32_t layers = MAX2(fb->layers, pass->num_views);
 
    /* If there is more than one layer, we need to make sure that the layer
     * stride is expressible as an offset in RB_BLIT_BASE_GMEM which ignores

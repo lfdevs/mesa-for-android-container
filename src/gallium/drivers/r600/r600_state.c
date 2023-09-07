@@ -144,13 +144,13 @@ static uint32_t r600_translate_dbformat(enum pipe_format format)
 static bool r600_is_sampler_format_supported(struct pipe_screen *screen, enum pipe_format format)
 {
 	return r600_translate_texformat(screen, format, NULL, NULL, NULL,
-                                   FALSE) != ~0U;
+                                   false) != ~0U;
 }
 
 static bool r600_is_colorbuffer_format_supported(enum amd_gfx_level chip, enum pipe_format format)
 {
-	return r600_translate_colorformat(chip, format, FALSE) != ~0U &&
-	       r600_translate_colorswap(format, FALSE) != ~0U;
+	return r600_translate_colorformat(chip, format, false) != ~0U &&
+	       r600_translate_colorswap(format, false) != ~0U;
 }
 
 static bool r600_is_zs_format_supported(enum pipe_format format)
@@ -677,7 +677,7 @@ r600_create_sampler_view_custom(struct pipe_context *ctx,
 	uint32_t word4 = 0, yuv_format = 0, pitch = 0;
 	unsigned char swizzle[4], array_mode = 0;
 	unsigned width, height, depth, offset_level, last_level;
-	bool do_endian_swap = FALSE;
+	bool do_endian_swap = false;
 
 	if (!view)
 		return NULL;
@@ -824,7 +824,7 @@ static void r600_init_color_surface(struct r600_context *rctx,
 	unsigned offset;
 	const struct util_format_description *desc;
 	int i;
-	bool blend_bypass = 0, blend_clamp = 0, do_endian_swap = FALSE;
+	bool blend_bypass = 0, blend_clamp = 0, do_endian_swap = false;
 
 	if (rtex->db_compatible && !r600_can_sample_zs(rtex, false)) {
 		r600_init_flushed_depth_texture(&rctx->b.b, surf->base.texture, NULL);
@@ -1578,13 +1578,13 @@ static void r600_emit_db_misc_state(struct r600_context *rctx, struct r600_atom 
 	if (rctx->b.gfx_level >= R700) {
 		switch (a->ps_conservative_z) {
 		default: /* fall through */
-		case TGSI_FS_DEPTH_LAYOUT_ANY:
+		case FRAG_DEPTH_LAYOUT_ANY:
 			db_render_control |= S_028D0C_CONSERVATIVE_Z_EXPORT(V_028D0C_EXPORT_ANY_Z);
 			break;
-		case TGSI_FS_DEPTH_LAYOUT_GREATER:
+		case FRAG_DEPTH_LAYOUT_GREATER:
 			db_render_control |= S_028D0C_CONSERVATIVE_Z_EXPORT(V_028D0C_EXPORT_GREATER_THAN_Z);
 			break;
-		case TGSI_FS_DEPTH_LAYOUT_LESS:
+		case FRAG_DEPTH_LAYOUT_LESS:
 			db_render_control |= S_028D0C_CONSERVATIVE_Z_EXPORT(V_028D0C_EXPORT_LESS_THAN_Z);
 			break;
 		}
@@ -2788,7 +2788,7 @@ void *r600_create_decompress_blend(struct r600_context *rctx)
 void *r600_create_db_flush_dsa(struct r600_context *rctx)
 {
 	struct pipe_depth_stencil_alpha_state dsa;
-	boolean quirk = false;
+	bool quirk = false;
 
 	if (rctx->b.family == CHIP_RV610 || rctx->b.family == CHIP_RV630 ||
 		rctx->b.family == CHIP_RV620 || rctx->b.family == CHIP_RV635)
@@ -2860,7 +2860,7 @@ static inline unsigned r600_array_mode(unsigned mode)
 	}
 }
 
-static boolean r600_dma_copy_tile(struct r600_context *rctx,
+static bool r600_dma_copy_tile(struct r600_context *rctx,
 				struct pipe_resource *dst,
 				unsigned dst_level,
 				unsigned dst_x,
@@ -2896,7 +2896,7 @@ static boolean r600_dma_copy_tile(struct r600_context *rctx,
 		slice_tile_max = (rsrc->surface.u.legacy.level[src_level].nblk_x * rsrc->surface.u.legacy.level[src_level].nblk_y) / (8*8);
 		slice_tile_max = slice_tile_max ? slice_tile_max - 1 : 0;
 		/* linear height must be the same as the slice tile max height, it's ok even
-		 * if the linear destination/source have smaller heigh as the size of the
+		 * if the linear destination/source have smaller height as the size of the
 		 * dma packet will be using the copy_height which is always smaller or equal
 		 * to the linear height
 		 */
@@ -2915,7 +2915,7 @@ static boolean r600_dma_copy_tile(struct r600_context *rctx,
 		slice_tile_max = (rdst->surface.u.legacy.level[dst_level].nblk_x * rdst->surface.u.legacy.level[dst_level].nblk_y) / (8*8);
 		slice_tile_max = slice_tile_max ? slice_tile_max - 1 : 0;
 		/* linear height must be the same as the slice tile max height, it's ok even
-		 * if the linear destination/source have smaller heigh as the size of the
+		 * if the linear destination/source have smaller height as the size of the
 		 * dma packet will be using the copy_height which is always smaller or equal
 		 * to the linear height
 		 */
@@ -2931,7 +2931,7 @@ static boolean r600_dma_copy_tile(struct r600_context *rctx,
 	}
 	/* check that we are in dw/base alignment constraint */
 	if (addr % 4 || base % 256) {
-		return FALSE;
+		return false;
 	}
 
 	/* It's a r6xx/r7xx limitation, the blit must be on 8 boundary for number
@@ -2960,7 +2960,7 @@ static boolean r600_dma_copy_tile(struct r600_context *rctx,
 		addr += cheight * pitch;
 		y += cheight;
 	}
-	return TRUE;
+	return true;
 }
 
 static void r600_dma_copy(struct pipe_context *ctx,
@@ -3059,9 +3059,9 @@ void r600_init_state_functions(struct r600_context *rctx)
 	unsigned id = 1;
 	unsigned i;
 	/* !!!
-	 *  To avoid GPU lockup registers must be emited in a specific order
+	 *  To avoid GPU lockup registers must be emitted in a specific order
 	 * (no kidding ...). The order below is important and have been
-	 * partialy infered from analyzing fglrx command stream.
+	 * partially inferred from analyzing fglrx command stream.
 	 *
 	 * Don't reorder atom without carefully checking the effect (GPU lockup
 	 * or piglit regression).
@@ -3075,8 +3075,8 @@ void r600_init_state_functions(struct r600_context *rctx)
 	r600_init_atom(rctx, &rctx->constbuf_state[PIPE_SHADER_GEOMETRY].atom, id++, r600_emit_gs_constant_buffers, 0);
 	r600_init_atom(rctx, &rctx->constbuf_state[PIPE_SHADER_FRAGMENT].atom, id++, r600_emit_ps_constant_buffers, 0);
 
-	/* sampler must be emited before TA_CNTL_AUX otherwise DISABLE_CUBE_WRAP change
-	 * does not take effect (TA_CNTL_AUX emited by r600_emit_seamless_cube_map)
+	/* sampler must be emitted before TA_CNTL_AUX otherwise DISABLE_CUBE_WRAP change
+	 * does not take effect (TA_CNTL_AUX emitted by r600_emit_seamless_cube_map)
 	 */
 	r600_init_atom(rctx, &rctx->samplers[PIPE_SHADER_VERTEX].states.atom, id++, r600_emit_vs_sampler_states, 0);
 	r600_init_atom(rctx, &rctx->samplers[PIPE_SHADER_GEOMETRY].states.atom, id++, r600_emit_gs_sampler_states, 0);

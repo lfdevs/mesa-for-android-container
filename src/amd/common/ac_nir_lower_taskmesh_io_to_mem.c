@@ -1,25 +1,7 @@
 /*
  * Copyright © 2022 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -108,7 +90,7 @@ task_draw_ready_bit(nir_builder *b,
    nir_ssa_def *workgroup_index = task_workgroup_index(b, s);
 
    nir_ssa_def *idx = nir_iadd_nuw(b, ring_entry, workgroup_index);
-   return nir_u2u8(b, nir_ubfe(b, idx, nir_imm_int(b, util_bitcount(s->num_entries - 1)), nir_imm_int(b, 1)));
+   return nir_u2u8(b, nir_ubfe_imm(b, idx, util_bitcount(s->num_entries - 1), 1));
 }
 
 static nir_ssa_def *
@@ -171,8 +153,8 @@ lower_task_launch_mesh_workgroups(nir_builder *b,
     * always a waitcnt_vscnt instruction in order to avoid a race condition
     * between payload stores and their loads after mesh shaders launch.
     */
-   nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                         .memory_scope = NIR_SCOPE_DEVICE,
+   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                         .memory_scope = SCOPE_DEVICE,
                          .memory_semantics = NIR_MEMORY_ACQ_REL,
                          .memory_modes = nir_var_mem_task_payload | nir_var_shader_out |
                                          nir_var_mem_ssbo | nir_var_mem_global);
@@ -194,7 +176,7 @@ lower_task_launch_mesh_workgroups(nir_builder *b,
       /* Dispatch dimensions of mesh shader workgroups. */
       task_write_draw_ring(b, nir_vec3(b, x, y, z), 0, s);
       /* Prevent the two stores from being reordered. */
-      nir_scoped_memory_barrier(b, NIR_SCOPE_INVOCATION, NIR_MEMORY_RELEASE, nir_var_shader_out);
+      nir_scoped_memory_barrier(b, SCOPE_INVOCATION, NIR_MEMORY_RELEASE, nir_var_shader_out);
       /* Ready bit, only write the low 8 bits. */
       task_write_draw_ring(b, task_draw_ready_bit(b, s), 12, s);
    }
@@ -290,9 +272,6 @@ ac_nir_lower_task_outputs_to_mem(nir_shader *shader,
    };
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   nir_builder builder;
-   nir_builder *b = &builder; /* This is to avoid the & */
-   nir_builder_init(b, impl);
 
    nir_shader_lower_instructions(shader,
                                  filter_task_intrinsics,

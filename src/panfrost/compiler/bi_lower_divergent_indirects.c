@@ -63,14 +63,7 @@ bi_lower_divergent_indirects_impl(nir_builder *b, nir_instr *instr, void *data)
       offset = nir_get_io_offset_src(intr);
       break;
 
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_xor:
+   case nir_intrinsic_image_texel_address:
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_store:
       /* Any image access */

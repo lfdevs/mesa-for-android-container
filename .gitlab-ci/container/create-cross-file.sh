@@ -47,7 +47,8 @@ if [[ -n "$GCC_ARCH" ]]; then
         echo "set(CMAKE_SYSTEM_PROCESSOR arm)";
         echo "set(CMAKE_C_COMPILER /usr/lib/ccache/$GCC_ARCH-gcc)";
         echo "set(CMAKE_CXX_COMPILER /usr/lib/ccache/$GCC_ARCH-g++)";
-        echo "set(ENV{PKG_CONFIG} \"/usr/bin/$GCC_ARCH-pkg-config\")";
+        echo "set(CMAKE_CXX_FLAGS_INIT \"-Wno-psabi\")";  # makes ABI warnings quiet for ARMv7
+        echo "set(ENV{PKG_CONFIG} \"/usr/bin/$GCC_ARCH-pkgconf\")";
         echo "set(DE_CPU $DE_CPU)";
     } > "$toolchain_file"
 fi

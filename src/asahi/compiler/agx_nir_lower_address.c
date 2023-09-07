@@ -20,9 +20,55 @@ struct match {
 };
 
 /*
+ * Try to match a multiplication with an immediate value. This generalizes to
+ * both imul and ishl. If successful, returns true and sets the output
+ * variables. Otherwise, returns false.
+ */
+static bool
+match_imul_imm(nir_ssa_scalar scalar, nir_ssa_scalar *variable, uint32_t *imm)
+{
+   if (!nir_ssa_scalar_is_alu(scalar))
+      return false;
+
+   nir_op op = nir_ssa_scalar_alu_op(scalar);
+   if (op != nir_op_imul && op != nir_op_ishl)
+      return false;
+
+   nir_ssa_scalar inputs[] = {
+      nir_ssa_scalar_chase_alu_src(scalar, 0),
+      nir_ssa_scalar_chase_alu_src(scalar, 1),
+   };
+
+   /* For imul check both operands for an immediate, since imul is commutative.
+    * For ishl, only check the operand on the right.
+    */
+   bool commutes = (op == nir_op_imul);
+
+   for (unsigned i = commutes ? 0 : 1; i < ARRAY_SIZE(inputs); ++i) {
+      if (!nir_ssa_scalar_is_const(inputs[i]))
+         continue;
+
+      *variable = inputs[1 - i];
+
+      uint32_t value = nir_ssa_scalar_as_uint(inputs[i]);
+
+      if (op == nir_op_imul)
+         *imm = value;
+      else
+         *imm = (1 << value);
+
+      return true;
+   }
+
+   return false;
+}
+
+/*
  * Try to rewrite (a << (#b + #c)) + #d as ((a << #b) + #d') << #c,
  * assuming that #d is a multiple of 1 << #c. This takes advantage of
  * the hardware's implicit << #c and avoids a right-shift.
+ *
+ * Similarly, try to rewrite (a * (#b << #c)) + #d as ((a * #b) + #d') << #c.
  *
  * This pattern occurs with a struct-of-array layout.
  */
@@ -42,33 +88,45 @@ match_soa(nir_builder *b, struct match *match, unsigned format_shift)
       if (!nir_ssa_scalar_is_const(summands[i]))
          continue;
 
-      unsigned offset = nir_ssa_scalar_as_uint(summands[i]);
-      unsigned offset_shifted = offset >> format_shift;
+      /* Note: This is treated as signed regardless of the sign of the match.
+       * The final addition into the base can be signed or unsigned, but when
+       * we shift right by the format shift below we need to always sign extend
+       * to ensure that any negative offset remains negative when added into
+       * the index. That is, in:
+       *
+       * addr = base + (u64)((index + offset) << shift)
+       *
+       * `index` and `offset` are always 32 bits, and a negative `offset` needs
+       * to subtract from the index, so it needs to be sign extended when we
+       * apply the format shift regardless of the fact that the later conversion
+       * to 64 bits does not sign extend.
+       *
+       * TODO: We need to confirm how the hardware handles 32-bit overflow when
+       * applying the format shift, which might need rework here again.
+       */
+      int offset = nir_ssa_scalar_as_int(summands[i]);
+      nir_ssa_scalar variable;
+      uint32_t multiplier;
 
-      /* If the constant offset is not aligned, we can't rewrite safely */
+      /* The other operand must multiply */
+      if (!match_imul_imm(summands[1 - i], &variable, &multiplier))
+         return false;
+
+      int offset_shifted = offset >> format_shift;
+      uint32_t multiplier_shifted = multiplier >> format_shift;
+
+      /* If the multiplier or the offset are not aligned, we can't rewrite */
+      if (multiplier != (multiplier_shifted << format_shift))
+         return false;
+
       if (offset != (offset_shifted << format_shift))
          return false;
 
-      /* The other operand must be ishl */
-      if (!nir_ssa_scalar_is_alu(summands[1 - i]) ||
-          nir_ssa_scalar_alu_op(summands[1 - i]) != nir_op_ishl)
-         return false;
+      /* Otherwise, rewrite! */
+      nir_ssa_def *unmultiplied = nir_vec_scalars(b, &variable, 1);
 
-      nir_ssa_scalar shifted = nir_ssa_scalar_chase_alu_src(summands[1 - i], 0);
-      nir_ssa_scalar shift = nir_ssa_scalar_chase_alu_src(summands[1 - i], 1);
-
-      /* The explicit shift must be at least as big as the implicit shift */
-      if (!nir_ssa_scalar_is_const(shift) ||
-          nir_ssa_scalar_as_uint(shift) < format_shift)
-         return false;
-
-      /* All conditions met, rewrite! */
-      nir_ssa_def *shifted_ssa = nir_vec_scalars(b, &shifted, 1);
-      uint32_t shift_u32 = nir_ssa_scalar_as_uint(shift);
-
-      nir_ssa_def *rewrite =
-         nir_iadd_imm(b, nir_ishl_imm(b, shifted_ssa, shift_u32 - format_shift),
-                      offset_shifted);
+      nir_ssa_def *rewrite = nir_iadd_imm(
+         b, nir_imul_imm(b, unmultiplied, multiplier_shifted), offset_shifted);
 
       match->offset = nir_get_ssa_scalar(rewrite, 0);
       match->shift = 0;
@@ -133,32 +191,44 @@ match_address(nir_builder *b, nir_ssa_scalar base, int8_t format_shift)
    if (!match.offset.def)
       return match;
 
-   /* But if we did, we can try to fold in an ishl from the offset */
-   if (nir_ssa_scalar_is_alu(match.offset) &&
-       nir_ssa_scalar_alu_op(match.offset) == nir_op_ishl) {
+   /* But if we did, we can try to fold in in a multiply */
+   nir_ssa_scalar multiplied;
+   uint32_t multiplier;
 
-      nir_ssa_scalar shifted = nir_ssa_scalar_chase_alu_src(match.offset, 0);
-      nir_ssa_scalar shift = nir_ssa_scalar_chase_alu_src(match.offset, 1);
+   if (match_imul_imm(match.offset, &multiplied, &multiplier)) {
+      int8_t new_shift = match.shift;
 
-      if (nir_ssa_scalar_is_const(shift)) {
-         int8_t new_shift = match.shift + nir_ssa_scalar_as_uint(shift);
+      /* Try to fold in either a full power-of-two, or just the power-of-two
+       * part of a non-power-of-two stride.
+       */
+      if (util_is_power_of_two_nonzero(multiplier)) {
+         new_shift += util_logbase2(multiplier);
+         multiplier = 1;
+      } else if (((multiplier >> format_shift) << format_shift) == multiplier) {
+         new_shift += format_shift;
+         multiplier >>= format_shift;
+      } else {
+         return match;
+      }
 
-         /* Only fold in if we wouldn't overflow the lsl field */
-         if (new_shift <= 2) {
-            match.offset = shifted;
-            match.shift = new_shift;
-         } else if (new_shift > 0) {
-            /* For large shifts, we do need an ishl instruction but we can
-             * shrink the shift to avoid generating an ishr.
-             */
-            assert(new_shift >= 3);
+      nir_ssa_def *multiplied_ssa = nir_vec_scalars(b, &multiplied, 1);
 
-            nir_ssa_def *rewrite =
-               nir_ishl_imm(b, nir_vec_scalars(b, &shifted, 1), new_shift);
+      /* Only fold in if we wouldn't overflow the lsl field */
+      if (new_shift <= 2) {
+         match.offset =
+            nir_get_ssa_scalar(nir_imul_imm(b, multiplied_ssa, multiplier), 0);
+         match.shift = new_shift;
+      } else if (new_shift > 0) {
+         /* For large shifts, we do need a multiply, but we can
+          * shrink the shift to avoid generating an ishr.
+          */
+         assert(new_shift >= 3);
 
-            match.offset = nir_get_ssa_scalar(rewrite, 0);
-            match.shift = 0;
-         }
+         nir_ssa_def *rewrite =
+            nir_imul_imm(b, multiplied_ssa, multiplier << new_shift);
+
+         match.offset = nir_get_ssa_scalar(rewrite, 0);
+         match.shift = 0;
       }
    } else {
       /* Try to match struct-of-arrays pattern, updating match if possible */
@@ -192,6 +262,8 @@ pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
    nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_global &&
        intr->intrinsic != nir_intrinsic_load_global_constant &&
+       intr->intrinsic != nir_intrinsic_global_atomic &&
+       intr->intrinsic != nir_intrinsic_global_atomic_swap &&
        intr->intrinsic != nir_intrinsic_store_global)
       return false;
 
@@ -239,27 +311,42 @@ pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
    assert(match.shift >= 0);
    nir_ssa_def *new_base = nir_channel(b, match.base.def, match.base.comp);
 
+   nir_ssa_def *repl = NULL;
+   bool has_dest = (intr->intrinsic != nir_intrinsic_store_global);
+   unsigned num_components = has_dest ? nir_dest_num_components(intr->dest) : 0;
+   unsigned bit_size = has_dest ? nir_dest_bit_size(intr->dest) : 0;
+
    if (intr->intrinsic == nir_intrinsic_load_global) {
-      nir_ssa_def *repl =
-         nir_load_agx(b, nir_dest_num_components(intr->dest),
-                      nir_dest_bit_size(intr->dest), new_base, offset,
+      repl =
+         nir_load_agx(b, num_components, bit_size, new_base, offset,
                       .access = nir_intrinsic_access(intr), .base = match.shift,
                       .format = format, .sign_extend = match.sign_extend);
 
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, repl);
    } else if (intr->intrinsic == nir_intrinsic_load_global_constant) {
-      nir_ssa_def *repl = nir_load_constant_agx(
-         b, nir_dest_num_components(intr->dest), nir_dest_bit_size(intr->dest),
-         new_base, offset, .access = nir_intrinsic_access(intr),
-         .base = match.shift, .format = format,
+      repl = nir_load_constant_agx(b, num_components, bit_size, new_base,
+                                   offset, .access = nir_intrinsic_access(intr),
+                                   .base = match.shift, .format = format,
+                                   .sign_extend = match.sign_extend);
+   } else if (intr->intrinsic == nir_intrinsic_global_atomic) {
+      offset = nir_ishl_imm(b, offset, match.shift);
+      repl =
+         nir_global_atomic_agx(b, bit_size, new_base, offset, intr->src[1].ssa,
+                               .atomic_op = nir_intrinsic_atomic_op(intr),
+                               .sign_extend = match.sign_extend);
+   } else if (intr->intrinsic == nir_intrinsic_global_atomic_swap) {
+      offset = nir_ishl_imm(b, offset, match.shift);
+      repl = nir_global_atomic_swap_agx(
+         b, bit_size, new_base, offset, intr->src[1].ssa, intr->src[2].ssa,
+         .atomic_op = nir_intrinsic_atomic_op(intr),
          .sign_extend = match.sign_extend);
-
-      nir_ssa_def_rewrite_uses(&intr->dest.ssa, repl);
    } else {
       nir_store_agx(b, intr->src[0].ssa, new_base, offset,
                     .access = nir_intrinsic_access(intr), .base = match.shift,
                     .format = format, .sign_extend = match.sign_extend);
    }
+
+   if (repl)
+      nir_ssa_def_rewrite_uses(&intr->dest.ssa, repl);
 
    nir_instr_remove(instr);
    return true;

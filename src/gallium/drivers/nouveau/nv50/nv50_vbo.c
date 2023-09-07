@@ -418,7 +418,7 @@ nv50_vertex_arrays_validate(struct nv50_context *nv50)
 }
 
 #define NV50_PRIM_GL_CASE(n) \
-   case PIPE_PRIM_##n: return NV50_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
+   case MESA_PRIM_##n: return NV50_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
 
 static inline unsigned
 nv50_prim_gl(unsigned prim)
@@ -445,22 +445,22 @@ nv50_prim_gl(unsigned prim)
 }
 
 /* For pre-nva0 transform feedback. */
-static const uint8_t nv50_pipe_prim_to_prim_size[PIPE_PRIM_MAX + 1] =
+static const uint8_t nv50_pipe_prim_to_prim_size[MESA_PRIM_COUNT + 1] =
 {
-   [PIPE_PRIM_POINTS] = 1,
-   [PIPE_PRIM_LINES] = 2,
-   [PIPE_PRIM_LINE_LOOP] = 2,
-   [PIPE_PRIM_LINE_STRIP] = 2,
-   [PIPE_PRIM_TRIANGLES] = 3,
-   [PIPE_PRIM_TRIANGLE_STRIP] = 3,
-   [PIPE_PRIM_TRIANGLE_FAN] = 3,
-   [PIPE_PRIM_QUADS] = 3,
-   [PIPE_PRIM_QUAD_STRIP] = 3,
-   [PIPE_PRIM_POLYGON] = 3,
-   [PIPE_PRIM_LINES_ADJACENCY] = 2,
-   [PIPE_PRIM_LINE_STRIP_ADJACENCY] = 2,
-   [PIPE_PRIM_TRIANGLES_ADJACENCY] = 3,
-   [PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = 3
+   [MESA_PRIM_POINTS] = 1,
+   [MESA_PRIM_LINES] = 2,
+   [MESA_PRIM_LINE_LOOP] = 2,
+   [MESA_PRIM_LINE_STRIP] = 2,
+   [MESA_PRIM_TRIANGLES] = 3,
+   [MESA_PRIM_TRIANGLE_STRIP] = 3,
+   [MESA_PRIM_TRIANGLE_FAN] = 3,
+   [MESA_PRIM_QUADS] = 3,
+   [MESA_PRIM_QUAD_STRIP] = 3,
+   [MESA_PRIM_POLYGON] = 3,
+   [MESA_PRIM_LINES_ADJACENCY] = 2,
+   [MESA_PRIM_LINE_STRIP_ADJACENCY] = 2,
+   [MESA_PRIM_TRIANGLES_ADJACENCY] = 3,
+   [MESA_PRIM_TRIANGLE_STRIP_ADJACENCY] = 3
 };
 
 static void

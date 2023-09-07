@@ -40,7 +40,7 @@ bool pvr_dump_bo_ctx_push(struct pvr_dump_bo_ctx *const ctx,
    bool did_map_bo = false;
 
    if (!bo->bo->map) {
-      if (!pvr_bo_cpu_map_unchanged(device, bo))
+      if (pvr_bo_cpu_map_unchanged(device, bo) != VK_SUCCESS)
          goto err_out;
 
       did_map_bo = true;

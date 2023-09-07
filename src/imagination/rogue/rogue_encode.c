@@ -222,6 +222,29 @@ typedef union rogue_instr_encoding {
    rogue_bitwise_instr_encoding bitwise;
 } PACKED rogue_instr_encoding;
 
+static unsigned rogue_alu_movc_ft(const rogue_ref *ref)
+{
+   switch (rogue_ref_get_io(ref)) {
+   case ROGUE_IO_NONE:
+   case ROGUE_IO_FT0:
+      return MOVW_FT0;
+
+   case ROGUE_IO_FT1:
+      return MOVW_FT1;
+
+   case ROGUE_IO_FT2:
+      return MOVW_FT2;
+
+   case ROGUE_IO_FTE:
+      return MOVW_FTE;
+
+   default:
+      break;
+   }
+
+   unreachable("Invalid source.");
+}
+
 #define SM(src_mod) ROGUE_ALU_SRC_MOD_##src_mod
 #define DM(dst_mod) ROGUE_ALU_DST_MOD_##dst_mod
 #define OM(op_mod) ROGUE_ALU_OP_MOD_##op_mod
@@ -357,39 +380,8 @@ static void rogue_encode_alu_instr(const rogue_alu_instr *alu,
       bool e3 = rogue_alu_dst_mod_is_set(alu, 0, DM(E3));
       bool e_none = !e0 && !e1 && !e2 && !e3;
 
-      switch (rogue_ref_get_io(&alu->src[1].ref)) {
-      case ROGUE_IO_FT0:
-         instr_encoding->alu.movc.movw0 = MOVW_FT0;
-         break;
-      case ROGUE_IO_FT1:
-         instr_encoding->alu.movc.movw0 = MOVW_FT1;
-         break;
-      case ROGUE_IO_FT2:
-         instr_encoding->alu.movc.movw0 = MOVW_FT2;
-         break;
-      case ROGUE_IO_FTE:
-         instr_encoding->alu.movc.movw0 = MOVW_FTE;
-         break;
-      default:
-         unreachable("Invalid source.");
-      }
-
-      switch (rogue_ref_get_io(&alu->src[2].ref)) {
-      case ROGUE_IO_FT0:
-         instr_encoding->alu.movc.movw1 = MOVW_FT0;
-         break;
-      case ROGUE_IO_FT1:
-         instr_encoding->alu.movc.movw1 = MOVW_FT1;
-         break;
-      case ROGUE_IO_FT2:
-         instr_encoding->alu.movc.movw1 = MOVW_FT2;
-         break;
-      case ROGUE_IO_FTE:
-         instr_encoding->alu.movc.movw1 = MOVW_FTE;
-         break;
-      default:
-         unreachable("Invalid source.");
-      }
+      instr_encoding->alu.movc.movw0 = rogue_alu_movc_ft(&alu->src[1].ref);
+      instr_encoding->alu.movc.movw1 = rogue_alu_movc_ft(&alu->src[2].ref);
 
       if (instr_size == 2) {
          instr_encoding->alu.movc.ext = 1;
@@ -403,14 +395,10 @@ static void rogue_encode_alu_instr(const rogue_alu_instr *alu,
          if (e_none) {
             instr_encoding->alu.movc.maskw0 = MASKW0_EALL;
          } else {
-            if (e0)
-               instr_encoding->alu.movc.maskw0 |= MASKW0_E0;
-            if (e1)
-               instr_encoding->alu.movc.maskw0 |= MASKW0_E1;
-            if (e2)
-               instr_encoding->alu.movc.maskw0 |= MASKW0_E2;
-            if (e3)
-               instr_encoding->alu.movc.maskw0 |= MASKW0_E3;
+            instr_encoding->alu.movc.maskw0 |= e0 ? MASKW0_E0 : 0;
+            instr_encoding->alu.movc.maskw0 |= e1 ? MASKW0_E1 : 0;
+            instr_encoding->alu.movc.maskw0 |= e2 ? MASKW0_E2 : 0;
+            instr_encoding->alu.movc.maskw0 |= e3 ? MASKW0_E3 : 0;
          }
       }
       break;
@@ -1316,14 +1304,14 @@ static void rogue_encode_instr_group(rogue_instr_group *group,
 }
 
 PUBLIC
-void rogue_encode_shader(UNUSED rogue_build_ctx *ctx,
+void rogue_encode_shader(rogue_build_ctx *ctx,
                          rogue_shader *shader,
                          struct util_dynarray *binary)
 {
    if (!shader->is_grouped)
       unreachable("Can't encode shader with ungrouped instructions.");
 
-   util_dynarray_init(binary, shader);
+   util_dynarray_init(binary, ctx);
 
    rogue_foreach_instr_group_in_shader (group, shader)
       rogue_encode_instr_group(group, binary);

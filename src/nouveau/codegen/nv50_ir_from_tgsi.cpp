@@ -1205,9 +1205,9 @@ void Source::scanProperty(const struct tgsi_full_property *prop)
       break;
    case TGSI_PROPERTY_TES_POINT_MODE:
       if (prop->u[0].Data)
-         info_out->prop.tp.outputPrim = PIPE_PRIM_POINTS;
+         info_out->prop.tp.outputPrim = MESA_PRIM_POINTS;
       else
-         info_out->prop.tp.outputPrim = PIPE_PRIM_TRIANGLES; /* anything but points */
+         info_out->prop.tp.outputPrim = MESA_PRIM_TRIANGLES; /* anything but points */
       break;
    case TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH:
       info->prop.cp.numThreads[0] = prop->u[0].Data;

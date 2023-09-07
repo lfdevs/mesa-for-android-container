@@ -7867,6 +7867,64 @@ static inline void vn_decode_vkCmdResolveImage2_reply(struct vn_cs_decoder *dec,
     /* skip pResolveImageInfo */
 }
 
+static inline size_t vn_sizeof_vkCmdSetColorWriteEnableEXT(VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetColorWriteEnableEXT_EXT;
+    const VkFlags cmd_flags = 0;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type) + vn_sizeof_VkFlags(&cmd_flags);
+
+    cmd_size += vn_sizeof_VkCommandBuffer(&commandBuffer);
+    cmd_size += vn_sizeof_uint32_t(&attachmentCount);
+    if (pColorWriteEnables) {
+        cmd_size += vn_sizeof_array_size(attachmentCount);
+        cmd_size += vn_sizeof_VkBool32_array(pColorWriteEnables, attachmentCount);
+    } else {
+        cmd_size += vn_sizeof_array_size(0);
+    }
+
+    return cmd_size;
+}
+
+static inline void vn_encode_vkCmdSetColorWriteEnableEXT(struct vn_cs_encoder *enc, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetColorWriteEnableEXT_EXT;
+
+    vn_encode_VkCommandTypeEXT(enc, &cmd_type);
+    vn_encode_VkFlags(enc, &cmd_flags);
+
+    vn_encode_VkCommandBuffer(enc, &commandBuffer);
+    vn_encode_uint32_t(enc, &attachmentCount);
+    if (pColorWriteEnables) {
+        vn_encode_array_size(enc, attachmentCount);
+        vn_encode_VkBool32_array(enc, pColorWriteEnables, attachmentCount);
+    } else {
+        vn_encode_array_size(enc, 0);
+    }
+}
+
+static inline size_t vn_sizeof_vkCmdSetColorWriteEnableEXT_reply(VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
+{
+    const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetColorWriteEnableEXT_EXT;
+    size_t cmd_size = vn_sizeof_VkCommandTypeEXT(&cmd_type);
+
+    /* skip commandBuffer */
+    /* skip attachmentCount */
+    /* skip pColorWriteEnables */
+
+    return cmd_size;
+}
+
+static inline void vn_decode_vkCmdSetColorWriteEnableEXT_reply(struct vn_cs_decoder *dec, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
+{
+    VkCommandTypeEXT command_type;
+    vn_decode_VkCommandTypeEXT(dec, &command_type);
+    assert(command_type == VK_COMMAND_TYPE_vkCmdSetColorWriteEnableEXT_EXT);
+
+    /* skip commandBuffer */
+    /* skip attachmentCount */
+    /* skip pColorWriteEnables */
+}
+
 static inline size_t vn_sizeof_vkCmdSetEvent2(VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo* pDependencyInfo)
 {
     const VkCommandTypeEXT cmd_type = VK_COMMAND_TYPE_vkCmdSetEvent2_EXT;
@@ -10139,6 +10197,27 @@ static inline void vn_submit_vkCmdResolveImage2(struct vn_instance *vn_instance,
     }
 }
 
+static inline void vn_submit_vkCmdSetColorWriteEnableEXT(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables, struct vn_instance_submit_command *submit)
+{
+    uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
+    void *cmd_data = local_cmd_data;
+    size_t cmd_size = vn_sizeof_vkCmdSetColorWriteEnableEXT(commandBuffer, attachmentCount, pColorWriteEnables);
+    if (cmd_size > sizeof(local_cmd_data)) {
+        cmd_data = malloc(cmd_size);
+        if (!cmd_data)
+            cmd_size = 0;
+    }
+    const size_t reply_size = cmd_flags & VK_COMMAND_GENERATE_REPLY_BIT_EXT ? vn_sizeof_vkCmdSetColorWriteEnableEXT_reply(commandBuffer, attachmentCount, pColorWriteEnables) : 0;
+
+    struct vn_cs_encoder *enc = vn_instance_submit_command_init(vn_instance, submit, cmd_data, cmd_size, reply_size);
+    if (cmd_size) {
+        vn_encode_vkCmdSetColorWriteEnableEXT(enc, cmd_flags, commandBuffer, attachmentCount, pColorWriteEnables);
+        vn_instance_submit_command(vn_instance, submit);
+        if (cmd_data != local_cmd_data)
+            free(cmd_data);
+    }
+}
+
 static inline void vn_submit_vkCmdSetEvent2(struct vn_instance *vn_instance, VkCommandFlagsEXT cmd_flags, VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo* pDependencyInfo, struct vn_instance_submit_command *submit)
 {
     uint8_t local_cmd_data[VN_SUBMIT_LOCAL_CMD_SIZE];
@@ -12025,6 +12104,25 @@ static inline void vn_async_vkCmdResolveImage2(struct vn_instance *vn_instance, 
 {
     struct vn_instance_submit_command submit;
     vn_submit_vkCmdResolveImage2(vn_instance, 0, commandBuffer, pResolveImageInfo, &submit);
+}
+
+static inline void vn_call_vkCmdSetColorWriteEnableEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
+{
+    VN_TRACE_FUNC();
+
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdSetColorWriteEnableEXT(vn_instance, VK_COMMAND_GENERATE_REPLY_BIT_EXT, commandBuffer, attachmentCount, pColorWriteEnables, &submit);
+    struct vn_cs_decoder *dec = vn_instance_get_command_reply(vn_instance, &submit);
+    if (dec) {
+        vn_decode_vkCmdSetColorWriteEnableEXT_reply(dec, commandBuffer, attachmentCount, pColorWriteEnables);
+        vn_instance_free_command_reply(vn_instance, &submit);
+    }
+}
+
+static inline void vn_async_vkCmdSetColorWriteEnableEXT(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkBool32* pColorWriteEnables)
+{
+    struct vn_instance_submit_command submit;
+    vn_submit_vkCmdSetColorWriteEnableEXT(vn_instance, 0, commandBuffer, attachmentCount, pColorWriteEnables, &submit);
 }
 
 static inline void vn_call_vkCmdSetEvent2(struct vn_instance *vn_instance, VkCommandBuffer commandBuffer, VkEvent event, const VkDependencyInfo* pDependencyInfo)

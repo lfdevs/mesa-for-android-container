@@ -291,7 +291,7 @@ u_transfer_helper_transfer_map(struct pipe_context *pctx,
    ptrans->usage = usage;
    ptrans->box   = *box;
    ptrans->stride = util_format_get_stride(format, box->width);
-   ptrans->layer_stride = ptrans->stride * box->height;
+   ptrans->layer_stride = (uint64_t)ptrans->stride * box->height;
 
    trans->staging = malloc(ptrans->layer_stride);
    if (!trans->staging)

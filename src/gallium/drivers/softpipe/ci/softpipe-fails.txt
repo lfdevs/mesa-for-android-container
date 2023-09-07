@@ -992,7 +992,6 @@ spec@!opengl 3.2@layered-rendering@clear-color-all-types 2d_multisample_array si
 spec@!opengl 3.2@minmax,Fail
 spec@!opengl 3.2@pointsprite-origin,Fail
 spec@!opengl 3.3@minmax,Fail
-spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
 spec@!opengl es 3.0@minmax,Fail
 spec@arb_blend_func_extended@arb_blend_func_extended-fbo-extended-blend-pattern_gles2,Crash
 spec@arb_color_buffer_float@gl_rgba8_snorm-render,Fail
@@ -1275,4 +1274,6 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
 
+spec@nv_shader_atomic_float@execution@ssbo-atomicexchange-float,Fail
 
+spec@arb_viewport_array@display-list,Fail

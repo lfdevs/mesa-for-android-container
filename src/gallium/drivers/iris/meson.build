@@ -24,6 +24,8 @@ files_libiris = files(
   'i915/iris_bufmgr.c',
   'i915/iris_bufmgr.h',
   'i915/iris_kmd_backend.c',
+  'xe/iris_batch.c',
+  'xe/iris_batch.h',
   'xe/iris_bufmgr.c',
   'xe/iris_bufmgr.h',
   'xe/iris_kmd_backend.c',

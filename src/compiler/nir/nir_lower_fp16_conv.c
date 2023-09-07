@@ -53,11 +53,11 @@ half_rounded(nir_builder *b, nir_ssa_def *value, nir_ssa_def *guard, nir_ssa_def
    case nir_rounding_mode_rtne:
       return nir_iadd(b, value, nir_iand(b, guard, nir_ior(b, sticky, value)));
    case nir_rounding_mode_ru:
-      sign = nir_ushr(b, sign, nir_imm_int(b, 31));
+      sign = nir_ushr_imm(b, sign, 31);
       return nir_iadd(b, value, nir_iand(b, nir_inot(b, sign),
                                             nir_ior(b, guard, sticky)));
    case nir_rounding_mode_rd:
-      sign = nir_ushr(b, sign, nir_imm_int(b, 31));
+      sign = nir_ushr_imm(b, sign, 31);
       return nir_iadd(b, value, nir_iand(b, sign,
                                             nir_ior(b, guard, sticky)));
    default:
@@ -73,10 +73,10 @@ float_to_half_impl(nir_builder *b, nir_ssa_def *src, nir_rounding_mode mode)
 
    if (src->bit_size == 64)
       src = nir_f2f32(b, src);
-   nir_ssa_def *sign = nir_iand(b, src, nir_imm_int(b, 0x80000000));
+   nir_ssa_def *sign = nir_iand_imm(b, src, 0x80000000);
    nir_ssa_def *one = nir_imm_int(b, 1);
 
-   nir_ssa_def *abs = nir_iand(b, src, nir_imm_int(b, 0x7FFFFFFF));
+   nir_ssa_def *abs = nir_iand_imm(b, src, 0x7FFFFFFF);
    /* NaN or INF. For rtne, overflow also becomes INF, so combine the comparisons */
    nir_push_if(b, nir_ige(b, abs, mode == nir_rounding_mode_rtne ? f16max : f32infinity));
    nir_ssa_def *inf_nanfp16 = nir_bcsel(b,
@@ -108,26 +108,26 @@ float_to_half_impl(nir_builder *b, nir_ssa_def *src, nir_rounding_mode mode)
 
    nir_ssa_def *zero = nir_imm_int(b, 0);
 
-   nir_push_if(b, nir_ige(b, abs, nir_imm_int(b, 113 << 23)));
+   nir_push_if(b, nir_ige_imm(b, abs, 113 << 23));
 
    /* FP16 will be normal */
    nir_ssa_def *value = nir_ior(b,
-                                nir_ishl(b,
-                                         nir_isub(b,
-                                                  nir_ushr(b, abs, nir_imm_int(b, 23)),
-                                                  nir_imm_int(b, 112)),
-                                         nir_imm_int(b, 10)),
-                                nir_iand(b, nir_ushr(b, abs, nir_imm_int(b, 13)), nir_imm_int(b, 0x3FFF)));
-   nir_ssa_def *guard = nir_iand(b, nir_ushr(b, abs, nir_imm_int(b, 12)), one);
-   nir_ssa_def *sticky = nir_bcsel(b, nir_ine(b, nir_iand(b, abs, nir_imm_int(b, 0xFFF)), zero), one, zero);
+                                nir_ishl_imm(b,
+                                             nir_iadd_imm(b,
+                                                          nir_ushr_imm(b, abs, 23),
+                                                          -112),
+                                             10),
+                                nir_iand_imm(b, nir_ushr_imm(b, abs, 13), 0x3FFF));
+   nir_ssa_def *guard = nir_iand(b, nir_ushr_imm(b, abs, 12), one);
+   nir_ssa_def *sticky = nir_bcsel(b, nir_ine(b, nir_iand_imm(b, abs, 0xFFF), zero), one, zero);
    nir_ssa_def *normal_fp16 = half_rounded(b, value, guard, sticky, sign, mode);
 
    nir_push_else(b, NULL);
-   nir_push_if(b, nir_ige(b, abs, nir_imm_int(b, 102 << 23)));
+   nir_push_if(b, nir_ige_imm(b, abs, 102 << 23));
 
    /* FP16 will be denormal */
-   nir_ssa_def *i = nir_isub(b, nir_imm_int(b, 125), nir_ushr(b, abs, nir_imm_int(b, 23)));
-   nir_ssa_def *masked = nir_ior(b, nir_iand(b, abs, nir_imm_int(b, 0x7FFFFF)), nir_imm_int(b, 0x800000));
+   nir_ssa_def *i = nir_isub_imm(b, 125, nir_ushr_imm(b, abs, 23));
+   nir_ssa_def *masked = nir_ior_imm(b, nir_iand_imm(b, abs, 0x7FFFFF), 0x800000);
    value = nir_ushr(b, masked, nir_iadd(b, i, one));
    guard = nir_iand(b, nir_ushr(b, masked, i), one);
    sticky = nir_bcsel(b, nir_ine(b, nir_iand(b, masked, nir_isub(b, nir_ishl(b, one, i), one)), zero), one, zero);
@@ -166,7 +166,7 @@ float_to_half_impl(nir_builder *b, nir_ssa_def *src, nir_rounding_mode mode)
    nir_pop_if(b, NULL);
    nir_ssa_def *fp16 = nir_if_phi(b, inf_nanfp16, finite_or_overflowed_fp16);
 
-   return nir_u2u16(b, nir_ior(b, fp16, nir_ushr(b, sign, nir_imm_int(b, 16))));
+   return nir_u2u16(b, nir_ior(b, fp16, nir_ushr_imm(b, sign, 16)));
 }
 
 static bool

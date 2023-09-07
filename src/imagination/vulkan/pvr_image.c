@@ -280,7 +280,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
    if (!iview)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   image = vk_to_pvr_image(iview->vk.image);
+   image = pvr_image_view_get_image(iview);
 
    info.type = iview->vk.view_type;
    info.base_level = iview->vk.base_mip_level;
@@ -342,7 +342,7 @@ VkResult pvr_CreateImageView(VkDevice _device,
       info.base_level = 0;
       info.tex_state_type = PVR_TEXTURE_STATE_ATTACHMENT;
 
-      if (iview->vk.image->image_type == VK_IMAGE_TYPE_3D &&
+      if (image->vk.image_type == VK_IMAGE_TYPE_3D &&
           iview->vk.view_type == VK_IMAGE_VIEW_TYPE_2D) {
          info.type = VK_IMAGE_VIEW_TYPE_3D;
       } else {
@@ -427,6 +427,7 @@ VkResult pvr_CreateBufferView(VkDevice _device,
    info.tex_state_type = PVR_TEXTURE_STATE_SAMPLE;
    info.format = bview->format;
    info.flags = PVR_TEXFLAGS_INDEX_LOOKUP;
+   info.aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT;
 
    if (PVR_HAS_FEATURE(&device->pdevice->dev_info, tpu_array_textures))
       info.array_size = 1U;

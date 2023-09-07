@@ -201,6 +201,8 @@ struct st_config_options
    char *force_gl_vendor;
    char *force_gl_renderer;
    char *mesa_extension_override;
+   bool allow_multisampled_copyteximage;
+
    unsigned char config_options_sha1[20];
 };
 

@@ -111,13 +111,13 @@ tc_fence_finish(struct zink_context *ctx, struct zink_tc_fence *mfence, uint64_t
       /* this is a tc mfence, so we're just waiting on the queue mfence to complete
        * after being signaled by the real mfence
        */
-      if (*timeout_ns == PIPE_TIMEOUT_INFINITE) {
+      if (*timeout_ns == OS_TIMEOUT_INFINITE) {
          util_queue_fence_wait(&mfence->ready);
       } else {
          if (!util_queue_fence_wait_timeout(&mfence->ready, abs_timeout))
             return false;
       }
-      if (*timeout_ns && *timeout_ns != PIPE_TIMEOUT_INFINITE) {
+      if (*timeout_ns && *timeout_ns != OS_TIMEOUT_INFINITE) {
          int64_t time_ns = os_time_get_nano();
          *timeout_ns = abs_timeout > time_ns ? abs_timeout - time_ns : 0;
       }
@@ -178,7 +178,7 @@ zink_fence_finish(struct zink_screen *screen, struct pipe_context *pctx, struct 
 
    struct zink_fence *fence = mfence->fence;
 
-   unsigned submit_diff = zink_batch_state(mfence->fence)->submit_count - mfence->submit_count;
+   unsigned submit_diff = zink_batch_state(mfence->fence)->usage.submit_count - mfence->submit_count;
    /* this batch is known to have finished because it has been submitted more than 1 time
     * since the tc fence last saw it
     */

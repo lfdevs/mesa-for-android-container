@@ -181,7 +181,7 @@ bool dump::visit(alu_packed_node& n, bool enter) {
 		}
 
 	}
-	// proccess children only if their src/dst aren't moved to this node yet
+	// process children only if their src/dst aren't moved to this node yet
 	return n.src.empty();
 }
 

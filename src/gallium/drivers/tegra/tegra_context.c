@@ -1000,7 +1000,7 @@ tegra_texture_subdata(struct pipe_context *pcontext,
                       const struct pipe_box *box,
                       const void *data,
                       unsigned stride,
-                      unsigned layer_stride)
+                      uintptr_t layer_stride)
 {
    struct tegra_resource *resource = to_tegra_resource(presource);
    struct tegra_context *context = to_tegra_context(pcontext);

@@ -34,35 +34,15 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
    switch (intr->intrinsic) {
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_store_ssbo:
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
-   case nir_intrinsic_ssbo_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_fmin:
-   case nir_intrinsic_ssbo_atomic_fmax:
-   case nir_intrinsic_ssbo_atomic_fcomp_swap:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
    case nir_intrinsic_get_ssbo_size:
       desc_offset = IR3_BINDLESS_SSBO_OFFSET;
       break;
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_store:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_comp_swap:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
    case nir_intrinsic_image_size:
    case nir_intrinsic_image_samples:
       desc_offset = IR3_BINDLESS_IMAGE_OFFSET;
@@ -82,7 +62,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
 
    unsigned set = ir3_shader_descriptor_set(b->shader->info.stage);
    nir_ssa_def *src = nir_ssa_for_src(b, intr->src[buffer_src], 1);
-   src = nir_iadd(b, src, nir_imm_int(b, desc_offset));
+   src = nir_iadd_imm(b, src, desc_offset);
    /* An out-of-bounds index into an SSBO/image array can cause a GPU fault
     * on access to the descriptor (I don't see any hw mechanism to bound the
     * access).  We could just allow the resulting iova fault (it is a read

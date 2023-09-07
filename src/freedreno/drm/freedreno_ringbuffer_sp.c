@@ -678,13 +678,13 @@ fd_ringbuffer_sp_init(struct fd_ringbuffer_sp *fd_ring, uint32_t size,
    ring->flags = flags;
 
    if (flags & _FD_RINGBUFFER_OBJECT) {
-      if (fd_dev_64b(&fd_ring->u.pipe->dev_id)) {
+      if (fd_ring->u.pipe->is_64bit) {
          ring->funcs = &ring_funcs_obj_64;
       } else {
          ring->funcs = &ring_funcs_obj_32;
       }
    } else {
-      if (fd_dev_64b(&fd_ring->u.submit->pipe->dev_id)) {
+      if (fd_ring->u.submit->pipe->is_64bit) {
          ring->funcs = &ring_funcs_nonobj_64;
       } else {
          ring->funcs = &ring_funcs_nonobj_32;

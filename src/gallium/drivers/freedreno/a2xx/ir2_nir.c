@@ -121,7 +121,6 @@ ir2_optimize_nir(nir_shader *s, bool lower)
       debug_printf("----------------------\n");
    }
 
-   OPT_V(s, nir_lower_regs_to_ssa);
    OPT_V(s, nir_lower_vars_to_ssa);
    OPT_V(s, nir_lower_indirect_derefs, nir_var_shader_in | nir_var_shader_out,
          UINT32_MAX);
@@ -1120,9 +1119,7 @@ ir2_nir_compile(struct ir2_context *ctx, bool binning)
 
    OPT_V(ctx->nir, nir_lower_alu_to_scalar, ir2_alu_to_scalar_filter_cb, NULL);
 
-   OPT_V(ctx->nir, nir_lower_locals_to_regs);
-
-   OPT_V(ctx->nir, nir_convert_from_ssa, true);
+   OPT_V(ctx->nir, nir_convert_from_ssa, true, false);
 
    OPT_V(ctx->nir, nir_move_vec_src_uses_to_dest);
    OPT_V(ctx->nir, nir_lower_vec_to_movs, NULL, NULL);

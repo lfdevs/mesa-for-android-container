@@ -541,16 +541,8 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
    }
 
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
       nir_emit_ssbo_atomic(lsc_op_to_legacy_atomic(lsc_aop_for_nir_intrinsic(instr)), instr);
       break;
 
@@ -715,7 +707,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_scoped_barrier: {
-      if (nir_intrinsic_memory_scope(instr) == NIR_SCOPE_NONE)
+      if (nir_intrinsic_memory_scope(instr) == SCOPE_NONE)
          break;
       const vec4_builder bld =
          vec4_builder(this).at_end().annotate(current_annotation, base_ir);

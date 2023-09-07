@@ -49,3 +49,27 @@ iris_xe_destroy_global_vm(struct iris_bufmgr *bufmgr)
    return intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_XE_VM_DESTROY,
                       &destroy) == 0;
 }
+
+/*
+ * Xe kmd has fixed caching modes for each heap, only scanout bos can change
+ * it.
+ */
+enum iris_mmap_mode
+iris_xe_bo_flags_to_mmap_mode(struct iris_bufmgr *bufmgr, enum iris_heap heap,
+                              unsigned flags)
+{
+   /* TODO: might be different for MTL/platforms without LLC */
+   switch (heap) {
+   case IRIS_HEAP_DEVICE_LOCAL_PREFERRED:
+      /* TODO: Can vary on current placement?! */
+      return IRIS_MMAP_WC;
+   case IRIS_HEAP_DEVICE_LOCAL:
+      return IRIS_MMAP_WC;
+   case IRIS_HEAP_SYSTEM_MEMORY:
+      if (flags & BO_ALLOC_SCANOUT)
+         return IRIS_MMAP_WC;
+      return IRIS_MMAP_WB;
+   default:
+      return IRIS_MMAP_NONE;
+   }
+}

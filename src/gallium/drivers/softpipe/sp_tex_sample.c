@@ -3519,7 +3519,7 @@ softpipe_create_sampler_state(struct pipe_context *pipe,
           sampler->wrap_t == PIPE_TEX_WRAP_REPEAT &&
           sampler->min_img_filter == PIPE_TEX_FILTER_LINEAR &&
           sampler->max_anisotropy <= 1) {
-         samp->min_mag_equal_repeat_linear = TRUE;
+         samp->min_mag_equal_repeat_linear = true;
       }
       samp->filter_funcs = &funcs_linear;
 
@@ -3545,7 +3545,7 @@ softpipe_create_sampler_state(struct pipe_context *pipe,
       break;
    }
    if (samp->min_img_filter == sampler->mag_img_filter) {
-      samp->min_mag_equal = TRUE;
+      samp->min_mag_equal = true;
    }
 
    return (void *)samp;
@@ -3627,7 +3627,7 @@ softpipe_create_sampler_view(struct pipe_context *pipe,
 #endif
 
       if (any_swizzle(view)) {
-         sview->need_swizzle = TRUE;
+         sview->need_swizzle = true;
       }
 
       sview->need_cube_convert = (view->target == PIPE_TEXTURE_CUBE ||

@@ -161,8 +161,10 @@ rebind_sampler_views(struct v3d_context *v3d,
 
                         struct v3d_sampler_view *sview =
                                 v3d_sampler_view(psview);
+                        struct v3d_device_info *devinfo =
+                                &v3d->screen->devinfo;
 
-                        v3d_create_texture_shader_state_bo(v3d, sview);
+                        v3d_X(devinfo, create_texture_shader_state_bo)(v3d, sview);
 
                         v3d_flag_dirty_sampler_state(v3d, st);
                 }
@@ -346,7 +348,7 @@ v3d_texture_subdata(struct pipe_context *pctx,
                     const struct pipe_box *box,
                     const void *data,
                     unsigned stride,
-                    unsigned layer_stride)
+                    uintptr_t layer_stride)
 {
         struct v3d_resource *rsc = v3d_resource(prsc);
         struct v3d_resource_slice *slice = &rsc->slices[level];
@@ -524,6 +526,27 @@ v3d_get_ub_pad(struct v3d_resource *rsc, uint32_t height)
         return 0;
 }
 
+/**
+ * Computes the dimension with required padding for mip levels.
+ *
+ * This padding is required for width and height dimensions when the mip
+ * level is greater than 1, and for the depth dimension when the mip level
+ * is greater than 0. This function expects to be passed a mip level >= 1.
+ *
+ * Note: Hardware documentation seems to suggest that the third argument
+ * should be the utile dimensions, but through testing it was found that
+ * the block dimension should be used instead.
+ */
+static uint32_t
+v3d_get_dimension_mpad(uint32_t dimension, uint32_t level, uint32_t block_dimension)
+{
+        assert(level >= 1);
+        uint32_t pot_dim = u_minify(dimension, 1);
+        pot_dim = util_next_power_of_two(DIV_ROUND_UP(pot_dim, block_dimension));
+        uint32_t padded_dim = block_dimension * pot_dim;
+        return u_minify(padded_dim, level - 1);
+}
+
 static void
 v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
                  bool uif_top)
@@ -532,14 +555,6 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
         uint32_t width = prsc->width0;
         uint32_t height = prsc->height0;
         uint32_t depth = prsc->depth0;
-        /* Note that power-of-two padding is based on level 1.  These are not
-         * equivalent to just util_next_power_of_two(dimension), because at a
-         * level 0 dimension of 9, the level 1 power-of-two padded value is 4,
-         * not 8.
-         */
-        uint32_t pot_width = 2 * util_next_power_of_two(u_minify(width, 1));
-        uint32_t pot_height = 2 * util_next_power_of_two(u_minify(height, 1));
-        uint32_t pot_depth = 2 * util_next_power_of_two(u_minify(depth, 1));
         uint32_t offset = 0;
         uint32_t utile_w = v3d_utile_width(rsc->cpp);
         uint32_t utile_h = v3d_utile_height(rsc->cpp);
@@ -547,6 +562,21 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
         uint32_t uif_block_h = utile_h * 2;
         uint32_t block_width = util_format_get_blockwidth(prsc->format);
         uint32_t block_height = util_format_get_blockheight(prsc->format);
+
+        /* Note that power-of-two padding is based on level 1.  These are not
+         * equivalent to just util_next_power_of_two(dimension), because at a
+         * level 0 dimension of 9, the level 1 power-of-two padded value is 4,
+         * not 8. Additionally the pot padding is based on the block size.
+         */
+        uint32_t pot_width = 2 * v3d_get_dimension_mpad(width,
+                                                        1,
+                                                        block_width);
+        uint32_t pot_height = 2 * v3d_get_dimension_mpad(height,
+                                                         1,
+                                                         block_height);
+        uint32_t pot_depth = 2 * v3d_get_dimension_mpad(depth,
+                                                        1,
+                                                        1);
         bool msaa = prsc->nr_samples > 1;
 
         /* MSAA textures/renderbuffers are always laid out as single-level
@@ -708,7 +738,9 @@ v3d_resource_setup(struct pipe_screen *pscreen,
                    const struct pipe_resource *tmpl)
 {
         struct v3d_screen *screen = v3d_screen(pscreen);
+        struct v3d_device_info *devinfo = &screen->devinfo;
         struct v3d_resource *rsc = CALLOC_STRUCT(v3d_resource);
+
         if (!rsc)
                 return NULL;
         struct pipe_resource *prsc = &rsc->base;
@@ -719,21 +751,20 @@ v3d_resource_setup(struct pipe_screen *pscreen,
         prsc->screen = pscreen;
 
         if (prsc->nr_samples <= 1 ||
-            screen->devinfo.ver >= 40 ||
+            devinfo->ver >= 40 ||
             util_format_is_depth_or_stencil(prsc->format)) {
                 rsc->cpp = util_format_get_blocksize(prsc->format);
-                if (screen->devinfo.ver < 40 && prsc->nr_samples > 1)
+                if (devinfo->ver < 40 && prsc->nr_samples > 1)
                         rsc->cpp *= prsc->nr_samples;
         } else {
-                assert(v3d_rt_format_supported(&screen->devinfo, prsc->format));
+                assert(v3d_rt_format_supported(devinfo, prsc->format));
                 uint32_t output_image_format =
-                        v3d_get_rt_format(&screen->devinfo, prsc->format);
+                        v3d_get_rt_format(devinfo, prsc->format);
                 uint32_t internal_type;
                 uint32_t internal_bpp;
-                v3d_get_internal_type_bpp_for_output_format(&screen->devinfo,
-                                                            output_image_format,
-                                                            &internal_type,
-                                                            &internal_bpp);
+                v3d_X(devinfo, get_internal_type_bpp_for_output_format)
+                   (output_image_format, &internal_type, &internal_bpp);
+
                 switch (internal_bpp) {
                 case V3D_INTERNAL_BPP_32:
                         rsc->cpp = 4;
@@ -1046,6 +1077,7 @@ v3d_create_surface(struct pipe_context *pctx,
 {
         struct v3d_context *v3d = v3d_context(pctx);
         struct v3d_screen *screen = v3d->screen;
+        struct v3d_device_info *devinfo = &screen->devinfo;
         struct v3d_surface *surface = CALLOC_STRUCT(v3d_surface);
         struct v3d_resource *rsc = v3d_resource(ptex);
 
@@ -1071,7 +1103,7 @@ v3d_create_surface(struct pipe_context *pctx,
                                            psurf->u.tex.first_layer);
         surface->tiling = slice->tiling;
 
-        surface->format = v3d_get_rt_format(&screen->devinfo, psurf->format);
+        surface->format = v3d_get_rt_format(devinfo, psurf->format);
 
         const struct util_format_description *desc =
                 util_format_description(psurf->format);
@@ -1093,9 +1125,8 @@ v3d_create_surface(struct pipe_context *pctx,
                 }
         } else {
                 uint32_t bpp, type;
-                v3d_get_internal_type_bpp_for_output_format(&screen->devinfo,
-                                                            surface->format,
-                                                            &type, &bpp);
+                v3d_X(devinfo, get_internal_type_bpp_for_output_format)
+                   (surface->format, &type, &bpp);
                 surface->internal_type = type;
                 surface->internal_bpp = bpp;
         }

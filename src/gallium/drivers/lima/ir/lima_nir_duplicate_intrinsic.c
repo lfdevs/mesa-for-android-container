@@ -47,8 +47,8 @@ lima_nir_duplicate_intrinsic(nir_builder *b, nir_intrinsic_instr *itr,
          else
             dupl->src[0].reg = itr->src[0].reg;
 
-         nir_ssa_dest_init(&dupl->instr, &dupl->dest,
-               dupl->num_components, itr->dest.ssa.bit_size, NULL);
+         nir_ssa_dest_init(&dupl->instr, &dupl->dest, dupl->num_components,
+                           itr->dest.ssa.bit_size);
 
          dupl->instr.pass_flags = 1;
          nir_builder_instr_insert(b, &dupl->instr);
@@ -80,8 +80,8 @@ lima_nir_duplicate_intrinsic(nir_builder *b, nir_intrinsic_instr *itr,
          else
             dupl->src[0].reg = itr->src[0].reg;
 
-         nir_ssa_dest_init(&dupl->instr, &dupl->dest,
-               dupl->num_components, itr->dest.ssa.bit_size, NULL);
+         nir_ssa_dest_init(&dupl->instr, &dupl->dest, dupl->num_components,
+                           itr->dest.ssa.bit_size);
 
          dupl->instr.pass_flags = 1;
          nir_builder_instr_insert(b, &dupl->instr);
@@ -103,8 +103,7 @@ static void
 lima_nir_duplicate_intrinsic_impl(nir_shader *shader, nir_function_impl *impl,
                                   nir_intrinsic_op op)
 {
-   nir_builder builder;
-   nir_builder_init(&builder, impl);
+   nir_builder builder = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr(instr, block) {

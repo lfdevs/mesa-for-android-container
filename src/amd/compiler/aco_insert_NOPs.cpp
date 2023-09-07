@@ -254,8 +254,7 @@ public:
    void join_min(const VGPRCounterMap& other)
    {
       unsigned i;
-      BITSET_FOREACH_SET(i, other.resident, 256)
-      {
+      BITSET_FOREACH_SET (i, other.resident, 256) {
          if (BITSET_TEST(resident, i))
             val[i] = MIN2(val[i] + base, other.val[i] + other.base) - base;
          else
@@ -270,8 +269,7 @@ public:
          return false;
 
       unsigned i;
-      BITSET_FOREACH_SET(i, other.resident, 256)
-      {
+      BITSET_FOREACH_SET (i, other.resident, 256) {
          if (!BITSET_TEST(resident, i))
             return false;
          if (val[i] + base != other.val[i] + other.base)
@@ -365,11 +363,11 @@ search_backwards_internal(State& state, GlobalState& global_state, BlockState bl
          return;
    }
 
-PRAGMA_DIAGNOSTIC_PUSH
-PRAGMA_DIAGNOSTIC_IGNORED(-Waddress)
+   PRAGMA_DIAGNOSTIC_PUSH
+   PRAGMA_DIAGNOSTIC_IGNORED(-Waddress)
    if (block_cb != nullptr && !block_cb(global_state, block_state, block))
       return;
-PRAGMA_DIAGNOSTIC_POP
+   PRAGMA_DIAGNOSTIC_POP
 
    for (unsigned lin_pred : block->linear_preds) {
       search_backwards_internal<GlobalState, BlockState, block_cb, instr_cb>(

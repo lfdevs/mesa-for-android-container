@@ -31,7 +31,6 @@
 #include "sfn_instr_export.h"
 #include "sfn_instr_fetch.h"
 #include "sfn_instr_tex.h"
-#include "tgsi/tgsi_from_mesa.h"
 
 #include <sstream>
 
@@ -43,10 +42,6 @@ FragmentShader::FragmentShader(const r600_shader_key& key):
     Shader("FS", key.ps.first_atomic_counter),
     m_dual_source_blend(key.ps.dual_source_blend),
     m_max_color_exports(MAX2(key.ps.nr_cbufs, 1)),
-    m_export_highest(0),
-    m_num_color_exports(0),
-    m_color_export_mask(0),
-    m_last_pixel_export(nullptr),
     m_pos_input(127, false),
     m_fs_write_all(false),
     m_apply_sample_mask(key.ps.apply_sample_id_mask),
@@ -172,7 +167,7 @@ FragmentShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
                                     value_factory().src(intr->src[0], 0),
                                     value_factory().zero(),
                                     {AluInstr::last}));
-      start_new_block(0);
+
       return true;
    case nir_intrinsic_discard:
       m_uses_discard = true;
@@ -181,7 +176,6 @@ FragmentShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
                                     value_factory().zero(),
                                     value_factory().zero(),
                                     {AluInstr::last}));
-      start_new_block(0);
       return true;
    case nir_intrinsic_load_sample_mask_in:
       if (m_apply_sample_mask) {
@@ -508,19 +502,22 @@ FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr)
 
       for (unsigned k = 0; k < color_outputs; ++k) {
 
-         unsigned location =
-            (m_dual_source_blend && (semantics.location == FRAG_RESULT_COLOR)
-                ? semantics.dual_source_blend_index
-                : driver_location) + k;
+         unsigned location = semantics.location - FRAG_RESULT_DATA0;
 
-         sfn_log << SfnLog::io << "Pixel output at loc:" << location << "\n";
+         if (semantics.location == FRAG_RESULT_COLOR)
+            location = driver_location + k;
+
+         if (semantics.dual_source_blend_index)
+            location = semantics.dual_source_blend_index;
+
+         sfn_log << SfnLog::io << "Pixel output at loc:" << location
+                 << "("<< semantics.location << ") of "<< m_max_color_exports<<"\n";
 
          if (location >= m_max_color_exports) {
             sfn_log << SfnLog::io << "Pixel output loc:" << location
                     << " dl:" << driver_location << " skipped  because  we have only "
                     << m_max_color_exports << " CBs\n";
             return true;
-            ;
          }
 
          m_last_pixel_export = new ExportInstr(ExportInstr::pixel, location, value);
@@ -532,13 +529,21 @@ FragmentShader::emit_export_pixel(nir_intrinsic_instr& intr)
 
          /* Hack: force dual source output handling if one color output has a
           * dual_source_blend_index > 0 */
-         if (semantics.location == FRAG_RESULT_COLOR &&
-             semantics.dual_source_blend_index > 0)
+         if (semantics.dual_source_blend_index > 0)
             m_dual_source_blend = true;
 
          if (m_num_color_exports > 1)
             m_fs_write_all = false;
          unsigned mask = (0xfu << (location * 4));
+
+         m_color_export_written_mask |= (1 << location);
+
+         /* If the i-th target format is set, all previous target formats must
+          * be non-zero to avoid hangs. - from radeonsi, seems to apply to eg as well.
+          /*/
+         for (unsigned i = 0; i < location; ++i)
+            mask |= (0x1u << (i * 4));
+
          m_color_export_mask |= mask;
 
          emit_instruction(m_last_pixel_export);
@@ -582,6 +587,27 @@ FragmentShader::emit_load_sample_pos(nir_intrinsic_instr *instr)
 void
 FragmentShader::do_finalize()
 {
+   /* On pre-evergreen not emtting something to all color exports that
+    * are enabled might lead to a hang.
+    * see: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9223
+    */
+   if (chip_class() < ISA_CC_EVERGREEN) {
+      unsigned i = 0;
+      unsigned mask = m_color_export_mask;
+
+      while (i < m_max_color_exports && (mask & (1u << (4 * i)))) {
+         if (!(m_color_export_written_mask & (1u << i))) {
+            RegisterVec4 value(0, false, {7, 7, 7, 7});
+            m_last_pixel_export = new ExportInstr(ExportInstr::pixel, i, value);
+            emit_instruction(m_last_pixel_export);
+            m_num_color_exports++;
+            if (m_export_highest < i)
+               m_export_highest = i;
+         }
+         ++i;
+      }
+   }
+
    if (!m_last_pixel_export) {
       RegisterVec4 value(0, false, {7, 7, 7, 7});
       m_last_pixel_export = new ExportInstr(ExportInstr::pixel, 0, value);

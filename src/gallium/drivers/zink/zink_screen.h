@@ -31,9 +31,6 @@
 extern "C" {
 #endif
 
-extern uint32_t zink_debug;
-extern bool zink_tracing;
-
 struct util_dl_library;
 
 void
@@ -99,6 +96,22 @@ zink_screen_handle_vkresult(struct zink_screen *screen, VkResult ret)
       break;
    }
    return success;
+}
+
+typedef const char *(*zink_vkflags_func)(uint64_t);
+
+static inline unsigned
+zink_string_vkflags_unroll(char *buf, size_t bufsize, uint64_t flags, zink_vkflags_func func)
+{
+   bool first = true;
+   unsigned idx = 0;
+   u_foreach_bit64(bit, flags) {
+      if (!first)
+         buf[idx++] = '|';
+      idx += snprintf(&buf[idx], bufsize - idx, "%s", func((BITFIELD64_BIT(bit))));
+      first = false;
+   }
+   return idx;
 }
 
 VkSemaphore

@@ -29,6 +29,9 @@ spec@!opengl 1.4@triangle-rasterization-overdraw
 spec@!opengl 1.1@streaming-texture-leak
 spec@!opengl 1.2@tex3d-maxsize
 
+# Allocates >1GB CPU memory and more GPU, and ooms.
+ppgtt_memory_alignment
+
 # slow
 shaders@glsl-predication-on-large-array
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-giant-temp-array

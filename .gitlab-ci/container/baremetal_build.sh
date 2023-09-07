@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 set -o xtrace
 
-# Fetch the arm-built rootfs image and unpack it in our x86 container (saves
+# Fetch the arm-built rootfs image and unpack it in our x86_64 container (saves
 # network transfer, disk usage, and runtime on test jobs)
 
 # shellcheck disable=SC2154 # arch is assigned in previous scripts

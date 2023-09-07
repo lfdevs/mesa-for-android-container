@@ -55,6 +55,15 @@ struct vn_feedback_cmd_pool {
    VkCommandPool pool;
 };
 
+/* coherent buffer with bound and mapped memory */
+struct vn_feedback_buffer {
+   VkBuffer buffer;
+   VkDeviceMemory memory;
+   void *data;
+
+   struct list_head head;
+};
+
 VkResult
 vn_feedback_pool_init(struct vn_device *dev,
                       struct vn_feedback_pool *pool,
@@ -109,12 +118,36 @@ vn_feedback_set_counter(struct vn_feedback_slot *slot, uint64_t counter)
    *slot->counter = counter;
 }
 
+VkResult
+vn_feedback_buffer_create(struct vn_device *dev,
+                          uint32_t size,
+                          const VkAllocationCallbacks *alloc,
+                          struct vn_feedback_buffer **out_feedback_buf);
+
+void
+vn_feedback_buffer_destroy(struct vn_device *dev,
+                           struct vn_feedback_buffer *feedback_buf,
+                           const VkAllocationCallbacks *alloc);
+
 void
 vn_feedback_event_cmd_record(VkCommandBuffer cmd_handle,
                              VkEvent ev_handle,
                              VkPipelineStageFlags2 src_stage_mask,
                              VkResult status,
                              bool sync2);
+
+void
+vn_feedback_query_copy_cmd_record(VkCommandBuffer commandBuffer,
+                                  VkQueryPool queryPool,
+                                  uint32_t query,
+                                  uint32_t queryCount);
+
+void
+vn_feedback_query_reset_cmd_record(VkCommandBuffer commandBuffer,
+                                   VkQueryPool queryPool,
+                                   uint32_t query,
+                                   uint32_t queryCount);
+
 VkResult
 vn_feedback_cmd_alloc(VkDevice dev_handle,
                       struct vn_feedback_cmd_pool *pool,

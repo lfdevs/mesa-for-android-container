@@ -32,48 +32,73 @@ below.
 Vertex shader
 `````````````
 
-A vertex shader (running on the Unified Shader Cores) outputs varyings with the
+A vertex shader (running on the :term:`Unified Shader Cores`) outputs varyings with the
 ``st_var`` instruction. ``st_var`` takes a *vertex output index* and a 32-bit
 value. The maximum number of *vertex outputs* is specified as the "output count"
 of the shader in the "Bind Vertex Pipeline" packet. The value may be interpreted
 consist of a single 32-bit value or an aligned 16-bit register pair, depending
 on whether interpolation should happen at 32-bit or 16-bit. Vertex outputs are
 indexed starting from 0, with the *vertex position* always coming first, the
-32-bit user varyings coming next, then 16-bit user varyings, and finally *point
-size* and *clip distances* at the end if present. Note that *clip distances* are
-not accessible from the fragment shader; if the fragment shader needs to read
-the interpolated clip distance, the vertex shader must *also* write the clip
-distance values to a user varying for the fragment shader to interpolate. Also
-note there is no clip plane enable mask anywhere; that must lowered for APIs
-that require this (OpenGL but not Vulkan).
+32-bit user varyings coming next with perspective, flat, and linear interpolated
+varyings grouped in that order, then 16-bit user varyings with the same groupings,
+and finally *point size* and *clip distances* at the end if present. Note that
+*clip distances* are not accessible from the fragment shader; if the fragment
+shader needs to read the interpolated clip distance, the vertex shader must
+*also* write the clip distance values to a user varying for the fragment shader
+to interpolate. Also note there is no clip plane enable mask anywhere; that must
+lowered for APIs that require this (OpenGL but not Vulkan).
 
 .. list-table:: Ordering of vertex outputs with all outputs used
    :widths: 25 75
    :header-rows: 1
 
-   * - Index
+   * - Size (words)
      - Value
-   * - 0
-     - Vertex position
    * - 4
-     - 32-bit varying 0
+     - Vertex position
+   * - 1
+     - 32-bit smooth varying 0
    * -
      - ...
-   * - 4 + m
-     - 32-bit varying m
-   * - 4 + m + 1
-     - Packed pair of 16-bit varyings 0
+   * - 1
+     - 32-bit smooth varying m
+   * - 1
+     - 32-bit flat varying 0
    * -
      - ...
-   * - 4 + m + 1 + n
-     - Packed pair of 16-bit varyings n
-   * - 4 + m + 1 + n + 1
+   * - 1
+     - 32-bit flat varying n
+   * - 1
+     - 32-bit linear varying 0
+   * -
+     - ...
+   * - 1
+     - 32-bit linear varying o
+   * - 1
+     - Packed pair of 16-bit smooth varyings 0
+   * -
+     - ...
+   * - 1
+     - Packed pair of 16-bit smooth varyings p
+   * - 1
+     - Packed pair of 16-bit flat varyings 0
+   * -
+     - ...
+   * - 1
+     - Packed pair of 16-bit flat varyings q
+   * - 1
+     - Packed pair of 16-bit linear varyings 0
+   * -
+     - ...
+   * - 1
+     - Packed pair of 16-bit linear varyings r
+   * - 1
      - Point size
-   * - 4 + m + 1 + n + 2 + 0
+   * - 1
      - Clip distance for plane 0
    * -
      - ...
-   * - 4 + m + 1 + n + 2 + 15
+   * - 1
      - Clip distance for plane 15
 
 Remapping
@@ -295,3 +320,40 @@ with the IR:
 
 The drm-shim implementation for Asahi is located in ``src/asahi/drm-shim``. The
 drm-shim implementation there should be updated as new UABI is added.
+
+Hardware glossary
+-----------------
+
+AGX is a tiled renderer descended from the PowerVR architecture. Some hardware
+concepts used in PowerVR GPUs appear in AGX.
+
+.. glossary:: :sorted:
+
+   VDM
+   Vertex Data Master
+      Dispatches vertex shaders.
+
+   PDM
+   Pixel Data Master
+      Dispatches pixel shaders.
+
+   CDM
+   Compute Data Master
+      Dispatches compute kernels.
+
+   USC
+   Unified Shader Cores
+      A unified shader core is a small cpu that runs shader code. The core is
+      unified because a single ISA is used for vertex, pixel and compute
+      shaders. This differs from older GPUs where the vertex, fragment and
+      compute have separate ISAs for shader stages.
+
+   PPP
+   Primitive Processing Pipeline
+      The Primitive Processing Pipeline is a hardware unit that does primitive
+      assembly. The PPP is between the :term:`VDM` and :term:`ISP`.
+
+   ISP
+   Image Synthesis Processor
+      The Image Synthesis Processor is responsible for the rasterization stage
+      of the rendering pipeline.

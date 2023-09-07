@@ -15,7 +15,9 @@ agx_const_buffer_ptr(struct agx_batch *batch, struct pipe_constant_buffer *cb)
 
       return rsrc->bo->ptr.gpu + cb->buffer_offset;
    } else {
-      return 0;
+      return agx_pool_upload_aligned(
+         &batch->pool, ((uint8_t *)cb->user_buffer) + cb->buffer_offset,
+         cb->buffer_size - cb->buffer_offset, 64);
    }
 }
 
@@ -85,9 +87,22 @@ agx_upload_uniforms(struct agx_batch *batch, uint64_t textures,
       u_foreach_bit(vbo, ctx->vb_mask) {
          uniforms.vs.vbo_base[vbo] = agx_vertex_buffer_ptr(batch, vbo);
       }
+
+      if (ctx->streamout.key.active) {
+         uniforms.vs.xfb = ctx->streamout.params;
+
+         for (unsigned i = 0; i < batch->ctx->streamout.num_targets; ++i) {
+            uint32_t size = 0;
+            uniforms.vs.xfb.base[i] = agx_batch_get_so_address(batch, i, &size);
+            uniforms.vs.xfb.size[i] = size;
+         }
+      }
    } else if (stage == PIPE_SHADER_FRAGMENT) {
       memcpy(uniforms.fs.blend_constant, &ctx->blend_color,
              sizeof(ctx->blend_color));
+
+      uniforms.fs.sample_mask = ctx->sample_mask;
+      uniforms.fs.ppp_multisamplectl = batch->ppp_multisamplectl;
    }
 
    memcpy(root_ptr.cpu, &uniforms, sizeof(uniforms));

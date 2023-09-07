@@ -241,8 +241,7 @@ brw_nir_opt_peephole_ffma_instr(nir_builder *b,
    assert(add->dest.dest.is_ssa);
 
    nir_ssa_dest_init(&ffma->instr, &ffma->dest.dest,
-                     add->dest.dest.ssa.num_components,
-                     bit_size, NULL);
+                     add->dest.dest.ssa.num_components, bit_size);
    nir_ssa_def_rewrite_uses(&add->dest.dest.ssa, &ffma->dest.dest.ssa);
 
    nir_builder_instr_insert(b, &ffma->instr);

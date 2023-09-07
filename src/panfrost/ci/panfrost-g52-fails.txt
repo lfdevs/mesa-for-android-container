@@ -54,8 +54,6 @@ spec@arb_depth_buffer_float@fbo-stencil-gl_depth32f_stencil8-readpixels,Fail
 spec@arb_depth_clamp@depth-clamp-range,Fail
 spec@arb_direct_state_access@gettextureimage-formats,Fail
 spec@arb_direct_state_access@gettextureimage-formats init-by-rendering,Fail
-spec@arb_es2_compatibility@fbo-blending-formats,Fail
-spec@arb_es2_compatibility@fbo-blending-formats@GL_RGB565,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit depth gl_depth32f_stencil8,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit depth_stencil gl_depth32f_stencil8,Fail
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_depth32f_stencil8,Fail
@@ -187,7 +185,6 @@ spec@ext_framebuffer_object@fbo-alphatest-formats@GL_INTENSITY4,Fail
 spec@ext_framebuffer_object@fbo-alphatest-formats@GL_INTENSITY8,Fail
 spec@ext_framebuffer_object@fbo-alphatest-formats@GL_INTENSITY,Fail
 spec@ext_framebuffer_object@fbo-blending-format-quirks,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@3,Fail
 spec@ext_framebuffer_object@fbo-blending-formats,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA4,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_ALPHA8,Fail
@@ -201,10 +198,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8_ALPHA8,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE8,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE_ALPHA,Fail
 spec@ext_framebuffer_object@fbo-blending-formats@GL_LUMINANCE,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_R3_G3_B2,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB10,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB8,Fail
-spec@ext_framebuffer_object@fbo-blending-formats@GL_RGB,Fail
 spec@ext_framebuffer_object@fbo-blending-snorm,Fail
 spec@ext_framebuffer_object@fbo-clear-formats,Fail
 spec@ext_framebuffer_object@fbo-clear-formats@GL_INTENSITY4,Fail
@@ -253,6 +246,7 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416,Crash
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420,Crash
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv,Crash
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Crash
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Crash
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-unsupported_format,Crash
 spec@ext_packed_float@query-rgba-signed-components,Fail
 spec@ext_texture_srgb@fbo-fast-clear,Fail
@@ -496,7 +490,6 @@ spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
-spec@!opengl 1.0@gl-1.0-spot-light,Fail
 spec@!opengl 1.0@rasterpos,Crash
 spec@!opengl 1.1@getteximage-formats,Fail
 spec@!opengl 1.1@linestipple@Factor 2x,Fail

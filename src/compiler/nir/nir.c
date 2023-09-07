@@ -85,8 +85,8 @@ static const struct debug_named_value nir_debug_control[] = {
      "Dump resulting callable shader after each successful lowering/optimization call" },
    { "print_ks", NIR_DEBUG_PRINT_KS,
      "Dump resulting kernel shader after each successful lowering/optimization call" },
-   { "print_consts", NIR_DEBUG_PRINT_CONSTS,
-     "Print const value near each use of const SSA variable" },
+   { "print_no_inline_consts", NIR_DEBUG_PRINT_NO_INLINE_CONSTS,
+     "Do not print const value near each use of const SSA variable" },
    { "print_internal", NIR_DEBUG_PRINT_INTERNAL,
      "Print shaders even if they are marked as internal" },
    DEBUG_NAMED_VALUE_END
@@ -324,6 +324,93 @@ nir_local_variable_create(nir_function_impl *impl,
 }
 
 nir_variable *
+nir_state_variable_create(nir_shader *shader,
+                          const struct glsl_type *type,
+                          const char *name,
+                          const gl_state_index16 tokens[STATE_LENGTH])
+{
+   nir_variable *var = nir_variable_create(shader, nir_var_uniform, type, name);
+   var->num_state_slots = 1;
+   var->state_slots = rzalloc_array(var, nir_state_slot, 1);
+   memcpy(var->state_slots[0].tokens, tokens,
+          sizeof(var->state_slots[0].tokens));
+   shader->num_uniforms++;
+   return var;
+}
+
+nir_variable *
+nir_create_variable_with_location(nir_shader *shader, nir_variable_mode mode, int location,
+                                  const struct glsl_type *type)
+{
+   /* Only supporting non-array, or arrayed-io types, because otherwise we don't
+    * know how much to increment num_inputs/outputs
+    */
+   assert(glsl_get_length(type) <= 1);
+
+   const char *name;
+   switch (mode) {
+   case nir_var_shader_in:
+      if (shader->info.stage == MESA_SHADER_VERTEX)
+         name = gl_vert_attrib_name(location);
+      else
+         name = gl_varying_slot_name_for_stage(location, shader->info.stage);
+      break;
+
+   case nir_var_shader_out:
+      if (shader->info.stage == MESA_SHADER_FRAGMENT)
+         name = gl_frag_result_name(location);
+      else
+         name = gl_varying_slot_name_for_stage(location, shader->info.stage);
+      break;
+
+   case nir_var_system_value:
+      name = gl_system_value_name(location);
+      break;
+
+   default:
+      unreachable("Unsupported variable mode");
+   }
+
+   nir_variable *var = nir_variable_create(shader, mode, type, name);
+   var->data.location = location;
+
+   switch (mode) {
+   case nir_var_shader_in:
+      var->data.driver_location = shader->num_inputs++;
+      break;
+
+   case nir_var_shader_out:
+      var->data.driver_location = shader->num_outputs++;
+      break;
+
+   case nir_var_system_value:
+      break;
+
+   default:
+      unreachable("Unsupported variable mode");
+   }
+
+   return var;
+}
+
+nir_variable *
+nir_get_variable_with_location(nir_shader *shader, nir_variable_mode mode, int location,
+                               const struct glsl_type *type)
+{
+   nir_variable *var = nir_find_variable_with_location(shader, mode, location);
+   if (var) {
+      /* If this shader has location_fracs, this builder function is not suitable. */
+      assert(var->data.location_frac == 0);
+
+      /* The variable for the slot should match what we expected. */
+      assert(type == var->type);
+      return var;
+   }
+
+   return nir_create_variable_with_location(shader, mode, location, type);
+}
+
+nir_variable *
 nir_find_variable_with_location(nir_shader *shader,
                                 nir_variable_mode mode,
                                 unsigned location)
@@ -344,6 +431,19 @@ nir_find_variable_with_driver_location(nir_shader *shader,
    assert(util_bitcount(mode) == 1 && mode != nir_var_function_temp);
    nir_foreach_variable_with_modes(var, shader, mode) {
       if (var->data.driver_location == location)
+         return var;
+   }
+   return NULL;
+}
+
+nir_variable *
+nir_find_state_variable(nir_shader *s,
+                        gl_state_index16 tokens[STATE_LENGTH])
+{
+   nir_foreach_variable_with_modes(var, s, nir_var_uniform) {
+      if (var->num_state_slots == 1 &&
+          !memcmp(var->state_slots[0].tokens, tokens,
+                  sizeof(var->state_slots[0].tokens)))
          return var;
    }
    return NULL;
@@ -567,10 +667,7 @@ nir_function_impl_create(nir_function *function)
    assert(function->impl == NULL);
 
    nir_function_impl *impl = nir_function_impl_create_bare(function->shader);
-
-   function->impl = impl;
-   impl->function = function;
-
+   nir_function_set_impl(function, impl);
    return impl;
 }
 
@@ -1496,11 +1593,7 @@ nir_foreach_phi_src_leaving_block(nir_block *block,
       if (block->successors[i] == NULL)
          continue;
 
-      nir_foreach_instr(instr, block->successors[i]) {
-         if (instr->type != nir_instr_type_phi)
-            break;
-
-         nir_phi_instr *phi = nir_instr_as_phi(instr);
+      nir_foreach_phi(phi, block->successors[i]) {
          nir_foreach_phi_src(phi_src, phi) {
             if (phi_src->pred == block) {
                if (!cb(&phi_src->src, state))
@@ -1704,7 +1797,6 @@ nir_instr_rewrite_dest(nir_instr *instr, nir_dest *dest, nir_dest new_dest)
       src_add_all_uses(dest->reg.indirect, instr, NULL);
 }
 
-/* note: does *not* take ownership of 'name' */
 void
 nir_ssa_def_init(nir_instr *instr, nir_ssa_def *def,
                  unsigned num_components,
@@ -1728,11 +1820,9 @@ nir_ssa_def_init(nir_instr *instr, nir_ssa_def *def,
    }
 }
 
-/* note: does *not* take ownership of 'name' */
 void
 nir_ssa_dest_init(nir_instr *instr, nir_dest *dest,
-                 unsigned num_components, unsigned bit_size,
-                 const char *name)
+                 unsigned num_components, unsigned bit_size)
 {
    dest->is_ssa = true;
    nir_ssa_def_init(instr, &dest->ssa, num_components, bit_size);
@@ -2174,6 +2264,18 @@ nir_index_instrs(nir_function_impl *impl)
    return index;
 }
 
+void
+nir_shader_clear_pass_flags(nir_shader *shader)
+{
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            instr->pass_flags = 0;
+         }
+      }
+   }
+}
+
 unsigned
 nir_shader_index_vars(nir_shader *shader, nir_variable_mode modes)
 {
@@ -2241,8 +2343,7 @@ nir_function_impl_lower_instructions(nir_function_impl *impl,
                                      nir_lower_instr_cb lower,
                                      void *cb_data)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_metadata preserved = nir_metadata_block_index |
                             nir_metadata_dominance;
@@ -2333,10 +2434,8 @@ nir_shader_lower_instructions(nir_shader *shader,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl &&
-          nir_function_impl_lower_instructions(function->impl,
-                                               filter, lower, cb_data))
+   nir_foreach_function_impl(impl, shader) {
+      if (nir_function_impl_lower_instructions(impl, filter, lower, cb_data))
          progress = true;
    }
 
@@ -2486,6 +2585,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_ray_instance_custom_index;
    case SYSTEM_VALUE_CULL_MASK:
       return nir_intrinsic_load_cull_mask;
+   case SYSTEM_VALUE_RAY_TRIANGLE_VERTEX_POSITIONS:
+      return nir_intrinsic_load_ray_triangle_vertex_positions;
    case SYSTEM_VALUE_MESH_VIEW_COUNT:
       return nir_intrinsic_load_mesh_view_count;
    case SYSTEM_VALUE_FRAG_SHADING_RATE:
@@ -2639,6 +2740,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_RAY_INSTANCE_CUSTOM_INDEX;
    case nir_intrinsic_load_cull_mask:
       return SYSTEM_VALUE_CULL_MASK;
+   case nir_intrinsic_load_ray_triangle_vertex_positions:
+      return SYSTEM_VALUE_RAY_TRIANGLE_VERTEX_POSITIONS;
    case nir_intrinsic_load_frag_shading_rate:
       return SYSTEM_VALUE_FRAG_SHADING_RATE;
    case nir_intrinsic_load_mesh_view_count:
@@ -2714,6 +2817,10 @@ nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_ssa_def *src,
    if (nir_intrinsic_has_dest_type(intrin))
       data_type = nir_intrinsic_dest_type(intrin);
 
+   nir_atomic_op atomic_op = 0;
+   if (nir_intrinsic_has_atomic_op(intrin))
+      atomic_op = nir_intrinsic_atomic_op(intrin);
+
    switch (intrin->intrinsic) {
 #define CASE(op) \
    case nir_intrinsic_image_deref_##op: \
@@ -2723,21 +2830,8 @@ nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_ssa_def *src,
    CASE(load)
    CASE(sparse_load)
    CASE(store)
-   CASE(atomic_add)
-   CASE(atomic_imin)
-   CASE(atomic_umin)
-   CASE(atomic_imax)
-   CASE(atomic_umax)
-   CASE(atomic_and)
-   CASE(atomic_or)
-   CASE(atomic_xor)
-   CASE(atomic_exchange)
-   CASE(atomic_comp_swap)
-   CASE(atomic_fadd)
-   CASE(atomic_fmin)
-   CASE(atomic_fmax)
-   CASE(atomic_inc_wrap)
-   CASE(atomic_dec_wrap)
+   CASE(atomic)
+   CASE(atomic_swap)
    CASE(size)
    CASE(samples)
    CASE(load_raw_intel)
@@ -2748,8 +2842,7 @@ nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_ssa_def *src,
       unreachable("Unhanded image intrinsic");
    }
 
-   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-   nir_variable *var = nir_deref_instr_get_variable(deref);
+   nir_variable *var = nir_intrinsic_get_var(intrin, 0);
 
    /* Only update the format if the intrinsic doesn't have one set */
    if (nir_intrinsic_format(intrin) == PIPE_FORMAT_NONE)
@@ -2760,6 +2853,9 @@ nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_ssa_def *src,
       nir_intrinsic_set_src_type(intrin, data_type);
    if (nir_intrinsic_has_dest_type(intrin))
       nir_intrinsic_set_dest_type(intrin, data_type);
+
+   if (nir_intrinsic_has_atomic_op(intrin))
+      nir_intrinsic_set_atomic_op(intrin, atomic_op);
 
    nir_instr_rewrite_src(&intrin->instr, &intrin->src[0],
                          nir_src_for_ssa(src));
@@ -2865,6 +2961,22 @@ nir_binding nir_chase_binding(nir_src rsrc)
    nir_intrinsic_instr *intrin = nir_src_as_intrinsic(rsrc);
    if (!intrin)
       return (nir_binding){0};
+
+   /* Intel resource, similar to load_vulkan_descriptor after it has been
+    * lowered.
+    */
+   if (intrin->intrinsic == nir_intrinsic_resource_intel) {
+      res.success = true;
+      res.desc_set = nir_intrinsic_desc_set(intrin);
+      res.binding = nir_intrinsic_binding(intrin);
+      /* nir_intrinsic_resource_intel has 3 sources, but src[2] is included in
+       * src[1], it is kept around for other purposes.
+       */
+      res.num_indices = 2;
+      res.indices[0] = intrin->src[0];
+      res.indices[1] = intrin->src[1];
+      return res;
+   }
 
    /* skip load_vulkan_descriptor */
    if (intrin->intrinsic == nir_intrinsic_load_vulkan_descriptor) {
@@ -3126,6 +3238,8 @@ nir_alu_instr_is_comparison(const nir_alu_instr *instr)
    CASE_ALL_SIZES(nir_op_uge)
    CASE_ALL_SIZES(nir_op_ieq)
    CASE_ALL_SIZES(nir_op_ine)
+   CASE_ALL_SIZES(nir_op_bitz)
+   CASE_ALL_SIZES(nir_op_bitnz)
    case nir_op_inot:
       return true;
    default:
@@ -3158,6 +3272,73 @@ nir_intrinsic_dest_components(nir_intrinsic_instr *intr)
       return info->dest_components;
    else
       return intr->num_components;
+}
+
+nir_alu_type
+nir_intrinsic_instr_src_type(const nir_intrinsic_instr *intrin, unsigned src)
+{
+   /* We could go nuts here, but we'll just handle a few simple
+    * cases and let everything else be untyped.
+    */
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_store_deref: {
+      nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+      if (src == 1 && intrin->src[1].is_ssa)
+         return nir_get_nir_type_for_glsl_type(deref->type);
+      break;
+   }
+
+   case nir_intrinsic_store_output:
+      if (src == 0 && intrin->src[0].is_ssa)
+         return nir_intrinsic_src_type(intrin);
+      break;
+
+   default:
+      break;
+   }
+
+   /* For the most part, we leave other intrinsics alone.  Most
+    * of them don't matter in OpenGL ES 2.0 drivers anyway.
+    * However, we should at least check if this is some sort of
+    * IO intrinsic and flag it's offset and index sources.
+    */
+   {
+      int offset_src_idx = nir_get_io_offset_src_number(intrin);
+      if (src == offset_src_idx) {
+         const nir_src *offset_src = offset_src_idx >= 0 ? &intrin->src[offset_src_idx] : NULL;
+         if (offset_src && offset_src->is_ssa)
+            return nir_type_int;
+      }
+   }
+
+   return nir_type_invalid;
+}
+
+nir_alu_type
+nir_intrinsic_instr_dest_type(const nir_intrinsic_instr *intrin)
+{
+   /* We could go nuts here, but we'll just handle a few simple
+    * cases and let everything else be untyped.
+    */
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_deref: {
+      nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+      if (intrin->dest.is_ssa)
+         return nir_get_nir_type_for_glsl_type(deref->type);
+      break;
+   }
+
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_uniform:
+      if (intrin->dest.is_ssa)
+         return nir_intrinsic_dest_type(intrin);
+      break;
+
+   default:
+      break;
+   }
+
+   return nir_type_invalid;
 }
 
 /**
@@ -3434,28 +3615,47 @@ nir_instr_xfb_write_mask(nir_intrinsic_instr *instr)
  * Whether an output slot is consumed by fixed-function logic.
  */
 bool
-nir_slot_is_sysval_output(gl_varying_slot slot)
+nir_slot_is_sysval_output(gl_varying_slot slot, gl_shader_stage next_shader)
 {
-   return slot == VARYING_SLOT_POS ||
-          slot == VARYING_SLOT_PSIZ ||
-          slot == VARYING_SLOT_EDGE ||
-          slot == VARYING_SLOT_CLIP_VERTEX ||
-          slot == VARYING_SLOT_CLIP_DIST0 ||
-          slot == VARYING_SLOT_CLIP_DIST1 ||
-          slot == VARYING_SLOT_CULL_DIST0 ||
-          slot == VARYING_SLOT_CULL_DIST1 ||
-          slot == VARYING_SLOT_LAYER ||
-          slot == VARYING_SLOT_VIEWPORT ||
-          slot == VARYING_SLOT_TESS_LEVEL_OUTER ||
-          slot == VARYING_SLOT_TESS_LEVEL_INNER ||
-          slot == VARYING_SLOT_BOUNDING_BOX0 ||
-          slot == VARYING_SLOT_BOUNDING_BOX1 ||
-          slot == VARYING_SLOT_VIEW_INDEX ||
-          slot == VARYING_SLOT_VIEWPORT_MASK ||
-          slot == VARYING_SLOT_PRIMITIVE_SHADING_RATE ||
-          slot == VARYING_SLOT_PRIMITIVE_COUNT ||
-          slot == VARYING_SLOT_PRIMITIVE_INDICES ||
-          slot == VARYING_SLOT_TASK_COUNT;
+   switch (next_shader) {
+   case MESA_SHADER_FRAGMENT:
+      return slot == VARYING_SLOT_POS ||
+             slot == VARYING_SLOT_PSIZ ||
+             slot == VARYING_SLOT_EDGE ||
+             slot == VARYING_SLOT_CLIP_VERTEX ||
+             slot == VARYING_SLOT_CLIP_DIST0 ||
+             slot == VARYING_SLOT_CLIP_DIST1 ||
+             slot == VARYING_SLOT_CULL_DIST0 ||
+             slot == VARYING_SLOT_CULL_DIST1 ||
+             slot == VARYING_SLOT_LAYER ||
+             slot == VARYING_SLOT_VIEWPORT ||
+             slot == VARYING_SLOT_VIEW_INDEX ||
+             slot == VARYING_SLOT_VIEWPORT_MASK ||
+             slot == VARYING_SLOT_PRIMITIVE_SHADING_RATE ||
+             /* NV_mesh_shader_only */
+             slot == VARYING_SLOT_PRIMITIVE_COUNT ||
+             slot == VARYING_SLOT_PRIMITIVE_INDICES;
+
+   case MESA_SHADER_TESS_EVAL:
+      return slot == VARYING_SLOT_TESS_LEVEL_OUTER ||
+             slot == VARYING_SLOT_TESS_LEVEL_INNER ||
+             slot == VARYING_SLOT_BOUNDING_BOX0 ||
+             slot == VARYING_SLOT_BOUNDING_BOX1;
+
+   case MESA_SHADER_MESH:
+      /* NV_mesh_shader only */
+      return slot == VARYING_SLOT_TASK_COUNT;
+
+   case MESA_SHADER_NONE:
+      /* NONE means unknown. Check all possibilities. */
+      return nir_slot_is_sysval_output(slot, MESA_SHADER_FRAGMENT) ||
+             nir_slot_is_sysval_output(slot, MESA_SHADER_TESS_EVAL) ||
+             nir_slot_is_sysval_output(slot, MESA_SHADER_MESH);
+
+   default:
+      /* No other shaders have preceding shaders with sysval outputs. */
+      return false;
+   }
 }
 
 /**
@@ -3485,9 +3685,10 @@ nir_slot_is_varying(gl_varying_slot slot)
 }
 
 bool
-nir_slot_is_sysval_output_and_varying(gl_varying_slot slot)
+nir_slot_is_sysval_output_and_varying(gl_varying_slot slot,
+                                      gl_shader_stage next_shader)
 {
-   return nir_slot_is_sysval_output(slot) &&
+   return nir_slot_is_sysval_output(slot, next_shader) &&
           nir_slot_is_varying(slot);
 }
 
@@ -3495,17 +3696,21 @@ nir_slot_is_sysval_output_and_varying(gl_varying_slot slot)
  * This marks the output store instruction as not feeding the next shader
  * stage. If the instruction has no other use, it's removed.
  */
-void nir_remove_varying(nir_intrinsic_instr *intr)
+bool
+nir_remove_varying(nir_intrinsic_instr *intr, gl_shader_stage next_shader)
 {
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-   if ((!sem.no_sysval_output && nir_slot_is_sysval_output(sem.location)) ||
+   if ((!sem.no_sysval_output &&
+        nir_slot_is_sysval_output(sem.location, next_shader)) ||
        nir_instr_xfb_write_mask(intr)) {
       /* Demote the store instruction. */
       sem.no_varying = true;
       nir_intrinsic_set_io_semantics(intr, sem);
+      return false;
    } else {
       nir_instr_remove(&intr->instr);
+      return true;
    }
 }
 
@@ -3529,7 +3734,7 @@ void nir_remove_sysval_output(nir_intrinsic_instr *intr)
 
 void nir_remove_non_entrypoints(nir_shader *nir)
 {
-   foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
+   nir_foreach_function_safe(func, nir) {
       if (!func->is_entrypoint)
          exec_node_remove(&func->node);
    }

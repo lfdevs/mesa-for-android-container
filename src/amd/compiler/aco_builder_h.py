@@ -101,8 +101,8 @@ aco_ptr<Instruction> create_s_mov(Definition dst, Operand src);
 
 enum sendmsg {
    sendmsg_none = 0,
-   _sendmsg_gs = 2, /* gfx6 to gfx10.3 */
-   _sendmsg_gs_done = 3, /* gfx6 to gfx10.3 */
+   sendmsg_gs = 2, /* gfx6 to gfx10.3 */
+   sendmsg_gs_done = 3, /* gfx6 to gfx10.3 */
    sendmsg_hs_tessfactor = 2, /* gfx11+ */
    sendmsg_dealloc_vgprs = 3, /* gfx11+ */
    sendmsg_save_wave = 4, /* gfx8 to gfx10.3 */
@@ -127,20 +127,6 @@ enum sendmsg_rtn {
    sendmsg_rtn_mask = 0xff,
 };
 
-inline sendmsg
-sendmsg_gs(bool cut, bool emit, unsigned stream)
-{
-    assert(stream < 4);
-    return (sendmsg)((unsigned)_sendmsg_gs | (cut << 4) | (emit << 5) | (stream << 8));
-}
-
-inline sendmsg
-sendmsg_gs_done(bool cut, bool emit, unsigned stream)
-{
-    assert(stream < 4);
-    return (sendmsg)((unsigned)_sendmsg_gs_done | (cut << 4) | (emit << 5) | (stream << 8));
-}
-
 enum bperm_swiz {
    bperm_b1_sign = 8,
    bperm_b3_sign = 9,
@@ -148,6 +134,21 @@ enum bperm_swiz {
    bperm_b7_sign = 11,
    bperm_0 = 12,
    bperm_255 = 13,
+};
+
+enum class alu_delay_wait {
+   NO_DEP = 0,
+   VALU_DEP_1 = 1,
+   VALU_DEP_2 = 2,
+   VALU_DEP_3 = 3,
+   VALU_DEP_4 = 4,
+   TRANS32_DEP_1 = 5,
+   TRANS32_DEP_2 = 6,
+   TRANS32_DEP_3 = 7,
+   FMA_ACCUM_CYCLE_1 = 8,
+   SALU_CYCLE_1 = 9,
+   SALU_CYCLE_2 = 10,
+   SALU_CYCLE_3 = 11,
 };
 
 class Builder {
@@ -575,12 +576,22 @@ formats = [("pseudo", [Format.PSEUDO], 'Pseudo_instruction', list(itertools.prod
            ("vop1_dpp", [Format.VOP1, Format.DPP16], 'DPP16_instruction', [(1, 1)]),
            ("vop2_dpp", [Format.VOP2, Format.DPP16], 'DPP16_instruction', itertools.product([1, 2], [2, 3])),
            ("vopc_dpp", [Format.VOPC, Format.DPP16], 'DPP16_instruction', itertools.product([1, 2], [2])),
+           ("vop3_dpp", [Format.VOP3, Format.DPP16], 'DPP16_instruction', [(1, 3), (1, 2), (1, 1), (2, 2)]),
+           ("vop3p_dpp", [Format.VOP3P, Format.DPP16], 'DPP16_instruction', [(1, 2), (1, 3)]),
            ("vop1_dpp8", [Format.VOP1, Format.DPP8], 'DPP8_instruction', [(1, 1)]),
            ("vop2_dpp8", [Format.VOP2, Format.DPP8], 'DPP8_instruction', itertools.product([1, 2], [2, 3])),
            ("vopc_dpp8", [Format.VOPC, Format.DPP8], 'DPP8_instruction', itertools.product([1, 2], [2])),
+           ("vop3_dpp8", [Format.VOP3, Format.DPP8], 'DPP8_instruction', [(1, 3), (1, 2), (1, 1), (2, 2)]),
+           ("vop3p_dpp8", [Format.VOP3P, Format.DPP8], 'DPP8_instruction', [(1, 2), (1, 3)]),
            ("vop1_e64", [Format.VOP1, Format.VOP3], 'VALU_instruction', itertools.product([1], [1])),
            ("vop2_e64", [Format.VOP2, Format.VOP3], 'VALU_instruction', itertools.product([1, 2], [2, 3])),
            ("vopc_e64", [Format.VOPC, Format.VOP3], 'VALU_instruction', itertools.product([1, 2], [2])),
+           ("vop1_e64_dpp", [Format.VOP1, Format.VOP3, Format.DPP16], 'DPP16_instruction', itertools.product([1], [1])),
+           ("vop2_e64_dpp", [Format.VOP2, Format.VOP3, Format.DPP16], 'DPP16_instruction', itertools.product([1, 2], [2, 3])),
+           ("vopc_e64_dpp", [Format.VOPC, Format.VOP3, Format.DPP16], 'DPP16_instruction', itertools.product([1, 2], [2])),
+           ("vop1_e64_dpp8", [Format.VOP1, Format.VOP3, Format.DPP8], 'DPP8_instruction', itertools.product([1], [1])),
+           ("vop2_e64_dpp8", [Format.VOP2, Format.VOP3, Format.DPP8], 'DPP8_instruction', itertools.product([1, 2], [2, 3])),
+           ("vopc_e64_dpp8", [Format.VOPC, Format.VOP3, Format.DPP8], 'DPP8_instruction', itertools.product([1, 2], [2])),
            ("flat", [Format.FLAT], 'FLAT_instruction', [(0, 3), (1, 2)]),
            ("global", [Format.GLOBAL], 'FLAT_instruction', [(0, 3), (1, 2)]),
            ("scratch", [Format.SCRATCH], 'FLAT_instruction', [(0, 3), (1, 2)])]

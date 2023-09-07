@@ -62,3 +62,6 @@ dEQP-VK.spirv_assembly.instruction.graphics.16bit_storage.uniform_32struct_to_16
 
 # started failing with CTS 1.3.5.0
 dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic
+
+# Those cases seem to usually timeout.
+dEQP-VK.binding_model.descriptor_buffer.multiple.*buffers32_sets1

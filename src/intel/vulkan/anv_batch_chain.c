@@ -425,6 +425,23 @@ anv_cmd_buffer_current_generation_batch_bo(struct anv_cmd_buffer *cmd_buffer)
 struct anv_address
 anv_cmd_buffer_surface_base_address(struct anv_cmd_buffer *cmd_buffer)
 {
+   /* Only graphics & compute queues need binding tables. */
+   if (!(cmd_buffer->queue_family->queueFlags & (VK_QUEUE_GRAPHICS_BIT |
+                                                 VK_QUEUE_COMPUTE_BIT)))
+      return ANV_NULL_ADDRESS;
+
+   /* If we've never allocated a binding table block, do it now. Otherwise we
+    * would trigger another STATE_BASE_ADDRESS emission which would require an
+    * additional bunch of flushes/stalls.
+    */
+   if (u_vector_length(&cmd_buffer->bt_block_states) == 0) {
+      VkResult result = anv_cmd_buffer_new_binding_table_block(cmd_buffer);
+      if (result != VK_SUCCESS) {
+         anv_batch_set_error(&cmd_buffer->batch, result);
+         return ANV_NULL_ADDRESS;
+      }
+   }
+
    struct anv_state_pool *pool = &cmd_buffer->device->binding_table_pool;
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
    return (struct anv_address) {
@@ -670,6 +687,9 @@ struct anv_state
 anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
                                    uint32_t entries, uint32_t *state_offset)
 {
+   if (u_vector_length(&cmd_buffer->bt_block_states) == 0)
+      return (struct anv_state) { 0 };
+
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
 
    uint32_t bt_size = align(entries * 4, 32);
@@ -841,10 +861,6 @@ anv_cmd_buffer_init_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
    if (result != VK_SUCCESS)
       goto fail_bt_blocks;
 
-   result = anv_cmd_buffer_new_binding_table_block(cmd_buffer);
-   if (result != VK_SUCCESS)
-      goto fail_bt_blocks;
-
    return VK_SUCCESS;
 
  fail_bt_blocks:
@@ -899,13 +915,11 @@ anv_cmd_buffer_reset_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
                       &cmd_buffer->batch,
                       GFX8_MI_BATCH_BUFFER_START_length * 4);
 
-   while (u_vector_length(&cmd_buffer->bt_block_states) > 1) {
+   while (u_vector_length(&cmd_buffer->bt_block_states) > 0) {
       struct anv_state *bt_block = u_vector_remove(&cmd_buffer->bt_block_states);
       anv_binding_table_pool_free(cmd_buffer->device, *bt_block);
    }
-   assert(u_vector_length(&cmd_buffer->bt_block_states) == 1);
-   cmd_buffer->bt_next = *(struct anv_state *)u_vector_head(&cmd_buffer->bt_block_states);
-   cmd_buffer->bt_next.offset = 0;
+   cmd_buffer->bt_next = ANV_STATE_NULL;
 
    anv_reloc_list_clear(&cmd_buffer->surface_relocs);
 
@@ -1167,8 +1181,13 @@ anv_cmd_buffer_exec_batch_debug(struct anv_queue *queue,
    struct anv_device *device = queue->device;
    const bool has_perf_query = perf_query_pool && perf_query_pass >= 0 &&
                                cmd_buffer_count;
+   uint64_t frame_id = device->debug_frame_desc->frame_id;
 
-   fprintf(stderr, "Batch on queue %d\n", (int)(queue - device->queues));
+   if (!intel_debug_batch_in_range(device->debug_frame_desc->frame_id))
+      return;
+   fprintf(stderr, "Batch for frame %"PRIu64" on queue %d\n",
+      frame_id, (int)(queue - device->queues));
+
    if (cmd_buffer_count) {
       if (has_perf_query) {
          struct anv_bo *pass_batch_bo = perf_query_pool->bo;
@@ -1384,7 +1403,8 @@ anv_queue_submit_simple_batch(struct anv_queue *queue,
       intel_flush_range(batch_bo->map, batch_size);
 #endif
 
-   if (INTEL_DEBUG(DEBUG_BATCH)) {
+   if (INTEL_DEBUG(DEBUG_BATCH) &&
+       intel_debug_batch_in_range(device->debug_frame_desc->frame_id)) {
       intel_print_batch(queue->decoder,
                         batch_bo->map,
                         batch_bo->size,

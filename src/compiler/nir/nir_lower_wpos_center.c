@@ -67,43 +67,27 @@ update_fragcoord(nir_builder *b, nir_intrinsic_instr *intr)
 }
 
 static bool
-lower_wpos_center_block(nir_builder *b, nir_block *block)
+lower_wpos_center_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-   bool progress = false;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-   nir_foreach_instr(instr, block) {
-      if (instr->type == nir_instr_type_intrinsic) {
-         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-         if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
-            update_fragcoord(b, intr);
-            progress = true;
-         }
-      }
-   }
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_load_frag_coord)
+      return false;
 
-   return progress;
+   update_fragcoord(b, intr);
+   return true;
 }
 
 bool
 nir_lower_wpos_center(nir_shader *shader)
 {
-   bool progress = false;
-   nir_builder b;
-
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder_init(&b, function->impl);
-
-         nir_foreach_block(block, function->impl) {
-            progress = lower_wpos_center_block(&b, block) ||
-                       progress;
-         }
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
-      }
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader,
+                                       lower_wpos_center_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

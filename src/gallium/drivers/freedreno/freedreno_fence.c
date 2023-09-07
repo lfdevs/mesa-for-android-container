@@ -55,7 +55,7 @@ fence_flush(struct pipe_context *pctx, struct pipe_fence_handle *fence,
       if (!timeout)
          return false;
 
-      if (timeout == PIPE_TIMEOUT_INFINITE) {
+      if (timeout == OS_TIMEOUT_INFINITE) {
          util_queue_fence_wait(&fence->ready);
       } else {
          int64_t abs_timeout = os_time_get_absolute_timeout(timeout);
@@ -267,7 +267,7 @@ fd_pipe_fence_get_fd(struct pipe_screen *pscreen, struct pipe_fence_handle *fenc
     * but if TC is not used, this will be null.  Which is fine, we won't call
     * threaded_context_flush() in that case
     */
-   fence_flush(&fence->ctx->tc->base, fence, PIPE_TIMEOUT_INFINITE);
+   fence_flush(&fence->ctx->tc->base, fence, OS_TIMEOUT_INFINITE);
    assert(fence->fence);
    return os_dupfd_cloexec(fence->fence->fence_fd);
 }

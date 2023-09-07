@@ -28,7 +28,7 @@
 #ifndef FD6_SCREEN_H_
 #define FD6_SCREEN_H_
 
-#include "pipe/p_screen.h"
+#include "freedreno_screen.h"
 
 EXTERNC void fd6_screen_init(struct pipe_screen *pscreen);
 

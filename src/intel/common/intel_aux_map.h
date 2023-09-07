@@ -50,6 +50,9 @@ intel_aux_map_init(void *driver_ctx,
                    struct intel_mapped_pinned_buffer_alloc *buffer_alloc,
                    const struct intel_device_info *devinfo);
 
+uint32_t
+intel_aux_map_get_alignment(struct intel_aux_map_context *ctx);
+
 void
 intel_aux_map_finish(struct intel_aux_map_context *ctx);
 

@@ -38,8 +38,6 @@
 #include "pipe/p_shader_tokens.h"
 #include "draw/draw_context.h"
 #include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_scan.h"
-#include "tgsi/tgsi_parse.h"
 #include "gallivm/lp_bld_type.h"
 #include "gallivm/lp_bld_const.h"
 #include "gallivm/lp_bld_conv.h"
@@ -98,7 +96,7 @@ emit_fetch_texel_linear(const struct lp_build_sampler_aos *base,
    struct linear_sampler *sampler = (struct linear_sampler *)base;
 
    if (sampler->instance >= LP_MAX_LINEAR_TEXTURES) {
-      assert(FALSE);
+      assert(false);
       return bld->undef;
    }
 
@@ -139,11 +137,14 @@ llvm_fragment_body(struct lp_build_context *bld,
                    LLVMValueRef dst)
 {
    static const unsigned char bgra_swizzles[4] = {2, 1, 0, 3};
+   static const unsigned char rgba_swizzles[4] = {0, 1, 2, 3};
    LLVMValueRef inputs[PIPE_MAX_SHADER_INPUTS];
    LLVMValueRef outputs[PIPE_MAX_SHADER_OUTPUTS];
    LLVMBuilderRef builder = bld->gallivm->builder;
    struct gallivm_state *gallivm = bld->gallivm;
    LLVMValueRef result = NULL;
+   bool rgba_order = (variant->key.cbuf_format[0] == PIPE_FORMAT_R8G8B8A8_UNORM ||
+                      variant->key.cbuf_format[0] == PIPE_FORMAT_R8G8B8X8_UNORM);
 
    sampler->instance = 0;
 
@@ -166,14 +167,14 @@ llvm_fragment_body(struct lp_build_context *bld,
 
    if (shader->base.type == PIPE_SHADER_IR_TGSI) {
       lp_build_tgsi_aos(gallivm, shader->base.tokens, fs_type,
-                        bgra_swizzles,
+                        rgba_order ? rgba_swizzles : bgra_swizzles,
                         consts_ptr, inputs, outputs,
                         &sampler->base,
                         &shader->info.base);
    } else {
       nir_shader *clone = nir_shader_clone(NULL, shader->base.ir.nir);
       lp_build_nir_aos(gallivm, clone, fs_type,
-                       bgra_swizzles,
+                       rgba_order ? rgba_swizzles : bgra_swizzles,
                        consts_ptr, inputs, outputs,
                        &sampler->base,
                        &shader->info.base);
@@ -228,7 +229,7 @@ llvm_fragment_body(struct lp_build_context *bld,
                                   mask,
                                   blend_color,  /* const_ */
                                   NULL,         /* const_alpha */
-                                  bgra_swizzles,
+                                  rgba_order ? rgba_swizzles : bgra_swizzles,
                                   4);
    }
 
@@ -259,9 +260,9 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
    // unorm8[16] vector type
    struct lp_type fs_type;
    memset(&fs_type, 0, sizeof fs_type);
-   fs_type.floating = FALSE;
-   fs_type.sign = FALSE;
-   fs_type.norm = TRUE;
+   fs_type.floating = false;
+   fs_type.sign = false;
+   fs_type.norm = true;
    fs_type.width = 8;
    fs_type.length = 16;
 

@@ -222,7 +222,7 @@ st_update_rasterizer(struct st_context *st)
 
       raster->point_quad_rasterization = 1;
 
-      raster->point_tri_clip = _mesa_is_gles2(st->ctx);
+      raster->point_line_tri_clip = _mesa_is_gles2(st->ctx);
    }
 
    /* ST_NEW_VERTEX_PROGRAM

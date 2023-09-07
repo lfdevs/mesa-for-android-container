@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 #define NVFX_SWZ_IDENTITY ((3 << 6) | (2 << 4) | (1 << 2) | (0 << 0))
 

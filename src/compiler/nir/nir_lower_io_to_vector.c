@@ -160,7 +160,7 @@ get_flat_type(const nir_shader *shader, nir_variable *old_vars[MAX_SLOTS][4],
    unsigned todo = 1;
    unsigned slots = 0;
    unsigned num_vars = 0;
-   enum glsl_base_type base;
+   enum glsl_base_type base = GLSL_TYPE_ERROR;
    *num_vertices = 0;
    *first_var = NULL;
 
@@ -411,8 +411,7 @@ nir_lower_io_to_vector_impl(nir_function_impl *impl, nir_variable_mode modes)
 {
    assert(!(modes & ~(nir_var_shader_in | nir_var_shader_out)));
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_metadata_require(impl, nir_metadata_dominance);
 
@@ -615,9 +614,8 @@ nir_lower_io_to_vector(nir_shader *shader, nir_variable_mode modes)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_lower_io_to_vector_impl(function->impl, modes);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_lower_io_to_vector_impl(impl, modes);
    }
 
    return progress;
@@ -627,8 +625,7 @@ static bool
 nir_vectorize_tess_levels_impl(nir_function_impl *impl)
 {
    bool progress = false;
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -720,9 +717,8 @@ nir_vectorize_tess_levels(nir_shader *shader)
       }
    }
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_vectorize_tess_levels_impl(function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_vectorize_tess_levels_impl(impl);
    }
 
    return progress;

@@ -68,12 +68,7 @@ remove_phis_block(nir_block *block, nir_builder *b)
 {
    bool progress = false;
 
-   nir_foreach_instr_safe(instr, block) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
-
+   nir_foreach_phi_safe(phi, block) {
       nir_ssa_def *def = NULL;
       nir_alu_instr *mov = NULL;
       bool srcs_same = true;
@@ -133,7 +128,7 @@ remove_phis_block(nir_block *block, nir_builder *b)
 
       assert(phi->dest.is_ssa);
       nir_ssa_def_rewrite_uses(&phi->dest.ssa, def);
-      nir_instr_remove(instr);
+      nir_instr_remove(&phi->instr);
 
       progress = true;
    }
@@ -144,8 +139,7 @@ remove_phis_block(nir_block *block, nir_builder *b)
 bool
 nir_opt_remove_phis_block(nir_block *block)
 {
-   nir_builder b;
-   nir_builder_init(&b, nir_cf_node_get_function(&block->cf_node));
+   nir_builder b = nir_builder_create(nir_cf_node_get_function(&block->cf_node));
    return remove_phis_block(block, &b);
 }
 
@@ -153,8 +147,7 @@ static bool
 nir_opt_remove_phis_impl(nir_function_impl *impl)
 {
    bool progress = false;
-   nir_builder bld;
-   nir_builder_init(&bld, impl);
+   nir_builder bld = nir_builder_create(impl);
 
    nir_metadata_require(impl, nir_metadata_dominance);
 
@@ -177,9 +170,8 @@ nir_opt_remove_phis(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader)
-      if (function->impl)
-         progress = nir_opt_remove_phis_impl(function->impl) || progress;
+   nir_foreach_function_impl(impl, shader)
+      progress = nir_opt_remove_phis_impl(impl) || progress;
 
    return progress;
 }

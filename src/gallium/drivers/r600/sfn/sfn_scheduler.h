@@ -36,4 +36,4 @@ schedule(Shader *original);
 
 }
 
-#endif // SHEDULER_H
+#endif // SCHEDULER_H

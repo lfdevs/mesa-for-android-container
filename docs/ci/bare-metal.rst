@@ -98,7 +98,7 @@ You'll talk to the Cisco for configuration using its USB port, which provides a
 serial terminal at 9600 baud.  You need to enable SNMP control, which we'll do
 using a "mesaci" community name that the gitlab runner can access as its
 authentication (no password) to configure.  To talk to the SNMP on the router,
-you need to put an IP address on the default vlan (vlan 1).
+you need to put an IP address on the default VLAN (VLAN 1).
 
 Setting that up looks something like:
 

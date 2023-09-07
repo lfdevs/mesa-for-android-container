@@ -61,7 +61,7 @@ lp_build_fetch_rgba_aos_array(struct gallivm_state *gallivm,
    LLVMTypeRef src_vec_type;
    LLVMValueRef ptr, res = NULL;
    struct lp_type src_type;
-   boolean pure_integer = format_desc->channel[0].pure_integer;
+   bool pure_integer = format_desc->channel[0].pure_integer;
    struct lp_type tmp_type;
 
    lp_type_from_format_desc(&src_type, format_desc);

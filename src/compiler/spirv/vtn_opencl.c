@@ -598,8 +598,8 @@ handle_core(struct vtn_builder *b, uint32_t opcode,
        * The libclc we have uses a __local pointer but clang gives us generic
        * pointers.  Fortunately, the whole function is just a barrier.
        */
-      nir_scoped_barrier(&b->nb, .execution_scope = NIR_SCOPE_WORKGROUP,
-                                 .memory_scope = NIR_SCOPE_WORKGROUP,
+      nir_scoped_barrier(&b->nb, .execution_scope = SCOPE_WORKGROUP,
+                                 .memory_scope = SCOPE_WORKGROUP,
                                  .memory_semantics = NIR_MEMORY_ACQUIRE |
                                                      NIR_MEMORY_RELEASE,
                                  .memory_modes = nir_var_mem_shared |
@@ -891,7 +891,7 @@ handle_shuffle2(struct vtn_builder *b, uint32_t opcode,
       nir_ssa_def *vmask = nir_iand(&b->nb, this_mask, nir_imm_intN_t(&b->nb, half_mask, mask->bit_size));
       nir_ssa_def *val0 = nir_vector_extract(&b->nb, input0, vmask);
       nir_ssa_def *val1 = nir_vector_extract(&b->nb, input1, vmask);
-      nir_ssa_def *sel = nir_ilt(&b->nb, this_mask, nir_imm_intN_t(&b->nb, in_elems, mask->bit_size));
+      nir_ssa_def *sel = nir_ilt_imm(&b->nb, this_mask, in_elems);
       outres[i] = nir_bcsel(&b->nb, sel, val0, val1);
    }
    return nir_vec(&b->nb, outres, out_elems);

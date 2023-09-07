@@ -57,7 +57,7 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
     * We don't currently support pipeline statistics queries.
     * VkPhysicalDeviceFeatures->pipelineStatisticsQuery = false.
     */
-   assert(!device->features.pipelineStatisticsQuery);
+   assert(!device->vk.enabled_features.pipelineStatisticsQuery);
    assert(pCreateInfo->queryType == VK_QUERY_TYPE_OCCLUSION);
 
    pool = vk_object_alloc(&device->vk,
@@ -77,21 +77,19 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
     */
    alloc_size = (uint64_t)pool->result_stride * core_count;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.vis_test_heap,
-                         alloc_size,
-                         PVRX(CR_ISP_OCLQRY_BASE_ADDR_ALIGNMENT),
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                         &pool->result_buffer);
+   result = pvr_bo_suballoc(&device->suballoc_vis_test,
+                            alloc_size,
+                            PVRX(CR_ISP_OCLQRY_BASE_ADDR_ALIGNMENT),
+                            false,
+                            &pool->result_buffer);
    if (result != VK_SUCCESS)
       goto err_free_pool;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
-                         query_size,
-                         sizeof(uint32_t),
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                         &pool->availability_buffer);
+   result = pvr_bo_suballoc(&device->suballoc_general,
+                            query_size,
+                            sizeof(uint32_t),
+                            false,
+                            &pool->availability_buffer);
    if (result != VK_SUCCESS)
       goto err_free_result_buffer;
 
@@ -100,7 +98,7 @@ VkResult pvr_CreateQueryPool(VkDevice _device,
    return VK_SUCCESS;
 
 err_free_result_buffer:
-   pvr_bo_free(device, pool->result_buffer);
+   pvr_bo_suballoc_free(pool->result_buffer);
 
 err_free_pool:
    vk_object_free(&device->vk, pAllocator, pool);
@@ -115,8 +113,11 @@ void pvr_DestroyQueryPool(VkDevice _device,
    PVR_FROM_HANDLE(pvr_query_pool, pool, queryPool);
    PVR_FROM_HANDLE(pvr_device, device, _device);
 
-   pvr_bo_free(device, pool->availability_buffer);
-   pvr_bo_free(device, pool->result_buffer);
+   if (!pool)
+      return;
+
+   pvr_bo_suballoc_free(pool->availability_buffer);
+   pvr_bo_suballoc_free(pool->result_buffer);
 
    vk_object_free(&device->vk, pAllocator, pool);
 }
@@ -130,7 +131,8 @@ void pvr_DestroyQueryPool(VkDevice _device,
 static inline bool pvr_query_is_available(const struct pvr_query_pool *pool,
                                           uint32_t query_idx)
 {
-   volatile uint32_t *available = pool->availability_buffer->bo->map;
+   volatile uint32_t *available =
+      pvr_bo_suballoc_get_map_addr(pool->availability_buffer);
    return !!available[query_idx];
 }
 
@@ -144,9 +146,9 @@ static inline bool pvr_query_is_available(const struct pvr_query_pool *pool,
  * device.
  */
 /* TODO: Handle device loss scenario properly. */
-static bool pvr_wait_for_available(struct pvr_device *device,
-                                   const struct pvr_query_pool *pool,
-                                   uint32_t query_idx)
+static VkResult pvr_wait_for_available(struct pvr_device *device,
+                                       const struct pvr_query_pool *pool,
+                                       uint32_t query_idx)
 {
    const uint64_t abs_timeout =
       os_time_get_absolute_timeout(PVR_WAIT_TIMEOUT * NSEC_PER_SEC);
@@ -196,9 +198,11 @@ VkResult pvr_GetQueryPoolResults(VkDevice _device,
 {
    PVR_FROM_HANDLE(pvr_query_pool, pool, queryPool);
    PVR_FROM_HANDLE(pvr_device, device, _device);
+   VG(volatile uint32_t *available =
+         pvr_bo_suballoc_get_map_addr(pool->availability_buffer));
+   volatile uint32_t *query_results =
+      pvr_bo_suballoc_get_map_addr(pool->result_buffer);
    const uint32_t core_count = device->pdevice->dev_runtime_info.core_count;
-   VG(volatile uint32_t *available = pool->availability_buffer->bo->map);
-   volatile uint32_t *query_results = pool->result_buffer->bo->map;
    uint8_t *data = (uint8_t *)pData;
    VkResult result = VK_SUCCESS;
 
@@ -286,7 +290,6 @@ void pvr_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
 {
    PVR_FROM_HANDLE(pvr_cmd_buffer, cmd_buffer, commandBuffer);
    struct pvr_query_info query_info;
-   struct pvr_sub_cmd_event *sub_cmd;
    VkResult result;
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
@@ -318,8 +321,7 @@ void pvr_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
     * transfer job with the compute job.
     */
 
-   sub_cmd = &cmd_buffer->state.current_sub_cmd->event;
-   *sub_cmd = (struct pvr_sub_cmd_event) {
+   cmd_buffer->state.current_sub_cmd->event = (struct pvr_sub_cmd_event){
       .type = PVR_EVENT_TYPE_BARRIER,
       .barrier = {
          .wait_for_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
@@ -337,8 +339,7 @@ void pvr_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
    if (result != VK_SUCCESS)
       return;
 
-   sub_cmd = &cmd_buffer->state.current_sub_cmd->event;
-   *sub_cmd = (struct pvr_sub_cmd_event) {
+   cmd_buffer->state.current_sub_cmd->event = (struct pvr_sub_cmd_event){
       .type = PVR_EVENT_TYPE_BARRIER,
       .barrier = {
          .wait_for_stage_mask = PVR_PIPELINE_STAGE_OCCLUSION_QUERY_BIT,

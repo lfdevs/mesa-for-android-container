@@ -22,3 +22,76 @@ spec@!opengl 1.1@longprim
 
 # OOMs
 spec@!opengl 1.1@streaming-texture-leak
+tex3d-maxsize
+
+# Takes absurdly long, sometimes flaking due to the 60s timeout
+glx@glx-make-current
+
+# These Piglits cause crashes, at least when run with PAN_MESA_DEBUG=sync. For
+# many, the crashes are due to faults. Although Piglits are nominally
+# process-isolated, faults can leak across processes to subpar recovery, meaning
+# these crashes are liable to cause robust passing tests to flakes.
+# So, skip any tests known to crash to make sure the coverage is solid.
+glx@glx-visuals-depth -pixmap
+glx@glx-visuals-stencil -pixmap
+spec@arb_texture_buffer_object@formats (fs- arb)
+spec@arb_texture_buffer_object@formats (vs- arb)
+spec@arb_texture_buffer_object@texture-buffer-size-clamp
+spec@arb_texture_float@fbo-alphatest-formats
+spec@arb_texture_float@fbo-blending-formats
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drect
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drectshadow
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4
+spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow
+spec@arb_texture_view@sampling-2d-array-as-cubemap-array
+spec@arb_texture_view@sampling-2d-array-as-cubemap
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-invalid_attributes
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-invalid_hints
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-missing_attributes
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-ownership_transfer
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb8888
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-unsupported_format
+spec@ext_transform_feedback@immediate-reuse-index-buffer
+spec@ext_transform_feedback@immediate-reuse-uniform-buffer
+spec@glsl-1.30@execution@tex-miplevel-selection texture() 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection texture() 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drect_projvec4
+spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drect_projvec4
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drect_projvec4
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drectshadow
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect_projvec4
+spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drectshadow
+spec@oes_texture_view@sampling-2d-array-as-cubemap
+spec@!opengl 1.0@rasterpos

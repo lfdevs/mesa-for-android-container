@@ -296,23 +296,6 @@ TEST_F(alu_srcs_negative_equal_test, swizzle_scalar_to_vector)
    EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
 }
 
-TEST_F(alu_srcs_negative_equal_test, unused_components_mismatch)
-{
-   nir_ssa_def *v1 = nir_imm_vec4(&bld, -2.0, 18.0, 43.0,  1.0);
-   nir_ssa_def *v2 = nir_imm_vec4(&bld,  2.0, 99.0, 76.0, -1.0);
-
-   nir_ssa_def *result = nir_fadd(&bld, v1, v2);
-
-   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
-
-   /* Disable the channels that aren't negations of each other. */
-   nir_register *reg = nir_local_reg_create(bld.impl);
-   nir_instr_rewrite_dest(&instr->instr, &instr->dest.dest, nir_dest_for_reg(reg));
-   instr->dest.write_mask = 8 + 1;
-
-   EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
-}
-
 static void
 count_sequence(nir_const_value c[NIR_MAX_VEC_COMPONENTS],
                nir_alu_type full_type, int first)

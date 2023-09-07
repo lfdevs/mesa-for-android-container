@@ -70,7 +70,7 @@ upload_S0S1(struct i915_context *i915)
    /* I915_NEW_VERTEX_SIZE
     */
    {
-      unsigned vertex_size = i915->current.vertex_info.size;
+      unsigned vertex_size = i915->current.vertex_info.draw.size;
 
       LIS1 = ((vertex_size << 24) | (vertex_size << 16));
    }

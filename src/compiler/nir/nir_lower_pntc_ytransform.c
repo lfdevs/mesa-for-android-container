@@ -23,7 +23,6 @@
 
 #include "nir.h"
 #include "nir_builder.h"
-#include "program/prog_instruction.h"
 
 /* Lower gl_PointCoord to account for user requested point-coord origin
  * and for whether draw buffer is flipped.
@@ -43,16 +42,11 @@ get_pntc_transform(lower_pntc_ytransform_state *state)
       /* NOTE: name must be prefixed w/ "gl_" to trigger slot based
        * special handling in uniform setup:
        */
-      nir_variable *var = nir_variable_create(state->shader,
-                                              nir_var_uniform,
-                                              glsl_vec4_type(),
-                                              "gl_PntcYTransform");
+      nir_variable *var = nir_state_variable_create(state->shader,
+                                                    glsl_vec4_type(),
+                                                    "gl_PntcYTransform",
+                                                    state->pntc_state_tokens);
 
-      var->num_state_slots = 1;
-      var->state_slots = ralloc_array(var, nir_state_slot, 1);
-      var->state_slots[0].swizzle = SWIZZLE_XYZW;
-      memcpy(var->state_slots[0].tokens, state->pntc_state_tokens,
-             sizeof(var->state_slots[0].tokens));
       var->data.how_declared = nir_var_hidden;
       state->pntc_transform = var;
    }
@@ -120,16 +114,14 @@ nir_lower_pntc_ytransform(nir_shader *shader,
 
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder_init(&state.b, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      state.b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            lower_pntc_ytransform_block(&state, block);
-         }
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
+      nir_foreach_block(block, impl) {
+         lower_pntc_ytransform_block(&state, block);
       }
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 
    return state.pntc_transform != NULL;

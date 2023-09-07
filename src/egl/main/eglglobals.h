@@ -27,7 +27,6 @@
  *
  **************************************************************************/
 
-
 #ifndef EGLGLOBALS_INCLUDED
 #define EGLGLOBALS_INCLUDED
 
@@ -36,19 +35,17 @@
 
 #include "egltypedefs.h"
 
-enum
-{
-    _EGL_DEBUG_BIT_CRITICAL = 0x1,
-    _EGL_DEBUG_BIT_ERROR = 0x2,
-    _EGL_DEBUG_BIT_WARN = 0x4,
-    _EGL_DEBUG_BIT_INFO = 0x8,
+enum {
+   _EGL_DEBUG_BIT_CRITICAL = 0x1,
+   _EGL_DEBUG_BIT_ERROR = 0x2,
+   _EGL_DEBUG_BIT_WARN = 0x4,
+   _EGL_DEBUG_BIT_INFO = 0x8,
 };
 
 /**
  * Global library data
  */
-struct _egl_global
-{
+struct _egl_global {
    simple_mtx_t *Mutex;
 
    /* the list of all displays */
@@ -75,14 +72,13 @@ struct _egl_global
    unsigned int debugTypesEnabled;
 };
 
-
 extern struct _egl_global _eglGlobal;
-
 
 extern void
 _eglAddAtExitCall(void (*func)(void));
 
-static inline unsigned int DebugBitFromType(EGLenum type)
+static inline unsigned int
+DebugBitFromType(EGLenum type)
 {
    assert(type >= EGL_DEBUG_MSG_CRITICAL_KHR && type <= EGL_DEBUG_MSG_INFO_KHR);
    return (1 << (type - EGL_DEBUG_MSG_CRITICAL_KHR));
@@ -92,6 +88,6 @@ static inline unsigned int DebugBitFromType(EGLenum type)
  * Perform validity checks on a generic pointer.
  */
 extern EGLBoolean
-_eglPointerIsDereferencable(void *p);
+_eglPointerIsDereferenceable(void *p);
 
 #endif /* EGLGLOBALS_INCLUDED */

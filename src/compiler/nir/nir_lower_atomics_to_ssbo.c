@@ -35,77 +35,57 @@
 static nir_deref_instr *
 deref_offset_var(nir_builder *b, unsigned binding, unsigned offset_align_state)
 {
-   nir_foreach_uniform_variable(var, b->shader) {
-      if (var->num_state_slots != 1)
-         continue;
-      if (var->state_slots[0].tokens[0] == offset_align_state &&
-          var->state_slots[0].tokens[1] == binding)
-         return nir_build_deref_var(b, var);
+   gl_state_index16 tokens[STATE_LENGTH] = {offset_align_state, binding};
+   nir_variable *var = nir_find_state_variable(b->shader, tokens);
+   if (!var) {
+      var = nir_state_variable_create(b->shader, glsl_uint_type(), "offset", tokens);
+      var->data.how_declared = nir_var_hidden;
    }
-
-   nir_variable *var = nir_variable_create(b->shader, nir_var_uniform, glsl_uint_type(), "offset");
-   var->state_slots = rzalloc_array(var, nir_state_slot, 1);
-   var->state_slots[0].tokens[0] = offset_align_state;
-   var->state_slots[0].tokens[1] = binding;
-   var->num_state_slots = 1;
-   var->data.how_declared = nir_var_hidden;
-   b->shader->num_uniforms++;
    return nir_build_deref_var(b, var);
 }
 
 static bool
 lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, unsigned offset_align_state)
 {
-   nir_intrinsic_op op;
+   nir_intrinsic_op op = nir_intrinsic_ssbo_atomic;
+
+   /* Initialize to something to avoid spurious compiler warning */
+   nir_atomic_op atomic_op = nir_atomic_op_iadd;
 
    b->cursor = nir_before_instr(&instr->instr);
 
    switch (instr->intrinsic) {
-   case nir_intrinsic_memory_barrier_atomic_counter:
-      /* Atomic counters are now SSBOs so memoryBarrierAtomicCounter() is now
-       * memoryBarrierBuffer().
-       */
-      if (b->shader->options->use_scoped_barrier) {
-         instr->intrinsic = nir_intrinsic_scoped_barrier;
-         nir_intrinsic_set_execution_scope(instr, NIR_SCOPE_NONE);
-         nir_intrinsic_set_memory_scope(instr, NIR_SCOPE_DEVICE);
-         nir_intrinsic_set_memory_semantics(instr, NIR_MEMORY_ACQ_REL);
-         nir_intrinsic_set_memory_modes(instr, nir_var_mem_ssbo);
-      } else {
-         instr->intrinsic = nir_intrinsic_memory_barrier_buffer;
-      }
-      return true;
-
    case nir_intrinsic_atomic_counter_inc:
    case nir_intrinsic_atomic_counter_add:
    case nir_intrinsic_atomic_counter_pre_dec:
    case nir_intrinsic_atomic_counter_post_dec:
       /* inc and dec get remapped to add: */
-      op = nir_intrinsic_ssbo_atomic_add;
+      atomic_op = nir_atomic_op_iadd;
       break;
    case nir_intrinsic_atomic_counter_read:
       op = nir_intrinsic_load_ssbo;
       break;
    case nir_intrinsic_atomic_counter_min:
-      op = nir_intrinsic_ssbo_atomic_umin;
+      atomic_op = nir_atomic_op_umin;
       break;
    case nir_intrinsic_atomic_counter_max:
-      op = nir_intrinsic_ssbo_atomic_umax;
+      atomic_op = nir_atomic_op_umax;
       break;
    case nir_intrinsic_atomic_counter_and:
-      op = nir_intrinsic_ssbo_atomic_and;
+      atomic_op = nir_atomic_op_iand;
       break;
    case nir_intrinsic_atomic_counter_or:
-      op = nir_intrinsic_ssbo_atomic_or;
+      atomic_op = nir_atomic_op_ior;
       break;
    case nir_intrinsic_atomic_counter_xor:
-      op = nir_intrinsic_ssbo_atomic_xor;
+      atomic_op = nir_atomic_op_ixor;
       break;
    case nir_intrinsic_atomic_counter_exchange:
-      op = nir_intrinsic_ssbo_atomic_exchange;
+      atomic_op = nir_atomic_op_xchg;
       break;
    case nir_intrinsic_atomic_counter_comp_swap:
-      op = nir_intrinsic_ssbo_atomic_comp_swap;
+      op = nir_intrinsic_ssbo_atomic_swap;
+      atomic_op = nir_atomic_op_cmpxchg;
       break;
    default:
       return false;
@@ -121,6 +101,8 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
    }
    nir_intrinsic_instr *new_instr =
          nir_intrinsic_instr_create(b->shader, op);
+   if (nir_intrinsic_has_atomic_op(new_instr))
+      nir_intrinsic_set_atomic_op(new_instr, atomic_op);
 
    /* a couple instructions need special handling since they don't map
     * 1:1 with ssbo atomics
@@ -152,8 +134,7 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
       new_instr->src[0] = nir_src_for_ssa(buffer);
       nir_src_copy(&new_instr->src[1], &instr->src[0], &new_instr->instr);
       nir_src_copy(&new_instr->src[2], &instr->src[1], &new_instr->instr);
-      if (op == nir_intrinsic_ssbo_atomic_comp_swap ||
-          op == nir_intrinsic_ssbo_atomic_fcomp_swap)
+      if (op == nir_intrinsic_ssbo_atomic_swap)
          nir_src_copy(&new_instr->src[3], &instr->src[2], &new_instr->instr);
       break;
    }
@@ -176,8 +157,7 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
    }
 
    nir_ssa_dest_init(&new_instr->instr, &new_instr->dest,
-                     instr->dest.ssa.num_components,
-                     instr->dest.ssa.bit_size, NULL);
+                     instr->dest.ssa.num_components, instr->dest.ssa.bit_size);
    nir_instr_insert_before(&instr->instr, &new_instr->instr);
    nir_instr_remove(&instr->instr);
 
@@ -206,21 +186,18 @@ nir_lower_atomics_to_ssbo(nir_shader *shader, unsigned offset_align_state)
    unsigned ssbo_offset = shader->info.num_ssbos;
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder builder;
-         nir_builder_init(&builder, function->impl);
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               if (instr->type == nir_instr_type_intrinsic)
-                  progress |= lower_instr(nir_instr_as_intrinsic(instr),
-                                          ssbo_offset, &builder, offset_align_state);
-            }
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder builder = nir_builder_create(impl);
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type == nir_instr_type_intrinsic)
+               progress |= lower_instr(nir_instr_as_intrinsic(instr),
+                                       ssbo_offset, &builder, offset_align_state);
          }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 
    if (progress) {

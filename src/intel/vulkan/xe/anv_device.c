@@ -119,6 +119,60 @@ anv_xe_physical_device_get_parameters(struct anv_physical_device *device)
 }
 
 VkResult
+anv_xe_physical_device_init_memory_types(struct anv_physical_device *device)
+{
+   if (anv_physical_device_has_vram(device)) {
+      device->memory.type_count = 3;
+      device->memory.types[0] = (struct anv_memory_type) {
+         .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+         .heapIndex = 0,
+      };
+      device->memory.types[1] = (struct anv_memory_type) {
+         .propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                          VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+         .heapIndex = 1,
+      };
+      device->memory.types[2] = (struct anv_memory_type) {
+         .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+         /* This memory type either comes from heaps[0] if there is only
+          * mappable vram region, or from heaps[2] if there is both mappable &
+          * non-mappable vram regions.
+          */
+         .heapIndex = device->vram_non_mappable.size > 0 ? 2 : 0,
+      };
+   } else if (device->info.has_llc) {
+      /* Big core GPUs share LLC with the CPU and thus one memory type can be
+       * both cached and coherent at the same time.
+       *
+       * But some game engines can't handle single type well
+       * https://gitlab.freedesktop.org/mesa/mesa/-/issues/7360#note_1719438
+       *
+       * TODO: But with current UAPI we can't change the mmap mode in Xe, so
+       * here only supporting two memory types.
+       */
+      device->memory.type_count = 2;
+      device->memory.types[0] = (struct anv_memory_type) {
+         .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+         .heapIndex = 0,
+      };
+      device->memory.types[1] = (struct anv_memory_type) {
+         .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                          VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+         .heapIndex = 0,
+      };
+   } else {
+      return vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+                       "No memory heaps types set for non llc devices yet on Xe");
+   }
+   return VK_SUCCESS;
+}
+
+VkResult
 anv_xe_device_check_status(struct vk_device *vk_device)
 {
    struct anv_device *device = container_of(vk_device, struct anv_device, vk);

@@ -44,8 +44,8 @@ using std::vector;
 struct nir_intrinsic_instr_less {
    bool operator()(const nir_intrinsic_instr *lhs, const nir_intrinsic_instr *rhs) const
    {
-      nir_variable *vlhs = nir_deref_instr_get_variable(nir_src_as_deref(lhs->src[0]));
-      nir_variable *vrhs = nir_deref_instr_get_variable(nir_src_as_deref(rhs->src[0]));
+      nir_variable *vlhs = nir_intrinsic_get_var(lhs, 0);
+      nir_variable *vrhs = nir_intrinsic_get_var(rhs, 0);
 
       auto ltype = glsl_get_base_type(vlhs->type);
       auto rtype = glsl_get_base_type(vrhs->type);
@@ -128,10 +128,8 @@ r600_lower_fs_out_to_vector(nir_shader *shader)
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
    bool progress = false;
 
-   nir_foreach_function(function, shader)
-   {
-      if (function->impl)
-         progress |= processor.run(function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= processor.run(impl);
    }
    return progress;
 }
@@ -148,8 +146,7 @@ NirLowerIOToVector::NirLowerIOToVector(int base_slot):
 bool
 NirLowerIOToVector::run(nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_metadata_require(impl, nir_metadata_dominance);
    create_new_io_vars(impl->function->shader);
@@ -357,7 +354,7 @@ NirLowerIOToVector::vec_instr_stack_pop(nir_builder *b,
              });
 
    nir_intrinsic_instr *intr = *ir_sorted_set.begin();
-   nir_variable *var = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
+   nir_variable *var = nir_intrinsic_get_var(intr, 0);
 
    unsigned loc = var->data.location - m_base_slot;
 
@@ -386,7 +383,7 @@ NirLowerIOToVector::vec_instr_stack_pop(nir_builder *b,
 
    for (auto k = ir_sorted_set.begin() + 1; k != ir_sorted_set.end(); ++k) {
       nir_intrinsic_instr *intr2 = *k;
-      nir_variable *var2 = nir_deref_instr_get_variable(nir_src_as_deref(intr2->src[0]));
+      nir_variable *var2 = nir_intrinsic_get_var(intr2, 0);
       unsigned loc2 = var->data.location - m_base_slot;
 
       if (m_vars[loc][var->data.location_frac] !=
@@ -490,7 +487,7 @@ NirLowerFSOutToVector::create_combined_vector(nir_builder *b,
       k += s->num_components;
    }
 
-   nir_ssa_dest_init(&instr->instr, &instr->dest.dest, num_comp, 32, NULL);
+   nir_ssa_dest_init(&instr->instr, &instr->dest.dest, num_comp, 32);
    instr->dest.write_mask = (1 << num_comp) - 1;
    nir_builder_instr_insert(b, &instr->instr);
    return &instr->dest.dest.ssa;

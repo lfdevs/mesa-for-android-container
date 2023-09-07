@@ -109,6 +109,7 @@ shade_quads(struct lp_rasterizer_task *task,
    BEGIN_JIT_CALL(state, task);
    const unsigned fn_index = mask == 0xffff ? RAST_WHOLE : RAST_EDGE_TEST;
    variant->jit_function[fn_index](&state->jit_context,
+                                   &state->jit_resources,
                                    x, y,
                                    inputs->frontfacing,
                                    GET_A0(inputs),

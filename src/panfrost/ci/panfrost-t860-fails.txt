@@ -56,36 +56,4 @@ dEQP-GLES31.functional.texture.gather.basic.cube.rgba8ui.no_corners.size_pot.cla
 dEQP-GLES31.functional.texture.gather.basic.cube.rgba8ui.no_corners.size_pot.mirrored_repeat_clamp_to_edge,Fail
 dEQP-GLES31.functional.texture.gather.basic.cube.rgba8ui.no_corners.size_pot.repeat_mirrored_repeat,Fail
 
-# CTS bug: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4308
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb565_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb565_depth_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb565_no_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_depth_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_no_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgba8888_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgba8888_depth_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgba8888_no_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb565_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb565_depth_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb565_no_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_depth_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_no_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_depth_no_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_depth_stencil,Fail
-wayland-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_no_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_depth_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgb888_no_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgba8888_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgba8888_depth_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_30.rgba8888_no_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_depth_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgb888_no_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_depth_no_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_depth_stencil,Fail
-x11-dEQP-EGL.functional.create_context_ext.robust_gl_31.rgba8888_no_depth_no_stencil,Fail
-
 wayland-dEQP-EGL.functional.wide_color.window_888_colorspace_default,Fail

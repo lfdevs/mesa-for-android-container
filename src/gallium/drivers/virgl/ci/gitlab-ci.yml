@@ -70,7 +70,7 @@ virgl-traces:
 
 .virgl-iris-test:
   extends:
-    - .lava-piglit-traces:amd64
+    - .lava-piglit-traces:x86_64
   variables:
     DEVICE_TYPE: asus-cx9400-volteer
     BOOT_METHOD: depthcharge

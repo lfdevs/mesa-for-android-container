@@ -24,6 +24,7 @@ struct nouveau_fence {
    struct nouveau_fence *next;
    struct nouveau_screen *screen;
    struct nouveau_context *context;
+   struct nouveau_bo *bo;
    int state;
    int ref;
    uint32_t sequence;
@@ -37,7 +38,7 @@ struct nouveau_fence_list {
    uint32_t sequence;
    uint32_t sequence_ack;
    simple_mtx_t lock;
-   void (*emit)(struct pipe_context *, uint32_t *sequence);
+   void (*emit)(struct pipe_context *, uint32_t *sequence, struct nouveau_bo *wait);
    uint32_t (*update)(struct pipe_screen *);
 };
 

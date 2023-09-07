@@ -55,26 +55,10 @@ get_ir3_intrinsic_for_ssbo_intrinsic(unsigned intrinsic,
       return nir_intrinsic_store_ssbo_ir3;
    case nir_intrinsic_load_ssbo:
       return nir_intrinsic_load_ssbo_ir3;
-   case nir_intrinsic_ssbo_atomic_add:
-      return nir_intrinsic_ssbo_atomic_add_ir3;
-   case nir_intrinsic_ssbo_atomic_imin:
-      return nir_intrinsic_ssbo_atomic_imin_ir3;
-   case nir_intrinsic_ssbo_atomic_umin:
-      return nir_intrinsic_ssbo_atomic_umin_ir3;
-   case nir_intrinsic_ssbo_atomic_imax:
-      return nir_intrinsic_ssbo_atomic_imax_ir3;
-   case nir_intrinsic_ssbo_atomic_umax:
-      return nir_intrinsic_ssbo_atomic_umax_ir3;
-   case nir_intrinsic_ssbo_atomic_and:
-      return nir_intrinsic_ssbo_atomic_and_ir3;
-   case nir_intrinsic_ssbo_atomic_or:
-      return nir_intrinsic_ssbo_atomic_or_ir3;
-   case nir_intrinsic_ssbo_atomic_xor:
-      return nir_intrinsic_ssbo_atomic_xor_ir3;
-   case nir_intrinsic_ssbo_atomic_exchange:
-      return nir_intrinsic_ssbo_atomic_exchange_ir3;
-   case nir_intrinsic_ssbo_atomic_comp_swap:
-      return nir_intrinsic_ssbo_atomic_comp_swap_ir3;
+   case nir_intrinsic_ssbo_atomic:
+      return nir_intrinsic_ssbo_atomic_ir3;
+   case nir_intrinsic_ssbo_atomic_swap:
+      return nir_intrinsic_ssbo_atomic_swap_ir3;
    default:
       break;
    }
@@ -113,9 +97,9 @@ check_and_propagate_bit_shift32(nir_builder *b, nir_alu_instr *alu_instr,
 
    /* Add or substract shift depending on the final direction (SHR vs. SHL). */
    if (shift * direction < 0)
-      shift_ssa = nir_isub(b, shift_ssa, nir_imm_int(b, abs(shift)));
+      shift_ssa = nir_iadd_imm(b, shift_ssa, -abs(shift));
    else
-      shift_ssa = nir_iadd(b, shift_ssa, nir_imm_int(b, abs(shift)));
+      shift_ssa = nir_iadd_imm(b, shift_ssa, abs(shift));
 
    return shift_ssa;
 }
@@ -177,8 +161,8 @@ scalarize_load(nir_intrinsic_instr *intrinsic, nir_builder *b)
    for (unsigned i = 0; i < intrinsic->dest.ssa.num_components; i++) {
       results[i] =
          nir_load_ssbo_ir3(b, 1, intrinsic->dest.ssa.bit_size, descriptor,
-                           nir_iadd(b, offset, nir_imm_int(b, i * comp_size)),
-                           nir_iadd(b, new_offset, nir_imm_int(b, i)),
+                           nir_iadd_imm(b, offset, i * comp_size),
+                           nir_iadd_imm(b, new_offset, i),
                            .access = nir_intrinsic_access(intrinsic),
                            .align_mul = nir_intrinsic_align_mul(intrinsic),
                            .align_offset = nir_intrinsic_align_offset(intrinsic));
@@ -240,7 +224,7 @@ lower_offset_for_ssbo(nir_intrinsic_instr *intrinsic, nir_builder *b,
       assert(intrinsic->dest.is_ssa);
       nir_ssa_def *dest = &intrinsic->dest.ssa;
       nir_ssa_dest_init(&new_intrinsic->instr, &new_intrinsic->dest,
-                        dest->num_components, dest->bit_size, NULL);
+                        dest->num_components, dest->bit_size);
       new_dest = &new_intrinsic->dest.ssa;
    }
 
@@ -257,7 +241,7 @@ lower_offset_for_ssbo(nir_intrinsic_instr *intrinsic, nir_builder *b,
    if (new_offset)
       offset = new_offset;
    else
-      offset = nir_ushr(b, offset, nir_imm_int(b, shift));
+      offset = nir_ushr_imm(b, offset, shift);
 
    /* Insert the new intrinsic right before the old one. */
    nir_builder_instr_insert(b, &new_intrinsic->instr);
@@ -316,8 +300,7 @@ static bool
 lower_io_offsets_func(nir_function_impl *impl)
 {
    void *mem_ctx = ralloc_parent(impl);
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    bool progress = false;
    nir_foreach_block_safe (block, impl) {

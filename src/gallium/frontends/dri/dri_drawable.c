@@ -538,7 +538,7 @@ dri_flush(__DRIcontext *cPriv,
 
       /* throttle on the previous fence */
       if (drawable->throttle_fence) {
-         screen->fence_finish(screen, NULL, drawable->throttle_fence, PIPE_TIMEOUT_INFINITE);
+         screen->fence_finish(screen, NULL, drawable->throttle_fence, OS_TIMEOUT_INFINITE);
          screen->fence_reference(screen, &drawable->throttle_fence, NULL);
       }
       drawable->throttle_fence = new_fence;

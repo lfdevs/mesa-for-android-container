@@ -228,6 +228,7 @@ setup_state_map(struct fd_context *ctx)
       BIT(FD6_GROUP_NON_GROUP));
 }
 
+template <chip CHIP>
 struct pipe_context *
 fd6_context_create(struct pipe_screen *pscreen, void *priv,
                    unsigned flags) disable_thread_safety_analysis
@@ -253,11 +254,11 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    pctx->create_depth_stencil_alpha_state = fd6_zsa_state_create;
    pctx->create_vertex_elements_state = fd6_vertex_state_create;
 
-   fd6_draw_init(pctx);
-   fd6_compute_init(pctx);
-   fd6_gmem_init(pctx);
+   fd6_draw_init<CHIP>(pctx);
+   fd6_compute_init<CHIP>(pctx);
+   fd6_gmem_init<CHIP>(pctx);
    fd6_texture_init(pctx);
-   fd6_prog_init(pctx);
+   fd6_prog_init<CHIP>(pctx);
    fd6_query_context_init(pctx);
 
    setup_state_map(&fd6_ctx->base);
@@ -299,7 +300,11 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
 
    fd_context_setup_common_vbos(&fd6_ctx->base);
 
-   fd6_blitter_init(pctx);
+   fd6_blitter_init<CHIP>(pctx);
 
    return fd_context_init_tc(pctx, flags);
 }
+
+/* Teach the compiler about needed variants: */
+template struct pipe_context *fd6_context_create<A6XX>(struct pipe_screen *pscreen, void *priv, unsigned flags);
+template struct pipe_context *fd6_context_create<A7XX>(struct pipe_screen *pscreen, void *priv, unsigned flags);

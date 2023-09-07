@@ -69,7 +69,9 @@ public:
       all = (1 << 15) - 1,
       nomerge = 1 << 16,
       steps = 1 << 17,
-      noopt = 1 << 18
+      noopt = 1 << 18,
+      noaddrsplit = 1 << 19,
+      warn = 1 << 20,
    };
 
    SfnLog();

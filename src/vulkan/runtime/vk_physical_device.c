@@ -30,6 +30,7 @@ VkResult
 vk_physical_device_init(struct vk_physical_device *pdevice,
                         struct vk_instance *instance,
                         const struct vk_device_extension_table *supported_extensions,
+                        const struct vk_features *supported_features,
                         const struct vk_physical_device_dispatch_table *dispatch_table)
 {
    memset(pdevice, 0, sizeof(*pdevice));
@@ -38,6 +39,9 @@ vk_physical_device_init(struct vk_physical_device *pdevice,
 
    if (supported_extensions != NULL)
       pdevice->supported_extensions = *supported_extensions;
+
+   if (supported_features != NULL)
+      pdevice->supported_features = *supported_features;
 
    pdevice->dispatch_table = *dispatch_table;
 
@@ -230,7 +234,7 @@ VKAPI_ATTR void VKAPI_CALL
 vk_common_GetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice,
                                                        VkFormat format,
                                                        VkImageType type,
-                                                       uint32_t samples,
+                                                       VkSampleCountFlagBits samples,
                                                        VkImageUsageFlags usage,
                                                        VkImageTiling tiling,
                                                        uint32_t *pNumProperties,

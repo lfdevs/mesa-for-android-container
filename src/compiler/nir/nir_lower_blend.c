@@ -515,6 +515,12 @@ nir_lower_blend_instr(nir_builder *b, nir_instr *instr, void *data)
     */
    b->cursor = nir_after_block(instr->block);
 
+   /* Don't bother copying the destination to the source for disabled RTs */
+   if (options->rt[rt].colormask == 0) {
+      nir_instr_remove(instr);
+      return true;
+   }
+
    /* Grab the input color.  We always want 4 channels during blend.  Dead
     * code will clean up any channels we don't need.
     */

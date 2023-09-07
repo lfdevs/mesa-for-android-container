@@ -204,8 +204,7 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
 {
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block_safe(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -228,20 +227,8 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
                break;
 
             case nir_intrinsic_load_ssbo:
-            case nir_intrinsic_ssbo_atomic_add:
-            case nir_intrinsic_ssbo_atomic_imin:
-            case nir_intrinsic_ssbo_atomic_umin:
-            case nir_intrinsic_ssbo_atomic_imax:
-            case nir_intrinsic_ssbo_atomic_umax:
-            case nir_intrinsic_ssbo_atomic_and:
-            case nir_intrinsic_ssbo_atomic_or:
-            case nir_intrinsic_ssbo_atomic_xor:
-            case nir_intrinsic_ssbo_atomic_exchange:
-            case nir_intrinsic_ssbo_atomic_comp_swap:
-            case nir_intrinsic_ssbo_atomic_fadd:
-            case nir_intrinsic_ssbo_atomic_fmin:
-            case nir_intrinsic_ssbo_atomic_fmax:
-            case nir_intrinsic_ssbo_atomic_fcomp_swap:
+            case nir_intrinsic_ssbo_atomic:
+            case nir_intrinsic_ssbo_atomic_swap:
                if ((options->types & nir_lower_non_uniform_ssbo_access) &&
                    lower_non_uniform_access_intrin(options, &b, intrin, 0))
                   progress = true;
@@ -254,22 +241,17 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
                   progress = true;
                break;
 
+            case nir_intrinsic_get_ssbo_size:
+               if ((options->types & nir_lower_non_uniform_get_ssbo_size) &&
+                   lower_non_uniform_access_intrin(options, &b, intrin, 0))
+                  progress = true;
+               break;
+
             case nir_intrinsic_image_load:
             case nir_intrinsic_image_sparse_load:
             case nir_intrinsic_image_store:
-            case nir_intrinsic_image_atomic_add:
-            case nir_intrinsic_image_atomic_imin:
-            case nir_intrinsic_image_atomic_umin:
-            case nir_intrinsic_image_atomic_imax:
-            case nir_intrinsic_image_atomic_umax:
-            case nir_intrinsic_image_atomic_and:
-            case nir_intrinsic_image_atomic_or:
-            case nir_intrinsic_image_atomic_xor:
-            case nir_intrinsic_image_atomic_exchange:
-            case nir_intrinsic_image_atomic_comp_swap:
-            case nir_intrinsic_image_atomic_fadd:
-            case nir_intrinsic_image_atomic_fmin:
-            case nir_intrinsic_image_atomic_fmax:
+            case nir_intrinsic_image_atomic:
+            case nir_intrinsic_image_atomic_swap:
             case nir_intrinsic_image_size:
             case nir_intrinsic_image_samples:
             case nir_intrinsic_image_samples_identical:
@@ -277,19 +259,8 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
             case nir_intrinsic_bindless_image_load:
             case nir_intrinsic_bindless_image_sparse_load:
             case nir_intrinsic_bindless_image_store:
-            case nir_intrinsic_bindless_image_atomic_add:
-            case nir_intrinsic_bindless_image_atomic_imin:
-            case nir_intrinsic_bindless_image_atomic_umin:
-            case nir_intrinsic_bindless_image_atomic_imax:
-            case nir_intrinsic_bindless_image_atomic_umax:
-            case nir_intrinsic_bindless_image_atomic_and:
-            case nir_intrinsic_bindless_image_atomic_or:
-            case nir_intrinsic_bindless_image_atomic_xor:
-            case nir_intrinsic_bindless_image_atomic_exchange:
-            case nir_intrinsic_bindless_image_atomic_comp_swap:
-            case nir_intrinsic_bindless_image_atomic_fadd:
-            case nir_intrinsic_bindless_image_atomic_fmin:
-            case nir_intrinsic_bindless_image_atomic_fmax:
+            case nir_intrinsic_bindless_image_atomic:
+            case nir_intrinsic_bindless_image_atomic_swap:
             case nir_intrinsic_bindless_image_size:
             case nir_intrinsic_bindless_image_samples:
             case nir_intrinsic_bindless_image_samples_identical:
@@ -297,19 +268,8 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
             case nir_intrinsic_image_deref_load:
             case nir_intrinsic_image_deref_sparse_load:
             case nir_intrinsic_image_deref_store:
-            case nir_intrinsic_image_deref_atomic_add:
-            case nir_intrinsic_image_deref_atomic_umin:
-            case nir_intrinsic_image_deref_atomic_imin:
-            case nir_intrinsic_image_deref_atomic_umax:
-            case nir_intrinsic_image_deref_atomic_imax:
-            case nir_intrinsic_image_deref_atomic_and:
-            case nir_intrinsic_image_deref_atomic_or:
-            case nir_intrinsic_image_deref_atomic_xor:
-            case nir_intrinsic_image_deref_atomic_exchange:
-            case nir_intrinsic_image_deref_atomic_comp_swap:
-            case nir_intrinsic_image_deref_atomic_fadd:
-            case nir_intrinsic_image_deref_atomic_fmin:
-            case nir_intrinsic_image_deref_atomic_fmax:
+            case nir_intrinsic_image_deref_atomic:
+            case nir_intrinsic_image_deref_atomic_swap:
             case nir_intrinsic_image_deref_size:
             case nir_intrinsic_image_deref_samples:
             case nir_intrinsic_image_deref_samples_identical:
@@ -368,9 +328,8 @@ nir_lower_non_uniform_access(nir_shader *shader,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl &&
-          nir_lower_non_uniform_access_impl(function->impl, options))
+   nir_foreach_function_impl(impl, shader) {
+      if (nir_lower_non_uniform_access_impl(impl, options))
          progress = true;
    }
 

@@ -32,7 +32,7 @@
 
 struct nir_builder;
 
-typedef enum PACKED {
+typedef enum ENUM_PACKED {
    nir_search_value_expression,
    nir_search_value_variable,
    nir_search_value_constant,

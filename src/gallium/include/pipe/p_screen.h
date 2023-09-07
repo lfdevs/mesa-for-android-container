@@ -38,7 +38,7 @@
 #define P_SCREEN_H
 
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/format/u_formats.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_video_enums.h"
@@ -408,7 +408,7 @@ struct pipe_screen {
     *
     * In all other cases, the ctx parameter has no effect.
     *
-    * \param timeout  in nanoseconds (may be PIPE_TIMEOUT_INFINITE).
+    * \param timeout  in nanoseconds (may be OS_TIMEOUT_INFINITE).
     */
    bool (*fence_finish)(struct pipe_screen *screen,
                         struct pipe_context *ctx,

@@ -32,10 +32,12 @@
 #include "util/functional.hpp"
 
 #include <compiler/glsl_types.h>
+#include <compiler/clc/nir_clc_helpers.h>
 #include <compiler/nir/nir_builder.h>
 #include <compiler/nir/nir_serialize.h>
 #include <compiler/spirv/nir_spirv.h>
 #include <util/u_math.h>
+#include <util/hex.h>
 
 using namespace clover;
 
@@ -239,7 +241,7 @@ struct disk_cache *clover::nir::create_clc_disk_cache(void)
 
    _mesa_sha1_final(&ctx, sha1);
 
-   disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
+   mesa_bytes_to_hex(cache_id, sha1, 20);
    return disk_cache_create("clover-clc", cache_id, 0);
 }
 
@@ -255,7 +257,8 @@ nir_shader *clover::nir::load_libclc_nir(const device &dev, std::string &r_log)
    auto *compiler_options = dev_get_nir_compiler_options(dev);
 
    return nir_load_libclc_shader(dev.address_bits(), dev.clc_cache,
-				 &spirv_options, compiler_options);
+                                 &spirv_options, compiler_options,
+                                 dev.clc_cache != nullptr);
 }
 
 static bool

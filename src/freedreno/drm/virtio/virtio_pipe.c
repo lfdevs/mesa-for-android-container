@@ -122,13 +122,6 @@ virtio_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence, uint64_t ti
 {
    MESA_TRACE_FUNC();
 
-   assert(fence->use_fence_fd);
-
-   if (fence->use_fence_fd)
-      return sync_wait(fence->fence_fd, timeout / 1000000);
-
-   /* TODO remove !use_fence_fd path */
-
    struct msm_ccmd_wait_fence_req req = {
          .hdr = MSM_CCMD(WAIT_FENCE, sizeof(req)),
          .queue_id = to_virtio_pipe(pipe)->queue_id,
@@ -138,6 +131,19 @@ virtio_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence, uint64_t ti
    int64_t end_time = os_time_get_nano() + timeout;
    int ret;
 
+   /* Do a non-blocking wait to trigger host-side wait-boost,
+    * if the host kernel is new enough
+    */
+   rsp = virtio_alloc_rsp(pipe->dev, &req.hdr, sizeof(*rsp));
+   ret = virtio_execbuf(pipe->dev, &req.hdr, false);
+   if (ret)
+      goto out;
+
+   virtio_execbuf_flush(pipe->dev);
+
+   if (fence->use_fence_fd)
+      return sync_wait(fence->fence_fd, timeout / 1000000);
+
    do {
       rsp = virtio_alloc_rsp(pipe->dev, &req.hdr, sizeof(*rsp));
 
@@ -145,7 +151,7 @@ virtio_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence, uint64_t ti
       if (ret)
          goto out;
 
-      if ((timeout != PIPE_TIMEOUT_INFINITE) &&
+      if ((timeout != OS_TIMEOUT_INFINITE) &&
           (os_time_get_nano() >= end_time))
          break;
 

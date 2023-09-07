@@ -375,7 +375,6 @@ compute_version(const struct gl_extensions *extensions,
                          consts->GLSLVersion >= 440 &&
                          consts->MaxVertexAttribStride >= 2048 &&
                          extensions->ARB_buffer_storage &&
-                         extensions->ARB_clear_texture &&
                          extensions->ARB_enhanced_layouts &&
                          extensions->ARB_query_buffer_object &&
                          extensions->ARB_texture_mirror_clamp_to_edge &&

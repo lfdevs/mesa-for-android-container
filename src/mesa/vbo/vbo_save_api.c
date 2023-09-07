@@ -598,7 +598,7 @@ compile_vertex_list(struct gl_context *ctx)
    node->cold->max_index = end - 1;
 
    /* converting primitive types may result in many more indices */
-   bool all_prims_supported = (ctx->Const.DriverSupportedPrimMask & BITFIELD_MASK(PIPE_PRIM_MAX)) == BITFIELD_MASK(PIPE_PRIM_MAX);
+   bool all_prims_supported = (ctx->Const.DriverSupportedPrimMask & BITFIELD_MASK(MESA_PRIM_COUNT)) == BITFIELD_MASK(MESA_PRIM_COUNT);
    int max_index_count = total_vert_count * (all_prims_supported ? 2 : 3);
    uint32_t* indices = (uint32_t*) malloc(max_index_count * sizeof(uint32_t));
    void *tmp_indices = all_prims_supported ? NULL : malloc(max_index_count * sizeof(uint32_t));
@@ -626,7 +626,7 @@ compile_vertex_list(struct gl_context *ctx)
       bool converted_prim = false;
       unsigned index_size;
       bool outputting_quads = !!(ctx->Const.DriverSupportedPrimMask &
-                                 (BITFIELD_MASK(PIPE_PRIM_QUADS) | BITFIELD_MASK(PIPE_PRIM_QUAD_STRIP)));
+                                 (BITFIELD_MASK(MESA_PRIM_QUADS) | BITFIELD_MASK(MESA_PRIM_QUAD_STRIP)));
       unsigned verts_per_primitive = outputting_quads ? 4 : 3;
 
       int vertex_count = original_prims[i].count;
@@ -648,7 +648,7 @@ compile_vertex_list(struct gl_context *ctx)
       if (!(ctx->Const.DriverSupportedPrimMask & BITFIELD_BIT(mode))) {
          unsigned new_count;
          u_generate_func trans_func;
-         enum pipe_prim_type pmode = (enum pipe_prim_type)mode;
+         enum mesa_prim pmode = (enum mesa_prim)mode;
          u_index_generator(ctx->Const.DriverSupportedPrimMask,
                            pmode, original_prims[i].start, vertex_count,
                            PV_LAST, PV_LAST,

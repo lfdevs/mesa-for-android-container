@@ -153,8 +153,8 @@ lower_load_bitsize(nir_builder *b,
                         }
                 }
 
-                nir_ssa_dest_init(&new_intr->instr, &new_intr->dest,
-                                  1, bit_size, NULL);
+                nir_ssa_dest_init(&new_intr->instr, &new_intr->dest, 1,
+                                  bit_size);
                 dest_components[component] = &new_intr->dest.ssa;
 
                 nir_builder_instr_insert(b, &new_intr->instr);

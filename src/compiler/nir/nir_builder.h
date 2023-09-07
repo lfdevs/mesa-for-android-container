@@ -48,7 +48,27 @@ typedef struct nir_builder {
    nir_function_impl *impl;
 } nir_builder;
 
-void nir_builder_init(nir_builder *build, nir_function_impl *impl);
+static inline nir_builder
+nir_builder_create(nir_function_impl *impl)
+{
+   nir_builder b;
+   memset(&b, 0, sizeof(b));
+   b.exact = false;
+   b.impl = impl;
+   b.shader = impl->function->shader;
+   return b;
+}
+
+/* Requires the cursor to be inside a nir_function_impl. */
+static inline nir_builder
+nir_builder_at(nir_cursor cursor)
+{
+   nir_cf_node *current_block = &nir_cursor_current_block(cursor)->cf_node;
+
+   nir_builder b = nir_builder_create(nir_cf_node_get_function(current_block));
+   b.cursor = cursor;
+   return b;
+}
 
 nir_builder MUST_CHECK PRINTFLIKE(3, 4)
 nir_builder_init_simple_shader(gl_shader_stage stage,
@@ -75,25 +95,21 @@ nir_shader_instructions_pass(nir_shader *shader,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
+   nir_foreach_function_impl(impl, shader) {
       bool func_progress = false;
-      nir_builder b;
-      nir_builder_init(&b, function->impl);
+      nir_builder b = nir_builder_create(impl);
 
-      nir_foreach_block_safe(block, function->impl) {
+      nir_foreach_block_safe(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             func_progress |= pass(&b, instr, cb_data);
          }
       }
 
       if (func_progress) {
-         nir_metadata_preserve(function->impl, preserved);
+         nir_metadata_preserve(impl, preserved);
          progress = true;
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 
@@ -419,7 +435,7 @@ nir_f2fN(nir_builder *b, nir_ssa_def *src, unsigned bit_size)
 static inline nir_ssa_def *
 nir_i2b(nir_builder *b, nir_ssa_def *src)
 {
-   return nir_ine(b, src, nir_imm_intN_t(b, 0, src->bit_size));
+   return nir_ine_imm(b, src, 0);
 }
 
 static inline nir_ssa_def *
@@ -495,7 +511,7 @@ nir_mov_alu(nir_builder *build, nir_alu_src src, unsigned num_components)
 
    nir_alu_instr *mov = nir_alu_instr_create(build->shader, nir_op_mov);
    nir_ssa_dest_init(&mov->instr, &mov->dest.dest, num_components,
-                     nir_src_bit_size(src.src), NULL);
+                     nir_src_bit_size(src.src));
    mov->exact = build->exact;
    mov->dest.write_mask = (1 << num_components) - 1;
    mov->src[0] = src;
@@ -621,7 +637,7 @@ _nir_select_from_array_helper(nir_builder *b, nir_ssa_def **arr,
       return arr[start];
    } else {
       unsigned mid = start + (end - start) / 2;
-      return nir_bcsel(b, nir_ilt(b, idx, nir_imm_intN_t(b, mid, idx->bit_size)),
+      return nir_bcsel(b, nir_ilt_imm(b, idx, mid),
                        _nir_select_from_array_helper(b, arr, idx, start, mid),
                        _nir_select_from_array_helper(b, arr, idx, mid, end));
    }
@@ -708,6 +724,19 @@ nir_vector_insert(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *scalar,
 }
 
 static inline nir_ssa_def *
+nir_replicate(nir_builder *b, nir_ssa_def *scalar, unsigned num_components)
+{
+   assert(scalar->num_components == 1);
+   assert(num_components <= NIR_MAX_VEC_COMPONENTS);
+
+   nir_ssa_def *copies[NIR_MAX_VEC_COMPONENTS] = {NULL};
+   for (unsigned i = 0; i < num_components; ++i)
+      copies[i] = scalar;
+
+   return nir_vec(b, copies, num_components);
+}
+
+static inline nir_ssa_def *
 nir_iadd_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
 {
    assert(x->bit_size <= 64);
@@ -738,15 +767,15 @@ nir_iadd_nuw(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
 }
 
 static inline nir_ssa_def *
-nir_ieq_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
+nir_fgt_imm(nir_builder *build, nir_ssa_def *src1, double src2)
 {
-   return nir_ieq(build, x, nir_imm_intN_t(build, y, x->bit_size));
+   return nir_flt(build, nir_imm_floatN_t(build, src2, src1->bit_size), src1);
 }
 
 static inline nir_ssa_def *
-nir_ine_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
+nir_fle_imm(nir_builder *build, nir_ssa_def *src1, double src2)
 {
-  return nir_ine(build, x, nir_imm_intN_t(build, y, x->bit_size));
+   return nir_fge(build, nir_imm_floatN_t(build, src2, src1->bit_size), src1);
 }
 
 /* Use nir_iadd(x, -y) for reversing parameter ordering */
@@ -795,9 +824,21 @@ nir_fadd_imm(nir_builder *build, nir_ssa_def *x, double y)
 }
 
 static inline nir_ssa_def *
+nir_fsub_imm(nir_builder *build, double x, nir_ssa_def *y)
+{
+   return nir_fsub(build, nir_imm_floatN_t(build, x, y->bit_size), y);
+}
+
+static inline nir_ssa_def *
 nir_fmul_imm(nir_builder *build, nir_ssa_def *x, double y)
 {
    return nir_fmul(build, x, nir_imm_floatN_t(build, y, x->bit_size));
+}
+
+static inline nir_ssa_def *
+nir_fdiv_imm(nir_builder *build, nir_ssa_def *x, double y)
+{
+   return nir_fdiv(build, x, nir_imm_floatN_t(build, y, x->bit_size));
 }
 
 static inline nir_ssa_def *
@@ -868,6 +909,12 @@ nir_ushr_imm(nir_builder *build, nir_ssa_def *x, uint32_t y)
 }
 
 static inline nir_ssa_def *
+nir_imod_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
+{
+   return nir_imod(build, x, nir_imm_intN_t(build, y, x->bit_size));
+}
+
+static inline nir_ssa_def *
 nir_udiv_imm(nir_builder *build, nir_ssa_def *x, uint64_t y)
 {
    assert(x->bit_size <= 64);
@@ -904,6 +951,12 @@ static inline nir_ssa_def *
 nir_ubfe_imm(nir_builder *build, nir_ssa_def *x, uint32_t offset, uint32_t size)
 {
    return nir_ubfe(build, x, nir_imm_int(build, offset), nir_imm_int(build, size));
+}
+
+static inline nir_ssa_def *
+nir_ubitfield_extract_imm(nir_builder *build, nir_ssa_def *x, uint32_t offset, uint32_t size)
+{
+   return nir_ubitfield_extract(build, x, nir_imm_int(build, offset), nir_imm_int(build, size));
 }
 
 static inline nir_ssa_def *
@@ -1220,7 +1273,7 @@ nir_build_deref_var(nir_builder *build, nir_variable *var)
    deref->var = var;
 
    nir_ssa_dest_init(&deref->instr, &deref->dest, 1,
-                     nir_get_ptr_bitsize(build->shader), NULL);
+                     nir_get_ptr_bitsize(build->shader));
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1247,7 +1300,7 @@ nir_build_deref_array(nir_builder *build, nir_deref_instr *parent,
 
    nir_ssa_dest_init(&deref->instr, &deref->dest,
                      parent->dest.ssa.num_components,
-                     parent->dest.ssa.bit_size, NULL);
+                     parent->dest.ssa.bit_size);
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1285,7 +1338,7 @@ nir_build_deref_ptr_as_array(nir_builder *build, nir_deref_instr *parent,
 
    nir_ssa_dest_init(&deref->instr, &deref->dest,
                      parent->dest.ssa.num_components,
-                     parent->dest.ssa.bit_size, NULL);
+                     parent->dest.ssa.bit_size);
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1307,7 +1360,7 @@ nir_build_deref_array_wildcard(nir_builder *build, nir_deref_instr *parent)
 
    nir_ssa_dest_init(&deref->instr, &deref->dest,
                      parent->dest.ssa.num_components,
-                     parent->dest.ssa.bit_size, NULL);
+                     parent->dest.ssa.bit_size);
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1330,7 +1383,7 @@ nir_build_deref_struct(nir_builder *build, nir_deref_instr *parent,
 
    nir_ssa_dest_init(&deref->instr, &deref->dest,
                      parent->dest.ssa.num_components,
-                     parent->dest.ssa.bit_size, NULL);
+                     parent->dest.ssa.bit_size);
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1350,8 +1403,8 @@ nir_build_deref_cast(nir_builder *build, nir_ssa_def *parent,
    deref->parent = nir_src_for_ssa(parent);
    deref->cast.ptr_stride = ptr_stride;
 
-   nir_ssa_dest_init(&deref->instr, &deref->dest,
-                     parent->num_components, parent->bit_size, NULL);
+   nir_ssa_dest_init(&deref->instr, &deref->dest, parent->num_components,
+                     parent->bit_size);
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1374,7 +1427,7 @@ nir_alignment_deref_cast(nir_builder *build, nir_deref_instr *parent,
 
    nir_ssa_dest_init(&deref->instr, &deref->dest,
                      parent->dest.ssa.num_components,
-                     parent->dest.ssa.bit_size, NULL);
+                     parent->dest.ssa.bit_size);
 
    nir_builder_instr_insert(build, &deref->instr);
 
@@ -1434,14 +1487,14 @@ nir_build_deref_follower(nir_builder *b, nir_deref_instr *parent,
 }
 
 static inline nir_ssa_def *
-nir_load_reg(nir_builder *build, nir_register *reg)
+nir_load_register(nir_builder *build, nir_register *reg)
 {
    return nir_ssa_for_src(build, nir_src_for_reg(reg), reg->num_components);
 }
 
 static inline void
-nir_store_reg(nir_builder *build, nir_register *reg,
-              nir_ssa_def *def, nir_component_mask_t write_mask)
+nir_store_register(nir_builder *build, nir_register *reg,
+                   nir_ssa_def *def, nir_component_mask_t write_mask)
 {
    assert(reg->num_components == def->num_components);
    assert(reg->bit_size == def->bit_size);
@@ -1589,8 +1642,7 @@ nir_load_global(nir_builder *build, nir_ssa_def *addr, unsigned align,
    load->num_components = num_components;
    load->src[0] = nir_src_for_ssa(addr);
    nir_intrinsic_set_align(load, align, 0);
-   nir_ssa_dest_init(&load->instr, &load->dest,
-                     num_components, bit_size, NULL);
+   nir_ssa_dest_init(&load->instr, &load->dest, num_components, bit_size);
    nir_builder_instr_insert(build, &load->instr);
    return &load->dest.ssa;
 }
@@ -1621,8 +1673,7 @@ nir_load_global_constant(nir_builder *build, nir_ssa_def *addr, unsigned align,
    load->num_components = num_components;
    load->src[0] = nir_src_for_ssa(addr);
    nir_intrinsic_set_align(load, align, 0);
-   nir_ssa_dest_init(&load->instr, &load->dest,
-                     num_components, bit_size, NULL);
+   nir_ssa_dest_init(&load->instr, &load->dest, num_components, bit_size);
    nir_builder_instr_insert(build, &load->instr);
    return &load->dest.ssa;
 }
@@ -1636,14 +1687,84 @@ nir_load_param(nir_builder *build, uint32_t param_idx)
    return nir_build_load_param(build, param->num_components, param->bit_size, param_idx);
 }
 
+#undef nir_decl_reg
+static inline nir_ssa_def *
+nir_decl_reg(nir_builder *b, unsigned num_components, unsigned bit_size,
+             unsigned num_array_elems)
+{
+   nir_intrinsic_instr *decl =
+      nir_intrinsic_instr_create(b->shader, nir_intrinsic_decl_reg);
+   nir_intrinsic_set_num_components(decl, num_components);
+   nir_intrinsic_set_bit_size(decl, bit_size);
+   nir_intrinsic_set_num_array_elems(decl, num_array_elems);
+   nir_intrinsic_set_divergent(decl, true);
+   nir_ssa_dest_init(&decl->instr, &decl->dest, 1, 32);
+
+   nir_instr_insert(nir_before_cf_list(&b->impl->body), &decl->instr);
+
+   return &decl->dest.ssa;
+}
+
+#undef nir_load_reg
+static inline nir_ssa_def *
+nir_load_reg(nir_builder *b, nir_ssa_def *reg)
+{
+   nir_intrinsic_instr *decl = nir_reg_get_decl(reg);
+   unsigned num_components = nir_intrinsic_num_components(decl);
+   unsigned bit_size = nir_intrinsic_bit_size(decl);
+
+   nir_ssa_def *res = nir_build_load_reg(b, num_components, bit_size, reg);
+   res->divergent = nir_intrinsic_divergent(decl);
+
+   return res;
+}
+
+#undef nir_store_reg
+static inline void
+nir_store_reg(nir_builder *b, nir_ssa_def *value, nir_ssa_def *reg)
+{
+   ASSERTED nir_intrinsic_instr *decl = nir_reg_get_decl(reg);
+   ASSERTED unsigned num_components = nir_intrinsic_num_components(decl);
+   ASSERTED unsigned bit_size = nir_intrinsic_bit_size(decl);
+
+   assert(value->num_components == num_components);
+   assert(value->bit_size == bit_size);
+
+   nir_build_store_reg(b, value, reg);
+}
+
+static inline nir_tex_src
+nir_tex_src_for_ssa(nir_tex_src_type src_type, nir_ssa_def *def)
+{
+   nir_tex_src src;
+   src.src = nir_src_for_ssa(def);
+   src.src_type = src_type;
+   return src;
+}
+
+/*
+ * Find a texture source, remove it, and return its nir_ssa_def. If the texture
+ * source does not exist, return NULL. This is useful for texture lowering pass
+ * that consume their input sources and produce a new lowered source.
+ */
+static inline nir_ssa_def *
+nir_steal_tex_src(nir_tex_instr *tex, nir_tex_src_type type_)
+{
+   int idx = nir_tex_instr_src_index(tex, type_);
+   if (idx < 0)
+      return NULL;
+
+   assert(tex->src[idx].src.is_ssa);
+   nir_ssa_def *ssa = tex->src[idx].src.ssa;
+   nir_tex_instr_remove_src(tex, idx);
+   return ssa;
+}
+
 static inline nir_ssa_def *
 nir_tex_deref(nir_builder *b, nir_deref_instr *t, nir_deref_instr *s,
               nir_ssa_def *coord)
 {
-   nir_tex_src srcs[] = {{
-      nir_src_for_ssa(coord),
-      nir_tex_src_coord,
-   }};
+   nir_tex_src srcs[] = {nir_tex_src_for_ssa(nir_tex_src_coord, coord)};
 
    return nir_build_tex_deref_instr(b, nir_texop_tex, t, s,
                                     ARRAY_SIZE(srcs), srcs);
@@ -1653,13 +1774,10 @@ static inline nir_ssa_def *
 nir_txl_deref(nir_builder *b, nir_deref_instr *t, nir_deref_instr *s,
               nir_ssa_def *coord, nir_ssa_def *lod)
 {
-   nir_tex_src srcs[] = {{
-      nir_src_for_ssa(coord),
-      nir_tex_src_coord,
-   }, {
-      nir_src_for_ssa(lod),
-      nir_tex_src_lod,
-   }};
+   nir_tex_src srcs[] = {
+      nir_tex_src_for_ssa(nir_tex_src_coord, coord),
+      nir_tex_src_for_ssa(nir_tex_src_lod, lod),
+   };
 
    return nir_build_tex_deref_instr(b, nir_texop_txl, t, s,
                                     ARRAY_SIZE(srcs), srcs);
@@ -1679,9 +1797,7 @@ nir_txf_deref(nir_builder *b, nir_deref_instr *t,
    nir_tex_src srcs[2];
    unsigned num_srcs = 0;
 
-   srcs[num_srcs].src_type = nir_tex_src_coord;
-   srcs[num_srcs].src = nir_src_for_ssa(coord);
-   num_srcs++;
+   srcs[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_coord, coord);
 
    if (lod == NULL) {
       switch (glsl_get_sampler_dim(t->type)) {
@@ -1696,11 +1812,8 @@ nir_txf_deref(nir_builder *b, nir_deref_instr *t,
       }
    }
 
-   if (lod != NULL) {
-      srcs[num_srcs].src_type = nir_tex_src_lod;
-      srcs[num_srcs].src = nir_src_for_ssa(lod);
-      num_srcs++;
-   }
+   if (lod != NULL)
+      srcs[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_lod, lod);
 
    return nir_build_tex_deref_instr(b, nir_texop_txf, t, NULL,
                                     num_srcs, srcs);
@@ -1710,13 +1823,10 @@ static inline nir_ssa_def *
 nir_txf_ms_deref(nir_builder *b, nir_deref_instr *t,
                  nir_ssa_def *coord, nir_ssa_def *ms_index)
 {
-   nir_tex_src srcs[] = {{
-      nir_src_for_ssa(coord),
-      nir_tex_src_coord,
-   }, {
-      nir_src_for_ssa(ms_index),
-      nir_tex_src_ms_index,
-   }};
+   nir_tex_src srcs[] = {
+      nir_tex_src_for_ssa(nir_tex_src_coord, coord),
+      nir_tex_src_for_ssa(nir_tex_src_ms_index, ms_index),
+   };
 
    return nir_build_tex_deref_instr(b, nir_texop_txf_ms, t, NULL,
                                     ARRAY_SIZE(srcs), srcs);
@@ -1726,10 +1836,7 @@ static inline nir_ssa_def *
 nir_samples_identical_deref(nir_builder *b, nir_deref_instr *t,
                             nir_ssa_def *coord)
 {
-   nir_tex_src srcs[] = {{
-      nir_src_for_ssa(coord),
-      nir_tex_src_coord,
-   }};
+   nir_tex_src srcs[] = {nir_tex_src_for_ssa(nir_tex_src_coord, coord)};
 
    return nir_build_tex_deref_instr(b, nir_texop_samples_identical, t, NULL,
                                     ARRAY_SIZE(srcs), srcs);
@@ -1749,7 +1856,7 @@ nir_load_barycentric(nir_builder *build, nir_intrinsic_op op,
 {
    unsigned num_components = op == nir_intrinsic_load_barycentric_model ? 3 : 2;
    nir_intrinsic_instr *bary = nir_intrinsic_instr_create(build->shader, op);
-   nir_ssa_dest_init(&bary->instr, &bary->dest, num_components, 32, NULL);
+   nir_ssa_dest_init(&bary->instr, &bary->dest, num_components, 32);
    nir_intrinsic_set_interp_mode(bary, interp_mode);
    nir_builder_instr_insert(build, &bary->instr);
    return &bary->dest.ssa;
@@ -1790,11 +1897,11 @@ nir_compare_func(nir_builder *b, enum compare_func func,
 
 static inline void
 nir_scoped_memory_barrier(nir_builder *b,
-                          nir_scope scope,
+                          mesa_scope scope,
                           nir_memory_semantics semantics,
                           nir_variable_mode modes)
 {
-   nir_scoped_barrier(b, NIR_SCOPE_NONE, scope, semantics, modes);
+   nir_scoped_barrier(b, SCOPE_NONE, scope, semantics, modes);
 }
 
 nir_ssa_def *

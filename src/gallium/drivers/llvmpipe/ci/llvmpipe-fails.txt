@@ -1,5 +1,4 @@
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.compute,Fail
-dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.fragment,Timeout
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.vertex,Fail
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.query_status.vertex_and_fragment,Fail
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.compute,Fail
@@ -8,20 +7,13 @@ dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.reset_status.
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.compute,Fail
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex,Fail
 dEQP-EGL.functional.robustness.reset_context.shaders.infinite_loop.sync_status.vertex_and_fragment,Fail
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_center,Fail
-dEQP-GLES3.functional.clipping.line.wide_line_clip_viewport_corner,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_x,Fail
 
 spec@glsl-1.20@compiler@invalid-vec4-array-to-vec3-array-conversion.vert,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
@@ -196,13 +188,6 @@ spec@glsl-4.00@execution@conversion@vert-conversion-explicit-dvec4-vec4,Fail
 spec@glsl-4.50@execution@ssbo-atomiccompswap-int,Fail
 spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_image,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_sampler,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_image,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_sampler,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_image,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_sampler,Fail
 
 # [...]
 # Image comparison failed: reference = -0.000488281, expected = 0:0:0:0, result = 0:0:0:3
@@ -211,6 +196,10 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_
 # [...]
 wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail
 
-# New CTS failures in 1.3.5.0
-KHR-GL45.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
-KHR-GL45.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail
+# Debian bookworm fails
+spec@arb_viewport_array@display-list,Fail
+spec@intel_shader_atomic_float_minmax@execution@ssbo-atomicmin-float-nan,Fail
+spec@intel_shader_atomic_float_minmax@execution@ssbo-atomicmax-float-nan,Fail
+spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float,Crash
+spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float-nan,Crash
+spec@intel_shader_atomic_float_minmax@execution@ssbo-atomiccompswap-float-negative-zero,Crash

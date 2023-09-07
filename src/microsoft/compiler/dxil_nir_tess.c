@@ -33,9 +33,7 @@ is_memory_barrier_tcs_patch(const nir_intrinsic_instr *intr)
    if (intr->intrinsic == nir_intrinsic_scoped_barrier &&
        nir_intrinsic_memory_modes(intr) & nir_var_shader_out) {
       assert(nir_intrinsic_memory_modes(intr) == nir_var_shader_out);
-      assert(nir_intrinsic_memory_scope(intr) == NIR_SCOPE_WORKGROUP);
-      return true;
-   } else if (intr->intrinsic == nir_intrinsic_memory_barrier_tcs_patch) {
+      assert(nir_intrinsic_memory_scope(intr) == SCOPE_WORKGROUP);
       return true;
    } else {
       return false;
@@ -51,8 +49,7 @@ remove_hs_intrinsics(nir_function_impl *impl)
             continue;
          nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
          if (intr->intrinsic != nir_intrinsic_store_output &&
-             !is_memory_barrier_tcs_patch(intr) &&
-             intr->intrinsic != nir_intrinsic_control_barrier)
+             !is_memory_barrier_tcs_patch(intr))
             continue;
          nir_instr_remove(instr);
       }
@@ -147,7 +144,7 @@ start_tcs_loop(nir_builder *b, struct tcs_patch_loop_state *state, nir_deref_ins
    nir_store_deref(b, loop_var_deref, nir_imm_int(b, 0), 1);
    state->loop = nir_push_loop(b);
    state->count = nir_load_deref(b, loop_var_deref);
-   nir_push_if(b, nir_ige(b, state->count, nir_imm_int(b, b->impl->function->shader->info.tess.tcs_vertices_out)));
+   nir_push_if(b, nir_ige_imm(b, state->count, b->impl->function->shader->info.tess.tcs_vertices_out));
    nir_jump(b, nir_jump_break);
    nir_pop_if(b, NULL);
    state->insert_cursor = b->cursor;
@@ -197,8 +194,7 @@ dxil_nir_split_tess_ctrl(nir_shader *nir, nir_function **patch_const_func)
 
    *patch_const_func = nir_function_create(nir, "PatchConstantFunc");
    nir_function_impl *patch_const_func_impl = nir_function_impl_clone(nir, entrypoint);
-   (*patch_const_func)->impl = patch_const_func_impl;
-   patch_const_func_impl->function = *patch_const_func;
+   nir_function_set_impl(*patch_const_func, patch_const_func_impl);
 
    remove_hs_intrinsics(entrypoint);
    prune_patch_function_to_intrinsic_and_srcs(patch_const_func_impl);
@@ -222,8 +218,7 @@ dxil_nir_split_tess_ctrl(nir_shader *nir, nir_function **patch_const_func)
     * First, sink load_invocation_id so that it's present on both sides of barriers.
     * Each use gets a unique load of the invocation ID.
     */
-   nir_builder b;
-   nir_builder_init(&b, patch_const_func_impl);
+   nir_builder b = nir_builder_create(patch_const_func_impl);
    nir_foreach_block(block, patch_const_func_impl) {
       nir_foreach_instr_safe(instr, block) {
          if (instr->type != nir_instr_type_intrinsic)
@@ -265,7 +260,6 @@ dxil_nir_split_tess_ctrl(nir_shader *nir, nir_function **patch_const_func)
             break;
          }
          case nir_intrinsic_scoped_barrier:
-         case nir_intrinsic_memory_barrier_tcs_patch:
             if (!is_memory_barrier_tcs_patch(intr))
                break;
 

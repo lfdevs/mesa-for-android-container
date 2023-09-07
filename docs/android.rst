@@ -51,7 +51,7 @@ one cross-compiling the turnip driver for a stock Pixel phone)
 	-Dgallium-drivers= \
 	-Dvulkan-drivers=freedreno \
 	-Dfreedreno-kmds=kgsl
-    ninja -C build-android-aarch64
+    meson compile -C build-android-aarch64
 
 Replacing Android drivers on stock Android
 ------------------------------------------

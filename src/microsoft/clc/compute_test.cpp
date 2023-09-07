@@ -39,7 +39,7 @@
 
 #include <spirv-tools/libspirv.hpp>
 
-#if (defined(_WIN32) && defined(_MSC_VER)) || D3D12_SDK_VERSION < 606
+#if (defined(_WIN32) && defined(_MSC_VER))
 inline D3D12_CPU_DESCRIPTOR_HANDLE
 GetCPUDescriptorHandleForHeapStart(ID3D12DescriptorHeap *heap)
 {
@@ -740,7 +740,7 @@ ComputeTest::SetUp()
 
    uav_heap_incr = dev->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-   event = CreateEvent(NULL, FALSE, FALSE, NULL);
+   event = CreateEvent(NULL, false, false, NULL);
    if (!event)
       throw runtime_error("Failed to create event");
    fence_value = 1;

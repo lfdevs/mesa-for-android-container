@@ -41,7 +41,6 @@ libbroadcom_compiler_files = files(
   'v3d_nir_lower_line_smooth.c',
   'v3d_nir_lower_load_store_bitsize.c',
   'v3d_nir_lower_logic_ops.c',
-  'v3d_nir_lower_robust_access.c',
   'v3d_nir_lower_scratch.c',
   'v3d_nir_lower_txf_ms.c',
 )

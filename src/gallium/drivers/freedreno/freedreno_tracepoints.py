@@ -123,13 +123,21 @@ begin_end_tp('binning_ib')
 begin_end_tp('vsc_overflow_test')
 begin_end_tp('prologue')
 
-# For GMEM pass, where this could either be a clear or resolve
-begin_end_tp('clear_restore',
+# Either sysmem or gmem clears
+begin_end_tp('clears',
     args=[TracepointArg(type='uint16_t', var='fast_cleared', c_format='0x%x')],
     tp_print=['fast_cleared: 0x%x', '__entry->fast_cleared'],
 )
 
-begin_end_tp('resolve')
+begin_end_tp('tile_loads',
+    args=[TracepointArg(type='uint16_t', var='load', c_format='0x%x')],
+    tp_print=['load=0x%x', '__entry->load'],
+)
+
+begin_end_tp('tile_stores',
+    args=[TracepointArg(type='uint16_t', var='store', c_format='0x%x')],
+    tp_print=['store: 0x%x', '__entry->store'],
+)
 
 singular_tp('start_tile',
     args=[TracepointArg(type='uint16_t', var='bin_h', c_format='%u'),
@@ -157,7 +165,8 @@ begin_end_tp('compute',
           TracepointArg(type='uint16_t', var='local_size_z', c_format='%u'),
           TracepointArg(type='uint32_t', var='num_groups_x', c_format='%u'),
           TracepointArg(type='uint32_t', var='num_groups_y', c_format='%u'),
-          TracepointArg(type='uint32_t', var='num_groups_z', c_format='%u')]
+          TracepointArg(type='uint32_t', var='num_groups_z', c_format='%u'),
+          TracepointArg(type='uint32_t', var='shader_id',    c_format='%u')]
 )
 
 utrace_generate(cpath=args.src,

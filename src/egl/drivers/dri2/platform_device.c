@@ -30,31 +30,27 @@
 #include <xf86drm.h>
 #endif
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <dlfcn.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include "egl_dri2.h"
-#include "loader.h"
-#include "kopper_interface.h"
 #include "util/u_debug.h"
+#include "egl_dri2.h"
+#include "kopper_interface.h"
+#include "loader.h"
 
-static __DRIimage*
+static __DRIimage *
 device_alloc_image(struct dri2_egl_display *dri2_dpy,
                    struct dri2_egl_surface *dri2_surf)
 {
    return dri2_dpy->image->createImage(
-            dri2_dpy->dri_screen_render_gpu,
-            dri2_surf->base.Width,
-            dri2_surf->base.Height,
-            dri2_surf->visual,
-            0,
-            NULL);
+      dri2_dpy->dri_screen_render_gpu, dri2_surf->base.Width,
+      dri2_surf->base.Height, dri2_surf->visual, 0, NULL);
 }
 
 static void
@@ -73,12 +69,9 @@ device_free_images(struct dri2_egl_surface *dri2_surf)
 }
 
 static int
-device_image_get_buffers(__DRIdrawable *driDrawable,
-                         unsigned int format,
-                         uint32_t *stamp,
-                         void *loaderPrivate,
-                         uint32_t buffer_mask,
-                         struct __DRIimageList *buffers)
+device_image_get_buffers(__DRIdrawable *driDrawable, unsigned int format,
+                         uint32_t *stamp, void *loaderPrivate,
+                         uint32_t buffer_mask, struct __DRIimageList *buffers)
 {
    struct dri2_egl_surface *dri2_surf = loaderPrivate;
    struct dri2_egl_display *dri2_dpy =
@@ -105,8 +98,7 @@ device_image_get_buffers(__DRIdrawable *driDrawable,
    if (buffer_mask & __DRI_IMAGE_BUFFER_FRONT) {
 
       if (!dri2_surf->front)
-         dri2_surf->front =
-            device_alloc_image(dri2_dpy, dri2_surf);
+         dri2_surf->front = device_alloc_image(dri2_dpy, dri2_surf);
 
       buffers->image_mask |= __DRI_IMAGE_BUFFER_FRONT;
       buffers->front = dri2_surf->front;
@@ -138,11 +130,11 @@ dri2_device_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
                           false, NULL))
       goto cleanup_surface;
 
-   config = dri2_get_dri_config(dri2_conf, type,
-                                dri2_surf->base.GLColorspace);
+   config = dri2_get_dri_config(dri2_conf, type, dri2_surf->base.GLColorspace);
 
    if (!config) {
-      _eglError(EGL_BAD_MATCH, "Unsupported surfacetype/colorspace configuration");
+      _eglError(EGL_BAD_MATCH,
+                "Unsupported surfacetype/colorspace configuration");
       goto cleanup_surface;
    }
 
@@ -155,9 +147,9 @@ dri2_device_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
 
    return &dri2_surf->base;
 
-   cleanup_surface:
-      free(dri2_surf);
-      return NULL;
+cleanup_surface:
+   free(dri2_surf);
+   return NULL;
 }
 
 static EGLBoolean
@@ -207,16 +199,16 @@ device_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
 }
 
 static const __DRIimageLoaderExtension image_loader_extension = {
-   .base             = { __DRI_IMAGE_LOADER, 2 },
-   .getBuffers       = device_image_get_buffers,
+   .base = {__DRI_IMAGE_LOADER, 2},
+   .getBuffers = device_image_get_buffers,
    .flushFrontBuffer = device_flush_front_buffer,
-   .getCapability    = device_get_capability,
+   .getCapability = device_get_capability,
 };
 
 static const __DRIkopperLoaderExtension kopper_loader_extension = {
-    .base = { __DRI_KOPPER_LOADER, 1 },
+   .base = {__DRI_KOPPER_LOADER, 1},
 
-    .SetSurfaceCreateInfo   = NULL,
+   .SetSurfaceCreateInfo = NULL,
 };
 
 static const __DRIextension *image_loader_extensions[] = {
@@ -253,24 +245,24 @@ device_get_fd(_EGLDisplay *disp, _EGLDevice *dev)
       if (dev != _eglAddDevice(fd, false))
          return -1;
 
-      /* kms_swrast only work with primary node. It used to work with render node in
-       * the past because some downstream kernel carry a patch to enable dumb bo
-       * ioctl on render nodes.
+      /* kms_swrast only work with primary node. It used to work with render
+       * node in the past because some downstream kernel carry a patch to enable
+       * dumb bo ioctl on render nodes.
        */
-      char *node = kms_swrast ? drmGetPrimaryDeviceNameFromFd(fd) :
-                                drmGetRenderDeviceNameFromFd(fd);
+      char *node = kms_swrast ? drmGetPrimaryDeviceNameFromFd(fd)
+                              : drmGetRenderDeviceNameFromFd(fd);
 
       /* Don't close the internal fd, get render node one based on it. */
       fd = loader_open_device(node);
       free(node);
       return fd;
    }
-   const char *node =  _eglQueryDeviceStringEXT(dev, kms_swrast ?
-                                                     EGL_DRM_DEVICE_FILE_EXT :
-                                                     EGL_DRM_RENDER_NODE_FILE_EXT);
+   const char *node = _eglQueryDeviceStringEXT(
+      dev, kms_swrast ? EGL_DRM_DEVICE_FILE_EXT : EGL_DRM_RENDER_NODE_FILE_EXT);
    return loader_open_device(node);
 #else
-   _eglLog(_EGL_FATAL, "Driver bug: Built without libdrm, yet using a HW device");
+   _eglLog(_EGL_FATAL,
+           "Driver bug: Built without libdrm, yet using a HW device");
    return -1;
 #endif
 }
@@ -279,7 +271,8 @@ static bool
 device_probe_device(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   bool request_software = debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
+   bool request_software =
+      debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
 
    if (request_software)
       _eglLog(_EGL_WARNING, "Not allowed to force software rendering when "
@@ -320,7 +313,6 @@ err_name:
    close(dri2_dpy->fd_render_gpu);
    dri2_dpy->fd_render_gpu = dri2_dpy->fd_display_gpu = -1;
    return false;
-
 }
 
 static bool
@@ -350,7 +342,7 @@ dri2_initialize_device(_EGLDisplay *disp)
 {
    _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
-   const char* err;
+   const char *err;
 
    dri2_dpy = calloc(1, sizeof *dri2_dpy);
    if (!dri2_dpy)
@@ -362,7 +354,7 @@ dri2_initialize_device(_EGLDisplay *disp)
    dri2_dpy->fd_render_gpu = -1;
    dri2_dpy->fd_display_gpu = -1;
    disp->Device = dev;
-   disp->DriverData = (void *) dri2_dpy;
+   disp->DriverData = (void *)dri2_dpy;
    err = "DRI2: failed to load driver";
    if (_eglDeviceSupports(dev, _EGL_DEVICE_DRM)) {
       if (!device_probe_device(disp))
@@ -371,7 +363,8 @@ dri2_initialize_device(_EGLDisplay *disp)
       if (!device_probe_device_sw(disp))
          goto cleanup;
    } else {
-      _eglLog(_EGL_FATAL, "Driver bug: exposed device is neither DRM nor SOFTWARE one");
+      _eglLog(_EGL_FATAL,
+              "Driver bug: exposed device is neither DRM nor SOFTWARE one");
       return EGL_FALSE;
    }
 
@@ -387,7 +380,8 @@ dri2_initialize_device(_EGLDisplay *disp)
 
    dri2_setup_screen(disp);
 #ifdef HAVE_WAYLAND_PLATFORM
-   dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
+   dri2_dpy->device_name =
+      loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
 #endif
    dri2_set_WL_bind_wayland_display(disp);
 

@@ -38,6 +38,8 @@ extern "C" {
  */
 
 struct fd_dev_info {
+   uint8_t chip;
+
    /* alignment for size of tiles */
    uint32_t tile_align_w, tile_align_h;
    /* gmem load/store granularity */
@@ -146,6 +148,12 @@ struct fd_dev_info {
          bool has_lrz_dir_tracking;
          bool lrz_track_quirk;
 
+         /* Some generations have a bit to add the multiview index to the
+          * viewport index, which lets us implement different scaling for
+          * different views.
+          */
+         bool has_per_view_viewport;
+
          struct {
             uint32_t PC_POWER_CNTL;
             uint32_t TPL1_DBG_ECO_CNTL;
@@ -189,10 +197,12 @@ fd_dev_gpu_id(const struct fd_dev_id *id)
    return id->gpu_id;
 }
 
+const struct fd_dev_info * fd_dev_info(const struct fd_dev_id *id);
+
 static uint8_t
 fd_dev_gen(const struct fd_dev_id *id)
 {
-   return fd_dev_gpu_id(id) / 100;
+   return fd_dev_info(id)->chip;
 }
 
 static inline bool
@@ -212,7 +222,6 @@ fd_dev_64b(const struct fd_dev_id *id)
  */
 #define A6XX_CCU_GMEM_COLOR_SIZE (16 * 1024)
 
-const struct fd_dev_info * fd_dev_info(const struct fd_dev_id *id);
 const char * fd_dev_name(const struct fd_dev_id *id);
 
 #ifdef __cplusplus

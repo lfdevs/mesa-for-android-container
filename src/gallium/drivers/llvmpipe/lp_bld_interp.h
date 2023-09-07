@@ -85,7 +85,7 @@ struct lp_build_interp_soa_context
    unsigned mask[1 + PIPE_MAX_SHADER_INPUTS]; /**< TGSI_WRITE_MASK_x */
    enum lp_interp interp[1 + PIPE_MAX_SHADER_INPUTS];
    unsigned interp_loc[1 + PIPE_MAX_SHADER_INPUTS];
-   boolean depth_clamp;
+   bool depth_clamp;
 
    double pos_offset;
    unsigned coverage_samples;
@@ -123,7 +123,7 @@ lp_build_interp_soa_init(struct lp_build_interp_soa_context *bld,
                          struct gallivm_state *gallivm,
                          unsigned num_inputs,
                          const struct lp_shader_input *inputs,
-                         boolean pixel_center_integer,
+                         bool pixel_center_integer,
                          unsigned coverage_samples,
                          LLVMTypeRef sample_pos_array_type,
                          LLVMValueRef sample_pos_array,
@@ -157,7 +157,7 @@ lp_build_interp_soa(struct lp_build_interp_soa_context *bld,
                     LLVMTypeRef mask_type,
                     LLVMValueRef mask_store,
                     unsigned attrib, unsigned chan,
-                    unsigned loc,
+                    enum tgsi_interpolate_loc loc,
                     LLVMValueRef indir_index,
                     LLVMValueRef offsets[2]);
 

@@ -66,3 +66,7 @@ spec@ext_external_objects@vk-pix-buf-update-errors
 spec@ext_external_objects_fd@semaphore-api-errors
 spec@ext_external_objects_fd@memory-object-api-errors
 spec@ext_external_objects@vk-vert-buf-reuse
+
+# too slow, timeouts sometimes in the full run (approx. 1/10 runs)
+CreateSurfaces/VAAPICreateSurfaces.CreateSurfacesWithConfigAttribs/152
+CreateSurfaces/VAAPICreateSurfaces.CreateSurfacesWithConfigAttribs/2991

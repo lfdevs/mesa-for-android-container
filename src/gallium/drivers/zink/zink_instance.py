@@ -67,7 +67,7 @@ header_code = """
 #ifndef ZINK_INSTANCE_H
 #define ZINK_INSTANCE_H
 
-#include "os/os_process.h"
+#include "util/u_process.h"
 
 #include <vulkan/vulkan_core.h>
 
@@ -235,12 +235,11 @@ zink_create_instance(struct zink_screen *screen)
    VkApplicationInfo ai = {0};
    ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 
-   char proc_name[128];
-   if (os_get_process_name(proc_name, ARRAY_SIZE(proc_name)))
-      ai.pApplicationName = proc_name;
-   else
-      ai.pApplicationName = "unknown";
+   const char *proc_name = util_get_process_name();
+   if (!proc_name)
+      proc_name = "unknown";
 
+   ai.pApplicationName = proc_name;
    ai.pEngineName = "mesa zink";
    ai.apiVersion = instance_info->loader_version;
 

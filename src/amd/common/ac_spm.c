@@ -1,25 +1,7 @@
 /*
  * Copyright 2021 Valve Corporation
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_spm.h"
@@ -29,28 +11,27 @@
 #include "ac_perfcounter.h"
 
 static struct ac_spm_block_select *
-ac_spm_get_block_select(struct ac_spm_trace_data *spm_trace,
-                        const struct ac_pc_block *block)
+ac_spm_get_block_select(struct ac_spm *spm, const struct ac_pc_block *block)
 {
    struct ac_spm_block_select *block_sel, *new_block_sel;
    uint32_t num_block_sel;
 
-   for (uint32_t i = 0; i < spm_trace->num_block_sel; i++) {
-      if (spm_trace->block_sel[i].b->b->b->gpu_block == block->b->b->gpu_block)
-         return &spm_trace->block_sel[i];
+   for (uint32_t i = 0; i < spm->num_block_sel; i++) {
+      if (spm->block_sel[i].b->b->b->gpu_block == block->b->b->gpu_block)
+         return &spm->block_sel[i];
    }
 
    /* Allocate a new select block if it doesn't already exist. */
-   num_block_sel = spm_trace->num_block_sel + 1;
-   block_sel = realloc(spm_trace->block_sel, num_block_sel * sizeof(*block_sel));
+   num_block_sel = spm->num_block_sel + 1;
+   block_sel = realloc(spm->block_sel, num_block_sel * sizeof(*block_sel));
    if (!block_sel)
       return NULL;
 
-   spm_trace->num_block_sel = num_block_sel;
-   spm_trace->block_sel = block_sel;
+   spm->num_block_sel = num_block_sel;
+   spm->block_sel = block_sel;
 
    /* Initialize the new select block. */
-   new_block_sel = &spm_trace->block_sel[spm_trace->num_block_sel - 1];
+   new_block_sel = &spm->block_sel[spm->num_block_sel - 1];
    memset(new_block_sel, 0, sizeof(*new_block_sel));
 
    new_block_sel->b = block;
@@ -81,16 +62,15 @@ ac_spm_init_muxsel(const struct ac_pc_block *block,
 }
 
 static bool
-ac_spm_map_counter(struct ac_spm_trace_data *spm_trace,
-                   struct ac_spm_block_select *block_sel,
+ac_spm_map_counter(struct ac_spm *spm, struct ac_spm_block_select *block_sel,
                    struct ac_spm_counter_info *counter,
                    uint32_t *spm_wire)
 {
    if (block_sel->b->b->b->gpu_block == SQ) {
-      for (unsigned i = 0; i < ARRAY_SIZE(spm_trace->sq_block_sel); i++) {
-         struct ac_spm_block_select *sq_block_sel = &spm_trace->sq_block_sel[i];
+      for (unsigned i = 0; i < ARRAY_SIZE(spm->sq_block_sel); i++) {
+         struct ac_spm_block_select *sq_block_sel = &spm->sq_block_sel[i];
          struct ac_spm_counter_select *cntr_sel = &sq_block_sel->counters[0];
-         if (i < spm_trace->num_used_sq_block_sel)
+         if (i < spm->num_used_sq_block_sel)
             continue;
 
          /* SQ doesn't support 16-bit counters. */
@@ -105,7 +85,7 @@ ac_spm_map_counter(struct ac_spm_trace_data *spm_trace,
          /* One wire per SQ module. */
          *spm_wire = i;
 
-         spm_trace->num_used_sq_block_sel++;
+         spm->num_used_sq_block_sel++;
          return true;
       }
    } else {
@@ -154,7 +134,7 @@ ac_spm_map_counter(struct ac_spm_trace_data *spm_trace,
 
 static bool
 ac_spm_add_counter(const struct ac_perfcounters *pc,
-                   struct ac_spm_trace_data *spm_trace,
+                   struct ac_spm *spm,
                    const struct ac_spm_counter_create_info *info)
 {
    struct ac_spm_counter_info *counter;
@@ -181,20 +161,20 @@ ac_spm_add_counter(const struct ac_perfcounters *pc,
       return false;
    }
 
-   counter = &spm_trace->counters[spm_trace->num_counters];
-   spm_trace->num_counters++;
+   counter = &spm->counters[spm->num_counters];
+   spm->num_counters++;
 
    counter->gpu_block = info->gpu_block;
    counter->instance = info->instance;
    counter->event_id = info->event_id;
 
    /* Get the select block used to configure the counter. */
-   block_sel = ac_spm_get_block_select(spm_trace, block);
+   block_sel = ac_spm_get_block_select(spm, block);
    if (!block_sel)
       return false;
 
    /* Map the counter to the select block. */
-   if (!ac_spm_map_counter(spm_trace, block_sel, counter, &spm_wire)) {
+   if (!ac_spm_map_counter(spm, block_sel, counter, &spm_wire)) {
       fprintf(stderr, "ac/spm: No free slots available!\n");
       return false;
    }
@@ -216,14 +196,14 @@ bool ac_init_spm(const struct radeon_info *info,
                  const struct ac_perfcounters *pc,
                  unsigned num_counters,
                  const struct ac_spm_counter_create_info *counters,
-                 struct ac_spm_trace_data *spm_trace)
+                 struct ac_spm *spm)
 {
-   spm_trace->counters = CALLOC(num_counters, sizeof(*spm_trace->counters));
-   if (!spm_trace->counters)
+   spm->counters = CALLOC(num_counters, sizeof(*spm->counters));
+   if (!spm->counters)
       return false;
 
    for (unsigned i = 0; i < num_counters; i++) {
-      if (!ac_spm_add_counter(pc, spm_trace, &counters[i])) {
+      if (!ac_spm_add_counter(pc, spm, &counters[i])) {
          fprintf(stderr, "ac/spm: Failed to add SPM counter (%d).\n", i);
          return false;
       }
@@ -239,8 +219,8 @@ bool ac_init_spm(const struct radeon_info *info,
       }
 
       /* Count the number of even/odd counters for this segment. */
-      for (unsigned c = 0; c < spm_trace->num_counters; c++) {
-         struct ac_spm_counter_info *counter = &spm_trace->counters[c];
+      for (unsigned c = 0; c < spm->num_counters; c++) {
+         struct ac_spm_counter_info *counter = &spm->counters[c];
 
          if (counter->segment_type != s)
             continue;
@@ -259,10 +239,10 @@ bool ac_init_spm(const struct radeon_info *info,
          DIV_ROUND_UP(num_odd_counters, AC_SPM_NUM_COUNTER_PER_MUXSEL);
       unsigned num_lines = (even_lines > odd_lines) ? (2 * even_lines - 1) : (2 * odd_lines);
 
-      spm_trace->muxsel_lines[s] = CALLOC(num_lines, sizeof(*spm_trace->muxsel_lines[s]));
-      if (!spm_trace->muxsel_lines[s])
+      spm->muxsel_lines[s] = CALLOC(num_lines, sizeof(*spm->muxsel_lines[s]));
+      if (!spm->muxsel_lines[s])
          return false;
-      spm_trace->num_muxsel_lines[s] = num_lines;
+      spm->num_muxsel_lines[s] = num_lines;
    }
 
    /* RLC uses the following order: Global, SE0, SE1, SE2, SE3. */
@@ -276,12 +256,12 @@ bool ac_init_spm(const struct radeon_info *info,
    };
 
    for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
-      if (!spm_trace->muxsel_lines[s])
+      if (!spm->muxsel_lines[s])
          continue;
 
       uint32_t segment_offset = 0;
       for (unsigned i = 0; s != ordered_segment[i]; i++) {
-         segment_offset += spm_trace->num_muxsel_lines[ordered_segment[i]] *
+         segment_offset += spm->num_muxsel_lines[ordered_segment[i]] *
                            AC_SPM_NUM_COUNTER_PER_MUXSEL;
       }
 
@@ -298,12 +278,12 @@ bool ac_init_spm(const struct radeon_info *info,
          };
 
          for (unsigned i = 0; i < 4; i++) {
-            spm_trace->muxsel_lines[s][even_line_idx].muxsel[even_counter_idx++] = global_timestamp_muxsel;
+            spm->muxsel_lines[s][even_line_idx].muxsel[even_counter_idx++] = global_timestamp_muxsel;
          }
       }
 
-      for (unsigned i = 0; i < spm_trace->num_counters; i++) {
-         struct ac_spm_counter_info *counter = &spm_trace->counters[i];
+      for (unsigned i = 0; i < spm->num_counters; i++) {
+         struct ac_spm_counter_info *counter = &spm->counters[i];
 
          if (counter->segment_type != s)
             continue;
@@ -312,7 +292,7 @@ bool ac_init_spm(const struct radeon_info *info,
             counter->offset = segment_offset + even_line_idx *
                               AC_SPM_NUM_COUNTER_PER_MUXSEL + even_counter_idx;
 
-            spm_trace->muxsel_lines[s][even_line_idx].muxsel[even_counter_idx] = spm_trace->counters[i].muxsel;
+            spm->muxsel_lines[s][even_line_idx].muxsel[even_counter_idx] = spm->counters[i].muxsel;
             if (++even_counter_idx == AC_SPM_NUM_COUNTER_PER_MUXSEL) {
                even_counter_idx = 0;
                even_line_idx += 2;
@@ -321,7 +301,7 @@ bool ac_init_spm(const struct radeon_info *info,
             counter->offset = segment_offset + odd_line_idx *
                               AC_SPM_NUM_COUNTER_PER_MUXSEL + odd_counter_idx;
 
-            spm_trace->muxsel_lines[s][odd_line_idx].muxsel[odd_counter_idx] = spm_trace->counters[i].muxsel;
+            spm->muxsel_lines[s][odd_line_idx].muxsel[odd_counter_idx] = spm->counters[i].muxsel;
             if (++odd_counter_idx == AC_SPM_NUM_COUNTER_PER_MUXSEL) {
                odd_counter_idx = 0;
                odd_line_idx += 2;
@@ -333,30 +313,30 @@ bool ac_init_spm(const struct radeon_info *info,
    return true;
 }
 
-void ac_destroy_spm(struct ac_spm_trace_data *spm_trace)
+void ac_destroy_spm(struct ac_spm *spm)
 {
    for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
-      FREE(spm_trace->muxsel_lines[s]);
+      FREE(spm->muxsel_lines[s]);
    }
-   FREE(spm_trace->block_sel);
-   FREE(spm_trace->counters);
+   FREE(spm->block_sel);
+   FREE(spm->counters);
 }
 
-uint32_t ac_spm_get_sample_size(const struct ac_spm_trace_data *spm_trace)
+static uint32_t ac_spm_get_sample_size(const struct ac_spm *spm)
 {
    uint32_t sample_size = 0; /* in bytes */
 
    for (unsigned s = 0; s < AC_SPM_SEGMENT_TYPE_COUNT; s++) {
-      sample_size += spm_trace->num_muxsel_lines[s] * AC_SPM_MUXSEL_LINE_SIZE * 4;
+      sample_size += spm->num_muxsel_lines[s] * AC_SPM_MUXSEL_LINE_SIZE * 4;
    }
 
    return sample_size;
 }
 
-uint32_t ac_spm_get_num_samples(const struct ac_spm_trace_data *spm_trace)
+static uint32_t ac_spm_get_num_samples(const struct ac_spm *spm)
 {
-   uint32_t sample_size = ac_spm_get_sample_size(spm_trace);
-   uint32_t *ptr = (uint32_t *)spm_trace->ptr;
+   uint32_t sample_size = ac_spm_get_sample_size(spm);
+   uint32_t *ptr = (uint32_t *)spm->ptr;
    uint32_t data_size, num_lines_written;
    uint32_t num_samples = 0;
 
@@ -374,4 +354,16 @@ uint32_t ac_spm_get_num_samples(const struct ac_spm_trace_data *spm_trace)
    }
 
    return num_samples;
+}
+
+void ac_spm_get_trace(const struct ac_spm *spm, struct ac_spm_trace *trace)
+{
+   memset(trace, 0, sizeof(*trace));
+
+   trace->ptr = spm->ptr;
+   trace->sample_interval = spm->sample_interval;
+   trace->num_counters = spm->num_counters;
+   trace->counters = spm->counters;
+   trace->sample_size_in_bytes = ac_spm_get_sample_size(spm);
+   trace->num_samples = ac_spm_get_num_samples(spm);
 }

@@ -62,6 +62,7 @@ struct isel_context {
    Block* block;
    uint32_t first_temp_id;
    std::unordered_map<unsigned, std::array<Temp, NIR_MAX_VEC_COMPONENTS>> allocated_vec;
+   std::vector<Temp> unended_linear_vgprs;
    Stage stage;
    struct {
       bool has_branch;
@@ -90,12 +91,6 @@ struct isel_context {
    nir_unsigned_upper_bound_config ub_config;
 
    Temp arg_temps[AC_MAX_ARGS];
-
-   /* FS inputs */
-   Temp persp_centroid, linear_centroid;
-
-   /* GS inputs */
-   Temp gs_wave_id;
 
    /* VS output information */
    bool export_clip_dists;

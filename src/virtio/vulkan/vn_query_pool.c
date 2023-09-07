@@ -13,6 +13,8 @@
 #include "venus-protocol/vn_protocol_driver_query_pool.h"
 
 #include "vn_device.h"
+#include "vn_feedback.h"
+#include "vn_physical_device.h"
 
 /* query pool commands */
 
@@ -85,6 +87,40 @@ vn_CreateQueryPool(VkDevice device,
       break;
    }
 
+   if (!VN_PERF(NO_QUERY_FEEDBACK)) {
+      /* Feedback results are always 64 bit and include availability bit
+       * (also 64 bit)
+       */
+      const uint32_t slot_size = (pool->result_array_size * 8) + 8;
+      VkResult result = vn_feedback_buffer_create(
+         dev, slot_size * pCreateInfo->queryCount, alloc, &pool->feedback);
+      if (result != VK_SUCCESS) {
+         vn_object_base_fini(&pool->base);
+         vk_free(alloc, pool);
+         return vn_error(dev->instance, result);
+      }
+   }
+
+   /* Venus has to handle overflow behavior with query feedback to keep
+    * consistency between vkCmdCopyQueryPoolResults and vkGetQueryPoolResults.
+    * The default query feedback behavior is to wrap on overflow. However, per
+    * spec:
+    *
+    * If an unsigned integer query’s value overflows the result type, the
+    * value may either wrap or saturate.
+    *
+    * We detect the renderer side implementation to align with the
+    * implementation specific behavior.
+    */
+   switch (dev->physical_device->renderer_driver_id) {
+   case VK_DRIVER_ID_ARM_PROPRIETARY:
+   case VK_DRIVER_ID_MESA_TURNIP:
+      pool->saturate_on_overflow = true;
+      break;
+   default:
+      break;
+   };
+
    VkQueryPool pool_handle = vn_query_pool_to_handle(pool);
    vn_async_vkCreateQueryPool(dev->instance, device, pCreateInfo, NULL,
                               &pool_handle);
@@ -109,6 +145,9 @@ vn_DestroyQueryPool(VkDevice device,
 
    alloc = pAllocator ? pAllocator : &pool->allocator;
 
+   if (pool->feedback)
+      vn_feedback_buffer_destroy(dev, pool->feedback, alloc);
+
    vn_async_vkDestroyQueryPool(dev->instance, device, queryPool, NULL);
 
    vn_object_base_fini(&pool->base);
@@ -123,9 +162,123 @@ vn_ResetQueryPool(VkDevice device,
 {
    VN_TRACE_FUNC();
    struct vn_device *dev = vn_device_from_handle(device);
+   struct vn_query_pool *pool = vn_query_pool_from_handle(queryPool);
 
    vn_async_vkResetQueryPool(dev->instance, device, queryPool, firstQuery,
                              queryCount);
+   if (pool->feedback) {
+      /* Feedback results are always 64 bit and include availability bit
+       * (also 64 bit)
+       */
+      const uint32_t slot_size = (pool->result_array_size * 8) + 8;
+      const uint32_t offset = slot_size * firstQuery;
+      memset(pool->feedback->data + offset, 0, slot_size * queryCount);
+   }
+}
+
+static VkResult
+vn_get_query_pool_feedback(struct vn_query_pool *pool,
+                           uint32_t firstQuery,
+                           uint32_t queryCount,
+                           void *pData,
+                           VkDeviceSize stride,
+                           VkQueryResultFlags flags)
+{
+   VkResult result = VK_SUCCESS;
+   /* Feedback results are always 64 bit and include availability bit
+    * (also 64 bit)
+    */
+   const uint32_t slot_array_size = pool->result_array_size + 1;
+   uint64_t *src = pool->feedback->data;
+   src += slot_array_size * firstQuery;
+
+   uint32_t dst_index = 0;
+   uint32_t src_index = 0;
+   if (flags & VK_QUERY_RESULT_64_BIT) {
+      uint64_t *dst = pData;
+      uint32_t index_stride = stride / sizeof(uint64_t);
+      for (uint32_t i = 0; i < queryCount; i++) {
+         /* Copy the result if its available */
+         const uint64_t avail = src[src_index + pool->result_array_size];
+         if (avail) {
+            memcpy(&dst[dst_index], &src[src_index],
+                   pool->result_array_size * sizeof(uint64_t));
+         } else {
+            result = VK_NOT_READY;
+            /* valid to return result of 0 if partial bit is set */
+            if (flags & VK_QUERY_RESULT_PARTIAL_BIT) {
+               memset(&dst[dst_index], 0,
+                      pool->result_array_size * sizeof(uint64_t));
+            }
+         }
+         /* Set the availability bit if requested */
+         if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+            dst[dst_index + pool->result_array_size] = avail;
+
+         dst_index += index_stride;
+         src_index += slot_array_size;
+      }
+   } else {
+      uint32_t *dst = pData;
+      uint32_t index_stride = stride / sizeof(uint32_t);
+      for (uint32_t i = 0; i < queryCount; i++) {
+         /* Copy the result if its available, converting down to uint32_t */
+         const uint32_t avail =
+            (uint32_t)src[src_index + pool->result_array_size];
+         if (avail) {
+            for (uint32_t j = 0; j < pool->result_array_size; j++) {
+               const uint64_t src_val = src[src_index + j];
+               dst[dst_index + j] =
+                  src_val > UINT32_MAX && pool->saturate_on_overflow
+                     ? UINT32_MAX
+                     : (uint32_t)src_val;
+            }
+         } else {
+            result = VK_NOT_READY;
+            /* valid to return result of 0 if partial bit is set */
+            if (flags & VK_QUERY_RESULT_PARTIAL_BIT) {
+               for (uint32_t j = 0; j < pool->result_array_size; j++)
+                  dst[dst_index + j] = 0;
+            }
+         }
+         /* Set the availability bit if requested */
+         if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+            dst[dst_index + pool->result_array_size] = avail;
+
+         dst_index += index_stride;
+         src_index += slot_array_size;
+      }
+   }
+   return result;
+}
+
+static VkResult
+vn_query_feedback_wait_ready(struct vn_query_pool *pool,
+                             uint32_t firstQuery,
+                             uint32_t queryCount)
+{
+   /* Timeout after 5 seconds */
+   uint64_t timeout = 5000ull * 1000 * 1000;
+   uint64_t abs_timeout_ns = os_time_get_absolute_timeout(timeout);
+
+   /* Feedback results are always 64 bit and include availability bit
+    * (also 64 bit)
+    */
+   const uint32_t slot_array_size = pool->result_array_size + 1;
+   volatile uint64_t *src = pool->feedback->data;
+   src += (slot_array_size * firstQuery) + pool->result_array_size;
+
+   uint32_t src_index = 0;
+   for (uint32_t i = 0; i < queryCount; i++) {
+      while (!src[src_index]) {
+         if (os_time_get_nano() > abs_timeout_ns)
+            return VK_ERROR_DEVICE_LOST;
+
+         thrd_yield();
+      }
+      src_index += slot_array_size;
+   }
+   return VK_SUCCESS;
 }
 
 VkResult
@@ -142,11 +295,27 @@ vn_GetQueryPoolResults(VkDevice device,
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_query_pool *pool = vn_query_pool_from_handle(queryPool);
    const VkAllocationCallbacks *alloc = &pool->allocator;
+   VkResult result;
 
    const size_t result_width = flags & VK_QUERY_RESULT_64_BIT ? 8 : 4;
    const size_t result_size = pool->result_array_size * result_width;
    const bool result_always_written =
       flags & (VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_PARTIAL_BIT);
+
+   /* Get results from feedback buffers
+    * Not possible for VK_QUERY_RESULT_PARTIAL_BIT
+    */
+   if (pool->feedback) {
+      /* If wait bit is set, wait poll until query is ready */
+      if (flags & VK_QUERY_RESULT_WAIT_BIT) {
+         result = vn_query_feedback_wait_ready(pool, firstQuery, queryCount);
+         if (result != VK_SUCCESS)
+            return vn_result(dev->instance, result);
+      }
+      result = vn_get_query_pool_feedback(pool, firstQuery, queryCount, pData,
+                                          stride, flags);
+      return vn_result(dev->instance, result);
+   }
 
    VkQueryResultFlags packed_flags = flags;
    size_t packed_stride = result_size;
@@ -165,12 +334,7 @@ vn_GetQueryPoolResults(VkDevice device,
       if (!packed_data)
          return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
-
-   /* TODO the renderer should transparently vkCmdCopyQueryPoolResults to a
-    * coherent memory such that we can memcpy from the coherent memory to
-    * avoid this serialized round trip.
-    */
-   VkResult result = vn_call_vkGetQueryPoolResults(
+   result = vn_call_vkGetQueryPoolResults(
       dev->instance, device, queryPool, firstQuery, queryCount, packed_size,
       packed_data, packed_stride, packed_flags);
 

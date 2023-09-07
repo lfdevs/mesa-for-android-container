@@ -1084,12 +1084,27 @@ _mesa_get_fallback_texture(struct gl_context *ctx, gl_texture_index tex, bool is
          /* initialize level[0] texture image */
          texImage = _mesa_get_tex_image(ctx, texObj, faceTarget, 0);
 
-         _mesa_init_teximage_fields(ctx, texImage,
-                                    width,
-                                    (dims > 1) ? height : 1,
-                                    (dims > 2) ? depth : 1,
-                                    0, /* border */
-                                    is_depth ? GL_DEPTH_COMPONENT : GL_RGBA, texFormat);
+         GLenum internalFormat = is_depth ? GL_DEPTH_COMPONENT : GL_RGBA;
+         if (tex == TEXTURE_2D_MULTISAMPLE_INDEX ||
+             tex == TEXTURE_2D_MULTISAMPLE_ARRAY_INDEX) {
+            int samples[16];
+            st_QueryInternalFormat(ctx, 0, internalFormat, GL_SAMPLES, samples);
+            _mesa_init_teximage_fields_ms(ctx, texImage,
+                                          width,
+                                          (dims > 1) ? height : 1,
+                                          (dims > 2) ? depth : 1,
+                                          0, /* border */
+                                          internalFormat, texFormat,
+                                          samples[0],
+                                          GL_TRUE);
+         } else {
+            _mesa_init_teximage_fields(ctx, texImage,
+                                       width,
+                                       (dims > 1) ? height : 1,
+                                       (dims > 2) ? depth : 1,
+                                       0, /* border */
+                                       internalFormat, texFormat);
+         }
          _mesa_update_texture_object_swizzle(ctx, texObj);
          if (ctx->st->can_null_texture && is_depth) {
             texObj->NullTexture = GL_TRUE;

@@ -31,8 +31,7 @@ radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_le
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* Iterate in reverse order since there should be only one deref store to PRIMITIVE_SHADING_RATE
     * after lower_io_to_temporaries for vertex shaders.
@@ -47,8 +46,7 @@ radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_le
             continue;
 
          nir_variable *var = nir_intrinsic_get_var(intr, 0);
-         if (var->data.mode != nir_var_shader_out ||
-             var->data.location != VARYING_SLOT_PRIMITIVE_SHADING_RATE)
+         if (var->data.mode != nir_var_shader_out || var->data.location != VARYING_SLOT_PRIMITIVE_SHADING_RATE)
             continue;
 
          b.cursor = nir_before_instr(instr);
@@ -91,8 +89,7 @@ radv_nir_lower_primitive_shading_rate(nir_shader *nir, enum amd_gfx_level gfx_le
             y_rate_shift += 26;
          }
 
-         out = nir_ior(&b, nir_ishl_imm(&b, x_rate, x_rate_shift),
-                       nir_ishl_imm(&b, y_rate, y_rate_shift));
+         out = nir_ior(&b, nir_ishl_imm(&b, x_rate, x_rate_shift), nir_ishl_imm(&b, y_rate, y_rate_shift));
 
          nir_instr_rewrite_src(&intr->instr, &intr->src[1], nir_src_for_ssa(out));
 

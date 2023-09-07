@@ -32,8 +32,7 @@ lower_impl(nir_function_impl *impl)
    nir_variable *in, *out;
    nir_ssa_def *def;
 
-   nir_builder_init(&b, impl);
-   b.cursor = nir_before_cf_list(&impl->body);
+   b = nir_builder_at(nir_before_cf_list(&impl->body));
 
    /* The edge flag is the last input in st/mesa.  This code is also called by
     * i965 which calls it before any input locations are assigned.
@@ -75,16 +74,12 @@ lower_impl(nir_function_impl *impl)
       return;
    }
 
-   in  = nir_variable_create(shader, nir_var_shader_in,
-                             glsl_vec4_type(), "edgeflag_in");
-   in->data.location = VERT_ATTRIB_EDGEFLAG;
-
-   in->data.driver_location = shader->num_inputs++;
+   in = nir_create_variable_with_location(b.shader, nir_var_shader_in,
+                                          VERT_ATTRIB_EDGEFLAG, glsl_vec4_type());
    shader->info.inputs_read |= VERT_BIT_EDGEFLAG;
 
-   out = nir_variable_create(shader, nir_var_shader_out,
-                             glsl_vec4_type(), "edgeflag_out");
-   out->data.location = VARYING_SLOT_EDGE;
+   out = nir_create_variable_with_location(b.shader, nir_var_shader_out,
+                                           VARYING_SLOT_EDGE, glsl_vec4_type());
    shader->info.outputs_written |= VARYING_BIT_EDGE;
 
    def = nir_load_var(&b, in);

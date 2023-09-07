@@ -1,27 +1,8 @@
 /**************************************************************************
  *
  * Copyright 2017 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  **************************************************************************/
 
@@ -81,6 +62,24 @@ static void radeon_enc_op_preset(struct radeon_encoder *enc)
       preset_mode = RENCODE_IB_OP_SET_SPEED_ENCODING_MODE;
 
    RADEON_ENC_BEGIN(preset_mode);
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_quality_params(struct radeon_encoder *enc)
+{
+   enc->enc_pic.quality_params.vbaq_mode = enc->enc_pic.quality_modes.vbaq_mode;
+   enc->enc_pic.quality_params.scene_change_sensitivity = 0;
+   enc->enc_pic.quality_params.scene_change_min_idr_interval = 0;
+   enc->enc_pic.quality_params.two_pass_search_center_map_mode =
+                    (enc->enc_pic.quality_modes.pre_encode_mode) ? 1 : 0;
+   enc->enc_pic.quality_params.vbaq_strength = 0;
+
+   RADEON_ENC_BEGIN(enc->cmd.quality_params);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.vbaq_mode);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.scene_change_sensitivity);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.scene_change_min_idr_interval);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.two_pass_search_center_map_mode);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.vbaq_strength);
    RADEON_ENC_END();
 }
 
@@ -443,9 +442,18 @@ static void radeon_enc_output_format(struct radeon_encoder *enc)
    RADEON_ENC_END();
 }
 
+static uint32_t radeon_enc_ref_swizzle_mode(struct radeon_encoder *enc)
+{
+   /* return RENCODE_REC_SWIZZLE_MODE_LINEAR; for debugging purpose */
+   if (enc->enc_pic.bit_depth_luma_minus8 != 0)
+      return RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP;
+   else
+      return RENCODE_REC_SWIZZLE_MODE_256B_S;
+}
+
 static void radeon_enc_ctx(struct radeon_encoder *enc)
 {
-   enc->enc_pic.ctx_buf.swizzle_mode = 0;
+   enc->enc_pic.ctx_buf.swizzle_mode = radeon_enc_ref_swizzle_mode(enc);
    enc->enc_pic.ctx_buf.two_pass_search_center_map_offset = 0;
 
    RADEON_ENC_BEGIN(enc->cmd.ctx);
@@ -506,6 +514,7 @@ void radeon_enc_2_0_init(struct radeon_encoder *enc)
    enc->output_format = radeon_enc_output_format;
    enc->ctx = radeon_enc_ctx;
    enc->op_preset = radeon_enc_op_preset;
+   enc->quality_params = radeon_enc_quality_params;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC) {
       enc->deblocking_filter = radeon_enc_loop_filter_hevc;

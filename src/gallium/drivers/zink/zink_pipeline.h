@@ -43,10 +43,12 @@ zink_find_or_create_input_dynamic(struct zink_context *ctx, VkPrimitiveTopology 
 VkPipeline
 zink_create_gfx_pipeline(struct zink_screen *screen,
                          struct zink_gfx_program *prog,
+                         struct zink_shader_object *objs,
                          struct zink_gfx_pipeline_state *state,
                          const uint8_t *binding_map,
                          VkPrimitiveTopology primitive_topology,
-                         bool optimize);
+                         bool optimize,
+                         struct util_dynarray *dgc);
 
 VkPipeline
 zink_create_compute_pipeline(struct zink_screen *screen, struct zink_compute_program *comp, struct zink_compute_pipeline_state *state);
@@ -63,7 +65,7 @@ zink_create_gfx_pipeline_output(struct zink_screen *screen, struct zink_gfx_pipe
 VkPipeline
 zink_create_gfx_pipeline_combined(struct zink_screen *screen, struct zink_gfx_program *prog, VkPipeline input, VkPipeline *library, unsigned libcount, VkPipeline output, bool optimized);
 VkPipeline
-zink_create_gfx_pipeline_separate(struct zink_screen *screen, VkShaderModule *modules, VkPipelineLayout layout);
+zink_create_gfx_pipeline_separate(struct zink_screen *screen, struct zink_shader_object *objs, VkPipelineLayout layout);
 #ifdef __cplusplus
 }
 #endif

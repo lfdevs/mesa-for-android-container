@@ -23,7 +23,7 @@
 #ifndef R300_TGSI_TO_RC_H
 #define R300_TGSI_TO_RC_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 struct radeon_compiler;
 
@@ -43,7 +43,7 @@ struct tgsi_to_rc {
     int immediate_offset;
 
     /* If an error occurred. */
-    boolean error;
+    bool error;
 };
 
 void r300_tgsi_to_rc(struct tgsi_to_rc * ttr, const struct tgsi_token * tokens);

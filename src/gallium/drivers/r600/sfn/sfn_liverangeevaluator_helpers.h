@@ -128,7 +128,7 @@ private:
     *
     * A positive (other than "conditionality_untouched") number refers to the
     * last loop id for which the write was resolved as unconditional. With
-    * each new loop this value will be overwitten by
+    * each new loop this value will be overwritten by
     * "conditionality_unresolved" on entering the first IF clause writing this
     * temporary.
     *

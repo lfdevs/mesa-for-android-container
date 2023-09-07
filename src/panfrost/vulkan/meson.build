@@ -29,6 +29,7 @@ panvk_entrypoints = custom_target(
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'panvk',
     '--device-prefix', 'panvk_v6', '--device-prefix', 'panvk_v7',
+    '--beta', with_vulkan_beta.to_string()
   ],
   depend_files : vk_entrypoints_gen_depend_files,
 )
@@ -47,7 +48,6 @@ libpanvk_files = files(
   'panvk_private.h',
   'panvk_query.c',
   'panvk_shader.c',
-  'panvk_util.c',
   'panvk_wsi.c',
 ) + [vk_cmd_enqueue_entrypoints[0], vk_common_entrypoints[0]]
 

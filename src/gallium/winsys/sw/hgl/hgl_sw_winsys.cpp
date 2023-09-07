@@ -27,7 +27,7 @@
 
 #include <stdio.h>
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_defines.h"
 #include "util/format/u_formats.h"
 #include "util/u_inlines.h"

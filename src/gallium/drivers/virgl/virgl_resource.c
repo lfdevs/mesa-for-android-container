@@ -309,12 +309,12 @@ virgl_resource_transfer_prepare(struct virgl_context *vctx,
 static unsigned
 virgl_transfer_map_size(struct virgl_transfer *vtransfer,
                         unsigned *out_stride,
-                        unsigned *out_layer_stride)
+                        uintptr_t *out_layer_stride)
 {
    struct pipe_resource *pres = vtransfer->base.resource;
    struct pipe_box *box = &vtransfer->base.box;
    unsigned stride;
-   unsigned layer_stride;
+   uintptr_t layer_stride;
    unsigned size;
 
    assert(out_stride);
@@ -349,7 +349,7 @@ virgl_staging_map(struct virgl_context *vctx,
    unsigned size;
    unsigned align_offset;
    unsigned stride;
-   unsigned layer_stride;
+   uintptr_t layer_stride;
    void *map_addr;
    bool alloc_succeeded;
 
@@ -762,7 +762,8 @@ static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *scre
 
    /* assign blob resource a type in case it was created untyped */
    if (res->blob_mem && plane == 0 &&
-       (vs->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_UNTYPED_RESOURCE)) {
+       (vs->caps.caps.v2.host_feature_check_version >= 18 ||
+	(vs->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_UNTYPED_RESOURCE))) {
       uint32_t plane_strides[VIRGL_MAX_PLANE_COUNT];
       uint32_t plane_offsets[VIRGL_MAX_PLANE_COUNT];
       uint32_t plane_count = 0;

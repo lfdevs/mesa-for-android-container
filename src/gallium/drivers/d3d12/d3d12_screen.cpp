@@ -170,7 +170,6 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
-   case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
       return 1;
 
@@ -213,7 +212,7 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
-      return 0; /* unsure */
+      return PIPE_TEXTURE_TRANSFER_BLIT;
 
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_NATIVE; /* unsure */
@@ -333,6 +332,7 @@ d3d12_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FENCE_SIGNAL:
    case PIPE_CAP_TIMELINE_SEMAPHORE_IMPORT:
    case PIPE_CAP_CLIP_HALFZ:
+   case PIPE_CAP_VS_LAYER_VIEWPORT:
       return 1;
 
    case PIPE_CAP_MAX_VERTEX_STREAMS:
@@ -399,6 +399,10 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
 {
    struct d3d12_screen *screen = d3d12_screen(pscreen);
 
+   if (shader == PIPE_SHADER_TASK ||
+       shader == PIPE_SHADER_MESH)
+      return 0;
+
    switch (param) {
    case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
    case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
@@ -459,9 +463,6 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
       return 0; /* not implemented */
-
-   case PIPE_SHADER_CAP_PREFERRED_IR:
-      return PIPE_SHADER_IR_NIR;
 
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return 0; /* not implemented */
@@ -780,9 +781,9 @@ d3d12_flush_frontbuffer(struct pipe_screen * pscreen,
                                         u_minify(pres->height0, level),
                                         &transfer);
       if (res_map) {
-         util_copy_rect((ubyte*)map, pres->format, res->dt_stride, 0, 0,
+         util_copy_rect((uint8_t*)map, pres->format, res->dt_stride, 0, 0,
                         transfer->box.width, transfer->box.height,
-                        (const ubyte*)res_map, transfer->stride, 0, 0);
+                        (const uint8_t*)res_map, transfer->stride, 0, 0);
          pipe_texture_unmap(pctx, transfer);
       }
       winsys->displaytarget_unmap(winsys, res->dt);
@@ -1474,7 +1475,8 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
       debug_printf("D3D12: failed to get device options\n");
       return false;
    }
-#if D3D12_SDK_VERSION >= 609
+   screen->dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS14, &screen->opts14, sizeof(screen->opts14));
+#ifndef _GAMING_XBOX
    screen->dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS19, &screen->opts19, sizeof(screen->opts19));
 #endif
 
@@ -1510,7 +1512,10 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
    for (UINT i = 0; i < ARRAY_SIZE(valid_shader_models); ++i) {
       D3D12_FEATURE_DATA_SHADER_MODEL shader_model = { valid_shader_models[i] };
       if (SUCCEEDED(screen->dev->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model)))) {
-         screen->max_shader_model = shader_model.HighestShaderModel;
+         static_assert(D3D_SHADER_MODEL_6_0 == 0x60 && SHADER_MODEL_6_0 == 0x60000, "Validating math below");
+         static_assert(D3D_SHADER_MODEL_6_7 == 0x67 && SHADER_MODEL_6_7 == 0x60007, "Validating math below");
+         screen->max_shader_model = static_cast<dxil_shader_model>(((shader_model.HighestShaderModel & 0xf0) << 12) |
+                                                                   (shader_model.HighestShaderModel & 0xf));
          break;
       }
    }
@@ -1615,20 +1620,15 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
    }
 #endif
 
-   screen->nir_options = *dxil_get_nir_compiler_options();
-
    static constexpr uint64_t known_good_warp_version = 10ull << 48 | 22000ull << 16;
-   if ((screen->vendor_id == HW_VENDOR_MICROSOFT &&
-        screen->driver_version < known_good_warp_version) ||
-      !screen->opts1.Int64ShaderOps) {
-      /* Work around old versions of WARP that are completely broken for 64bit shifts */
-      screen->nir_options.lower_pack_64_2x32_split = false;
-      screen->nir_options.lower_unpack_64_2x32_split = false;
-      screen->nir_options.lower_int64_options = (nir_lower_int64_options)~0;
-   }
-
-   if (!screen->opts.DoublePrecisionFloatShaderOps)
-      screen->nir_options.lower_doubles_options = (nir_lower_doubles_options)~0;
+   bool warp_with_broken_int64 =
+      (screen->vendor_id == HW_VENDOR_MICROSOFT && screen->driver_version < known_good_warp_version);
+   unsigned supported_int_sizes = 32 | (screen->opts1.Int64ShaderOps && !warp_with_broken_int64 ? 64 : 0);
+   unsigned supported_float_sizes = 32 | (screen->opts.DoublePrecisionFloatShaderOps ? 64 : 0);
+   dxil_get_nir_compiler_options(&screen->nir_options,
+                                 screen->max_shader_model,
+                                 supported_int_sizes,
+                                 supported_float_sizes);
 
    const char *mesa_version = "Mesa " PACKAGE_VERSION MESA_GIT_SHA1;
    struct mesa_sha1 sha1_ctx;

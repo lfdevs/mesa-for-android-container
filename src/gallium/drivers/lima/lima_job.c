@@ -908,7 +908,7 @@ lima_do_job(struct lima_job *job)
       fprintf(stderr, "gp job error\n");
 
    if (job->dump) {
-      if (lima_job_wait(job, LIMA_PIPE_GP, PIPE_TIMEOUT_INFINITE)) {
+      if (lima_job_wait(job, LIMA_PIPE_GP, OS_TIMEOUT_INFINITE)) {
          if (ctx->gp_output) {
             float *pos = lima_bo_map(ctx->gp_output);
             lima_dump_command_stream_print(
@@ -989,7 +989,7 @@ lima_do_job(struct lima_job *job)
    }
 
    if (job->dump) {
-      if (!lima_job_wait(job, LIMA_PIPE_PP, PIPE_TIMEOUT_INFINITE)) {
+      if (!lima_job_wait(job, LIMA_PIPE_PP, OS_TIMEOUT_INFINITE)) {
          fprintf(stderr, "pp wait error\n");
          exit(1);
       }

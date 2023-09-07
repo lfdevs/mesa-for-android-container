@@ -120,6 +120,10 @@ struct dxil_spirv_vertex_runtime_data {
    float viewport_width;
    float viewport_height;
    uint32_t view_index;
+   /* When depth bias is dynamic, the constant value to add to point
+    * primitives when emulating triangle point fill mode. Slope-scaled
+    * depth bias is currently unsupported. */
+   float depth_bias;
 };
 
 enum dxil_spirv_yz_flip_mode {

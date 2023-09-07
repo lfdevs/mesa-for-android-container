@@ -70,6 +70,8 @@ enum {
    RADV_DEBUG_SHADOW_REGS = 1ull << 39,
    RADV_DEBUG_EXTRA_MD = 1ull << 40,
    RADV_DEBUG_NO_GPL = 1ull << 41,
+   RADV_DEBUG_VIDEO_ARRAY_PATH = 1ull << 42,
+   RADV_DEBUG_NO_RT = 1ull << 43,
 };
 
 enum {
@@ -81,13 +83,12 @@ enum {
    RADV_PERFTEST_GE_WAVE_32 = 1u << 5,
    RADV_PERFTEST_NO_SAM = 1u << 6,
    RADV_PERFTEST_SAM = 1u << 7,
-   RADV_PERFTEST_RT = 1u << 8,
-   RADV_PERFTEST_NGGC = 1u << 9,
-   RADV_PERFTEST_EMULATE_RT = 1u << 10,
-   RADV_PERFTEST_RT_WAVE_64 = 1u << 11,
-   RADV_PERFTEST_NGG_STREAMOUT = 1u << 12,
-   RADV_PERFTEST_VIDEO_DECODE = 1u << 13,
-   RADV_PERFTEST_DMA_SHADERS = 1u << 14,
+   RADV_PERFTEST_NGGC = 1u << 8,
+   RADV_PERFTEST_EMULATE_RT = 1u << 9,
+   RADV_PERFTEST_RT_WAVE_64 = 1u << 10,
+   RADV_PERFTEST_NGG_STREAMOUT = 1u << 11,
+   RADV_PERFTEST_VIDEO_DECODE = 1u << 12,
+   RADV_PERFTEST_DMA_SHADERS = 1u << 13,
 };
 
 bool radv_init_trace(struct radv_device *device);
@@ -97,7 +98,7 @@ void radv_check_gpu_hangs(struct radv_queue *queue, struct radeon_cmdbuf *cs);
 
 void radv_print_spirv(const char *data, uint32_t size, FILE *fp);
 
-void radv_dump_enabled_options(struct radv_device *device, FILE *f);
+void radv_dump_enabled_options(const struct radv_device *device, FILE *f);
 
 bool radv_trap_handler_init(struct radv_device *device);
 void radv_trap_handler_finish(struct radv_device *device);

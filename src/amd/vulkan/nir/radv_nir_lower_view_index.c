@@ -54,8 +54,7 @@ radv_nir_lower_view_index(nir_shader *nir, bool per_primitive)
 {
    bool progress = false;
    nir_function_impl *entry = nir_shader_get_entrypoint(nir);
-   nir_builder b;
-   nir_builder_init(&b, entry);
+   nir_builder b = nir_builder_create(entry);
 
    nir_variable *layer = NULL;
    nir_foreach_block (block, entry) {

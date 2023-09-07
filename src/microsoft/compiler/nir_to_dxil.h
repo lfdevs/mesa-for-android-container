@@ -101,7 +101,13 @@ nir_to_dxil(struct nir_shader *s, const struct nir_to_dxil_options *opts,
             const struct dxil_logger *logger, struct blob *blob);
 
 const nir_shader_compiler_options*
-dxil_get_nir_compiler_options(void);
+dxil_get_base_nir_compiler_options(void);
+
+void
+dxil_get_nir_compiler_options(nir_shader_compiler_options *options,
+                              enum dxil_shader_model shader_model_max,
+                              unsigned supported_int_sizes,
+                              unsigned supported_float_sizes);
 
 #ifdef __cplusplus
 }

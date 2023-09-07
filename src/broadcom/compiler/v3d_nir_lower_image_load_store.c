@@ -103,9 +103,9 @@ v3d_nir_lower_image_store(nir_builder *b, nir_intrinsic_instr *instr)
 
         b->cursor = nir_before_instr(&instr->instr);
 
-        nir_ssa_def *color = nir_channels(b,
-                                          nir_ssa_for_src(b, instr->src[3], 4),
-                                          (1 << num_components) - 1);
+        nir_ssa_def *color = nir_trim_vector(b,
+                                             nir_ssa_for_src(b, instr->src[3], 4),
+                                             num_components);
         nir_ssa_def *formatted = NULL;
 
         if (format == PIPE_FORMAT_R11G11B10_FLOAT) {

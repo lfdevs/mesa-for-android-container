@@ -535,8 +535,7 @@ lower_copies_to_load_store(struct deref_node *node,
    if (!node->copies)
       return;
 
-   nir_builder b;
-   nir_builder_init(&b, state->impl);
+   nir_builder b = nir_builder_create(state->impl);
 
    set_foreach(node->copies, copy_entry) {
       nir_intrinsic_instr *copy = (void *)copy_entry->key;
@@ -572,8 +571,7 @@ lower_copies_to_load_store(struct deref_node *node,
 static bool
 rename_variables(struct lower_variables_state *state)
 {
-   nir_builder b;
-   nir_builder_init(&b, state->impl);
+   nir_builder b = nir_builder_create(state->impl);
 
    nir_foreach_block(block, state->impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -610,7 +608,7 @@ rename_variables(struct lower_variables_state *state)
             mov->dest.write_mask = (1 << intrin->num_components) - 1;
             nir_ssa_dest_init(&mov->instr, &mov->dest.dest,
                               intrin->num_components,
-                              intrin->dest.ssa.bit_size, NULL);
+                              intrin->dest.ssa.bit_size);
 
             nir_instr_insert_before(&intrin->instr, &mov->instr);
             nir_instr_remove(&intrin->instr);
@@ -820,9 +818,8 @@ nir_lower_vars_to_ssa(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_lower_vars_to_ssa_impl(function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_lower_vars_to_ssa_impl(impl);
    }
 
    return progress;

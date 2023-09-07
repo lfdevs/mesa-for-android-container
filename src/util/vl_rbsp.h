@@ -43,6 +43,7 @@
 struct vl_rbsp {
    struct vl_vlc nal;
    unsigned escaped;
+   unsigned removed;
 };
 
 /**
@@ -78,6 +79,7 @@ static inline void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsign
    valid = vl_vlc_valid_bits(&rbsp->nal);
 
    rbsp->escaped = (valid >= 16) ? 16 : ((valid >= 8) ? 8 : 0);
+   rbsp->removed = 0;
 }
 
 /**
@@ -112,6 +114,7 @@ static inline void vl_rbsp_fillbits(struct vl_rbsp *rbsp)
          vl_vlc_removebits(&rbsp->nal, i - 8, 8);
          rbsp->escaped = bits - i;
          bits -= 8;
+         rbsp->removed += 8;
          i += 8;
       }
    }

@@ -89,8 +89,7 @@ bit_block_equal(bi_block *A, bi_block *B)
       return false;
 
    list_pair_for_each_entry(bi_instr, insA, insB, &A->instructions,
-                            &B->instructions, link)
-   {
+                            &B->instructions, link) {
       if (!bit_instr_equal(insA, insB))
          return false;
    }
@@ -105,8 +104,7 @@ bit_shader_equal(bi_context *A, bi_context *B)
       return false;
 
    list_pair_for_each_entry(bi_block, blockA, blockB, &A->blocks, &B->blocks,
-                            link)
-   {
+                            link) {
       if (!bit_block_equal(blockA, blockB))
          return false;
    }

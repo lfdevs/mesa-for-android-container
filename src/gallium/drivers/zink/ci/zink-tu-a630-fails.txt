@@ -11,17 +11,9 @@ KHR-GL46.limits.max_fragment_input_components,Fail
 # https://gerrit.khronos.org/c/vk-gl-cts/+/9672
 KHR-GL46.buffer_storage.map_persistent_draw,Fail
 
-# https://gerrit.khronos.org/c/vk-gl-cts/+/9667
-KHR-GL46.gpu_shader_fp64.builtin.mod_dvec2,Fail
-KHR-GL46.gpu_shader_fp64.builtin.mod_dvec3,Fail
-KHR-GL46.gpu_shader_fp64.builtin.mod_dvec4,Fail
-
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/6723
 KHR-GL46.copy_image.functional,Fail
 KHR-GL46.texture_view.view_classes,Fail
-
-# https://gerrit.khronos.org/c/vk-gl-cts/+/9891/
-KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
 
 # Piglit xfb tests
 spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail

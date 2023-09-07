@@ -514,6 +514,36 @@ static void update_samples(struct tu_subpass *subpass,
 }
 
 static void
+tu_render_pass_calc_views(struct tu_render_pass *pass)
+{
+   uint32_t view_mask = 0;
+   for (unsigned i = 0; i < pass->subpass_count; i++)
+      view_mask |= pass->subpasses[i].multiview_mask;
+   pass->num_views = util_last_bit(view_mask);
+}
+
+/* If there are any multisample attachments with a load op other than
+ * clear/don't-care/none and store op other than don't-care/none, then we'd
+ * have to load/store a scaled multisample image which doesn't make much
+ * sense. Just disable fragment_density_map in this case.
+ */
+static bool
+tu_render_pass_disable_fdm(struct tu_render_pass *pass)
+{
+   for (uint32_t i = 0; i < pass->attachment_count; i++) {
+      struct tu_render_pass_attachment *att = &pass->attachments[i];
+
+      if (att->samples > 1 &&
+          (att->load || att->load_stencil ||
+           att->store || att->store_stencil)) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+static void
 tu_render_pass_calc_hash(struct tu_render_pass *pass)
 {
    #define HASH(hash, data) XXH64(&(data), sizeof(data), hash)
@@ -847,6 +877,20 @@ tu_CreateRenderPass2(VkDevice _device,
    } else
       pass->subpass_attachments = NULL;
 
+   const VkRenderPassFragmentDensityMapCreateInfoEXT *fdm_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT);
+   if (fdm_info && !tu_render_pass_disable_fdm(pass)) {
+      pass->fragment_density_map.attachment =
+         fdm_info->fragmentDensityMapAttachment.attachment;
+      pass->has_fdm = true;
+   } else {
+      pass->fragment_density_map.attachment = VK_ATTACHMENT_UNUSED;
+   }
+
+   if (TU_DEBUG(FDM) && !tu_render_pass_disable_fdm(pass))
+      pass->has_fdm = true;
+
    p = pass->subpass_attachments;
    for (uint32_t i = 0; i < pCreateInfo->subpassCount; i++) {
       const VkSubpassDescription2 *desc = &pCreateInfo->pSubpasses[i];
@@ -952,6 +996,7 @@ tu_CreateRenderPass2(VkDevice _device,
    tu_render_pass_cond_config(pass);
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
+   tu_render_pass_calc_views(pass);
    tu_render_pass_calc_hash(pass);
 
    for (unsigned i = 0; i < pCreateInfo->dependencyCount; ++i) {
@@ -1123,9 +1168,36 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
 
    pass->attachment_count = a;
 
+   const VkRenderingFragmentDensityMapAttachmentInfoEXT *fdm_info =
+      vk_find_struct_const(info->pNext,
+                           RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_INFO_EXT);
+   if (fdm_info && fdm_info->imageView != VK_NULL_HANDLE &&
+       !tu_render_pass_disable_fdm(pass)) {
+      TU_FROM_HANDLE(tu_image_view, view, fdm_info->imageView);
+
+      struct tu_render_pass_attachment *att = &pass->attachments[a];
+      tu_setup_dynamic_attachment(att, view);
+      pass->fragment_density_map.attachment = a++;
+      attachment_set_ops(device, att,
+                         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                         VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                         VK_ATTACHMENT_STORE_OP_DONT_CARE);
+      pass->has_fdm = true;
+   } else {
+      pass->fragment_density_map.attachment = VK_ATTACHMENT_UNUSED;
+      pass->has_fdm = false;
+   }
+
+   if (TU_DEBUG(FDM) && !tu_render_pass_disable_fdm(pass))
+      pass->has_fdm = true;
+
+   pass->attachment_count = a;
+
    tu_render_pass_cond_config(pass);
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
+   tu_render_pass_calc_views(pass);
    tu_render_pass_calc_hash(pass);
 }
 
@@ -1138,6 +1210,7 @@ tu_setup_dynamic_inheritance(struct tu_cmd_buffer *cmd_buffer,
 
    pass->subpass_count = 1;
    pass->attachments = cmd_buffer->dynamic_rp_attachments;
+   pass->fragment_density_map.attachment = VK_ATTACHMENT_UNUSED;
 
    subpass->color_count = info->colorAttachmentCount;
    subpass->resolve_count = 0;
@@ -1185,6 +1258,8 @@ tu_setup_dynamic_inheritance(struct tu_cmd_buffer *cmd_buffer,
    } else {
       subpass->depth_stencil_attachment.attachment = VK_ATTACHMENT_UNUSED;
    }
+
+   tu_render_pass_calc_views(pass);
 }
 
 VKAPI_ATTR void VKAPI_CALL

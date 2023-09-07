@@ -36,8 +36,6 @@
 #include "nir/nir_draw_helpers.h"
 #include "nir/tgsi_to_nir.h"
 #include "compiler/nir/nir_builder.h"
-#include "tgsi/tgsi_from_mesa.h"
-#include "tgsi/tgsi_ureg.h"
 
 #include "util/hash_table.h"
 #include "util/u_memory.h"
@@ -46,11 +44,6 @@
 #include "util/u_dl.h"
 
 #include <dxguids/dxguids.h>
-
-extern "C" {
-#include "tgsi/tgsi_parse.h"
-#include "tgsi/tgsi_point_sprite.h"
-}
 
 #ifdef _WIN32
 #include "dxil_validator.h"
@@ -145,13 +138,11 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
          NIR_PASS_V(nir, nir_lower_clip_halfz);
       NIR_PASS_V(nir, d3d12_lower_yflip);
    }
-   NIR_PASS_V(nir, nir_lower_packed_ubo_loads);
    NIR_PASS_V(nir, d3d12_lower_load_draw_params);
    NIR_PASS_V(nir, d3d12_lower_load_patch_vertices_in);
    NIR_PASS_V(nir, d3d12_lower_state_vars, shader);
    const struct dxil_nir_lower_loads_stores_options loads_stores_options = {};
    NIR_PASS_V(nir, dxil_nir_lower_loads_stores_to_dxil, &loads_stores_options);
-   NIR_PASS_V(nir, dxil_nir_lower_atomics_to_dxil);
    NIR_PASS_V(nir, dxil_nir_lower_double_math);
 
    if (key->stage == PIPE_SHADER_FRAGMENT && key->fs.multisample_disabled)
@@ -166,9 +157,7 @@ compile_nir(struct d3d12_context *ctx, struct d3d12_shader_selector *sel,
       opts.provoking_vertex = key->fs.provoking_vertex;
    opts.input_clip_size = key->input_clip_size;
    opts.environment = DXIL_ENVIRONMENT_GL;
-   static_assert(D3D_SHADER_MODEL_6_0 == 0x60 && SHADER_MODEL_6_0 == 0x60000, "Validating math below");
-   static_assert(D3D_SHADER_MODEL_6_7 == 0x67 && SHADER_MODEL_6_7 == 0x60007, "Validating math below");
-   opts.shader_model_max = static_cast<dxil_shader_model>(((screen->max_shader_model & 0xf0) << 12) | (screen->max_shader_model & 0xf));
+   opts.shader_model_max = screen->max_shader_model;
 #ifdef _WIN32
    opts.validator_version_max = dxil_get_validator_version(ctx->dxil_validator);
 #endif
@@ -279,32 +268,30 @@ missing_dual_src_outputs(struct d3d12_context *ctx)
    const nir_shader *s = fs->initial;
 
    unsigned indices_seen = 0;
-   nir_foreach_function(function, s) {
-      if (function->impl) {
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr(instr, block) {
-               if (instr->type != nir_instr_type_intrinsic)
-                  continue;
+   nir_foreach_function_impl(impl, s) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
 
-               nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-               if (intr->intrinsic != nir_intrinsic_store_deref)
-                  continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic != nir_intrinsic_store_deref)
+               continue;
 
-               nir_variable *var = nir_intrinsic_get_var(intr, 0);
-               if (var->data.mode != nir_var_shader_out)
-                  continue;
+            nir_variable *var = nir_intrinsic_get_var(intr, 0);
+            if (var->data.mode != nir_var_shader_out)
+               continue;
 
-               unsigned index = var->data.index;
-               if (var->data.location > FRAG_RESULT_DATA0)
-                  index = var->data.location - FRAG_RESULT_DATA0;
-               else if (var->data.location != FRAG_RESULT_COLOR &&
-                        var->data.location != FRAG_RESULT_DATA0)
-                  continue;
+            unsigned index = var->data.index;
+            if (var->data.location > FRAG_RESULT_DATA0)
+               index = var->data.location - FRAG_RESULT_DATA0;
+            else if (var->data.location != FRAG_RESULT_COLOR &&
+                     var->data.location != FRAG_RESULT_DATA0)
+               continue;
 
-               indices_seen |= 1u << index;
-               if ((indices_seen & 3) == 3)
-                  return 0;
-            }
+            indices_seen |= 1u << index;
+            if ((indices_seen & 3) == 3)
+               return 0;
          }
       }
    }
@@ -355,11 +342,11 @@ manual_depth_range(struct d3d12_context *ctx)
 }
 
 static bool
-needs_edge_flag_fix(enum pipe_prim_type mode)
+needs_edge_flag_fix(enum mesa_prim mode)
 {
-   return (mode == PIPE_PRIM_QUADS ||
-           mode == PIPE_PRIM_QUAD_STRIP ||
-           mode == PIPE_PRIM_POLYGON);
+   return (mode == MESA_PRIM_QUADS ||
+           mode == MESA_PRIM_QUAD_STRIP ||
+           mode == MESA_PRIM_POLYGON);
 }
 
 static unsigned
@@ -370,8 +357,8 @@ fill_mode_lowered(struct d3d12_context *ctx, const struct pipe_draw_info *dinfo)
    if ((ctx->gfx_stages[PIPE_SHADER_GEOMETRY] != NULL &&
         !ctx->gfx_stages[PIPE_SHADER_GEOMETRY]->is_variant) ||
        ctx->gfx_pipeline_state.rast == NULL ||
-       (dinfo->mode != PIPE_PRIM_TRIANGLES &&
-        dinfo->mode != PIPE_PRIM_TRIANGLE_STRIP))
+       (dinfo->mode != MESA_PRIM_TRIANGLES &&
+        dinfo->mode != MESA_PRIM_TRIANGLE_STRIP))
       return PIPE_POLYGON_MODE_FILL;
 
    /* D3D12 supports line mode (wireframe) but doesn't support edge flags */
@@ -417,7 +404,7 @@ needs_point_sprite_lowering(struct d3d12_context *ctx, const struct pipe_draw_in
                  !has_stream_out_for_streams(ctx)));
    } else {
       /* No user GS; check if we are drawing wide points */
-      return ((dinfo->mode == PIPE_PRIM_POINTS ||
+      return ((dinfo->mode == MESA_PRIM_POINTS ||
                fill_mode_lowered(ctx, dinfo) == PIPE_POLYGON_MODE_POINT) &&
               (ctx->gfx_pipeline_state.rast->base.point_size > 1.0 ||
                ctx->gfx_pipeline_state.rast->base.offset_point ||
@@ -452,17 +439,17 @@ get_provoking_vertex(struct d3d12_selection_context *sel_ctx, bool *alternate, c
    struct d3d12_shader_selector *last_vertex_stage = gs && !gs->is_variant ? gs : vs;
 
    /* Make sure GL prims match Gallium prims */
-   STATIC_ASSERT(GL_POINTS == PIPE_PRIM_POINTS);
-   STATIC_ASSERT(GL_LINES == PIPE_PRIM_LINES);
-   STATIC_ASSERT(GL_LINE_STRIP == PIPE_PRIM_LINE_STRIP);
+   STATIC_ASSERT(GL_POINTS == MESA_PRIM_POINTS);
+   STATIC_ASSERT(GL_LINES == MESA_PRIM_LINES);
+   STATIC_ASSERT(GL_LINE_STRIP == MESA_PRIM_LINE_STRIP);
 
-   enum pipe_prim_type mode;
+   enum mesa_prim mode;
    switch (last_vertex_stage->stage) {
    case PIPE_SHADER_GEOMETRY:
-      mode = (enum pipe_prim_type)last_vertex_stage->current->nir->info.gs.output_primitive;
+      mode = (enum mesa_prim)last_vertex_stage->current->nir->info.gs.output_primitive;
       break;
    case PIPE_SHADER_VERTEX:
-      mode = (enum pipe_prim_type)dinfo->mode;
+      mode = (enum mesa_prim)dinfo->mode;
       break;
    default:
       unreachable("Tesselation shaders are not supported");
@@ -1436,8 +1423,8 @@ static unsigned
 scan_texture_use(nir_shader *nir)
 {
    unsigned result = 0;
-   nir_foreach_function(func, nir) {
-      nir_foreach_block(block, func->impl) {
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type == nir_instr_type_tex) {
                auto tex = nir_instr_as_tex(instr);

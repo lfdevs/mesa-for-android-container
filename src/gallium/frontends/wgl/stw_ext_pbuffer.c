@@ -70,7 +70,7 @@ WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 struct stw_framebuffer *
 stw_pbuffer_create(const struct stw_pixelformat_info *pfi, int iWidth, int iHeight, struct pipe_frontend_screen *fscreen)
 {
-   static boolean first = TRUE;
+   static bool first = true;
 
    /*
     * Implement pbuffers through invisible windows
@@ -88,7 +88,7 @@ stw_pbuffer_create(const struct stw_pixelformat_info *pfi, int iWidth, int iHeig
       wc.lpszClassName = "wglpbuffer";
       wc.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
       RegisterClass(&wc);
-      first = FALSE;
+      first = false;
    }
 
    DWORD dwExStyle = 0;
@@ -117,7 +117,7 @@ stw_pbuffer_create(const struct stw_pixelformat_info *pfi, int iWidth, int iHeig
     * WS_OVERLAPPEDWINDOW or WS_POPUPWINDOW as above.
     */
 
-   AdjustWindowRectEx(&rect, dwStyle, FALSE, dwExStyle);
+   AdjustWindowRectEx(&rect, dwStyle, false, dwExStyle);
 
    HWND hWnd = CreateWindowEx(dwExStyle,
                               "wglpbuffer", /* wc.lpszClassName */
@@ -167,7 +167,7 @@ wglCreatePbufferARB(HDC hCurrentDC,
    BOOL bRet;
    int textureFormat = WGL_NO_TEXTURE_ARB;
    int textureTarget = WGL_NO_TEXTURE_ARB;
-   BOOL textureMipmap = FALSE;
+   BOOL textureMipmap = false;
    const struct stw_pixelformat_info *pfi = stw_pixelformat_get_info(iPixelFormat);
 
    if (!pfi) {
@@ -316,7 +316,7 @@ wglDestroyPbufferARB(HPBUFFERARB hPbuffer)
 
    if (!hPbuffer) {
       SetLastError(ERROR_INVALID_HANDLE);
-      return FALSE;
+      return false;
    }
 
    fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
@@ -335,7 +335,7 @@ wglQueryPbufferARB(HPBUFFERARB hPbuffer,
 
    if (!hPbuffer) {
       SetLastError(ERROR_INVALID_HANDLE);
-      return FALSE;
+      return false;
    }
 
    fb = stw_framebuffer_from_HPBUFFERARB(hPbuffer);
@@ -343,32 +343,32 @@ wglQueryPbufferARB(HPBUFFERARB hPbuffer,
    switch (iAttribute) {
    case WGL_PBUFFER_WIDTH_ARB:
       *piValue = fb->width;
-      return TRUE;
+      return true;
    case WGL_PBUFFER_HEIGHT_ARB:
       *piValue = fb->height;
-      return TRUE;
+      return true;
    case WGL_PBUFFER_LOST_ARB:
       /* We assume that no content is ever lost due to display mode change */
-      *piValue = FALSE;
-      return TRUE;
+      *piValue = false;
+      return true;
    /* WGL_ARB_render_texture */
    case WGL_TEXTURE_TARGET_ARB:
       *piValue = fb->textureTarget;
-      return TRUE;
+      return true;
    case WGL_TEXTURE_FORMAT_ARB:
       *piValue = fb->textureFormat;
-      return TRUE;
+      return true;
    case WGL_MIPMAP_TEXTURE_ARB:
       *piValue = fb->textureMipmap;
-      return TRUE;
+      return true;
    case WGL_MIPMAP_LEVEL_ARB:
       *piValue = fb->textureLevel;
-      return TRUE;
+      return true;
    case WGL_CUBE_MAP_FACE_ARB:
       *piValue = fb->textureFace + WGL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB;
-      return TRUE;
+      return true;
    default:
       SetLastError(ERROR_INVALID_DATA);
-      return FALSE;
+      return false;
    }
 }

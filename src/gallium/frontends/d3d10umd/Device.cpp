@@ -455,7 +455,7 @@ CheckFormatSupport(D3D10DDI_HDEVICE hDevice, // IN
 
    *pFormatCaps = 0;
 
-   enum pipe_format format = FormatTranslate(Format, FALSE);
+   enum pipe_format format = FormatTranslate(Format, false);
    if (format == PIPE_FORMAT_NONE) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
       return;

@@ -26,7 +26,6 @@
 #include "nir/nir_to_tgsi.h"
 #include "pipe/p_context.h"
 #include "util/u_memory.h"
-#include "tgsi/tgsi_parse.h"
 
 #include "svga_context.h"
 #include "svga_shader.h"

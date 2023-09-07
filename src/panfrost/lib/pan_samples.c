@@ -151,16 +151,3 @@ panfrost_upload_sample_positions(struct panfrost_device *dev)
    memcpy(dev->sample_positions->ptr.cpu, sample_position_lut,
           sizeof(sample_position_lut));
 }
-
-/* CPU side LUT query, to implement glGetMultisamplefv */
-
-void
-panfrost_query_sample_position(enum mali_sample_pattern pattern,
-                               unsigned sample_idx, float *out)
-{
-   struct mali_sample_position pos =
-      sample_position_lut[pattern].positions[sample_idx];
-
-   out[0] = decode_position(pos.x);
-   out[1] = decode_position(pos.y);
-}

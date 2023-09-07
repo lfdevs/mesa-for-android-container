@@ -278,7 +278,7 @@ r2d_src_depth(struct tu_cmd_buffer *cmd,
    tu_cs_emit(cs, iview->view.SP_PS_2D_SRC_SIZE);
    tu_cs_emit_qw(cs, iview->depth_base_addr + iview->depth_layer_size * layer);
    /* SP_PS_2D_SRC_PITCH has shifted pitch field */
-   tu_cs_emit(cs, iview->depth_PITCH << 9);
+   tu_cs_emit(cs, A6XX_SP_PS_2D_SRC_PITCH(.pitch = iview->depth_pitch).value);
 
    tu_cs_emit_pkt4(cs, REG_A6XX_SP_PS_2D_SRC_FLAGS, 3);
    tu_cs_image_flag_ref(cs, &iview->view, layer);
@@ -295,8 +295,7 @@ r2d_src_stencil(struct tu_cmd_buffer *cmd,
    tu_cs_emit(cs, tu_image_view_stencil(iview, SP_PS_2D_SRC_INFO) & ~A6XX_SP_PS_2D_SRC_INFO_FLAGS);
    tu_cs_emit(cs, iview->view.SP_PS_2D_SRC_SIZE);
    tu_cs_emit_qw(cs, iview->stencil_base_addr + iview->stencil_layer_size * layer);
-   /* SP_PS_2D_SRC_PITCH has shifted pitch field */
-   tu_cs_emit(cs, iview->stencil_PITCH << 9);
+   tu_cs_emit(cs, A6XX_SP_PS_2D_SRC_PITCH(.pitch = iview->stencil_pitch).value);
 }
 
 static void
@@ -349,7 +348,7 @@ r2d_dst_depth(struct tu_cs *cs, const struct tu_image_view *iview, uint32_t laye
    tu_cs_emit_pkt4(cs, REG_A6XX_RB_2D_DST_INFO, 4);
    tu_cs_emit(cs, tu_image_view_depth(iview, RB_2D_DST_INFO));
    tu_cs_emit_qw(cs, iview->depth_base_addr + iview->depth_layer_size * layer);
-   tu_cs_emit(cs, iview->depth_PITCH);
+   tu_cs_emit(cs, A6XX_RB_2D_DST_PITCH(iview->depth_pitch).value);
 
    tu_cs_emit_pkt4(cs, REG_A6XX_RB_2D_DST_FLAGS, 3);
    tu_cs_image_flag_ref(cs, &iview->view, layer);
@@ -361,7 +360,7 @@ r2d_dst_stencil(struct tu_cs *cs, const struct tu_image_view *iview, uint32_t la
    tu_cs_emit_pkt4(cs, REG_A6XX_RB_2D_DST_INFO, 4);
    tu_cs_emit(cs, tu_image_view_stencil(iview, RB_2D_DST_INFO) & ~A6XX_RB_2D_DST_INFO_FLAGS);
    tu_cs_emit_qw(cs, iview->stencil_base_addr + iview->stencil_layer_size * layer);
-   tu_cs_emit(cs, iview->stencil_PITCH);
+   tu_cs_emit(cs, A6XX_RB_2D_DST_PITCH(iview->stencil_pitch).value);
 }
 
 static void
@@ -620,11 +619,11 @@ build_blit_fs_shader(bool zscale)
    b->shader->info.num_textures = 1;
    BITSET_SET(b->shader->info.textures_used, 0);
 
-   tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(nir_load_var(b, in_coords));
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord,
+                                     nir_load_var(b, in_coords));
    tex->coord_components = coord_components;
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
 
    nir_store_var(b, out_color, &tex->dest.ssa, 0xf);
@@ -676,14 +675,13 @@ build_ms_copy_fs_shader(void)
 
    nir_ssa_def *coord = nir_f2i32(b, nir_load_var(b, in_coords));
 
-   tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(coord);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, coord);
    tex->coord_components = 2;
 
-   tex->src[1].src_type = nir_tex_src_ms_index;
-   tex->src[1].src = nir_src_for_ssa(nir_load_sample_id(b));
+   tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_ms_index,
+                                     nir_load_sample_id(b));
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
    nir_builder_instr_insert(b, &tex->instr);
 
    nir_store_var(b, out_color, &tex->dest.ssa, 0xf);
@@ -1100,6 +1098,113 @@ r3d_src_buffer(struct tu_cmd_buffer *cmd,
 }
 
 static void
+r3d_src_depth(struct tu_cmd_buffer *cmd,
+              struct tu_cs *cs,
+              const struct tu_image_view *iview,
+              uint32_t layer)
+{
+   uint32_t desc[A6XX_TEX_CONST_DWORDS];
+
+   memcpy(desc, iview->view.descriptor, sizeof(desc));
+   uint64_t va = iview->depth_base_addr;
+
+   desc[0] &= ~(A6XX_TEX_CONST_0_FMT__MASK |
+                A6XX_TEX_CONST_0_SWIZ_X__MASK | A6XX_TEX_CONST_0_SWIZ_Y__MASK |
+                A6XX_TEX_CONST_0_SWIZ_Z__MASK | A6XX_TEX_CONST_0_SWIZ_W__MASK |
+                A6XX_TEX_CONST_0_SWAP__MASK);
+   desc[0] |= A6XX_TEX_CONST_0_FMT(FMT6_32_FLOAT) |
+              A6XX_TEX_CONST_0_SWIZ_X(A6XX_TEX_X) |
+              A6XX_TEX_CONST_0_SWIZ_Y(A6XX_TEX_Y) |
+              A6XX_TEX_CONST_0_SWIZ_Z(A6XX_TEX_Z) |
+              A6XX_TEX_CONST_0_SWIZ_W(A6XX_TEX_W);
+   desc[2] =
+      A6XX_TEX_CONST_2_PITCH(iview->depth_pitch) |
+      A6XX_TEX_CONST_2_TYPE(A6XX_TEX_2D);
+   desc[3] = A6XX_TEX_CONST_3_ARRAY_PITCH(iview->depth_layer_size) |
+      (iview->view.descriptor[3] & ~A6XX_TEX_CONST_3_ARRAY_PITCH__MASK);
+   desc[4] = va;
+   desc[5] = va >> 32;
+
+   r3d_src_common(cmd, cs, desc,
+                  iview->depth_layer_size * layer, 
+                  iview->view.ubwc_layer_size * layer,
+                  VK_FILTER_NEAREST);
+}
+
+static void
+r3d_src_stencil(struct tu_cmd_buffer *cmd,
+                struct tu_cs *cs,
+                const struct tu_image_view *iview,
+                uint32_t layer)
+{
+   uint32_t desc[A6XX_TEX_CONST_DWORDS];
+
+   memcpy(desc, iview->view.descriptor, sizeof(desc));
+   uint64_t va = iview->stencil_base_addr;
+
+   desc[0] &= ~(A6XX_TEX_CONST_0_FMT__MASK |
+                A6XX_TEX_CONST_0_SWIZ_X__MASK | A6XX_TEX_CONST_0_SWIZ_Y__MASK |
+                A6XX_TEX_CONST_0_SWIZ_Z__MASK | A6XX_TEX_CONST_0_SWIZ_W__MASK |
+                A6XX_TEX_CONST_0_SWAP__MASK);
+   desc[0] |= A6XX_TEX_CONST_0_FMT(FMT6_8_UINT) |
+              A6XX_TEX_CONST_0_SWIZ_X(A6XX_TEX_X) |
+              A6XX_TEX_CONST_0_SWIZ_Y(A6XX_TEX_Y) |
+              A6XX_TEX_CONST_0_SWIZ_Z(A6XX_TEX_Z) |
+              A6XX_TEX_CONST_0_SWIZ_W(A6XX_TEX_W);
+   desc[2] =
+      A6XX_TEX_CONST_2_PITCH(iview->stencil_pitch) |
+      A6XX_TEX_CONST_2_TYPE(A6XX_TEX_2D);
+   desc[3] = A6XX_TEX_CONST_3_ARRAY_PITCH(iview->stencil_layer_size);
+   desc[4] = va;
+   desc[5] = va >> 32;
+   for (unsigned i = 6; i < A6XX_TEX_CONST_DWORDS; i++)
+      desc[i] = 0;
+
+   r3d_src_common(cmd, cs, desc, iview->stencil_layer_size * layer, 0,
+                  VK_FILTER_NEAREST);
+}
+
+static void
+r3d_src_gmem_load(struct tu_cmd_buffer *cmd,
+                  struct tu_cs *cs,
+                  const struct tu_image_view *iview,
+                  uint32_t layer)
+{
+   uint32_t desc[A6XX_TEX_CONST_DWORDS];
+
+   memcpy(desc, iview->view.descriptor, sizeof(desc));
+
+   /* Fixup D24 formats because we always load both depth and stencil. */
+   enum pipe_format format = iview->view.format;
+   if (format == PIPE_FORMAT_X24S8_UINT ||
+       format == PIPE_FORMAT_Z24X8_UNORM ||
+       format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+      desc[0] &= ~A6XX_TEX_CONST_0_FMT__MASK;
+      if (iview->view.ubwc_enabled)
+         desc[0] |= A6XX_TEX_CONST_0_FMT(FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8);
+      else
+         desc[0] |= A6XX_TEX_CONST_0_FMT(FMT6_8_8_8_8_UNORM);
+   }
+
+   /* When loading/storing GMEM we always load the full image and don't do any
+    * swizzling or swapping, that's done in the draw when reading/writing
+    * GMEM, so we need to fixup the swizzle and swap.
+    */
+   desc[0] &= ~(A6XX_TEX_CONST_0_SWIZ_X__MASK | A6XX_TEX_CONST_0_SWIZ_Y__MASK |
+                A6XX_TEX_CONST_0_SWIZ_Z__MASK | A6XX_TEX_CONST_0_SWIZ_W__MASK |
+                A6XX_TEX_CONST_0_SWAP__MASK);
+   desc[0] |= A6XX_TEX_CONST_0_SWIZ_X(A6XX_TEX_X) |
+              A6XX_TEX_CONST_0_SWIZ_Y(A6XX_TEX_Y) |
+              A6XX_TEX_CONST_0_SWIZ_Z(A6XX_TEX_Z) |
+              A6XX_TEX_CONST_0_SWIZ_W(A6XX_TEX_W);
+
+   r3d_src_common(cmd, cs, desc,
+                  iview->view.layer_size * layer,
+                  iview->view.ubwc_layer_size * layer,
+                  VK_FILTER_NEAREST);
+}
+
+static void
 r3d_src_gmem(struct tu_cmd_buffer *cmd,
              struct tu_cs *cs,
              const struct tu_image_view *iview,
@@ -1212,6 +1317,43 @@ r3d_dst_buffer(struct tu_cs *cs, enum pipe_format format, uint64_t va, uint32_t 
    tu_cs_emit_regs(cs, A6XX_RB_RENDER_CNTL());
 }
 
+static void
+r3d_dst_gmem(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
+             const struct tu_image_view *iview,
+             const struct tu_render_pass_attachment *att,
+             bool separate_stencil, unsigned layer)
+{
+   unsigned RB_MRT_BUF_INFO;
+   unsigned gmem_offset;
+
+   if (att->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+      if (!separate_stencil) {
+         RB_MRT_BUF_INFO = tu_image_view_depth(iview, RB_MRT_BUF_INFO);
+         gmem_offset = tu_attachment_gmem_offset(cmd, att, layer);
+      } else {
+         RB_MRT_BUF_INFO = tu_image_view_stencil(iview, RB_MRT_BUF_INFO);
+         gmem_offset = tu_attachment_gmem_offset_stencil(cmd, att, layer);
+      }
+   } else {
+      RB_MRT_BUF_INFO = iview->view.RB_MRT_BUF_INFO;
+      gmem_offset = tu_attachment_gmem_offset(cmd, att, layer);
+   }
+
+   tu_cs_emit_regs(cs,
+                   A6XX_RB_MRT_BUF_INFO(0, .dword = RB_MRT_BUF_INFO),
+                   A6XX_RB_MRT_PITCH(0, 0),
+                   A6XX_RB_MRT_ARRAY_PITCH(0, 0),
+                   A6XX_RB_MRT_BASE(0, 0),
+                   A6XX_RB_MRT_BASE_GMEM(0, gmem_offset));
+
+   enum a6xx_format color_format =
+      (enum a6xx_format)(RB_MRT_BUF_INFO & A6XX_RB_MRT_BUF_INFO_COLOR_FORMAT__MASK);
+   tu_cs_emit_regs(cs,
+                   A6XX_GRAS_LRZ_MRT_BUF_INFO_0(.color_format = color_format));
+
+   tu_cs_emit_regs(cs, A6XX_RB_RENDER_CNTL());
+}
+
 static uint8_t
 aspect_write_mask(enum pipe_format format, VkImageAspectFlags aspect_mask)
 {
@@ -1228,6 +1370,11 @@ aspect_write_mask(enum pipe_format format, VkImageAspectFlags aspect_mask)
    }
    return mask;
 }
+
+enum r3d_blit_param {
+   R3D_Z_SCALE = 1 << 0,
+   R3D_DST_GMEM = 1 << 1,
+};
 
 static void
 r3d_setup(struct tu_cmd_buffer *cmd,
@@ -1252,10 +1399,12 @@ r3d_setup(struct tu_cmd_buffer *cmd,
       tu6_emit_window_scissor(cs, 0, 0, 0x3fff, 0x3fff);
    }
 
-   tu_cs_emit_regs(cs, A6XX_GRAS_BIN_CONTROL(.dword = 0xc00000));
-   tu_cs_emit_regs(cs, A6XX_RB_BIN_CONTROL(.dword = 0xc00000));
+   if (!(blit_param & R3D_DST_GMEM)) {
+      tu_cs_emit_regs(cs, A6XX_GRAS_BIN_CONTROL(.buffers_location = BUFFERS_IN_SYSMEM));
+      tu_cs_emit_regs(cs, A6XX_RB_BIN_CONTROL(.buffers_location = BUFFERS_IN_SYSMEM));
+   }
 
-   r3d_common(cmd, cs, !clear, 1, blit_param, samples);
+   r3d_common(cmd, cs, !clear, 1, blit_param & R3D_Z_SCALE, samples);
 
    tu_cs_emit_pkt4(cs, REG_A6XX_SP_FS_OUTPUT_CNTL0, 2);
    tu_cs_emit(cs, A6XX_SP_FS_OUTPUT_CNTL0_DEPTH_REGID(0xfc) |
@@ -1653,7 +1802,7 @@ tu6_blit_image(struct tu_cmd_buffer *cmd,
        filter == VK_FILTER_CUBIC_EXT ||
        z_scale) {
       ops = &r3d_ops;
-      blit_param = z_scale;
+      blit_param = z_scale ? R3D_Z_SCALE : 0;
    }
 
    /* use the right format in setup() for D32_S8
@@ -3089,14 +3238,14 @@ tu_emit_blit(struct tu_cmd_buffer *cmd,
          if (!separate_stencil) {
             tu_cs_emit(cs, tu_image_view_depth(iview, RB_BLIT_DST_INFO));
             tu_cs_emit_qw(cs, iview->depth_base_addr + iview->depth_layer_size * i);
-            tu_cs_emit(cs, iview->depth_PITCH);
+            tu_cs_emit(cs, A6XX_RB_2D_DST_PITCH(iview->depth_pitch).value);
 
             tu_cs_emit_pkt4(cs, REG_A6XX_RB_BLIT_FLAG_DST, 3);
             tu_cs_image_flag_ref(cs, &iview->view, i);
          } else {
             tu_cs_emit(cs, tu_image_view_stencil(iview, RB_BLIT_DST_INFO) & ~A6XX_RB_BLIT_DST_INFO_FLAGS);
             tu_cs_emit_qw(cs, iview->stencil_base_addr + iview->stencil_layer_size * i);
-            tu_cs_emit(cs, iview->stencil_PITCH);
+            tu_cs_emit(cs, A6XX_RB_BLIT_DST_PITCH(iview->stencil_pitch).value);
          }
       } else {
          tu_cs_emit(cs, iview->view.RB_BLIT_DST_INFO);
@@ -3156,6 +3305,99 @@ blit_can_resolve(VkFormat format)
    }
 
    return true;
+}
+
+struct apply_load_coords_state {
+   unsigned view;
+};
+
+static void
+fdm_apply_load_coords(struct tu_cs *cs, void *data, VkRect2D bin,
+                      unsigned views, VkExtent2D *frag_areas)
+{
+   const struct apply_load_coords_state *state =
+      (const struct apply_load_coords_state *)data;
+   assert(state->view < views);
+   VkExtent2D frag_area = frag_areas[state->view];
+
+   assert(bin.extent.width % frag_area.width == 0);
+   assert(bin.extent.height % frag_area.height == 0);
+   uint32_t scaled_width = bin.extent.width / frag_area.width;
+   uint32_t scaled_height = bin.extent.height / frag_area.height;
+
+   const float coords[] = {
+      bin.offset.x,                    bin.offset.y,
+      bin.offset.x,                    bin.offset.y,
+      bin.offset.x + scaled_width,     bin.offset.y + scaled_height,
+      bin.offset.x + bin.extent.width, bin.offset.y + bin.extent.height,
+   };
+   r3d_coords_raw(cs, coords);
+}
+
+static void
+load_3d_blit(struct tu_cmd_buffer *cmd,
+             struct tu_cs *cs,
+             const struct tu_image_view *iview,
+             const struct tu_render_pass_attachment *att,
+             bool separate_stencil)
+{
+   const struct tu_framebuffer *fb = cmd->state.framebuffer;
+   enum pipe_format format = iview->view.format;
+   if (iview->image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+      if (separate_stencil)
+         format = PIPE_FORMAT_S8_UINT;
+      else
+         format = PIPE_FORMAT_Z32_FLOAT;
+   }
+   r3d_setup(cmd, cs, format, format,
+             VK_IMAGE_ASPECT_COLOR_BIT, R3D_DST_GMEM, false,
+             iview->view.ubwc_enabled, iview->image->vk.samples);
+
+   if (!cmd->state.pass->has_fdm) {
+      r3d_coords(cs, (VkOffset2D) { 0, 0 }, (VkOffset2D) { 0, 0 },
+                 (VkExtent2D) { fb->width, fb->height });
+   }
+
+   /* Normal loads read directly from system memory, so we have to invalidate
+    * UCHE in case it contains stale data.
+    */
+   tu6_emit_event_write(cmd, cs, CACHE_INVALIDATE);
+
+   /* Wait for CACHE_INVALIDATE to land */
+   tu_cs_emit_wfi(cs);
+
+   for_each_layer(i, att->clear_views, cmd->state.framebuffer->layers) {
+      if (cmd->state.pass->has_fdm) {
+         struct apply_load_coords_state state = {
+            .view = att->clear_views ? i : 0,
+         };
+         tu_create_fdm_bin_patchpoint(cmd, cs, 1 + 3 + 8, fdm_apply_load_coords, state);
+      }
+
+      r3d_dst_gmem(cmd, cs, iview, att, separate_stencil, i);
+
+      if (iview->image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+         if (separate_stencil)
+            r3d_src_stencil(cmd, cs, iview, i);
+         else
+            r3d_src_depth(cmd, cs, iview, i);
+      } else {
+         r3d_src_gmem_load(cmd, cs, iview, i);
+      }
+
+      r3d_run(cmd, cs);
+   }
+
+   r3d_teardown(cmd, cs);
+
+   /* It seems we need to WFI here for depth/stencil because color writes here
+    * aren't synchronized with depth/stencil writes.
+    *
+    * Note: the blob also uses a WFI for color attachments but this hasn't
+    * been seen to be necessary.
+    */
+   if (vk_format_is_depth_or_stencil(att->format))
+      tu_cs_emit_wfi(cs);
 }
 
 static void
@@ -3234,11 +3476,23 @@ tu_load_gmem_attachment(struct tu_cmd_buffer *cmd,
    if (cond_exec)
       tu_begin_load_store_cond_exec(cmd, cs, true);
 
-   if (load_common)
-      tu_emit_blit(cmd, cs, iview, attachment, false, false);
+   if (TU_DEBUG(3D_LOAD) ||
+       cmd->state.pass->has_fdm) {
+      if (load_common || load_stencil)
+         tu_disable_draw_states(cmd, cs);
 
-   if (load_stencil)
-      tu_emit_blit(cmd, cs, iview, attachment, false, true);
+      if (load_common)
+         load_3d_blit(cmd, cs, iview, attachment, false);
+
+      if (load_stencil)
+         load_3d_blit(cmd, cs, iview, attachment, true);
+   } else {
+      if (load_common)
+         tu_emit_blit(cmd, cs, iview, attachment, false, false);
+
+      if (load_stencil)
+         tu_emit_blit(cmd, cs, iview, attachment, false, true);
+   }
 
    if (cond_exec)
       tu_end_load_store_cond_exec(cmd, cs, true);
@@ -3285,8 +3539,7 @@ store_cp_blit(struct tu_cmd_buffer *cmd,
                                          !util_format_is_depth_or_stencil(dst_format),
                       .unk20 = 1,
                       .unk22 = 1),
-                   /* note: src size does not matter when not scaling */
-                   A6XX_SP_PS_2D_SRC_SIZE( .width = 0x3fff, .height = 0x3fff),
+                   A6XX_SP_PS_2D_SRC_SIZE( .width = iview->vk.extent.width, .height = iview->vk.extent.height),
                    A6XX_SP_PS_2D_SRC(.qword = cmd->device->physical_device->gmem_base + gmem_offset),
                    A6XX_SP_PS_2D_SRC_PITCH(.pitch = cmd->state.tiling->tile0.width * cpp));
 
@@ -3386,6 +3639,10 @@ tu_attachment_store_unaligned(struct tu_cmd_buffer *cmd, uint32_t a)
    if (TU_DEBUG(UNALIGNED_STORE))
       return true;
 
+   /* We always use the unaligned store path when scaling rendering. */
+   if (cmd->state.pass->has_fdm)
+      return true;
+
    uint32_t x1 = render_area->offset.x;
    uint32_t y1 = render_area->offset.y;
    uint32_t x2 = x1 + render_area->extent.width;
@@ -3428,6 +3685,41 @@ tu_choose_gmem_layout(struct tu_cmd_buffer *cmd)
    }
 
    cmd->state.tiling = &cmd->state.framebuffer->tiling[cmd->state.gmem_layout];
+}
+
+struct apply_store_coords_state {
+   unsigned view;
+};
+
+static void
+fdm_apply_store_coords(struct tu_cs *cs, void *data, VkRect2D bin,
+                       unsigned views, VkExtent2D *frag_areas)
+{
+   const struct apply_store_coords_state *state =
+      (const struct apply_store_coords_state *)data;
+   assert(state->view < views);
+   VkExtent2D frag_area = frag_areas[state->view];
+
+   /* The bin width/height must be a multiple of the frag_area to make sure
+    * that the scaling happens correctly. This means there may be some
+    * destination pixels jut out of the framebuffer, but they should be
+    * clipped by the render area.
+    */
+   assert(bin.extent.width % frag_area.width == 0);
+   assert(bin.extent.height % frag_area.height == 0);
+   uint32_t scaled_width = bin.extent.width / frag_area.width;
+   uint32_t scaled_height = bin.extent.height / frag_area.height;
+
+   tu_cs_emit_regs(cs,
+      A6XX_GRAS_2D_DST_TL(.x = bin.offset.x,
+                          .y = bin.offset.y),
+      A6XX_GRAS_2D_DST_BR(.x = bin.offset.x + bin.extent.width - 1,
+                          .y = bin.offset.y + bin.extent.height - 1));
+   tu_cs_emit_regs(cs,
+                   A6XX_GRAS_2D_SRC_TL_X(bin.offset.x),
+                   A6XX_GRAS_2D_SRC_BR_X(bin.offset.x + scaled_width - 1),
+                   A6XX_GRAS_2D_SRC_TL_Y(bin.offset.y),
+                   A6XX_GRAS_2D_SRC_BR_Y(bin.offset.y + scaled_height - 1));
 }
 
 void
@@ -3528,9 +3820,33 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
          }
       }
    } else {
-      r2d_coords(cs, render_area->offset, render_area->offset, render_area->extent);
+      if (!cmd->state.pass->has_fdm) {
+         r2d_coords(cs, render_area->offset, render_area->offset,
+                    render_area->extent);
+      } else {
+         /* Usually GRAS_2D_RESOLVE_CNTL_* clips the destination to the bin
+          * area and the coordinates span the entire render area, but for
+          * FDM we need to scale the coordinates so we need to take the
+          * opposite aproach, specifying the exact bin size in the destination
+          * coordinates and using GRAS_2D_RESOLVE_CNTL_* to clip to the render
+          * area.
+          */
+         tu_cs_emit_regs(cs,
+                         A6XX_GRAS_2D_RESOLVE_CNTL_1(.x = render_area->offset.x,
+                                                     .y = render_area->offset.y,),
+                         A6XX_GRAS_2D_RESOLVE_CNTL_2(.x = render_area->offset.x + render_area->extent.width - 1,
+                                                     .y = render_area->offset.y + render_area->extent.height - 1,));
+      }
 
-      for_each_layer(i, layer_mask, layers) {
+      for_each_layer (i, layer_mask, layers) {
+         if (cmd->state.pass->has_fdm) {
+            unsigned view = layer_mask ? i : 0;
+            struct apply_store_coords_state state = {
+               .view = view,
+            };
+            tu_create_fdm_bin_patchpoint(cmd, cs, 8, fdm_apply_store_coords,
+                                         state);
+         }
          if (store_common) {
             store_cp_blit(cmd, cs, iview, src->samples, false, src_format,
                           dst_format, i, tu_attachment_gmem_offset(cmd, src, i), src->cpp);

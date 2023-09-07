@@ -27,7 +27,6 @@
 
 #include "nir_types.h"
 #include "nir_gl_types.h"
-#include "compiler/glsl/ir.h"
 
 const char *
 glsl_get_type_name(const glsl_type *type)
@@ -650,10 +649,10 @@ glsl_explicit_matrix_type(const glsl_type *mat,
 }
 
 const glsl_type *
-glsl_array_type(const glsl_type *base, unsigned elements,
+glsl_array_type(const glsl_type *element, unsigned array_size,
                 unsigned explicit_stride)
 {
-   return glsl_type::get_array_instance(base, elements, explicit_stride);
+   return glsl_type::get_array_instance(element, array_size, explicit_stride);
 }
 
 const glsl_type *

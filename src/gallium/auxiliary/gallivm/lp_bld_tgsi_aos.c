@@ -45,7 +45,6 @@
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_info.h"
 #include "tgsi/tgsi_parse.h"
-#include "tgsi/tgsi_util.h"
 #include "tgsi/tgsi_scan.h"
 #include "lp_bld_type.h"
 #include "lp_bld_const.h"
@@ -425,7 +424,7 @@ lp_emit_declaration_aos(
  * Emit LLVM for one TGSI instruction.
  * \param return TRUE for success, FALSE otherwise
  */
-boolean
+bool
 lp_emit_instruction_aos(
    struct lp_build_tgsi_aos_context *bld,
    const struct tgsi_full_instruction *inst,
@@ -465,7 +464,7 @@ lp_emit_instruction_aos(
       break;
 
    case TGSI_OPCODE_LIT:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_RCP:
    /* TGSI_OPCODE_RECIP */
@@ -481,10 +480,10 @@ lp_emit_instruction_aos(
       break;
 
    case TGSI_OPCODE_EXP:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_LOG:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_MUL:
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
@@ -500,14 +499,14 @@ lp_emit_instruction_aos(
 
    case TGSI_OPCODE_DP3:
    /* TGSI_OPCODE_DOT3 */
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_DP4:
    /* TGSI_OPCODE_DOT4 */
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_DST:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_MIN:
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
@@ -598,31 +597,31 @@ lp_emit_instruction_aos(
       break;
 
    case TGSI_OPCODE_DDX:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_DDY:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_KILL:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_KILL_IF:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_PK2H:
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_PK2US:
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_PK4B:
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_PK4UB:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_SEQ:
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
@@ -669,25 +668,25 @@ lp_emit_instruction_aos(
    case TGSI_OPCODE_UP2H:
       /* deprecated */
       assert (0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_UP2US:
       /* deprecated */
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_UP4B:
       /* deprecated */
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_UP4UB:
       /* deprecated */
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_ARR:
@@ -696,7 +695,7 @@ lp_emit_instruction_aos(
       break;
 
    case TGSI_OPCODE_CAL:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_RET:
       /* safe to ignore at end */
@@ -726,11 +725,11 @@ lp_emit_instruction_aos(
 
    case TGSI_OPCODE_DIV:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_DP2:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_TXL:
       dst0 = emit_tex(bld, inst, LP_BLD_TEX_MODIFIER_EXPLICIT_LOD);
@@ -741,29 +740,29 @@ lp_emit_instruction_aos(
       break;
 
    case TGSI_OPCODE_BRK:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_IF:
    case TGSI_OPCODE_UIF:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_BGNLOOP:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_BGNSUB:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_ELSE:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_ENDIF:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_ENDLOOP:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_ENDSUB:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_CEIL:
       src0 = lp_build_emit_fetch(&bld->bld_base, inst, 0, LP_CHAN_ALL);
@@ -772,12 +771,12 @@ lp_emit_instruction_aos(
 
    case TGSI_OPCODE_I2F:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_NOT:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_TRUNC:
@@ -787,53 +786,53 @@ lp_emit_instruction_aos(
 
    case TGSI_OPCODE_SHL:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_ISHR:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_AND:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_OR:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_MOD:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_XOR:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_TXF:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_TXQ:
       assert(0);
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_CONT:
-      return FALSE;
+      return false;
 
    case TGSI_OPCODE_EMIT:
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_ENDPRIM:
-      return FALSE;
+      return false;
       break;
 
    case TGSI_OPCODE_NOP:
@@ -844,14 +843,14 @@ lp_emit_instruction_aos(
       break;
 
    default:
-      return FALSE;
+      return false;
    }
    
    if (info->num_dst) {
       lp_emit_store_aos(bld, inst, 0, dst0);
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -868,7 +867,7 @@ lp_build_tgsi_aos(struct gallivm_state *gallivm,
 {
    struct lp_build_tgsi_aos_context bld;
    struct tgsi_parse_context parse;
-   uint num_immediates = 0;
+   unsigned num_immediates = 0;
    unsigned chan;
    int pc = 0;
 
@@ -924,7 +923,7 @@ lp_build_tgsi_aos(struct gallivm_state *gallivm,
       case TGSI_TOKEN_TYPE_IMMEDIATE:
          /* simply copy the immediate values into the next immediates[] slot */
          {
-            const uint size = parse.FullToken.FullImmediate.Immediate.NrTokens - 1;
+            const unsigned size = parse.FullToken.FullImmediate.Immediate.NrTokens - 1;
             float imm[4];
             assert(size <= 4);
             assert(num_immediates < LP_MAX_INLINED_IMMEDIATES);

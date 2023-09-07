@@ -31,6 +31,12 @@ struct vn_queue {
 
    /* sync fence used for Android wsi */
    VkFence sync_fence;
+
+   /* semaphore for gluing vkQueueSubmit feedback commands to
+    * vkQueueBindSparse
+    */
+   VkSemaphore sparse_semaphore;
+   uint64_t sparse_semaphore_counter;
 };
 VK_DEFINE_HANDLE_CASTS(vn_queue, base.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 

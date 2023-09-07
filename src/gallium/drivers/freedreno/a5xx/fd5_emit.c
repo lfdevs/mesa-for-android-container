@@ -310,8 +310,10 @@ emit_border_color(struct fd_context *ctx, struct fd_ringbuffer *ring) assert_dt
 
    STATIC_ASSERT(sizeof(struct bcolor_entry) == FD5_BORDER_COLOR_SIZE);
 
+   const unsigned int alignment =
+      util_next_power_of_two(FD5_BORDER_COLOR_UPLOAD_SIZE);
    u_upload_alloc(fd5_ctx->border_color_uploader, 0,
-                  FD5_BORDER_COLOR_UPLOAD_SIZE, FD5_BORDER_COLOR_UPLOAD_SIZE,
+                  FD5_BORDER_COLOR_UPLOAD_SIZE, alignment,
                   &off, &fd5_ctx->border_color_buf, &ptr);
 
    entries = ptr;

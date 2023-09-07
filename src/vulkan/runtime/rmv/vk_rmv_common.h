@@ -106,10 +106,6 @@ struct vk_memory_trace_data {
    struct util_dynarray tokens;
    simple_mtx_t token_mtx;
 
-   int32_t cur_frame_idx;
-   int32_t trace_frame_idx;
-   const char *trigger_file_name;
-
    bool is_enabled;
 
    struct vk_rmv_device_info device_info;
@@ -120,30 +116,9 @@ struct vk_memory_trace_data {
 
 struct vk_device;
 
-static inline int
-vk_memory_trace_frame()
-{
-   return (int)debug_get_num_option("MESA_VK_MEMORY_TRACE", -1);
-}
-
-static inline const char *
-vk_memory_trace_trigger_file()
-{
-   return getenv("MESA_VK_MEMORY_TRACE_TRIGGER");
-}
-
-static inline bool
-vk_memory_trace_enabled()
-{
-   return vk_memory_trace_frame() != -1 || vk_memory_trace_trigger_file();
-}
-
 void vk_memory_trace_init(struct vk_device *device, const struct vk_rmv_device_info *device_info);
 
 void vk_memory_trace_finish(struct vk_device *device);
-
-/* The memory trace mutex should be locked when entering this function. */
-void vk_rmv_handle_present_locked(struct vk_device *device);
 
 int vk_dump_rmv_capture(struct vk_memory_trace_data *data);
 

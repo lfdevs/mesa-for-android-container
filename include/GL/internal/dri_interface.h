@@ -40,6 +40,7 @@
 #ifndef DRI_INTERFACE_H
 #define DRI_INTERFACE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /**
@@ -1634,8 +1635,8 @@ struct __DRIimageExtensionRec {
     *
     * \since 15
     */
-   unsigned char (*queryDmaBufFormats)(__DRIscreen *screen, int max,
-                                       int *formats, int *count);
+   bool (*queryDmaBufFormats)(__DRIscreen *screen, int max, int *formats,
+                              int *count);
 
    /*
     * dmabuf format modifier query for a given format to support
@@ -1656,10 +1657,9 @@ struct __DRIimageExtensionRec {
     *
     * \since 15
     */
-   unsigned char (*queryDmaBufModifiers)(__DRIscreen *screen, int fourcc,
-                                         int max, uint64_t *modifiers,
-                                         unsigned int *external_only,
-                                         int *count);
+   bool (*queryDmaBufModifiers)(__DRIscreen *screen, int fourcc, int max,
+                                uint64_t *modifiers,
+                                unsigned int *external_only, int *count);
 
    /**
     * dmabuf format modifier attribute query for a given format and modifier.
@@ -1675,11 +1675,9 @@ struct __DRIimageExtensionRec {
     *
     * \since 16
     */
-   unsigned char (*queryDmaBufFormatModifierAttribs)(__DRIscreen *screen,
-                                                     uint32_t fourcc,
-                                                     uint64_t modifier,
-                                                     int attrib,
-                                                     uint64_t *value);
+   bool (*queryDmaBufFormatModifierAttribs)(__DRIscreen *screen,
+                                            uint32_t fourcc, uint64_t modifier,
+                                            int attrib, uint64_t *value);
 
    /**
     * Create a DRI image from the given renderbuffer.

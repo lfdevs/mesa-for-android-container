@@ -437,6 +437,7 @@ int main(int argc, char **argv)
             .fp16 = true,
             .intel_subgroups = true,
             .subgroups = true,
+            .subgroups_ifp = true,
          },
          .args = util_dynarray_begin(&clang_args),
          .num_args = util_dynarray_num_elements(&clang_args, char *),

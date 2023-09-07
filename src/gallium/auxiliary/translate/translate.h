@@ -40,7 +40,7 @@
 #define _TRANSLATE_H
 
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/format/u_formats.h"
 #include "pipe/p_state.h"
 
@@ -135,7 +135,7 @@ struct translate {
 
 struct translate *translate_create( const struct translate_key *key );
 
-boolean translate_is_output_format_supported(enum pipe_format format);
+bool translate_is_output_format_supported(enum pipe_format format);
 
 static inline int translate_keysize( const struct translate_key *key )
 {
@@ -171,6 +171,6 @@ struct translate *translate_sse2_create( const struct translate_key *key );
 
 struct translate *translate_generic_create( const struct translate_key *key );
 
-boolean translate_generic_is_output_format_supported(enum pipe_format format);
+bool translate_generic_is_output_format_supported(enum pipe_format format);
 
 #endif

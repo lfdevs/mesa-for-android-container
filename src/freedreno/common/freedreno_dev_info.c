@@ -45,7 +45,9 @@ dev_id_compare(const struct fd_dev_id *ref, const struct fd_dev_id *id)
    if (ref->gpu_id && id->gpu_id) {
       return ref->gpu_id == id->gpu_id;
    } else {
-      assert(ref->chip_id && id->chip_id);
+      if (!id->chip_id)
+         return false;
+
       /* Match on either:
        * (a) exact match:
        */

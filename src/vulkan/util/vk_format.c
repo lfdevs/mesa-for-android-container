@@ -35,7 +35,7 @@
  * Also, missing entries are zero-filled, which happens to be
  * PIPE_FORMAT_NONE.
  */
-static const enum pipe_format vk_format_map[] = {
+const enum pipe_format vk_format_map[] = {
    /* Missing R4G4 */
    [VK_FORMAT_R4G4B4A4_UNORM_PACK16] = PIPE_FORMAT_A4B4G4R4_UNORM,
    [VK_FORMAT_B4G4R4A4_UNORM_PACK16] = PIPE_FORMAT_A4R4G4B4_UNORM,

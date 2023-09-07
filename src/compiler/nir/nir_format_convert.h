@@ -29,9 +29,9 @@ static inline nir_ssa_def *
 nir_shift_imm(nir_builder *b, nir_ssa_def *value, int left_shift)
 {
    if (left_shift > 0)
-      return nir_ishl(b, value, nir_imm_int(b, left_shift));
+      return nir_ishl_imm(b, value, left_shift);
    else if (left_shift < 0)
-      return nir_ushr(b, value, nir_imm_int(b, -left_shift));
+      return nir_ushr_imm(b, value, -left_shift);
    else
       return value;
 }
@@ -40,7 +40,7 @@ static inline nir_ssa_def *
 nir_shift(nir_builder *b, nir_ssa_def *value, nir_ssa_def *left_shift)
 {
    return nir_bcsel(b,
-                    nir_ige(b, left_shift, nir_imm_int(b, 0)),
+                    nir_ige_imm(b, left_shift, 0),
                     nir_ishl(b, value, left_shift),
                     nir_ushr(b, value, nir_ineg(b, left_shift)));
 }
@@ -49,7 +49,7 @@ static inline nir_ssa_def *
 nir_mask_shift(struct nir_builder *b, nir_ssa_def *src,
                uint32_t mask, int left_shift)
 {
-   return nir_shift_imm(b, nir_iand(b, src, nir_imm_int(b, mask)), left_shift);
+   return nir_shift_imm(b, nir_iand_imm(b, src, mask), left_shift);
 }
 
 static inline nir_ssa_def *
@@ -78,8 +78,11 @@ nir_format_sign_extend_ivec(nir_builder *b, nir_ssa_def *src,
    assert(src->num_components <= 4);
    nir_ssa_def *comps[4];
    for (unsigned i = 0; i < src->num_components; i++) {
-      nir_ssa_def *shift = nir_imm_int(b, src->bit_size - bits[i]);
-      comps[i] = nir_ishr(b, nir_ishl(b, nir_channel(b, src, i), shift), shift);
+      unsigned shift = src->bit_size - bits[i];
+      comps[i] = nir_ishr_imm(b, nir_ishl_imm(b,
+                                              nir_channel(b, src, i),
+                                              shift),
+                                 shift);
    }
    return nir_vec(b, comps, src->num_components);
 }
@@ -106,12 +109,12 @@ nir_format_unpack_int(nir_builder *b, nir_ssa_def *packed,
       assert(bits[i] < bit_size);
       assert(offset + bits[i] <= bit_size);
       nir_ssa_def *chan = nir_channel(b, packed, next_chan);
-      nir_ssa_def *lshift = nir_imm_int(b, bit_size - (offset + bits[i]));
-      nir_ssa_def *rshift = nir_imm_int(b, bit_size - bits[i]);
+      unsigned lshift = bit_size - (offset + bits[i]);
+      unsigned rshift = bit_size - bits[i];
       if (sign_extend)
-         comps[i] = nir_ishr(b, nir_ishl(b, chan, lshift), rshift);
+         comps[i] = nir_ishr_imm(b, nir_ishl_imm(b, chan, lshift), rshift);
       else
-         comps[i] = nir_ushr(b, nir_ishl(b, chan, lshift), rshift);
+         comps[i] = nir_ushr_imm(b, nir_ishl_imm(b, chan, lshift), rshift);
       offset += bits[i];
       if (offset >= bit_size) {
          next_chan++;
@@ -194,8 +197,8 @@ nir_format_bitcast_uvec_unmasked(nir_builder *b, nir_ssa_def *src,
       unsigned shift = 0;
       unsigned dst_idx = 0;
       for (unsigned i = 0; i < src->num_components; i++) {
-         nir_ssa_def *shifted = nir_ishl(b, nir_channel(b, src, i),
-                                            nir_imm_int(b, shift));
+         nir_ssa_def *shifted = nir_ishl_imm(b, nir_channel(b, src, i),
+                                                shift);
          if (shift == 0) {
             dst_chan[dst_idx] = shifted;
          } else {
@@ -209,14 +212,16 @@ nir_format_bitcast_uvec_unmasked(nir_builder *b, nir_ssa_def *src,
          }
       }
    } else {
-      nir_ssa_def *mask = nir_imm_int(b, ~0u >> (32 - dst_bits));
+      unsigned mask = ~0u >> (32 - dst_bits);
 
       unsigned src_idx = 0;
       unsigned shift = 0;
       for (unsigned i = 0; i < dst_components; i++) {
-         dst_chan[i] = nir_iand(b, nir_ushr_imm(b, nir_channel(b, src, src_idx),
-                                                shift),
-                                   mask);
+         dst_chan[i] = nir_iand_imm(b,
+                                    nir_ushr_imm(b,
+                                                 nir_channel(b, src, src_idx),
+                                                 shift),
+                                    mask);
          shift += dst_bits;
          if (shift >= src_bits) {
             src_idx++;
@@ -301,26 +306,26 @@ nir_format_float_to_half(nir_builder *b, nir_ssa_def *f)
 static inline nir_ssa_def *
 nir_format_linear_to_srgb(nir_builder *b, nir_ssa_def *c)
 {
-   nir_ssa_def *linear = nir_fmul(b, c, nir_imm_float(b, 12.92f));
+   nir_ssa_def *linear = nir_fmul_imm(b, c, 12.92f);
    nir_ssa_def *curved =
-      nir_fsub(b, nir_fmul(b, nir_imm_float(b, 1.055f),
-                              nir_fpow(b, c, nir_imm_float(b, 1.0 / 2.4))),
-                  nir_imm_float(b, 0.055f));
+      nir_fadd_imm(b, nir_fmul_imm(b, nir_fpow(b, c, nir_imm_float(b, 1.0 / 2.4)),
+                                      1.055f),
+                      -0.055f);
 
-   return nir_fsat(b, nir_bcsel(b, nir_flt(b, c, nir_imm_float(b, 0.0031308f)),
+   return nir_fsat(b, nir_bcsel(b, nir_flt_imm(b, c, 0.0031308f),
                                    linear, curved));
 }
 
 static inline nir_ssa_def *
 nir_format_srgb_to_linear(nir_builder *b, nir_ssa_def *c)
 {
-   nir_ssa_def *linear = nir_fdiv(b, c, nir_imm_float(b, 12.92f));
+   nir_ssa_def *linear = nir_fdiv_imm(b, c, 12.92f);
    nir_ssa_def *curved =
-      nir_fpow(b, nir_fdiv(b, nir_fadd(b, c, nir_imm_float(b, 0.055f)),
-                              nir_imm_float(b, 1.055f)),
+      nir_fpow(b, nir_fmul_imm(b, nir_fadd_imm(b, c, 0.055f),
+                                  1.0 / 1.055f),
                   nir_imm_float(b, 2.4f));
 
-   return nir_fsat(b, nir_bcsel(b, nir_fge(b, nir_imm_float(b, 0.04045f), c),
+   return nir_fsat(b, nir_bcsel(b, nir_fle_imm(b, c, 0.04045f),
                                    linear, curved));
 }
 
@@ -412,7 +417,7 @@ nir_format_pack_r9g9b9e5(nir_builder *b, nir_ssa_def *color)
    nir_ssa_def *clamped = nir_fmin(b, color, nir_imm_float(b, MAX_RGB9E5));
 
    /* Get rid of negatives and NaN */
-   clamped = nir_bcsel(b, nir_ult(b, nir_imm_int(b, 0x7f800000), color),
+   clamped = nir_bcsel(b, nir_ugt_imm(b, color, 0x7f800000),
                           nir_imm_float(b, 0), clamped);
 
    /* maxrgb.u = MAX3(rc.u, gc.u, bc.u); */
@@ -421,27 +426,27 @@ nir_format_pack_r9g9b9e5(nir_builder *b, nir_ssa_def *color)
                                    nir_channel(b, clamped, 2)));
 
    /* maxrgb.u += maxrgb.u & (1 << (23-9)); */
-   maxu = nir_iadd(b, maxu, nir_iand(b, maxu, nir_imm_int(b, 1 << 14)));
+   maxu = nir_iadd(b, maxu, nir_iand_imm(b, maxu, 1 << 14));
 
    /* exp_shared = MAX2((maxrgb.u >> 23), -RGB9E5_EXP_BIAS - 1 + 127) +
     *              1 + RGB9E5_EXP_BIAS - 127;
     */
    nir_ssa_def *exp_shared =
-      nir_iadd(b, nir_umax(b, nir_ushr_imm(b, maxu, 23),
-                              nir_imm_int(b, -RGB9E5_EXP_BIAS - 1 + 127)),
-                  nir_imm_int(b, 1 + RGB9E5_EXP_BIAS - 127));
+      nir_iadd_imm(b, nir_umax(b, nir_ushr_imm(b, maxu, 23),
+                                  nir_imm_int(b, -RGB9E5_EXP_BIAS - 1 + 127)),
+                      1 + RGB9E5_EXP_BIAS - 127);
 
    /* revdenom_biasedexp = 127 - (exp_shared - RGB9E5_EXP_BIAS -
     *                             RGB9E5_MANTISSA_BITS) + 1;
     */
    nir_ssa_def *revdenom_biasedexp =
-      nir_isub(b, nir_imm_int(b, 127 + RGB9E5_EXP_BIAS +
-                                 RGB9E5_MANTISSA_BITS + 1),
-                  exp_shared);
+      nir_isub_imm(b, 127 + RGB9E5_EXP_BIAS +
+                      RGB9E5_MANTISSA_BITS + 1,
+                      exp_shared);
 
    /* revdenom.u = revdenom_biasedexp << 23; */
    nir_ssa_def *revdenom =
-      nir_ishl(b, revdenom_biasedexp, nir_imm_int(b, 23));
+      nir_ishl_imm(b, revdenom_biasedexp, 23);
 
    /* rm = (int) (rc.f * revdenom.f);
     * gm = (int) (gc.f * revdenom.f);

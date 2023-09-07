@@ -475,16 +475,13 @@ void
 nir_group_loads(nir_shader *shader, nir_load_grouping grouping,
                 unsigned max_distance)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_foreach_block(block, function->impl) {
-            process_block(block, grouping, max_distance);
-         }
-
-         nir_metadata_preserve(function->impl,
-                               nir_metadata_block_index |
-                               nir_metadata_dominance |
-                               nir_metadata_loop_analysis);
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         process_block(block, grouping, max_distance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance |
+                                  nir_metadata_loop_analysis);
    }
 }

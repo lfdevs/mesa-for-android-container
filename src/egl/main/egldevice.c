@@ -33,10 +33,9 @@
 
 #include "eglcurrent.h"
 #include "egldevice.h"
-#include "egllog.h"
 #include "eglglobals.h"
+#include "egllog.h"
 #include "egltypedefs.h"
-
 
 struct _egl_device {
    _EGLDevice *Next;
@@ -89,7 +88,7 @@ _eglCheckDeviceHandle(EGLDeviceEXT device)
    simple_mtx_lock(_eglGlobal.Mutex);
    cur = _eglGlobal.DeviceList;
    while (cur) {
-      if (cur == (_EGLDevice *) device)
+      if (cur == (_EGLDevice *)device)
          break;
       cur = cur->Next;
    }
@@ -113,8 +112,8 @@ _eglAddDRMDevice(drmDevicePtr device, _EGLDevice **out_dev)
 {
    _EGLDevice *dev;
 
-   if ((device->available_nodes & (1 << DRM_NODE_PRIMARY |
-                                   1 << DRM_NODE_RENDER)) == 0)
+   if ((device->available_nodes &
+        (1 << DRM_NODE_PRIMARY | 1 << DRM_NODE_RENDER)) == 0)
       return -1;
 
    dev = _eglGlobal.DeviceList;
@@ -189,7 +188,8 @@ _eglAddDevice(int fd, bool software)
    if (_eglAddDRMDevice(device, &dev) != 0)
       drmFreeDevice(&device);
 #else
-   _eglLog(_EGL_FATAL, "Driver bug: Built without libdrm, yet looking for HW device");
+   _eglLog(_EGL_FATAL,
+           "Driver bug: Built without libdrm, yet looking for HW device");
    dev = NULL;
 #endif
 
@@ -215,8 +215,7 @@ _eglDeviceSupports(_EGLDevice *dev, _EGLDeviceExtension ext)
 }
 
 EGLBoolean
-_eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute,
-                         EGLAttrib *value)
+_eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute, EGLAttrib *value)
 {
    switch (attribute) {
    default:
@@ -304,8 +303,7 @@ _eglRefreshDeviceList(void)
 }
 
 EGLBoolean
-_eglQueryDevicesEXT(EGLint max_devices,
-                    _EGLDevice **devices,
+_eglQueryDevicesEXT(EGLint max_devices, _EGLDevice **devices,
                     EGLint *num_devices)
 {
    _EGLDevice *dev, *devs, *swrast;
@@ -347,7 +345,7 @@ _eglQueryDevicesEXT(EGLint max_devices,
       dev = dev->Next;
    }
 
-   /* User requested the full device list, add the sofware device. */
+   /* User requested the full device list, add the software device. */
    if (max_devices >= num_devs && swrast) {
       assert(_eglDeviceSupports(swrast, _EGL_DEVICE_SOFTWARE));
       devices[num_devs - 1] = swrast;

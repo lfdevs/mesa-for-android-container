@@ -82,8 +82,7 @@
    MAP_FORMAT_INT(R8G8B8A8) \
    MAP_FORMAT_SRGB(R8G8B8A8) \
 \
-   /* Since we report PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND and other caps, \
-    * we can rely on st/mesa to force the alpha to 1 for these, so we can \
+   /* We can rely on st/mesa to force the alpha to 1 for these, so we can \
     * just use RGBA. This is needed to support RGB configs, since some apps \
     * will only choose RGB (not RGBA) configs. \
     */ \

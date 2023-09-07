@@ -55,11 +55,8 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
       ralloc_array(any_hit, nir_parameter, ARRAY_SIZE(params));
    memcpy(impl->function->params, params, sizeof(params));
 
-   nir_builder build;
-   nir_builder_init(&build, impl);
+   nir_builder build = nir_builder_at(nir_before_cf_list(&impl->body));
    nir_builder *b = &build;
-
-   b->cursor = nir_before_cf_list(&impl->body);
 
    nir_ssa_def *commit_ptr = nir_load_param(b, 0);
    nir_ssa_def *hit_t = nir_load_param(b, 1);
@@ -157,11 +154,8 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
 
    nir_function_impl *impl = nir_shader_get_entrypoint(intersection);
 
-   nir_builder build;
-   nir_builder_init(&build, impl);
+   nir_builder build = nir_builder_at(nir_before_cf_list(&impl->body));
    nir_builder *b = &build;
-
-   b->cursor = nir_before_cf_list(&impl->body);
 
    nir_ssa_def *t_addr = brw_nir_rt_mem_hit_addr(b, false /* committed */);
    nir_variable *commit =

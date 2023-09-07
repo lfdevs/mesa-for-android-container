@@ -24,6 +24,7 @@ enum agx_compiler_dbg {
    AGX_DBG_NOOPT       = BITFIELD_BIT(6),
    AGX_DBG_WAIT        = BITFIELD_BIT(7),
    AGX_DBG_NOPREAMBLE  = BITFIELD_BIT(8),
+   AGX_DBG_DEMAND      = BITFIELD_BIT(9),
 };
 /* clang-format on */
 

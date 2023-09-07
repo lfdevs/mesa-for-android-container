@@ -44,11 +44,12 @@ void
 dd_get_debug_filename_and_mkdir(char *buf, size_t buflen, bool verbose)
 {
    static unsigned index;
-   char proc_name[128], dir[256];
+   char dir[256];
+   const char *proc_name = util_get_process_name();
 
-   if (!os_get_process_name(proc_name, sizeof(proc_name))) {
+   if (!proc_name) {
       fprintf(stderr, "dd: can't get the process name\n");
-      strcpy(proc_name, "unknown");
+      proc_name = "unknown";
    }
 
    snprintf(dir, sizeof(dir), "%s/"DD_DIR, debug_get_option("HOME", "."));
@@ -1807,7 +1808,7 @@ dd_context_texture_subdata(struct pipe_context *_pipe,
                            unsigned level, unsigned usage,
                            const struct pipe_box *box,
                            const void *data, unsigned stride,
-                           unsigned layer_stride)
+                           uintptr_t layer_stride)
 {
    struct dd_context *dctx = dd_context(_pipe);
    struct pipe_context *pipe = dctx->pipe;

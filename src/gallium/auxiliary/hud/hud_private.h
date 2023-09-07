@@ -141,8 +141,8 @@ struct hud_pane {
    uint64_t initial_max_value;
    uint64_t ceiling;
    unsigned dyn_ceil_last_ran;
-   boolean dyn_ceiling;
-   boolean sort_items;
+   bool dyn_ceiling;
+   bool sort_items;
    enum pipe_driver_query_type type;
    uint64_t period; /* in microseconds */
 
@@ -179,9 +179,9 @@ void hud_pipe_query_install(struct hud_batch_query_context **pbq,
                             enum pipe_driver_query_type type,
                             enum pipe_driver_query_result_type result_type,
                             unsigned flags);
-boolean hud_driver_query_install(struct hud_batch_query_context **pbq,
-                                 struct hud_pane *pane,
-                                 struct pipe_screen *screen, const char *name);
+bool hud_driver_query_install(struct hud_batch_query_context **pbq,
+                              struct hud_pane *pane,
+                              struct pipe_screen *screen, const char *name);
 void hud_batch_query_begin(struct hud_batch_query_context *bq,
                            struct pipe_context *pipe);
 void hud_batch_query_update(struct hud_batch_query_context *bq,

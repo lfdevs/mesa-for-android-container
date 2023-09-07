@@ -30,6 +30,8 @@ inc_frontends = include_directories('gallium/frontends')
 pps_datasources = []
 pps_includes = []
 
+inc_llvmpipe = include_directories('gallium/drivers/llvmpipe')
+
 if with_llvm
   inc_amd_common_llvm = include_directories('amd/llvm')
 else

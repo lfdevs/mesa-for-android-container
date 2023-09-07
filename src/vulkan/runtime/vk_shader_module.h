@@ -26,6 +26,7 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include "util/mesa-blake3.h"
 #include "compiler/shader_enums.h"
 #include "vk_object.h"
 
@@ -40,7 +41,7 @@ struct spirv_to_nir_options;
 struct vk_shader_module {
    struct vk_object_base base;
    struct nir_shader *nir;
-   unsigned char sha1[20];
+   blake3_hash hash;
    uint32_t size;
    char data[0];
 };

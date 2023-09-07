@@ -27,8 +27,8 @@ spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-output-array-
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-output-array-vec2-index-wr,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-output-array-vec3-index-wr,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-output-array-vec4-index-wr,Crash
-spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-index-wr,Crash
-spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-swiz-index-wr,Crash
+spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-index-wr,Fail
+spec@arb_tessellation_shader@execution@variable-indexing@tcs-patch-vec4-swiz-index-wr,Fail
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-float-index-rd,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec2-index-rd,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tes-both-input-array-vec3-index-rd,Crash

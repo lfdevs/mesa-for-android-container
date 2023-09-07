@@ -169,6 +169,7 @@ validate_buffer_descriptor(struct fd_context *ctx, struct fd6_descriptor_set *se
 }
 
 /* Build bindless descriptor state, returns ownership of state reference */
+template <chip CHIP>
 struct fd_ringbuffer *
 fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
                          bool append_fb_read)
@@ -201,16 +202,12 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
       struct pipe_shader_buffer *buf = &bufso->sb[b];
       unsigned idx = b + IR3_BINDLESS_SSBO_OFFSET;
       validate_buffer_descriptor(ctx, set, idx, buf);
-      if (buf->buffer)
-         fd_ringbuffer_attach_bo(ring, fd_resource(buf->buffer)->bo);
    }
 
    u_foreach_bit (b, imgso->enabled_mask) {
       struct pipe_image_view *img = &imgso->si[b];
       unsigned idx = b + IR3_BINDLESS_IMAGE_OFFSET;
       validate_image_descriptor(ctx, set, idx, img);
-      if (img->resource)
-         fd_ringbuffer_attach_bo(ring, fd_resource(img->resource)->bo);
    }
 
    if (!set->bo) {
@@ -257,9 +254,11 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
 
    unsigned idx = ir3_shader_descriptor_set(shader);
 
+   fd_ringbuffer_attach_bo(ring, set->bo);
+
    if (shader == PIPE_SHADER_COMPUTE) {
-      OUT_REG(ring, A6XX_HLSQ_INVALIDATE_CMD(.cs_bindless = 0x1f));
-      OUT_REG(ring, A6XX_SP_CS_BINDLESS_BASE_DESCRIPTOR(
+      OUT_REG(ring, HLSQ_INVALIDATE_CMD(CHIP, .cs_bindless = 0x1f));
+      OUT_REG(ring, SP_CS_BINDLESS_BASE_DESCRIPTOR(CHIP,
             idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
       ));
       OUT_REG(ring, A6XX_HLSQ_CS_BINDLESS_BASE_DESCRIPTOR(
@@ -300,8 +299,8 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
          );
       }
    } else {
-      OUT_REG(ring, A6XX_HLSQ_INVALIDATE_CMD(.gfx_bindless = 0x1f));
-      OUT_REG(ring, A6XX_SP_BINDLESS_BASE_DESCRIPTOR(
+      OUT_REG(ring, HLSQ_INVALIDATE_CMD(CHIP, .gfx_bindless = 0x1f));
+      OUT_REG(ring, SP_BINDLESS_BASE_DESCRIPTOR(CHIP,
             idx, .desc_size = BINDLESS_DESCRIPTOR_64B, .bo = set->bo,
       ));
       OUT_REG(ring, A6XX_HLSQ_BINDLESS_BASE_DESCRIPTOR(
@@ -345,6 +344,9 @@ fd6_build_bindless_state(struct fd_context *ctx, enum pipe_shader_type shader,
 
    return ring;
 }
+
+template struct fd_ringbuffer *fd6_build_bindless_state<A6XX>(struct fd_context *ctx, enum pipe_shader_type shader, bool append_fb_read);
+template struct fd_ringbuffer *fd6_build_bindless_state<A7XX>(struct fd_context *ctx, enum pipe_shader_type shader, bool append_fb_read);
 
 static void
 fd6_set_shader_buffers(struct pipe_context *pctx, enum pipe_shader_type shader,

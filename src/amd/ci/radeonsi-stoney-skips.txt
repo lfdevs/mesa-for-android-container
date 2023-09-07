@@ -49,3 +49,6 @@ glx@glx-multithread-buffer
 glx@glx-swap-event_async
 glx@glx-swap-event_event
 glx@glx-swap-event_interval
+
+# Debian 12 (bookworm) uprev
+dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_frag_buffers32_sets1

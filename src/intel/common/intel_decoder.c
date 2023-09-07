@@ -167,6 +167,7 @@ create_group(struct parser_context *ctx,
    group->dword_length_field = NULL;
    group->dw_length = 0;
    group->engine_mask = INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_RENDER) |
+                        INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_COMPUTE) |
                         INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_VIDEO) |
                         INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_COPY);
    group->bias = 1;
@@ -187,6 +188,8 @@ create_group(struct parser_context *ctx,
          while (tok != NULL) {
             if (strcmp(tok, "render") == 0) {
                group->engine_mask |= INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_RENDER);
+            } else if (strcmp(tok, "compute") == 0) {
+               group->engine_mask |= INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_COMPUTE);
             } else if (strcmp(tok, "video") == 0) {
                group->engine_mask |= INTEL_ENGINE_CLASS_TO_MASK(INTEL_ENGINE_CLASS_VIDEO);
             } else if (strcmp(tok, "blitter") == 0) {

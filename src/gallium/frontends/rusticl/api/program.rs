@@ -8,18 +8,22 @@ use crate::core::program::*;
 use mesa_rust::compiler::clc::*;
 use mesa_rust_util::string::*;
 use rusticl_opencl_gen::*;
+use rusticl_proc_macros::cl_entrypoint;
+use rusticl_proc_macros::cl_info_entrypoint;
 
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::iter;
+use std::mem::MaybeUninit;
 use std::num::NonZeroUsize;
 use std::os::raw::c_char;
 use std::ptr;
 use std::slice;
 use std::sync::Arc;
 
+#[cl_info_entrypoint(cl_get_program_info)]
 impl CLInfo<cl_program_info> for cl_program {
-    fn query(&self, q: cl_program_info, vals: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_program_info, vals: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let prog = self.get_ref()?;
         Ok(match q {
             CL_PROGRAM_BINARIES => cl_prop::<Vec<*mut u8>>(prog.binaries(vals)),
@@ -29,23 +33,17 @@ impl CLInfo<cl_program_info> for cl_program {
                 let ptr = Arc::as_ptr(&prog.context);
                 cl_prop::<cl_context>(cl_context::from_ptr(ptr))
             }
-            CL_PROGRAM_DEVICES => {
-                cl_prop::<&Vec<cl_device_id>>(
-                    &prog
-                        .devs
-                        .iter()
-                        .map(|d| {
-                            // Note we use as_ptr here which doesn't increase the reference count.
-                            cl_device_id::from_ptr(Arc::as_ptr(d))
-                        })
-                        .collect(),
-                )
-            }
+            CL_PROGRAM_DEVICES => cl_prop::<Vec<cl_device_id>>(
+                prog.devs
+                    .iter()
+                    .map(|&d| cl_device_id::from_ptr(d))
+                    .collect(),
+            ),
             CL_PROGRAM_IL => match &prog.src {
-                ProgramSourceType::Il(il) => il.to_bin().to_vec(),
+                ProgramSourceType::Il(il) => to_maybeuninit_vec(il.to_bin().to_vec()),
                 _ => Vec::new(),
             },
-            CL_PROGRAM_KERNEL_NAMES => cl_prop::<String>(prog.kernels().join(";")),
+            CL_PROGRAM_KERNEL_NAMES => cl_prop::<&str>(&*prog.kernels().join(";")),
             CL_PROGRAM_NUM_DEVICES => cl_prop::<cl_uint>(prog.devs.len() as cl_uint),
             CL_PROGRAM_NUM_KERNELS => cl_prop::<usize>(prog.kernels().len()),
             CL_PROGRAM_REFERENCE_COUNT => cl_prop::<cl_uint>(self.refcnt()?),
@@ -61,15 +59,16 @@ impl CLInfo<cl_program_info> for cl_program {
     }
 }
 
+#[cl_info_entrypoint(cl_get_program_build_info)]
 impl CLInfoObj<cl_program_build_info, cl_device_id> for cl_program {
-    fn query(&self, d: cl_device_id, q: cl_program_build_info) -> CLResult<Vec<u8>> {
+    fn query(&self, d: cl_device_id, q: cl_program_build_info) -> CLResult<Vec<MaybeUninit<u8>>> {
         let prog = self.get_ref()?;
         let dev = d.get_arc()?;
         Ok(match q {
             CL_PROGRAM_BINARY_TYPE => cl_prop::<cl_program_binary_type>(prog.bin_type(&dev)),
             CL_PROGRAM_BUILD_GLOBAL_VARIABLE_TOTAL_SIZE => cl_prop::<usize>(0),
-            CL_PROGRAM_BUILD_LOG => cl_prop::<String>(prog.log(&dev)),
-            CL_PROGRAM_BUILD_OPTIONS => cl_prop::<String>(prog.options(&dev)),
+            CL_PROGRAM_BUILD_LOG => cl_prop::<&str>(&prog.log(&dev)),
+            CL_PROGRAM_BUILD_OPTIONS => cl_prop::<&str>(&prog.options(&dev)),
             CL_PROGRAM_BUILD_STATUS => cl_prop::<cl_build_status>(prog.status(&dev)),
             // CL_INVALID_VALUE if param_name is not one of the supported values
             _ => return Err(CL_INVALID_VALUE),
@@ -77,12 +76,12 @@ impl CLInfoObj<cl_program_build_info, cl_device_id> for cl_program {
     }
 }
 
-fn validate_devices(
+fn validate_devices<'a>(
     device_list: *const cl_device_id,
     num_devices: cl_uint,
-    default: &[Arc<Device>],
-) -> CLResult<Vec<Arc<Device>>> {
-    let mut devs = cl_device_id::get_arc_vec_from_arr(device_list, num_devices)?;
+    default: &[&'a Device],
+) -> CLResult<Vec<&'a Device>> {
+    let mut devs = cl_device_id::get_ref_vec_from_arr(device_list, num_devices)?;
 
     // If device_list is a NULL value, the compile is performed for all devices associated with
     // program.
@@ -103,7 +102,8 @@ fn call_cb(
     }
 }
 
-pub fn create_program_with_source(
+#[cl_entrypoint]
+fn create_program_with_source(
     context: cl_context,
     count: cl_uint,
     strings: *mut *const c_char,
@@ -181,7 +181,8 @@ pub fn create_program_with_source(
     )))
 }
 
-pub fn create_program_with_binary(
+#[cl_entrypoint]
+fn create_program_with_binary(
     context: cl_context,
     num_devices: cl_uint,
     device_list: *const cl_device_id,
@@ -190,7 +191,7 @@ pub fn create_program_with_binary(
     binary_status: *mut cl_int,
 ) -> CLResult<cl_program> {
     let c = context.get_arc()?;
-    let devs = cl_device_id::get_arc_vec_from_arr(device_list, num_devices)?;
+    let devs = cl_device_id::get_ref_vec_from_arr(device_list, num_devices)?;
 
     // CL_INVALID_VALUE if device_list is NULL or num_devices is zero.
     if devs.is_empty() {
@@ -228,18 +229,21 @@ pub fn create_program_with_binary(
 
         // just return the last one
         err = dev_err;
-        bins[i] = unsafe { slice::from_raw_parts(binaries[i], lengths[i] as usize) };
+        bins[i] = unsafe { slice::from_raw_parts(binaries[i], lengths[i]) };
     }
 
     if err != 0 {
         return Err(err);
     }
 
-    Ok(cl_program::from_arc(Program::from_bins(c, devs, &bins)))
+    let prog = Program::from_bins(c, devs, &bins);
+
+    Ok(cl_program::from_arc(prog))
     //• CL_INVALID_BINARY if an invalid program binary was encountered for any device. binary_status will return specific status for each device.
 }
 
-pub fn create_program_with_il(
+#[cl_entrypoint]
+fn create_program_with_il(
     context: cl_context,
     il: *const ::std::os::raw::c_void,
     length: usize,
@@ -256,7 +260,18 @@ pub fn create_program_with_il(
     Ok(cl_program::from_arc(Program::from_spirv(c, spirv)))
 }
 
-pub fn build_program(
+#[cl_entrypoint]
+fn retain_program(program: cl_program) -> CLResult<()> {
+    program.retain()
+}
+
+#[cl_entrypoint]
+fn release_program(program: cl_program) -> CLResult<()> {
+    program.release()
+}
+
+#[cl_entrypoint]
+fn build_program(
     program: cl_program,
     num_devices: cl_uint,
     device_list: *const cl_device_id,
@@ -291,7 +306,7 @@ pub fn build_program(
     if res {
         Ok(())
     } else {
-        if Platform::get().debug.program {
+        if Platform::dbg().program {
             for dev in &devs {
                 eprintln!("{}", p.log(dev));
             }
@@ -300,7 +315,8 @@ pub fn build_program(
     }
 }
 
-pub fn compile_program(
+#[cl_entrypoint]
+fn compile_program(
     program: cl_program,
     num_devices: cl_uint,
     device_list: *const cl_device_id,
@@ -370,7 +386,7 @@ pub fn compile_program(
     if res {
         Ok(())
     } else {
-        if Platform::get().debug.program {
+        if Platform::dbg().program {
             for dev in &devs {
                 eprintln!("{}", p.log(dev));
             }
@@ -440,7 +456,8 @@ pub fn link_program(
     //• CL_INVALID_OPERATION if the rules for devices containing compiled binaries or libraries as described in input_programs argument above are not followed.
 }
 
-pub fn set_program_specialization_constant(
+#[cl_entrypoint]
+fn set_program_specialization_constant(
     program: cl_program,
     spec_id: cl_uint,
     spec_size: usize,
@@ -474,7 +491,8 @@ pub fn set_program_specialization_constant(
     Ok(())
 }
 
-pub fn set_program_release_callback(
+#[cl_entrypoint]
+fn set_program_release_callback(
     _program: cl_program,
     _pfn_notify: ::std::option::Option<ProgramCB>,
     _user_data: *mut ::std::os::raw::c_void,

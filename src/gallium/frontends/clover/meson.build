@@ -88,7 +88,7 @@ libclnir = static_library(
   'clnir',
   files('nir/invocation.cpp', 'nir/invocation.hpp'),
   include_directories : [clover_incs, inc_mesa],
-  dependencies : idep_nir,
+  dependencies : [idep_nir, idep_vtn, idep_mesaclc],
   cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args],
   gnu_symbol_visibility : 'hidden',
 )

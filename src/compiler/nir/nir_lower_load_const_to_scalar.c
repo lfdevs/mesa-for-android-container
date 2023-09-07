@@ -41,9 +41,7 @@ lower_load_const_instr_scalar(nir_load_const_instr *lower)
    if (lower->def.num_components == 1)
       return false;
 
-   nir_builder b;
-   nir_builder_init(&b, nir_cf_node_get_function(&lower->instr.block->cf_node));
-   b.cursor = nir_before_instr(&lower->instr);
+   nir_builder b = nir_builder_at(nir_before_instr(&lower->instr));
 
    /* Emit the individual loads. */
    nir_ssa_def *loads[NIR_MAX_VEC_COMPONENTS];
@@ -92,9 +90,8 @@ nir_lower_load_const_to_scalar(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_lower_load_const_to_scalar_impl(function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_lower_load_const_to_scalar_impl(impl);
    }
 
    return progress;

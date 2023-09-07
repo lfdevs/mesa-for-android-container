@@ -1,25 +1,7 @@
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 /* The compiler middle-end architecture: Explaining (non-)monolithic shaders
@@ -103,10 +85,9 @@
  *   Name             Location
  *
  *   POSITION         0
- *   PSIZE            1
- *   CLIPDIST0..1     2..3
- *   CULLDIST0..1     (not implemented)
- *   GENERIC0..31     4..35
+ *   VAR0..31         1..32
+ *   CLIP_DIST0..1    49..50
+ *   PSIZ             51
  *
  * For example, a shader only writing GENERIC0 has the output stride of 5.
  *
@@ -131,30 +112,24 @@
 #ifndef SI_SHADER_H
 #define SI_SHADER_H
 
+#include "shader_info.h"
 #include "ac_binary.h"
-#include "ac_llvm_build.h"
-#include "ac_llvm_util.h"
-#include "util/simple_mtx.h"
-#include "util/u_inlines.h"
+#include "ac_gpu_info.h"
 #include "util/u_live_shader_cache.h"
 #include "util/u_queue.h"
 #include "si_pm4.h"
-
-#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct nir_shader;
-struct si_shader;
-struct si_context;
+struct nir_instr;
+struct nir_lower_subgroups_options;
 
 #define SI_MAX_ATTRIBS    16
 #define SI_MAX_VS_OUTPUTS 40
 #define SI_USER_CLIP_PLANE_MASK  0x3F
-
-#define SI_NGG_PRIM_EDGE_FLAG_BITS ((1 << 9) | (1 << 19) | (1 << 29))
 
 #define SI_PS_INPUT_CNTL_0000          (S_028644_OFFSET(0x20) | S_028644_DEFAULT_VAL(0))
 #define SI_PS_INPUT_CNTL_0001          (S_028644_OFFSET(0x20) | S_028644_DEFAULT_VAL(3))
@@ -190,15 +165,13 @@ enum
 
    /* GFX6-8: TCS only */
    GFX6_SGPR_TCS_OFFCHIP_LAYOUT = SI_NUM_RESOURCE_SGPRS,
-   GFX6_SGPR_TCS_OUT_OFFSETS,
-   GFX6_SGPR_TCS_OUT_LAYOUT,
+   GFX6_SGPR_TCS_OFFCHIP_ADDR,
    GFX6_SGPR_TCS_IN_LAYOUT,
    GFX6_TCS_NUM_USER_SGPR,
 
    /* GFX9: Merged LS-HS (VS-TCS) only. */
    GFX9_SGPR_TCS_OFFCHIP_LAYOUT = SI_VS_NUM_USER_SGPR,
-   GFX9_SGPR_TCS_OUT_OFFSETS,
-   GFX9_SGPR_TCS_OUT_LAYOUT,
+   GFX9_SGPR_TCS_OFFCHIP_ADDR,
    GFX9_TCS_NUM_USER_SGPR,
 
    /* GS limits */
@@ -259,8 +232,16 @@ enum
  * in the shader via vs_state_bits in LS/HS.
  */
 /* bit gap */
-#define VS_STATE_LS_OUT_VERTEX_SIZE__SHIFT   24
-#define VS_STATE_LS_OUT_VERTEX_SIZE__MASK    0xff /* max 32 * 4 + 1 */
+/* TCS output patch0 offset for per-patch outputs / 4
+ * - 64 outputs are implied by SI_UNIQUE_SLOT_* values.
+ * - max = 32(CPs) * 64(outputs) * 16(vec4) * 64(num_patches) * 2(inputs + outputs) / 4
+ *       = 1M, clamped to 32K(LDS limit) / 4 = 8K
+ * - only used by si_llvm_tcs_build_end, it can be removed after NIR lowering replaces it
+ */
+#define VS_STATE_TCS_OUT_PATCH0_OFFSET__SHIFT   10
+#define VS_STATE_TCS_OUT_PATCH0_OFFSET__MASK    0x3fff
+#define VS_STATE_LS_OUT_VERTEX_SIZE__SHIFT      24
+#define VS_STATE_LS_OUT_VERTEX_SIZE__MASK       0xff /* max 32 * 4 + 1 (to reduce LDS bank conflicts) */
 
 /* These fields are only set in current_gs_state in si_context, and they are accessible
  * in the shader via vs_state_bits in legacy GS, the GS copy shader, and any NGG shader.
@@ -320,7 +301,7 @@ enum
 
 #define SI_PROFILE_WAVE32                    (1 << 0)
 #define SI_PROFILE_WAVE64                    (1 << 1)
-#define SI_PROFILE_IGNORE_LLVM13_DISCARD_BUG (1 << 2)
+/* bit gap */
 #define SI_PROFILE_VS_NO_BINNING             (1 << 3)
 #define SI_PROFILE_PS_NO_BINNING             (1 << 4)
 #define SI_PROFILE_CLAMP_DIV_BY_ZERO         (1 << 5)
@@ -331,8 +312,52 @@ enum si_shader_dump_type {
    SI_DUMP_NIR,            /* final NIR after lowering when shader variants are created */
    SI_DUMP_INIT_LLVM_IR,   /* initial LLVM IR before optimizations */
    SI_DUMP_LLVM_IR,        /* final LLVM IR */
+   SI_DUMP_INIT_ACO_IR,    /* initial ACO IR before optimizations */
+   SI_DUMP_ACO_IR,         /* final ACO IR */
    SI_DUMP_ASM,            /* final asm shaders */
+   SI_DUMP_STATS,          /* print statistics as shader-db */
    SI_DUMP_ALWAYS,
+};
+
+enum {
+   SI_UNIQUE_SLOT_POS = 0,
+
+   /* Since some shader stages use the highest used IO index
+    * to determine the size to allocate for inputs/outputs
+    * (in LDS, tess and GS rings). VARn should be placed right
+    * after POSITION to make that size as small as possible.
+    */
+   SI_UNIQUE_SLOT_VAR0 = 1, /* 0..31 */
+
+   /* Put 16-bit GLES varyings after 32-bit varyings. They can use the same indices as
+    * legacy desktop GL varyings because they are mutually exclusive.
+    */
+   SI_UNIQUE_SLOT_VAR0_16BIT = 33, /* 0..15 */
+
+   /* Legacy GL-only varyings can alias GLES-only 16-bit varyings. */
+   SI_UNIQUE_SLOT_FOGC = 33,
+   SI_UNIQUE_SLOT_COL0,
+   SI_UNIQUE_SLOT_COL1,
+   SI_UNIQUE_SLOT_BFC0,
+   SI_UNIQUE_SLOT_BFC1,
+   SI_UNIQUE_SLOT_TEX0,
+   SI_UNIQUE_SLOT_TEX1,
+   SI_UNIQUE_SLOT_TEX2,
+   SI_UNIQUE_SLOT_TEX3,
+   SI_UNIQUE_SLOT_TEX4,
+   SI_UNIQUE_SLOT_TEX5,
+   SI_UNIQUE_SLOT_TEX6,
+   SI_UNIQUE_SLOT_TEX7,
+   SI_UNIQUE_SLOT_CLIP_VERTEX,
+
+   /* Varyings present in both GLES and desktop GL must start at 49 after 16-bit varyings. */
+   SI_UNIQUE_SLOT_CLIP_DIST0 = 49,
+   SI_UNIQUE_SLOT_CLIP_DIST1,
+   SI_UNIQUE_SLOT_PSIZ,
+   /* These can't be written by LS, HS, and ES. */
+   SI_UNIQUE_SLOT_LAYER,
+   SI_UNIQUE_SLOT_VIEWPORT,
+   SI_UNIQUE_SLOT_PRIMITIVE_ID,
 };
 
 /**
@@ -379,10 +404,10 @@ enum si_color_output_type {
 
 union si_input_info {
    struct {
-      ubyte semantic;
-      ubyte interpolate;
-      ubyte fp16_lo_hi_valid;
-      ubyte usage_mask;
+      uint8_t semantic;
+      uint8_t interpolate;
+      uint8_t fp16_lo_hi_valid;
+      uint8_t usage_mask;
    };
    uint32_t _unused; /* this just forces 4-byte alignment */
 };
@@ -392,18 +417,18 @@ struct si_shader_info {
 
    uint32_t options; /* bitmask of SI_PROFILE_* */
 
-   ubyte num_inputs;
-   ubyte num_outputs;
+   uint8_t num_inputs;
+   uint8_t num_outputs;
    union si_input_info input[PIPE_MAX_SHADER_INPUTS];
-   ubyte output_semantic[PIPE_MAX_SHADER_OUTPUTS];
-   ubyte output_usagemask[PIPE_MAX_SHADER_OUTPUTS];
-   ubyte output_readmask[PIPE_MAX_SHADER_OUTPUTS];
-   ubyte output_streams[PIPE_MAX_SHADER_OUTPUTS];
-   ubyte output_type[PIPE_MAX_SHADER_OUTPUTS]; /* enum nir_alu_type */
+   uint8_t output_semantic[PIPE_MAX_SHADER_OUTPUTS];
+   uint8_t output_usagemask[PIPE_MAX_SHADER_OUTPUTS];
+   uint8_t output_readmask[PIPE_MAX_SHADER_OUTPUTS];
+   uint8_t output_streams[PIPE_MAX_SHADER_OUTPUTS];
+   uint8_t output_type[PIPE_MAX_SHADER_OUTPUTS]; /* enum nir_alu_type */
 
-   ubyte num_vs_inputs;
-   ubyte num_vbos_in_user_sgprs;
-   ubyte num_stream_output_components[4];
+   uint8_t num_vs_inputs;
+   uint8_t num_vbos_in_user_sgprs;
+   uint8_t num_stream_output_components[4];
    uint16_t enabled_streamout_buffer_mask;
 
    uint64_t inputs_read; /* "get_unique_index" bits */
@@ -413,13 +438,13 @@ struct si_shader_info {
    uint64_t outputs_written;           /* "get_unique_index" bits */
    uint32_t patch_outputs_written;     /* "get_unique_index_patch" bits */
 
-   ubyte clipdist_mask;
-   ubyte culldist_mask;
+   uint8_t clipdist_mask;
+   uint8_t culldist_mask;
 
    uint16_t lshs_vertex_stride;
    uint16_t esgs_vertex_stride;
    uint16_t gsvs_vertex_size;
-   ubyte gs_input_verts_per_prim;
+   uint8_t gs_input_verts_per_prim;
    unsigned max_gsvs_emit_size;
 
    /* Set 0xf or 0x0 (4 bits) per each written output.
@@ -429,11 +454,11 @@ struct si_shader_info {
 
    int constbuf0_num_slots;
    uint num_memory_stores;
-   ubyte color_attr_index[2];
-   ubyte color_interpolate[2];
-   ubyte color_interpolate_loc[2];
-   ubyte colors_read; /**< which color components are read by the FS */
-   ubyte colors_written;
+   uint8_t color_attr_index[2];
+   uint8_t color_interpolate[2];
+   uint8_t color_interpolate_loc[2];
+   uint8_t colors_read; /**< which color components are read by the FS */
+   uint8_t colors_written;
    uint16_t output_color_types; /**< Each bit pair is enum si_color_output_type */
    bool vs_needs_prolog;
    bool color0_writes_all_cbufs; /**< gl_FragColor */
@@ -476,6 +501,8 @@ struct si_shader_info {
    bool uses_bindless_images;
    bool uses_indirect_descriptor;
    bool has_divergent_loop;
+   bool uses_sampleid;
+   bool has_non_uniform_tex_access;
 
    bool uses_vmem_sampler_or_bvh;
    bool uses_vmem_load_other; /* all other VMEM loads and atomics with return */
@@ -494,6 +521,10 @@ struct si_shader_info {
     * texunit + 1.
     */
    uint8_t writes_1_if_tex_is_1;
+
+   /* frag coord and sample pos per component read mask. */
+   uint8_t reads_frag_coord_mask;
+   uint8_t reads_sample_pos_mask;
 };
 
 /* A shader selector is a gallium CSO and contains shader variants and
@@ -528,15 +559,15 @@ struct si_shader_selector {
    struct si_shader_info info;
 
    enum pipe_shader_type pipe_shader_type;
-   ubyte const_and_shader_buf_descriptors_index;
-   ubyte sampler_and_images_descriptors_index;
-   ubyte cs_shaderbufs_sgpr_index;
-   ubyte cs_num_shaderbufs_in_user_sgprs;
-   ubyte cs_images_sgpr_index;
-   ubyte cs_images_num_sgprs;
-   ubyte cs_num_images_in_user_sgprs;
+   uint8_t const_and_shader_buf_descriptors_index;
+   uint8_t sampler_and_images_descriptors_index;
+   uint8_t cs_shaderbufs_sgpr_index;
+   uint8_t cs_num_shaderbufs_in_user_sgprs;
+   uint8_t cs_images_sgpr_index;
+   uint8_t cs_images_num_sgprs;
+   uint8_t cs_num_images_in_user_sgprs;
    unsigned ngg_cull_vert_threshold; /* UINT32_MAX = disabled */
-   enum pipe_prim_type rast_prim;
+   enum mesa_prim rast_prim;
 
    /* GS parameters. */
    bool tess_turns_off_ngg;
@@ -618,6 +649,7 @@ struct si_ps_epilog_bits {
    unsigned clamp_color : 1;
    unsigned dual_src_blend_swizzle : 1;      /* gfx11+ */
    unsigned rbplus_depth_only_opt:1;
+   unsigned kill_samplemask:1;
 };
 
 union si_shader_part_key {
@@ -783,30 +815,44 @@ union si_shader_key {
 
 /* GCN-specific shader info. */
 struct si_shader_binary_info {
-   ubyte vs_output_param_offset[NUM_TOTAL_VARYING_SLOTS];
+   uint8_t vs_output_param_offset[NUM_TOTAL_VARYING_SLOTS];
    uint32_t vs_output_ps_input_cntl[NUM_TOTAL_VARYING_SLOTS];
-   ubyte num_input_sgprs;
-   ubyte num_input_vgprs;
+   uint8_t num_input_sgprs;
+   uint8_t num_input_vgprs;
    bool uses_vmem_load_other; /* all other VMEM loads and atomics with return */
    bool uses_vmem_sampler_or_bvh;
    signed char face_vgpr_index;
    signed char ancillary_vgpr_index;
    signed char sample_coverage_vgpr_index;
    bool uses_instanceid;
-   ubyte nr_pos_exports;
-   ubyte nr_param_exports;
+   uint8_t nr_pos_exports;
+   uint8_t nr_param_exports;
    unsigned private_mem_vgprs;
    unsigned max_simd_waves;
 };
 
+enum si_shader_binary_type {
+   SI_SHADER_BINARY_ELF,
+   SI_SHADER_BINARY_RAW,
+};
+
 struct si_shader_binary {
-   const char *elf_buffer;
-   size_t elf_size;
+   enum si_shader_binary_type type;
+
+   /* Depends on binary type, either ELF or raw buffer. */
+   const char *code_buffer;
+   size_t code_size;
 
    char *uploaded_code;
    size_t uploaded_code_size;
 
    char *llvm_ir_string;
+
+   const char *disasm_string;
+   size_t disasm_size;
+
+   const unsigned *symbols;
+   unsigned num_symbols;
 };
 
 struct gfx9_gs_info {
@@ -815,37 +861,6 @@ struct gfx9_gs_info {
    unsigned gs_inst_prims_in_subgroup;
    unsigned max_prims_per_subgroup;
    unsigned esgs_ring_size; /* in bytes */
-};
-
-#define SI_NUM_VGT_STAGES_KEY_BITS 8
-#define SI_NUM_VGT_STAGES_STATES   (1 << SI_NUM_VGT_STAGES_KEY_BITS)
-
-/* The VGT_SHADER_STAGES key used to index the table of precomputed values.
- * Some fields are set by state-change calls, most are set by draw_vbo.
- */
-union si_vgt_stages_key {
-   struct {
-#if UTIL_ARCH_LITTLE_ENDIAN
-      uint8_t tess : 1;
-      uint8_t gs : 1;
-      uint8_t ngg_passthrough : 1;
-      uint8_t ngg : 1;       /* gfx10+ */
-      uint8_t streamout : 1; /* only used with NGG */
-      uint8_t hs_wave32 : 1;
-      uint8_t gs_wave32 : 1;
-      uint8_t vs_wave32 : 1;
-#else /* UTIL_ARCH_BIG_ENDIAN */
-      uint8_t vs_wave32 : 1;
-      uint8_t gs_wave32 : 1;
-      uint8_t hs_wave32 : 1;
-      uint8_t streamout : 1;
-      uint8_t ngg : 1;
-      uint8_t ngg_passthrough : 1;
-      uint8_t gs : 1;
-      uint8_t tess : 1;
-#endif
-   } u;
-   uint8_t index;
 };
 
 struct si_shader {
@@ -875,6 +890,9 @@ struct si_shader {
    bool is_gs_copy_shader;
    uint8_t wave_size;
 
+   /* Use ACO for compilation. */
+   bool use_aco;
+
    /* The following data is all that's needed for binary shaders. */
    struct si_shader_binary binary;
    struct ac_shader_config config;
@@ -894,7 +912,7 @@ struct si_shader {
 
    struct gfx9_gs_info gs_info;
 
-   /* For save precompute context registers values. */
+   /* Precomputed register values. */
    union {
       struct {
          unsigned vgt_gsvs_ring_offset_1;
@@ -933,12 +951,11 @@ struct si_shader {
          unsigned spi_shader_idx_format;
          unsigned spi_shader_pos_format;
          unsigned pa_cl_vte_cntl;
-         unsigned pa_cl_ngg_cntl;
          unsigned vgt_gs_max_vert_out; /* for API GS */
          unsigned ge_pc_alloc;         /* uconfig register */
          unsigned spi_shader_pgm_rsrc3_gs;
          unsigned spi_shader_pgm_rsrc4_gs;
-         union si_vgt_stages_key vgt_stages;
+         unsigned vgt_shader_stages_en;
       } ngg;
 
       struct {
@@ -961,6 +978,7 @@ struct si_shader {
          unsigned cb_shader_mask;
          unsigned db_shader_control;
          unsigned num_interp;
+         bool writes_samplemask;
       } ps;
    };
 
@@ -981,14 +999,14 @@ struct si_shader_part {
 /* si_shader.c */
 struct ac_rtld_binary;
 
-void si_update_shader_binary_info(struct si_shader *shader, nir_shader *nir);
+void si_update_shader_binary_info(struct si_shader *shader, struct nir_shader *nir);
 bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
                        struct si_shader *shader, struct util_debug_callback *debug);
 bool si_create_shader_variant(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
                               struct si_shader *shader, struct util_debug_callback *debug);
 void si_shader_destroy(struct si_shader *shader);
 unsigned si_shader_io_get_unique_index_patch(unsigned semantic);
-unsigned si_shader_io_get_unique_index(unsigned semantic, bool is_varying);
+unsigned si_shader_io_get_unique_index(unsigned semantic);
 bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader,
                              uint64_t scratch_va);
 bool si_can_dump_shader(struct si_screen *sscreen, gl_shader_stage stage,
@@ -1012,10 +1030,11 @@ void si_nir_scan_shader(struct si_screen *sscreen,  const struct nir_shader *nir
                         struct si_shader_info *info);
 
 /* si_shader_nir.c */
-extern const nir_lower_subgroups_options si_nir_subgroups_options;
+extern const struct nir_lower_subgroups_options si_nir_subgroups_options;
 
+bool si_alu_to_scalar_packed_math_filter(const struct nir_instr *instr, const void *data);
 void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first);
-void si_nir_late_opts(nir_shader *nir);
+void si_nir_late_opts(struct nir_shader *nir);
 char *si_finalize_nir(struct pipe_screen *screen, void *nirptr);
 
 /* si_state_shaders.cpp */

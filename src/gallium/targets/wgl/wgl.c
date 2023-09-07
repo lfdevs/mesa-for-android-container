@@ -64,13 +64,13 @@
 #endif
 
 #ifdef GALLIUM_LLVMPIPE
-static boolean use_llvmpipe = FALSE;
+static bool use_llvmpipe = false;
 #endif
 #ifdef GALLIUM_D3D12
-static boolean use_d3d12 = FALSE;
+static bool use_d3d12 = false;
 #endif
 #ifdef GALLIUM_ZINK
-static boolean use_zink = FALSE;
+static bool use_zink = false;
 #endif
 
 static const char *created_driver_name = NULL;
@@ -84,21 +84,21 @@ wgl_screen_create_by_name(HDC hDC, const char* driver, struct sw_winsys *winsys)
    if (strcmp(driver, "llvmpipe") == 0) {
       screen = llvmpipe_create_screen(winsys);
       if (screen)
-         use_llvmpipe = TRUE;
+         use_llvmpipe = true;
    }
 #endif
 #ifdef GALLIUM_D3D12
    if (strcmp(driver, "d3d12") == 0) {
       screen = d3d12_wgl_create_screen(winsys, hDC);
       if (screen)
-         use_d3d12 = TRUE;
+         use_d3d12 = true;
    }
 #endif
 #ifdef GALLIUM_ZINK
    if (strcmp(driver, "zink") == 0) {
       screen = zink_create_screen(winsys, NULL);
       if (screen)
-         use_zink = TRUE;
+         use_zink = true;
    }
 #endif
 #ifdef GALLIUM_SOFTPIPE
@@ -207,7 +207,7 @@ wgl_present(struct pipe_screen *screen,
 
 
 #if WINVER >= 0xA00
-static boolean
+static bool
 wgl_get_adapter_luid(struct pipe_screen* screen,
    HDC hDC,
    LUID* adapter_luid)
@@ -309,5 +309,5 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
       }
       break;
    }
-   return TRUE;
+   return true;
 }

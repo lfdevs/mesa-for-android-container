@@ -494,7 +494,7 @@ static void emit_all_tex(struct schedule_state * s, struct rc_instruction * befo
  * dst_full is an rgb instruction, meaning that it has a vector instruction(rgb)
  * but no scalar instruction (alpha).
  * @return 0 if merging the presubtract sources fails.
- * @retrun 1 if merging the presubtract sources succeeds.
+ * @return 1 if merging the presubtract sources succeeds.
  */
 static int merge_presub_sources(
 	struct rc_pair_instruction * dst_full,
@@ -571,7 +571,7 @@ static int merge_presub_sources(
 		for(arg = 0; arg < info->NumSrcRegs; arg++) {
 			/* If the arg does read both from rgb and alpha, then we need to rewrite
 			 * both sources and the code currently doesn't handle this.
-			 * FIXME: This is definitelly solvable, however shader-db shows it is
+			 * FIXME: This is definitely solvable, however shader-db shows it is
 			 * not worth the effort.
 			 */
 			if (rc_source_type_swz(dst_full->RGB.Arg[arg].Swizzle) & RC_SOURCE_ALPHA &&
@@ -844,7 +844,7 @@ static void is_rgb_to_alpha_possible(
 	}
 
 	/* Make sure the source only reads the register component that we
-	 * are going to be convering from.  It is OK if the instruction uses
+	 * are going to be converting from.  It is OK if the instruction uses
 	 * this component more than once.
 	 * XXX If the index we will be converting to is the same as the
 	 * current index, then it is OK to read from more than one component.

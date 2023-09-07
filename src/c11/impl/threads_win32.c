@@ -106,7 +106,7 @@ static BOOL CALLBACK impl_call_once_callback(PINIT_ONCE InitOnce, PVOID Paramete
     struct impl_call_once_param *param = (struct impl_call_once_param*)Parameter;
     (param->func)();
     ((void)InitOnce); ((void)Context);  // suppress warning
-    return TRUE;
+    return true;
 }
 
 static struct impl_tss_dtor_entry {
@@ -338,7 +338,7 @@ thrd_current(void)
     if (state->thrd.handle == NULL)
     {
         if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
-            &(state->thrd.handle), 0, FALSE, DUPLICATE_SAME_ACCESS))
+            &(state->thrd.handle), 0, false, DUPLICATE_SAME_ACCESS))
         {
             abort();
         }

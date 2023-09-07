@@ -64,7 +64,7 @@ write_tsv_row(FILE *fp,
               struct lp_type src_type,
               struct lp_type dst_type,
               double cycles,
-              boolean success)
+              bool success)
 {
    fprintf(fp, "%s\t", success ? "pass" : "fail");
 
@@ -151,7 +151,7 @@ add_conv_test(struct gallivm_state *gallivm,
 
 
 UTIL_ALIGN_STACK
-static boolean
+static bool
 test_one(unsigned verbose,
          FILE *fp,
          struct lp_type src_type,
@@ -161,7 +161,7 @@ test_one(unsigned verbose,
    struct gallivm_state *gallivm;
    LLVMValueRef func = NULL;
    conv_test_ptr_t conv_test_ptr;
-   boolean success;
+   bool success;
    const unsigned n = LP_TEST_NUM_SAMPLES;
    int64_t cycles[LP_TEST_NUM_SAMPLES];
    double cycles_avg = 0.0;
@@ -172,7 +172,7 @@ test_one(unsigned verbose,
 
    if ((src_type.width >= dst_type.width && src_type.length > dst_type.length) ||
        (src_type.width <= dst_type.width && src_type.length < dst_type.length)) {
-      return TRUE;
+      return true;
    }
 
    /* Known failures
@@ -181,7 +181,7 @@ test_one(unsigned verbose,
     */
    if ((src_type.floating && !dst_type.floating && dst_type.sign && dst_type.norm && src_type.width == dst_type.width) ||
        (!src_type.floating && dst_type.floating && src_type.fixed && src_type.width == dst_type.width)) {
-      return TRUE;
+      return true;
    }
 
    /* Known failures
@@ -190,7 +190,7 @@ test_one(unsigned verbose,
     */
    if ((src_type.floating && !dst_type.floating && dst_type.sign && dst_type.norm && src_type.width == dst_type.width) ||
        (!src_type.floating && dst_type.floating && src_type.fixed && src_type.width == dst_type.width)) {
-      return TRUE;
+      return true;
    }
 
    if (verbose >= 1)
@@ -236,7 +236,7 @@ test_one(unsigned verbose,
 
    gallivm_free_ir(gallivm);
 
-   success = TRUE;
+   success = true;
    for (i = 0; i < n && success; ++i) {
       unsigned src_stride = src_type.length*src_type.width/8;
       unsigned dst_stride = dst_type.length*dst_type.width/8;
@@ -264,7 +264,7 @@ test_one(unsigned verbose,
 
       for (j = 0; j < num_dsts; ++j) {
          if (!compare_vec_with_eps(dst_type, dst + j*dst_stride, ref + j*dst_stride, eps))
-            success = FALSE;
+            success = false;
       }
 
       if (!success || verbose >= 3) {
@@ -347,66 +347,66 @@ const struct lp_type conv_types[] = {
    /* float, fixed,  sign,  norm, width, len */
 
    /* Float */
-   {   TRUE, FALSE,  TRUE,  TRUE,    32,   4 },
-   {   TRUE, FALSE,  TRUE, FALSE,    32,   4 },
-   {   TRUE, FALSE, FALSE,  TRUE,    32,   4 },
-   {   TRUE, FALSE, FALSE, FALSE,    32,   4 },
+   {   true, false,  true,  true,    32,   4 },
+   {   true, false,  true, false,    32,   4 },
+   {   true, false, false,  true,    32,   4 },
+   {   true, false, false, false,    32,   4 },
 
-   {   TRUE, FALSE,  TRUE,  TRUE,    32,   8 },
-   {   TRUE, FALSE,  TRUE, FALSE,    32,   8 },
-   {   TRUE, FALSE, FALSE,  TRUE,    32,   8 },
-   {   TRUE, FALSE, FALSE, FALSE,    32,   8 },
+   {   true, false,  true,  true,    32,   8 },
+   {   true, false,  true, false,    32,   8 },
+   {   true, false, false,  true,    32,   8 },
+   {   true, false, false, false,    32,   8 },
 
    /* Fixed */
-   {  FALSE,  TRUE,  TRUE,  TRUE,    32,   4 },
-   {  FALSE,  TRUE,  TRUE, FALSE,    32,   4 },
-   {  FALSE,  TRUE, FALSE,  TRUE,    32,   4 },
-   {  FALSE,  TRUE, FALSE, FALSE,    32,   4 },
+   {  false,  true,  true,  true,    32,   4 },
+   {  false,  true,  true, false,    32,   4 },
+   {  false,  true, false,  true,    32,   4 },
+   {  false,  true, false, false,    32,   4 },
 
-   {  FALSE,  TRUE,  TRUE,  TRUE,    32,   8 },
-   {  FALSE,  TRUE,  TRUE, FALSE,    32,   8 },
-   {  FALSE,  TRUE, FALSE,  TRUE,    32,   8 },
-   {  FALSE,  TRUE, FALSE, FALSE,    32,   8 },
+   {  false,  true,  true,  true,    32,   8 },
+   {  false,  true,  true, false,    32,   8 },
+   {  false,  true, false,  true,    32,   8 },
+   {  false,  true, false, false,    32,   8 },
 
    /* Integer */
-   {  FALSE, FALSE,  TRUE,  TRUE,    32,   4 },
-   {  FALSE, FALSE,  TRUE, FALSE,    32,   4 },
-   {  FALSE, FALSE, FALSE,  TRUE,    32,   4 },
-   {  FALSE, FALSE, FALSE, FALSE,    32,   4 },
+   {  false, false,  true,  true,    32,   4 },
+   {  false, false,  true, false,    32,   4 },
+   {  false, false, false,  true,    32,   4 },
+   {  false, false, false, false,    32,   4 },
 
-   {  FALSE, FALSE,  TRUE,  TRUE,    32,   8 },
-   {  FALSE, FALSE,  TRUE, FALSE,    32,   8 },
-   {  FALSE, FALSE, FALSE,  TRUE,    32,   8 },
-   {  FALSE, FALSE, FALSE, FALSE,    32,   8 },
+   {  false, false,  true,  true,    32,   8 },
+   {  false, false,  true, false,    32,   8 },
+   {  false, false, false,  true,    32,   8 },
+   {  false, false, false, false,    32,   8 },
 
-   {  FALSE, FALSE,  TRUE,  TRUE,    16,   8 },
-   {  FALSE, FALSE,  TRUE, FALSE,    16,   8 },
-   {  FALSE, FALSE, FALSE,  TRUE,    16,   8 },
-   {  FALSE, FALSE, FALSE, FALSE,    16,   8 },
+   {  false, false,  true,  true,    16,   8 },
+   {  false, false,  true, false,    16,   8 },
+   {  false, false, false,  true,    16,   8 },
+   {  false, false, false, false,    16,   8 },
 
-   {  FALSE, FALSE,  TRUE,  TRUE,     8,  16 },
-   {  FALSE, FALSE,  TRUE, FALSE,     8,  16 },
-   {  FALSE, FALSE, FALSE,  TRUE,     8,  16 },
-   {  FALSE, FALSE, FALSE, FALSE,     8,  16 },
+   {  false, false,  true,  true,     8,  16 },
+   {  false, false,  true, false,     8,  16 },
+   {  false, false, false,  true,     8,  16 },
+   {  false, false, false, false,     8,  16 },
 
-   {  FALSE, FALSE,  TRUE,  TRUE,     8,   4 },
-   {  FALSE, FALSE,  TRUE, FALSE,     8,   4 },
-   {  FALSE, FALSE, FALSE,  TRUE,     8,   4 },
-   {  FALSE, FALSE, FALSE, FALSE,     8,   4 },
+   {  false, false,  true,  true,     8,   4 },
+   {  false, false,  true, false,     8,   4 },
+   {  false, false, false,  true,     8,   4 },
+   {  false, false, false, false,     8,   4 },
 
-   {  FALSE, FALSE,  FALSE,  TRUE,    8,   8 },
+   {  false, false,  false,  true,    8,   8 },
 };
 
 
 const unsigned num_types = ARRAY_SIZE(conv_types);
 
 
-boolean
+bool
 test_all(unsigned verbose, FILE *fp)
 {
    const struct lp_type *src_type;
    const struct lp_type *dst_type;
-   boolean success = TRUE;
+   bool success = true;
    int error_count = 0;
 
    for (src_type = conv_types; src_type < &conv_types[num_types]; ++src_type) {
@@ -416,7 +416,7 @@ test_all(unsigned verbose, FILE *fp)
             continue;
 
          if (!test_one(verbose, fp, *src_type, *dst_type)){
-            success = FALSE;
+            success = false;
             ++error_count;
          }
       }
@@ -428,14 +428,14 @@ test_all(unsigned verbose, FILE *fp)
 }
 
 
-boolean
+bool
 test_some(unsigned verbose, FILE *fp,
           unsigned long n)
 {
    const struct lp_type *src_type;
    const struct lp_type *dst_type;
    unsigned long i;
-   boolean success = TRUE;
+   bool success = true;
 
    for (i = 0; i < n; ++i) {
       src_type = &conv_types[rand() % num_types];
@@ -445,23 +445,23 @@ test_some(unsigned verbose, FILE *fp,
       } while (src_type == dst_type || src_type->norm != dst_type->norm);
 
       if (!test_one(verbose, fp, *src_type, *dst_type))
-        success = FALSE;
+        success = false;
    }
 
    return success;
 }
 
 
-boolean
+bool
 test_single(unsigned verbose, FILE *fp)
 {
    /*    float, fixed,  sign,  norm, width, len */
    struct lp_type f32x4_type =
-      {   TRUE, FALSE,  TRUE,  TRUE,    32,   4 };
+      {   true, false,  true,  true,    32,   4 };
    struct lp_type ub8x4_type =
-      {  FALSE, FALSE, FALSE,  TRUE,     8,  16 };
+      {  false, false, false,  true,     8,  16 };
 
-   boolean success;
+   bool success;
 
    success = test_one(verbose, fp, f32x4_type, ub8x4_type);
 

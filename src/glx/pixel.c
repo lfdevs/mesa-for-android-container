@@ -53,7 +53,7 @@ static const GLubyte HighBitsMask[9] = {
 
 /*
 ** Copy bitmap data from clients packed memory applying unpacking modes as the
-** data is transfered into the destImage buffer.  Return in modes the
+** data is transferred into the destImage buffer.  Return in modes the
 ** set of pixel modes that are to be done by the server.
 */
 static void

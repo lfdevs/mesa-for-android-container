@@ -12,7 +12,7 @@ $depsInstallPath="C:\mesa-deps"
 
 Get-Date
 Write-Host "Cloning DirectX-Headers"
-git clone -b v1.710.0-preview --depth=1 https://github.com/microsoft/DirectX-Headers deps/DirectX-Headers
+git clone -b v1.711.3-preview --depth=1 https://github.com/microsoft/DirectX-Headers deps/DirectX-Headers
 if (!$?) {
   Write-Host "Failed to clone DirectX-Headers repository"
   Exit 1

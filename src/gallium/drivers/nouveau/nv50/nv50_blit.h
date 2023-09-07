@@ -53,19 +53,25 @@ nv50_blit_texture_type(enum pipe_texture_target target)
    }
 }
 
-static inline unsigned
-nv50_blit_get_tgsi_texture_target(enum pipe_texture_target target)
+static inline enum glsl_sampler_dim
+nv50_blit_get_glsl_sampler_dim(enum pipe_texture_target target)
 {
    switch (target) {
-   case PIPE_TEXTURE_1D: return TGSI_TEXTURE_1D;
-   case PIPE_TEXTURE_2D: return TGSI_TEXTURE_2D;
-   case PIPE_TEXTURE_3D: return TGSI_TEXTURE_3D;
-   case PIPE_TEXTURE_1D_ARRAY: return TGSI_TEXTURE_1D_ARRAY;
-   case PIPE_TEXTURE_2D_ARRAY: return TGSI_TEXTURE_2D_ARRAY;
+   case PIPE_TEXTURE_1D: return GLSL_SAMPLER_DIM_1D;
+   case PIPE_TEXTURE_2D: return GLSL_SAMPLER_DIM_2D;
+   case PIPE_TEXTURE_3D: return GLSL_SAMPLER_DIM_3D;
+   case PIPE_TEXTURE_1D_ARRAY: return GLSL_SAMPLER_DIM_1D;
+   case PIPE_TEXTURE_2D_ARRAY: return GLSL_SAMPLER_DIM_2D;
    default:
       assert(target == PIPE_BUFFER);
-      return TGSI_TEXTURE_BUFFER;
+      return GLSL_SAMPLER_DIM_BUF;
    }
+}
+
+static inline bool
+nv50_blit_is_array(enum pipe_texture_target target) {
+   return (target == PIPE_TEXTURE_1D_ARRAY) ||
+          (target == PIPE_TEXTURE_2D_ARRAY);
 }
 
 static inline enum pipe_texture_target

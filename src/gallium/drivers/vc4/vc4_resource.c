@@ -226,7 +226,7 @@ vc4_texture_subdata(struct pipe_context *pctx,
                     const struct pipe_box *box,
                     const void *data,
                     unsigned stride,
-                    unsigned layer_stride)
+                    uintptr_t layer_stride)
 {
         struct vc4_resource *rsc = vc4_resource(prsc);
         struct vc4_resource_slice *slice = &rsc->slices[level];
@@ -1058,7 +1058,7 @@ vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
                                 },
                                 .format = orig->base.format,
                         },
-                        .mask = ~0,
+                        .mask = util_format_get_mask(orig->base.format),
                 };
                 pctx->blit(pctx, &info);
         }

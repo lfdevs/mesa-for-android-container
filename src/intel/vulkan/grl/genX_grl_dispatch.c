@@ -60,7 +60,8 @@ get_shader_bin(struct anv_device *device,
                                   &kernel_data.prog_data.base,
                                   sizeof(kernel_data.prog_data),
                                   NULL, 0, NULL, &bind_map,
-                                  &push_desc_info);
+                                  &push_desc_info,
+                                  0 /* dynamic_push_values */);
 
    /* The cache already has a reference and it's not going anywhere so there
     * is no need to hold a second reference.

@@ -27,96 +27,96 @@
 #include "util/u_memory.h"
 
 static unsigned int
-gs_in_prim_for_topology(enum shader_prim prim)
+gs_in_prim_for_topology(enum mesa_prim prim)
 {
    switch (prim) {
-   case SHADER_PRIM_QUADS:
-      return SHADER_PRIM_LINES_ADJACENCY;
+   case MESA_PRIM_QUADS:
+      return MESA_PRIM_LINES_ADJACENCY;
    default:
       return prim;
    }
 }
 
-static enum shader_prim
-gs_out_prim_for_topology(enum shader_prim prim)
+static enum mesa_prim
+gs_out_prim_for_topology(enum mesa_prim prim)
 {
    switch (prim) {
-   case SHADER_PRIM_POINTS:
-      return SHADER_PRIM_POINTS;
-   case SHADER_PRIM_LINES:
-   case SHADER_PRIM_LINE_LOOP:
-   case SHADER_PRIM_LINES_ADJACENCY:
-   case SHADER_PRIM_LINE_STRIP_ADJACENCY:
-   case SHADER_PRIM_LINE_STRIP:
-      return SHADER_PRIM_LINE_STRIP;
-   case SHADER_PRIM_TRIANGLES:
-   case SHADER_PRIM_TRIANGLE_STRIP:
-   case SHADER_PRIM_TRIANGLE_FAN:
-   case SHADER_PRIM_TRIANGLES_ADJACENCY:
-   case SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY:
-   case SHADER_PRIM_POLYGON:
-      return SHADER_PRIM_TRIANGLE_STRIP;
-   case SHADER_PRIM_QUADS:
-   case SHADER_PRIM_QUAD_STRIP:
-   case SHADER_PRIM_PATCHES:
+   case MESA_PRIM_POINTS:
+      return MESA_PRIM_POINTS;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP:
+      return MESA_PRIM_LINE_STRIP;
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_POLYGON:
+      return MESA_PRIM_TRIANGLE_STRIP;
+   case MESA_PRIM_QUADS:
+   case MESA_PRIM_QUAD_STRIP:
+   case MESA_PRIM_PATCHES:
    default:
-      return SHADER_PRIM_QUADS;
+      return MESA_PRIM_QUADS;
    }
 }
 
 static unsigned int
-vertices_for_prim(enum shader_prim prim)
+vertices_for_prim(enum mesa_prim prim)
 {
    switch (prim) {
-   case SHADER_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return 1;
-   case SHADER_PRIM_LINES:
-   case SHADER_PRIM_LINE_LOOP:
-   case SHADER_PRIM_LINES_ADJACENCY:
-   case SHADER_PRIM_LINE_STRIP_ADJACENCY:
-   case SHADER_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP:
       return 2;
-   case SHADER_PRIM_TRIANGLES:
-   case SHADER_PRIM_TRIANGLE_STRIP:
-   case SHADER_PRIM_TRIANGLE_FAN:
-   case SHADER_PRIM_TRIANGLES_ADJACENCY:
-   case SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY:
-   case SHADER_PRIM_POLYGON:
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_POLYGON:
       return 3;
-   case SHADER_PRIM_QUADS:
-   case SHADER_PRIM_QUAD_STRIP:
+   case MESA_PRIM_QUADS:
+   case MESA_PRIM_QUAD_STRIP:
       return 4;
-   case SHADER_PRIM_PATCHES:
+   case MESA_PRIM_PATCHES:
    default:
       unreachable("unsupported primitive for gs input");
    }
 }
 
 static unsigned int
-array_size_for_prim(enum shader_prim prim)
+array_size_for_prim(enum mesa_prim prim)
 {
    switch (prim) {
-   case SHADER_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return 1;
-   case SHADER_PRIM_LINES:
-   case SHADER_PRIM_LINE_LOOP:
-   case SHADER_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINE_STRIP:
       return 2;
-   case SHADER_PRIM_LINES_ADJACENCY:
-   case SHADER_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
       return 4;
-   case SHADER_PRIM_TRIANGLES:
-   case SHADER_PRIM_TRIANGLE_STRIP:
-   case SHADER_PRIM_TRIANGLE_FAN:
-   case SHADER_PRIM_POLYGON:
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_POLYGON:
       return 3;
-   case SHADER_PRIM_TRIANGLES_ADJACENCY:
-   case SHADER_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return 6;
-   case SHADER_PRIM_QUADS:
-   case SHADER_PRIM_QUAD_STRIP:
+   case MESA_PRIM_QUADS:
+   case MESA_PRIM_QUAD_STRIP:
       return 4;
-   case SHADER_PRIM_PATCHES:
+   case MESA_PRIM_PATCHES:
    default:
       unreachable("unsupported primitive for gs input");
    }
@@ -149,16 +149,14 @@ copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
 nir_shader *
 nir_create_passthrough_gs(const nir_shader_compiler_options *options,
                           const nir_shader *prev_stage,
-                          enum shader_prim primitive_type,
-                          int flat_interp_mask_offset,
-                          int last_pv_vert_offset,
+                          enum mesa_prim primitive_type,
                           bool emulate_edgeflags,
                           bool force_line_strip_out)
 {
    unsigned int vertices_out = vertices_for_prim(primitive_type);
    emulate_edgeflags = emulate_edgeflags && (prev_stage->info.outputs_written & VARYING_BIT_EDGE);
    bool needs_closing = (force_line_strip_out || emulate_edgeflags) && vertices_out >= 3;
-   enum shader_prim original_our_prim = gs_out_prim_for_topology(primitive_type);
+   enum mesa_prim original_our_prim = gs_out_prim_for_topology(primitive_type);
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_GEOMETRY,
                                                   options,
                                                   "gs passthrough");
@@ -166,7 +164,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
    nir_shader *nir = b.shader;
    nir->info.gs.input_primitive = gs_in_prim_for_topology(primitive_type);
    nir->info.gs.output_primitive = (force_line_strip_out || emulate_edgeflags) ?
-      SHADER_PRIM_LINE_STRIP : original_our_prim;
+      MESA_PRIM_LINE_STRIP : original_our_prim;
    nir->info.gs.vertices_in = vertices_out;
    nir->info.gs.vertices_out = needs_closing ? vertices_out + 1 : vertices_out;
    nir->info.gs.invocations = 1;
@@ -178,7 +176,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       nir->xfb_info = mem_dup(prev_stage->xfb_info, nir_xfb_info_size(prev_stage->xfb_info->output_count));
    }
 
-   bool handle_flat = nir->info.gs.output_primitive == SHADER_PRIM_LINE_STRIP &&
+   bool handle_flat = nir->info.gs.output_primitive == MESA_PRIM_LINE_STRIP &&
                       nir->info.gs.output_primitive != original_our_prim;
    nir_variable *in_vars[VARYING_SLOT_MAX * 4];
    nir_variable *out_vars[VARYING_SLOT_MAX * 4];
@@ -233,13 +231,13 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
    unsigned int end_vert = vertices_out;
    unsigned int vert_step = 1;
    switch (primitive_type) {
-   case PIPE_PRIM_LINES_ADJACENCY:
-   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
       start_vert = 1;
       end_vert += 1;
       break;
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
       end_vert = 5;
       vert_step = 2;
       break;
@@ -248,12 +246,8 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
    }
 
    nir_variable *edge_var = nir_find_variable_with_location(nir, nir_var_shader_in, VARYING_SLOT_EDGE);
-   nir_ssa_def *flat_interp_mask_def = nir_load_ubo(&b, 1, 32,
-                                                    nir_imm_int(&b, 0), nir_imm_int(&b, flat_interp_mask_offset),
-                                                    .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
-   nir_ssa_def *last_pv_vert_def = nir_load_ubo(&b, 1, 32,
-                                                nir_imm_int(&b, 0), nir_imm_int(&b, last_pv_vert_offset),
-                                                .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0);
+   nir_ssa_def *flat_interp_mask_def = nir_load_flat_mask(&b);
+   nir_ssa_def *last_pv_vert_def = nir_load_provoking_last(&b);
    last_pv_vert_def = nir_ine_imm(&b, last_pv_vert_def, 0);
    nir_ssa_def *start_vert_index = nir_imm_int(&b, start_vert);
    nir_ssa_def *end_vert_index = nir_imm_int(&b, end_vert - 1);
@@ -280,7 +274,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       nir_emit_vertex(&b, 0);
       if (emulate_edgeflags) {
          nir_ssa_def *edge_value = nir_channel(&b, nir_load_array_var_imm(&b, edge_var, idx), 0);
-         nir_if *edge_if = nir_push_if(&b, nir_fneu(&b, edge_value, nir_imm_float(&b, 1.0)));
+         nir_if *edge_if = nir_push_if(&b, nir_fneu_imm(&b, edge_value, 1.0));
          nir_end_primitive(&b, 0);
          nir_pop_if(&b, edge_if);
       }

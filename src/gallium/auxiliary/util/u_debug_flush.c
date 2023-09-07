@@ -38,7 +38,7 @@
  */
 
 #ifdef DEBUG
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/simple_mtx.h"
 #include "util/u_debug_stack.h"
 #include "util/u_debug.h"
@@ -56,7 +56,7 @@
 
 struct debug_map_item {
    struct debug_stack_frame *frame;
-   boolean persistent;
+   bool persistent;
 };
 
 struct debug_flush_buf {
@@ -64,11 +64,11 @@ struct debug_flush_buf {
    struct pipe_reference reference; /* Must be the first member. */
    mtx_t mutex;
    /* Immutable */
-   boolean supports_persistent;
+   bool supports_persistent;
    unsigned bt_depth;
    /* Protected by mutex */
    int map_count;
-   boolean has_sync_map;
+   bool has_sync_map;
    int last_sync_map;
    struct debug_map_item maps[DEBUG_FLUSH_MAP_DEPTH];
 };
@@ -82,7 +82,7 @@ struct debug_flush_item {
 struct debug_flush_ctx {
    /* Contexts are used by a single thread at a time */
    unsigned bt_depth;
-   boolean catch_map_of_referenced;
+   bool catch_map_of_referenced;
    struct hash_table *ref_hash;
    struct list_head head;
 };
@@ -104,7 +104,7 @@ debug_flush_capture_frame(int start, int depth)
 }
 
 struct debug_flush_buf *
-debug_flush_buf_create(boolean supports_persistent, unsigned bt_depth)
+debug_flush_buf_create(bool supports_persistent, unsigned bt_depth)
 {
    struct debug_flush_buf *fbuf = CALLOC_STRUCT(debug_flush_buf);
 
@@ -152,7 +152,7 @@ debug_flush_item_destroy(struct debug_flush_item *item)
 }
 
 struct debug_flush_ctx *
-debug_flush_ctx_create(UNUSED boolean catch_reference_of_mapped,
+debug_flush_ctx_create(UNUSED bool catch_reference_of_mapped,
                        unsigned bt_depth)
 {
    struct debug_flush_ctx *fctx = CALLOC_STRUCT(debug_flush_ctx);
@@ -183,8 +183,8 @@ out_no_ctx:
 static void
 debug_flush_alert(const char *s, const char *op,
                   unsigned start, unsigned depth,
-                  boolean continued,
-                  boolean capture,
+                  bool continued,
+                  bool capture,
                   const struct debug_stack_frame *frame)
 {
    if (capture)
@@ -211,7 +211,7 @@ debug_flush_alert(const char *s, const char *op,
 void
 debug_flush_map(struct debug_flush_buf *fbuf, unsigned flags)
 {
-   boolean map_sync, persistent;
+   bool map_sync, persistent;
 
    if (!fbuf)
       return;
@@ -227,16 +227,16 @@ debug_flush_map(struct debug_flush_buf *fbuf, unsigned flags)
     */
    if (fbuf->has_sync_map && !map_sync) {
       debug_flush_alert("Recursive sync map detected.", "Map",
-                        2, fbuf->bt_depth, TRUE, TRUE, NULL);
-      debug_flush_alert(NULL, "Previous map", 0, fbuf->bt_depth, FALSE,
-                        FALSE, fbuf->maps[fbuf->last_sync_map].frame);
+                        2, fbuf->bt_depth, true, true, NULL);
+      debug_flush_alert(NULL, "Previous map", 0, fbuf->bt_depth, false,
+                        false, fbuf->maps[fbuf->last_sync_map].frame);
    }
 
    fbuf->maps[fbuf->map_count].frame =
       debug_flush_capture_frame(1, fbuf->bt_depth);
    fbuf->maps[fbuf->map_count].persistent = persistent;
    if (!persistent) {
-      fbuf->has_sync_map = TRUE;
+      fbuf->has_sync_map = true;
       fbuf->last_sync_map = fbuf->map_count;
    }
 
@@ -255,9 +255,9 @@ debug_flush_map(struct debug_flush_buf *fbuf, unsigned flags)
 
          if (item && fctx->catch_map_of_referenced) {
             debug_flush_alert("Already referenced map detected.",
-                              "Map", 2, fbuf->bt_depth, TRUE, TRUE, NULL);
+                              "Map", 2, fbuf->bt_depth, true, true, NULL);
             debug_flush_alert(NULL, "Reference", 0, item->bt_depth,
-                              FALSE, FALSE, item->ref_frame);
+                              false, false, item->ref_frame);
          }
       }
       simple_mtx_unlock(&list_mutex);
@@ -273,15 +273,15 @@ debug_flush_unmap(struct debug_flush_buf *fbuf)
    mtx_lock(&fbuf->mutex);
    if (--fbuf->map_count < 0) {
       debug_flush_alert("Unmap not previously mapped detected.", "Map",
-                        2, fbuf->bt_depth, FALSE, TRUE, NULL);
+                        2, fbuf->bt_depth, false, true, NULL);
    } else {
       if (fbuf->has_sync_map && fbuf->last_sync_map == fbuf->map_count) {
          int i = fbuf->map_count;
 
-         fbuf->has_sync_map = FALSE;
+         fbuf->has_sync_map = false;
          while (i-- && !fbuf->has_sync_map) {
             if (!fbuf->maps[i].persistent) {
-               fbuf->has_sync_map = TRUE;
+               fbuf->has_sync_map = true;
                fbuf->last_sync_map = i;
             }
          }
@@ -312,9 +312,9 @@ debug_flush_cb_reference(struct debug_flush_ctx *fctx,
    mtx_lock(&fbuf->mutex);
    if (fbuf->map_count && fbuf->has_sync_map) {
       debug_flush_alert("Reference of mapped buffer detected.", "Reference",
-                        2, fctx->bt_depth, TRUE, TRUE, NULL);
-      debug_flush_alert(NULL, "Map", 0, fbuf->bt_depth, FALSE,
-                        FALSE, fbuf->maps[fbuf->last_sync_map].frame);
+                        2, fctx->bt_depth, true, true, NULL);
+      debug_flush_alert(NULL, "Map", 0, fbuf->bt_depth, false,
+                        false, fbuf->maps[fbuf->last_sync_map].frame);
    }
    mtx_unlock(&fbuf->mutex);
 
@@ -352,11 +352,11 @@ debug_flush_might_flush_cb(UNUSED void *key, void *value, void *data)
       snprintf(message, sizeof(message),
                "%s referenced mapped buffer detected.", reason);
 
-      debug_flush_alert(message, reason, 3, item->bt_depth, TRUE, TRUE, NULL);
-      debug_flush_alert(NULL, "Map", 0, fbuf->bt_depth, TRUE, FALSE,
+      debug_flush_alert(message, reason, 3, item->bt_depth, true, true, NULL);
+      debug_flush_alert(NULL, "Map", 0, fbuf->bt_depth, true, false,
                         fbuf->maps[fbuf->last_sync_map].frame);
-      debug_flush_alert(NULL, "First reference", 0, item->bt_depth, FALSE,
-                        FALSE, item->ref_frame);
+      debug_flush_alert(NULL, "First reference", 0, item->bt_depth, false,
+                        false, item->ref_frame);
    }
    mtx_unlock(&fbuf->mutex);
 

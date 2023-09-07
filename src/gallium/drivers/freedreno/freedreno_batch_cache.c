@@ -552,5 +552,7 @@ fd_batch_from_fb(struct fd_context *ctx,
    struct fd_batch *batch = batch_from_key(ctx, key);
    fd_screen_unlock(ctx->screen);
 
+   fd_batch_set_fb(batch, pfb);
+
    return batch;
 }

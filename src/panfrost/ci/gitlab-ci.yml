@@ -42,16 +42,16 @@ panfrost-t720-gles2:arm64:
 
 # We only have two machines, which we share with KernelCI.
 # Keep the second t760 job manual.
-panfrost-t760-gles2:armhf:
+panfrost-t760-gles2:arm32:
   extends:
-    - .lava-test-deqp:armhf
+    - .lava-test-deqp:arm32
     - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3288-veyron-jaq
 
-.panfrost-t760-traces:armhf:
+.panfrost-t760-traces:arm32:
   extends:
-    - .lava-piglit-traces:armhf
+    - .lava-piglit-traces:arm32
     - .panfrost-midgard-rules
     - .panfrost-test
     - .lava-rk3288-veyron-jaq
@@ -125,11 +125,10 @@ panfrost-g52-gl:arm64:
 
 panfrost-g52-piglit-gles2:arm64:
   extends:
-    - .piglit-test
     - .lava-piglit:arm64
     - .lava-meson-g12b-a311d-khadas-vim3
   variables:
-    HWCI_START_XORG: 1
+    HWCI_START_WESTON: 1
     DEQP_VER: gles2
     PIGLIT_PROFILES: quick_gl
 

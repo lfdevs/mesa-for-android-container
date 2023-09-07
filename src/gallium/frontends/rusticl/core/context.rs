@@ -1,15 +1,17 @@
 use crate::api::icd::*;
 use crate::core::device::*;
-use crate::core::format::*;
 use crate::core::memory::*;
 use crate::core::util::*;
 use crate::impl_cl_type_trait;
 
 use mesa_rust::pipe::resource::*;
 use mesa_rust::pipe::screen::ResourceType;
+use mesa_rust_gen::*;
 use mesa_rust_util::properties::Properties;
 use rusticl_opencl_gen::*;
 
+use std::alloc::Layout;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::os::raw::c_void;
@@ -18,16 +20,17 @@ use std::sync::Mutex;
 
 pub struct Context {
     pub base: CLObjectBase<CL_INVALID_CONTEXT>,
-    pub devs: Vec<Arc<Device>>,
+    pub devs: Vec<&'static Device>,
     pub properties: Properties<cl_context_properties>,
     pub dtors: Mutex<Vec<Box<dyn Fn(cl_context)>>>,
+    pub svm_ptrs: Mutex<BTreeMap<*const c_void, Layout>>,
 }
 
 impl_cl_type_trait!(cl_context, Context, CL_INVALID_CONTEXT);
 
 impl Context {
     pub fn new(
-        devs: Vec<Arc<Device>>,
+        devs: Vec<&'static Device>,
         properties: Properties<cl_context_properties>,
     ) -> Arc<Context> {
         Arc::new(Self {
@@ -35,6 +38,7 @@ impl Context {
             devs: devs,
             properties: properties,
             dtors: Mutex::new(Vec::new()),
+            svm_ptrs: Mutex::new(BTreeMap::new()),
         })
     }
 
@@ -44,10 +48,10 @@ impl Context {
         user_ptr: *mut c_void,
         copy: bool,
         res_type: ResourceType,
-    ) -> CLResult<HashMap<Arc<Device>, Arc<PipeResource>>> {
+    ) -> CLResult<HashMap<&'static Device, Arc<PipeResource>>> {
         let adj_size: u32 = size.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)?;
         let mut res = HashMap::new();
-        for dev in &self.devs {
+        for &dev in &self.devs {
             let mut resource = None;
 
             if !user_ptr.is_null() && !copy {
@@ -61,7 +65,7 @@ impl Context {
             }
 
             let resource = resource.ok_or(CL_OUT_OF_RESOURCES);
-            res.insert(Arc::clone(dev), Arc::new(resource?));
+            res.insert(dev, Arc::new(resource?));
         }
 
         if !user_ptr.is_null() {
@@ -80,11 +84,11 @@ impl Context {
     pub fn create_texture(
         &self,
         desc: &cl_image_desc,
-        format: &cl_image_format,
+        format: pipe_format,
         user_ptr: *mut c_void,
         copy: bool,
         res_type: ResourceType,
-    ) -> CLResult<HashMap<Arc<Device>, Arc<PipeResource>>> {
+    ) -> CLResult<HashMap<&'static Device, Arc<PipeResource>>> {
         let width = desc
             .image_width
             .try_into()
@@ -102,10 +106,9 @@ impl Context {
             .try_into()
             .map_err(|_| CL_OUT_OF_HOST_MEMORY)?;
         let target = cl_mem_type_to_texture_target(desc.image_type);
-        let format = format.to_pipe_format().unwrap();
 
         let mut res = HashMap::new();
-        for dev in &self.devs {
+        for &dev in &self.devs {
             let mut resource = None;
 
             // we can't specify custom pitches/slices, so this won't work for non 1D images
@@ -122,13 +125,13 @@ impl Context {
             }
 
             let resource = resource.ok_or(CL_OUT_OF_RESOURCES);
-            res.insert(Arc::clone(dev), Arc::new(resource?));
+            res.insert(dev, Arc::new(resource?));
         }
 
         if !user_ptr.is_null() {
             let bx = desc.bx()?;
             let stride = desc.row_pitch()?;
-            let layer_stride = desc.slice_pitch()?;
+            let layer_stride = desc.slice_pitch();
 
             res.iter()
                 .filter(|(_, r)| copy || !r.is_user)
@@ -140,6 +143,42 @@ impl Context {
         }
 
         Ok(res)
+    }
+
+    /// Returns the max allocation size supported by all devices
+    pub fn max_mem_alloc(&self) -> u64 {
+        self.devs
+            .iter()
+            .map(|dev| dev.max_mem_alloc())
+            .min()
+            .unwrap()
+    }
+
+    pub fn has_svm_devs(&self) -> bool {
+        self.devs.iter().any(|dev| dev.svm_supported())
+    }
+
+    pub fn add_svm_ptr(&self, ptr: *mut c_void, layout: Layout) {
+        self.svm_ptrs.lock().unwrap().insert(ptr, layout);
+    }
+
+    pub fn find_svm_alloc(&self, ptr: *const c_void) -> Option<(*const c_void, Layout)> {
+        let lock = self.svm_ptrs.lock().unwrap();
+        if let Some((&base, layout)) = lock.range(..=ptr).next_back() {
+            // SAFETY: we really just do some pointer math here...
+            unsafe {
+                // we check if ptr is within [base..base+size)
+                // means we can check if ptr - (base + size) < 0
+                if ptr.offset_from(base.add(layout.size())) < 0 {
+                    return Some((base, *layout));
+                }
+            }
+        }
+        None
+    }
+
+    pub fn remove_svm_ptr(&self, ptr: *const c_void) -> Option<Layout> {
+        self.svm_ptrs.lock().unwrap().remove(&ptr)
     }
 }
 

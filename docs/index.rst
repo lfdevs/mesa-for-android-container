@@ -89,6 +89,7 @@ Linux, FreeBSD, and other operating systems.
    drivers/lima
    drivers/llvmpipe
    drivers/panfrost
+   drivers/powervr
    drivers/radv
    drivers/svga3d
    drivers/v3d
@@ -137,10 +138,3 @@ Linux, FreeBSD, and other operating systems.
    OpenGL Website <https://www.opengl.org>
    DRI Website <https://dri.freedesktop.org>
    Developer Blogs <https://planet.freedesktop.org>
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Hosted by:
-   :hidden:
-
-   freedesktop.org <https://www.freedesktop.org>

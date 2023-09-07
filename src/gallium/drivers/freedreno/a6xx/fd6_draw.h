@@ -34,7 +34,7 @@
 
 #include "fd6_context.h"
 
-EXTERNC
+template <chip CHIP>
 void fd6_draw_init(struct pipe_context *pctx);
 
 #endif /* FD6_DRAW_H_ */

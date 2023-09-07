@@ -25,14 +25,14 @@
 #include "anv_private.h"
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
-#include "nir/nir_vulkan.h"
+#include "vk_nir_convert_ycbcr.h"
 
 struct ycbcr_state {
    nir_builder *builder;
    nir_ssa_def *image_size;
    nir_tex_instr *origin_tex;
    nir_deref_instr *tex_deref;
-   struct anv_ycbcr_conversion *conversion;
+   const struct vk_ycbcr_conversion *conversion;
 };
 
 /* TODO: we should probably replace this with a push constant/uniform. */
@@ -52,11 +52,11 @@ get_texture_size(struct ycbcr_state *state, nir_deref_instr *texture)
    tex->is_shadow = glsl_sampler_type_is_shadow(type);
    tex->dest_type = nir_type_int32;
 
-   tex->src[0].src_type = nir_tex_src_texture_deref;
-   tex->src[0].src = nir_src_for_ssa(&texture->dest.ssa);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
+                                     &texture->dest.ssa);
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest,
-                     nir_tex_instr_dest_size(tex), 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, nir_tex_instr_dest_size(tex),
+                     32);
    nir_builder_instr_insert(b, &tex->instr);
 
    state->image_size = nir_i2f32(b, &tex->dest.ssa);
@@ -72,8 +72,7 @@ implicit_downsampled_coord(nir_builder *b,
 {
    return nir_fadd(b,
                    value,
-                   nir_fdiv(b,
-                            nir_imm_float(b, 1.0f),
+                   nir_frcp(b,
                             nir_fmul(b,
                                      nir_imm_float(b, div_scale),
                                      max_value)));
@@ -85,14 +84,14 @@ implicit_downsampled_coords(struct ycbcr_state *state,
                             const struct anv_format_plane *plane_format)
 {
    nir_builder *b = state->builder;
-   struct anv_ycbcr_conversion *conversion = state->conversion;
+   const struct vk_ycbcr_conversion *conversion = state->conversion;
    nir_ssa_def *image_size = get_texture_size(state, state->tex_deref);
    nir_ssa_def *comp[4] = { NULL, };
    int c;
 
-   for (c = 0; c < ARRAY_SIZE(conversion->chroma_offsets); c++) {
+   for (c = 0; c < ARRAY_SIZE(conversion->state.chroma_offsets); c++) {
       if (plane_format->denominator_scales[c] > 1 &&
-          conversion->chroma_offsets[c] == VK_CHROMA_LOCATION_COSITED_EVEN) {
+          conversion->state.chroma_offsets[c] == VK_CHROMA_LOCATION_COSITED_EVEN) {
          comp[c] = implicit_downsampled_coord(b,
                                               nir_channel(b, old_coords, c),
                                               nir_channel(b, image_size, c),
@@ -114,9 +113,9 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
                                 uint32_t plane)
 {
    nir_builder *b = state->builder;
-   struct anv_ycbcr_conversion *conversion = state->conversion;
+   const struct vk_ycbcr_conversion *conversion = state->conversion;
    const struct anv_format_plane *plane_format =
-      &conversion->format->planes[plane];
+      &anv_get_format(conversion->state.format)->planes[plane];
    nir_tex_instr *old_tex = state->origin_tex;
    nir_tex_instr *tex = nir_tex_instr_create(b->shader, old_tex->num_srcs + 1);
 
@@ -125,7 +124,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
 
       switch (old_tex->src[i].src_type) {
       case nir_tex_src_coord:
-         if (plane_format->has_chroma && conversion->chroma_reconstruction) {
+         if (plane_format->has_chroma && conversion->state.chroma_reconstruction) {
             assert(old_tex->src[i].src.is_ssa);
             tex->src[i].src =
                nir_src_for_ssa(implicit_downsampled_coords(state,
@@ -139,8 +138,8 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
          break;
       }
    }
-   tex->src[tex->num_srcs - 1].src = nir_src_for_ssa(nir_imm_int(b, plane));
-   tex->src[tex->num_srcs - 1].src_type = nir_tex_src_plane;
+   tex->src[tex->num_srcs - 1] = nir_tex_src_for_ssa(nir_tex_src_plane,
+                                                     nir_imm_int(b, plane));
 
    tex->sampler_dim = old_tex->sampler_dim;
    tex->dest_type = old_tex->dest_type;
@@ -156,7 +155,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
 
    nir_ssa_dest_init(&tex->instr, &tex->dest,
                      old_tex->dest.ssa.num_components,
-                     nir_dest_bit_size(old_tex->dest), NULL);
+                     nir_dest_bit_size(old_tex->dest));
    nir_builder_instr_insert(b, &tex->instr);
 
    return &tex->dest.ssa;
@@ -254,7 +253,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
 
    builder->cursor = nir_before_instr(&tex->instr);
 
-   const struct anv_format *format = state.conversion->format;
+   const struct anv_format *format = anv_get_format(state.conversion->state.format);
    const struct isl_format_layout *y_isl_layout = NULL;
    for (uint32_t p = 0; p < format->n_planes; p++) {
       if (!format->planes[p].has_chroma)
@@ -301,7 +300,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
    nir_ssa_def *swizzled_comp[4] = { NULL, };
    uint32_t swizzled_bpcs[4] = { 0, };
 
-   for (uint32_t i = 0; i < ARRAY_SIZE(state.conversion->mapping); i++) {
+   for (uint32_t i = 0; i < ARRAY_SIZE(state.conversion->state.mapping); i++) {
       /* Maps to components in |ycbcr_comp| */
       static const uint32_t swizzle_mapping[] = {
          [VK_COMPONENT_SWIZZLE_ZERO] = 4,
@@ -311,7 +310,7 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
          [VK_COMPONENT_SWIZZLE_B]    = 2,
          [VK_COMPONENT_SWIZZLE_A]    = 3,
       };
-      const VkComponentSwizzle m = state.conversion->mapping[i];
+      const VkComponentSwizzle m = state.conversion->state.mapping[i];
 
       if (m == VK_COMPONENT_SWIZZLE_IDENTITY) {
          swizzled_comp[i] = ycbcr_comp[i];
@@ -323,10 +322,10 @@ anv_nir_lower_ycbcr_textures_instr(nir_builder *builder,
    }
 
    nir_ssa_def *result = nir_vec(builder, swizzled_comp, 4);
-   if (state.conversion->ycbcr_model != VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY) {
+   if (state.conversion->state.ycbcr_model != VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY) {
       result = nir_convert_ycbcr_to_rgb(builder,
-                                        state.conversion->ycbcr_model,
-                                        state.conversion->ycbcr_range,
+                                        state.conversion->state.ycbcr_model,
+                                        state.conversion->state.ycbcr_range,
                                         result,
                                         swizzled_bpcs);
    }

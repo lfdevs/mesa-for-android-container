@@ -155,6 +155,12 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
    /* Make sure remaining elements are clean */
    for (; i < 16; ++i)
       resetReferencePictureDesc(&context->desc.h264, i);
+
+   context->desc.h264.slice_parameter.slice_info_present = false;
+   memset(context->desc.h264.slice_parameter.slice_data_flag, 0, sizeof(context->desc.h264.slice_parameter.slice_data_flag));
+   memset(context->desc.h264.slice_parameter.slice_data_offset, 0, sizeof(context->desc.h264.slice_parameter.slice_data_offset));
+   memset(context->desc.h264.slice_parameter.slice_data_size, 0, sizeof(context->desc.h264.slice_parameter.slice_data_size));
+
 }
 
 void vlVaHandleIQMatrixBufferH264(vlVaContext *context, vlVaBuffer *buf)
@@ -171,9 +177,35 @@ void vlVaHandleSliceParameterBufferH264(vlVaContext *context, vlVaBuffer *buf)
    VASliceParameterBufferH264 *h264 = buf->data;
 
    assert(buf->size >= sizeof(VASliceParameterBufferH264) && buf->num_elements == 1);
-   context->desc.h264.slice_count += buf->num_elements;
    context->desc.h264.num_ref_idx_l0_active_minus1 =
       h264->num_ref_idx_l0_active_minus1;
    context->desc.h264.num_ref_idx_l1_active_minus1 =
       h264->num_ref_idx_l1_active_minus1;
+
+   ASSERTED const size_t max_pipe_h264_slices = ARRAY_SIZE(context->desc.h264.slice_parameter.slice_data_offset);
+   assert(context->desc.h264.slice_count < max_pipe_h264_slices);
+
+   context->desc.h264.slice_parameter.slice_info_present = true;
+   context->desc.h264.slice_parameter.slice_data_size[context->desc.h264.slice_count] = h264->slice_data_size;
+   context->desc.h264.slice_parameter.slice_data_offset[context->desc.h264.slice_count] = h264->slice_data_offset;
+
+   switch (h264->slice_data_flag) {
+   case VA_SLICE_DATA_FLAG_ALL:
+      context->desc.h264.slice_parameter.slice_data_flag[context->desc.h264.slice_count] = PIPE_SLICE_BUFFER_PLACEMENT_TYPE_WHOLE;
+      break;
+   case VA_SLICE_DATA_FLAG_BEGIN:
+      context->desc.h264.slice_parameter.slice_data_flag[context->desc.h264.slice_count] = PIPE_SLICE_BUFFER_PLACEMENT_TYPE_BEGIN;
+      break;
+   case VA_SLICE_DATA_FLAG_MIDDLE:
+      context->desc.h264.slice_parameter.slice_data_flag[context->desc.h264.slice_count] = PIPE_SLICE_BUFFER_PLACEMENT_TYPE_MIDDLE;
+      break;
+   case VA_SLICE_DATA_FLAG_END:
+      context->desc.h264.slice_parameter.slice_data_flag[context->desc.h264.slice_count] = PIPE_SLICE_BUFFER_PLACEMENT_TYPE_END;
+      break;
+   default:
+      break;
+   }
+
+   /* assert(buf->num_elements == 1) above; */
+   context->desc.h264.slice_count += buf->num_elements;
 }

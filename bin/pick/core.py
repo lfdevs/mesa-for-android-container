@@ -40,10 +40,11 @@ if typing.TYPE_CHECKING:
         sha: str
         description: str
         nominated: bool
-        nomination_type: typing.Optional[int]
+        nomination_type: int
         resolution: typing.Optional[int]
         main_sha: typing.Optional[str]
         because_sha: typing.Optional[str]
+        notes: typing.Optional[str] = attr.ib(None)
 
 IS_FIX = re.compile(r'^\s*fixes:\s*([a-f0-9]{6,40})', flags=re.MULTILINE | re.IGNORECASE)
 # FIXME: I dislike the duplication in this regex, but I couldn't get it to work otherwise
@@ -71,6 +72,7 @@ class NominationType(enum.Enum):
     CC = 0
     FIXES = 1
     REVERT = 2
+    NONE = 3
 
 
 @enum.unique
@@ -116,24 +118,24 @@ class Commit:
     sha: str = attr.ib()
     description: str = attr.ib()
     nominated: bool = attr.ib(False)
-    nomination_type: typing.Optional[NominationType] = attr.ib(None)
+    nomination_type: NominationType = attr.ib(NominationType.NONE)
     resolution: Resolution = attr.ib(Resolution.UNRESOLVED)
     main_sha: typing.Optional[str] = attr.ib(None)
     because_sha: typing.Optional[str] = attr.ib(None)
+    notes: typing.Optional[str] = attr.ib(None)
 
     def to_json(self) -> 'CommitDict':
         d: typing.Dict[str, typing.Any] = attr.asdict(self)
-        if self.nomination_type is not None:
-            d['nomination_type'] = self.nomination_type.value
+        d['nomination_type'] = self.nomination_type.value
         if self.resolution is not None:
             d['resolution'] = self.resolution.value
         return typing.cast('CommitDict', d)
 
     @classmethod
     def from_json(cls, data: 'CommitDict') -> 'Commit':
-        c = cls(data['sha'], data['description'], data['nominated'], main_sha=data['main_sha'], because_sha=data['because_sha'])
-        if data['nomination_type'] is not None:
-            c.nomination_type = NominationType(data['nomination_type'])
+        c = cls(data['sha'], data['description'], data['nominated'], main_sha=data['main_sha'],
+                because_sha=data['because_sha'], notes=data['notes'])
+        c.nomination_type = NominationType(data['nomination_type'])
         if data['resolution'] is not None:
             c.resolution = Resolution(data['resolution'])
         return c
@@ -201,6 +203,14 @@ class Commit:
         v = await commit_state(amend=True)
         assert v
         await ui.feedback(f'{self.sha} ({self.description}) committed successfully')
+
+    async def update_notes(self, ui: 'UI', notes: typing.Optional[str]) -> None:
+        self.notes = notes
+        async with ui.git_lock:
+            ui.save()
+            v = await commit_state(message=f'Updates notes for {self.sha}')
+        assert v
+        await ui.feedback(f'{self.sha} ({self.description}) notes updated successfully')
 
 
 async def get_new_commits(sha: str) -> typing.List[typing.Tuple[str, str]]:

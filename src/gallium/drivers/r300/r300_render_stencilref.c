@@ -43,10 +43,10 @@ struct r300_stencilref_context {
 
     uint32_t rs_cull_mode;
     uint32_t zb_stencilrefmask;
-    ubyte ref_value_front;
+    uint8_t ref_value_front;
 };
 
-static boolean r300_stencilref_needed(struct r300_context *r300)
+static bool r300_stencilref_needed(struct r300_context *r300)
 {
     struct r300_dsa_state *dsa = (struct r300_dsa_state*)r300->dsa_state.state;
 

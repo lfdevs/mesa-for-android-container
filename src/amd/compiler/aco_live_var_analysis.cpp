@@ -50,6 +50,20 @@ get_live_changes(aco_ptr<Instruction>& instr)
    return changes;
 }
 
+void
+handle_def_fixed_to_op(RegisterDemand* demand, RegisterDemand demand_before, Instruction* instr,
+                       int op_idx)
+{
+   /* Usually the register demand before an instruction would be considered part of the previous
+    * instruction, since it's not greater than the register demand for that previous instruction.
+    * Except, it can be greater in the case of an definition fixed to a non-killed operand: the RA
+    * needs to reserve space between the two instructions for the definition (containing a copy of
+    * the operand).
+    */
+   demand_before += instr->definitions[0].getTemp();
+   demand->update(demand_before);
+}
+
 RegisterDemand
 get_temp_registers(aco_ptr<Instruction>& instr)
 {
@@ -65,6 +79,13 @@ get_temp_registers(aco_ptr<Instruction>& instr)
    for (Operand op : instr->operands) {
       if (op.isTemp() && op.isLateKill() && op.isFirstKill())
          temp_registers += op.getTemp();
+   }
+
+   int op_idx = get_op_fixed_to_def(instr.get());
+   if (op_idx != -1 && !instr->operands[op_idx].isKill()) {
+      RegisterDemand before_instr;
+      before_instr -= get_live_changes(instr);
+      handle_def_fixed_to_op(&temp_registers, before_instr, instr.get(), op_idx);
    }
 
    return temp_registers;
@@ -180,6 +201,12 @@ process_live_temps_per_block(Program* program, live& lives, Block* block, unsign
                new_demand += temp;
             }
          }
+      }
+
+      int op_idx = get_op_fixed_to_def(insn);
+      if (op_idx != -1 && !insn->operands[op_idx].isKill()) {
+         RegisterDemand before_instr = new_demand;
+         handle_def_fixed_to_op(&register_demand[idx], before_instr, insn, op_idx);
       }
    }
 

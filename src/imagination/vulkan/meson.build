@@ -28,6 +28,7 @@ pvr_entrypoints = custom_target(
   command : [
     prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
     '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'pvr',
+    '--beta', with_vulkan_beta.to_string()
   ],
   depend_files : vk_entrypoints_gen_depend_files,
 )
@@ -38,6 +39,7 @@ pvr_files = files(
   'winsys/pvr_winsys_helper.c',
   'pvr_blit.c',
   'pvr_bo.c',
+  'pvr_border.c',
   'pvr_clear.c',
   'pvr_cmd_buffer.c',
   'pvr_csb.c',
@@ -57,6 +59,7 @@ pvr_files = files(
   'pvr_pass.c',
   'pvr_pipeline.c',
   'pvr_pipeline_cache.c',
+  'pvr_transfer_frag_store.c',
   'pvr_query.c',
   'pvr_query_compute.c',
   'pvr_queue.c',
@@ -67,6 +70,7 @@ pvr_files = files(
   'pvr_wsi.c',
 
   'usc/pvr_uscgen.c',
+  'usc/pvr_uscgen_tq.c',
 )
 
 pvr_includes = [
@@ -80,6 +84,7 @@ pvr_deps = [
   dep_csbgen,
   dep_libdrm,
   dep_valgrind,
+  idep_mesautil,
   idep_vulkan_runtime,
   idep_vulkan_util,
   idep_vulkan_wsi,
@@ -100,13 +105,14 @@ if with_imagination_srv
     'winsys/pvrsrvkm/pvr_srv_job_render.c',
     'winsys/pvrsrvkm/pvr_srv_job_transfer.c',
     'winsys/pvrsrvkm/pvr_srv_sync.c',
+    'winsys/pvrsrvkm/pvr_srv_sync_prim.c',
   )
   pvr_flags += '-DPVR_SUPPORT_SERVICES_DRIVER'
 endif
 
 libvulkan_powervr_mesa = shared_library(
   'vulkan_powervr_mesa',
-  [pvr_files, pvr_entrypoints],
+  [pvr_files, pvr_entrypoints, u_format_pack_h],
   include_directories : [
     pvr_includes,
     inc_gallium_aux,
@@ -157,8 +163,7 @@ powervr_mesa_icd = custom_target(
   command : [
     prog_python, '@INPUT0@',
     '--api-version', '1.0', '--xml', '@INPUT1@',
-    '--lib-path', join_paths(get_option('prefix'), get_option('libdir'),
-                             'libvulkan_powervr_mesa.so'),
+    '--lib-path', get_option('prefix') / get_option('libdir') / 'libvulkan_powervr_mesa.so',
     '--out', '@OUTPUT@',
   ],
   build_by_default : true,
@@ -166,11 +171,10 @@ powervr_mesa_icd = custom_target(
   install : true,
 )
 
-_dev_icdname = 'powervr_mesa_devenv_icd.@0@.json'.format(host_machine.cpu())
 _dev_icd = custom_target(
   'powervr_mesa_devenv_icd',
   input : [vk_icd_gen, vk_api_xml],
-  output : _dev_icdname,
+  output : 'powervr_mesa_devenv_icd.@0@.json'.format(host_machine.cpu()),
   command : [
     prog_python, '@INPUT0@',
     '--api-version', '1.0', '--xml', '@INPUT1@',

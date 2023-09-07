@@ -59,7 +59,7 @@ static void *
 llvmpipe_create_rasterizer_state(struct pipe_context *pipe,
                                  const struct pipe_rasterizer_state *rast)
 {
-   boolean need_pipeline;
+   bool need_pipeline;
 
    /* Partition rasterizer state into what we want the draw module to
     * handle, and what we'll look after ourselves.

@@ -1,27 +1,8 @@
 /**************************************************************************
  *
  * Copyright 2017 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  **************************************************************************/
 
@@ -242,7 +223,8 @@ static void radeon_enc_quality_params(struct radeon_encoder *enc)
    enc->enc_pic.quality_params.vbaq_mode = enc->enc_pic.quality_modes.vbaq_mode;
    enc->enc_pic.quality_params.scene_change_sensitivity = 0;
    enc->enc_pic.quality_params.scene_change_min_idr_interval = 0;
-   enc->enc_pic.quality_params.two_pass_search_center_map_mode = 0;
+   enc->enc_pic.quality_params.two_pass_search_center_map_mode =
+                    (enc->enc_pic.quality_modes.pre_encode_mode) ? 1 : 0;
 
    RADEON_ENC_BEGIN(enc->cmd.quality_params);
    RADEON_ENC_CS(enc->enc_pic.quality_params.vbaq_mode);
@@ -1416,7 +1398,7 @@ static int get_picture_storage(struct radeon_encoder *enc)
             if (enc->dpb_info[i].in_use &&
 		enc->dpb_info[i].is_ltr &&
 		enc->enc_pic.ltr_idx == enc->dpb_info[i].pic_num) {
-               enc->dpb_info[i].in_use = FALSE;
+               enc->dpb_info[i].in_use = false;
                return i;
             }
          }
@@ -1441,7 +1423,7 @@ static int get_picture_storage(struct radeon_encoder *enc)
       }
 
    if (oldest_idx >= 0)
-      enc->dpb_info[oldest_idx].in_use = FALSE;
+      enc->dpb_info[oldest_idx].in_use = false;
 
    return oldest_idx;
 }
@@ -1462,14 +1444,14 @@ static void manage_dpb_before_encode(struct radeon_encoder *enc)
    int ref0_idx = find_ref_idx(enc, enc->enc_pic.ref_idx_l0, enc->enc_pic.ref_idx_l0_is_ltr);
 
    if (!enc->enc_pic.not_referenced)
-      enc->dpb_info[current_pic_idx].in_use = TRUE;
+      enc->dpb_info[current_pic_idx].in_use = true;
 
    if (enc->enc_pic.is_ltr) {
       enc->dpb_info[current_pic_idx].pic_num = enc->enc_pic.ltr_idx;
-      enc->dpb_info[current_pic_idx].is_ltr = TRUE;
+      enc->dpb_info[current_pic_idx].is_ltr = true;
    } else {
       enc->dpb_info[current_pic_idx].pic_num = enc->enc_pic.frame_num;
-      enc->dpb_info[current_pic_idx].is_ltr = FALSE;
+      enc->dpb_info[current_pic_idx].is_ltr = false;
    }
 
    if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_IDR)
@@ -1504,7 +1486,6 @@ void radeon_enc_1_2_init(struct radeon_encoder *enc)
    enc->op_init_rc = radeon_enc_op_init_rc;
    enc->op_init_rc_vbv = radeon_enc_op_init_rc_vbv;
    enc->op_preset = radeon_enc_op_preset;
-   enc->encode_params = radeon_enc_encode_params;
    enc->session_init = radeon_enc_session_init;
    enc->encode_statistics = radeon_enc_encode_statistics;
    enc->nalu_aud = radeon_enc_nalu_aud;

@@ -223,10 +223,6 @@ pack_cfg_bits(struct v3dv_pipeline *pipeline,
          config.depth_test_function = VK_COMPARE_OP_ALWAYS;
       }
 
-      /* EZ state will be updated at draw time based on bound pipeline state */
-      config.early_z_updates_enable = false;
-      config.early_z_enable = false;
-
       config.stencil_enable =
          ds_info ? ds_info->stencilTestEnable && has_ds_attachment: false;
 
@@ -388,7 +384,7 @@ pack_shader_state_record(struct v3dv_pipeline *pipeline)
 
       if (!pipeline->has_gs) {
          shader.point_size_in_shaded_vertex_data =
-            pipeline->topology == PIPE_PRIM_POINTS;
+            pipeline->topology == MESA_PRIM_POINTS;
       } else {
          struct v3d_gs_prog_data *prog_data_gs =
             pipeline->shared_data->variants[BROADCOM_SHADER_GEOMETRY]->prog_data.gs;

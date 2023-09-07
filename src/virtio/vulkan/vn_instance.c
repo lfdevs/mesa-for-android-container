@@ -19,7 +19,7 @@
 #include "vn_physical_device.h"
 #include "vn_renderer.h"
 
-#define VN_INSTANCE_RING_SIZE (64 * 1024)
+#define VN_INSTANCE_RING_SIZE (128 * 1024)
 #define VN_INSTANCE_RING_DIRECT_THRESHOLD (VN_INSTANCE_RING_SIZE / 16)
 
 /*
@@ -172,54 +172,6 @@ vn_instance_init_ring(struct vn_instance *instance)
 }
 
 static VkResult
-vn_instance_init_experimental_features(struct vn_instance *instance)
-{
-   if (instance->renderer->info.vk_mesa_venus_protocol_spec_version !=
-       100000) {
-      if (VN_DEBUG(INIT))
-         vn_log(instance, "renderer supports no experimental features");
-      return VK_SUCCESS;
-   }
-
-   size_t struct_size = sizeof(instance->experimental);
-   vn_call_vkGetVenusExperimentalFeatureData100000MESA(
-      instance, &struct_size, &instance->experimental);
-
-   VkVenusExperimentalFeatures100000MESA *exp_feats = &instance->experimental;
-
-   /* if renderer supports multiple_timelines, the driver will use it and
-    * globalFencing support can be assumed.
-    */
-   if (instance->renderer->info.supports_multiple_timelines)
-      exp_feats->globalFencing = VK_TRUE;
-
-   if (!exp_feats->memoryResourceAllocationSize ||
-       !exp_feats->globalFencing || !exp_feats->largeRing ||
-       !exp_feats->syncFdFencing || !exp_feats->asyncRoundtrip ||
-       !exp_feats->ringMonitoring)
-      return VK_ERROR_INITIALIZATION_FAILED;
-
-   if (VN_DEBUG(INIT)) {
-      vn_log(instance,
-             "VkVenusExperimentalFeatures100000MESA is as below:"
-             "\n\tmemoryResourceAllocationSize = %u"
-             "\n\tglobalFencing = %u"
-             "\n\tlargeRing = %u"
-             "\n\tsyncFdFencing = %u"
-             "\n\tasyncRoundtrip = %u"
-             "\n\tringMonitoring = %u",
-             instance->experimental.memoryResourceAllocationSize,
-             instance->experimental.globalFencing,
-             instance->experimental.largeRing,
-             instance->experimental.syncFdFencing,
-             instance->experimental.asyncRoundtrip,
-             instance->experimental.ringMonitoring);
-   }
-
-   return VK_SUCCESS;
-}
-
-static VkResult
 vn_instance_init_renderer(struct vn_instance *instance)
 {
    const VkAllocationCallbacks *alloc = &instance->base.base.alloc;
@@ -298,8 +250,8 @@ vn_instance_submit_roundtrip(struct vn_instance *instance,
 
    mtx_lock(&instance->ring.roundtrip_mutex);
    const uint64_t seqno = instance->ring.roundtrip_next++;
-   vn_encode_vkSubmitVirtqueueSeqno100000MESA(&local_enc, 0,
-                                              instance->ring.id, seqno);
+   vn_encode_vkSubmitVirtqueueSeqnoMESA(&local_enc, 0, instance->ring.id,
+                                        seqno);
    VkResult result = vn_renderer_submit_simple(
       instance->renderer, local_data, vn_cs_encoder_get_len(&local_enc));
    mtx_unlock(&instance->ring.roundtrip_mutex);
@@ -312,7 +264,7 @@ void
 vn_instance_wait_roundtrip(struct vn_instance *instance,
                            uint64_t roundtrip_seqno)
 {
-   vn_async_vkWaitVirtqueueSeqno100000MESA(instance, roundtrip_seqno);
+   vn_async_vkWaitVirtqueueSeqnoMESA(instance, roundtrip_seqno);
 }
 
 struct vn_instance_submission {
@@ -693,10 +645,6 @@ vn_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                &instance->reply_shmem_pool, 1u << 20);
 
    result = vn_instance_init_ring(instance);
-   if (result != VK_SUCCESS)
-      goto fail;
-
-   result = vn_instance_init_experimental_features(instance);
    if (result != VK_SUCCESS)
       goto fail;
 

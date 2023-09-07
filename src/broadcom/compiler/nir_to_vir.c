@@ -164,7 +164,7 @@ vir_emit_thrsw(struct v3d_compile *c)
         c->last_thrsw->qpu.sig.thrsw = true;
         c->last_thrsw_at_top_level = !c->in_control_flow;
 
-        /* We need to lock the scoreboard before any tlb acess happens. If this
+        /* We need to lock the scoreboard before any tlb access happens. If this
          * thread switch comes after we have emitted a tlb load, then it means
          * that we can't lock on the last thread switch any more.
          */
@@ -187,6 +187,28 @@ v3d_get_op_for_atomic_add(nir_intrinsic_instr *instr, unsigned src)
 }
 
 static uint32_t
+v3d_general_tmu_op_for_atomic(nir_intrinsic_instr *instr)
+{
+        nir_atomic_op atomic_op = nir_intrinsic_atomic_op(instr);
+        switch (atomic_op) {
+        case nir_atomic_op_iadd:
+                return  instr->intrinsic == nir_intrinsic_ssbo_atomic ?
+                        v3d_get_op_for_atomic_add(instr, 2) :
+                        v3d_get_op_for_atomic_add(instr, 1);
+        case nir_atomic_op_imin:    return V3D_TMU_OP_WRITE_SMIN;
+        case nir_atomic_op_umin:    return V3D_TMU_OP_WRITE_UMIN_FULL_L1_CLEAR;
+        case nir_atomic_op_imax:    return V3D_TMU_OP_WRITE_SMAX;
+        case nir_atomic_op_umax:    return V3D_TMU_OP_WRITE_UMAX;
+        case nir_atomic_op_iand:    return V3D_TMU_OP_WRITE_AND_READ_INC;
+        case nir_atomic_op_ior:     return V3D_TMU_OP_WRITE_OR_READ_DEC;
+        case nir_atomic_op_ixor:    return V3D_TMU_OP_WRITE_XOR_READ_NOT;
+        case nir_atomic_op_xchg:    return V3D_TMU_OP_WRITE_XCHG_READ_FLUSH;
+        case nir_atomic_op_cmpxchg: return V3D_TMU_OP_WRITE_CMPXCHG_READ_FLUSH;
+        default:                    unreachable("unknown atomic op");
+        }
+}
+
+static uint32_t
 v3d_general_tmu_op(nir_intrinsic_instr *instr)
 {
         switch (instr->intrinsic) {
@@ -201,47 +223,15 @@ v3d_general_tmu_op(nir_intrinsic_instr *instr)
         case nir_intrinsic_store_scratch:
         case nir_intrinsic_store_global_2x32:
                 return V3D_TMU_OP_REGULAR;
-        case nir_intrinsic_ssbo_atomic_add:
-                return v3d_get_op_for_atomic_add(instr, 2);
-        case nir_intrinsic_shared_atomic_add:
-        case nir_intrinsic_global_atomic_add_2x32:
-                return v3d_get_op_for_atomic_add(instr, 1);
-        case nir_intrinsic_ssbo_atomic_imin:
-        case nir_intrinsic_global_atomic_imin_2x32:
-        case nir_intrinsic_shared_atomic_imin:
-                return V3D_TMU_OP_WRITE_SMIN;
-        case nir_intrinsic_ssbo_atomic_umin:
-        case nir_intrinsic_global_atomic_umin_2x32:
-        case nir_intrinsic_shared_atomic_umin:
-                return V3D_TMU_OP_WRITE_UMIN_FULL_L1_CLEAR;
-        case nir_intrinsic_ssbo_atomic_imax:
-        case nir_intrinsic_global_atomic_imax_2x32:
-        case nir_intrinsic_shared_atomic_imax:
-                return V3D_TMU_OP_WRITE_SMAX;
-        case nir_intrinsic_ssbo_atomic_umax:
-        case nir_intrinsic_global_atomic_umax_2x32:
-        case nir_intrinsic_shared_atomic_umax:
-                return V3D_TMU_OP_WRITE_UMAX;
-        case nir_intrinsic_ssbo_atomic_and:
-        case nir_intrinsic_global_atomic_and_2x32:
-        case nir_intrinsic_shared_atomic_and:
-                return V3D_TMU_OP_WRITE_AND_READ_INC;
-        case nir_intrinsic_ssbo_atomic_or:
-        case nir_intrinsic_global_atomic_or_2x32:
-        case nir_intrinsic_shared_atomic_or:
-                return V3D_TMU_OP_WRITE_OR_READ_DEC;
-        case nir_intrinsic_ssbo_atomic_xor:
-        case nir_intrinsic_global_atomic_xor_2x32:
-        case nir_intrinsic_shared_atomic_xor:
-                return V3D_TMU_OP_WRITE_XOR_READ_NOT;
-        case nir_intrinsic_ssbo_atomic_exchange:
-        case nir_intrinsic_global_atomic_exchange_2x32:
-        case nir_intrinsic_shared_atomic_exchange:
-                return V3D_TMU_OP_WRITE_XCHG_READ_FLUSH;
-        case nir_intrinsic_ssbo_atomic_comp_swap:
-        case nir_intrinsic_global_atomic_comp_swap_2x32:
-        case nir_intrinsic_shared_atomic_comp_swap:
-                return V3D_TMU_OP_WRITE_CMPXCHG_READ_FLUSH;
+
+        case nir_intrinsic_ssbo_atomic:
+        case nir_intrinsic_ssbo_atomic_swap:
+        case nir_intrinsic_shared_atomic:
+        case nir_intrinsic_shared_atomic_swap:
+        case nir_intrinsic_global_atomic_2x32:
+        case nir_intrinsic_global_atomic_swap_2x32:
+                return v3d_general_tmu_op_for_atomic(instr);
+
         default:
                 unreachable("unknown intrinsic op");
         }
@@ -304,7 +294,7 @@ ntq_flush_tmu(struct v3d_compile *c)
 
 /**
  * Queues a pending thread switch + LDTMU/TMUWT for a TMU operation. The caller
- * is reponsible for ensuring that doing this doesn't overflow the TMU fifos,
+ * is responsible for ensuring that doing this doesn't overflow the TMU fifos,
  * and more specifically, the output fifo, since that can't stall.
  */
 void
@@ -514,11 +504,12 @@ ntq_emit_tmu_general(struct v3d_compile *c, nir_intrinsic_instr *instr,
          * amount to add/sub, as that is implicit.
          */
         bool atomic_add_replaced =
-                ((instr->intrinsic == nir_intrinsic_ssbo_atomic_add ||
-                  instr->intrinsic == nir_intrinsic_shared_atomic_add ||
-                  instr->intrinsic == nir_intrinsic_global_atomic_add_2x32) &&
+                (instr->intrinsic == nir_intrinsic_ssbo_atomic ||
+                 instr->intrinsic == nir_intrinsic_shared_atomic ||
+                 instr->intrinsic == nir_intrinsic_global_atomic_2x32) &&
+                nir_intrinsic_atomic_op(instr) == nir_atomic_op_iadd &&
                  (tmu_op == V3D_TMU_OP_WRITE_AND_READ_INC ||
-                  tmu_op == V3D_TMU_OP_WRITE_OR_READ_DEC));
+                  tmu_op == V3D_TMU_OP_WRITE_OR_READ_DEC);
 
         bool is_store = (instr->intrinsic == nir_intrinsic_store_ssbo ||
                          instr->intrinsic == nir_intrinsic_store_scratch ||
@@ -926,6 +917,7 @@ ntq_emit_txs(struct v3d_compile *c, nir_tex_instr *instr)
                 case GLSL_SAMPLER_DIM_3D:
                 case GLSL_SAMPLER_DIM_CUBE:
                 case GLSL_SAMPLER_DIM_BUF:
+                case GLSL_SAMPLER_DIM_EXTERNAL:
                         /* Don't minify the array size. */
                         if (!(instr->is_array && i == dest_size - 1)) {
                                 size = ntq_minify(c, size, lod);
@@ -1741,7 +1733,7 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
 
 /* Each TLB read/write setup (a render target or depth buffer) takes an 8-bit
  * specifier.  They come from a register that's preloaded with 0xffffffff
- * (0xff gets you normal vec4 f16 RT0 writes), and when one is neaded the low
+ * (0xff gets you normal vec4 f16 RT0 writes), and when one is needed the low
  * 8 bits are shifted off the bottom and 0xff shifted in from the top.
  */
 #define TLB_TYPE_F16_COLOR         (3 << 6)
@@ -2097,7 +2089,7 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_dead_cf);
                 NIR_PASS(progress, s, nir_opt_cse);
                 NIR_PASS(progress, s, nir_opt_peephole_select, 0, false, false);
-                NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);
+                NIR_PASS(progress, s, nir_opt_peephole_select, 24, true, true);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
 
@@ -2205,14 +2197,13 @@ ntq_emit_vpm_read(struct v3d_compile *c,
                   uint32_t *remaining,
                   uint32_t vpm_index)
 {
-        struct qreg vpm = vir_reg(QFILE_VPM, vpm_index);
-
         if (c->devinfo->ver >= 40 ) {
                 return vir_LDVPMV_IN(c,
                                      vir_uniform_ui(c,
                                                     (*num_components_queued)++));
         }
 
+        struct qreg vpm = vir_reg(QFILE_VPM, vpm_index);
         if (*num_components_queued != 0) {
                 (*num_components_queued)--;
                 return vir_MOV(c, vpm);
@@ -2555,7 +2546,7 @@ vir_emit_tlb_color_read(struct v3d_compile *c, nir_intrinsic_instr *instr)
          *
          * To fix that, we make sure we always emit a thread switch before the
          * first tlb color read. If that happens to be the last thread switch
-         * we emit, then everything is fine, but otherwsie, if any code after
+         * we emit, then everything is fine, but otherwise, if any code after
          * this point needs to emit additional thread switches, then we will
          * switch the strategy to locking the scoreboard on the first thread
          * switch instead -- see vir_emit_thrsw().
@@ -3330,44 +3321,20 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 }
                 break;
 
-        case nir_intrinsic_ssbo_atomic_add:
-        case nir_intrinsic_ssbo_atomic_imin:
-        case nir_intrinsic_ssbo_atomic_umin:
-        case nir_intrinsic_ssbo_atomic_imax:
-        case nir_intrinsic_ssbo_atomic_umax:
-        case nir_intrinsic_ssbo_atomic_and:
-        case nir_intrinsic_ssbo_atomic_or:
-        case nir_intrinsic_ssbo_atomic_xor:
-        case nir_intrinsic_ssbo_atomic_exchange:
-        case nir_intrinsic_ssbo_atomic_comp_swap:
         case nir_intrinsic_store_ssbo:
+        case nir_intrinsic_ssbo_atomic:
+        case nir_intrinsic_ssbo_atomic_swap:
                 ntq_emit_tmu_general(c, instr, false, false);
                 break;
 
-        case nir_intrinsic_global_atomic_add_2x32:
-        case nir_intrinsic_global_atomic_imin_2x32:
-        case nir_intrinsic_global_atomic_umin_2x32:
-        case nir_intrinsic_global_atomic_imax_2x32:
-        case nir_intrinsic_global_atomic_umax_2x32:
-        case nir_intrinsic_global_atomic_and_2x32:
-        case nir_intrinsic_global_atomic_or_2x32:
-        case nir_intrinsic_global_atomic_xor_2x32:
-        case nir_intrinsic_global_atomic_exchange_2x32:
-        case nir_intrinsic_global_atomic_comp_swap_2x32:
         case nir_intrinsic_store_global_2x32:
+        case nir_intrinsic_global_atomic_2x32:
+        case nir_intrinsic_global_atomic_swap_2x32:
                 ntq_emit_tmu_general(c, instr, false, true);
                 break;
 
-        case nir_intrinsic_shared_atomic_add:
-        case nir_intrinsic_shared_atomic_imin:
-        case nir_intrinsic_shared_atomic_umin:
-        case nir_intrinsic_shared_atomic_imax:
-        case nir_intrinsic_shared_atomic_umax:
-        case nir_intrinsic_shared_atomic_and:
-        case nir_intrinsic_shared_atomic_or:
-        case nir_intrinsic_shared_atomic_xor:
-        case nir_intrinsic_shared_atomic_exchange:
-        case nir_intrinsic_shared_atomic_comp_swap:
+        case nir_intrinsic_shared_atomic:
+        case nir_intrinsic_shared_atomic_swap:
         case nir_intrinsic_store_shared:
         case nir_intrinsic_store_scratch:
                 ntq_emit_tmu_general(c, instr, true, false);
@@ -3380,16 +3347,8 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 break;
 
         case nir_intrinsic_image_store:
-        case nir_intrinsic_image_atomic_add:
-        case nir_intrinsic_image_atomic_imin:
-        case nir_intrinsic_image_atomic_umin:
-        case nir_intrinsic_image_atomic_imax:
-        case nir_intrinsic_image_atomic_umax:
-        case nir_intrinsic_image_atomic_and:
-        case nir_intrinsic_image_atomic_or:
-        case nir_intrinsic_image_atomic_xor:
-        case nir_intrinsic_image_atomic_exchange:
-        case nir_intrinsic_image_atomic_comp_swap:
+        case nir_intrinsic_image_atomic:
+        case nir_intrinsic_image_atomic_swap:
                 v3d40_vir_emit_image_load_store(c, instr);
                 break;
 
@@ -3546,47 +3505,45 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 break;
         }
 
-        case nir_intrinsic_memory_barrier:
-        case nir_intrinsic_memory_barrier_buffer:
-        case nir_intrinsic_memory_barrier_image:
-        case nir_intrinsic_memory_barrier_shared:
-        case nir_intrinsic_memory_barrier_tcs_patch:
-        case nir_intrinsic_group_memory_barrier:
-                /* We don't do any instruction scheduling of these NIR
-                 * instructions between each other, so we just need to make
-                 * sure that the TMU operations before the barrier are flushed
+        case nir_intrinsic_scoped_barrier:
+                /* Ensure that the TMU operations before the barrier are flushed
                  * before the ones after the barrier.
                  */
                 ntq_flush_tmu(c);
-                break;
 
-        case nir_intrinsic_control_barrier:
-                /* Emit a TSY op to get all invocations in the workgroup
-                 * (actually supergroup) to block until the last invocation
-                 * reaches the TSY op.
-                 */
-                ntq_flush_tmu(c);
+                if (nir_intrinsic_execution_scope(instr) != SCOPE_NONE) {
+                        /* Ensure we flag the use of the control barrier. NIR's
+                         * gather info pass usually takes care of this, but that
+                         * requires that we call that pass after any other pass
+                         * may emit a control barrier, so this is safer.
+                         */
+                        c->s->info.uses_control_barrier = true;
 
-                if (c->devinfo->ver >= 42) {
-                        vir_BARRIERID_dest(c, vir_reg(QFILE_MAGIC,
-                                                      V3D_QPU_WADDR_SYNCB));
-                } else {
-                        struct qinst *sync =
-                                vir_BARRIERID_dest(c,
-                                                   vir_reg(QFILE_MAGIC,
-                                                           V3D_QPU_WADDR_SYNCU));
-                        sync->uniform =
-                                vir_get_uniform_index(c, QUNIFORM_CONSTANT,
-                                                      0xffffff00 |
-                                                      V3D_TSY_WAIT_INC_CHECK);
+                        /* Emit a TSY op to get all invocations in the workgroup
+                         * (actually supergroup) to block until the last
+                         * invocation reaches the TSY op.
+                         */
+                        if (c->devinfo->ver >= 42) {
+                                vir_BARRIERID_dest(c, vir_reg(QFILE_MAGIC,
+                                                              V3D_QPU_WADDR_SYNCB));
+                        } else {
+                                struct qinst *sync =
+                                        vir_BARRIERID_dest(c,
+                                                           vir_reg(QFILE_MAGIC,
+                                                                   V3D_QPU_WADDR_SYNCU));
+                                sync->uniform =
+                                        vir_get_uniform_index(c, QUNIFORM_CONSTANT,
+                                                              0xffffff00 |
+                                                              V3D_TSY_WAIT_INC_CHECK);
 
+                        }
+
+                        /* The blocking of a TSY op only happens at the next
+                         * thread switch. No texturing may be outstanding at the
+                         * time of a TSY blocking operation.
+                         */
+                        vir_emit_thrsw(c);
                 }
-
-                /* The blocking of a TSY op only happens at the next thread
-                 * switch.  No texturing may be outstanding at the time of a
-                 * TSY blocking operation.
-                 */
-                vir_emit_thrsw(c);
                 break;
 
         case nir_intrinsic_load_num_workgroups:
@@ -3860,6 +3817,25 @@ ntq_activate_execute_for_block(struct v3d_compile *c)
         vir_MOV_cond(c, V3D_QPU_COND_IFA, c->execute, vir_uniform_ui(c, 0));
 }
 
+static bool
+is_cheap_block(nir_block *block)
+{
+        int32_t cost = 3;
+        nir_foreach_instr(instr, block) {
+                switch (instr->type) {
+                case nir_instr_type_alu:
+                case nir_instr_type_ssa_undef:
+                case nir_instr_type_load_const:
+                        if (--cost <= 0)
+                                return false;
+                break;
+                default:
+                        return false;
+                }
+        }
+        return true;
+}
+
 static void
 ntq_emit_uniform_if(struct v3d_compile *c, nir_if *if_stmt)
 {
@@ -4004,12 +3980,16 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
                      c->execute,
                      vir_uniform_ui(c, else_block->index));
 
-        /* Jump to ELSE if nothing is active for THEN, otherwise fall
-         * through.
+        /* Jump to ELSE if nothing is active for THEN (unless THEN block is
+         * so small it won't pay off), otherwise fall through.
          */
-        vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute), V3D_QPU_PF_PUSHZ);
-        vir_BRANCH(c, V3D_QPU_BRANCH_COND_ALLNA);
-        vir_link_blocks(c->cur_block, else_block);
+        bool is_cheap = exec_list_is_singular(&if_stmt->then_list) &&
+                        is_cheap_block(nir_if_first_then_block(if_stmt));
+        if (!is_cheap) {
+                vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), c->execute), V3D_QPU_PF_PUSHZ);
+                vir_BRANCH(c, V3D_QPU_BRANCH_COND_ALLNA);
+                vir_link_blocks(c->cur_block, else_block);
+        }
         vir_link_blocks(c->cur_block, then_block);
 
         /* Process the THEN block. */
@@ -4026,13 +4006,19 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
                 vir_MOV_cond(c, V3D_QPU_COND_IFA, c->execute,
                              vir_uniform_ui(c, after_block->index));
 
-                /* If everything points at ENDIF, then jump there immediately. */
-                vir_set_pf(c, vir_XOR_dest(c, vir_nop_reg(),
-                                        c->execute,
-                                        vir_uniform_ui(c, after_block->index)),
-                           V3D_QPU_PF_PUSHZ);
-                vir_BRANCH(c, V3D_QPU_BRANCH_COND_ALLA);
-                vir_link_blocks(c->cur_block, after_block);
+                /* If everything points at ENDIF, then jump there immediately
+                 * (unless ELSE block is so small it won't pay off).
+                 */
+                bool is_cheap = exec_list_is_singular(&if_stmt->else_list) &&
+                                is_cheap_block(nir_else_block);
+                if (!is_cheap) {
+                        vir_set_pf(c, vir_XOR_dest(c, vir_nop_reg(),
+                                                   c->execute,
+                                                   vir_uniform_ui(c, after_block->index)),
+                                   V3D_QPU_PF_PUSHZ);
+                        vir_BRANCH(c, V3D_QPU_BRANCH_COND_ALLA);
+                        vir_link_blocks(c->cur_block, after_block);
+                }
                 vir_link_blocks(c->cur_block, else_block);
 
                 vir_set_emit_block(c, else_block);
@@ -4360,13 +4346,6 @@ nir_to_vir(struct v3d_compile *c)
                         c->line_x = emit_fragment_varying(c, NULL, -1, 0, 0);
                         c->uses_implicit_point_line_varyings = true;
                 }
-
-                c->force_per_sample_msaa =
-                   c->s->info.fs.uses_sample_qualifier ||
-                   BITSET_TEST(c->s->info.system_values_read,
-                               SYSTEM_VALUE_SAMPLE_ID) ||
-                   BITSET_TEST(c->s->info.system_values_read,
-                               SYSTEM_VALUE_SAMPLE_POS);
                 break;
         case MESA_SHADER_COMPUTE:
                 /* Set up the TSO for barriers, assuming we do some. */

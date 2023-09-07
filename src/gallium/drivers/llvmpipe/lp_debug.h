@@ -29,7 +29,7 @@
 #ifndef LP_DEBUG_H
 #define LP_DEBUG_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_debug.h"
 
 #define DEBUG_PIPE      0x1
@@ -45,13 +45,13 @@
 #define DEBUG_MEM           0x4000
 #define DEBUG_FS            0x8000
 #define DEBUG_CS            0x10000
-#define DEBUG_TGSI_IR       0x20000
 // unused                   0x40000
 #define DEBUG_NO_FASTPATH   0x80000
 #define DEBUG_LINEAR        0x100000
 #define DEBUG_LINEAR2       0x200000
 #define DEBUG_SHOW_DEPTH    0x400000
 #define DEBUG_ACCURATE_A0   0x800000 /* verbose */
+#define DEBUG_MESH         0x1000000
 
 /* Performance flags.  These are active even on release builds.
  */

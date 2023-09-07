@@ -48,7 +48,7 @@
  * purple.  Keep blending active so we can see more of what's going
  * on.
  */
-static boolean
+static bool
 linear_fallback(const struct lp_rast_state *state,
                 unsigned x, unsigned y,
                 unsigned width, unsigned height,
@@ -64,7 +64,7 @@ linear_fallback(const struct lp_rast_state *state,
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -73,7 +73,7 @@ linear_fallback(const struct lp_rast_state *state,
  * x,y is the surface position of the linear region, width, height is the size.
  * Return TRUE for success, FALSE otherwise.
  */
-static boolean
+static bool
 lp_fs_linear_run(const struct lp_rast_state *state,
                  unsigned x, unsigned y,
                  unsigned width, unsigned height,
@@ -85,6 +85,9 @@ lp_fs_linear_run(const struct lp_rast_state *state,
 {
    const struct lp_fragment_shader_variant *variant = state->variant;
    const struct lp_tgsi_info *info = &variant->shader->info;
+   const struct lp_fragment_shader_variant_key *key = &variant->key;
+   bool rgba_order = (key->cbuf_format[0] == PIPE_FORMAT_R8G8B8A8_UNORM ||
+                      key->cbuf_format[0] == PIPE_FORMAT_R8G8B8X8_UNORM);
    uint8_t constants[LP_MAX_LINEAR_CONSTANTS * 4];
 
    LP_DBG(DEBUG_RAST, "%s\n", __func__);
@@ -104,10 +107,10 @@ lp_fs_linear_run(const struct lp_rast_state *state,
    if (variant->shader->base.type == PIPE_SHADER_IR_TGSI) {
       nr_consts = (info->base.file_max[TGSI_FILE_CONSTANT] + 1) * 4;
    } else {
-      nr_consts = state->jit_context.constants[0].num_elements;
+      nr_consts = state->jit_resources.constants[0].num_elements;
    }
    for (int i = 0; i < nr_consts; i++){
-      float val = state->jit_context.constants[0].f[i];
+      float val = state->jit_resources.constants[0].f[i];
       if (val < 0.0f || val > 1.0f) {
          if (LP_DEBUG & DEBUG_LINEAR2)
             debug_printf("  -- const[%d] out of range %f\n", i, val);
@@ -119,15 +122,19 @@ lp_fs_linear_run(const struct lp_rast_state *state,
    struct lp_jit_linear_context jit;
    jit.constants = (const uint8_t (*)[4])constants;
 
-   /* We assume BGRA ordering */
-   assert(variant->key.cbuf_format[0] == PIPE_FORMAT_B8G8R8X8_UNORM ||
-          variant->key.cbuf_format[0] == PIPE_FORMAT_B8G8R8A8_UNORM);
-
-   jit.blend_color =
+   if (!rgba_order) {
+      jit.blend_color =
          state->jit_context.u8_blend_color[32] +
          (state->jit_context.u8_blend_color[16] << 8) +
          (state->jit_context.u8_blend_color[0] << 16) +
          (state->jit_context.u8_blend_color[48] << 24);
+   } else {
+      jit.blend_color =
+         (state->jit_context.u8_blend_color[32] << 24) +
+         (state->jit_context.u8_blend_color[16] << 16) +
+         (state->jit_context.u8_blend_color[0] << 8) +
+         (state->jit_context.u8_blend_color[48] << 0);
+   }
 
    jit.alpha_ref_value = float_to_ubyte(state->jit_context.alpha_ref_value);
 
@@ -139,7 +146,7 @@ lp_fs_linear_run(const struct lp_rast_state *state,
    while (input_mask) {
       int i = u_bit_scan(&input_mask);
       unsigned usage_mask = info->base.input_usage_mask[i];
-      boolean perspective =
+      bool perspective =
             info->base.input_interpolate[i] == TGSI_INTERPOLATE_PERSPECTIVE ||
             (info->base.input_interpolate[i] == TGSI_INTERPOLATE_COLOR &&
              !variant->key.flatshade);
@@ -181,8 +188,8 @@ lp_fs_linear_run(const struct lp_rast_state *state,
 
       if (!lp_linear_init_sampler(&samp[i], tex_info,
                   lp_fs_variant_key_sampler_idx(&variant->key, samp_unit),
-                  &state->jit_context.textures[tex_unit],
-                  x, y, width, height, a0, dadx, dady)) {
+                  &state->jit_resources.textures[tex_unit],
+                  x, y, width, height, a0, dadx, dady, rgba_order)) {
          if (LP_DEBUG & DEBUG_LINEAR2)
             debug_printf("  -- init_sampler(%d) failed\n", i);
          goto fail;
@@ -200,7 +207,7 @@ lp_fs_linear_run(const struct lp_rast_state *state,
       jit.color0 += stride;
    }
 
-   return TRUE;
+   return true;
 
 fail:
    /* Visually distinguish this from other fallbacks:
@@ -209,7 +216,7 @@ fail:
       return linear_fallback(state, x, y, width, height, color, stride);
    }
 
-   return FALSE;
+   return false;
 }
 
 

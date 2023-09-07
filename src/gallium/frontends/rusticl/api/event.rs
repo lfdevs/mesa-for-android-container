@@ -5,13 +5,17 @@ use crate::core::event::*;
 use crate::core::queue::*;
 
 use rusticl_opencl_gen::*;
+use rusticl_proc_macros::cl_entrypoint;
+use rusticl_proc_macros::cl_info_entrypoint;
 
 use std::collections::HashSet;
+use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::Arc;
 
+#[cl_info_entrypoint(cl_get_event_info)]
 impl CLInfo<cl_event_info> for cl_event {
-    fn query(&self, q: cl_event_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_event_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let event = self.get_ref()?;
         Ok(match *q {
             CL_EVENT_COMMAND_EXECUTION_STATUS => cl_prop::<cl_int>(event.status()),
@@ -35,8 +39,9 @@ impl CLInfo<cl_event_info> for cl_event {
     }
 }
 
+#[cl_info_entrypoint(cl_get_event_profiling_info)]
 impl CLInfo<cl_profiling_info> for cl_event {
-    fn query(&self, q: cl_profiling_info, _: &[u8]) -> CLResult<Vec<u8>> {
+    fn query(&self, q: cl_profiling_info, _: &[u8]) -> CLResult<Vec<MaybeUninit<u8>>> {
         let event = self.get_ref()?;
         if event.cmd_type == CL_COMMAND_USER {
             // CL_PROFILING_INFO_NOT_AVAILABLE [...] if event is a user event object.
@@ -55,12 +60,24 @@ impl CLInfo<cl_profiling_info> for cl_event {
     }
 }
 
-pub fn create_user_event(context: cl_context) -> CLResult<cl_event> {
+#[cl_entrypoint]
+fn create_user_event(context: cl_context) -> CLResult<cl_event> {
     let c = context.get_arc()?;
     Ok(cl_event::from_arc(Event::new_user(c)))
 }
 
-pub fn wait_for_events(num_events: cl_uint, event_list: *const cl_event) -> CLResult<()> {
+#[cl_entrypoint]
+fn retain_event(event: cl_event) -> CLResult<()> {
+    event.retain()
+}
+
+#[cl_entrypoint]
+fn release_event(event: cl_event) -> CLResult<()> {
+    event.release()
+}
+
+#[cl_entrypoint]
+fn wait_for_events(num_events: cl_uint, event_list: *const cl_event) -> CLResult<()> {
     let evs = cl_event::get_arc_vec_from_arr(event_list, num_events)?;
 
     // CL_INVALID_VALUE if num_events is zero or event_list is NULL.
@@ -94,7 +111,8 @@ pub fn wait_for_events(num_events: cl_uint, event_list: *const cl_event) -> CLRe
     Ok(())
 }
 
-pub fn set_event_callback(
+#[cl_entrypoint]
+fn set_event_callback(
     event: cl_event,
     command_exec_callback_type: cl_int,
     pfn_event_notify: Option<EventCB>,
@@ -120,7 +138,8 @@ pub fn set_event_callback(
     Ok(())
 }
 
-pub fn set_user_event_status(event: cl_event, execution_status: cl_int) -> CLResult<()> {
+#[cl_entrypoint]
+fn set_user_event_status(event: cl_event, execution_status: cl_int) -> CLResult<()> {
     let e = event.get_ref()?;
 
     // CL_INVALID_VALUE if the execution_status is not CL_COMPLETE or a negative integer value.

@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <xf86drm.h>
+#include <sys/mman.h>
 
 #include <gtest/gtest.h>
 
@@ -193,7 +194,7 @@ mi_builder_test::SetUp()
          ASSERT_TRUE(intel_gem_get_param(fd, I915_PARAM_CHIPSET_ID, &device_id))
                << strerror(errno);
 
-         ASSERT_TRUE(intel_get_device_info_from_pci_id(device_id, &devinfo));
+         ASSERT_TRUE(intel_get_device_info_from_fd(fd, &devinfo));
          if (devinfo.ver != GFX_VER ||
              (devinfo.platform == INTEL_PLATFORM_HSW) != (GFX_VERx10 == 75)) {
             close(fd);
@@ -228,20 +229,36 @@ mi_builder_test::SetUp()
    batch_bo_addr = 0xffffffffdff70000ULL;
 #endif
 
-   drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
-   gem_caching.handle = batch_bo_handle;
-   gem_caching.caching = I915_CACHING_CACHED;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
-                      (void *)&gem_caching), 0) << strerror(errno);
+   if (devinfo.has_caching_uapi) {
+      drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
+      gem_caching.handle = batch_bo_handle;
+      gem_caching.caching = I915_CACHING_CACHED;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
+                         (void *)&gem_caching), 0) << strerror(errno);
+   }
 
-   drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
-   gem_mmap.handle = batch_bo_handle;
-   gem_mmap.offset = 0;
-   gem_mmap.size = BATCH_BO_SIZE;
-   gem_mmap.flags = 0;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
+   if (devinfo.has_mmap_offset) {
+      drm_i915_gem_mmap_offset gem_mmap_offset = drm_i915_gem_mmap_offset();
+      gem_mmap_offset.handle = batch_bo_handle;
+      gem_mmap_offset.flags = devinfo.has_local_mem ?
+                              I915_MMAP_OFFSET_FIXED :
+                              I915_MMAP_OFFSET_WC;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET,
+                         &gem_mmap_offset), 0) << strerror(errno);
+
+      batch_map = mmap(NULL, BATCH_BO_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       fd, gem_mmap_offset.offset);
+      ASSERT_NE(batch_map, MAP_FAILED) << strerror(errno);
+   } else {
+      drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
+      gem_mmap.handle = batch_bo_handle;
+      gem_mmap.offset = 0;
+      gem_mmap.size = BATCH_BO_SIZE;
+      gem_mmap.flags = 0;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
                       (void *)&gem_mmap), 0) << strerror(errno);
-   batch_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+      batch_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+   }
 
    // Start the batch at zero
    batch_offset = 0;
@@ -256,20 +273,37 @@ mi_builder_test::SetUp()
    data_bo_addr = 0xffffffffefff0000ULL;
 #endif
 
-   gem_caching = drm_i915_gem_caching();
-   gem_caching.handle = data_bo_handle;
-   gem_caching.caching = I915_CACHING_CACHED;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
-                      (void *)&gem_caching), 0) << strerror(errno);
+   if (devinfo.has_caching_uapi) {
+      drm_i915_gem_caching gem_caching = drm_i915_gem_caching();
+      gem_caching.handle = data_bo_handle;
+      gem_caching.caching = I915_CACHING_CACHED;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_SET_CACHING,
+                         (void *)&gem_caching), 0) << strerror(errno);
+   }
 
-   gem_mmap = drm_i915_gem_mmap();
-   gem_mmap.handle = data_bo_handle;
-   gem_mmap.offset = 0;
-   gem_mmap.size = DATA_BO_SIZE;
-   gem_mmap.flags = 0;
-   ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
-                      (void *)&gem_mmap), 0) << strerror(errno);
-   data_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+   if (devinfo.has_mmap_offset) {
+      drm_i915_gem_mmap_offset gem_mmap_offset = drm_i915_gem_mmap_offset();
+      gem_mmap_offset.handle = data_bo_handle;
+      gem_mmap_offset.flags = devinfo.has_local_mem ?
+                              I915_MMAP_OFFSET_FIXED :
+                              I915_MMAP_OFFSET_WC;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET,
+                         &gem_mmap_offset), 0) << strerror(errno);
+
+      data_map = mmap(NULL, DATA_BO_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                      fd, gem_mmap_offset.offset);
+      ASSERT_NE(data_map, MAP_FAILED) << strerror(errno);
+   } else {
+      drm_i915_gem_mmap gem_mmap = drm_i915_gem_mmap();
+      gem_mmap.handle = data_bo_handle;
+      gem_mmap.offset = 0;
+      gem_mmap.size = DATA_BO_SIZE;
+      gem_mmap.flags = 0;
+      ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GEM_MMAP,
+                         (void *)&gem_mmap), 0) << strerror(errno);
+      data_map = (void *)(uintptr_t)gem_mmap.addr_ptr;
+   }
+
    input = (char *)data_map + INPUT_DATA_OFFSET;
    output = (char *)data_map + OUTPUT_DATA_OFFSET;
 

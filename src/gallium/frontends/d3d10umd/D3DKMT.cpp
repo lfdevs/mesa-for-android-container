@@ -308,7 +308,7 @@ D3DKMTQueryAdapterInfo(CONST D3DKMT_QUERYADAPTERINFO *pData)
    case KMTQAITYPE_CHECKDRIVERUPDATESTATUS:
       {
          BOOL *pResult = (BOOL *)pData->pPrivateDriverData;
-         *pResult = FALSE;
+         *pResult = false;
          return STATUS_SUCCESS;
       }
    case KMTQAITYPE_DRIVERVERSION:
@@ -320,7 +320,7 @@ D3DKMTQueryAdapterInfo(CONST D3DKMT_QUERYADAPTERINFO *pData)
    case KMTQAITYPE_XBOX:
       {
          BOOL *pResult = (BOOL *)pData->pPrivateDriverData;
-         *pResult = FALSE;
+         *pResult = false;
          return STATUS_SUCCESS;
       }
    case KMTQAITYPE_PHYSICALADAPTERCOUNT:
@@ -628,7 +628,7 @@ EXTERN_C BOOLEAN APIENTRY
 D3DKMTCheckExclusiveOwnership(VOID)
 {
    LOG_UNSUPPORTED_ENTRYPOINT();
-   return FALSE;
+   return false;
 }
 
 

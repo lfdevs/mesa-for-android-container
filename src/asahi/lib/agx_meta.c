@@ -17,9 +17,12 @@ agx_compile_meta_shader(struct agx_meta_cache *cache, nir_shader *shader,
    struct util_dynarray binary;
    util_dynarray_init(&binary, NULL);
 
-   agx_preprocess_nir(shader, false);
-   if (tib)
+   agx_preprocess_nir(shader, false, NULL);
+   if (tib) {
       agx_nir_lower_tilebuffer(shader, tib, NULL, NULL);
+      agx_nir_lower_monolithic_msaa(
+         shader, &(struct agx_msaa_state){.nr_samples = tib->nr_samples});
+   }
 
    struct agx_meta_shader *res = rzalloc(cache->ht, struct agx_meta_shader);
    agx_compile_shader_nir(shader, key, NULL, &binary, &res->info);
@@ -27,6 +30,7 @@ agx_compile_meta_shader(struct agx_meta_cache *cache, nir_shader *shader,
    res->ptr = agx_pool_upload_aligned_with_bo(&cache->pool, binary.data,
                                               binary.size, 128, &res->bo);
    util_dynarray_fini(&binary);
+   ralloc_free(shader);
 
    return res;
 }
@@ -36,25 +40,23 @@ build_background_op(nir_builder *b, enum agx_meta_op op, unsigned rt,
                     unsigned nr, bool msaa)
 {
    if (op == AGX_META_OP_LOAD) {
-      nir_ssa_def *fragcoord = nir_load_frag_coord(b);
-      nir_ssa_def *coord = nir_channels(b, fragcoord, 0x3);
-
       nir_tex_instr *tex = nir_tex_instr_create(b->shader, msaa ? 2 : 1);
       /* The type doesn't matter as long as it matches the store */
       tex->dest_type = nir_type_uint32;
       tex->sampler_dim = msaa ? GLSL_SAMPLER_DIM_MS : GLSL_SAMPLER_DIM_2D;
-      tex->op = nir_texop_tex;
-      tex->src[0].src_type = nir_tex_src_coord;
-      tex->src[0].src = nir_src_for_ssa(coord);
+      tex->op = msaa ? nir_texop_txf_ms : nir_texop_txf;
+      tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord,
+                                        nir_u2u32(b, nir_load_pixel_coord(b)));
 
       if (msaa) {
-         tex->src[1].src_type = nir_tex_src_ms_index;
-         tex->src[1].src = nir_src_for_ssa(nir_load_sample_id(b));
+         tex->src[1] =
+            nir_tex_src_for_ssa(nir_tex_src_ms_index, nir_load_sample_id(b));
+         b->shader->info.fs.uses_sample_shading = true;
       }
 
       tex->coord_components = 2;
       tex->texture_index = rt;
-      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+      nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
       nir_builder_instr_insert(b, &tex->instr);
 
       return nir_trim_vector(b, &tex->dest.ssa, nr);
@@ -75,6 +77,7 @@ agx_build_background_shader(struct agx_meta_cache *cache,
 
    struct agx_shader_key compiler_key = {
       .fs.ignore_tib_dependencies = true,
+      .fs.nr_samples = key->tib.nr_samples,
    };
 
    for (unsigned rt = 0; rt < ARRAY_SIZE(key->op); ++rt) {

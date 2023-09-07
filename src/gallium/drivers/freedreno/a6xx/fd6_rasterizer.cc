@@ -35,6 +35,7 @@
 #include "fd6_pack.h"
 #include "fd6_rasterizer.h"
 
+template <chip CHIP>
 struct fd_ringbuffer *
 __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
                                 const struct pipe_rasterizer_state *cso,
@@ -102,7 +103,7 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
    }
 
    OUT_REG(ring, A6XX_VPC_POLYGON_MODE(mode));
-   OUT_REG(ring, A6XX_PC_POLYGON_MODE(mode));
+   OUT_REG(ring, PC_POLYGON_MODE(CHIP, mode));
 
    if (ctx->screen->info->a6xx.has_shading_rate) {
       OUT_REG(ring, A6XX_RB_UNKNOWN_8A00());
@@ -113,6 +114,9 @@ __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
 
    return ring;
 }
+
+template struct fd_ringbuffer *__fd6_setup_rasterizer_stateobj<A6XX>(struct fd_context *ctx, const struct pipe_rasterizer_state *cso, bool primitive_restart);
+template struct fd_ringbuffer *__fd6_setup_rasterizer_stateobj<A7XX>(struct fd_context *ctx, const struct pipe_rasterizer_state *cso, bool primitive_restart);
 
 void *
 fd6_rasterizer_state_create(struct pipe_context *pctx,

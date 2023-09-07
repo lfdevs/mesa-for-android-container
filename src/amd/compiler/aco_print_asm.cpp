@@ -310,32 +310,6 @@ disasm_instr(amd_gfx_level gfx_level, LLVMDisasmContextRef disasm, uint32_t* bin
       size = l / 4;
    }
 
-#if LLVM_VERSION_MAJOR <= 14
-   /* See: https://github.com/GPUOpen-Tools/radeon_gpu_profiler/issues/65 and
-    * https://github.com/llvm/llvm-project/issues/38652
-    */
-   if (invalid) {
-      /* do nothing */
-   } else if (gfx_level == GFX9 && (binary[pos] & 0xfc024000) == 0xc0024000) {
-      /* SMEM with IMM=1 and SOE=1: LLVM ignores SOFFSET */
-      size_t len = strlen(outline);
-
-      char imm[16] = {0};
-      while (outline[--len] != ' ') ;
-      strncpy(imm, outline + len + 1, sizeof(imm) - 1);
-
-      snprintf(outline + len, outline_size - len, " s%u offset:%s", binary[pos + 1] >> 25, imm);
-   } else if (gfx_level >= GFX10 && (binary[pos] & 0xfc000000) == 0xf4000000 &&
-              (binary[pos + 1] & 0xfe000000) != 0xfa000000) {
-      /* SMEM non-NULL SOFFSET: LLVM ignores OFFSET */
-      uint32_t offset = binary[pos + 1] & 0x1fffff;
-      if (offset) {
-         size_t len = strlen(outline);
-         snprintf(outline + len, outline_size - len, " offset:0x%x", offset);
-      }
-   }
-#endif
-
    return std::make_pair(invalid, size);
 }
 

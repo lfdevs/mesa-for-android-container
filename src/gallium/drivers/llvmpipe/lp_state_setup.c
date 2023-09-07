@@ -773,7 +773,7 @@ lp_make_setup_variant_key(const struct llvmpipe_context *lp,
    key->pixel_center_half = lp->rasterizer->half_pixel_center;
    key->multisample = lp->rasterizer->multisample;
    key->twoside = lp->rasterizer->light_twoside;
-   key->size = Offset(struct lp_setup_variant_key, inputs[key->num_inputs]);
+   key->size = offsetof(struct lp_setup_variant_key, inputs[key->num_inputs]);
 
    key->color_slot = lp->color_slot[0];
    key->bcolor_slot = lp->bcolor_slot[0];

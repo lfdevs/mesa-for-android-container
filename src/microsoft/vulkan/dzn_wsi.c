@@ -68,8 +68,8 @@ dzn_wsi_create_image_memory(VkDevice dev, void *resource,
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    vk_object_base_init(&device->vk, &mem->base, VK_OBJECT_TYPE_DEVICE_MEMORY);
-   mem->swapchain_res = resource;
-   ID3D12Resource_AddRef(mem->swapchain_res);
+   mem->dedicated_res = resource;
+   ID3D12Resource_AddRef(mem->dedicated_res);
 
    *out = dzn_device_memory_to_handle(mem);
    return VK_SUCCESS;

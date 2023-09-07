@@ -32,7 +32,7 @@
  * @author Jose Fonseca <jfonseca@vmware.com>
  */
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_thread.h"
 #include "util/simple_mtx.h"
 #include "util/u_string.h"
@@ -54,7 +54,7 @@
  * SymInitialize() must be called once for each process (in this case, the
  * current process), before any of the other functions can be called.
  */
-static BOOL g_bSymInitialized = FALSE;
+static BOOL g_bSymInitialized = false;
 
 
 /**
@@ -129,23 +129,23 @@ DBGHELP_DISPATCH(SymInitialize,
                  (hProcess, UserSearchPath, fInvadeProcess))
 
 DBGHELP_DISPATCH(SymSetOptions,
-                 DWORD, FALSE,
+                 DWORD, false,
                  (DWORD SymOptions),
                  (SymOptions))
 
 #ifndef _GAMING_XBOX
 DBGHELP_DISPATCH(SymFromAddr,
-                 BOOL, FALSE,
+                 BOOL, false,
                  (HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFO Symbol),
                  (hProcess, Address, Displacement, Symbol))
 #endif
 
 DBGHELP_DISPATCH(SymGetLineFromAddr64,
-                 BOOL, FALSE,
+                 BOOL, false,
                  (HANDLE hProcess, DWORD64 dwAddr, PDWORD pdwDisplacement, PIMAGEHLP_LINE64 Line),
                  (hProcess, dwAddr, pdwDisplacement, Line))
 
-DBGHELP_DISPATCH(SymCleanup, BOOL, FALSE, (HANDLE hProcess), (hProcess))
+DBGHELP_DISPATCH(SymCleanup, BOOL, false, (HANDLE hProcess), (hProcess))
 
 
 #undef DBGHELP_DISPATCH
@@ -182,8 +182,8 @@ debug_symbol_name_dbghelp(const void *addr, char* buf, unsigned size)
          j_SymCleanup(hProcess);
 
       j_SymSetOptions(/* SYMOPT_UNDNAME | */ SYMOPT_LOAD_LINES);
-      if (j_SymInitialize(hProcess, NULL, TRUE)) {
-         g_bSymInitialized = TRUE;
+      if (j_SymInitialize(hProcess, NULL, true)) {
+         g_bSymInitialized = true;
       }
    }
 

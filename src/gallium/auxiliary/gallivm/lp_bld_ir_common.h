@@ -48,8 +48,8 @@ enum lp_exec_mask_break_type {
 struct lp_exec_mask {
    struct lp_build_context *bld;
 
-   boolean has_mask;
-   boolean ret_in_main;
+   bool has_mask;
+   bool ret_in_main;
 
    LLVMTypeRef int_vec_type;
 
@@ -76,13 +76,13 @@ struct lp_exec_mask {
          LLVMValueRef switch_val;
          LLVMValueRef switch_mask;
          LLVMValueRef switch_mask_default;
-         boolean switch_in_default;
+         bool switch_in_default;
          unsigned switch_pc;
       } switch_stack[LP_MAX_TGSI_NESTING];
       int switch_stack_size;
       LLVMValueRef switch_val;
       LLVMValueRef switch_mask_default; /* reverse of switch mask used for default */
-      boolean switch_in_default;        /* if switch exec is currently in default */
+      bool switch_in_default;        /* if switch exec is currently in default */
       unsigned switch_pc;               /* when used points to default or endswitch-1 */
 
       LLVMValueRef loop_limiter;

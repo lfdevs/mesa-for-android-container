@@ -58,7 +58,7 @@ deqp_args = [
 ]
 
 [[deqp]]
-deqp = "/deqp/modules/egl/deqp-egl"
+deqp = "/deqp/modules/egl/deqp-egl-x11"
 caselists = ["/deqp/mustpass/egl-master.txt"]
 deqp_args = [
     "--deqp-surface-width=256",

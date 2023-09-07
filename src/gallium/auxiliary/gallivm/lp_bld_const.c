@@ -455,9 +455,9 @@ lp_build_const_string(struct gallivm_state *gallivm,
    unsigned len = strlen(str) + 1;
    LLVMTypeRef i8 = LLVMInt8TypeInContext(gallivm->context);
    LLVMValueRef string = LLVMAddGlobal(gallivm->module, LLVMArrayType(i8, len), "");
-   LLVMSetGlobalConstant(string, TRUE);
+   LLVMSetGlobalConstant(string, true);
    LLVMSetLinkage(string, LLVMInternalLinkage);
-   LLVMSetInitializer(string, LLVMConstStringInContext(gallivm->context, str, len, TRUE));
+   LLVMSetInitializer(string, LLVMConstStringInContext(gallivm->context, str, len, true));
    string = LLVMConstBitCast(string, LLVMPointerType(i8, 0));
    return string;
 }

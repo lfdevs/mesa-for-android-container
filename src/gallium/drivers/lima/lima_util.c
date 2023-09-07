@@ -45,7 +45,7 @@ bool lima_get_absolute_timeout(uint64_t *timeout)
    struct timespec current;
    uint64_t current_ns;
 
-   if (*timeout == PIPE_TIMEOUT_INFINITE)
+   if (*timeout == OS_TIMEOUT_INFINITE)
       return true;
 
    if (clock_gettime(CLOCK_MONOTONIC, &current))

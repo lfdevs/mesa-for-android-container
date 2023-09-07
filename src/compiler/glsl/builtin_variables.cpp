@@ -683,7 +683,6 @@ builtin_variable_generator::add_uniform(const glsl_type *type,
 	 if (type->is_array())
             slots->tokens[1] = a;
 
-	 slots->swizzle = element->swizzle;
 	 slots++;
       }
    }

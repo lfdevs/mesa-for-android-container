@@ -340,7 +340,7 @@ st_framebuffer_update_attachments(struct gl_framebuffer *stfb)
  * renderbuffer).  The window system code determines the format.
  */
 static struct gl_renderbuffer *
-st_new_renderbuffer_fb(enum pipe_format format, unsigned samples, boolean sw)
+st_new_renderbuffer_fb(enum pipe_format format, unsigned samples, bool sw)
 {
    struct gl_renderbuffer *rb;
 
@@ -823,7 +823,7 @@ st_context_flush(struct st_context *st, unsigned flags,
 
    if ((flags & ST_FLUSH_WAIT) && fence && *fence) {
       st->screen->fence_finish(st->screen, NULL, *fence,
-                                     PIPE_TIMEOUT_INFINITE);
+                                     OS_TIMEOUT_INFINITE);
       st->screen->fence_reference(st->screen, fence, NULL);
    }
 

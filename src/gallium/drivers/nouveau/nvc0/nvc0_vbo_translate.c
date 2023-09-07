@@ -449,7 +449,7 @@ disp_vertices_seq(struct push_context *ctx, unsigned start, unsigned count)
 
 
 #define NVC0_PRIM_GL_CASE(n) \
-   case PIPE_PRIM_##n: return NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
+   case MESA_PRIM_##n: return NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
 
 static inline unsigned
 nvc0_prim_gl(unsigned prim)

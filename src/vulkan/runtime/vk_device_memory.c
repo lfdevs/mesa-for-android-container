@@ -138,7 +138,6 @@ vk_device_memory_create(struct vk_device *device,
       }
    }
 
-#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
    if ((mem->export_handle_types &
         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID) &&
        mem->ahardware_buffer == NULL) {
@@ -151,7 +150,6 @@ vk_device_memory_create(struct vk_device *device,
          return NULL;
       }
    }
-#endif
 
    return mem;
 }

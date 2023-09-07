@@ -39,7 +39,6 @@ zink-lvp:
     # Enable validation (except for on piglit, see deqp-zink-lvp.toml), logging
     # to stdout and aborting on unknown failures.
     ZINK_DEBUG: validation
-    VK_LAYER_SETTINGS_PATH: ${CI_PROJECT_DIR}/install/zink-lvp-validation-settings.txt
     XVFB_SCRIPT: "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/deqp-runner.sh"
   script: |
     xvfb-run --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && ${XVFB_SCRIPT}"
@@ -79,7 +78,7 @@ zink-anv-tgl-full:
 
 zink-anv-tgl-traces:
   extends:
-    - .lava-piglit-traces:amd64
+    - .lava-piglit-traces:x86_64
     - .zink-anv-test
     - .zink-trace-test
     # Add .lava-traces-base again to override .zink-anv-test setting the
@@ -137,8 +136,11 @@ zink-tu-a618-traces-performance:
     # Always use the same device
     # a618 tag starts with cbg-1 (not cbg-0) for some reason
     LAVA_TAGS: "cbg-1"
+  needs:
+    - !reference [zink-tu-a618-traces, needs]
+    - !reference [.piglit-performance:arm64, needs]
 
-zink-freedreno-a630-traces:
+.zink-freedreno-a630-traces:
   extends:
     - a630-traces
     - .zink-turnip-rules
@@ -155,7 +157,6 @@ zink-freedreno-a630-traces:
   variables:
     PIGLIT_PROFILES: all
     PIGLIT_PLATFORM: gbm
-    RADV_PERFTEST: gpl
     HWCI_TEST_SCRIPT: ./install/valve/gl_combined_testing.sh
     B2C_JOB_SUCCESS_REGEX: 'Execution is over, pipeline status: 0'
 
@@ -175,6 +176,9 @@ zink-radv-vangogh-valve:
   extends:
     - .radv-zink-test-valve
     - .vangogh-test-valve
-    - .zink-radv-manual-rules
+    - .zink-radv-rules
   variables:
     GPU_VERSION: zink-radv-vangogh
+  # Override the list of tags to drop `priority:low`
+  tags:
+    - amdgpu:codename:VANGOGH

@@ -14,8 +14,8 @@
 #include <sys/mman.h>
 #include <agx_pack.h>
 
+#include "util/u_hexdump.h"
 #include "decode.h"
-#include "hexdump.h"
 #ifdef __APPLE__
 #include "agx_iokit.h"
 #endif
@@ -282,7 +282,7 @@ agxdecode_stateful(uint64_t va, const char *label, decode_cmd decoder,
 
       /* If we fail to decode, default to a hexdump (don't hang) */
       if (count == 0) {
-         hexdump(agxdecode_dump_stream, map, 8, false);
+         u_hexdump(agxdecode_dump_stream, map, 8, false);
          count = 8;
       }
 
@@ -376,7 +376,7 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       for (unsigned i = 0; i < temp.count; ++i) {
          agx_unpack(agxdecode_dump_stream, tex, TEXTURE, t);
          DUMP_CL(TEXTURE, tex, "Texture");
-         DUMP_CL(RENDER_TARGET, tex, "Render target");
+         DUMP_CL(PBE, tex, "PBE");
 
          tex += AGX_TEXTURE_LENGTH;
       }
@@ -389,7 +389,7 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
       DUMP_UNPACKED(USC_UNIFORM, temp, "Uniform\n");
 
       uint8_t *raw = agxdecode_fetch_gpu_mem(temp.buffer, 2 * temp.size_halfs);
-      hexdump(agxdecode_dump_stream, raw, 2 * temp.size_halfs, false);
+      u_hexdump(agxdecode_dump_stream, raw, 2 * temp.size_halfs, false);
 
       return AGX_USC_UNIFORM_LENGTH;
    }
@@ -401,7 +401,7 @@ agxdecode_usc(const uint8_t *map, UNUSED uint64_t *link, UNUSED bool verbose,
 
    default:
       fprintf(agxdecode_dump_stream, "Unknown USC control type: %u\n", type);
-      hexdump(agxdecode_dump_stream, map, 8, false);
+      u_hexdump(agxdecode_dump_stream, map, 8, false);
       return 8;
    }
 
@@ -438,8 +438,8 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
    PPP_PRINT(map, viewport, VIEWPORT, "Viewport");
    PPP_PRINT(map, w_clamp, W_CLAMP, "W clamp");
    PPP_PRINT(map, output_select, OUTPUT_SELECT, "Output select");
-   PPP_PRINT(map, varying_word_0, VARYING_0, "Varying word 0");
-   PPP_PRINT(map, varying_word_1, VARYING_1, "Varying word 1");
+   PPP_PRINT(map, varying_counts_32, VARYING_COUNTS, "Varying counts 32");
+   PPP_PRINT(map, varying_counts_16, VARYING_COUNTS, "Varying counts 16");
    PPP_PRINT(map, cull, CULL, "Cull");
    PPP_PRINT(map, cull_2, CULL_2, "Cull 2");
 
@@ -450,7 +450,7 @@ agxdecode_record(uint64_t va, size_t size, bool verbose)
 
       if (frag.cf_bindings) {
          uint8_t *cf = agxdecode_fetch_gpu_mem(frag.cf_bindings, 128);
-         hexdump(agxdecode_dump_stream, cf, 128, false);
+         u_hexdump(agxdecode_dump_stream, cf, 128, false);
 
          DUMP_CL(CF_BINDING_HEADER, cf, "Coefficient binding header:");
          cf += AGX_CF_BINDING_HEADER_LENGTH;
@@ -538,7 +538,7 @@ agxdecode_cdm(const uint8_t *map, uint64_t *link, bool verbose,
    default:
       fprintf(agxdecode_dump_stream, "Unknown CDM block type: %u\n",
               block_type);
-      hexdump(agxdecode_dump_stream, map, 8, false);
+      u_hexdump(agxdecode_dump_stream, map, 8, false);
       return 8;
    }
 }
@@ -653,7 +653,7 @@ agxdecode_vdm(const uint8_t *map, uint64_t *link, bool verbose,
    default:
       fprintf(agxdecode_dump_stream, "Unknown VDM block type: %u\n",
               block_type);
-      hexdump(agxdecode_dump_stream, map, 8, false);
+      u_hexdump(agxdecode_dump_stream, map, 8, false);
       return 8;
    }
 }
@@ -764,8 +764,8 @@ agxdecode_dump_mappings(unsigned map_handle)
               agx_alloc_types[mmap_array[i].type], mmap_array[i].ptr.gpu,
               mmap_array[i].handle);
 
-      hexdump(agxdecode_dump_stream, mmap_array[i].ptr.cpu, mmap_array[i].size,
-              false);
+      u_hexdump(agxdecode_dump_stream, mmap_array[i].ptr.cpu,
+                mmap_array[i].size, false);
       fprintf(agxdecode_dump_stream, "\n");
    }
 }

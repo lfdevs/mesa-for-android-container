@@ -25,6 +25,7 @@
 
 #include "aco_builder.h"
 #include "aco_ir.h"
+#include "aco_util.h"
 
 #include "common/sid.h"
 
@@ -65,20 +66,24 @@ struct remat_info {
 struct spill_ctx {
    RegisterDemand target_pressure;
    Program* program;
+   aco::monotonic_buffer_resource memory;
+
    std::vector<std::vector<RegisterDemand>> register_demand;
-   std::vector<std::map<Temp, Temp>> renames;
-   std::vector<std::unordered_map<Temp, uint32_t>> spills_entry;
-   std::vector<std::unordered_map<Temp, uint32_t>> spills_exit;
+   std::vector<aco::map<Temp, Temp>> renames;
+   std::vector<aco::unordered_map<Temp, uint32_t>> spills_entry;
+   std::vector<aco::unordered_map<Temp, uint32_t>> spills_exit;
 
    std::vector<bool> processed;
    std::stack<Block*, std::vector<Block*>> loop_header;
-   std::vector<std::unordered_map<Temp, std::pair<uint32_t, uint32_t>>> next_use_distances_start;
-   std::vector<std::unordered_map<Temp, std::pair<uint32_t, uint32_t>>> next_use_distances_end;
+
+   using next_use_distance_startend_type = aco::unordered_map<Temp, std::pair<uint32_t, uint32_t>>;
+   std::vector<next_use_distance_startend_type> next_use_distances_start;
+   std::vector<next_use_distance_startend_type> next_use_distances_end;
    std::vector<std::vector<std::pair<Temp, uint32_t>>> local_next_use_distance; /* Working buffer */
    std::vector<std::pair<RegClass, std::unordered_set<uint32_t>>> interferences;
    std::vector<std::vector<uint32_t>> affinities;
    std::vector<bool> is_reloaded;
-   std::unordered_map<Temp, remat_info> remat;
+   aco::unordered_map<Temp, remat_info> remat;
    std::set<Instruction*> unused_remats;
    unsigned wave_size;
 
@@ -88,11 +93,15 @@ struct spill_ctx {
 
    spill_ctx(const RegisterDemand target_pressure_, Program* program_,
              std::vector<std::vector<RegisterDemand>> register_demand_)
-       : target_pressure(target_pressure_), program(program_),
-         register_demand(std::move(register_demand_)), renames(program->blocks.size()),
-         spills_entry(program->blocks.size()), spills_exit(program->blocks.size()),
-         processed(program->blocks.size(), false), wave_size(program->wave_size),
-         sgpr_spill_slots(0), vgpr_spill_slots(0)
+       : target_pressure(target_pressure_), program(program_), memory(),
+         register_demand(std::move(register_demand_)),
+         renames(program->blocks.size(), aco::map<Temp, Temp>(memory)),
+         spills_entry(program->blocks.size(), aco::unordered_map<Temp, uint32_t>(memory)),
+         spills_exit(program->blocks.size(), aco::unordered_map<Temp, uint32_t>(memory)),
+         processed(program->blocks.size(), false),
+         next_use_distances_start(program->blocks.size(), next_use_distance_startend_type(memory)),
+         next_use_distances_end(program->blocks.size(), next_use_distance_startend_type(memory)),
+         remat(memory), wave_size(program->wave_size), sgpr_spill_slots(0), vgpr_spill_slots(0)
    {}
 
    void add_affinity(uint32_t first, uint32_t second)
@@ -218,10 +227,11 @@ next_uses_per_block(spill_ctx& ctx, unsigned block_idx, uint32_t& worklist)
 
       std::pair<uint32_t, uint32_t> distance{block_idx, 0};
 
-      auto it = instr->definitions[0].isTemp() ? next_use_distances_start.find(instr->definitions[0].getTemp())
-                                               : next_use_distances_start.end();
+      auto it = instr->definitions[0].isTemp()
+                   ? next_use_distances_start.find(instr->definitions[0].getTemp())
+                   : next_use_distances_start.end();
       if (it != next_use_distances_start.end() &&
-         phi_defs.insert(instr->definitions[0].getTemp()).second) {
+          phi_defs.insert(instr->definitions[0].getTemp()).second) {
          distance = it->second;
       }
 
@@ -273,9 +283,6 @@ next_uses_per_block(spill_ctx& ctx, unsigned block_idx, uint32_t& worklist)
 void
 compute_global_next_uses(spill_ctx& ctx)
 {
-   ctx.next_use_distances_start.resize(ctx.program->blocks.size());
-   ctx.next_use_distances_end.resize(ctx.program->blocks.size());
-
    uint32_t worklist = ctx.program->blocks.size();
    while (worklist) {
       unsigned block_idx = --worklist;
@@ -383,7 +390,7 @@ get_rematerialize_info(spill_ctx& ctx)
 
 void
 update_local_next_uses(spill_ctx& ctx, Block* block,
-                std::vector<std::vector<std::pair<Temp, uint32_t>>>& local_next_uses)
+                       std::vector<std::vector<std::pair<Temp, uint32_t>>>& local_next_uses)
 {
    if (local_next_uses.size() < block->instructions.size()) {
       /* Allocate more next-use-maps. Note that by never reducing the vector size, we enable
@@ -881,7 +888,7 @@ add_coupling_code(spill_ctx& ctx, Block* block, unsigned block_idx)
             Temp var = phi->operands[i].getTemp();
 
             std::map<Temp, Temp>::iterator rename_it = ctx.renames[pred_idx].find(var);
-            /* prevent the definining instruction from being DCE'd if it could be rematerialized */
+            /* prevent the defining instruction from being DCE'd if it could be rematerialized */
             if (rename_it == ctx.renames[preds[i]].end() && ctx.remat.count(var))
                ctx.unused_remats.erase(ctx.remat[var].instr);
 
@@ -1001,7 +1008,7 @@ add_coupling_code(spill_ctx& ctx, Block* block, unsigned block_idx)
                ctx.renames[pred_idx].find(phi->operands[i].getTemp());
             if (it != ctx.renames[pred_idx].end()) {
                phi->operands[i].setTemp(it->second);
-            /* prevent the definining instruction from being DCE'd if it could be rematerialized */
+               /* prevent the defining instruction from being DCE'd if it could be rematerialized */
             } else {
                auto remat_it = ctx.remat.find(phi->operands[i].getTemp());
                if (remat_it != ctx.remat.end()) {
@@ -1117,7 +1124,7 @@ add_coupling_code(spill_ctx& ctx, Block* block, unsigned block_idx)
                tmp = rename;
             } else {
                tmp = pair.first;
-               /* prevent the definining instruction from being DCE'd if it could be rematerialized */
+               /* prevent the defining instruction from being DCE'd if it could be rematerialized */
                if (ctx.remat.count(tmp))
                   ctx.unused_remats.erase(ctx.remat[tmp].instr);
             }
@@ -1162,7 +1169,7 @@ process_block(spill_ctx& ctx, unsigned block_idx, Block* block, RegisterDemand s
    std::vector<aco_ptr<Instruction>> instructions;
    unsigned idx = 0;
 
-   /* phis are handled separetely */
+   /* phis are handled separately */
    while (block->instructions[idx]->opcode == aco_opcode::p_phi ||
           block->instructions[idx]->opcode == aco_opcode::p_linear_phi) {
       instructions.emplace_back(std::move(block->instructions[idx++]));
@@ -1191,7 +1198,7 @@ process_block(spill_ctx& ctx, unsigned block_idx, Block* block, RegisterDemand s
             if (rename_it != ctx.renames[block_idx].end()) {
                op.setTemp(rename_it->second);
             } else {
-               /* prevent its definining instruction from being DCE'd if it could be rematerialized */
+               /* prevent its defining instruction from being DCE'd if it could be rematerialized */
                auto remat_it = ctx.remat.find(op.getTemp());
                if (remat_it != ctx.remat.end()) {
                   ctx.unused_remats.erase(remat_it->second.instr);
@@ -1325,7 +1332,7 @@ spill_block(spill_ctx& ctx, unsigned block_idx)
    Block* loop_header = ctx.loop_header.top();
 
    /* preserve original renames at end of loop header block */
-   std::map<Temp, Temp> renames = std::move(ctx.renames[loop_header->index]);
+   aco::map<Temp, Temp> renames = std::move(ctx.renames[loop_header->index]);
 
    /* add coupling code to all loop header predecessors */
    add_coupling_code(ctx, loop_header, loop_header->index);
@@ -1402,7 +1409,8 @@ load_scratch_resource(spill_ctx& ctx, Temp& scratch_offset, Block& block,
             continue;
 
          /* find p_logical_end */
-         std::vector<aco_ptr<Instruction>>& prev_instructions = ctx.program->blocks[block_idx].instructions;
+         std::vector<aco_ptr<Instruction>>& prev_instructions =
+            ctx.program->blocks[block_idx].instructions;
          unsigned idx = prev_instructions.size() - 1;
          while (prev_instructions[idx]->opcode != aco_opcode::p_logical_end)
             idx--;
@@ -1416,9 +1424,17 @@ load_scratch_resource(spill_ctx& ctx, Temp& scratch_offset, Block& block,
       return bld.copy(bld.def(s1), Operand::c32(offset));
 
    Temp private_segment_buffer = ctx.program->private_segment_buffer;
-   if (ctx.program->stage.hw != HWStage::CS)
+   if (!private_segment_buffer.bytes()) {
+      Temp addr_lo =
+         bld.sop1(aco_opcode::p_load_symbol, bld.def(s1), Operand::c32(aco_symbol_scratch_addr_lo));
+      Temp addr_hi =
+         bld.sop1(aco_opcode::p_load_symbol, bld.def(s1), Operand::c32(aco_symbol_scratch_addr_hi));
+      private_segment_buffer =
+         bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), addr_lo, addr_hi);
+   } else if (ctx.program->stage.hw != AC_HW_COMPUTE_SHADER) {
       private_segment_buffer =
          bld.smem(aco_opcode::s_load_dwordx2, bld.def(s2), private_segment_buffer, Operand::zero());
+   }
 
    if (offset)
       scratch_offset = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc),
@@ -1458,8 +1474,7 @@ setup_vgpr_spill_reload(spill_ctx& ctx, Block& block,
       if (ctx.scratch_rsrc == Temp()) {
          int32_t saddr = ctx.program->config->scratch_bytes_per_wave / ctx.program->wave_size -
                          ctx.program->dev.scratch_global_offset_min;
-         ctx.scratch_rsrc =
-            load_scratch_resource(ctx, scratch_offset, block, instructions, saddr);
+         ctx.scratch_rsrc = load_scratch_resource(ctx, scratch_offset, block, instructions, saddr);
       }
    } else {
       bool add_offset_to_sgpr =
@@ -1664,7 +1679,7 @@ assign_spill_slots_helper(spill_ctx& ctx, RegType type, std::vector<bool>& is_as
 void
 end_unused_spill_vgprs(spill_ctx& ctx, Block& block, std::vector<Temp>& vgpr_spill_temps,
                        const std::vector<uint32_t>& slots,
-                       const std::unordered_map<Temp, uint32_t>& spills)
+                       const aco::unordered_map<Temp, uint32_t>& spills)
 {
    std::vector<bool> is_used(vgpr_spill_temps.size());
    for (std::pair<Temp, uint32_t> pair : spills) {

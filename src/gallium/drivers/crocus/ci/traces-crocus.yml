@@ -89,7 +89,8 @@ traces:
     crocus-g41:
       checksum: 0f14a88f511cd886c920238c80017e5d
     crocus-hsw:
-      checksum: ec6b2615ab12db73126e06e6b20663ec
+      checksum: d77b3697a9b1a47611cde275aa6cb912
+      text: "https://gitlab.freedesktop.org/mesa/mesa/-/issues/9159"
   paraview/pv-manyspheres-v2.trace:
     crocus-hsw:
       checksum: 73e5d34fb13268b0c7126297bfc34965
@@ -115,7 +116,7 @@ traces:
       label: [skip, flakes]
   supertuxkart/supertuxkart-mansion-egl-gles-v2.trace:
     crocus-hsw:
-      checksum: c219d20ed5f701c4d4194e762501d4fd
+      checksum: c59dc93744d2dfcf172aa3f26ce2a62e
   valve/counterstrike-v2.trace:
     crocus-g41:
       checksum: 90c01e73b3544cb477ac6109bc61bef1

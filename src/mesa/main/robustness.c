@@ -133,28 +133,9 @@ _mesa_GetGraphicsResetStatusARB( void )
       return GL_NO_ERROR;
    }
 
-   if (ctx->Driver.GetGraphicsResetStatus) {
-      /* Query the reset status of this context from the driver core.
-       */
+   /* Query the reset status of this context from the driver core. */
+   if (ctx->Driver.GetGraphicsResetStatus)
       status = ctx->Driver.GetGraphicsResetStatus(ctx);
-
-      simple_mtx_lock(&ctx->Shared->Mutex);
-
-      /* If this context has not been affected by a GPU reset, check to see if
-       * some other context in the share group has been affected by a reset.
-       * If another context saw a reset but this context did not, assume that
-       * this context was not guilty.
-       */
-      if (status != GL_NO_ERROR) {
-         ctx->Shared->ShareGroupReset = true;
-         ctx->Shared->DisjointOperation = true;
-      } else if (ctx->Shared->ShareGroupReset && !ctx->ShareGroupReset) {
-         status = GL_INNOCENT_CONTEXT_RESET_ARB;
-      }
-
-      ctx->ShareGroupReset = ctx->Shared->ShareGroupReset;
-      simple_mtx_unlock(&ctx->Shared->Mutex);
-   }
 
    if (status != GL_NO_ERROR)
       _mesa_set_context_lost_dispatch(ctx);

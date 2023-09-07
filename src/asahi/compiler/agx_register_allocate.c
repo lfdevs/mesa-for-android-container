@@ -5,19 +5,28 @@
 
 #include "agx_builder.h"
 #include "agx_compiler.h"
+#include "agx_debug.h"
 
 /* SSA-based register allocator */
 
 struct ra_ctx {
    agx_context *shader;
    agx_block *block;
+   agx_instr *instr;
    uint8_t *ssa_to_reg;
    uint8_t *ncomps;
+   enum agx_size *sizes;
    BITSET_WORD *visited;
    BITSET_WORD *used_regs;
 
    /* For affinities */
    agx_instr **src_to_collect;
+
+   /* If bit i of used_regs is set, and register i is the first consecutive
+    * register holding an SSA value, then reg_to_ssa[i] is the SSA index of the
+    * value currently in register  i.
+    */
+   uint32_t reg_to_ssa[AGX_NUM_REGS];
 
    /* Maximum number of registers that RA is allowed to use */
    unsigned bound;
@@ -31,6 +40,7 @@ agx_write_registers(const agx_instr *I, unsigned d)
 
    switch (I->op) {
    case AGX_OPCODE_ITER:
+   case AGX_OPCODE_ITERPROJ:
       assert(1 <= I->channels && I->channels <= 4);
       return I->channels * size;
 
@@ -71,6 +81,124 @@ agx_split_width(const agx_instr *I)
    return width;
 }
 
+/*
+ * Return number of registers required for coordinates for a
+ * texture/image instruction. We handle layer + sample index as 32-bit even when
+ * only the lower 16-bits are present.
+ */
+static unsigned
+agx_coordinate_registers(const agx_instr *I)
+{
+   switch (I->dim) {
+   case AGX_DIM_1D:
+      return 2 * 1;
+   case AGX_DIM_1D_ARRAY:
+      return 2 * 2;
+   case AGX_DIM_2D:
+      return 2 * 2;
+   case AGX_DIM_2D_ARRAY:
+      return 2 * 3;
+   case AGX_DIM_2D_MS:
+      return 2 * 3;
+   case AGX_DIM_3D:
+      return 2 * 3;
+   case AGX_DIM_CUBE:
+      return 2 * 3;
+   case AGX_DIM_CUBE_ARRAY:
+      return 2 * 4;
+   case AGX_DIM_2D_MS_ARRAY:
+      return 2 * 3;
+   }
+
+   unreachable("Invalid texture dimension");
+}
+
+/*
+ * Calculate register demand in 16-bit registers. Becuase we allocate in SSA,
+ * this calculation is exact in linear-time. Depends on liveness information.
+ */
+static unsigned
+agx_calc_register_demand(agx_context *ctx, uint8_t *widths)
+{
+   /* Calculate demand at the start of each block based on live-in, then update
+    * for each instruction processed. Calculate rolling maximum.
+    */
+   unsigned max_demand = 0;
+
+   agx_foreach_block(ctx, block) {
+      unsigned demand = 0;
+
+      /* RA treats the nesting counter as alive throughout if control flow is
+       * used anywhere. This could be optimized.
+       */
+      if (ctx->any_cf)
+         demand++;
+
+      /* Everything live-in */
+      {
+         int i;
+         BITSET_FOREACH_SET(i, block->live_in, ctx->alloc) {
+            demand += widths[i];
+         }
+      }
+
+      max_demand = MAX2(demand, max_demand);
+
+      /* To handle non-power-of-two vectors, sometimes live range splitting
+       * needs extra registers for 1 instruction. This counter tracks the number
+       * of registers to be freed after 1 extra instruction.
+       */
+      unsigned late_kill_count = 0;
+
+      agx_foreach_instr_in_block(block, I) {
+         /* Handle late-kill registers from last instruction */
+         demand -= late_kill_count;
+         late_kill_count = 0;
+
+         /* Kill sources the first time we see them */
+         agx_foreach_src(I, s) {
+            if (!I->src[s].kill)
+               continue;
+            assert(I->src[s].type == AGX_INDEX_NORMAL);
+
+            bool skip = false;
+
+            for (unsigned backwards = 0; backwards < s; ++backwards) {
+               if (agx_is_equiv(I->src[backwards], I->src[s])) {
+                  skip = true;
+                  break;
+               }
+            }
+
+            if (!skip)
+               demand -= widths[I->src[s].value];
+         }
+
+         /* Make destinations live */
+         agx_foreach_dest(I, d) {
+            if (agx_is_null(I->dest[d]))
+               continue;
+            assert(I->dest[d].type == AGX_INDEX_NORMAL);
+
+            /* Live range splits allocate at power-of-two granularity. Round up
+             * destination sizes (temporarily) to powers-of-two.
+             */
+            unsigned real_width = widths[I->dest[d].value];
+            unsigned pot_width = util_next_power_of_two(real_width);
+
+            demand += pot_width;
+            late_kill_count += (pot_width - real_width);
+         }
+
+         max_demand = MAX2(demand, max_demand);
+      }
+
+      demand -= late_kill_count;
+   }
+
+   return max_demand;
+}
+
 unsigned
 agx_read_registers(const agx_instr *I, unsigned s)
 {
@@ -93,7 +221,11 @@ agx_read_registers(const agx_instr *I, unsigned s)
          /* Depth (bit 0) is fp32, stencil (bit 1) is u16 in the hw but we pad
           * up to u32 for simplicity
           */
-         return 2 * (!!(I->zs & 1) + !!(I->zs & 2));
+         bool z = !!(I->zs & 1);
+         bool s = !!(I->zs & 2);
+         assert(z || s);
+
+         return (z && s) ? 4 : z ? 2 : 1;
       } else {
          return 1;
       }
@@ -101,31 +233,7 @@ agx_read_registers(const agx_instr *I, unsigned s)
    case AGX_OPCODE_TEXTURE_LOAD:
    case AGX_OPCODE_TEXTURE_SAMPLE:
       if (s == 0) {
-         /* Coordinates. We handle layer + sample index as 32-bit even when only
-          * the lower 16-bits are present.
-          */
-         switch (I->dim) {
-         case AGX_DIM_1D:
-            return 2 * 1;
-         case AGX_DIM_1D_ARRAY:
-            return 2 * 2;
-         case AGX_DIM_2D:
-            return 2 * 2;
-         case AGX_DIM_2D_ARRAY:
-            return 2 * 3;
-         case AGX_DIM_2D_MS:
-            return 2 * 3;
-         case AGX_DIM_3D:
-            return 2 * 3;
-         case AGX_DIM_CUBE:
-            return 2 * 3;
-         case AGX_DIM_CUBE_ARRAY:
-            return 2 * 4;
-         case AGX_DIM_2D_MS_ARRAY:
-            return 2 * 3;
-         }
-
-         unreachable("Invalid texture dimension");
+         return agx_coordinate_registers(I);
       } else if (s == 1) {
          /* LOD */
          if (I->lod_mode == AGX_LOD_MODE_LOD_GRAD) {
@@ -167,25 +275,344 @@ agx_read_registers(const agx_instr *I, unsigned s)
    }
 }
 
-static unsigned
-find_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned max)
+static bool
+find_regs_simple(struct ra_ctx *rctx, unsigned count, unsigned align,
+                 unsigned *out)
 {
-   assert(count >= 1);
-
-   for (unsigned reg = 0; reg + count <= max; reg += align) {
-      if (!BITSET_TEST_RANGE(used_regs, reg, reg + count - 1))
-         return reg;
+   for (unsigned reg = 0; reg + count <= rctx->bound; reg += align) {
+      if (!BITSET_TEST_RANGE(rctx->used_regs, reg, reg + count - 1)) {
+         *out = reg;
+         return true;
+      }
    }
 
-   /* Couldn't find a free register, dump the state of the register file */
-   fprintf(stderr, "Failed to find register of size %u aligned %u max %u.\n",
-           count, align, max);
+   return false;
+}
 
-   fprintf(stderr, "Register file:\n");
-   for (unsigned i = 0; i < BITSET_WORDS(max); ++i)
-      fprintf(stderr, "    %08X\n", used_regs[i]);
+/*
+ * Search the register file for the best contiguous aligned region of the given
+ * size to evict when shuffling registers. The region must not contain any
+ * register marked in the passed bitset.
+ *
+ * As a hint, this also takes in the set of registers from killed sources passed
+ * to this instruction. These should be deprioritized, since they are more
+ * expensive to use (extra moves to shuffle the contents away).
+ *
+ * Precondition: such a region exists.
+ *
+ * Postcondition: at least one register in the returned region is already free.
+ */
+static unsigned
+find_best_region_to_evict(struct ra_ctx *rctx, unsigned size,
+                          BITSET_WORD *already_evicted, BITSET_WORD *killed)
+{
+   assert(util_is_power_of_two_or_zero(size) && "precondition");
+   assert((rctx->bound % size) == 0 &&
+          "register file size must be aligned to the maximum vector size");
 
-   unreachable("Could not find a free register");
+   unsigned best_base = ~0;
+   unsigned best_moves = ~0;
+
+   for (unsigned base = 0; base + size <= rctx->bound; base += size) {
+      /* r0l is unevictable, skip it. By itself, this does not pose a problem.
+       * We are allocating n registers, but the region containing r0l has at
+       * most n-1 free. Since there are at least n free registers total, there
+       * is at least 1 free register outside this region. Thus the region
+       * containing that free register contains at most n-1 occupied registers.
+       * In the worst case, those n-1 occupied registers are moved to the region
+       * with r0l and then the n free registers are used for the destination.
+       * Thus, we do not need extra registers to handle "single point"
+       * unevictability.
+       */
+      if (base == 0 && rctx->shader->any_cf)
+         continue;
+
+      /* Do not evict the same register multiple times. It's not necessary since
+       * we're just shuffling, there are enough free registers elsewhere.
+       */
+      if (BITSET_TEST_RANGE(already_evicted, base, base + size - 1))
+         continue;
+
+      /* Estimate the number of moves required if we pick this region */
+      unsigned moves = 0;
+      bool any_free = false;
+
+      for (unsigned reg = base; reg < base + size; ++reg) {
+         /* We need a move for each blocked register (TODO: we only need a
+          * single move for 32-bit pairs, could optimize to use that instead.)
+          */
+         if (BITSET_TEST(rctx->used_regs, reg))
+            moves++;
+         else
+            any_free = true;
+
+         /* Each clobbered killed register requires a move or a swap. Since
+          * swaps require more instructions, assign a higher cost here. In
+          * practice, 3 is too high but 2 is slightly better than 1.
+          */
+         if (BITSET_TEST(killed, reg))
+            moves += 2;
+      }
+
+      /* Pick the region requiring fewest moves as a heuristic. Regions with no
+       * free registers are skipped even if the heuristic estimates a lower cost
+       * (due to killed sources), since the recursive splitting algorithm
+       * requires at least one free register.
+       */
+      if (any_free && moves < best_moves) {
+         best_moves = moves;
+         best_base = base;
+      }
+   }
+
+   assert(best_base < rctx->bound &&
+          "not enough registers (should have spilled already)");
+   return best_base;
+}
+
+static unsigned
+assign_regs_by_copying(struct ra_ctx *rctx, unsigned npot_count, unsigned align,
+                       const agx_instr *I, struct util_dynarray *copies,
+                       BITSET_WORD *clobbered, BITSET_WORD *killed)
+{
+   /* XXX: This needs some special handling but so far it has been prohibitively
+    * difficult to hit the case
+    */
+   if (I->op == AGX_OPCODE_PHI)
+      unreachable("TODO");
+
+   /* Expand the destination to the next power-of-two size. This simplifies
+    * splitting and is accounted for by the demand calculation, so is legal.
+    */
+   unsigned count = util_next_power_of_two(npot_count);
+   assert(align <= count && "still aligned");
+   align = count;
+
+   /* There's not enough contiguous room in the register file. We need to
+    * shuffle some variables around. Look for a range of the register file
+    * that is partially blocked.
+    */
+   unsigned base = find_best_region_to_evict(rctx, count, clobbered, killed);
+
+   assert(count <= 16 && "max allocation size (conservative)");
+   BITSET_DECLARE(evict_set, 16) = {0};
+
+   /* Store the set of blocking registers that need to be evicted */
+   for (unsigned i = 0; i < count; ++i) {
+      if (BITSET_TEST(rctx->used_regs, base + i)) {
+         BITSET_SET(evict_set, i);
+      }
+   }
+
+   /* We are going to allocate the destination to this range, so it is now fully
+    * used. Mark it as such so we don't reassign here later.
+    */
+   BITSET_SET_RANGE(rctx->used_regs, base, base + count - 1);
+
+   /* Before overwriting the range, we need to evict blocked variables */
+   for (unsigned i = 0; i < 16; ++i) {
+      /* Look for subranges that needs eviction */
+      if (!BITSET_TEST(evict_set, i))
+         continue;
+
+      unsigned reg = base + i;
+      uint32_t ssa = rctx->reg_to_ssa[reg];
+      uint32_t nr = rctx->ncomps[ssa];
+      unsigned align = agx_size_align_16(rctx->sizes[ssa]);
+
+      assert(nr >= 1 && "must be assigned");
+      assert(rctx->ssa_to_reg[ssa] == reg &&
+             "variable must start within the range, since vectors are limited");
+
+      for (unsigned j = 0; j < nr; ++j) {
+         assert(BITSET_TEST(evict_set, i + j) &&
+                "variable is allocated contiguous and vectors are limited, "
+                "so evicted in full");
+      }
+
+      /* Assign a new location for the variable. This terminates with finite
+       * recursion because nr is decreasing because of the gap.
+       */
+      assert(nr < count && "fully contained in range that's not full");
+      unsigned new_reg =
+         assign_regs_by_copying(rctx, nr, align, I, copies, clobbered, killed);
+
+      /* Copy the variable over, register by register */
+      for (unsigned i = 0; i < nr; i += align) {
+         struct agx_copy copy = {
+            .dest = new_reg + i,
+            .src = agx_register(reg + i, rctx->sizes[ssa]),
+         };
+
+         assert((copy.dest % agx_size_align_16(rctx->sizes[ssa])) == 0 &&
+                "new dest must be aligned");
+         assert((copy.src.value % agx_size_align_16(rctx->sizes[ssa])) == 0 &&
+                "src must be aligned");
+         util_dynarray_append(copies, struct agx_copy, copy);
+      }
+
+      /* Mark down the set of clobbered registers, so that killed sources may be
+       * handled correctly later.
+       */
+      BITSET_SET_RANGE(clobbered, new_reg, new_reg + nr - 1);
+
+      /* Update bookkeeping for this variable */
+      rctx->ssa_to_reg[ssa] = new_reg;
+      rctx->reg_to_ssa[new_reg] = ssa;
+
+      /* Skip to the next variable */
+      i += nr - 1;
+   }
+
+   /* We overallocated for non-power-of-two vectors. Free up the excess now.
+    * This is modelled as late kill in demand calculation.
+    */
+   if (npot_count != count)
+      BITSET_CLEAR_RANGE(rctx->used_regs, base + npot_count, base + count - 1);
+
+   return base;
+}
+
+static int
+sort_by_size(const void *a_, const void *b_, void *sizes_)
+{
+   const enum agx_size *sizes = sizes_;
+   const unsigned *a = a_, *b = b_;
+
+   return sizes[*b] - sizes[*a];
+}
+
+/*
+ * Allocating a destination of n consecutive registers may require moving those
+ * registers' contents to the locations of killed sources. For the instruction
+ * to read the correct values, the killed sources themselves need to be moved to
+ * the space where the destination will go.
+ *
+ * This is legal because there is no interference between the killed source and
+ * the destination. This is always possible because, after this insertion, the
+ * destination needs to contain the killed sources already overlapping with the
+ * destination (size k) plus the killed sources clobbered to make room for
+ * livethrough sources overlapping with the destination (at most size |dest|-k),
+ * so the total size is at most k + |dest| - k = |dest| and so fits in the dest.
+ * Sorting by alignment may be necessary.
+ */
+static void
+insert_copies_for_clobbered_killed(struct ra_ctx *rctx, unsigned reg,
+                                   unsigned count, const agx_instr *I,
+                                   struct util_dynarray *copies,
+                                   BITSET_WORD *clobbered)
+{
+   unsigned vars[16] = {0};
+   unsigned nr_vars = 0;
+
+   /* Precondition: the nesting counter is not overwritten. Therefore we do not
+    * have to move it.  find_best_region_to_evict knows better than to try.
+    */
+   assert(!(reg == 0 && rctx->shader->any_cf) && "r0l is never moved");
+
+   /* Consider the destination clobbered for the purpose of source collection.
+    * This way, killed sources already in the destination will be preserved
+    * (though possibly compacted).
+    */
+   BITSET_SET_RANGE(clobbered, reg, reg + count - 1);
+
+   /* Collect killed clobbered sources, if any */
+   agx_foreach_ssa_src(I, s) {
+      unsigned reg = rctx->ssa_to_reg[I->src[s].value];
+
+      if (I->src[s].kill && BITSET_TEST(clobbered, reg)) {
+         assert(nr_vars < ARRAY_SIZE(vars) &&
+                "cannot clobber more than max variable size");
+
+         vars[nr_vars++] = I->src[s].value;
+      }
+   }
+
+   if (nr_vars == 0)
+      return;
+
+   /* Sort by descending alignment so they are packed with natural alignment */
+   qsort_r(vars, nr_vars, sizeof(vars[0]), sort_by_size, rctx->sizes);
+
+   /* Reassign in the destination region */
+   unsigned base = reg;
+
+   /* We align vectors to their sizes, so this assertion holds as long as no
+    * instruction has a source whose scalar size is greater than the entire size
+    * of the vector destination. Yet the killed source must fit within this
+    * destination, so the destination must be bigger and therefore have bigger
+    * alignment.
+    */
+   assert((base % agx_size_align_16(rctx->sizes[vars[0]])) == 0 &&
+          "destination alignment >= largest killed source alignment");
+
+   for (unsigned i = 0; i < nr_vars; ++i) {
+      unsigned var = vars[i];
+      unsigned var_base = rctx->ssa_to_reg[var];
+      unsigned var_count = rctx->ncomps[var];
+      unsigned var_align = agx_size_align_16(rctx->sizes[var]);
+
+      assert((base % var_align) == 0 && "induction");
+      assert((var_count % var_align) == 0 && "no partial variables");
+
+      for (unsigned j = 0; j < var_count; j += var_align) {
+         struct agx_copy copy = {
+            .dest = base + j,
+            .src = agx_register(var_base + j, rctx->sizes[var]),
+         };
+
+         util_dynarray_append(copies, struct agx_copy, copy);
+      }
+
+      rctx->ssa_to_reg[var] = base;
+      rctx->reg_to_ssa[base] = var;
+
+      base += var_count;
+   }
+
+   assert(base <= reg + count && "no overflow");
+}
+
+static unsigned
+find_regs(struct ra_ctx *rctx, agx_instr *I, unsigned dest_idx, unsigned count,
+          unsigned align)
+{
+   unsigned reg;
+   assert(count == align);
+
+   if (find_regs_simple(rctx, count, align, &reg)) {
+      return reg;
+   } else {
+      BITSET_DECLARE(clobbered, AGX_NUM_REGS) = {0};
+      BITSET_DECLARE(killed, AGX_NUM_REGS) = {0};
+      struct util_dynarray copies = {0};
+      util_dynarray_init(&copies, NULL);
+
+      /* Initialize the set of registers killed by this instructions' sources */
+      agx_foreach_ssa_src(I, s) {
+         unsigned v = I->src[s].value;
+
+         if (BITSET_TEST(rctx->visited, v)) {
+            unsigned base = rctx->ssa_to_reg[v];
+            unsigned nr = rctx->ncomps[v];
+            BITSET_SET_RANGE(killed, base, base + nr - 1);
+         }
+      }
+
+      reg = assign_regs_by_copying(rctx, count, align, I, &copies, clobbered,
+                                   killed);
+      insert_copies_for_clobbered_killed(rctx, reg, count, I, &copies,
+                                         clobbered);
+
+      /* Insert the necessary copies */
+      agx_builder b = agx_init_builder(rctx->shader, agx_before_instr(I));
+      agx_emit_parallel_copies(
+         &b, copies.data, util_dynarray_num_elements(&copies, struct agx_copy));
+
+      /* assign_regs asserts this is cleared, so clear to be reassigned */
+      BITSET_CLEAR_RANGE(rctx->used_regs, reg, reg + count - 1);
+      return reg;
+   }
 }
 
 /*
@@ -201,14 +628,61 @@ find_regs(BITSET_WORD *used_regs, unsigned count, unsigned align, unsigned max)
 static void
 reserve_live_in(struct ra_ctx *rctx)
 {
+   unsigned nr_preds = agx_num_predecessors(rctx->block);
+   agx_builder b =
+      agx_init_builder(rctx->shader, agx_before_block(rctx->block));
+
    int i;
    BITSET_FOREACH_SET(i, rctx->block->live_in, rctx->shader->alloc) {
       /* Skip values defined in loops when processing the loop header */
       if (!BITSET_TEST(rctx->visited, i))
          continue;
 
-      for (unsigned j = 0; j < rctx->ncomps[i]; ++j)
-         BITSET_SET(rctx->used_regs, rctx->ssa_to_reg[i] + j);
+      unsigned base;
+
+      /* If we split live ranges, the variable might be defined differently at
+       * the end of each predecessor. Join them together with a phi inserted at
+       * the start of the block.
+       */
+      if (nr_preds > 1) {
+         /* We'll fill in the destination after, to coalesce one of the moves */
+         agx_instr *phi = agx_phi_to(&b, agx_null(), nr_preds);
+         enum agx_size size = rctx->sizes[i];
+
+         agx_foreach_predecessor(rctx->block, pred) {
+            unsigned pred_idx = agx_predecessor_index(rctx->block, *pred);
+
+            if ((*pred)->ssa_to_reg_out == NULL) {
+               /* If this is a loop header, we don't know where the register
+                * will end up. So, we create a phi conservatively but don't fill
+                * it in until the end of the loop. Stash in the information
+                * we'll need to fill in the real register later.
+                */
+               phi->src[pred_idx] = agx_get_index(i, size);
+            } else {
+               /* Otherwise, we can build the phi now */
+               unsigned reg = (*pred)->ssa_to_reg_out[i];
+               phi->src[pred_idx] = agx_register(reg, size);
+            }
+         }
+
+         /* Pick the phi destination to coalesce a move. Predecessor ordering is
+          * stable, so this means all live-in values get their registers from a
+          * particular predecessor. That means that such a register allocation
+          * is valid here, because it was valid in the predecessor.
+          */
+         phi->dest[0] = phi->src[0];
+         base = phi->dest[0].value;
+         rctx->ssa_to_reg[i] = base;
+      } else {
+         /* If we don't emit a phi, there is already a unique register */
+         base = rctx->ssa_to_reg[i];
+      }
+
+      for (unsigned j = 0; j < rctx->ncomps[i]; ++j) {
+         BITSET_SET(rctx->used_regs, base + j);
+         rctx->reg_to_ssa[base + j] = i;
+      }
    }
 }
 
@@ -224,8 +698,33 @@ assign_regs(struct ra_ctx *rctx, agx_index v, unsigned reg)
 
    assert(rctx->ncomps[v.value] >= 1);
    unsigned end = reg + rctx->ncomps[v.value] - 1;
+
    assert(!BITSET_TEST_RANGE(rctx->used_regs, reg, end) && "no interference");
    BITSET_SET_RANGE(rctx->used_regs, reg, end);
+
+   rctx->reg_to_ssa[reg] = v.value;
+}
+
+static void
+agx_set_sources(struct ra_ctx *rctx, agx_instr *I)
+{
+   agx_foreach_ssa_src(I, s) {
+      if (BITSET_TEST(rctx->visited, I->src[s].value)) {
+         unsigned v = rctx->ssa_to_reg[I->src[s].value];
+         I->src[s] =
+            agx_replace_index(I->src[s], agx_register(v, I->src[s].size));
+      }
+   }
+}
+
+static void
+agx_set_dests(struct ra_ctx *rctx, agx_instr *I)
+{
+   agx_foreach_ssa_dest(I, s) {
+      unsigned v = rctx->ssa_to_reg[I->dest[s].value];
+      I->dest[s] =
+         agx_replace_index(I->dest[s], agx_register(v, I->dest[s].size));
+   }
 }
 
 static unsigned
@@ -246,9 +745,10 @@ pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
    agx_index idx = I->dest[d];
    assert(idx.type == AGX_INDEX_NORMAL);
 
-   unsigned count = agx_write_registers(I, d);
-   unsigned align = agx_size_align_16(idx.size);
+   unsigned count = rctx->ncomps[idx.value];
    assert(count >= 1);
+
+   unsigned align = count;
 
    /* Try to allocate collects compatibly with their sources */
    if (I->op == AGX_OPCODE_COLLECT) {
@@ -310,7 +810,7 @@ pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
             return our_reg;
       }
 
-      unsigned collect_align = agx_size_align_16(collect->dest[0].size);
+      unsigned collect_align = rctx->ncomps[collect->dest[0].value];
       unsigned offset = our_source * align;
 
       /* Prefer ranges of the register file that leave room for all sources of
@@ -337,7 +837,7 @@ pick_regs(struct ra_ctx *rctx, agx_instr *I, unsigned d)
    }
 
    /* Default to any contiguous sequence of registers */
-   return find_regs(rctx->used_regs, count, align, rctx->bound);
+   return find_regs(rctx, I, d, count, align);
 }
 
 /** Assign registers to SSA values in a block. */
@@ -361,6 +861,8 @@ agx_ra_assign_local(struct ra_ctx *rctx)
       BITSET_SET(used_regs, 0);
 
    agx_foreach_instr_in_block(block, I) {
+      rctx->instr = I;
+
       /* Optimization: if a split contains the last use of a vector, the split
        * can be removed by assigning the destinations overlapping the source.
        */
@@ -378,6 +880,15 @@ agx_ra_assign_local(struct ra_ctx *rctx)
                assign_regs(rctx, I->dest[d], offset_reg);
          }
 
+         unsigned excess =
+            rctx->ncomps[I->src[0].value] - (I->nr_dests * width);
+         if (excess) {
+            BITSET_CLEAR_RANGE(used_regs, reg + (I->nr_dests * width),
+                               reg + rctx->ncomps[I->src[0].value] - 1);
+         }
+
+         agx_set_sources(rctx, I);
+         agx_set_dests(rctx, I);
          continue;
       } else if (I->op == AGX_OPCODE_PRELOAD) {
          /* We must coalesce all preload moves */
@@ -385,6 +896,7 @@ agx_ra_assign_local(struct ra_ctx *rctx)
          assert(I->src[0].type == AGX_INDEX_REGISTER);
 
          assign_regs(rctx, I->dest[0], I->src[0].value);
+         agx_set_dests(rctx, I);
          continue;
       }
 
@@ -405,10 +917,36 @@ agx_ra_assign_local(struct ra_ctx *rctx)
       agx_foreach_ssa_dest(I, d) {
          assign_regs(rctx, I->dest[d], pick_regs(rctx, I, d));
       }
+
+      agx_set_sources(rctx, I);
+      agx_set_dests(rctx, I);
    }
+
+   block->ssa_to_reg_out = calloc(rctx->shader->alloc, sizeof(uint8_t));
+   memcpy(block->ssa_to_reg_out, rctx->ssa_to_reg,
+          rctx->shader->alloc * sizeof(uint8_t));
 
    STATIC_ASSERT(sizeof(block->regs_out) == sizeof(used_regs));
    memcpy(block->regs_out, used_regs, sizeof(used_regs));
+
+   /* In case we split live ranges, fix up the phis in the loop header
+    * successor for loop exit blocks.
+    */
+   if (block->loop_header) {
+      agx_foreach_successor(block, succ) {
+         unsigned pred_idx = agx_predecessor_index(succ, block);
+
+         agx_foreach_phi_in_block(succ, phi) {
+            if (phi->src[pred_idx].type == AGX_INDEX_NORMAL) {
+               /* This source needs a fixup */
+               unsigned value = phi->src[pred_idx].value;
+
+               phi->src[pred_idx] = agx_register(rctx->ssa_to_reg[value],
+                                                 phi->src[pred_idx].size);
+            }
+         }
+      }
+   }
 }
 
 /*
@@ -479,6 +1017,7 @@ agx_ra(agx_context *ctx)
    uint8_t *ssa_to_reg = calloc(ctx->alloc, sizeof(uint8_t));
    uint8_t *ncomps = calloc(ctx->alloc, sizeof(uint8_t));
    agx_instr **src_to_collect = calloc(ctx->alloc, sizeof(agx_instr *));
+   enum agx_size *sizes = calloc(ctx->alloc, sizeof(enum agx_size));
    BITSET_WORD *visited = calloc(BITSET_WORDS(ctx->alloc), sizeof(BITSET_WORD));
 
    agx_foreach_instr_global(ctx, I) {
@@ -492,9 +1031,27 @@ agx_ra(agx_context *ctx)
       agx_foreach_ssa_dest(I, d) {
          unsigned v = I->dest[d].value;
          assert(ncomps[v] == 0 && "broken SSA");
-         ncomps[v] = agx_write_registers(I, d);
+         /* Round up vectors for easier live range splitting */
+         ncomps[v] = util_next_power_of_two(agx_write_registers(I, d));
+         sizes[v] = I->dest[d].size;
       }
    }
+
+   /* Calculate the demand and use it to bound register assignment */
+   unsigned demand = agx_calc_register_demand(ctx, ncomps);
+
+   /* Round up the demand to the maximum number of registers we can use without
+    * affecting occupancy. This reduces live range splitting.
+    */
+   unsigned max_regs = agx_occupancy_for_register_count(demand).max_registers;
+
+   /* Or, we can bound tightly for debugging */
+   if (agx_compiler_debug & AGX_DBG_DEMAND)
+      max_regs = ALIGN_POT(MAX2(max_regs, 12), 8);
+
+   /* ...but not too tightly */
+   assert((max_regs % 8) == 0 && "occupancy limits are 8 register aligned");
+   assert(max_regs >= (6 * 2) && "space for vertex shader preloading");
 
    /* Assign registers in dominance-order. This coincides with source-order due
     * to a NIR invariant, so we do not need special handling for this.
@@ -506,8 +1063,9 @@ agx_ra(agx_context *ctx)
          .ssa_to_reg = ssa_to_reg,
          .src_to_collect = src_to_collect,
          .ncomps = ncomps,
+         .sizes = sizes,
          .visited = visited,
-         .bound = AGX_NUM_REGS,
+         .bound = max_regs,
       });
    }
 
@@ -521,6 +1079,8 @@ agx_ra(agx_context *ctx)
     */
    if (ctx->nir->info.stage == MESA_SHADER_VERTEX)
       ctx->max_reg = MAX2(ctx->max_reg, 6 * 2);
+
+   assert(ctx->max_reg <= max_regs);
 
    agx_foreach_instr_global(ctx, ins) {
       agx_foreach_ssa_src(ins, s) {
@@ -563,23 +1123,27 @@ agx_ra(agx_context *ctx)
          agx_remove_instruction(ins);
          continue;
       } else if (ins->op == AGX_OPCODE_SPLIT) {
-         assert(ins->src[0].type == AGX_INDEX_REGISTER);
-         unsigned base = ins->src[0].value;
-         unsigned width = agx_size_align_16(agx_split_width(ins));
+         assert(ins->src[0].type == AGX_INDEX_REGISTER ||
+                ins->src[0].type == AGX_INDEX_UNIFORM);
 
          struct agx_copy copies[4];
          assert(ins->nr_dests <= ARRAY_SIZE(copies));
 
          unsigned n = 0;
+         unsigned width = agx_size_align_16(agx_split_width(ins));
 
          /* Move the sources */
          agx_foreach_dest(ins, i) {
             if (ins->dest[i].type != AGX_INDEX_REGISTER)
                continue;
 
+            agx_index src = ins->src[0];
+            src.size = ins->dest[i].size;
+            src.value += (i * width);
+
             copies[n++] = (struct agx_copy){
                .dest = ins->dest[i].value,
-               .src = agx_register(base + (i * width), ins->dest[i].size),
+               .src = src,
             };
          }
 
@@ -628,9 +1192,15 @@ agx_ra(agx_context *ctx)
       }
    }
 
+   agx_foreach_block(ctx, block) {
+      free(block->ssa_to_reg_out);
+      block->ssa_to_reg_out = NULL;
+   }
+
    free(src_to_collect);
    free(ssa_to_reg);
    free(ncomps);
+   free(sizes);
    free(visited);
    free(alloc);
 }

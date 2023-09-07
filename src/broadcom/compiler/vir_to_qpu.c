@@ -214,9 +214,10 @@ v3d_generate_code_block(struct v3d_compile *c,
                                 break;
                         case QFILE_NULL:
                                 /* QFILE_NULL is an undef, so we can load
-                                 * anything. Using reg 0
+                                 * anything. Using a reg that doesn't have
+                                 * sched. restrictions.
                                  */
-                                src[i] = qpu_reg(0);
+                                src[i] = qpu_reg(5);
                                 break;
                         case QFILE_LOAD_IMM:
                                 assert(!"not reached");
@@ -229,6 +230,7 @@ v3d_generate_code_block(struct v3d_compile *c,
                                 break;
 
                         case QFILE_VPM:
+                                assert(c->devinfo->ver < 40);
                                 assert((int)qinst->src[i].index >=
                                        last_vpm_read_index);
                                 (void)last_vpm_read_index;

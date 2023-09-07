@@ -632,8 +632,7 @@ opt_find_array_copies_block(nir_builder *b, nir_block *block,
 static bool
 opt_find_array_copies_impl(nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    bool progress = false;
 
@@ -641,7 +640,7 @@ opt_find_array_copies_impl(nir_function_impl *impl)
    s.dead_ctx = ralloc_context(NULL);
    s.var_nodes = _mesa_pointer_hash_table_create(s.dead_ctx);
    s.cast_nodes = _mesa_pointer_hash_table_create(s.dead_ctx);
-   nir_builder_init(&s.builder, impl);
+   s.builder = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       if (opt_find_array_copies_block(&b, block, &s))
@@ -676,8 +675,8 @@ nir_opt_find_array_copies(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl && opt_find_array_copies_impl(function->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (opt_find_array_copies_impl(impl))
          progress = true;
    }
 

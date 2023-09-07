@@ -210,7 +210,7 @@ tu_cs_emit_sync_breadcrumb(struct tu_cs *cs, uint8_t opcode, uint16_t cnt)
    /* Wait until CPU acknowledges the value written by GPU */
    emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
    tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) |
-                     CP_WAIT_REG_MEM_0_POLL_MEMORY);
+                     CP_WAIT_REG_MEM_0_POLL(POLL_MEMORY));
    tu_cs_emit_qw(
       cs, device->global_bo->iova + gb_offset(breadcrumb_cpu_sync_seqno));
    tu_cs_emit(cs, CP_WAIT_REG_MEM_3_REF(current_breadcrumb));

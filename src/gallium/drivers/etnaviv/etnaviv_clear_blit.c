@@ -47,7 +47,7 @@
 
 /* Save current state for blitter operation */
 void
-etna_blit_save_state(struct etna_context *ctx)
+etna_blit_save_state(struct etna_context *ctx, bool render_cond)
 {
    util_blitter_save_fragment_constant_buffer_slot(ctx->blitter,
                                                    ctx->constant_buffer[PIPE_SHADER_FRAGMENT].cb);
@@ -67,6 +67,13 @@ etna_blit_save_state(struct etna_context *ctx)
          ctx->num_fragment_samplers, (void **)ctx->sampler);
    util_blitter_save_fragment_sampler_views(ctx->blitter,
          ctx->num_fragment_sampler_views, ctx->sampler_view);
+
+   if (!render_cond)
+      util_blitter_save_render_condition(ctx->blitter,
+            ctx->cond_query, ctx->cond_cond, ctx->cond_mode);
+
+   if (DBG_ENABLED(ETNA_DBG_DEQP))
+      util_blitter_save_so_targets(ctx->blitter, 0, NULL);
 }
 
 uint64_t
@@ -97,6 +104,8 @@ etna_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
    struct etna_context *ctx = etna_context(pctx);
    struct pipe_blit_info info = *blit_info;
 
+   if (info.render_condition_enable && !etna_render_condition_check(pctx))
+      return;
 
    if (ctx->blit(pctx, &info))
       goto success;
@@ -116,7 +125,7 @@ etna_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
       return;
    }
 
-   etna_blit_save_state(ctx);
+   etna_blit_save_state(ctx, info.render_condition_enable);
    util_blitter_blit(ctx->blitter, &info);
 
 success:
@@ -134,7 +143,7 @@ etna_clear_render_target(struct pipe_context *pctx, struct pipe_surface *dst,
 
    /* XXX could fall back to RS when target area is full screen / resolveable
     * and no TS. */
-   etna_blit_save_state(ctx);
+   etna_blit_save_state(ctx, false);
    util_blitter_clear_render_target(ctx->blitter, dst, color, dstx, dsty, width, height);
 }
 
@@ -148,7 +157,7 @@ etna_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *dst,
 
    /* XXX could fall back to RS when target area is full screen / resolveable
     * and no TS. */
-   etna_blit_save_state(ctx);
+   etna_blit_save_state(ctx, false);
    util_blitter_clear_depth_stencil(ctx->blitter, dst, clear_flags, depth,
                                     stencil, dstx, dsty, width, height);
 }
@@ -163,10 +172,11 @@ etna_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *dst,
 
    if (src->target != PIPE_BUFFER && dst->target != PIPE_BUFFER &&
        util_blitter_is_copy_supported(ctx->blitter, dst, src)) {
-      etna_blit_save_state(ctx);
+      etna_blit_save_state(ctx, false);
       util_blitter_copy_texture(ctx->blitter, dst, dst_level, dstx, dsty, dstz,
                                 src, src_level, src_box);
    } else {
+      perf_debug_ctx(ctx, "copy_region falls back to sw");
       util_resource_copy_region(pctx, dst, dst_level, dstx, dsty, dstz, src,
                                 src_level, src_box);
    }

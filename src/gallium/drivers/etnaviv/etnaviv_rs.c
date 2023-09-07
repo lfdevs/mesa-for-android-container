@@ -431,6 +431,9 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers, const struct pipe_sci
 {
    struct etna_context *ctx = etna_context(pctx);
 
+   if (!etna_render_condition_check(pctx))
+      return;
+
    /* Flush color and depth cache before clearing anything.
     * This is especially important when coming from another surface, as
     * otherwise it may clear part of the old surface instead. */
@@ -578,30 +581,6 @@ etna_get_rs_alignment_mask(const struct etna_context *ctx,
    *height_mask = h_align -1;
 }
 
-static bool msaa_config(const struct pipe_resource *src,
-                        const struct pipe_resource *dst,
-                        int *msaa_xscale,
-                        int *msaa_yscale)
-{
-   int src_xscale = 1, src_yscale = 1;
-   int dst_xscale = 1, dst_yscale = 1;
-
-   assert(src->nr_samples <= 4);
-   assert(dst->nr_samples <= 4);
-
-   translate_samples_to_xyscale(src->nr_samples, &src_xscale, &src_yscale);
-   translate_samples_to_xyscale(dst->nr_samples, &dst_xscale, &dst_yscale);
-
-   /* RS does not support upscaling */
-   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale))
-      return false;
-
-   *msaa_xscale = src_xscale - dst_xscale + 1;
-   *msaa_yscale = src_yscale - dst_yscale + 1;
-
-   return true;
-}
-
 static bool
 etna_try_rs_blit(struct pipe_context *pctx,
                  const struct pipe_blit_info *blit_info)
@@ -610,16 +589,26 @@ etna_try_rs_blit(struct pipe_context *pctx,
    struct etna_resource *src = etna_resource(blit_info->src.resource);
    struct etna_resource *dst = etna_resource(blit_info->dst.resource);
    struct compiled_rs_state copy_to_screen;
-   int msaa_xscale = 1, msaa_yscale = 1;
+   int src_xscale, src_yscale, dst_xscale, dst_yscale;
+   bool downsample_x = false, downsample_y = false;
 
    /* Ensure that the level is valid */
    assert(blit_info->src.level <= src->base.last_level);
    assert(blit_info->dst.level <= dst->base.last_level);
 
-   if (!msaa_config(&src->base, &dst->base, &msaa_xscale, &msaa_yscale)) {
-      DBG("upsampling not supported");
+   if (!translate_samples_to_xyscale(src->base.nr_samples, &src_xscale, &src_yscale))
       return false;
-   }
+   if (!translate_samples_to_xyscale(dst->base.nr_samples, &dst_xscale, &dst_yscale))
+      return false;
+
+   /* RS does not support upscaling */
+   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale))
+      return false;
+
+   if (src_xscale > dst_xscale)
+      downsample_x = true;
+   if (src_yscale > dst_yscale)
+      downsample_y = true;
 
    /* The width/height are in pixels; they do not change as a result of
     * multi-sampling. So, when blitting from a 4x multisampled surface
@@ -653,7 +642,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    /* When not resolving MSAA, but only doing a layout conversion, we can get
     * away with a fallback format of matching size.
     */
-   if (format == ETNA_NO_MATCH && msaa_xscale == 1 && msaa_yscale == 1)
+   if (format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
       format = etna_compatible_rs_format(blit_info->dst.format);
    if (format == ETNA_NO_MATCH)
       return false;
@@ -679,8 +668,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
 
    /* we may be given coordinates up to the padded width to avoid
     * any alignment issues with different tiling formats */
-   assert((blit_info->src.box.x + blit_info->src.box.width) * msaa_xscale <= src_lev->padded_width);
-   assert((blit_info->src.box.y + blit_info->src.box.height) * msaa_yscale <= src_lev->padded_height);
+   assert((blit_info->src.box.x + blit_info->src.box.width) * src_xscale <= src_lev->padded_width);
+   assert((blit_info->src.box.y + blit_info->src.box.height) * src_yscale <= src_lev->padded_height);
    assert(blit_info->dst.box.x + blit_info->dst.box.width <= dst_lev->padded_width);
    assert(blit_info->dst.box.y + blit_info->dst.box.height <= dst_lev->padded_height);
 
@@ -706,18 +695,18 @@ etna_try_rs_blit(struct pipe_context *pctx,
    /* If the width is not aligned to the RS width, but is within our
     * padding, adjust the width to suite the RS width restriction.
     * Note: the RS width/height are converted to source samples here. */
-   unsigned int width = blit_info->src.box.width * msaa_xscale;
-   unsigned int height = blit_info->src.box.height * msaa_yscale;
-   unsigned int w_align = (ETNA_RS_WIDTH_MASK + 1) * msaa_xscale;
-   unsigned int h_align = (ETNA_RS_HEIGHT_MASK + 1) * msaa_yscale;
+   unsigned int width = blit_info->src.box.width * src_xscale;
+   unsigned int height = blit_info->src.box.height * src_yscale;
+   unsigned int w_align = (ETNA_RS_WIDTH_MASK + 1) * src_xscale;
+   unsigned int h_align = (ETNA_RS_HEIGHT_MASK + 1) * src_yscale;
 
-   if (width & (w_align - 1) && width >= src_lev->width * msaa_xscale && width >= dst_lev->width)
+   if (width & (w_align - 1) && width >= src_lev->width * src_xscale && width >= dst_lev->width)
       width = align(width, w_align);
 
-   if (height & (h_align - 1) && height >= src_lev->height * msaa_yscale && height >= dst_lev->height) {
+   if (height & (h_align - 1) && height >= src_lev->height * src_yscale && height >= dst_lev->height) {
       if (!ctx->screen->specs.single_buffer &&
           align(height, h_align * ctx->screen->specs.pixel_pipes) <=
-          dst_lev->padded_height * msaa_yscale)
+          dst_lev->padded_height * src_yscale)
          height = align(height, h_align * ctx->screen->specs.pixel_pipes);
       else
          height = align(height, h_align);
@@ -725,9 +714,9 @@ etna_try_rs_blit(struct pipe_context *pctx,
 
    /* The padded dimensions are in samples */
    if (width > src_lev->padded_width ||
-       width > dst_lev->padded_width * msaa_xscale ||
+       width > dst_lev->padded_width * src_xscale ||
        height > src_lev->padded_height ||
-       height > dst_lev->padded_height * msaa_yscale ||
+       height > dst_lev->padded_height * src_yscale ||
        width & (w_align - 1) || height & (h_align - 1))
       goto manual;
 
@@ -797,8 +786,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .dest_offset = dst_offset,
       .dest_stride = dst_lev->stride,
       .dest_padded_height = dst_lev->padded_height,
-      .downsample_x = msaa_xscale > 1,
-      .downsample_y = msaa_yscale > 1,
+      .downsample_x = downsample_x,
+      .downsample_y = downsample_y,
       .swap_rb = translate_rb_src_dst_swap(src->base.format, dst->base.format),
       .dither = {0xffffffff, 0xffffffff}, // XXX dither when going from 24 to 16 bit?
       .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_DISABLED,
@@ -822,7 +811,10 @@ manual:
    if (src->layout == ETNA_LAYOUT_TILED && dst->layout == ETNA_LAYOUT_TILED) {
       if ((etna_resource_status(ctx, src) & ETNA_PENDING_WRITE) ||
           (etna_resource_status(ctx, dst) & ETNA_PENDING_WRITE))
-         pctx->flush(pctx, NULL, 0);
+         etna_flush(pctx, NULL, 0, true);
+
+      perf_debug_ctx(ctx, "RS blit falls back to sw");
+
       return etna_manual_blit(dst, dst_lev, dst_offset, src, src_lev, src_offset, blit_info);
    }
 

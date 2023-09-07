@@ -388,7 +388,7 @@ class ABIPrinter(object):
         """Return the initializer for struct mapi_stub array."""
         stubs = []
         for ent in self.entries_sorted_by_names:
-            stubs.append('%s{ (void *) %d, %d, NULL }' % (
+            stubs.append('%s{ %d, %d }' % (
                 self.indent, pool_offsets[ent], ent.slot))
 
         return ',\n'.join(stubs)

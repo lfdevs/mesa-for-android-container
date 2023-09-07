@@ -675,8 +675,8 @@ fd_set_stream_output_targets(struct pipe_context *pctx, unsigned num_targets,
    }
 
    for (i = 0; i < num_targets; i++) {
-      boolean changed = targets[i] != so->targets[i];
-      boolean reset = (offsets[i] != (unsigned)-1);
+      bool changed = targets[i] != so->targets[i];
+      bool reset = (offsets[i] != (unsigned)-1);
 
       so->reset |= (reset << i);
 

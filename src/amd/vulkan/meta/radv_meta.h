@@ -112,17 +112,14 @@ void radv_device_finish_meta_etc_decode_state(struct radv_device *device);
 VkResult radv_device_init_dgc_prepare_state(struct radv_device *device);
 void radv_device_finish_dgc_prepare_state(struct radv_device *device);
 
-void radv_meta_save(struct radv_meta_saved_state *saved_state, struct radv_cmd_buffer *cmd_buffer,
-                    uint32_t flags);
+void radv_meta_save(struct radv_meta_saved_state *saved_state, struct radv_cmd_buffer *cmd_buffer, uint32_t flags);
 
-void radv_meta_restore(const struct radv_meta_saved_state *state,
-                       struct radv_cmd_buffer *cmd_buffer);
+void radv_meta_restore(const struct radv_meta_saved_state *state, struct radv_cmd_buffer *cmd_buffer);
 
 VkImageViewType radv_meta_get_view_type(const struct radv_image *image);
 
-uint32_t radv_meta_get_iview_layer(const struct radv_image *dest_image,
-                                   const VkImageSubresourceLayers *dest_subresource,
-                                   const VkOffset3D *dest_offset);
+uint32_t radv_meta_get_iview_layer(const struct radv_image *dst_image, const VkImageSubresourceLayers *dst_subresource,
+                                   const VkOffset3D *dst_offset);
 
 struct radv_meta_blit2d_surf {
    /** The size of an element in bytes. */
@@ -154,24 +151,21 @@ struct radv_meta_blit2d_rect {
 void radv_meta_begin_blit2d(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_saved_state *save);
 
 void radv_meta_blit2d(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src_img,
-                      struct radv_meta_blit2d_buffer *src_buf, struct radv_meta_blit2d_surf *dst,
-                      unsigned num_rects, struct radv_meta_blit2d_rect *rects);
+                      struct radv_meta_blit2d_buffer *src_buf, struct radv_meta_blit2d_surf *dst, unsigned num_rects,
+                      struct radv_meta_blit2d_rect *rects);
 
 void radv_meta_end_blit2d(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_saved_state *save);
 
 VkResult radv_device_init_meta_bufimage_state(struct radv_device *device);
 void radv_device_finish_meta_bufimage_state(struct radv_device *device);
-void radv_meta_image_to_buffer(struct radv_cmd_buffer *cmd_buffer,
-                               struct radv_meta_blit2d_surf *src,
+void radv_meta_image_to_buffer(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
                                struct radv_meta_blit2d_buffer *dst, unsigned num_rects,
                                struct radv_meta_blit2d_rect *rects);
 
-void radv_meta_buffer_to_image_cs(struct radv_cmd_buffer *cmd_buffer,
-                                  struct radv_meta_blit2d_buffer *src,
+void radv_meta_buffer_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_buffer *src,
                                   struct radv_meta_blit2d_surf *dst, unsigned num_rects,
                                   struct radv_meta_blit2d_rect *rects);
-void radv_meta_image_to_image_cs(struct radv_cmd_buffer *cmd_buffer,
-                                 struct radv_meta_blit2d_surf *src,
+void radv_meta_image_to_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
                                  struct radv_meta_blit2d_surf *dst, unsigned num_rects,
                                  struct radv_meta_blit2d_rect *rects);
 void radv_meta_clear_image_cs(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *dst,
@@ -183,35 +177,30 @@ void radv_expand_depth_stencil(struct radv_cmd_buffer *cmd_buffer, struct radv_i
 void radv_resummarize_depth_stencil(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                                     const VkImageSubresourceRange *subresourceRange,
                                     struct radv_sample_locations_state *sample_locs);
-void radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer,
-                                         struct radv_image *image,
+void radv_fast_clear_flush_image_inplace(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                                          const VkImageSubresourceRange *subresourceRange);
 void radv_decompress_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                          const VkImageSubresourceRange *subresourceRange);
 void radv_retile_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image);
 void radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
                                      const VkImageSubresourceRange *subresourceRange);
-void radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *vrs_image,
-                         const VkRect2D *rect, struct radv_image *dst_image,
-                         struct radv_buffer *htile_buffer, bool read_htile_value);
+void radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *vrs_image, const VkRect2D *rect,
+                         struct radv_image *dst_image, struct radv_buffer *htile_buffer, bool read_htile_value);
 
-bool radv_can_use_fmask_copy(struct radv_cmd_buffer *cmd_buffer,
-                             const struct radv_image *src_image, const struct radv_image *dst_image,
-                             unsigned num_rects, const struct radv_meta_blit2d_rect *rects);
+bool radv_can_use_fmask_copy(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *src_image,
+                             const struct radv_image *dst_image, unsigned num_rects,
+                             const struct radv_meta_blit2d_rect *rects);
 void radv_fmask_copy(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
                      struct radv_meta_blit2d_surf *dst);
 
-void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer,
-                                     struct radv_image *src_image, VkFormat src_format,
-                                     VkImageLayout src_image_layout, struct radv_image *dest_image,
-                                     VkFormat dest_format, VkImageLayout dest_image_layout,
+void radv_meta_resolve_compute_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
+                                     VkFormat src_format, VkImageLayout src_image_layout, struct radv_image *dst_image,
+                                     VkFormat dst_format, VkImageLayout dst_image_layout,
                                      const VkImageResolve2 *region);
 
-void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer,
-                                      struct radv_image *src_image, VkImageLayout src_image_layout,
-                                      struct radv_image *dest_image,
-                                      VkImageLayout dest_image_layout,
-                                      const VkImageResolve2 *region);
+void radv_meta_resolve_fragment_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image,
+                                      VkImageLayout src_image_layout, struct radv_image *dst_image,
+                                      VkImageLayout dst_image_layout, const VkImageResolve2 *region);
 
 void radv_decompress_resolve_rendering_src(struct radv_cmd_buffer *cmd_buffer);
 
@@ -227,12 +216,10 @@ uint32_t radv_clear_dcc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *i
 uint32_t radv_clear_htile(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *image,
                           const VkImageSubresourceRange *range, uint32_t value);
 
-void radv_update_buffer_cp(struct radv_cmd_buffer *cmd_buffer, uint64_t va, const void *data,
-                           uint64_t size);
+void radv_update_buffer_cp(struct radv_cmd_buffer *cmd_buffer, uint64_t va, const void *data, uint64_t size);
 
-void radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-                          VkImageLayout layout, const VkImageSubresourceLayers *subresource,
-                          VkOffset3D offset, VkExtent3D extent);
+void radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
+                          const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent);
 
 /**
  * Return whether the bound pipeline is the FMASK decompress pass.
@@ -260,8 +247,8 @@ radv_is_dcc_decompress_pipeline(struct radv_cmd_buffer *cmd_buffer)
       return false;
 
    return pipeline->custom_blend_mode == V_028808_CB_DCC_DECOMPRESS_GFX8 ||
-           (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11 &&
-            pipeline->custom_blend_mode == V_028808_CB_DCC_DECOMPRESS_GFX11);
+          (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11 &&
+           pipeline->custom_blend_mode == V_028808_CB_DCC_DECOMPRESS_GFX11);
 }
 
 /* common nir builder helpers */
@@ -273,9 +260,8 @@ nir_builder PRINTFLIKE(3, 4)
 nir_shader *radv_meta_build_nir_vs_generate_vertices(struct radv_device *dev);
 nir_shader *radv_meta_build_nir_fs_noop(struct radv_device *dev);
 
-void radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer,
-                                         int samples, nir_variable *input_img, nir_variable *color,
-                                         nir_ssa_def *img_coord);
+void radv_meta_build_resolve_shader_core(struct radv_device *device, nir_builder *b, bool is_integer, int samples,
+                                         nir_variable *input_img, nir_variable *color, nir_ssa_def *img_coord);
 
 nir_ssa_def *radv_meta_load_descriptor(nir_builder *b, unsigned desc_set, unsigned binding);
 

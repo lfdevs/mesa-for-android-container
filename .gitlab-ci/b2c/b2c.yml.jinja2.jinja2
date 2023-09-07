@@ -28,9 +28,11 @@ console_patterns:
     session_end:
         regex: >-
           {{ session_end_regex }}
+{% if session_reboot_regex %}
     session_reboot:
         regex: >-
           {{ session_reboot_regex }}
+{% endif %}
     job_success:
         regex: >-
           {{ job_success_regex }}

@@ -39,6 +39,11 @@ VkResult anv_image_bind_from_gralloc(struct anv_device *device,
    return VK_ERROR_EXTENSION_NOT_PRESENT;
 }
 
+unsigned anv_ahb_format_for_vk_format(VkFormat vk_format)
+{
+   return 0;
+}
+
 VkResult
 anv_import_ahw_memory(VkDevice device_h,
                       struct anv_device_memory *mem)

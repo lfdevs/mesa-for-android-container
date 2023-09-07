@@ -113,8 +113,8 @@ Building the Code
 
       cd $TOP/drm
       meson builddir --prefix=/usr --libdir=${LIBDIR}
-      ninja -C builddir
-      sudo ninja -C builddir install
+      meson compile -C builddir
+      sudo meson install -C builddir
         
 
 -  Build Mesa:
@@ -124,8 +124,8 @@ Building the Code
       cd $TOP/mesa
       meson builddir -Dvulkan-drivers= -Dgallium-drivers=svga -Ddri-drivers= -Dglvnd=true -Dglvnd-vendor-name=mesa
 
-      ninja -C builddir
-      sudo ninja -C builddir install
+      meson compile -C builddir
+      sudo meson install -C builddir
         
 
    Note that you may have to install other packages that Mesa depends

@@ -63,8 +63,7 @@ lower_ubo_load_instr(nir_builder *b, nir_instr *instr, UNUSED void *_data)
       for (unsigned i = 0; i < 2; i++) {
          nir_ssa_def *pred;
          if (bound) {
-            pred = nir_ilt(b, nir_imm_int(b, aligned_offset + i * 64 + 63),
-                              bound);
+            pred = nir_igt_imm(b, bound, aligned_offset + i * 64 + 63);
          } else {
             pred = nir_imm_true(b);
          }

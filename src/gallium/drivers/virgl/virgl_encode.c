@@ -352,7 +352,7 @@ static void virgl_encoder_emit_resource(struct virgl_screen *vs,
 {
    struct virgl_winsys *vws = vs->vws;
    if (res && res->hw_res)
-      vws->emit_res(vws, buf, res->hw_res, TRUE);
+      vws->emit_res(vws, buf, res->hw_res, true);
    else {
       virgl_encoder_write_dword(buf, 0);
    }
@@ -786,7 +786,7 @@ int virgl_encoder_draw_vbo(struct virgl_context *ctx,
                            const struct pipe_draw_start_count_bias *draw)
 {
    uint32_t length = VIRGL_DRAW_VBO_SIZE;
-   if (info->mode == PIPE_PRIM_PATCHES)
+   if (info->mode == MESA_PRIM_PATCHES || drawid_offset > 0)
       length = VIRGL_DRAW_VBO_SIZE_TESS;
    if (indirect && indirect->buffer)
       length = VIRGL_DRAW_VBO_SIZE_INDIRECT;
@@ -891,7 +891,7 @@ static void virgl_encoder_transfer3d_common(struct virgl_screen *vs,
 {
    struct pipe_transfer *transfer = &xfer->base;
    unsigned stride;
-   unsigned layer_stride;
+   uintptr_t layer_stride;
 
    if (encode_stride == virgl_transfer3d_explicit_stride) {
       stride = transfer->stride;
@@ -907,7 +907,7 @@ static void virgl_encoder_transfer3d_common(struct virgl_screen *vs,
     * because transfer->resource might have a different virgl_hw_res than what
     * this transfer targets, which is saved in xfer->hw_res.
     */
-   vs->vws->emit_res(vs->vws, buf, xfer->hw_res, TRUE);
+   vs->vws->emit_res(vs->vws, buf, xfer->hw_res, true);
    virgl_encoder_write_dword(buf, transfer->level);
    virgl_encoder_write_dword(buf, transfer->usage);
    virgl_encoder_write_dword(buf, stride);
@@ -1220,7 +1220,7 @@ int virgl_encoder_end_query(struct virgl_context *ctx,
 }
 
 int virgl_encoder_get_query_result(struct virgl_context *ctx,
-                                  uint32_t handle, boolean wait)
+                                  uint32_t handle, bool wait)
 {
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_GET_QUERY_RESULT, 0, 2));
    virgl_encoder_write_dword(ctx->cbuf, handle);
@@ -1229,7 +1229,7 @@ int virgl_encoder_get_query_result(struct virgl_context *ctx,
 }
 
 int virgl_encoder_render_condition(struct virgl_context *ctx,
-                                  uint32_t handle, boolean condition,
+                                  uint32_t handle, bool condition,
                                   enum pipe_render_cond_flag mode)
 {
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_SET_RENDER_CONDITION, 0, VIRGL_RENDER_CONDITION_SIZE));
@@ -1472,7 +1472,7 @@ int virgl_encode_tweak(struct virgl_context *ctx, enum vrend_tweak_type tweak, u
 
 int virgl_encode_get_query_result_qbo(struct virgl_context *ctx,
                                       uint32_t handle,
-                                      struct virgl_resource *res, boolean wait,
+                                      struct virgl_resource *res, bool wait,
                                       uint32_t result_type,
                                       uint32_t offset,
                                       uint32_t index)
@@ -1533,7 +1533,7 @@ void virgl_encode_copy_transfer(struct virgl_context *ctx,
     * from the image stride.
     */
    virgl_encoder_transfer3d_common(vs, ctx->cbuf, trans, virgl_transfer3d_explicit_stride);
-   vs->vws->emit_res(vs->vws, ctx->cbuf, trans->copy_src_hw_res, TRUE);
+   vs->vws->emit_res(vs->vws, ctx->cbuf, trans->copy_src_hw_res, true);
    virgl_encoder_write_dword(ctx->cbuf, trans->copy_src_offset);
    virgl_encoder_write_dword(ctx->cbuf, direction_and_synchronized);
 }

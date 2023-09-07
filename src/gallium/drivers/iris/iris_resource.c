@@ -65,6 +65,8 @@ enum modifier_priority {
    MODIFIER_PRIORITY_4,
    MODIFIER_PRIORITY_4_DG2_RC_CCS,
    MODIFIER_PRIORITY_4_DG2_RC_CCS_CC,
+   MODIFIER_PRIORITY_4_MTL_RC_CCS,
+   MODIFIER_PRIORITY_4_MTL_RC_CCS_CC,
 };
 
 static const uint64_t priority_to_modifier[] = {
@@ -78,6 +80,8 @@ static const uint64_t priority_to_modifier[] = {
    [MODIFIER_PRIORITY_4] = I915_FORMAT_MOD_4_TILED,
    [MODIFIER_PRIORITY_4_DG2_RC_CCS] = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS,
    [MODIFIER_PRIORITY_4_DG2_RC_CCS_CC] = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC,
+   [MODIFIER_PRIORITY_4_MTL_RC_CCS] = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS,
+   [MODIFIER_PRIORITY_4_MTL_RC_CCS_CC] = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC,
 };
 
 static bool
@@ -116,6 +120,12 @@ modifier_is_supported(const struct intel_device_info *devinfo,
       if (!intel_device_info_is_dg2(devinfo))
          return false;
       break;
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
+   case I915_FORMAT_MOD_4_TILED_MTL_MC_CCS:
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
+      if (!intel_device_info_is_mtl(devinfo))
+         return false;
+      break;
    case DRM_FORMAT_MOD_INVALID:
    default:
       return false;
@@ -123,6 +133,7 @@ modifier_is_supported(const struct intel_device_info *devinfo,
 
    /* Check remaining requirements. */
    switch (modifier) {
+   case I915_FORMAT_MOD_4_TILED_MTL_MC_CCS:
    case I915_FORMAT_MOD_4_TILED_DG2_MC_CCS:
    case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
       if (INTEL_DEBUG(DEBUG_NO_CCS))
@@ -141,6 +152,8 @@ modifier_is_supported(const struct intel_device_info *devinfo,
          return false;
       }
       break;
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
    case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC:
    case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
@@ -179,6 +192,12 @@ select_best_modifier(const struct intel_device_info *devinfo,
          continue;
 
       switch (modifiers[i]) {
+      case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
+         prio = MAX2(prio, MODIFIER_PRIORITY_4_MTL_RC_CCS_CC);
+         break;
+      case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
+         prio = MAX2(prio, MODIFIER_PRIORITY_4_MTL_RC_CCS);
+         break;
       case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC:
          prio = MAX2(prio, MODIFIER_PRIORITY_4_DG2_RC_CCS_CC);
          break;
@@ -246,6 +265,9 @@ iris_query_dmabuf_modifiers(struct pipe_screen *pscreen,
       I915_FORMAT_MOD_4_TILED_DG2_RC_CCS,
       I915_FORMAT_MOD_4_TILED_DG2_MC_CCS,
       I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC,
+      I915_FORMAT_MOD_4_TILED_MTL_RC_CCS,
+      I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC,
+      I915_FORMAT_MOD_4_TILED_MTL_MC_CCS,
       I915_FORMAT_MOD_Y_TILED,
       I915_FORMAT_MOD_Y_TILED_CCS,
       I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
@@ -300,8 +322,11 @@ iris_get_dmabuf_modifier_planes(struct pipe_screen *pscreen, uint64_t modifier,
    unsigned int planes = util_format_get_num_planes(format);
 
    switch (modifier) {
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
       return 3;
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
+   case I915_FORMAT_MOD_4_TILED_MTL_MC_CCS:
    case I915_FORMAT_MOD_4_TILED_DG2_RC_CCS_CC:
    case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
@@ -358,7 +383,8 @@ iris_memobj_create_from_handle(struct pipe_screen *pscreen,
                                         whandle->handle);
       break;
    case WINSYS_HANDLE_TYPE_FD:
-      bo = iris_bo_import_dmabuf(screen->bufmgr, whandle->handle);
+      bo = iris_bo_import_dmabuf(screen->bufmgr, whandle->handle,
+                                 whandle->modifier);
       break;
    default:
       unreachable("invalid winsys handle type");
@@ -472,7 +498,7 @@ iris_resource_alloc_flags(const struct iris_screen *screen,
 
    if (templ->flags & (PIPE_RESOURCE_FLAG_MAP_COHERENT |
                        PIPE_RESOURCE_FLAG_MAP_PERSISTENT))
-      flags |= BO_ALLOC_SMEM;
+      flags |= BO_ALLOC_SMEM | BO_ALLOC_COHERENT;
 
    if (screen->devinfo->verx10 >= 125 && screen->devinfo->has_local_mem &&
        isl_aux_usage_has_ccs(aux_usage)) {
@@ -851,7 +877,7 @@ iris_resource_configure_aux(struct iris_screen *screen,
          res->aux.usage = ISL_AUX_USAGE_STC_CCS;
       } else if (want_ccs_e_for_format(devinfo, res->surf.format)) {
          res->aux.usage = devinfo->ver < 12 ?
-            ISL_AUX_USAGE_CCS_E : ISL_AUX_USAGE_GFX12_CCS_E;
+            ISL_AUX_USAGE_CCS_E : ISL_AUX_USAGE_FCV_CCS_E;
       } else {
          assert(isl_format_supports_ccs_d(devinfo, res->surf.format));
          res->aux.usage = ISL_AUX_USAGE_CCS_D;
@@ -866,24 +892,16 @@ iris_resource_configure_aux(struct iris_screen *screen,
    case ISL_AUX_USAGE_HIZ:
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
-      initial_state = ISL_AUX_STATE_AUX_INVALID;
-      break;
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_MCS_CCS:
-      /* The Ivybridge PRM, Vol 2 Part 1 p326 says:
-       *
-       *    "When MCS buffer is enabled and bound to MSRT, it is required
-       *     that it is cleared prior to any rendering."
-       *
-       * Since we only use the MCS buffer for rendering, we just clear it
-       * immediately on allocation.  The clear value for MCS buffers is all
-       * 1's, so we simply memset it to 0xff.
+      /* Leave the auxiliary buffer uninitialized. We can ambiguate it before
+       * accessing it later on, if needed.
        */
-      initial_state = ISL_AUX_STATE_CLEAR;
+      initial_state = ISL_AUX_STATE_AUX_INVALID;
       break;
    case ISL_AUX_USAGE_CCS_D:
    case ISL_AUX_USAGE_CCS_E:
-   case ISL_AUX_USAGE_GFX12_CCS_E:
+   case ISL_AUX_USAGE_FCV_CCS_E:
    case ISL_AUX_USAGE_STC_CCS:
    case ISL_AUX_USAGE_MC:
       if (imported) {
@@ -897,14 +915,27 @@ iris_resource_configure_aux(struct iris_screen *screen,
           *    "CCS surface does not require initialization. Illegal CCS
           *     [values] are treated as uncompressed memory."
           *
-          * Even if we wanted to, we can't initialize the CCS via CPU map. So,
-          * we choose an aux state which describes the current state and helps
-          * avoid ambiguating (something not currently supported for STC_CCS).
+          * The above quote is from the render target section, but we assume
+          * it applies to CCS in general (e.g., STC_CCS). The uninitialized
+          * CCS may be in any aux state. We choose the one which is most
+          * convenient.
+          *
+          * We avoid states with CLEAR because stencil does not support it.
+          * Those states also create a dependency on the clear color, which
+          * can have negative performance implications. Even though some
+          * blocks may actually be encoded with CLEAR, we can get away with
+          * ignoring them - there are no known issues that require fast
+          * cleared blocks to be tracked and avoided.
+          *
+          * We specifically avoid the AUX_INVALID state because it could
+          * trigger an ambiguate. BLORP does not have support for ambiguating
+          * stencil. Also, ambiguating some LODs of mipmapped 8bpp surfaces
+          * seems to stomp on neighboring miplevels.
+          *
+          * There is only one remaining aux state which can give us correct
+          * behavior, COMPRESSED_NO_CLEAR.
           */
-         assert(isl_aux_usage_has_compression(res->aux.usage));
-         initial_state = isl_aux_usage_has_fast_clears(res->aux.usage) ?
-                         ISL_AUX_STATE_COMPRESSED_CLEAR :
-                         ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
+         initial_state = ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
       } else {
          assert(res->aux.surf.size_B > 0);
          /* When CCS is used, we need to ensure that it starts off in a valid
@@ -950,10 +981,7 @@ iris_resource_init_aux_buf(struct iris_screen *screen,
       if (!map)
          return false;
 
-      /* See iris_resource_configure_aux for the memset_value rationale. */
-      uint8_t memset_value = isl_aux_usage_has_mcs(res->aux.usage) ? 0xFF : 0;
-      memset((char*)map + res->aux.offset, memset_value,
-             res->aux.surf.size_B);
+      memset((char*)map + res->aux.offset, 0, res->aux.surf.size_B);
    }
 
    if (res->aux.extra_aux.surf.size_B > 0) {
@@ -1031,6 +1059,7 @@ iris_resource_finish_aux_import(struct pipe_screen *pscreen,
 
    /* Combine main and aux plane information. */
    switch (res->mod_info->modifier) {
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
    case I915_FORMAT_MOD_Y_TILED_CCS:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
       assert(num_main_planes == 1 && num_planes == 2);
@@ -1058,6 +1087,7 @@ iris_resource_finish_aux_import(struct pipe_screen *pscreen,
                        iris_get_aux_clear_color_state_size(screen, res),
                        4096, IRIS_MEMZONE_OTHER, BO_ALLOC_ZEROED);
       break;
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
       assert(num_main_planes == 1 && num_planes == 3);
       import_aux_info(r[0], r[1]);
@@ -1079,6 +1109,7 @@ iris_resource_finish_aux_import(struct pipe_screen *pscreen,
       r[0]->aux.clear_color_offset = r[1]->aux.clear_color_offset;
       r[0]->aux.clear_color_unknown = true;
       break;
+   case I915_FORMAT_MOD_4_TILED_MTL_MC_CCS:
    case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
       if (num_main_planes == 1 && num_planes == 2) {
          import_aux_info(r[0], r[1]);
@@ -1195,16 +1226,16 @@ iris_resource_create_for_image(struct pipe_screen *pscreen,
    if (!isl_surf_created_successfully)
       goto fail;
 
-   /* Don't create staging surfaces that will use over half the aperture,
+   /* Don't create staging surfaces that will use over half the sram,
     * since staging implies you are copying data to another resource that's
-    * at least as large, and then both wouldn't fit in the aperture.
+    * at least as large, and then both wouldn't fit in system memory.
     *
     * Skip this for discrete cards, as the destination buffer might be in
     * device local memory while the staging buffer would be in system memory,
     * so both would fit.
     */
    if (templ->usage == PIPE_USAGE_STAGING && !devinfo->has_local_mem &&
-       res->surf.size_B > devinfo->aperture_bytes / 2)
+       res->surf.size_B > (iris_bufmgr_sram_size(screen->bufmgr) / 2))
       goto fail;
 
    if (!iris_resource_configure_aux(screen, res, false))
@@ -1251,6 +1282,9 @@ iris_resource_create_for_image(struct pipe_screen *pscreen,
                 iris_get_aux_clear_color_state_size(screen, res);
    }
 
+   /* The ISL alignment already includes AUX-TT requirements, so no additional
+    * attention required here :)
+    */
    uint32_t alignment = MAX2(4096, res->surf.alignment_B);
    res->bo =
       iris_bo_alloc(screen->bufmgr, name, bo_size, alignment, memzone, flags);
@@ -1378,6 +1412,7 @@ mod_plane_is_clear_color(uint64_t modifier, uint32_t plane)
    assert(mod_info);
 
    switch (modifier) {
+   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC:
    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
       assert(mod_info->supports_clear_color);
       return plane == 2;
@@ -1416,7 +1451,8 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
 
    switch (whandle->type) {
    case WINSYS_HANDLE_TYPE_FD:
-      res->bo = iris_bo_import_dmabuf(bufmgr, whandle->handle);
+      res->bo = iris_bo_import_dmabuf(bufmgr, whandle->handle,
+                                      whandle->modifier);
       break;
    case WINSYS_HANDLE_TYPE_SHARED:
       res->bo = iris_bo_gem_create_from_name(bufmgr, "winsys image",
@@ -2384,7 +2420,12 @@ iris_map_tiled_memcpy(struct iris_transfer *map)
 
          isl_memcpy_tiled_to_linear(x1, x2, y1, y2, ptr, src, xfer->stride,
                                     surf->row_pitch_B, has_swizzling,
-                                    surf->tiling, ISL_MEMCPY_STREAMING_LOAD);
+                                    surf->tiling,
+#if defined(USE_SSE41)
+                                    util_get_cpu_caps()->has_sse4_1 ?
+                                    ISL_MEMCPY_STREAMING_LOAD :
+#endif
+                                    ISL_MEMCPY);
       }
    }
 
@@ -2593,8 +2634,8 @@ iris_transfer_map(struct pipe_context *ctx,
    if (prefer_cpu_access(res, box, usage, level, map_would_stall))
       usage |= PIPE_MAP_DIRECTLY;
 
-   /* TODO: Teach iris_map_tiled_memcpy about Tile4... */
-   if (res->surf.tiling == ISL_TILING_4)
+   /* TODO: Teach iris_map_tiled_memcpy about Tile4 and Tile64... */
+   if (res->surf.tiling == ISL_TILING_4 || res->surf.tiling == ISL_TILING_64)
       usage &= ~PIPE_MAP_DIRECTLY;
 
    if (!(usage & PIPE_MAP_DIRECTLY)) {
@@ -2704,7 +2745,7 @@ iris_texture_subdata(struct pipe_context *ctx,
                      const struct pipe_box *box,
                      const void *data,
                      unsigned stride,
-                     unsigned layer_stride)
+                     uintptr_t layer_stride)
 {
    struct iris_context *ice = (struct iris_context *)ctx;
    struct iris_resource *res = (struct iris_resource *)resource;
@@ -2719,10 +2760,11 @@ iris_texture_subdata(struct pipe_context *ctx,
     * take that path if we need the GPU to perform color compression, or
     * stall-avoidance blits.
     *
-    * TODO: Teach isl_memcpy_linear_to_tiled about Tile4...
+    * TODO: Teach isl_memcpy_linear_to_tiled about Tile4 and Tile64...
     */
    if (surf->tiling == ISL_TILING_LINEAR ||
        surf->tiling == ISL_TILING_4 ||
+       surf->tiling == ISL_TILING_64 ||
        isl_aux_usage_has_compression(res->aux.usage) ||
        resource_is_busy(ice, res) ||
        iris_bo_mmap_mode(res->bo) == IRIS_MMAP_NONE) {

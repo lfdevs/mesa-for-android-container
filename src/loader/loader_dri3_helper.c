@@ -37,13 +37,14 @@
 #include "loader_dri_helper.h"
 #include "loader_dri3_helper.h"
 #include "util/macros.h"
+#include "util/simple_mtx.h"
 #include "drm-uapi/drm_fourcc.h"
 
 /**
  * A cached blit context.
  */
 struct loader_dri3_blit_context {
-   mtx_t mtx;
+   simple_mtx_t mtx;
    __DRIcontext *ctx;
    __DRIscreen *cur_screen;
    const __DRIcoreExtension *core;
@@ -51,7 +52,7 @@ struct loader_dri3_blit_context {
 
 /* For simplicity we maintain the cache only for a single screen at a time */
 static struct loader_dri3_blit_context blit_context = {
-   _MTX_INITIALIZER_NP, NULL
+   SIMPLE_MTX_INITIALIZER, NULL
 };
 
 static void
@@ -162,7 +163,7 @@ static bool loader_dri3_have_image_blit(const struct loader_dri3_drawable *draw)
 static __DRIcontext *
 loader_dri3_blit_context_get(struct loader_dri3_drawable *draw)
 {
-   mtx_lock(&blit_context.mtx);
+   simple_mtx_lock(&blit_context.mtx);
 
    if (blit_context.ctx && blit_context.cur_screen != draw->dri_screen_render_gpu) {
       blit_context.core->destroyContext(blit_context.ctx);
@@ -186,7 +187,7 @@ loader_dri3_blit_context_get(struct loader_dri3_drawable *draw)
 static void
 loader_dri3_blit_context_put(void)
 {
-   mtx_unlock(&blit_context.mtx);
+   simple_mtx_unlock(&blit_context.mtx);
 }
 
 /**
@@ -2325,10 +2326,13 @@ loader_dri3_update_drawable_geometry(struct loader_dri3_drawable *draw)
    geom_reply = xcb_get_geometry_reply(draw->conn, geom_cookie, NULL);
 
    if (geom_reply) {
+      bool changed = draw->width != geom_reply->width || draw->height != geom_reply->height;
       draw->width = geom_reply->width;
       draw->height = geom_reply->height;
-      draw->vtable->set_drawable_size(draw, draw->width, draw->height);
-      draw->ext->flush->invalidate(draw->dri_drawable);
+      if (changed) {
+         draw->vtable->set_drawable_size(draw, draw->width, draw->height);
+         draw->ext->flush->invalidate(draw->dri_drawable);
+      }
 
       free(geom_reply);
    }
@@ -2357,12 +2361,12 @@ loader_dri3_swapbuffer_barrier(struct loader_dri3_drawable *draw)
 void
 loader_dri3_close_screen(__DRIscreen *dri_screen)
 {
-   mtx_lock(&blit_context.mtx);
+   simple_mtx_lock(&blit_context.mtx);
    if (blit_context.ctx && blit_context.cur_screen == dri_screen) {
       blit_context.core->destroyContext(blit_context.ctx);
       blit_context.ctx = NULL;
    }
-   mtx_unlock(&blit_context.mtx);
+   simple_mtx_unlock(&blit_context.mtx);
 }
 
 /**

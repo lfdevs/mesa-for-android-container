@@ -335,10 +335,10 @@ i915_create_sampler_state(struct pipe_context *pipe,
    }
 
    {
-      ubyte r = float_to_ubyte(sampler->border_color.f[0]);
-      ubyte g = float_to_ubyte(sampler->border_color.f[1]);
-      ubyte b = float_to_ubyte(sampler->border_color.f[2]);
-      ubyte a = float_to_ubyte(sampler->border_color.f[3]);
+      uint8_t r = float_to_ubyte(sampler->border_color.f[0]);
+      uint8_t g = float_to_ubyte(sampler->border_color.f[1]);
+      uint8_t b = float_to_ubyte(sampler->border_color.f[2]);
+      uint8_t a = float_to_ubyte(sampler->border_color.f[3]);
       cso->state[2] = I915PACKCOLOR8888(r, g, b, a);
    }
    return cso;
@@ -488,7 +488,7 @@ i915_create_depth_stencil_state(
 
    if (depth_stencil->alpha_enabled) {
       int test = i915_translate_compare_func(depth_stencil->alpha_func);
-      ubyte refByte = float_to_ubyte(depth_stencil->alpha_ref_value);
+      uint8_t refByte = float_to_ubyte(depth_stencil->alpha_ref_value);
 
       cso->depth_LIS6 |=
          (S6_ALPHA_TEST_ENABLE | (test << S6_ALPHA_TEST_FUNC_SHIFT) |

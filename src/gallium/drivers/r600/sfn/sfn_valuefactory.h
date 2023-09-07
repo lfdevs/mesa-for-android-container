@@ -284,14 +284,16 @@ public:
    void clear_pins();
 
    int next_register_index() const { return m_next_register_index; }
-
    uint32_t array_registers() const { return m_required_array_registers; }
+
+   PRegister addr();
+   PRegister idx_reg(unsigned idx);
 
 private:
    PVirtualValue ssa_src(const nir_ssa_def& dest, int chan);
 
-   PRegister local_register(const nir_reg_dest& dest, int chan);
-   PRegister local_register(const nir_reg_src& dest, int chan);
+   PRegister local_register(const nir_register_dest& dest, int chan);
+   PRegister local_register(const nir_register_src& dest, int chan);
    PRegister
    resolve_array(nir_register *reg, nir_src *indirect, int base_offset, int chan);
 
@@ -329,6 +331,10 @@ private:
    };
    ChannelCounts m_channel_counts;
    uint32_t m_required_array_registers{0};
+
+   AddressRegister *m_ar{nullptr};
+   AddressRegister *m_idx0{nullptr};
+   AddressRegister *m_idx1{nullptr};
 };
 
 } // namespace r600

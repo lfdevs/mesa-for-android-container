@@ -10,7 +10,7 @@
 
 #include "util/u_thread.h"
 #include "util/format/u_formats.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_screen.h"
 #include "postprocess/filters.h"
 

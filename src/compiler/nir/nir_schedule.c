@@ -403,19 +403,6 @@ nir_schedule_intrinsic_deps(nir_deps_state *state,
       add_write_dep(state, &state->store_shared, n);
       break;
 
-   case nir_intrinsic_control_barrier:
-   case nir_intrinsic_memory_barrier_shared:
-   case nir_intrinsic_group_memory_barrier:
-   /* A generic memory barrier can be emitted when multiple synchronization
-    * semantics are involved, including shared memory.
-    */
-   case nir_intrinsic_memory_barrier:
-      add_write_dep(state, &state->store_shared, n);
-
-      /* Serialize against ssbos/atomics/etc. */
-      add_write_dep(state, &state->unknown_intrinsic, n);
-      break;
-
    case nir_intrinsic_scoped_barrier: {
       const nir_variable_mode modes = nir_intrinsic_memory_modes(instr);
 
@@ -1120,8 +1107,8 @@ nir_schedule_get_scoreboard(nir_shader *shader,
    scoreboard->options = options;
    scoreboard->pressure = 0;
 
-   nir_foreach_function(function, shader) {
-      nir_foreach_register(reg, &function->impl->registers) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_register(reg, &impl->registers) {
          struct set *register_uses =
             _mesa_pointer_set_create(scoreboard);
 
@@ -1138,7 +1125,7 @@ nir_schedule_get_scoreboard(nir_shader *shader,
          }
       }
 
-      nir_foreach_block(block, function->impl) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             nir_foreach_ssa_def(instr, nir_schedule_ssa_def_init_scoreboard,
                                 scoreboard);
@@ -1205,11 +1192,8 @@ nir_schedule(nir_shader *shader,
       nir_print_shader(shader, stderr);
    }
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_schedule_block(scoreboard, block);
       }
    }

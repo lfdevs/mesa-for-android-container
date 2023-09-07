@@ -156,8 +156,7 @@ nir_lower_cl_images(nir_shader *shader, bool lower_image_derefs, bool lower_samp
    if (num_samplers)
       BITSET_SET_RANGE(shader->info.samplers_used, 0, num_samplers - 1);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* don't need any lowering if we can keep the derefs */
    if (!lower_image_derefs && !lower_sampler_derefs) {
@@ -248,19 +247,8 @@ nir_lower_cl_images(nir_shader *shader, bool lower_image_derefs, bool lower_samp
             switch (intrin->intrinsic) {
             case nir_intrinsic_image_deref_load:
             case nir_intrinsic_image_deref_store:
-            case nir_intrinsic_image_deref_atomic_add:
-            case nir_intrinsic_image_deref_atomic_imin:
-            case nir_intrinsic_image_deref_atomic_umin:
-            case nir_intrinsic_image_deref_atomic_imax:
-            case nir_intrinsic_image_deref_atomic_umax:
-            case nir_intrinsic_image_deref_atomic_and:
-            case nir_intrinsic_image_deref_atomic_or:
-            case nir_intrinsic_image_deref_atomic_xor:
-            case nir_intrinsic_image_deref_atomic_exchange:
-            case nir_intrinsic_image_deref_atomic_comp_swap:
-            case nir_intrinsic_image_deref_atomic_fadd:
-            case nir_intrinsic_image_deref_atomic_inc_wrap:
-            case nir_intrinsic_image_deref_atomic_dec_wrap:
+            case nir_intrinsic_image_deref_atomic:
+            case nir_intrinsic_image_deref_atomic_swap:
             case nir_intrinsic_image_deref_size:
             case nir_intrinsic_image_deref_samples: {
                if (!lower_image_derefs)

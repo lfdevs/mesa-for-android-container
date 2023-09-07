@@ -82,11 +82,11 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
                      unsigned length,
                      unsigned src_width,
                      unsigned dst_width,
-                     boolean aligned,
+                     bool aligned,
                      LLVMValueRef base_ptr,
                      LLVMValueRef offsets,
                      unsigned i,
-                     boolean vector_justify)
+                     bool vector_justify)
 {
    LLVMTypeRef src_type = LLVMIntTypeInContext(gallivm->context, src_width);
    LLVMTypeRef dst_elem_type = LLVMIntTypeInContext(gallivm->context, dst_width);
@@ -166,11 +166,11 @@ lp_build_gather_elem_vec(struct gallivm_state *gallivm,
                          unsigned src_width,
                          LLVMTypeRef src_type,
                          struct lp_type dst_type,
-                         boolean aligned,
+                         bool aligned,
                          LLVMValueRef base_ptr,
                          LLVMValueRef offsets,
                          unsigned i,
-                         boolean vector_justify)
+                         bool vector_justify)
 {
    LLVMValueRef ptr, res;
    assert(LLVMTypeOf(base_ptr) == LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0));
@@ -409,14 +409,14 @@ lp_build_gather(struct gallivm_state *gallivm,
                 unsigned length,
                 unsigned src_width,
                 struct lp_type dst_type,
-                boolean aligned,
+                bool aligned,
                 LLVMValueRef base_ptr,
                 LLVMValueRef offsets,
-                boolean vector_justify)
+                bool vector_justify)
 {
    LLVMValueRef res;
-   boolean need_expansion = src_width < dst_type.width * dst_type.length;
-   boolean vec_fetch;
+   bool need_expansion = src_width < dst_type.width * dst_type.length;
+   bool vec_fetch;
    struct lp_type fetch_type, fetch_dst_type;
    LLVMTypeRef src_type;
 
@@ -450,7 +450,7 @@ lp_build_gather(struct gallivm_state *gallivm,
    if (((src_width % 32) == 0) && ((src_width % dst_type.width) == 0) &&
        (dst_type.length > 1)) {
       /* use vector fetch (if dst_type is vector) */
-      vec_fetch = TRUE;
+      vec_fetch = true;
       if (dst_type.floating) {
          fetch_type = lp_type_float_vec(dst_type.width, src_width);
       } else {
@@ -463,7 +463,7 @@ lp_build_gather(struct gallivm_state *gallivm,
       fetch_dst_type.length = dst_type.length;
     } else {
       /* use scalar fetch */
-      vec_fetch = FALSE;
+      vec_fetch = false;
       if (dst_type.floating && ((src_width == 32) || (src_width == 64))) {
          fetch_type = lp_type_float(src_width);
       } else {
@@ -508,7 +508,7 @@ lp_build_gather(struct gallivm_state *gallivm,
 
       LLVMValueRef elems[LP_MAX_VECTOR_WIDTH / 8];
       unsigned i;
-      boolean vec_zext = FALSE;
+      bool vec_zext = false;
       struct lp_type res_type, gather_res_type;
       LLVMTypeRef res_t, gather_res_t;
 
@@ -530,11 +530,11 @@ lp_build_gather(struct gallivm_state *gallivm,
           * (We're not trying that with other bit widths as that might not be
           * easier, in particular with 8 bit values at least with only sse2.)
           */
-         assert(vec_fetch == FALSE);
+         assert(vec_fetch == false);
          gather_res_type.width /= 2;
          fetch_dst_type = fetch_type;
          src_type = lp_build_vec_type(gallivm, fetch_type);
-         vec_zext = TRUE;
+         vec_zext = true;
       }
       res_t = lp_build_vec_type(gallivm, res_type);
       gather_res_t = lp_build_vec_type(gallivm, gather_res_type);

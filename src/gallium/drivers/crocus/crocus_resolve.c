@@ -760,8 +760,8 @@ miptree_level_range_length(const struct crocus_resource *res,
 {
    assert(start_level < res->surf.levels);
 
-   if (num_levels == INTEL_REMAINING_LAYERS)
-      num_levels = res->surf.levels;
+   if (num_levels == INTEL_REMAINING_LEVELS)
+      num_levels = res->surf.levels - start_level;
 
    /* Check for overflow */
    assert(start_level + num_levels >= start_level);

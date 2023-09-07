@@ -33,10 +33,6 @@ vk_memory_trace_init(struct vk_device *device, const struct vk_rmv_device_info *
    util_dynarray_init(&device->memory_trace_data.tokens, NULL);
    simple_mtx_init(&device->memory_trace_data.token_mtx, mtx_plain);
 
-   device->memory_trace_data.trace_frame_idx = vk_memory_trace_frame();
-   device->memory_trace_data.trigger_file_name = vk_memory_trace_trigger_file();
-
-   device->memory_trace_data.cur_frame_idx = 0;
    device->memory_trace_data.next_resource_id = 1;
    device->memory_trace_data.handle_table = _mesa_hash_table_u64_create(NULL);
 }
@@ -68,36 +64,6 @@ vk_memory_trace_finish(struct vk_device *device)
               "mesa: Unfreed resources detected at device destroy, there may be memory leaks!\n");
    _mesa_hash_table_u64_destroy(device->memory_trace_data.handle_table);
    device->memory_trace_data.is_enabled = false;
-}
-
-void
-vk_rmv_handle_present_locked(struct vk_device *device)
-{
-   struct vk_memory_trace_data *trace_data = &device->memory_trace_data;
-
-   if (!trace_data->is_enabled)
-      return;
-   bool frame_trigger = false;
-   bool file_trigger = false;
-
-#ifndef _WIN32
-   if (trace_data->trigger_file_name && access(trace_data->trigger_file_name, W_OK) == 0) {
-      if (unlink(trace_data->trigger_file_name) == 0)
-         file_trigger = true;
-      else
-         /* Do not enable tracing if we cannot remove the file,
-          * because by then we'll trace every frame ... */
-         fprintf(stderr, "mesa: could not remove memory trace trigger "
-                         "file, ignoring\n");
-   }
-#endif
-
-   frame_trigger = trace_data->cur_frame_idx == trace_data->trace_frame_idx;
-   if (trace_data->cur_frame_idx <= trace_data->trace_frame_idx)
-      trace_data->cur_frame_idx++;
-
-   if (file_trigger || frame_trigger)
-      vk_dump_rmv_capture(trace_data);
 }
 
 void

@@ -108,20 +108,12 @@ propagate_across_edge(nir_block *pred, nir_block *succ,
    BITSET_WORD *live = state->tmp_live;
    memcpy(live, succ->live_in, state->bitset_words * sizeof *live);
 
-   nir_foreach_instr(instr, succ) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
-
+   nir_foreach_phi(phi, succ) {
       assert(phi->dest.is_ssa);
       set_ssa_def_dead(&phi->dest.ssa, live);
    }
 
-   nir_foreach_instr(instr, succ) {
-      if (instr->type != nir_instr_type_phi)
-         break;
-      nir_phi_instr *phi = nir_instr_as_phi(instr);
-
+   nir_foreach_phi(phi, succ) {
       nir_foreach_phi_src(src, phi) {
          if (src->pred == pred) {
             set_src_live(&src->src, live);

@@ -33,7 +33,6 @@
 #include "util/format/u_format.h"
 #include "u_sampler.h"
 #include "tgsi/tgsi_text.h"
-#include "tgsi/tgsi_ureg.h"
 #include "u_inlines.h"
 #include "u_compute.h"
 

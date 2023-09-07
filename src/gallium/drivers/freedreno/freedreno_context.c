@@ -343,7 +343,6 @@ fd_context_batch(struct fd_context *ctx)
    if (unlikely(!batch)) {
       batch =
          fd_batch_from_fb(ctx, &ctx->framebuffer);
-      util_copy_framebuffer_state(&batch->framebuffer, &ctx->framebuffer);
       fd_batch_reference(&ctx->batch, batch);
       fd_context_all_dirty(ctx);
    }

@@ -210,7 +210,7 @@ debug_variable_length_prim(struct debug_stream *stream)
    const char *prim = get_prim_name(ptr[0]);
    unsigned i, len;
 
-   ushort *idx = (ushort *)(ptr + 1);
+   uint16_t *idx = (uint16_t *)(ptr + 1);
    for (i = 0; idx[i] != 0xffff; i++)
       ;
 

@@ -85,9 +85,12 @@ util_copy_rect(void * dst_in,
    src += src_y * src_stride_pos;
    width *= blocksize;
 
-   if (width == dst_stride && width == (unsigned)src_stride)
-      memcpy(dst, src, height * width);
-   else {
+   if (width == dst_stride && width == (unsigned)src_stride) {
+      uint64_t size = (uint64_t)height * width;
+
+      assert(size <= SIZE_MAX);
+      memcpy(dst, src, size);
+   } else {
       for (i = 0; i < height; i++) {
          memcpy(dst, src, width);
          dst += dst_stride;
@@ -420,7 +423,7 @@ util_format_read_4(enum pipe_format format,
    assert(x % format_desc->block.width == 0);
    assert(y % format_desc->block.height == 0);
 
-   src_row = (const uint8_t *)src + y*src_stride + x*(format_desc->block.bits/8);
+   src_row = (const uint8_t *)src + (uint64_t)y*src_stride + x*(format_desc->block.bits/8);
 
    util_format_unpack_rgba_rect(format, dst, dst_stride, src_row, src_stride, w, h);
 }
@@ -442,7 +445,7 @@ util_format_write_4(enum pipe_format format,
    assert(x % format_desc->block.width == 0);
    assert(y % format_desc->block.height == 0);
 
-   dst_row = (uint8_t *)dst + y*dst_stride + x*(format_desc->block.bits/8);
+   dst_row = (uint8_t *)dst + (uint64_t)y*dst_stride + x*(format_desc->block.bits/8);
 
    if (util_format_is_pure_uint(format))
       pack->pack_rgba_uint(dst_row, dst_stride, src, src_stride, w, h);
@@ -464,7 +467,7 @@ util_format_read_4ub(enum pipe_format format, uint8_t *dst, unsigned dst_stride,
    assert(x % format_desc->block.width == 0);
    assert(y % format_desc->block.height == 0);
 
-   src_row = (const uint8_t *)src + y*src_stride + x*(format_desc->block.bits/8);
+   src_row = (const uint8_t *)src + (uint64_t)y*src_stride + x*(format_desc->block.bits/8);
 
    util_format_unpack_rgba_8unorm_rect(format, dst, dst_stride, src_row, src_stride, w, h);
 }
@@ -484,7 +487,7 @@ util_format_write_4ub(enum pipe_format format, const uint8_t *src, unsigned src_
    assert(x % format_desc->block.width == 0);
    assert(y % format_desc->block.height == 0);
 
-   dst_row = (uint8_t *)dst + y*dst_stride + x*(format_desc->block.bits/8);
+   dst_row = (uint8_t *)dst + (uint64_t)y*dst_stride + x*(format_desc->block.bits/8);
    src_row = src;
 
    pack->pack_rgba_8unorm(dst_row, dst_stride, src_row, src_stride, w, h);
@@ -628,7 +631,9 @@ util_format_fits_8unorm(const struct util_format_description *format_desc)
       switch (format_desc->format) {
       case PIPE_FORMAT_R1_UNORM:
       case PIPE_FORMAT_UYVY:
+      case PIPE_FORMAT_VYUY:
       case PIPE_FORMAT_YUYV:
+      case PIPE_FORMAT_YVYU:
       case PIPE_FORMAT_R8G8_B8G8_UNORM:
       case PIPE_FORMAT_G8R8_G8B8_UNORM:
          return true;
@@ -680,8 +685,8 @@ util_format_translate(enum pipe_format dst_format,
    assert(src_x % src_format_desc->block.width == 0);
    assert(src_y % src_format_desc->block.height == 0);
 
-   dst_row = (uint8_t *)dst + dst_y*dst_stride + dst_x*(dst_format_desc->block.bits/8);
-   src_row = (const uint8_t *)src + src_y*src_stride + src_x*(src_format_desc->block.bits/8);
+   dst_row = (uint8_t *)dst + (uint64_t)dst_y*dst_stride + dst_x*(dst_format_desc->block.bits/8);
+   src_row = (const uint8_t *)src + (uint64_t)src_y*src_stride + src_x*(src_format_desc->block.bits/8);
 
    /*
     * This works because all pixel formats have pixel blocks with power of two
@@ -750,7 +755,7 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
-      tmp_row = malloc(y_step * tmp_stride);
+      tmp_row = malloc((uint64_t)y_step * tmp_stride);
       if (!tmp_row)
          return false;
 
@@ -781,7 +786,7 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
-      tmp_row = malloc(y_step * tmp_stride);
+      tmp_row = malloc((uint64_t)y_step * tmp_stride);
       if (!tmp_row)
          return false;
 
@@ -812,7 +817,7 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
-      tmp_row = malloc(y_step * tmp_stride);
+      tmp_row = malloc((uint64_t)y_step * tmp_stride);
       if (!tmp_row)
          return false;
 
@@ -842,7 +847,7 @@ util_format_translate(enum pipe_format dst_format,
       }
 
       tmp_stride = MAX2(width, x_step) * 4 * sizeof *tmp_row;
-      tmp_row = malloc(y_step * tmp_stride);
+      tmp_row = malloc((uint64_t)y_step * tmp_stride);
       if (!tmp_row)
          return false;
 
@@ -868,12 +873,12 @@ util_format_translate(enum pipe_format dst_format,
 bool
 util_format_translate_3d(enum pipe_format dst_format,
                          void *dst, unsigned dst_stride,
-                         unsigned dst_slice_stride,
+                         uint64_t dst_slice_stride,
                          unsigned dst_x, unsigned dst_y,
                          unsigned dst_z,
                          enum pipe_format src_format,
                          const void *src, unsigned src_stride,
-                         unsigned src_slice_stride,
+                         uint64_t src_slice_stride,
                          unsigned src_x, unsigned src_y,
                          unsigned src_z, unsigned width,
                          unsigned height, unsigned depth)

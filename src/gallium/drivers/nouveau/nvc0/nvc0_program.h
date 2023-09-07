@@ -22,7 +22,7 @@ struct nvc0_transform_feedback_state {
 struct nvc0_program {
    struct pipe_shader_state pipe;
 
-   ubyte type;
+   uint8_t type;
    bool translated;
    bool need_tls;
    uint8_t num_gprs;

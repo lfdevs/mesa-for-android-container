@@ -388,7 +388,7 @@ mesa_log_v(enum mesa_log_level level, const char *tag, const char *format,
 }
 
 struct log_stream *
-_mesa_log_stream_create(enum mesa_log_level level, char *tag)
+_mesa_log_stream_create(enum mesa_log_level level, const char *tag)
 {
    struct log_stream *stream = ralloc(NULL, struct log_stream);
    stream->level = level;

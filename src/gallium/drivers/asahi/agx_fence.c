@@ -15,6 +15,7 @@
 #include "agx_fence.h"
 #include "agx_state.h"
 
+#include "util/libsync.h"
 #include "util/os_time.h"
 #include "util/u_inlines.h"
 
@@ -135,4 +136,26 @@ agx_fence_create(struct agx_context *ctx)
    close(fd);
 
    return f;
+}
+
+void
+agx_create_fence_fd(struct pipe_context *pctx,
+                    struct pipe_fence_handle **pfence, int fd,
+                    enum pipe_fd_type type)
+{
+   *pfence = agx_fence_from_fd(agx_context(pctx), fd, type);
+}
+
+void
+agx_fence_server_sync(struct pipe_context *pctx, struct pipe_fence_handle *f)
+{
+   struct agx_device *dev = agx_device(pctx->screen);
+   struct agx_context *ctx = agx_context(pctx);
+   int fd = -1, ret;
+
+   ret = drmSyncobjExportSyncFile(dev->fd, f->syncobj, &fd);
+   assert(!ret);
+
+   sync_accumulate("asahi", &ctx->in_sync_fd, fd);
+   close(fd);
 }

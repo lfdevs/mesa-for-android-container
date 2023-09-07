@@ -30,12 +30,45 @@ extern "C" {
 #endif
 
 #if ANDROID_API_LEVEL >= 26
+
+VkFormat vk_ahb_format_to_image_format(uint32_t ahb_format);
+
+uint32_t vk_image_format_to_ahb_format(VkFormat vk_format);
+
 uint64_t vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
                                      const VkImageUsageFlags vk_usage);
 
 struct AHardwareBuffer *
 vk_alloc_ahardware_buffer(const VkMemoryAllocateInfo *pAllocateInfo);
-#endif
+
+#else /* ANDROID_API_LEVEL >= 26 */
+
+static inline VkFormat
+vk_ahb_format_to_image_format(uint32_t ahb_format)
+{
+   return VK_FORMAT_UNDEFINED;
+}
+
+static inline uint32_t
+vk_image_format_to_ahb_format(VkFormat vk_format)
+{
+   return 0;
+}
+
+static inline uint64_t
+vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
+                            const VkImageUsageFlags vk_usage)
+{
+   return 0;
+}
+
+static inline struct AHardwareBuffer *
+vk_alloc_ahardware_buffer(const VkMemoryAllocateInfo *pAllocateInfo)
+{
+   return NULL;
+}
+
+#endif /* ANDROID_API_LEVEL >= 26 */
 
 #ifdef __cplusplus
 }

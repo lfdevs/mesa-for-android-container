@@ -99,11 +99,13 @@ amd_common_files = files(
   'ac_nir_lower_subdword_loads.c',
   'ac_nir_lower_taskmesh_io_to_mem.c',
   'ac_nir_lower_tess_io_to_mem.c',
+  'ac_nir_lower_tex.c',
   'ac_nir_lower_ngg.c',
   'ac_nir_lower_ps.c',
   'amd_family.c',
   'ac_perfcounter.c',
   'ac_perfcounter.h',
+  'ac_vcn_av1_default.h',
 )
 
 if dep_elf.found()

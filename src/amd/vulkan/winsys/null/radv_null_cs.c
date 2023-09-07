@@ -40,8 +40,7 @@ radv_null_cs(struct radeon_cmdbuf *base)
 }
 
 static VkResult
-radv_null_ctx_create(struct radeon_winsys *_ws, enum radeon_ctx_priority priority,
-                     struct radeon_winsys_ctx **rctx)
+radv_null_ctx_create(struct radeon_winsys *_ws, enum radeon_ctx_priority priority, struct radeon_winsys_ctx **rctx)
 {
    struct radv_null_ctx *ctx = CALLOC_STRUCT(radv_null_ctx);
 

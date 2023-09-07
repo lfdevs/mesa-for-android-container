@@ -25,10 +25,8 @@
  *
  **************************************************************************/
 
-
 #ifndef EGLDEVICE_INCLUDED
 #define EGLDEVICE_INCLUDED
-
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -49,7 +47,7 @@ _eglCheckDeviceHandle(EGLDeviceEXT device);
 static inline _EGLDevice *
 _eglLookupDevice(EGLDeviceEXT device)
 {
-   _EGLDevice *dev = (_EGLDevice *) device;
+   _EGLDevice *dev = (_EGLDevice *)device;
    if (!_eglCheckDeviceHandle(device))
       dev = NULL;
    return dev;
@@ -70,8 +68,7 @@ EGLBoolean
 _eglDeviceSupports(_EGLDevice *dev, _EGLDeviceExtension ext);
 
 EGLBoolean
-_eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute,
-                         EGLAttrib *value);
+_eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute, EGLAttrib *value);
 
 const char *
 _eglQueryDeviceStringEXT(_EGLDevice *dev, EGLint name);

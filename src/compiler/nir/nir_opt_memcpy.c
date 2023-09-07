@@ -233,8 +233,7 @@ opt_memcpy_impl(nir_function_impl *impl)
 {
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    struct set *complex_vars = _mesa_pointer_set_create(NULL);
 
@@ -292,8 +291,8 @@ nir_opt_memcpy(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl && opt_memcpy_impl(function->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (opt_memcpy_impl(impl))
          progress = true;
    }
 

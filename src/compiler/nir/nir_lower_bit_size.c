@@ -33,6 +33,8 @@
 static nir_ssa_def *convert_to_bit_size(nir_builder *bld, nir_ssa_def *src,
                                         nir_alu_type type, unsigned bit_size)
 {
+   assert(src->bit_size < bit_size);
+
    /* create b2i32(a) instead of i2i32(b2i8(a))/i2i32(b2i16(a)) */
    nir_alu_instr *alu = nir_src_as_alu_instr(nir_src_for_ssa(src));
    if ((type & (nir_type_uint | nir_type_int)) && bit_size == 32 &&
@@ -62,7 +64,10 @@ lower_alu_instr(nir_builder *bld, nir_alu_instr *alu, unsigned bit_size)
       if (nir_alu_type_get_type_size(type) == 0)
          src = convert_to_bit_size(bld, src, type, bit_size);
 
-      if (i == 1 && (op == nir_op_ishl || op == nir_op_ishr || op == nir_op_ushr)) {
+      if (i == 1 && (op == nir_op_ishl || op == nir_op_ishr || op == nir_op_ushr ||
+                     op == nir_op_bitz || op == nir_op_bitz8 || op == nir_op_bitz16 ||
+                     op == nir_op_bitz32 || op == nir_op_bitnz || op == nir_op_bitnz8 ||
+                     op == nir_op_bitnz16 || op == nir_op_bitnz32)) {
          assert(util_is_power_of_two_nonzero(dst_bit_size));
          src = nir_iand(bld, src, nir_imm_int(bld, dst_bit_size - 1));
       }
@@ -240,8 +245,7 @@ lower_impl(nir_function_impl *impl,
            nir_lower_bit_size_callback callback,
            void *callback_data)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
    bool progress = false;
 
    nir_foreach_block(block, impl) {
@@ -292,9 +296,8 @@ nir_lower_bit_size(nir_shader *shader,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= lower_impl(function->impl, callback, callback_data);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= lower_impl(impl, callback, callback_data);
    }
 
    return progress;
@@ -322,10 +325,10 @@ split_phi(nir_builder *b, nir_phi_instr *phi)
       nir_phi_instr_add_src(lowered[1], src->pred, nir_src_for_ssa(y));
    }
 
-   nir_ssa_dest_init(&lowered[0]->instr, &lowered[0]->dest,
-                     num_components, 32, NULL);
-   nir_ssa_dest_init(&lowered[1]->instr, &lowered[1]->dest,
-                     num_components, 32, NULL);
+   nir_ssa_dest_init(&lowered[0]->instr, &lowered[0]->dest, num_components,
+                     32);
+   nir_ssa_dest_init(&lowered[1]->instr, &lowered[1]->dest, num_components,
+                     32);
 
    b->cursor = nir_before_instr(&phi->instr);
    nir_builder_instr_insert(b, &lowered[0]->instr);

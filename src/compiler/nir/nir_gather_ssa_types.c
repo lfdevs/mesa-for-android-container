@@ -45,6 +45,10 @@ set_type(unsigned idx, nir_alu_type type, BITSET_WORD *float_types,
       }
       break;
 
+   case nir_type_invalid:
+      /* No new information, don't set anything. */
+      break;
+
    default:
       unreachable("Invalid base nir_alu_type");
    }
@@ -73,8 +77,10 @@ copy_types(nir_src src, nir_dest *dest, BITSET_WORD *float_types,
            BITSET_WORD *int_types, bool *progress)
 {
    bool src_is_sink = nir_src_is_const(src) || nir_src_is_undef(src);
-   copy_type(src.ssa->index, dest->ssa.index, src_is_sink, float_types, progress);
-   copy_type(src.ssa->index, dest->ssa.index, src_is_sink, int_types, progress);
+   if (src.is_ssa && dest->is_ssa) {
+      copy_type(src.ssa->index, dest->ssa.index, src_is_sink, float_types, progress);
+      copy_type(src.ssa->index, dest->ssa.index, src_is_sink, int_types, progress);
+   }
 }
 
 /** Gather up ALU types for SSA values
@@ -104,7 +110,6 @@ nir_gather_ssa_types(nir_function_impl *impl,
             switch (instr->type) {
             case nir_instr_type_alu: {
                nir_alu_instr *alu = nir_instr_as_alu(instr);
-               assert(alu->dest.dest.is_ssa);
                const nir_op_info *info = &nir_op_infos[alu->op];
                switch (alu->op) {
                case nir_op_mov:
@@ -122,8 +127,10 @@ nir_gather_ssa_types(nir_function_impl *impl,
 
                case nir_op_bcsel:
                case nir_op_b32csel:
-                  set_type(alu->src[0].src.ssa->index, nir_type_bool,
-                           float_types, int_types, &progress);
+                  if (alu->src[0].src.is_ssa) {
+                     set_type(alu->src[0].src.ssa->index, nir_type_bool,
+                              float_types, int_types, &progress);
+                  }
                   copy_types(alu->src[1].src, &alu->dest.dest,
                              float_types, int_types, &progress);
                   copy_types(alu->src[2].src, &alu->dest.dest,
@@ -132,12 +139,15 @@ nir_gather_ssa_types(nir_function_impl *impl,
 
                default:
                   for (unsigned i = 0; i < info->num_inputs; i++) {
-                     assert(alu->src[i].src.is_ssa);
-                     set_type(alu->src[i].src.ssa->index, info->input_types[i],
+                     if (alu->src[i].src.is_ssa) {
+                        set_type(alu->src[i].src.ssa->index, info->input_types[i],
+                                 float_types, int_types, &progress);
+                     }
+                  }
+                  if (alu->dest.dest.is_ssa) {
+                     set_type(alu->dest.dest.ssa.index, info->output_type,
                               float_types, int_types, &progress);
                   }
-                  set_type(alu->dest.dest.ssa.index, info->output_type,
-                           float_types, int_types, &progress);
                }
                break;
             }
@@ -145,79 +155,45 @@ nir_gather_ssa_types(nir_function_impl *impl,
             case nir_instr_type_tex: {
                nir_tex_instr *tex = nir_instr_as_tex(instr);
                for (unsigned i = 0; i < tex->num_srcs; i++) {
-                  assert(tex->src[i].src.is_ssa);
-                  set_type(tex->src[i].src.ssa->index,
-                           nir_tex_instr_src_type(tex, i),
+                  if (tex->src[i].src.is_ssa) {
+                     set_type(tex->src[i].src.ssa->index,
+                              nir_tex_instr_src_type(tex, i),
+                              float_types, int_types, &progress);
+                  }
+               }
+               if (tex->dest.is_ssa) {
+                  set_type(tex->dest.ssa.index, tex->dest_type,
                            float_types, int_types, &progress);
                }
-               assert(tex->dest.is_ssa);
-               set_type(tex->dest.ssa.index, tex->dest_type,
-                        float_types, int_types, &progress);
                break;
             }
 
             case nir_instr_type_intrinsic: {
                nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-               /* We could go nuts here, but we'll just handle a few simple
-                * cases and let everything else be untyped.
-                */
-               switch (intrin->intrinsic) {
-               case nir_intrinsic_load_deref: {
-                  nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
 
-                  assert(intrin->dest.is_ssa);
-                  set_type(intrin->dest.ssa.index,
-                           nir_get_nir_type_for_glsl_type(deref->type),
-                           float_types, int_types, &progress);
-                  break;
+               if (intrin->dest.is_ssa) {
+                  nir_alu_type dest_type = nir_intrinsic_instr_dest_type(intrin);
+                  if (dest_type != nir_type_invalid) {
+                     set_type(intrin->dest.ssa.index, dest_type,
+                              float_types, int_types, &progress);
+                  }
                }
 
-               case nir_intrinsic_store_deref: {
-                  nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-
-                  assert(intrin->src[1].is_ssa);
-                  set_type(intrin->src[1].ssa->index,
-                           nir_get_nir_type_for_glsl_type(deref->type),
-                           float_types, int_types, &progress);
-                  break;
-               }
-
-               case nir_intrinsic_load_input:
-               case nir_intrinsic_load_uniform:
-                  assert(intrin->dest.is_ssa);
-                  set_type(intrin->dest.ssa.index,
-                           nir_intrinsic_dest_type(intrin),
-                           float_types, int_types, &progress);
-                  break;
-
-               case nir_intrinsic_store_output:
-                  assert(intrin->src[0].is_ssa);
-                  set_type(intrin->src[0].ssa->index,
-                           nir_intrinsic_src_type(intrin),
-                           float_types, int_types, &progress);
-                  break;
-
-               default:
-                  break;
-               }
-
-               /* For the most part, we leave other intrinsics alone.  Most
-                * of them don't matter in OpenGL ES 2.0 drivers anyway.
-                * However, we should at least check if this is some sort of
-                * IO intrinsic and flag it's offset and index sources.
-                */
-               nir_src *offset_src = nir_get_io_offset_src(intrin);
-               if (offset_src) {
-                  assert(offset_src->is_ssa);
-                  set_type(offset_src->ssa->index, nir_type_int,
-                           float_types, int_types, &progress);
+               const unsigned num_srcs = nir_intrinsic_infos[intrin->intrinsic].num_srcs;
+               for (unsigned i = 0; i < num_srcs; i++) {
+                  if (intrin->src[i].is_ssa) {
+                     nir_alu_type src_type = nir_intrinsic_instr_src_type(intrin, i);
+                     if (src_type != nir_type_invalid) {
+                        set_type(intrin->src[i].ssa->index, src_type,
+                                 float_types, int_types, &progress);
+                     }
+                  }
                }
                break;
             }
 
             case nir_instr_type_phi: {
                nir_phi_instr *phi = nir_instr_as_phi(instr);
-               assert(phi->dest.is_ssa);
                nir_foreach_phi_src(src, phi) {
                   copy_types(src->src, &phi->dest,
                              float_types, int_types, &progress);

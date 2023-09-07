@@ -60,7 +60,7 @@ lower_fragcolor_instr(nir_builder *b, nir_instr *intr, void *data)
    if (instr->intrinsic != nir_intrinsic_store_deref)
       return false;
 
-   out = nir_deref_instr_get_variable(nir_src_as_deref(instr->src[0]));
+   out = nir_intrinsic_get_var(instr, 0);
    if (out->data.location != FRAG_RESULT_COLOR || out->data.mode != nir_var_shader_out)
       return false;
    b->cursor = nir_after_instr(&instr->instr);

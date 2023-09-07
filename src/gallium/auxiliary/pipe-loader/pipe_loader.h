@@ -33,7 +33,7 @@
 #ifndef PIPE_LOADER_H
 #define PIPE_LOADER_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "frontend/drm_driver.h"
 #include "util/xmlconfig.h"
 
@@ -199,7 +199,7 @@ pipe_loader_sw_probe(struct pipe_loader_device **devs, int ndev);
  *
  * \sa pipe_loader_probe
  */
-boolean
+bool
 pipe_loader_sw_probe_wrapped(struct pipe_loader_device **dev,
                              struct pipe_screen *screen);
 

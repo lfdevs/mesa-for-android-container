@@ -40,8 +40,8 @@ agx_ppp_update_size(struct AGX_PPP_HEADER *present)
    PPP_CASE(viewport, VIEWPORT);
    PPP_CASE(w_clamp, W_CLAMP);
    PPP_CASE(output_select, OUTPUT_SELECT);
-   PPP_CASE(varying_word_0, VARYING_0);
-   PPP_CASE(varying_word_1, VARYING_1);
+   PPP_CASE(varying_counts_32, VARYING_COUNTS);
+   PPP_CASE(varying_counts_16, VARYING_COUNTS);
    PPP_CASE(cull, CULL);
    PPP_CASE(cull_2, CULL_2);
    PPP_CASE(fragment_shader, FRAGMENT_SHADER);

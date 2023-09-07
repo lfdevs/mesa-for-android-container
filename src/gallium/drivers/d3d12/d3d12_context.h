@@ -196,7 +196,7 @@ struct d3d12_context {
    unsigned num_vbs;
    float flip_y;
    bool need_zero_one_depth_range;
-   enum pipe_prim_type initial_api_prim;
+   enum mesa_prim initial_api_prim;
    struct pipe_viewport_state viewport_states[PIPE_MAX_VIEWPORTS];
    D3D12_VIEWPORT viewports[PIPE_MAX_VIEWPORTS];
    unsigned num_viewports;
@@ -257,6 +257,7 @@ struct d3d12_context {
 
    uint64_t submit_id;
    ID3D12GraphicsCommandList *cmdlist;
+   ID3D12GraphicsCommandList8 *cmdlist8;
    ID3D12GraphicsCommandList *state_fixup_cmdlist;
 
    struct list_head active_queries;

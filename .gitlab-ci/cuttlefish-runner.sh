@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086 # we want word splitting
+
 section_start cuttlefish_setup "cuttlefish: setup"
 set -xe
 
@@ -26,6 +28,7 @@ ADB="adb -s vsock:3:5555"
 $ADB root
 sleep 1
 $ADB shell echo Hi from Android
+# shellcheck disable=SC2035
 $ADB logcat dEQP:D *:S &
 
 # overlay vendor
@@ -44,15 +47,15 @@ $ADB shell setenforce 0
 
 # deqp
 
-$ADB push /deqp/modules/egl/deqp-egl /data/.
+$ADB push /deqp/modules/egl/deqp-egl-android /data/.
 $ADB push /deqp/assets/gl_cts/data/mustpass/egl/aosp_mustpass/3.2.6.x/egl-master.txt /data/.
 $ADB push /deqp-runner/deqp-runner /data/.
 
-# download mesa-x86_64-android.tar.zst
-
-MESA_ANDROID_ARTIFACT_URL=https://${PIPELINE_ARTIFACTS_BASE}/${MINIO_ARTIFACT_NAME}.tar.zst
-curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -o ${MINIO_ARTIFACT_NAME}.tar.zst ${MESA_ANDROID_ARTIFACT_URL}
-tar -xvf ${MINIO_ARTIFACT_NAME}.tar.zst
+# download Android Mesa from S3
+MESA_ANDROID_ARTIFACT_URL=https://${PIPELINE_ARTIFACTS_BASE}/${S3_ARTIFACT_NAME}.tar.zst
+curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -o ${S3_ARTIFACT_NAME}.tar.zst ${MESA_ANDROID_ARTIFACT_URL}
+tar -xvf ${S3_ARTIFACT_NAME}.tar.zst
+rm "${S3_ARTIFACT_NAME}.tar.zst" &
 
 $ADB push install/all-skips.txt /data/.
 $ADB push install/$GPU_VERSION-flakes.txt /data/.
@@ -97,7 +100,7 @@ $ADB shell "mkdir /data/results; cd /data; strace -o /data/results/out.strace -f
     --flakes /data/$GPU_VERSION-flakes.txt \
     --testlog-to-xml /deqp/executor/testlog-to-xml \
     --fraction-start $CI_NODE_INDEX \
-    --fraction `expr $CI_NODE_TOTAL \* ${DEQP_FRACTION:-1}` \
+    --fraction $(( CI_NODE_TOTAL * ${DEQP_FRACTION:-1})) \
     --jobs ${FDO_CI_CONCURRENT:-4} \
     $DEQP_RUNNER_OPTIONS"
 

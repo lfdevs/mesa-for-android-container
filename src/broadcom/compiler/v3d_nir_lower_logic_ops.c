@@ -158,7 +158,7 @@ pack_unorm_rgb10a2(nir_builder *b, nir_ssa_def *c)
         int offset = bits[0];
         for (int i = 1; i < 4; i++) {
                 nir_ssa_def *shifted_chan =
-                        nir_ishl(b, chans[i], nir_imm_int(b, offset));
+                        nir_ishl_imm(b, chans[i], offset);
                 result = nir_ior(b, result, shifted_chan);
                 offset += bits[i];
         }
@@ -176,9 +176,9 @@ unpack_unorm_rgb10a2(nir_builder *b, nir_ssa_def *c)
 
         nir_ssa_def *chans[4];
         for (int i = 0; i < 4; i++) {
-                nir_ssa_def *unorm = nir_iand(b, c, nir_imm_int(b, masks[i]));
+                nir_ssa_def *unorm = nir_iand_imm(b, c, masks[i]);
                 chans[i] = nir_format_unorm_to_float(b, unorm, &bits[i]);
-                c = nir_ushr(b, c, nir_imm_int(b, bits[i]));
+                c = nir_ushr_imm(b, c, bits[i]);
         }
 
         return nir_vec4(b, chans[0], chans[1], chans[2], chans[3]);
@@ -246,9 +246,8 @@ v3d_emit_logic_op_raw(struct v3d_compile *c, nir_builder *b,
                                         c->fs_key->color_fmt[rt].format,
                                         UTIL_FORMAT_COLORSPACE_RGB, i);
                         if (bits > 0 && bits < 32) {
-                                nir_ssa_def *mask =
-                                        nir_imm_int(b, (1u << bits) - 1);
-                                op_res[i] = nir_iand(b, op_res[i], mask);
+                                op_res[i] = nir_iand_imm(b, op_res[i],
+                                                         (1u << bits) - 1);
                         }
                 }
         }
@@ -386,11 +385,7 @@ v3d_nir_lower_logic_ops_block(nir_block *block, struct v3d_compile *c)
                                 continue;
                         }
 
-                        nir_function_impl *impl =
-                                nir_cf_node_get_function(&block->cf_node);
-                        nir_builder b;
-                        nir_builder_init(&b, impl);
-                        b.cursor = nir_before_instr(&intr->instr);
+                        nir_builder b = nir_builder_at(nir_before_instr(&intr->instr));
                         v3d_nir_lower_logic_op_instr(c, &b, intr, rt);
 
                         progress = true;
@@ -411,19 +406,17 @@ v3d_nir_lower_logic_ops(nir_shader *s, struct v3d_compile *c)
         if (c->fs_key->logicop_func == PIPE_LOGICOP_COPY)
                 return false;
 
-        nir_foreach_function(function, s) {
-                if (function->impl) {
-                        nir_foreach_block(block, function->impl)
-                                progress |= v3d_nir_lower_logic_ops_block(block, c);
+        nir_foreach_function_impl(impl, s) {
+                nir_foreach_block(block, impl)
+                        progress |= v3d_nir_lower_logic_ops_block(block, c);
 
-                        if (progress) {
-                                nir_metadata_preserve(function->impl,
-                                                      nir_metadata_block_index |
-                                                      nir_metadata_dominance);
-                        } else {
-                                nir_metadata_preserve(function->impl,
-                                                      nir_metadata_all);
-                        }
+                if (progress) {
+                        nir_metadata_preserve(impl,
+                                              nir_metadata_block_index |
+                                              nir_metadata_dominance);
+                } else {
+                        nir_metadata_preserve(impl,
+                                              nir_metadata_all);
                 }
         }
 

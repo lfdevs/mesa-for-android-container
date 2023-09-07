@@ -32,7 +32,9 @@ from lava.utils.log_section import (
 
 @dataclass
 class LogFollower:
-    current_section: Optional[GitlabSection] = None
+    starting_section: Optional[GitlabSection] = None
+    _current_section: Optional[GitlabSection] = None
+    section_history: list[GitlabSection] = field(default_factory=list, init=False)
     timeout_durations: dict[LogSectionType, timedelta] = field(
         default_factory=lambda: DEFAULT_GITLAB_SECTION_TIMEOUTS,
     )
@@ -43,9 +45,11 @@ class LogFollower:
     _merge_next_line: str = field(default_factory=str, init=False)
 
     def __post_init__(self):
-        section_is_created = bool(self.current_section)
+        # Make it trigger current_section setter to populate section history
+        self.current_section = self.starting_section
+        section_is_created = bool(self._current_section)
         section_has_started = bool(
-            self.current_section and self.current_section.has_started
+            self._current_section and self._current_section.has_started
         )
         self.log_hints = LAVALogHints(self)
         assert (
@@ -57,10 +61,20 @@ class LogFollower:
         next(self.gl_section_fix_gen)
 
     @property
+    def current_section(self):
+        return self._current_section
+
+    @current_section.setter
+    def current_section(self, new_section: GitlabSection) -> None:
+        if old_section := self._current_section:
+            self.section_history.append(old_section)
+        self._current_section = new_section
+
+    @property
     def phase(self) -> LogSectionType:
         return (
-            self.current_section.type
-            if self.current_section
+            self._current_section.type
+            if self._current_section
             else LogSectionType.UNKNOWN
         )
 
@@ -75,22 +89,22 @@ class LogFollower:
             print(line)
 
     def watchdog(self):
-        if not self.current_section:
+        if not self._current_section:
             return
 
         timeout_duration = self.timeout_durations.get(
-            self.current_section.type, self.fallback_timeout
+            self._current_section.type, self.fallback_timeout
         )
 
-        if self.current_section.delta_time() > timeout_duration:
+        if self._current_section.delta_time() > timeout_duration:
             raise MesaCITimeoutError(
-                f"Gitlab Section {self.current_section} has timed out",
+                f"Gitlab Section {self._current_section} has timed out",
                 timeout_duration=timeout_duration,
             )
 
     def clear_current_section(self):
-        if self.current_section and not self.current_section.has_finished:
-            self._buffer.append(self.current_section.end())
+        if self._current_section and not self._current_section.has_finished:
+            self._buffer.append(self._current_section.end())
             self.current_section = None
 
     def update_section(self, new_section: GitlabSection):
@@ -110,6 +124,7 @@ class LogFollower:
         for log_section in LOG_SECTIONS:
             if new_section := log_section.from_log_line_to_section(line):
                 self.update_section(new_section)
+                break
 
     def detect_kernel_dump_line(self, line: dict[str, Union[str, list]]) -> bool:
         # line["msg"] can be a list[str] when there is a kernel dump
@@ -265,18 +280,31 @@ def fix_lava_gitlab_section_log():
 
 
 
-def print_log(msg: str) -> None:
+def print_log(msg: str, *args) -> None:
     # Reset color from timestamp, since `msg` can tint the terminal color
-    print(f"{CONSOLE_LOG['RESET']}{datetime.now()}: {msg}")
+    print(f"{CONSOLE_LOG['RESET']}{datetime.now()}: {msg}", *args)
 
 
-def fatal_err(msg):
+def fatal_err(msg, exception=None):
     colored_msg = f"{CONSOLE_LOG['FG_RED']}"
-    f"{msg}"
-    f"{CONSOLE_LOG['RESET']}"
-    print_log(colored_msg)
+    print_log(colored_msg, f"{msg}", f"{CONSOLE_LOG['RESET']}")
+    if exception:
+        raise exception
     sys.exit(1)
 
 
-def hide_sensitive_data(yaml_data: str, hide_tag: str ="HIDEME"):
-    return "".join(line for line in yaml_data.splitlines(True) if hide_tag not in line)
+def hide_sensitive_data(yaml_data: str, start_hide: str = "HIDE_START", end_hide: str = "HIDE_END") -> str:
+    skip_line = False
+    dump_data: list[str] = []
+    for line in yaml_data.splitlines(True):
+        if start_hide in line:
+            skip_line = True
+        elif end_hide in line:
+            skip_line = False
+
+        if skip_line:
+            continue
+
+        dump_data.append(line)
+
+    return "".join(dump_data)

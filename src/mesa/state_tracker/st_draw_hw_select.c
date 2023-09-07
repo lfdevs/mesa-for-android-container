@@ -61,7 +61,7 @@ struct geometry_constant {
 
 #define set_uniform_location(var, field, packed)                 \
    do {                                                          \
-      unsigned offset = Offset(struct geometry_constant, field); \
+      unsigned offset = offsetof(struct geometry_constant, field); \
       var->data.driver_location = offset >> (packed ? 2 : 4);    \
       var->data.location_frac = (offset >> 2) & 0x3;             \
    } while (0)
@@ -71,8 +71,7 @@ has_nan_or_inf(nir_builder *b, nir_ssa_def *v)
 {
    nir_ssa_def *nan = nir_bany_fnequal4(b, v, v);
 
-   nir_ssa_def *imm = nir_imm_float(b, INFINITY);
-   nir_ssa_def *inf = nir_bany(b, nir_feq(b, nir_fabs(b, v), imm));
+   nir_ssa_def *inf = nir_bany(b, nir_feq_imm(b, nir_fabs(b, v), INFINITY));
 
    return nir_ior(b, nan, inf);
 }
@@ -132,9 +131,9 @@ face_culling(nir_builder *b, nir_ssa_def **v, bool packed)
    nir_ssa_def *det = nir_fadd(b, nir_fadd(b, t0, t1), t2);
 
    /* invert det sign once any vertex w < 0 */
-   nir_ssa_def *n0 = nir_flt(b, nir_channel(b, v[0], 3), nir_imm_float(b, 0));
-   nir_ssa_def *n1 = nir_flt(b, nir_channel(b, v[1], 3), nir_imm_float(b, 0));
-   nir_ssa_def *n2 = nir_flt(b, nir_channel(b, v[2], 3), nir_imm_float(b, 0));
+   nir_ssa_def *n0 = nir_flt_imm(b, nir_channel(b, v[0], 3), 0);
+   nir_ssa_def *n1 = nir_flt_imm(b, nir_channel(b, v[1], 3), 0);
+   nir_ssa_def *n2 = nir_flt_imm(b, nir_channel(b, v[2], 3), 0);
    nir_ssa_def *cond = nir_ixor(b, nir_ixor(b, n0, n1), n2);
    det = nir_bcsel(b, cond, nir_fneg(b, det), det);
 
@@ -229,7 +228,7 @@ clip_with_plane(nir_builder *b, nir_variable *vert, nir_variable *num_vert,
       nir_ssa_def *d = nir_fdot(b, v, plane);
       nir_store_array_var(b, dist, idx, d, 1);
 
-      nir_ssa_def *clipped = nir_flt(b, d, nir_imm_float(b, 0));
+      nir_ssa_def *clipped = nir_flt_imm(b, d, 0);
       nir_store_var(b, all_clipped,
                     nir_iand(b, nir_load_var(b, all_clipped), clipped), 1);
    }
@@ -267,7 +266,7 @@ clip_with_plane(nir_builder *b, nir_variable *vert, nir_variable *num_vert,
    begin_for_loop(vert_loop, num)
    {
       nir_ssa_def *di = nir_load_array_var(b, dist, idx);
-      nir_if *if_clipped = nir_push_if(b, nir_flt(b, di, nir_imm_float(b, 0)));
+      nir_if *if_clipped = nir_push_if(b, nir_flt_imm(b, di, 0));
       {
          /* - case, we need to take care of sign change and insert vertex */
 
@@ -275,7 +274,7 @@ clip_with_plane(nir_builder *b, nir_variable *vert, nir_variable *num_vert,
                                        nir_iadd_imm(b, num, -1),
                                        nir_iadd_imm(b, idx, -1));
          nir_ssa_def *dp = nir_load_array_var(b, dist, prev);
-         nir_if *prev_if = nir_push_if(b, nir_flt(b, nir_imm_float(b, 0), dp));
+         nir_if *prev_if = nir_push_if(b, nir_fgt_imm(b, dp, 0));
          {
             /* +- case, replace - with inserted vertex
              * assert(vert_index <= idx), array is sure to not grow here
@@ -297,7 +296,7 @@ clip_with_plane(nir_builder *b, nir_variable *vert, nir_variable *num_vert,
          nir_ssa_def *next = nir_bcsel(b, nir_ieq(b, idx, nir_iadd_imm(b, num, -1)),
                                        nir_imm_int(b, 0), nir_iadd_imm(b, idx, 1));
          nir_ssa_def *dn = nir_load_array_var(b, dist, next);
-         nir_if *next_if = nir_push_if(b, nir_flt(b, nir_imm_float(b, 0), dn));
+         nir_if *next_if = nir_push_if(b, nir_fgt_imm(b, dn, 0));
          {
             /* -+ case, may grow array:
              *   vert_index > idx: +-+ case, grow array, current vertex in 'saved',
@@ -382,7 +381,7 @@ get_window_space_depth(nir_builder *b, nir_ssa_def *v, nir_ssa_def **trans)
    /* do perspective division, if w==0, xyz must be 0 too (otherwise can't pass
     * the clip test), 0/0=NaN, but we want it to be the nearest point.
     */
-   nir_ssa_def *c = nir_feq(b, w, nir_imm_float(b, 0));
+   nir_ssa_def *c = nir_feq_imm(b, w, 0);
    nir_ssa_def *d = nir_bcsel(b, c, nir_imm_float(b, -1), nir_fdiv(b, z, w));
 
    /* map [-1, 1] to [near, far] set by glDepthRange(near, far) */
@@ -413,9 +412,12 @@ update_result_buffer(nir_builder *b, nir_ssa_def *dmin, nir_ssa_def *dmax,
    /* driver_location = 0 (slot 0) */
 
    nir_ssa_def *ssbo = nir_imm_int(b, 0);
-   nir_ssbo_atomic_exchange(b, 32, ssbo, offset, nir_imm_int(b, 1));
-   nir_ssbo_atomic_umin(b, 32, ssbo, nir_iadd_imm(b, offset, 4), dmin);
-   nir_ssbo_atomic_umax(b, 32, ssbo, nir_iadd_imm(b, offset, 8), dmax);
+   nir_ssbo_atomic(b, 32, ssbo, offset, nir_imm_int(b, 1),
+                   .atomic_op = nir_atomic_op_xchg);
+   nir_ssbo_atomic(b, 32, ssbo, nir_iadd_imm(b, offset, 4), dmin,
+                   .atomic_op = nir_atomic_op_umin);
+   nir_ssbo_atomic(b, 32, ssbo, nir_iadd_imm(b, offset, 8), dmax,
+                   .atomic_op = nir_atomic_op_umax);
 }
 
 static void
@@ -432,7 +434,7 @@ build_point_nir_shader(nir_builder *b, union state_key state, bool packed)
    for (int i = 0; i < state.num_user_clip_planes; i++) {
       nir_ssa_def *p = get_user_clip_plane(b, i, packed);
       nir_ssa_def *d = nir_fdot(b, v, p);
-      nir_ssa_def *r = nir_flt(b, d, nir_imm_float(b, 0));
+      nir_ssa_def *r = nir_flt_imm(b, d, 0);
       outside = i ? nir_ior(b, outside, r) : r;
    }
    if (outside)
@@ -499,8 +501,8 @@ build_line_nir_shader(nir_builder *b, union state_key state, bool packed)
       nir_ssa_def *v1 = nir_load_var(b, vert1);
       nir_ssa_def *d0 = nir_fdot(b, v0, plane);
       nir_ssa_def *d1 = nir_fdot(b, v1, plane);
-      nir_ssa_def *n0 = nir_flt(b, d0, nir_imm_float(b, 0));
-      nir_ssa_def *n1 = nir_flt(b, d1, nir_imm_float(b, 0));
+      nir_ssa_def *n0 = nir_flt_imm(b, d0, 0);
+      nir_ssa_def *n1 = nir_flt_imm(b, d1, 0);
 
       return_if_true(b, nir_iand(b, n0, n1));
 
@@ -614,7 +616,7 @@ hw_select_create_gs(struct st_context *st, union state_key state)
    nir->info.inputs_read = VARYING_BIT_POS;
    nir->num_uniforms = DIV_ROUND_UP(sizeof(struct geometry_constant), (4 * sizeof(float)));
    nir->info.num_ssbos = 1;
-   nir->info.gs.output_primitive = SHADER_PRIM_POINTS;
+   nir->info.gs.output_primitive = MESA_PRIM_POINTS;
    nir->info.gs.vertices_out = 1;
    nir->info.gs.invocations = 1;
    nir->info.gs.active_stream_mask = 1;
@@ -626,23 +628,23 @@ hw_select_create_gs(struct st_context *st, union state_key state)
 
    switch (state.primitive) {
    case HW_SELECT_PRIM_POINTS:
-      nir->info.gs.input_primitive = SHADER_PRIM_POINTS;
+      nir->info.gs.input_primitive = MESA_PRIM_POINTS;
       nir->info.gs.vertices_in = 1;
       build_point_nir_shader(&b, state, packed);
       break;
    case HW_SELECT_PRIM_LINES:
-      nir->info.gs.input_primitive = SHADER_PRIM_LINES;
+      nir->info.gs.input_primitive = MESA_PRIM_LINES;
       nir->info.gs.vertices_in = 2;
       build_line_nir_shader(&b, state, packed);
       break;
    case HW_SELECT_PRIM_TRIANGLES:
-      nir->info.gs.input_primitive = SHADER_PRIM_TRIANGLES;
+      nir->info.gs.input_primitive = MESA_PRIM_TRIANGLES;
       nir->info.gs.vertices_in = 3;
       build_planar_primitive_nir_shader(&b, state, packed);
       break;
    case HW_SELECT_PRIM_QUADS:
       /* geometry shader has no quad primitive, use lines_adjacency instead */
-      nir->info.gs.input_primitive = SHADER_PRIM_LINES_ADJACENCY;
+      nir->info.gs.input_primitive = MESA_PRIM_LINES_ADJACENCY;
       nir->info.gs.vertices_in = 4;
       build_planar_primitive_nir_shader(&b, state, packed);
       break;

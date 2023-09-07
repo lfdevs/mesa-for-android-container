@@ -61,9 +61,8 @@ vn_android_release_ahb(struct AHardwareBuffer *ahb);
 VkFormat
 vn_android_drm_format_to_vk_format(uint32_t format);
 
-VkResult
-vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev,
-                                           uint32_t *out_mem_type_bits);
+uint32_t
+vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev);
 
 uint32_t
 vn_android_gralloc_get_shared_present_usage(void);
@@ -134,11 +133,10 @@ vn_android_drm_format_to_vk_format(UNUSED uint32_t format)
    return VK_FORMAT_UNDEFINED;
 }
 
-static inline VkResult
-vn_android_get_ahb_buffer_memory_type_bits(UNUSED struct vn_device *dev,
-                                           UNUSED uint32_t *out_mem_type_bits)
+static inline uint32_t
+vn_android_get_ahb_buffer_memory_type_bits(UNUSED struct vn_device *dev)
 {
-   return VK_ERROR_FEATURE_NOT_PRESENT;
+   return 0;
 }
 
 static inline uint32_t

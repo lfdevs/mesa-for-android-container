@@ -43,6 +43,8 @@ enum tu_debug_flags
    TU_DEBUG_NOLRZFC = 1 << 19,
    TU_DEBUG_DYNAMIC = 1 << 20,
    TU_DEBUG_BOS = 1 << 21,
+   TU_DEBUG_3D_LOAD = 1 << 22,
+   TU_DEBUG_FDM = 1 << 23,
 };
 
 struct tu_env {

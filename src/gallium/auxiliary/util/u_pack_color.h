@@ -35,7 +35,7 @@
 #define U_PACK_COLOR_H
 
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/format/u_formats.h"
 #include "util/format/u_format.h"
 #include "util/u_math.h"
@@ -48,19 +48,19 @@
  * Must be big enough to hold data for all formats (currently 256 bits).
  */
 union util_color {
-   ubyte ub;
-   ushort us;
-   uint ui[4];
-   ushort h[4]; /* half float */
+   uint8_t ub;
+   uint16_t us;
+   uint32_t ui[4];
+   uint16_t h[4]; /* half float */
    float f[4];
    double d[4];
 };
 
 /**
- * Pack ubyte R,G,B,A into dest pixel.
+ * Pack uint8 R,G,B,A into dest pixel.
  */
 static inline void
-util_pack_color_ub(ubyte r, ubyte g, ubyte b, ubyte a,
+util_pack_color_ub(uint8_t r, uint8_t g, uint8_t b, uint8_t a,
                    enum pipe_format format, union util_color *uc)
 {
    switch (format) {
@@ -145,7 +145,7 @@ util_pack_color_ub(ubyte r, ubyte g, ubyte b, ubyte a,
     */
    default:
       {
-         ubyte src[4];
+         uint8_t src[4];
 
          src[0] = r;
          src[1] = g;
@@ -158,120 +158,120 @@ util_pack_color_ub(ubyte r, ubyte g, ubyte b, ubyte a,
  
 
 /**
- * Unpack RGBA from a packed pixel, returning values as ubytes in [0,255].
+ * Unpack RGBA from a packed pixel, returning values as uint8_ts in [0,255].
  */
 static inline void
 util_unpack_color_ub(enum pipe_format format, union util_color *uc,
-                     ubyte *r, ubyte *g, ubyte *b, ubyte *a)
+                     uint8_t *r, uint8_t *g, uint8_t *b, uint8_t *a)
 {
    switch (format) {
    case PIPE_FORMAT_ABGR8888_UNORM:
       {
-         uint p = uc->ui[0];
-         *r = (ubyte) ((p >> 24) & 0xff);
-         *g = (ubyte) ((p >> 16) & 0xff);
-         *b = (ubyte) ((p >>  8) & 0xff);
-         *a = (ubyte) ((p >>  0) & 0xff);
+         uint32_t p = uc->ui[0];
+         *r = (uint8_t) ((p >> 24) & 0xff);
+         *g = (uint8_t) ((p >> 16) & 0xff);
+         *b = (uint8_t) ((p >>  8) & 0xff);
+         *a = (uint8_t) ((p >>  0) & 0xff);
       }
       return;
    case PIPE_FORMAT_XBGR8888_UNORM:
       {
-         uint p = uc->ui[0];
-         *r = (ubyte) ((p >> 24) & 0xff);
-         *g = (ubyte) ((p >> 16) & 0xff);
-         *b = (ubyte) ((p >>  8) & 0xff);
-         *a = (ubyte) 0xff;
+         uint32_t p = uc->ui[0];
+         *r = (uint8_t) ((p >> 24) & 0xff);
+         *g = (uint8_t) ((p >> 16) & 0xff);
+         *b = (uint8_t) ((p >>  8) & 0xff);
+         *a = (uint8_t) 0xff;
       }
       return;
    case PIPE_FORMAT_BGRA8888_UNORM:
       {
-         uint p = uc->ui[0];
-         *r = (ubyte) ((p >> 16) & 0xff);
-         *g = (ubyte) ((p >>  8) & 0xff);
-         *b = (ubyte) ((p >>  0) & 0xff);
-         *a = (ubyte) ((p >> 24) & 0xff);
+         uint32_t p = uc->ui[0];
+         *r = (uint8_t) ((p >> 16) & 0xff);
+         *g = (uint8_t) ((p >>  8) & 0xff);
+         *b = (uint8_t) ((p >>  0) & 0xff);
+         *a = (uint8_t) ((p >> 24) & 0xff);
       }
       return;
    case PIPE_FORMAT_BGRX8888_UNORM:
       {
-         uint p = uc->ui[0];
-         *r = (ubyte) ((p >> 16) & 0xff);
-         *g = (ubyte) ((p >>  8) & 0xff);
-         *b = (ubyte) ((p >>  0) & 0xff);
-         *a = (ubyte) 0xff;
+         uint32_t p = uc->ui[0];
+         *r = (uint8_t) ((p >> 16) & 0xff);
+         *g = (uint8_t) ((p >>  8) & 0xff);
+         *b = (uint8_t) ((p >>  0) & 0xff);
+         *a = (uint8_t) 0xff;
       }
       return;
    case PIPE_FORMAT_ARGB8888_UNORM:
       {
-         uint p = uc->ui[0];
-         *r = (ubyte) ((p >>  8) & 0xff);
-         *g = (ubyte) ((p >> 16) & 0xff);
-         *b = (ubyte) ((p >> 24) & 0xff);
-         *a = (ubyte) ((p >>  0) & 0xff);
+         uint32_t p = uc->ui[0];
+         *r = (uint8_t) ((p >>  8) & 0xff);
+         *g = (uint8_t) ((p >> 16) & 0xff);
+         *b = (uint8_t) ((p >> 24) & 0xff);
+         *a = (uint8_t) ((p >>  0) & 0xff);
       }
       return;
    case PIPE_FORMAT_XRGB8888_UNORM:
       {
-         uint p = uc->ui[0];
-         *r = (ubyte) ((p >>  8) & 0xff);
-         *g = (ubyte) ((p >> 16) & 0xff);
-         *b = (ubyte) ((p >> 24) & 0xff);
-         *a = (ubyte) 0xff;
+         uint32_t p = uc->ui[0];
+         *r = (uint8_t) ((p >>  8) & 0xff);
+         *g = (uint8_t) ((p >> 16) & 0xff);
+         *b = (uint8_t) ((p >> 24) & 0xff);
+         *a = (uint8_t) 0xff;
       }
       return;
    case PIPE_FORMAT_B5G6R5_UNORM:
       {
-         ushort p = uc->us;
-         *r = (ubyte) (((p >> 8) & 0xf8) | ((p >> 13) & 0x7));
-         *g = (ubyte) (((p >> 3) & 0xfc) | ((p >>  9) & 0x3));
-         *b = (ubyte) (((p << 3) & 0xf8) | ((p >>  2) & 0x7));
-         *a = (ubyte) 0xff;
+         uint16_t p = uc->us;
+         *r = (uint8_t) (((p >> 8) & 0xf8) | ((p >> 13) & 0x7));
+         *g = (uint8_t) (((p >> 3) & 0xfc) | ((p >>  9) & 0x3));
+         *b = (uint8_t) (((p << 3) & 0xf8) | ((p >>  2) & 0x7));
+         *a = (uint8_t) 0xff;
       }
       return;
    case PIPE_FORMAT_B5G5R5X1_UNORM:
       {
-         ushort p = uc->us;
-         *r = (ubyte) (((p >>  7) & 0xf8) | ((p >> 12) & 0x7));
-         *g = (ubyte) (((p >>  2) & 0xf8) | ((p >>  7) & 0x7));
-         *b = (ubyte) (((p <<  3) & 0xf8) | ((p >>  2) & 0x7));
-         *a = (ubyte) 0xff;
+         uint16_t p = uc->us;
+         *r = (uint8_t) (((p >>  7) & 0xf8) | ((p >> 12) & 0x7));
+         *g = (uint8_t) (((p >>  2) & 0xf8) | ((p >>  7) & 0x7));
+         *b = (uint8_t) (((p <<  3) & 0xf8) | ((p >>  2) & 0x7));
+         *a = (uint8_t) 0xff;
       }
       return;
    case PIPE_FORMAT_B5G5R5A1_UNORM:
       {
-         ushort p = uc->us;
-         *r = (ubyte) (((p >>  7) & 0xf8) | ((p >> 12) & 0x7));
-         *g = (ubyte) (((p >>  2) & 0xf8) | ((p >>  7) & 0x7));
-         *b = (ubyte) (((p <<  3) & 0xf8) | ((p >>  2) & 0x7));
-         *a = (ubyte) (0xff * (p >> 15));
+         uint16_t p = uc->us;
+         *r = (uint8_t) (((p >>  7) & 0xf8) | ((p >> 12) & 0x7));
+         *g = (uint8_t) (((p >>  2) & 0xf8) | ((p >>  7) & 0x7));
+         *b = (uint8_t) (((p <<  3) & 0xf8) | ((p >>  2) & 0x7));
+         *a = (uint8_t) (0xff * (p >> 15));
       }
       return;
    case PIPE_FORMAT_B4G4R4A4_UNORM:
       {
-         ushort p = uc->us;
-         *r = (ubyte) (((p >> 4) & 0xf0) | ((p >>  8) & 0xf));
-         *g = (ubyte) (((p >> 0) & 0xf0) | ((p >>  4) & 0xf));
-         *b = (ubyte) (((p << 4) & 0xf0) | ((p >>  0) & 0xf));
-         *a = (ubyte) (((p >> 8) & 0xf0) | ((p >> 12) & 0xf));
+         uint16_t p = uc->us;
+         *r = (uint8_t) (((p >> 4) & 0xf0) | ((p >>  8) & 0xf));
+         *g = (uint8_t) (((p >> 0) & 0xf0) | ((p >>  4) & 0xf));
+         *b = (uint8_t) (((p << 4) & 0xf0) | ((p >>  0) & 0xf));
+         *a = (uint8_t) (((p >> 8) & 0xf0) | ((p >> 12) & 0xf));
       }
       return;
    case PIPE_FORMAT_A8_UNORM:
       {
-         ubyte p = uc->ub;
-         *r = *g = *b = (ubyte) 0xff;
+         uint8_t p = uc->ub;
+         *r = *g = *b = (uint8_t) 0xff;
          *a = p;
       }
       return;
    case PIPE_FORMAT_L8_UNORM:
       {
-         ubyte p = uc->ub;
+         uint8_t p = uc->ub;
          *r = *g = *b = p;
-         *a = (ubyte) 0xff;
+         *a = (uint8_t) 0xff;
       }
       return;
    case PIPE_FORMAT_I8_UNORM:
       {
-         ubyte p = uc->ub;
+         uint8_t p = uc->ub;
          *r = *g = *b = *a = p;
       }
       return;
@@ -290,7 +290,7 @@ util_unpack_color_ub(enum pipe_format format, union util_color *uc,
          *r = float_to_ubyte(p[0]);
          *g = float_to_ubyte(p[1]);
          *b = float_to_ubyte(p[2]);
-         *a = (ubyte) 0xff;
+         *a = (uint8_t) 0xff;
       }
       return;
 
@@ -299,7 +299,7 @@ util_unpack_color_ub(enum pipe_format format, union util_color *uc,
          const float *p = &uc->f[0];
          *r = float_to_ubyte(p[0]);
          *g = float_to_ubyte(p[1]);
-         *b = *a = (ubyte) 0xff;
+         *b = *a = (uint8_t) 0xff;
       }
       return;
 
@@ -307,7 +307,7 @@ util_unpack_color_ub(enum pipe_format format, union util_color *uc,
       {
          const float *p = &uc->f[0];
          *r = float_to_ubyte(p[0]);
-         *g = *b = *a = (ubyte) 0xff;
+         *g = *b = *a = (uint8_t) 0xff;
       }
       return;
 
@@ -315,7 +315,7 @@ util_unpack_color_ub(enum pipe_format format, union util_color *uc,
     */
    default:
       {
-         ubyte dst[4];
+         uint8_t dst[4];
 
          util_format_read_4ub(format, dst, 0, uc, 0, 0, 0, 1, 1);
          *r = dst[0];
@@ -335,10 +335,10 @@ util_unpack_color_ub(enum pipe_format format, union util_color *uc,
 static inline void
 util_pack_color(const float rgba[4], enum pipe_format format, union util_color *uc)
 {
-   ubyte r = 0;
-   ubyte g = 0;
-   ubyte b = 0;
-   ubyte a = 0;
+   uint8_t r = 0;
+   uint8_t g = 0;
+   uint8_t b = 0;
+   uint8_t a = 0;
 
    if (util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_RGB, 0) <= 8) {
       /* format uses 8-bit components or less */
@@ -633,22 +633,22 @@ util_pack64_z_stencil(enum pipe_format format, double z, uint8_t s)
 
 
 /**
- * Pack 4 ubytes into a 4-byte word
+ * Pack 4 uint8_ts into a 4-byte word
  */
-static inline unsigned
-pack_ub4(ubyte b0, ubyte b1, ubyte b2, ubyte b3)
+static inline uint32_t
+pack_ub4(uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b3)
 {
-   return ((((unsigned int)b0) << 0) |
-	   (((unsigned int)b1) << 8) |
-	   (((unsigned int)b2) << 16) |
-	   (((unsigned int)b3) << 24));
+   return ((((uint32_t)b0) << 0) |
+	   (((uint32_t)b1) << 8) |
+	   (((uint32_t)b2) << 16) |
+	   (((uint32_t)b3) << 24));
 }
 
 
 /**
  * Pack/convert 4 floats into one 4-byte word.
  */
-static inline unsigned
+static inline uint32_t
 pack_ui32_float4(float a, float b, float c, float d)
 {
    return pack_ub4( float_to_ubyte(a),

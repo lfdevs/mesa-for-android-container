@@ -31,17 +31,18 @@
 struct lowering_state {
    const struct intel_device_info *devinfo;
 
+   nir_function_impl *impl;
+
    struct hash_table *queries;
    uint32_t n_queries;
 
    struct brw_nir_rt_globals_defs globals;
    nir_ssa_def *rq_globals;
-
-   uint32_t state_scratch_base_offset;
 };
 
 struct brw_ray_query {
    nir_variable *opaque_var;
+   nir_variable *internal_var;
    uint32_t id;
 };
 
@@ -60,42 +61,48 @@ need_spill_fill(struct lowering_state *state)
  * nir_intrinsic_rq_proceed.
  */
 
-static bool
-maybe_create_brw_var(nir_instr *instr, struct lowering_state *state)
+static void
+register_opaque_var(nir_variable *opaque_var, struct lowering_state *state)
 {
-   if (instr->type != nir_instr_type_deref)
-      return false;
-
-   nir_deref_instr *deref = nir_instr_as_deref(instr);
-   if (deref->deref_type != nir_deref_type_var &&
-       deref->deref_type != nir_deref_type_array)
-      return false;
-
-   nir_variable *opaque_var = nir_deref_instr_get_variable(deref);
-   if (!opaque_var || !opaque_var->data.ray_query)
-      return false;
-
    struct hash_entry *entry = _mesa_hash_table_search(state->queries, opaque_var);
-   if (entry)
-      return false;
+   assert(entry == NULL);
 
    struct brw_ray_query *rq = rzalloc(state->queries, struct brw_ray_query);
    rq->opaque_var = opaque_var;
    rq->id = state->n_queries;
 
-   _mesa_hash_table_insert(state->queries, opaque_var, rq);
-
    unsigned aoa_size = glsl_get_aoa_size(opaque_var->type);
    state->n_queries += MAX2(1, aoa_size);
 
-   return true;
+   _mesa_hash_table_insert(state->queries, opaque_var, rq);
 }
+
+static void
+create_internal_var(struct brw_ray_query *rq, struct lowering_state *state)
+{
+   const struct glsl_type *opaque_type = rq->opaque_var->type;
+   const struct glsl_type *internal_type = glsl_uint16_t_type();
+
+   while (glsl_type_is_array(opaque_type)) {
+      assert(!glsl_type_is_unsized_array(opaque_type));
+      internal_type = glsl_array_type(internal_type,
+                                      glsl_array_size(opaque_type),
+                                      0);
+      opaque_type = glsl_get_array_element(opaque_type);
+   }
+
+   rq->internal_var = nir_local_variable_create(state->impl,
+                                                internal_type,
+                                                NULL);
+}
+
+
 
 static nir_ssa_def *
 get_ray_query_shadow_addr(nir_builder *b,
                           nir_deref_instr *deref,
                           struct lowering_state *state,
-                          nir_ssa_def **out_state_offset)
+                          nir_deref_instr **out_state_deref)
 {
    nir_deref_path path;
    nir_deref_path_init(&path, deref, NULL);
@@ -115,8 +122,7 @@ get_ray_query_shadow_addr(nir_builder *b,
                    brw_rt_ray_queries_shadow_stack_size(state->devinfo) * rq->id);
 
    bool spill_fill = need_spill_fill(state);
-   *out_state_offset = nir_imm_int(b, state->state_scratch_base_offset +
-                                      SIZEOF_QUERY_STATE * rq->id);
+   *out_state_deref = nir_build_deref_var(b, rq->internal_var);
 
    if (!spill_fill)
       return NULL;
@@ -128,11 +134,7 @@ get_ray_query_shadow_addr(nir_builder *b,
          nir_ssa_def *index = nir_ssa_for_src(b, (*p)->arr.index, 1);
 
          /**/
-         uint32_t local_state_offset = SIZEOF_QUERY_STATE *
-                                       MAX2(1, glsl_get_aoa_size((*p)->type));
-         *out_state_offset =
-            nir_iadd(b, *out_state_offset,
-                        nir_imul_imm(b, index, local_state_offset));
+         *out_state_deref = nir_build_deref_array(b, *out_state_deref, index);
 
          /**/
          uint64_t size = MAX2(1, glsl_get_aoa_size((*p)->type)) *
@@ -166,13 +168,13 @@ get_ray_query_shadow_addr(nir_builder *b,
 
 static void
 update_trace_ctrl_level(nir_builder *b,
-                        nir_ssa_def *state_scratch_offset,
+                        nir_deref_instr *state_deref,
                         nir_ssa_def **out_old_ctrl,
                         nir_ssa_def **out_old_level,
                         nir_ssa_def *new_ctrl,
                         nir_ssa_def *new_level)
 {
-   nir_ssa_def *old_value = nir_load_scratch(b, 1, 32, state_scratch_offset, 4);
+   nir_ssa_def *old_value = nir_load_deref(b, state_deref);
    nir_ssa_def *old_ctrl = nir_ishr_imm(b, old_value, 2);
    nir_ssa_def *old_level = nir_iand_imm(b, old_value, 0x3);
 
@@ -181,6 +183,11 @@ update_trace_ctrl_level(nir_builder *b,
    if (out_old_level)
       *out_old_level = old_level;
 
+   if (new_ctrl)
+      new_ctrl = nir_i2i16(b, new_ctrl);
+   if (new_level)
+      new_level = nir_i2i16(b, new_level);
+
    if (new_ctrl || new_level) {
       if (!new_ctrl)
          new_ctrl = old_ctrl;
@@ -188,7 +195,7 @@ update_trace_ctrl_level(nir_builder *b,
          new_level = old_level;
 
       nir_ssa_def *new_value = nir_ior(b, nir_ishl_imm(b, new_ctrl, 2), new_level);
-      nir_store_scratch(b, new_value, state_scratch_offset, 4, 0x1);
+      nir_store_deref(b, state_deref, new_value, 0x1);
    }
 }
 
@@ -221,9 +228,9 @@ lower_ray_query_intrinsic(nir_builder *b,
 
    b->cursor = nir_instr_remove(&intrin->instr);
 
-   nir_ssa_def *ctrl_level_addr;
+   nir_deref_instr *ctrl_level_deref;
    nir_ssa_def *shadow_stack_addr =
-      get_ray_query_shadow_addr(b, deref, state, &ctrl_level_addr);
+      get_ray_query_shadow_addr(b, deref, state, &ctrl_level_deref);
    nir_ssa_def *hw_stack_addr =
       brw_nir_rt_sync_stack_addr(b, state->globals.base_mem_addr, state->devinfo);
    nir_ssa_def *stack_addr = shadow_stack_addr ? shadow_stack_addr : hw_stack_addr;
@@ -265,7 +272,7 @@ lower_ray_query_intrinsic(nir_builder *b,
       brw_nir_rt_query_mark_init(b, stack_addr);
       brw_nir_rt_store_mem_ray_query_at_addr(b, ray_addr, &ray_defs);
 
-      update_trace_ctrl_level(b, ctrl_level_addr,
+      update_trace_ctrl_level(b, ctrl_level_deref,
                               NULL, NULL,
                               nir_imm_int(b, GEN_RT_TRACE_RAY_INITAL),
                               nir_imm_int(b, BRW_RT_BVH_LEVEL_WORLD));
@@ -280,7 +287,7 @@ lower_ray_query_intrinsic(nir_builder *b,
       nir_push_if(b, not_done);
       {
          nir_ssa_def *ctrl, *level;
-         update_trace_ctrl_level(b, ctrl_level_addr,
+         update_trace_ctrl_level(b, ctrl_level_deref,
                                  &ctrl, &level,
                                  NULL,
                                  NULL);
@@ -304,7 +311,7 @@ lower_ray_query_intrinsic(nir_builder *b,
          if (shadow_stack_addr)
             spill_query(b, hw_stack_addr, shadow_stack_addr);
 
-         update_trace_ctrl_level(b, ctrl_level_addr,
+         update_trace_ctrl_level(b, ctrl_level_deref,
                                  NULL, NULL,
                                  nir_imm_int(b, GEN_RT_TRACE_RAY_CONTINUE),
                                  hit_in.bvh_level);
@@ -326,7 +333,7 @@ lower_ray_query_intrinsic(nir_builder *b,
                             brw_nir_rt_mem_hit_addr_from_addr(b, stack_addr, true), 16,
                             brw_nir_rt_mem_hit_addr_from_addr(b, stack_addr, false), 16,
                             BRW_RT_SIZEOF_HIT_INFO);
-      update_trace_ctrl_level(b, ctrl_level_addr,
+      update_trace_ctrl_level(b, ctrl_level_deref,
                               NULL, NULL,
                               nir_imm_int(b, GEN_RT_TRACE_RAY_COMMIT),
                               nir_imm_int(b, BRW_RT_BVH_LEVEL_OBJECT));
@@ -335,7 +342,7 @@ lower_ray_query_intrinsic(nir_builder *b,
 
    case nir_intrinsic_rq_generate_intersection: {
       brw_nir_rt_generate_hit_addr(b, stack_addr, intrin->src[1].ssa);
-      update_trace_ctrl_level(b, ctrl_level_addr,
+      update_trace_ctrl_level(b, ctrl_level_deref,
                               NULL, NULL,
                               nir_imm_int(b, GEN_RT_TRACE_RAY_COMMIT),
                               nir_imm_int(b, BRW_RT_BVH_LEVEL_OBJECT));
@@ -348,7 +355,7 @@ lower_ray_query_intrinsic(nir_builder *b,
    }
 
    case nir_intrinsic_rq_load: {
-      const bool committed = nir_src_as_bool(intrin->src[1]);
+      const bool committed = nir_intrinsic_committed(intrin);
 
       struct brw_nir_rt_mem_ray_defs world_ray_in = {};
       struct brw_nir_rt_mem_ray_defs object_ray_in = {};
@@ -370,7 +377,7 @@ lower_ray_query_intrinsic(nir_builder *b,
              * RayQueryCommittedIntersectionGeneratedEXT = 2U   <= hit_in.leaf_type == BRW_RT_BVH_NODE_TYPE_PROCEDURAL (3)
              */
             sysval =
-               nir_bcsel(b, nir_ieq(b, hit_in.leaf_type, nir_imm_int(b, 4)),
+               nir_bcsel(b, nir_ieq_imm(b, hit_in.leaf_type, 4),
                          nir_imm_int(b, 1), nir_imm_int(b, 2));
             sysval =
                nir_bcsel(b, hit_in.valid,
@@ -379,8 +386,8 @@ lower_ray_query_intrinsic(nir_builder *b,
             /* 0 -> triangle, 1 -> AABB */
             sysval =
                nir_b2i32(b,
-                         nir_ieq(b, hit_in.leaf_type,
-                                    nir_imm_int(b, BRW_RT_BVH_NODE_TYPE_PROCEDURAL)));
+                         nir_ieq_imm(b, hit_in.leaf_type,
+                                     BRW_RT_BVH_NODE_TYPE_PROCEDURAL));
          }
          break;
 
@@ -471,6 +478,13 @@ lower_ray_query_intrinsic(nir_builder *b,
          sysval = world_ray_in.orig;
          break;
 
+      case nir_ray_query_value_intersection_triangle_vertex_positions: {
+         struct brw_nir_rt_bvh_primitive_leaf_positions_defs pos;
+         brw_nir_rt_load_bvh_primitive_leaf_positions(b, &pos, hit_in.prim_leaf_ptr);
+         sysval = pos.positions[nir_intrinsic_column(intrin)];
+         break;
+      }
+
       default:
          unreachable("Invalid ray query");
       }
@@ -489,9 +503,7 @@ static void
 lower_ray_query_impl(nir_function_impl *impl, struct lowering_state *state)
 {
    nir_builder _b, *b = &_b;
-   nir_builder_init(&_b, impl);
-
-   b->cursor = nir_before_block(nir_start_block(b->impl));
+   _b = nir_builder_at(nir_before_block(nir_start_block(impl)));
 
    state->rq_globals = nir_load_ray_query_global_intel(b);
 
@@ -522,34 +534,31 @@ bool
 brw_nir_lower_ray_queries(nir_shader *shader,
                           const struct intel_device_info *devinfo)
 {
+   assert(exec_list_length(&shader->functions) == 1);
+
    struct lowering_state state = {
       .devinfo = devinfo,
+      .impl = nir_shader_get_entrypoint(shader),
       .queries = _mesa_pointer_hash_table_create(NULL),
    };
 
-   assert(exec_list_length(&shader->functions) == 1);
-
-   /* Find query variables */
-   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   nir_foreach_block_safe(block, impl) {
-      nir_foreach_instr(instr, block)
-         maybe_create_brw_var(instr, &state);
-   }
+   /* Map all query variable to internal type variables */
+   nir_foreach_function_temp_variable(var, state.impl)
+      register_opaque_var(var, &state);
+   hash_table_foreach(state.queries, entry)
+      create_internal_var(entry->data, &state);
 
    bool progress = state.n_queries > 0;
 
    if (progress) {
-      state.state_scratch_base_offset = shader->scratch_size;
-      shader->scratch_size += SIZEOF_QUERY_STATE * state.n_queries;
-
-      lower_ray_query_impl(impl, &state);
+      lower_ray_query_impl(state.impl, &state);
 
       nir_remove_dead_derefs(shader);
       nir_remove_dead_variables(shader,
                                 nir_var_shader_temp | nir_var_function_temp,
                                 NULL);
 
-      nir_metadata_preserve(impl, nir_metadata_none);
+      nir_metadata_preserve(state.impl, nir_metadata_none);
    }
 
    ralloc_free(state.queries);

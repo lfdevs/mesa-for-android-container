@@ -401,7 +401,7 @@
   "SQ_IMG_RSRC_WORD4_gfx103": {
    "fields": [
     {"bits": [0, 12], "name": "DEPTH"},
-    {"bits": [0, 13], "comment": "only for 1D, 2D, and 2D_MSAA if pitch > width", "name": "PITCH"},
+    {"bits": [13, 13], "comment": "1D, 2D, 2D_MSAA: the pitch if pitch > width, the low bits are in DEPTH", "name": "PITCH_MSB"},
     {"bits": [16, 28], "name": "BASE_ARRAY"}
    ]
   },

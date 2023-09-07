@@ -25,7 +25,7 @@
 
 #include "nir.h"
 
-enum PACKED ssa_ranges {
+enum ENUM_PACKED ssa_ranges {
    unknown = 0,
    lt_zero,
    le_zero,

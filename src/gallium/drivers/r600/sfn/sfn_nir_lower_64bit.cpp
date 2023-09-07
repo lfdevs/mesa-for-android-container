@@ -201,19 +201,19 @@ class LowerSplit64op : public NirLowerInstruction {
          }
          case nir_op_f2i32: {
             auto src = nir_ssa_for_alu_src(b, alu, 0);
-            auto gt0 = nir_flt(b, nir_imm_double(b, 0.0), src);
+            auto gt0 = nir_fgt_imm(b, src, 0.0);
             auto abs_src = nir_fabs(b, src);
             auto value = nir_f2u32(b, abs_src);
             return nir_bcsel(b, gt0, value, nir_ineg(b, value));
          }
          case nir_op_f2u32: {
-            /* fp32 doesn't hold suffient bits to represent the full range of
+            /* fp32 doesn't hold sufficient bits to represent the full range of
              * u32, therefore we have to split the values, and because f2f32
              * rounds, we have to remove the fractional part in the hi bits
              * For values > UINT_MAX the result is undefined */
             auto src = nir_ssa_for_alu_src(b, alu, 0);
             src = nir_fadd(b, src, nir_fneg(b, nir_ffract(b, src)));
-            auto gt0 = nir_flt(b, nir_imm_double(b, 0.0), src);
+            auto gt0 = nir_fgt_imm(b, src, 0.0);
             auto highval = nir_fmul_imm(b, src, 1.0 / 65536.0);
             auto fract = nir_ffract(b, highval);
             auto high = nir_f2u32(b, nir_f2f32(b, nir_fadd(b, highval, nir_fneg(b, fract))));
@@ -249,9 +249,9 @@ class LowerSplit64op : public NirLowerInstruction {
          auto phi_lo = nir_phi_instr_create(b->shader);
          auto phi_hi = nir_phi_instr_create(b->shader);
          nir_ssa_dest_init(
-            &phi_lo->instr, &phi_lo->dest, phi->dest.ssa.num_components * 2, 32, "");
+            &phi_lo->instr, &phi_lo->dest, phi->dest.ssa.num_components * 2, 32);
          nir_ssa_dest_init(
-            &phi_hi->instr, &phi_hi->dest, phi->dest.ssa.num_components * 2, 32, "");
+            &phi_hi->instr, &phi_hi->dest, phi->dest.ssa.num_components * 2, 32);
          nir_foreach_phi_src(s, phi)
          {
             auto lo = nir_unpack_32_2x16_split_x(b, nir_ssa_for_src(b, s->src, 1));
@@ -421,7 +421,7 @@ LowerSplit64BitVar::split_store_deref_array(nir_intrinsic_instr *intr,
 
    assert(old_components > 2 && old_components <= 4);
 
-   auto src_xy = nir_channels(b, intr->src[1].ssa, 3);
+   auto src_xy = nir_trim_vector(b, intr->src[1].ssa, 2);
 
    auto vars = get_var_pair(old_var);
 
@@ -458,7 +458,7 @@ LowerSplit64BitVar::split_store_deref_var(nir_intrinsic_instr *intr,
 
    assert(old_components > 2 && old_components <= 4);
 
-   auto src_xy = nir_channels(b, intr->src[1].ssa, 3);
+   auto src_xy = nir_trim_vector(b, intr->src[1].ssa, 2);
 
    auto vars = get_var_pair(old_var);
 
@@ -558,7 +558,7 @@ LowerSplit64BitVar::split_store_output(nir_intrinsic_instr *store1)
    nir_io_semantics sem = nir_intrinsic_io_semantics(store1);
 
    auto store2 = nir_instr_as_intrinsic(nir_instr_clone(b->shader, &store1->instr));
-   auto src1 = nir_channels(b, src.ssa, 3);
+   auto src1 = nir_trim_vector(b, src.ssa, 2);
    auto src2 = nir_channels(b, src.ssa, old_components == 3 ? 4 : 0xc);
 
    nir_instr_rewrite_src(&store1->instr, &src, nir_src_for_ssa(src1));
@@ -590,7 +590,7 @@ LowerSplit64BitVar::split_double_load_uniform(nir_intrinsic_instr *intr)
    nir_intrinsic_set_range(load2, nir_intrinsic_range(intr));
    load2->num_components = second_components;
 
-   nir_ssa_dest_init(&load2->instr, &load2->dest, second_components, 64, nullptr);
+   nir_ssa_dest_init(&load2->instr, &load2->dest, second_components, 64);
    nir_builder_instr_insert(b, &load2->instr);
 
    intr->dest.ssa.num_components = intr->num_components = 2;
@@ -618,7 +618,7 @@ LowerSplit64BitVar::split_double_load_ssbo(nir_intrinsic_instr *intr)
    auto new_src0 = nir_src_for_ssa(nir_iadd_imm(b, intr->src[0].ssa, 1));
    nir_instr_rewrite_src(&load2->instr, &load2->src[0], new_src0);
    load2->num_components = second_components;
-   nir_ssa_dest_init(&load2->instr, &load2->dest, second_components, 64, nullptr);
+   nir_ssa_dest_init(&load2->instr, &load2->dest, second_components, 64);
 
    nir_intrinsic_set_dest_type(load2, nir_intrinsic_dest_type(intr));
    nir_builder_instr_insert(b, &load2->instr);
@@ -644,7 +644,7 @@ LowerSplit64BitVar::split_double_load_ubo(nir_intrinsic_instr *intr)
 
    load2->num_components = second_components;
 
-   nir_ssa_dest_init(&load2->instr, &load2->dest, second_components, 64, nullptr);
+   nir_ssa_dest_init(&load2->instr, &load2->dest, second_components, 64);
    nir_builder_instr_insert(b, &load2->instr);
 
    intr->dest.ssa.num_components = intr->num_components = 2;
@@ -671,8 +671,8 @@ LowerSplit64BitVar::split_reduction3(nir_alu_instr *alu,
 {
    nir_ssa_def *src[2][2];
 
-   src[0][0] = nir_channels(b, nir_ssa_for_src(b, alu->src[0].src, 2), 3);
-   src[0][1] = nir_channels(b, nir_ssa_for_src(b, alu->src[1].src, 2), 3);
+   src[0][0] = nir_trim_vector(b, nir_ssa_for_src(b, alu->src[0].src, 2), 2);
+   src[0][1] = nir_trim_vector(b, nir_ssa_for_src(b, alu->src[1].src, 2), 2);
 
    src[1][0] = nir_channel(b, nir_ssa_for_src(b, alu->src[0].src, 3), 2);
    src[1][1] = nir_channel(b, nir_ssa_for_src(b, alu->src[1].src, 3), 2);
@@ -688,8 +688,8 @@ LowerSplit64BitVar::split_reduction4(nir_alu_instr *alu,
 {
    nir_ssa_def *src[2][2];
 
-   src[0][0] = nir_channels(b, nir_ssa_for_src(b, alu->src[0].src, 2), 3);
-   src[0][1] = nir_channels(b, nir_ssa_for_src(b, alu->src[1].src, 2), 3);
+   src[0][0] = nir_trim_vector(b, nir_ssa_for_src(b, alu->src[0].src, 2), 2);
+   src[0][1] = nir_trim_vector(b, nir_ssa_for_src(b, alu->src[1].src, 2), 2);
 
    src[1][0] = nir_channels(b, nir_ssa_for_src(b, alu->src[0].src, 4), 0xc);
    src[1][1] = nir_channels(b, nir_ssa_for_src(b, alu->src[1].src, 4), 0xc);
@@ -831,6 +831,7 @@ Lower64BitToVec2::filter(const nir_instr *instr) const
       case nir_intrinsic_load_input:
       case nir_intrinsic_load_uniform:
       case nir_intrinsic_load_ubo:
+      case nir_intrinsic_load_global:
       case nir_intrinsic_load_ubo_vec4:
       case nir_intrinsic_load_ssbo:
          return nir_dest_bit_size(intr->dest) == 64;
@@ -842,6 +843,8 @@ Lower64BitToVec2::filter(const nir_instr *instr) const
             return true;
          return (var->type->without_array()->components() != intr->num_components);
       }
+      case nir_intrinsic_store_global:
+         return nir_src_bit_size(intr->src[0]) == 64;
       default:
          return false;
       }
@@ -881,6 +884,7 @@ Lower64BitToVec2::lower(nir_instr *instr)
       case nir_intrinsic_load_ssbo:
          return load_ssbo_64_to_vec2(intr);
       case nir_intrinsic_load_input:
+      case nir_intrinsic_load_global:
       case nir_intrinsic_load_ubo:
       case nir_intrinsic_load_ubo_vec4:
          return load_64_to_vec2(intr);
@@ -1060,43 +1064,39 @@ bool
 r600_nir_64_to_vec2(nir_shader *sh)
 {
    vector<nir_instr *> intr64bit;
-   nir_foreach_function(function, sh)
+   nir_foreach_function_impl(impl, sh)
    {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
-
-         nir_foreach_block(block, function->impl)
+      nir_foreach_block(block, impl)
+      {
+         nir_foreach_instr_safe(instr, block)
          {
-            nir_foreach_instr_safe(instr, block)
-            {
-               switch (instr->type) {
-               case nir_instr_type_alu: {
+            switch (instr->type) {
+            case nir_instr_type_alu: {
+               bool success = false;
+               nir_foreach_src(instr, store_64bit_intr, &success);
+               if (success)
+                  intr64bit.push_back(instr);
+               break;
+            }
+            case nir_instr_type_intrinsic: {
+               auto ir = nir_instr_as_intrinsic(instr);
+               switch (ir->intrinsic) {
+               case nir_intrinsic_store_output:
+               case nir_intrinsic_store_global:
+               case nir_intrinsic_store_ssbo: {
                   bool success = false;
                   nir_foreach_src(instr, store_64bit_intr, &success);
-                  if (success)
-                     intr64bit.push_back(instr);
+                  if (success) {
+                     auto wm = nir_intrinsic_write_mask(ir);
+                     nir_intrinsic_set_write_mask(ir, (wm == 1) ? 3 : 0xf);
+                     ir->num_components *= 2;
+                  }
                   break;
-               }
-               case nir_instr_type_intrinsic: {
-                  auto ir = nir_instr_as_intrinsic(instr);
-                  switch (ir->intrinsic) {
-                  case nir_intrinsic_store_output:
-                  case nir_intrinsic_store_ssbo: {
-                     bool success = false;
-                     nir_foreach_src(instr, store_64bit_intr, &success);
-                     if (success) {
-                        auto wm = nir_intrinsic_write_mask(ir);
-                        nir_intrinsic_set_write_mask(ir, (wm == 1) ? 3 : 0xf);
-                        ir->num_components *= 2;
-                     }
-                     break;
-                  }
-                  default:;
-                  }
                }
                default:;
                }
+            }
+            default:;
             }
          }
       }
@@ -1179,29 +1179,27 @@ void
 StoreMerger::collect_stores()
 {
    unsigned vertex = 0;
-   nir_foreach_function(function, sh)
+   nir_foreach_function_impl(impl, sh)
    {
-      if (function->impl) {
-         nir_foreach_block(block, function->impl)
+      nir_foreach_block(block, impl)
+      {
+         nir_foreach_instr_safe(instr, block)
          {
-            nir_foreach_instr_safe(instr, block)
-            {
-               if (instr->type != nir_instr_type_intrinsic)
-                  continue;
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
 
-               auto ir = nir_instr_as_intrinsic(instr);
-               if (ir->intrinsic == nir_intrinsic_emit_vertex ||
-                   ir->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
-                  ++vertex;
-                  continue;
-               }
-               if (ir->intrinsic != nir_intrinsic_store_output)
-                  continue;
-
-               unsigned index = nir_intrinsic_base(ir) + 64 * vertex +
-                                8 * 64 * nir_intrinsic_io_semantics(ir).gs_streams;
-               m_stores[index].push_back(ir);
+            auto ir = nir_instr_as_intrinsic(instr);
+            if (ir->intrinsic == nir_intrinsic_emit_vertex ||
+                ir->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
+               ++vertex;
+               continue;
             }
+            if (ir->intrinsic != nir_intrinsic_store_output)
+               continue;
+
+            unsigned index = nir_intrinsic_base(ir) + 64 * vertex +
+                             8 * 64 * nir_intrinsic_io_semantics(ir).gs_streams;
+            m_stores[index].push_back(ir);
          }
       }
    }
@@ -1226,11 +1224,9 @@ StoreMerger::combine_one_slot(vector<nir_intrinsic_instr *>& stores)
 {
    nir_ssa_def *srcs[4] = {nullptr};
 
-   nir_builder b;
-   nir_builder_init(&b, nir_shader_get_entrypoint(sh));
    auto last_store = *stores.rbegin();
 
-   b.cursor = nir_before_instr(&last_store->instr);
+   nir_builder b = nir_builder_at(nir_before_instr(&last_store->instr));
 
    unsigned comps = 0;
    unsigned writemask = 0;

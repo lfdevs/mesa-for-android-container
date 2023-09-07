@@ -26,11 +26,6 @@
 namespace brw {
 
 void
-vec4_gs_visitor::nir_setup_inputs()
-{
-}
-
-void
 vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 {
    dst_reg dest;

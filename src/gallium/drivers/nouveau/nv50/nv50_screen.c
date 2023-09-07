@@ -191,7 +191,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART:
    case PIPE_CAP_SUPPORTED_PRIM_MODES:
-      return BITFIELD_MASK(PIPE_PRIM_MAX);
+      return BITFIELD_MASK(MESA_PRIM_COUNT);
 
    /* supported caps */
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -237,7 +237,6 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEPTH_BOUNDS_TEST:
    case PIPE_CAP_TEXTURE_QUERY_SAMPLES:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
-   case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_FS_FACE_IS_INTEGER_SYSVAL:
    case PIPE_CAP_INVALIDATE_BUFFER:
    case PIPE_CAP_STRING_MARKER:
@@ -255,11 +254,10 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
 
    case PIPE_CAP_ALPHA_TEST:
-      /* nvc0 has fixed function alpha test support, but nv50 doesn't.  The TGSI
-       * backend emits the conditional discard code against a driver-uploaded
-       * uniform, but with NIR we can have the st emit it for us.
+      /* nvc0 has fixed function alpha test support, but nv50 doesn't.  If we
+       * don't have it, then the frontend will lower it for us.
        */
-      return class_3d >= NVC0_3D_CLASS || !screen->prefer_nir;
+      return class_3d >= NVC0_3D_CLASS;
 
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
       return PIPE_TEXTURE_TRANSFER_BLIT;
@@ -316,8 +314,6 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
                              enum pipe_shader_type shader,
                              enum pipe_shader_cap param)
 {
-   const struct nouveau_screen *screen = nouveau_screen(pscreen);
-
    switch (shader) {
    case PIPE_SHADER_VERTEX:
    case PIPE_SHADER_GEOMETRY:
@@ -376,10 +372,8 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
       return shader == PIPE_SHADER_COMPUTE ? NV50_MAX_GLOBALS - 1 : 0;
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       return shader == PIPE_SHADER_COMPUTE ? NV50_MAX_GLOBALS - 1 : 0;
-   case PIPE_SHADER_CAP_PREFERRED_IR:
-      return screen->prefer_nir ? PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
-      return (1 << PIPE_SHADER_IR_TGSI) | (1 << PIPE_SHADER_IR_NIR);
+      return 1 << PIPE_SHADER_IR_NIR;
    case PIPE_SHADER_CAP_DROUND_SUPPORTED:
    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
@@ -454,8 +448,10 @@ nv50_screen_get_compute_param(struct pipe_screen *pscreen,
       RET((uint64_t []) { 16 << 10 });
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE: /* c[], arbitrary limit */
       RET((uint64_t []) { 4096 });
-   case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
+   case PIPE_COMPUTE_CAP_SUBGROUP_SIZES:
       RET((uint32_t []) { 32 });
+   case PIPE_COMPUTE_CAP_MAX_SUBGROUPS:
+      RET((uint32_t []) { 0 });
    case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
       RET((uint64_t []) { nouveau_device_get_global_mem_size(dev) });
    case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
@@ -517,11 +513,13 @@ nv50_screen_destroy(struct pipe_screen *pscreen)
 }
 
 static void
-nv50_screen_fence_emit(struct pipe_context *pcontext, u32 *sequence)
+nv50_screen_fence_emit(struct pipe_context *pcontext, u32 *sequence,
+                       struct nouveau_bo *wait)
 {
    struct nv50_context *nv50 = nv50_context(pcontext);
    struct nv50_screen *screen = nv50->screen;
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
+   struct nouveau_pushbuf_refn ref = { wait, NOUVEAU_BO_GART | NOUVEAU_BO_RDWR };
 
    /* we need to do it after possible flush in MARK_RING */
    *sequence = ++screen->base.fence.sequence;
@@ -537,6 +535,8 @@ nv50_screen_fence_emit(struct pipe_context *pcontext, u32 *sequence)
                     NV50_3D_QUERY_GET_TYPE_QUERY |
                     NV50_3D_QUERY_GET_QUERY_SELECT_ZERO |
                     NV50_3D_QUERY_GET_SHORT);
+
+   nouveau_pushbuf_refn(push, &ref, 1);
 }
 
 static u32
@@ -849,9 +849,8 @@ nv50_screen_get_compiler_options(struct pipe_screen *pscreen,
                                  enum pipe_shader_ir ir,
                                  enum pipe_shader_type shader)
 {
-   struct nouveau_screen *screen = nouveau_screen(pscreen);
    if (ir == PIPE_SHADER_IR_NIR)
-      return nv50_ir_nir_shader_compiler_options(NVISA_G80_CHIPSET, shader, screen->prefer_nir);
+      return nv50_ir_nir_shader_compiler_options(NVISA_G80_CHIPSET, shader);
    return NULL;
 }
 

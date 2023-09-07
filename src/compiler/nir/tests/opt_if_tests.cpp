@@ -126,7 +126,7 @@ TEST_F(nir_opt_if_test, opt_if_simplification_single_source_phi_after_if)
    nir_phi_instr_add_src(phi, then_block, nir_src_for_ssa(one));
 
    nir_ssa_dest_init(&phi->instr, &phi->dest,
-                     one->num_components, one->bit_size, NULL);
+                     one->num_components, one->bit_size);
 
    nir_builder_instr_insert(&bld, &phi->instr);
 
@@ -148,7 +148,7 @@ TEST_F(nir_opt_if_test, opt_if_alu_of_phi_progress)
    nir_loop *loop = nir_push_loop(&bld);
    {
       nir_ssa_dest_init(&phi->instr, &phi->dest,
-                        x->num_components, x->bit_size, NULL);
+                        x->num_components, x->bit_size);
 
       nir_phi_instr_add_src(phi, x->parent_instr->block, nir_src_for_ssa(x));
 

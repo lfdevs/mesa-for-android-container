@@ -144,7 +144,6 @@ bool rogue_regarray_set(rogue_shader *shader,
    *regarray_cached = regarray;
    regarray->cached = regarray_cached;
 
-   assert(updated);
    return updated;
 }
 
@@ -372,6 +371,12 @@ rogue_reg *rogue_pixout_reg(rogue_shader *shader, unsigned index)
 }
 
 PUBLIC
+rogue_reg *rogue_special_reg(rogue_shader *shader, unsigned index)
+{
+   return rogue_reg_cached(shader, ROGUE_REG_CLASS_SPECIAL, index);
+}
+
+PUBLIC
 rogue_reg *rogue_vtxin_reg(rogue_shader *shader, unsigned index)
 {
    return rogue_reg_cached(shader, ROGUE_REG_CLASS_VTXIN, index);
@@ -583,6 +588,16 @@ rogue_coeff_regarray(rogue_shader *shader, unsigned size, unsigned start_index)
    return rogue_regarray_cached(shader,
                                 size,
                                 ROGUE_REG_CLASS_COEFF,
+                                start_index);
+}
+
+PUBLIC
+rogue_regarray *
+rogue_shared_regarray(rogue_shader *shader, unsigned size, unsigned start_index)
+{
+   return rogue_regarray_cached(shader,
+                                size,
+                                ROGUE_REG_CLASS_SHARED,
                                 start_index);
 }
 
@@ -1229,7 +1244,7 @@ rogue_build_context_create(rogue_compiler *compiler,
 {
    rogue_build_ctx *ctx;
 
-   ctx = rzalloc_size(compiler, sizeof(*ctx));
+   ctx = rzalloc_size(NULL, sizeof(*ctx));
    if (!ctx)
       return NULL;
 

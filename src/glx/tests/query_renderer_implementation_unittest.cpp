@@ -191,7 +191,7 @@ TEST_F(dri2_query_renderer_string_test, DRI2_RENDERER_QUERY_not_supported)
  * for each GLX attribute value.
  *
  * \note
- * This test does \b not perform any checking for invalid GLX attribte values.
+ * This test does \b not perform any checking for invalid GLX attribute values.
  * Other unit tests verify that invalid values are filtered before
  * dri2_query_renderer_string is called.
  */
@@ -256,7 +256,7 @@ TEST_F(dri2_query_renderer_integer_test, DRI2_RENDERER_QUERY_not_supported)
  * for each GLX attribute value.
  *
  * \note
- * This test does \b not perform any checking for invalid GLX attribte values.
+ * This test does \b not perform any checking for invalid GLX attribute values.
  * Other unit tests verify that invalid values are filtered before
  * dri2_query_renderer_integer is called.
  */

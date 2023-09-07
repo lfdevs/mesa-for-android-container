@@ -95,15 +95,12 @@ rewrite_emit_vertex(nir_intrinsic_instr *intrin, struct state *state)
    else
       count_per_primitive = nir_ssa_undef(b, 1, 32);
 
-   nir_ssa_def *max_vertices =
-      nir_imm_int(b, b->shader->info.gs.vertices_out);
-
    /* Create: if (vertex_count < max_vertices) and insert it.
     *
     * The new if statement needs to be hooked up to the control flow graph
     * before we start inserting instructions into it.
     */
-   nir_push_if(b, nir_ilt(b, count, max_vertices));
+   nir_push_if(b, nir_ilt_imm(b, count, b->shader->info.gs.vertices_out));
 
    nir_emit_vertex_with_counter(b, count, count_per_primitive, stream);
 
@@ -150,14 +147,14 @@ overwrite_incomplete_primitives(struct state *state, unsigned stream)
    assert(state->count_vtx_per_prim);
 
    nir_builder *b = state->builder;
-   enum shader_prim outprim = b->shader->info.gs.output_primitive;
+   enum mesa_prim outprim = b->shader->info.gs.output_primitive;
    unsigned outprim_min_vertices;
 
-   if (outprim == SHADER_PRIM_POINTS)
+   if (outprim == MESA_PRIM_POINTS)
       outprim_min_vertices = 1;
-   else if (outprim == SHADER_PRIM_LINE_STRIP)
+   else if (outprim == MESA_PRIM_LINE_STRIP)
       outprim_min_vertices = 2;
-   else if (outprim == SHADER_PRIM_TRIANGLE_STRIP)
+   else if (outprim == MESA_PRIM_TRIANGLE_STRIP)
       outprim_min_vertices = 3;
    else
       unreachable("Invalid GS output primitive type.");
@@ -172,7 +169,7 @@ overwrite_incomplete_primitives(struct state *state, unsigned stream)
 
    /* See if the current primitive is a incomplete */
    nir_ssa_def *is_inc_prim =
-      nir_ilt(b, vtxcnt_per_primitive, nir_imm_int(b, outprim_min_vertices));
+      nir_ilt_imm(b, vtxcnt_per_primitive, outprim_min_vertices);
 
    /* Number of vertices in the incomplete primitive */
    nir_ssa_def *num_inc_vtx =
@@ -373,7 +370,7 @@ nir_lower_gs_intrinsics(nir_shader *shader, nir_lower_gs_intrinsics_flags option
       overwrite_incomplete ||
       (options & nir_lower_gs_intrinsics_count_vertices_per_primitive);
 
-   bool is_points = shader->info.gs.output_primitive == SHADER_PRIM_POINTS;
+   bool is_points = shader->info.gs.output_primitive == MESA_PRIM_POINTS;
    /* points are always complete primitives with a single vertex, so these are
     * not needed when primitive is points.
     */
@@ -397,11 +394,8 @@ nir_lower_gs_intrinsics(nir_shader *shader, nir_lower_gs_intrinsics_flags option
    if (!a_block_needs_set_vertex_and_primitive_count(impl->end_block, per_stream))
       return false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_at(nir_before_cf_list(&impl->body));
    state.builder = &b;
-
-   b.cursor = nir_before_cf_list(&impl->body);
 
    for (unsigned i = 0; i < NIR_MAX_XFB_STREAMS; i++) {
       if (per_stream && !(shader->info.gs.active_stream_mask & (1 << i)))

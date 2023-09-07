@@ -54,7 +54,7 @@ struct fetch_shade_emit {
     */
    const float *constants;
    unsigned pitch[PIPE_MAX_ATTRIBS];
-   const ubyte *src[PIPE_MAX_ATTRIBS];
+   const uint8_t *src[PIPE_MAX_ATTRIBS];
    unsigned prim;
 
    struct draw_vs_variant_key key;
@@ -67,7 +67,7 @@ struct fetch_shade_emit {
 
 static void
 fse_prepare(struct draw_pt_middle_end *middle,
-            enum pipe_prim_type prim,
+            enum mesa_prim prim,
             unsigned opt,
             unsigned *max_vertices)
 {
@@ -158,7 +158,7 @@ fse_prepare(struct draw_pt_middle_end *middle,
    for (unsigned i = 0; i < draw->pt.nr_vertex_buffers; i++) {
       fse->active->set_buffer(fse->active,
                               i,
-                              ((const ubyte *) draw->pt.user.vbuffer[i].map +
+                              ((const uint8_t *) draw->pt.user.vbuffer[i].map +
                                draw->pt.vertex_buffer[i].buffer_offset),
                               draw->pt.vertex_buffer[i].stride,
                               draw->pt.max_index);
@@ -199,8 +199,8 @@ fse_run_linear(struct draw_pt_middle_end *middle,
    draw_do_flush(draw, DRAW_FLUSH_BACKEND);
 
    if (!draw->render->allocate_vertices(draw->render,
-                                        (ushort) fse->key.output_stride,
-                                        (ushort) count))
+                                        (uint16_t) fse->key.output_stride,
+                                        (uint16_t) count))
       goto fail;
 
    hw_verts = draw->render->map_vertices(draw->render);
@@ -226,7 +226,7 @@ fse_run_linear(struct draw_pt_middle_end *middle,
       }
    }
 
-   draw->render->unmap_vertices(draw->render, 0, (ushort) (count - 1));
+   draw->render->unmap_vertices(draw->render, 0, (uint16_t) (count - 1));
 
    /* Draw arrays path to avoid re-emitting index list again and
     * again.
@@ -247,7 +247,7 @@ static void
 fse_run(struct draw_pt_middle_end *middle,
         const unsigned *fetch_elts,
         unsigned fetch_count,
-        const ushort *draw_elts,
+        const uint16_t *draw_elts,
         unsigned draw_count,
         unsigned prim_flags)
 {
@@ -260,8 +260,8 @@ fse_run(struct draw_pt_middle_end *middle,
    draw_do_flush(draw, DRAW_FLUSH_BACKEND);
 
    if (!draw->render->allocate_vertices(draw->render,
-                                        (ushort) fse->key.output_stride,
-                                        (ushort) fetch_count))
+                                        (uint16_t) fse->key.output_stride,
+                                        (uint16_t) fetch_count))
       goto fail;
 
    hw_verts = draw->render->map_vertices(draw->render);
@@ -281,7 +281,7 @@ fse_run(struct draw_pt_middle_end *middle,
       }
    }
 
-   draw->render->unmap_vertices(draw->render, 0, (ushort)(fetch_count - 1));
+   draw->render->unmap_vertices(draw->render, 0, (uint16_t)(fetch_count - 1));
 
    draw->render->draw_elements(draw->render, draw_elts, draw_count);
 
@@ -294,11 +294,11 @@ fail:
 }
 
 
-static boolean
+static bool
 fse_run_linear_elts(struct draw_pt_middle_end *middle,
                     unsigned start,
                     unsigned count,
-                    const ushort *draw_elts,
+                    const uint16_t *draw_elts,
                     unsigned draw_count,
                     unsigned prim_flags)
 {
@@ -311,13 +311,13 @@ fse_run_linear_elts(struct draw_pt_middle_end *middle,
    draw_do_flush(draw, DRAW_FLUSH_BACKEND);
 
    if (!draw->render->allocate_vertices(draw->render,
-                                        (ushort) fse->key.output_stride,
-                                        (ushort) count))
-      return FALSE;
+                                        (uint16_t) fse->key.output_stride,
+                                        (uint16_t) count))
+      return false;
 
    hw_verts = draw->render->map_vertices(draw->render);
    if (!hw_verts)
-      return FALSE;
+      return false;
 
    /* Single routine to fetch vertices, run shader and emit HW verts.
     * Clipping is done elsewhere -- either by the API or on hardware,
@@ -327,11 +327,11 @@ fse_run_linear_elts(struct draw_pt_middle_end *middle,
 
    draw->render->draw_elements(draw->render, draw_elts, draw_count);
 
-   draw->render->unmap_vertices(draw->render, 0, (ushort)(count - 1));
+   draw->render->unmap_vertices(draw->render, 0, (uint16_t)(count - 1));
 
    draw->render->release_vertices(draw->render);
 
-   return TRUE;
+   return true;
 }
 
 

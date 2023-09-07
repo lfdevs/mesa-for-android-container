@@ -78,10 +78,8 @@ lower_rt_io_derefs(nir_shader *shader)
     */
    assert(num_shader_call_vars <= 1);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_at(nir_before_cf_list(&impl->body));
 
-   b.cursor = nir_before_cf_list(&impl->body);
    nir_ssa_def *call_data_addr = NULL;
    if (num_shader_call_vars > 0) {
       assert(shader->scratch_size >= BRW_BTD_STACK_CALLEE_DATA_SIZE);
@@ -272,8 +270,7 @@ lower_ray_walk_intrinsics(nir_shader *shader,
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    bool progress = false;
    nir_foreach_block_safe(block, impl) {
@@ -507,7 +504,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
 
    NIR_PASS_V(nir, brw_nir_lower_rt_intrinsics, devinfo);
 
-   nir_builder_init(&b, nir_shader_get_entrypoint(b.shader));
+   b = nir_builder_create(nir_shader_get_entrypoint(b.shader));
    /* brw_nir_lower_rt_intrinsics will leave us with a btd_global_arg_addr
     * intrinsic which doesn't exist in compute shaders.  We also created one
     * above when we generated the BTD spawn intrinsic.  Now we go through and
@@ -534,7 +531,7 @@ brw_nir_create_raygen_trampoline(const struct brw_compiler *compiler,
 
    NIR_PASS_V(nir, brw_nir_lower_cs_intrinsics);
 
-   brw_nir_optimize(nir, compiler, true);
+   brw_nir_optimize(nir, compiler);
 
    return nir;
 }

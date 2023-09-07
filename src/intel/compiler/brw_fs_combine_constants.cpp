@@ -339,13 +339,23 @@ representable_as_uw(unsigned ud, uint16_t *uw)
 }
 
 static bool
-supports_src_as_imm(const struct intel_device_info *devinfo, enum opcode op)
+supports_src_as_imm(const struct intel_device_info *devinfo, const fs_inst *inst)
 {
-   switch (op) {
+   if (devinfo->ver < 12)
+      return false;
+
+   switch (inst->opcode) {
    case BRW_OPCODE_ADD3:
-      return devinfo->verx10 >= 125;
+      /* ADD3 only exists on Gfx12.5+. */
+      return true;
+
    case BRW_OPCODE_MAD:
-      return devinfo->ver == 12 && devinfo->verx10 < 125;
+      /* Integer types can always mix sizes. Floating point types can mix
+       * sizes on Gfx12. On Gfx12.5, floating point sources must all be HF or
+       * all be F.
+       */
+      return devinfo->verx10 < 125 || inst->src[0].type != BRW_REGISTER_TYPE_F;
+
    default:
       return false;
    }
@@ -357,11 +367,15 @@ can_promote_src_as_imm(const struct intel_device_info *devinfo, fs_inst *inst,
 {
    bool can_promote = false;
 
-   /* Experiment shows that we can only support src0 as immediate */
+   /* Experiment shows that we can only support src0 as immediate for MAD on
+    * Gfx12. ADD3 can use src0 or src2 in Gfx12.5, but constant propagation
+    * only propagates into src0. It's possible that src2 works for W or UW MAD
+    * on Gfx12.5.
+    */
    if (src_idx != 0)
       return false;
 
-   if (!supports_src_as_imm(devinfo, inst->opcode))
+   if (!supports_src_as_imm(devinfo, inst))
       return false;
 
    /* TODO - Fix the codepath below to use a bfloat16 immediate on XeHP,
@@ -376,7 +390,7 @@ can_promote_src_as_imm(const struct intel_device_info *devinfo, fs_inst *inst,
       }
       break;
    }
-   case BRW_REGISTER_TYPE_W: {
+   case BRW_REGISTER_TYPE_D: {
       int16_t w;
       if (representable_as_w(inst->src[src_idx].d, &w)) {
          inst->src[src_idx] = brw_imm_w(w);
@@ -384,7 +398,7 @@ can_promote_src_as_imm(const struct intel_device_info *devinfo, fs_inst *inst,
       }
       break;
    }
-   case BRW_REGISTER_TYPE_UW: {
+   case BRW_REGISTER_TYPE_UD: {
       uint16_t uw;
       if (representable_as_uw(inst->src[src_idx].ud, &uw)) {
          inst->src[src_idx] = brw_imm_uw(uw);
@@ -392,6 +406,11 @@ can_promote_src_as_imm(const struct intel_device_info *devinfo, fs_inst *inst,
       }
       break;
    }
+   case BRW_REGISTER_TYPE_W:
+   case BRW_REGISTER_TYPE_UW:
+   case BRW_REGISTER_TYPE_HF:
+      can_promote = true;
+      break;
    default:
       break;
    }

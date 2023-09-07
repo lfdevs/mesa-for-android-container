@@ -463,5 +463,5 @@ vl_bicubic_filter_render(struct vl_bicubic_filter *filter,
    filter->pipe->set_vertex_buffers(filter->pipe, 0, 1, 0, false, &filter->quad);
    filter->pipe->bind_vertex_elements_state(filter->pipe, filter->ves);
 
-   util_draw_arrays(filter->pipe, PIPE_PRIM_QUADS, 0, 4);
+   util_draw_arrays(filter->pipe, MESA_PRIM_QUADS, 0, 4);
 }

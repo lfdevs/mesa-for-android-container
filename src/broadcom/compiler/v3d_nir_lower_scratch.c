@@ -66,7 +66,7 @@ v3d_nir_lower_load_scratch(nir_builder *b, nir_intrinsic_instr *instr)
                         nir_intrinsic_instr_create(b->shader, instr->intrinsic);
                 chan_instr->num_components = 1;
                 nir_ssa_dest_init(&chan_instr->instr, &chan_instr->dest, 1,
-                                  instr->dest.ssa.bit_size, NULL);
+                                  instr->dest.ssa.bit_size);
 
                 chan_instr->src[0] = nir_src_for_ssa(chan_offset);
 

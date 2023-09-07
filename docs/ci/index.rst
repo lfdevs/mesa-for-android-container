@@ -52,6 +52,25 @@ The three GitLab CI systems currently integrated are:
    LAVA
    docker
 
+Farm management
+---------------
+
+.. note::
+   Never mix farm maintenance with any other change in the same merge request!
+
+When the farm starts failing for any reason (power, network, out-of-space), it needs to be disabled by pushing separate MR with
+
+.. code-block:: console
+
+   git mv .ci-farms{,-disabled}/$farm_name
+
+After farm restore functionality can be enabled by pushing a new merge request, which contains
+
+.. code-block:: console
+
+   git mv .ci-farms{-disabled,}/$farm_name
+
+
 Application traces replay
 -------------------------
 
@@ -248,7 +267,7 @@ directory.  You can hack on mesa and iterate testing the build with:
 
 .. code-block:: console
 
-   sudo docker run --rm -v `pwd`:/mesa $IMAGE ninja -C /mesa/_build
+   sudo docker run --rm -v `pwd`:/mesa $IMAGE meson compile -C /mesa/_build
 
 Running specific CI jobs
 ------------------------

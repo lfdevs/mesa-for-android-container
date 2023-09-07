@@ -75,6 +75,7 @@ static const struct debug_named_value etna_debug_options[] = {
    {"linear_pe",      ETNA_DBG_LINEAR_PE, "Enable linear PE"},
    {"msaa",           ETNA_DBG_MSAA, "Enable MSAA support"},
    {"shared_ts",      ETNA_DBG_SHARED_TS, "Enable TS sharing"},
+   {"perf",           ETNA_DBG_PERF, "Enable performance warnings"},
    DEBUG_NAMED_VALUE_END
 };
 
@@ -213,6 +214,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 
    /* Texturing. */
+   case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+      return VIV_FEATURE(screen, chipMinorFeatures1, HALF_FLOAT);
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
       return 1;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
@@ -241,6 +244,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    /* Queries. */
    case PIPE_CAP_OCCLUSION_QUERY:
+   case PIPE_CAP_CONDITIONAL_RENDER:
+   case PIPE_CAP_CONDITIONAL_RENDER_INVERTED:
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
 
    /* Preferences */
@@ -269,21 +274,21 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_SUPPORTED_PRIM_MODES:
    case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART: {
       /* Generate the bitmask of supported draw primitives. */
-      uint32_t modes = 1 << PIPE_PRIM_POINTS |
-                       1 << PIPE_PRIM_LINES |
-                       1 << PIPE_PRIM_LINE_STRIP |
-                       1 << PIPE_PRIM_TRIANGLES |
-                       1 << PIPE_PRIM_TRIANGLE_FAN;
+      uint32_t modes = 1 << MESA_PRIM_POINTS |
+                       1 << MESA_PRIM_LINES |
+                       1 << MESA_PRIM_LINE_STRIP |
+                       1 << MESA_PRIM_TRIANGLES |
+                       1 << MESA_PRIM_TRIANGLE_FAN;
 
       /* TODO: The bug relates only to indexed draws, but here we signal
        * that there is no support for triangle strips at all. This should
        * be refined.
        */
       if (VIV_FEATURE(screen, chipMinorFeatures2, BUG_FIXES8))
-         modes |= 1 << PIPE_PRIM_TRIANGLE_STRIP;
+         modes |= 1 << MESA_PRIM_TRIANGLE_STRIP;
 
       if (VIV_FEATURE(screen, chipMinorFeatures2, LINE_LOOP))
-         modes |= 1 << PIPE_PRIM_LINE_LOOP;
+         modes |= 1 << MESA_PRIM_LINE_LOOP;
 
       return modes;
    }
@@ -408,8 +413,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
       return shader == PIPE_SHADER_FRAGMENT
                 ? screen->specs.fragment_sampler_count
                 : screen->specs.vertex_sampler_count;
-   case PIPE_SHADER_CAP_PREFERRED_IR:
-      return PIPE_SHADER_IR_NIR;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER0_SIZE:
       if (ubo_enable)
          return 16384; /* 16384 so state tracker enables UBOs */

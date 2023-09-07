@@ -76,7 +76,7 @@ util_range_add(struct pipe_resource *resource, struct util_range *range,
    }
 }
 
-static inline boolean
+static inline bool
 util_ranges_intersect(const struct util_range *range,
                       unsigned start, unsigned end)
 {

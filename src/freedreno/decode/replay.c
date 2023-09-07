@@ -631,8 +631,8 @@ handle_file(const char *filename, uint32_t first_submit, uint32_t last_submit,
          break;
       }
       case RD_CHIP_ID: {
-         uint32_t gpu_id = parse_chip_id(ps.buf);
-         printf("gpuid: %d\n", gpu_id);
+         uint64_t chip_id = parse_chip_id(ps.buf);
+         printf("chip_id: 0x%" PRIx64 "\n", chip_id);
          break;
       }
       default:

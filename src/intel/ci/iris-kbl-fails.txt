@@ -140,6 +140,5 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode ful
 spec@!opengl 1.1@line-smooth-coverage,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
 
-# New CTS failures in 1.3.5.0
-KHR-GL46.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
-KHR-GL46.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail
+# fails after Debian bookworm update
+spec@arb_viewport_array@display-list,Fail

@@ -1194,11 +1194,8 @@ ${pass_name}(nir_shader *shader)
    condition_flags[${index}] = ${condition};
    % endfor
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         progress |= nir_algebraic_impl(function->impl, condition_flags,
-                                        &${pass_name}_table);
-      }
+   nir_foreach_function_impl(impl, shader) {
+     progress |= nir_algebraic_impl(impl, condition_flags, &${pass_name}_table);
    }
 
    return progress;

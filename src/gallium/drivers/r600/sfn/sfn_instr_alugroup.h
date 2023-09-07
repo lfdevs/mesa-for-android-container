@@ -79,6 +79,8 @@ public:
       return m_slots[0] ? m_slots[0]->has_alu_flag(alu_lds_group_start) : false;
    }
 
+   bool index_mode_load();
+
    bool has_lds_group_end() const;
 
    const auto& readport_reserer() const { return m_readports_evaluator; }

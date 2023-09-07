@@ -368,9 +368,17 @@ event_write(struct fd_ringbuffer *ring, struct kernel *kernel,
 {
    unsigned seqno = 0;
 
-   OUT_PKT7(ring, CP_EVENT_WRITE, timestamp ? 4 : 1);
-   OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(evt) |
-                     COND(timestamp && CHIP == A7XX, CP_EVENT_WRITE_0_SEQNO));
+   if (CHIP == A6XX) {
+      OUT_PKT7(ring, CP_EVENT_WRITE, timestamp ? 4 : 1);
+      OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(evt));
+   } else {
+      OUT_PKT7(ring, CP_EVENT_WRITE7, timestamp ? 4 : 1);
+      OUT_RING(ring,
+         CP_EVENT_WRITE7_0_EVENT(evt) |
+            COND(timestamp, CP_EVENT_WRITE7_0_WRITE_ENABLED |
+                               CP_EVENT_WRITE7_0_WRITE_SRC(EV_WRITE_USER_32B)));
+   }
+
    if (timestamp) {
       struct ir3_kernel *ir3_kernel = to_ir3_kernel(kernel);
       struct a6xx_backend *a6xx_backend = to_a6xx_backend(ir3_kernel->backend);
@@ -394,7 +402,7 @@ cache_flush(struct fd_ringbuffer *ring, struct kernel *kernel)
 
    OUT_PKT7(ring, CP_WAIT_REG_MEM, 6);
    OUT_RING(ring, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) |
-                     CP_WAIT_REG_MEM_0_POLL_MEMORY);
+                     CP_WAIT_REG_MEM_0_POLL(POLL_MEMORY));
    OUT_RELOC(ring, control_ptr(a6xx_backend, seqno));
    OUT_RING(ring, CP_WAIT_REG_MEM_3_REF(seqno));
    OUT_RING(ring, CP_WAIT_REG_MEM_4_MASK(~0));

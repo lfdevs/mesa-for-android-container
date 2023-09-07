@@ -36,6 +36,8 @@ static const struct debug_named_value debug_control[] = {
      "Track all buffer objects with at least one reference." },
    { "bo_zero", PVR_DEBUG_ZERO_BOS,
      "Zero all buffer objects at allocation to make them deterministic." },
+   { "vk_desc", PVR_DEBUG_VK_DUMP_DESCRIPTOR_SET_LAYOUT,
+     "Dump descriptor set and pipeline layouts." },
    DEBUG_NAMED_VALUE_END
 };
 /* clang-format on */

@@ -22,6 +22,10 @@ struct tu_u_trace_submission_data;
 
 struct tu_perfetto_stage {
    int stage_id;
+   /* dynamically allocated stage iid, for app_events.  0 if stage_id should be
+    * used instead.
+    */
+   uint64_t stage_iid;
    uint64_t start_ts;
    const void* payload;
    void* start_payload_function;

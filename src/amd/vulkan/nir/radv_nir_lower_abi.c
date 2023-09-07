@@ -30,6 +30,9 @@
 #include "radv_shader.h"
 #include "radv_shader_args.h"
 
+#define GET_SGPR_FIELD_NIR(arg, field)                                                                                 \
+   ac_nir_unpack_arg(b, &s->args->ac, arg, field##__SHIFT, util_bitcount(field##__MASK))
+
 typedef struct {
    enum amd_gfx_level gfx_level;
    const struct radv_shader_args *args;
@@ -42,12 +45,11 @@ typedef struct {
 static nir_ssa_def *
 load_ring(nir_builder *b, unsigned ring, lower_abi_state *s)
 {
-   struct ac_arg arg = b->shader->info.stage == MESA_SHADER_TASK ? s->args->task_ring_offsets
-                                                                 : s->args->ac.ring_offsets;
+   struct ac_arg arg =
+      b->shader->info.stage == MESA_SHADER_TASK ? s->args->task_ring_offsets : s->args->ac.ring_offsets;
 
    nir_ssa_def *ring_offsets = ac_nir_load_arg(b, &s->args->ac, arg);
-   ring_offsets =
-      nir_pack_64_2x32_split(b, nir_channel(b, ring_offsets, 0), nir_channel(b, ring_offsets, 1));
+   ring_offsets = nir_pack_64_2x32_split(b, nir_channel(b, ring_offsets, 0), nir_channel(b, ring_offsets, 1));
    return nir_load_smem_amd(b, 4, ring_offsets, nir_imm_int(b, ring * 16u), .align_mul = 4u);
 }
 
@@ -97,8 +99,7 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
    case nir_intrinsic_load_tcs_num_patches_amd:
       if (s->pl_key->dynamic_patch_control_points) {
          if (stage == MESA_SHADER_TESS_CTRL) {
-            nir_ssa_def *arg = ac_nir_load_arg(b, &s->args->ac, s->args->tcs_offchip_layout);
-            replacement = nir_ubfe_imm(b, arg, 6, 8);
+            replacement = GET_SGPR_FIELD_NIR(s->args->tcs_offchip_layout, TCS_OFFCHIP_LAYOUT_NUM_PATCHES);
          } else {
             replacement = ac_nir_load_arg(b, &s->args->ac, s->args->tes_num_patches);
          }
@@ -126,8 +127,7 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       replacement = load_ring(b, RING_PS_ATTR, s);
 
       /* Note, the HW always assumes there is at least 1 per-vertex param. */
-      const unsigned total_num_params =
-         MAX2(1, s->info->outinfo.param_exports) + s->info->outinfo.prim_param_exports;
+      const unsigned total_num_params = MAX2(1, s->info->outinfo.param_exports) + s->info->outinfo.prim_param_exports;
 
       nir_ssa_def *dword1 = nir_channel(b, replacement, 1);
       dword1 = nir_ior_imm(b, dword1, S_008F04_STRIDE(16 * total_num_params));
@@ -136,16 +136,13 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
 
    case nir_intrinsic_load_ring_attr_offset_amd: {
       nir_ssa_def *ring_attr_offset = ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_attr_offset);
-      replacement =
-         nir_ishl(b, nir_ubfe(b, ring_attr_offset, nir_imm_int(b, 0), nir_imm_int(b, 15)),
-                  nir_imm_int(b, 9)); /* 512b increments. */
+      replacement = nir_ishl_imm(b, nir_ubfe_imm(b, ring_attr_offset, 0, 15), 9); /* 512b increments. */
       break;
    }
 
    case nir_intrinsic_load_tess_rel_patch_id_amd:
       if (stage == MESA_SHADER_TESS_CTRL) {
-         replacement = nir_extract_u8(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.tcs_rel_ids),
-                                      nir_imm_int(b, 0));
+         replacement = nir_extract_u8(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.tcs_rel_ids), nir_imm_int(b, 0));
       } else if (stage == MESA_SHADER_TESS_EVAL) {
          /* Setting an upper bound like this will actually make it possible
           * to optimize some multiplications (in address calculations) so that
@@ -153,8 +150,7 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
           */
          nir_ssa_def *arg = ac_nir_load_arg(b, &s->args->ac, s->args->ac.tes_rel_patch_id);
          nir_intrinsic_instr *load_arg = nir_instr_as_intrinsic(arg->parent_instr);
-         nir_intrinsic_set_arg_upper_bound_u32_amd(
-            load_arg, 2048 / MAX2(b->shader->info.tess.tcs_vertices_out, 1));
+         nir_intrinsic_set_arg_upper_bound_u32_amd(load_arg, 2048 / MAX2(b->shader->info.tess.tcs_vertices_out, 1));
          replacement = arg;
       } else {
          unreachable("invalid tessellation shader stage");
@@ -163,8 +159,7 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
    case nir_intrinsic_load_patch_vertices_in:
       if (stage == MESA_SHADER_TESS_CTRL) {
          if (s->pl_key->dynamic_patch_control_points) {
-            nir_ssa_def *arg = ac_nir_load_arg(b, &s->args->ac, s->args->tcs_offchip_layout);
-            replacement = nir_ubfe_imm(b, arg, 0, 6);
+            replacement = GET_SGPR_FIELD_NIR(s->args->tcs_offchip_layout, TCS_OFFCHIP_LAYOUT_PATCH_CONTROL_POINTS);
          } else {
             replacement = nir_imm_int(b, s->pl_key->tcs.tess_input_vertices);
          }
@@ -174,16 +169,13 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
          unreachable("invalid tessellation shader stage");
       break;
    case nir_intrinsic_load_gs_vertex_offset_amd:
-      replacement =
-         ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_vtx_offset[nir_intrinsic_base(intrin)]);
+      replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_vtx_offset[nir_intrinsic_base(intrin)]);
       break;
    case nir_intrinsic_load_workgroup_num_input_vertices_amd:
-      replacement = nir_ubfe(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info),
-                             nir_imm_int(b, 12), nir_imm_int(b, 9));
+      replacement = nir_ubfe_imm(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info), 12, 9);
       break;
    case nir_intrinsic_load_workgroup_num_input_primitives_amd:
-      replacement = nir_ubfe(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info),
-                             nir_imm_int(b, 22), nir_imm_int(b, 9));
+      replacement = nir_ubfe_imm(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info), 22, 9);
       break;
    case nir_intrinsic_load_packed_passthrough_primitive_amd:
       /* NGG passthrough mode: the HW already packs the primitive export value to a single register.
@@ -211,12 +203,11 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
        * so the below is equivalent to: "ult(ubfe(gs_tg_info, 22, 9), 16)", but
        * ACO can optimize out the comparison to zero (see try_optimize_scc_nocompare).
        */
-      nir_ssa_def *small_workgroup =
-         nir_ieq_imm(b, nir_iand_imm(b, gs_tg_info, BITFIELD_RANGE(22 + 4, 9 - 4)), 0);
+      nir_ssa_def *small_workgroup = nir_ieq_imm(b, nir_iand_imm(b, gs_tg_info, BITFIELD_RANGE(22 + 4, 9 - 4)), 0);
 
-      nir_ssa_def *mask = nir_bcsel(
-         b, small_workgroup, nir_imm_int(b, radv_nggc_none),
-         nir_imm_int(b, radv_nggc_front_face | radv_nggc_back_face | radv_nggc_small_primitives));
+      nir_ssa_def *mask =
+         nir_bcsel(b, small_workgroup, nir_imm_int(b, radv_nggc_none),
+                   nir_imm_int(b, radv_nggc_front_face | radv_nggc_back_face | radv_nggc_small_primitives));
       nir_ssa_def *settings = ac_nir_load_arg(b, &s->args->ac, s->args->ngg_culling_settings);
       replacement = nir_ine_imm(b, nir_iand(b, settings, mask), 0);
       break;
@@ -267,39 +258,36 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       break;
    case nir_intrinsic_load_ring_mesh_scratch_offset_amd:
       /* gs_tg_info[0:11] is ordered_wave_id. Multiply by the ring entry size. */
-      replacement = nir_imul_imm(
-         b, nir_iand_imm(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info), 0xfff),
-         RADV_MESH_SCRATCH_ENTRY_BYTES);
+      replacement = nir_imul_imm(b, nir_iand_imm(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info), 0xfff),
+                                 RADV_MESH_SCRATCH_ENTRY_BYTES);
       break;
    case nir_intrinsic_load_task_ring_entry_amd:
       replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ac.task_ring_entry);
       break;
    case nir_intrinsic_load_lshs_vertex_stride_amd: {
-      unsigned io_num = stage == MESA_SHADER_VERTEX ? s->info->vs.num_linked_outputs
-                                                    : s->info->tcs.num_linked_inputs;
-      replacement = nir_imm_int(b, io_num * 16);
+      unsigned io_num = stage == MESA_SHADER_VERTEX ? s->info->vs.num_linked_outputs : s->info->tcs.num_linked_inputs;
+      replacement = nir_imm_int(b, get_tcs_input_vertex_stride(io_num));
       break;
    }
    case nir_intrinsic_load_esgs_vertex_stride_amd: {
       /* Emulate VGT_ESGS_RING_ITEMSIZE on GFX9+ to reduce context register writes. */
       assert(s->gfx_level >= GFX9);
-      const unsigned stride = s->info->is_ngg ? s->info->ngg_info.vgt_esgs_ring_itemsize
-                                              : s->info->gs_ring_info.vgt_esgs_ring_itemsize;
+      const unsigned stride =
+         s->info->is_ngg ? s->info->ngg_info.vgt_esgs_ring_itemsize : s->info->gs_ring_info.vgt_esgs_ring_itemsize;
       replacement = nir_imm_int(b, stride);
       break;
    }
    case nir_intrinsic_load_hs_out_patch_data_offset_amd: {
       unsigned out_vertices_per_patch = b->shader->info.tess.tcs_vertices_out;
-      unsigned num_tcs_outputs = stage == MESA_SHADER_TESS_CTRL ? s->info->tcs.num_linked_outputs
-                                                                : s->info->tes.num_linked_inputs;
+      unsigned num_tcs_outputs =
+         stage == MESA_SHADER_TESS_CTRL ? s->info->tcs.num_linked_outputs : s->info->tes.num_linked_inputs;
       int per_vertex_output_patch_size = out_vertices_per_patch * num_tcs_outputs * 16u;
 
       if (s->pl_key->dynamic_patch_control_points) {
          nir_ssa_def *num_patches;
 
          if (stage == MESA_SHADER_TESS_CTRL) {
-            nir_ssa_def *arg = ac_nir_load_arg(b, &s->args->ac, s->args->tcs_offchip_layout);
-            num_patches = nir_ubfe_imm(b, arg, 6, 8);
+            num_patches = GET_SGPR_FIELD_NIR(s->args->tcs_offchip_layout, TCS_OFFCHIP_LAYOUT_NUM_PATCHES);
          } else {
             num_patches = ac_nir_load_arg(b, &s->args->ac, s->args->tes_num_patches);
          }
@@ -325,13 +313,13 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
          offset = nir_iadd(b, offset, nir_ishl_imm(b, intrin->src[1].ssa, 3));
       }
 
-      replacement = nir_load_global_amd(b, 2, 32, addr, offset, .base = sample_pos_offset,
-                                        .access = ACCESS_NON_WRITEABLE);
+      replacement =
+         nir_load_global_amd(b, 2, 32, addr, offset, .base = sample_pos_offset, .access = ACCESS_NON_WRITEABLE);
       break;
    }
    case nir_intrinsic_load_rasterization_samples_amd:
       if (s->pl_key->dynamic_rasterization_samples) {
-         replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ps_num_samples);
+         replacement = GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_NUM_SAMPLES);
       } else {
          replacement = nir_imm_int(b, s->pl_key->ps.num_samples);
       }
@@ -359,21 +347,18 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       break;
    }
    case nir_intrinsic_atomic_add_gs_emit_prim_count_amd:
-      nir_gds_atomic_add_amd(b, 32, intrin->src[0].ssa,
-                             nir_imm_int(b, RADV_NGG_QUERY_PIPELINE_STAT_OFFSET),
+      nir_gds_atomic_add_amd(b, 32, intrin->src[0].ssa, nir_imm_int(b, RADV_NGG_QUERY_PIPELINE_STAT_OFFSET),
                              nir_imm_int(b, 0x100));
       break;
    case nir_intrinsic_atomic_add_gen_prim_count_amd:
-      nir_gds_atomic_add_amd(
-         b, 32, intrin->src[0].ssa,
-         nir_imm_int(b, RADV_NGG_QUERY_PRIM_GEN_OFFSET(nir_intrinsic_stream_id(intrin))),
-         nir_imm_int(b, 0x100));
+      nir_gds_atomic_add_amd(b, 32, intrin->src[0].ssa,
+                             nir_imm_int(b, RADV_NGG_QUERY_PRIM_GEN_OFFSET(nir_intrinsic_stream_id(intrin))),
+                             nir_imm_int(b, 0x100));
       break;
    case nir_intrinsic_atomic_add_xfb_prim_count_amd:
-      nir_gds_atomic_add_amd(
-         b, 32, intrin->src[0].ssa,
-         nir_imm_int(b, RADV_NGG_QUERY_PRIM_XFB_OFFSET(nir_intrinsic_stream_id(intrin))),
-         nir_imm_int(b, 0x100));
+      nir_gds_atomic_add_amd(b, 32, intrin->src[0].ssa,
+                             nir_imm_int(b, RADV_NGG_QUERY_PRIM_XFB_OFFSET(nir_intrinsic_stream_id(intrin))),
+                             nir_imm_int(b, 0x100));
       break;
    case nir_intrinsic_atomic_add_gs_invocation_count_amd:
       /* TODO: add gs invocation query emulation. */
@@ -386,15 +371,13 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ac.streamout_write_index);
       break;
    case nir_intrinsic_load_streamout_buffer_amd: {
-      nir_ssa_def *ptr =
-         nir_pack_64_2x32_split(b, ac_nir_load_arg(b, &s->args->ac, s->args->streamout_buffers),
-                                nir_imm_int(b, s->address32_hi));
+      nir_ssa_def *ptr = nir_pack_64_2x32_split(b, ac_nir_load_arg(b, &s->args->ac, s->args->streamout_buffers),
+                                                nir_imm_int(b, s->address32_hi));
       replacement = nir_load_smem_amd(b, 4, ptr, nir_imm_int(b, nir_intrinsic_base(intrin) * 16));
       break;
    }
    case nir_intrinsic_load_streamout_offset_amd:
-      replacement =
-         ac_nir_load_arg(b, &s->args->ac, s->args->ac.streamout_offset[nir_intrinsic_base(intrin)]);
+      replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ac.streamout_offset[nir_intrinsic_base(intrin)]);
       break;
 
    case nir_intrinsic_load_lds_ngg_gs_out_vertex_base_amd:
@@ -425,13 +408,13 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       } else {
          assert(stage == MESA_SHADER_GEOMETRY);
          switch (s->info->gs.output_prim) {
-         case SHADER_PRIM_POINTS:
+         case MESA_PRIM_POINTS:
             num_vertices = 1;
             break;
-         case SHADER_PRIM_LINE_STRIP:
+         case MESA_PRIM_LINE_STRIP:
             num_vertices = 2;
             break;
-         case SHADER_PRIM_TRIANGLE_STRIP:
+         case MESA_PRIM_TRIANGLE_STRIP:
             num_vertices = 3;
             break;
          default:
@@ -443,8 +426,7 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       break;
    }
    case nir_intrinsic_load_ordered_id_amd:
-      replacement =
-         nir_ubfe_imm(b, ac_nir_load_arg(b, &s->args->ac, s->args->ac.gs_tg_info), 0, 12);
+      replacement = ac_nir_unpack_arg(b, &s->args->ac, s->args->ac.gs_tg_info, 0, 12);
       break;
    case nir_intrinsic_load_force_vrs_rates_amd:
       replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ac.force_vrs_rates);
@@ -454,6 +436,31 @@ lower_abi_instr(nir_builder *b, nir_instr *instr, void *state)
       replacement = nir_ine_imm(b, sample_coverage, 0);
       break;
    }
+   case nir_intrinsic_load_barycentric_optimize_amd: {
+      nir_ssa_def *prim_mask = ac_nir_load_arg(b, &s->args->ac, s->args->ac.prim_mask);
+      /* enabled when bit 31 is set */
+      replacement = nir_ilt_imm(b, prim_mask, 0);
+      break;
+   }
+   case nir_intrinsic_load_poly_line_smooth_enabled:
+      if (s->pl_key->dynamic_line_rast_mode) {
+         nir_ssa_def *line_rast_mode = GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_LINE_RAST_MODE);
+         replacement = nir_ieq_imm(b, line_rast_mode, VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT);
+      } else {
+         replacement = nir_imm_bool(b, s->pl_key->ps.line_smooth_enabled);
+      }
+      break;
+   case nir_intrinsic_load_initial_edgeflags_amd:
+      replacement = nir_imm_int(b, 0);
+      break;
+   case nir_intrinsic_load_provoking_vtx_amd:
+      replacement = ac_nir_load_arg(b, &s->args->ac, s->args->ac.load_provoking_vtx);
+      break;
+   case nir_intrinsic_load_rasterization_primitive_amd:
+      assert(s->pl_key->unknown_rast_prim);
+      /* Load the primitive topology from an user SGPR when it's unknown at compile time (GPL). */
+      replacement = GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_RAST_PRIM);
+      break;
    default:
       progress = false;
       break;
@@ -487,22 +494,19 @@ load_gsvs_ring(nir_builder *b, lower_abi_state *s, unsigned stream_id)
    assert(stride < (1 << 14));
 
    if (stream_offset) {
-      nir_ssa_def *addr =
-         nir_pack_64_2x32_split(b, nir_channel(b, ring, 0), nir_channel(b, ring, 1));
+      nir_ssa_def *addr = nir_pack_64_2x32_split(b, nir_channel(b, ring, 0), nir_channel(b, ring, 1));
       addr = nir_iadd_imm(b, addr, stream_offset);
       ring = nir_vector_insert_imm(b, ring, nir_unpack_64_2x32_split_x(b, addr), 0);
       ring = nir_vector_insert_imm(b, ring, nir_unpack_64_2x32_split_y(b, addr), 1);
    }
 
-   ring = nir_vector_insert_imm(
-      b, ring, nir_ior_imm(b, nir_channel(b, ring, 1), S_008F04_STRIDE(stride)), 1);
+   ring = nir_vector_insert_imm(b, ring, nir_ior_imm(b, nir_channel(b, ring, 1), S_008F04_STRIDE(stride)), 1);
    return nir_vector_insert_imm(b, ring, nir_imm_int(b, s->info->wave_size), 2);
 }
 
 void
-radv_nir_lower_abi(nir_shader *shader, enum amd_gfx_level gfx_level,
-                   const struct radv_shader_info *info, const struct radv_shader_args *args,
-                   const struct radv_pipeline_key *pl_key, uint32_t address32_hi)
+radv_nir_lower_abi(nir_shader *shader, enum amd_gfx_level gfx_level, const struct radv_shader_info *info,
+                   const struct radv_shader_args *args, const struct radv_pipeline_key *pl_key, uint32_t address32_hi)
 {
    lower_abi_state state = {
       .gfx_level = gfx_level,
@@ -515,14 +519,11 @@ radv_nir_lower_abi(nir_shader *shader, enum amd_gfx_level gfx_level,
    if (shader->info.stage == MESA_SHADER_GEOMETRY && !info->is_ngg) {
       nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-      nir_builder b;
-      nir_builder_init(&b, impl);
-      b.cursor = nir_before_cf_list(&impl->body);
+      nir_builder b = nir_builder_at(nir_before_cf_list(&impl->body));
 
       u_foreach_bit (i, shader->info.gs.active_stream_mask)
          state.gsvs_ring[i] = load_gsvs_ring(&b, &state, i);
    }
 
-   nir_shader_instructions_pass(shader, lower_abi_instr,
-                                nir_metadata_dominance | nir_metadata_block_index, &state);
+   nir_shader_instructions_pass(shader, lower_abi_instr, nir_metadata_dominance | nir_metadata_block_index, &state);
 }

@@ -72,8 +72,7 @@ opt_simplify_convert_alu_types_impl(nir_function_impl *impl)
    bool progress = false;
    bool lowered_instr = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -110,8 +109,8 @@ nir_opt_simplify_convert_alu_types(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(func, shader) {
-      if (func->impl && opt_simplify_convert_alu_types_impl(func->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (opt_simplify_convert_alu_types_impl(impl))
          progress = true;
    }
 
@@ -124,8 +123,7 @@ lower_convert_alu_types_impl(nir_function_impl *impl,
 {
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -160,8 +158,8 @@ nir_lower_convert_alu_types(nir_shader *shader,
 {
    bool progress = false;
 
-   nir_foreach_function(func, shader) {
-      if (func->impl && lower_convert_alu_types_impl(func->impl, should_lower))
+   nir_foreach_function_impl(impl, shader) {
+      if (lower_convert_alu_types_impl(impl, should_lower))
          progress = true;
    }
 

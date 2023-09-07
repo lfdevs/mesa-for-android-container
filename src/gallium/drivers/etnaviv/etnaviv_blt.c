@@ -360,6 +360,9 @@ etna_clear_blt(struct pipe_context *pctx, unsigned buffers, const struct pipe_sc
 {
    struct etna_context *ctx = etna_context(pctx);
 
+   if (!etna_render_condition_check(pctx))
+      return;
+
    etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE, 0x00000c23);
    etna_set_state(ctx->stream, VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH);
 
@@ -393,14 +396,26 @@ etna_try_blt_blit(struct pipe_context *pctx,
    struct etna_context *ctx = etna_context(pctx);
    struct etna_resource *src = etna_resource(blit_info->src.resource);
    struct etna_resource *dst = etna_resource(blit_info->dst.resource);
-   int msaa_xscale = 1, msaa_yscale = 1;
+   int src_xscale, src_yscale, dst_xscale, dst_yscale;
+   bool downsample_x = false, downsample_y = false;
 
    /* Ensure that the level is valid */
    assert(blit_info->src.level <= src->base.last_level);
    assert(blit_info->dst.level <= dst->base.last_level);
 
-   if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale))
+   if (!translate_samples_to_xyscale(src->base.nr_samples, &src_xscale, &src_yscale))
       return false;
+   if (!translate_samples_to_xyscale(dst->base.nr_samples, &dst_xscale, &dst_yscale))
+      return false;
+
+   /* BLT does not support upscaling */
+   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale))
+      return false;
+
+   if (src_xscale > dst_xscale)
+      downsample_x = true;
+   if (src_yscale > dst_yscale)
+      downsample_y = true;
 
    /* The width/height are in pixels; they do not change as a result of
     * multi-sampling. So, when blitting from a 4x multisampled surface
@@ -436,7 +451,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
    /* When not resolving MSAA, but only doing a layout conversion, we can get
     * away with a fallback format of matching size.
     */
-   if (format == ETNA_NO_MATCH && msaa_xscale == 1 && msaa_yscale == 1)
+   if (format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
       format = etna_compatible_blt_format(blit_info->dst.format);
    if (format == ETNA_NO_MATCH)
       return false;
@@ -492,8 +507,8 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.src.format = format;
       op.src.stride = src_lev->stride;
       op.src.tiling = src->layout;
-      op.src.downsample_x = msaa_xscale > 1;
-      op.src.downsample_y = msaa_yscale > 1;
+      op.src.downsample_x = downsample_x;
+      op.src.downsample_y = downsample_y;
       for (unsigned x=0; x<4; ++x)
          op.src.swizzle[x] = x;
 
@@ -534,10 +549,10 @@ etna_try_blt_blit(struct pipe_context *pctx,
          op.src_y += blit_info->src.box.height;
       }
 
-      op.src_x *= msaa_xscale;
-      op.src_y *= msaa_yscale;
-      op.rect_w *= msaa_xscale;
-      op.rect_h *= msaa_yscale;
+      op.src_x *= src_xscale;
+      op.src_y *= src_yscale;
+      op.rect_w *= src_xscale;
+      op.rect_h *= src_yscale;
 
       assert(op.src_x < src_lev->padded_width);
       assert(op.src_y < src_lev->padded_height);

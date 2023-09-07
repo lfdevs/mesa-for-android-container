@@ -122,34 +122,34 @@ enum dxil_resource_kind dxil_get_resource_kind(const struct glsl_type *type)
    unreachable("unexpected glsl type");
 }
 
-enum dxil_input_primitive dxil_get_input_primitive(enum shader_prim primitive)
+enum dxil_input_primitive dxil_get_input_primitive(unsigned primitive)
 {
    switch (primitive) {
-   case SHADER_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return DXIL_INPUT_PRIMITIVE_POINT;
-   case SHADER_PRIM_LINES:
+   case MESA_PRIM_LINES:
       return DXIL_INPUT_PRIMITIVE_LINE;
-   case SHADER_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINES_ADJACENCY:
       return DXIL_INPUT_PRIMITIVE_LINES_ADJENCY;
-   case SHADER_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLES:
       return DXIL_INPUT_PRIMITIVE_TRIANGLE;
-   case SHADER_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
       return DXIL_INPUT_PRIMITIVE_TRIANGLES_ADJENCY;
    default:
       unreachable("unhandled primitive topology");
    }
 }
 
-enum dxil_primitive_topology dxil_get_primitive_topology(enum shader_prim topology)
+enum dxil_primitive_topology dxil_get_primitive_topology(unsigned topology)
 {
    switch (topology) {
-   case SHADER_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return DXIL_PRIMITIVE_TOPOLOGY_POINT_LIST;
-   case SHADER_PRIM_LINES:
+   case MESA_PRIM_LINES:
       return DXIL_PRIMITIVE_TOPOLOGY_LINE_LIST;
-   case SHADER_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINE_STRIP:
       return DXIL_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-   case SHADER_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
       return DXIL_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
    default:
       unreachable("unhandled primitive topology");

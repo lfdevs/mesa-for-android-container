@@ -49,7 +49,7 @@
 
 #define V3D_MAX_BUFFER_RANGE (1 << 30)
 
-/* Sub-pixel precission bits in the rasterizer */
+/* Sub-pixel precision bits in the rasterizer */
 #define V3D_COORD_SHIFT 6
 
 /* Size of a cache line */

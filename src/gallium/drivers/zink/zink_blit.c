@@ -74,6 +74,8 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
    VkCommandBuffer cmdbuf = *needs_present_readback ?
                             ctx->batch.state->cmdbuf :
                             zink_get_cmdbuf(ctx, src, dst);
+   if (cmdbuf == ctx->batch.state->cmdbuf)
+      zink_flush_dgc_if_enabled(ctx);
    zink_batch_reference_resource_rw(batch, src, false);
    zink_batch_reference_resource_rw(batch, dst, true);
 
@@ -173,25 +175,6 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
       return false;
 
 
-   apply_dst_clears(ctx, info, false);
-   zink_fb_clears_apply_region(ctx, info->src.resource, zink_rect_from_box(&info->src.box));
-
-   if (src->obj->dt)
-      *needs_present_readback = zink_kopper_acquire_readback(ctx, src);
-
-   struct zink_batch *batch = &ctx->batch;
-   zink_resource_setup_transfer_layouts(ctx, src, dst);
-   VkCommandBuffer cmdbuf = *needs_present_readback ?
-                            ctx->batch.state->cmdbuf :
-                            zink_get_cmdbuf(ctx, src, dst);
-   zink_batch_reference_resource_rw(batch, src, false);
-   zink_batch_reference_resource_rw(batch, dst, true);
-
-   bool marker = zink_cmd_debug_marker_begin(ctx, cmdbuf, "blit_native(%s->%s, %dx%d->%dx%d)",
-                                             util_format_short_name(info->src.format),
-                                             util_format_short_name(info->src.format),
-                                             info->src.box.width, info->src.box.height,
-                                             info->dst.box.width, info->dst.box.height);
    VkImageBlit region = {0};
    region.srcSubresource.aspectMask = src->aspect;
    region.srcSubresource.mipLevel = info->src.level;
@@ -210,6 +193,9 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
    case PIPE_TEXTURE_1D_ARRAY:
       /* these use layer */
       region.srcSubresource.baseArrayLayer = info->src.box.z;
+      /* VUID-vkCmdBlitImage-srcImage-00240 */
+      if (region.srcSubresource.baseArrayLayer && dst->base.b.target == PIPE_TEXTURE_3D)
+         return false;
       region.srcSubresource.layerCount = info->src.box.depth;
       region.srcOffsets[0].z = 0;
       region.srcOffsets[1].z = 1;
@@ -248,6 +234,9 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
    case PIPE_TEXTURE_1D_ARRAY:
       /* these use layer */
       region.dstSubresource.baseArrayLayer = info->dst.box.z;
+      /* VUID-vkCmdBlitImage-srcImage-00240 */
+      if (region.dstSubresource.baseArrayLayer && src->base.b.target == PIPE_TEXTURE_3D)
+         return false;
       region.dstSubresource.layerCount = info->dst.box.depth;
       region.dstOffsets[0].z = 0;
       region.dstOffsets[1].z = 1;
@@ -267,6 +256,28 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
       region.dstOffsets[1].z = 1;
    }
    assert(region.dstOffsets[0].z != region.dstOffsets[1].z);
+
+   apply_dst_clears(ctx, info, false);
+   zink_fb_clears_apply_region(ctx, info->src.resource, zink_rect_from_box(&info->src.box));
+
+   if (src->obj->dt)
+      *needs_present_readback = zink_kopper_acquire_readback(ctx, src);
+
+   struct zink_batch *batch = &ctx->batch;
+   zink_resource_setup_transfer_layouts(ctx, src, dst);
+   VkCommandBuffer cmdbuf = *needs_present_readback ?
+                            ctx->batch.state->cmdbuf :
+                            zink_get_cmdbuf(ctx, src, dst);
+   if (cmdbuf == ctx->batch.state->cmdbuf)
+      zink_flush_dgc_if_enabled(ctx);
+   zink_batch_reference_resource_rw(batch, src, false);
+   zink_batch_reference_resource_rw(batch, dst, true);
+
+   bool marker = zink_cmd_debug_marker_begin(ctx, cmdbuf, "blit_native(%s->%s, %dx%d->%dx%d)",
+                                             util_format_short_name(info->src.format),
+                                             util_format_short_name(info->src.format),
+                                             info->src.box.width, info->src.box.height,
+                                             info->dst.box.width, info->dst.box.height);
 
    VKCTX(CmdBlitImage)(cmdbuf, src->obj->image, src->layout,
                   dst->obj->image, dst->layout,
@@ -386,6 +397,7 @@ zink_blit(struct pipe_context *pctx,
    if (whole)
       pctx->invalidate_resource(pctx, info->dst.resource);
 
+   zink_flush_dgc_if_enabled(ctx);
    ctx->unordered_blitting = !(info->render_condition_enable && ctx->render_condition_active) &&
                              zink_screen(ctx->base.screen)->info.have_KHR_dynamic_rendering &&
                              !needs_present_readback &&
@@ -395,6 +407,7 @@ zink_blit(struct pipe_context *pctx,
    bool in_rp = ctx->batch.in_rp;
    uint64_t tc_data = ctx->dynamic_fb.tc_info.data;
    bool queries_disabled = ctx->queries_disabled;
+   unsigned ds3_states = ctx->ds3_states;
    if (ctx->unordered_blitting) {
       /* for unordered blit, swap the unordered cmdbuf for the main one for the whole op to avoid conditional hell */
       ctx->batch.state->cmdbuf = ctx->batch.state->barrier_cmdbuf;
@@ -403,12 +416,21 @@ zink_blit(struct pipe_context *pctx,
       ctx->queries_disabled = true;
       ctx->batch.state->has_barriers = true;
       ctx->pipeline_changed[0] = true;
+      struct zink_screen *screen = zink_screen(pctx->screen);
+      if (screen->info.have_EXT_extended_dynamic_state3) {
+         if (screen->have_full_ds3)
+            ctx->ds3_states = UINT32_MAX;
+         else
+            ctx->ds3_states = BITFIELD_MASK(ZINK_DS3_BLEND_A2C);
+         if (!screen->info.dynamic_state3_feats.extendedDynamicState3AlphaToOneEnable)
+            ctx->ds3_states &= ~BITFIELD_BIT(ZINK_DS3_BLEND_A21);
+      }
       zink_select_draw_vbo(ctx);
    }
    zink_blit_begin(ctx, ZINK_BLIT_SAVE_FB | ZINK_BLIT_SAVE_FS | ZINK_BLIT_SAVE_TEXTURES);
-   if (!zink_is_swapchain(src) && info->src.format != info->src.resource->format)
+   if (zink_format_needs_mutable(info->src.format, info->src.resource->format))
       zink_resource_object_init_mutable(ctx, src);
-   if (!zink_is_swapchain(dst) && info->dst.format != info->dst.resource->format)
+   if (zink_format_needs_mutable(info->dst.format, info->dst.resource->format))
       zink_resource_object_init_mutable(ctx, dst);
    zink_blit_barriers(ctx, src, dst, whole);
    ctx->blitting = true;
@@ -448,6 +470,7 @@ zink_blit(struct pipe_context *pctx,
       ctx->batch.state->cmdbuf = cmdbuf;
       ctx->gfx_pipeline_state.pipeline = pipeline;
       ctx->pipeline_changed[0] = true;
+      ctx->ds3_states = ds3_states;
       zink_select_draw_vbo(ctx);
    }
    ctx->unordered_blitting = false;

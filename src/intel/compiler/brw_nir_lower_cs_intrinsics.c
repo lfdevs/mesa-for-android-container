@@ -100,7 +100,7 @@ compute_local_index_id(nir_builder *b,
          id_x = nir_umod(b, block, size_x);
          id_y = nir_umod(b,
                          nir_iadd(b,
-                                  nir_umod(b, linear, nir_imm_int(b, height)),
+                                  nir_umod_imm(b, linear, height),
                                   nir_imul_imm(b,
                                                nir_udiv(b, block, size_x),
                                                height)),
@@ -209,7 +209,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
             if (ws[0] * ws[1] * ws[2] == 1) {
                nir_ssa_def *zero = nir_imm_int(b, 0);
                local_index = zero;
-               local_id = nir_vec3(b, zero, zero, zero);
+               local_id = nir_replicate(b, zero, 3);
             }
          }
 
@@ -277,7 +277,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
 static void
 lower_cs_intrinsics_convert_impl(struct lower_intrinsics_state *state)
 {
-   nir_builder_init(&state->builder, state->impl);
+   state->builder = nir_builder_create(state->impl);
 
    nir_foreach_block(block, state->impl) {
       lower_cs_intrinsics_convert_block(state, block);
@@ -311,11 +311,9 @@ brw_nir_lower_cs_intrinsics(nir_shader *nir)
       }
    }
 
-   nir_foreach_function(function, nir) {
-      if (function->impl) {
-         state.impl = function->impl;
-         lower_cs_intrinsics_convert_impl(&state);
-      }
+   nir_foreach_function_impl(impl, nir) {
+      state.impl = impl;
+      lower_cs_intrinsics_convert_impl(&state);
    }
 
    return state.progress;

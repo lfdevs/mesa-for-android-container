@@ -587,10 +587,39 @@ v3dX(emit_state)(struct pipe_context *pctx)
                 }
 
                 cl_emit(&job->bcl, VIEWPORT_OFFSET, vp) {
+#if V3D_VERSION < 41
                         vp.viewport_centre_x_coordinate =
                                 v3d->viewport.translate[0];
                         vp.viewport_centre_y_coordinate =
                                 v3d->viewport.translate[1];
+#else
+                        float vp_fine_x = v3d->viewport.translate[0];
+                        float vp_fine_y = v3d->viewport.translate[1];
+                        int32_t vp_coarse_x = 0;
+                        int32_t vp_coarse_y = 0;
+
+                        /* The fine coordinates must be unsigned, but coarse
+                         * can be signed.
+                         */
+                        if (unlikely(vp_fine_x < 0)) {
+                                int32_t blocks_64 =
+                                        DIV_ROUND_UP(fabsf(vp_fine_x), 64);
+                                vp_fine_x += 64.0f * blocks_64;
+                                vp_coarse_x -= blocks_64;
+                        }
+
+                        if (unlikely(vp_fine_y < 0)) {
+                                int32_t blocks_64 =
+                                        DIV_ROUND_UP(fabsf(vp_fine_y), 64);
+                                vp_fine_y += 64.0f * blocks_64;
+                                vp_coarse_y -= blocks_64;
+                        }
+
+                        vp.fine_x = vp_fine_x;
+                        vp.fine_y = vp_fine_y;
+                        vp.coarse_x = vp_coarse_x;
+                        vp.coarse_y = vp_coarse_y;
+#endif
                 }
         }
 
@@ -736,7 +765,7 @@ v3dX(emit_state)(struct pipe_context *pctx)
                           V3D_DIRTY_PRIM_MODE)) {
                 struct v3d_streamout_stateobj *so = &v3d->streamout;
                 if (so->num_targets) {
-                        bool psiz_per_vertex = (v3d->prim_mode == PIPE_PRIM_POINTS &&
+                        bool psiz_per_vertex = (v3d->prim_mode == MESA_PRIM_POINTS &&
                                                 v3d->rasterizer->base.point_size_per_vertex);
                         struct v3d_uncompiled_shader *tf_shader =
                                 get_tf_shader(v3d);

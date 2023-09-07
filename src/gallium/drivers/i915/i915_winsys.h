@@ -26,7 +26,7 @@
 #ifndef I915_WINSYS_H
 #define I915_WINSYS_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 struct i915_winsys;
 struct i915_winsys_buffer;

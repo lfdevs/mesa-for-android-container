@@ -54,6 +54,7 @@
 #include "util/hash_table.h"
 #include "util/ralloc.h"
 #include "util/set.h"
+#include "util/simple_mtx.h"
 #include "util/u_dynarray.h"
 #include "util/u_memory.h"
 #include "util/u_mm.h"
@@ -69,7 +70,7 @@
 
 /** Global (across GEM fds) state for the simulator */
 static struct v3d_simulator_state {
-        mtx_t mutex;
+        simple_mtx_t mutex;
         mtx_t submit_lock;
 
         struct v3d_hw *v3d;
@@ -94,7 +95,7 @@ static struct v3d_simulator_state {
         struct util_dynarray bin_oom;
         int refcount;
 } sim_state = {
-        .mutex = _MTX_INITIALIZER_NP,
+        .mutex = SIMPLE_MTX_INITIALIZER,
 };
 
 enum gem_type {
@@ -216,9 +217,9 @@ v3d_create_simulator_bo(int fd, unsigned size)
 
         sim_bo->file = file;
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         sim_bo->block = u_mmAllocMem(sim_state.heap, size + 4, GMP_ALIGN2, 0);
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
         assert(sim_bo->block);
 
         set_gmp_flags(file, sim_bo->block->ofs, size, 0x3);
@@ -299,10 +300,10 @@ v3d_create_simulator_bo_for_gem(int fd, int handle, unsigned size)
          * don't need to go in the lookup table.
          */
         if (handle != 0) {
-                mtx_lock(&sim_state.mutex);
+                simple_mtx_lock(&sim_state.mutex);
                 _mesa_hash_table_insert(file->bo_map, int_to_key(handle),
                                         sim_bo);
-                mtx_unlock(&sim_state.mutex);
+                simple_mtx_unlock(&sim_state.mutex);
         }
 
         return sim_bo;
@@ -332,13 +333,13 @@ v3d_free_simulator_bo(struct v3d_simulator_bo *sim_bo)
         if (sim_bo->gem_vaddr)
                 munmap(sim_bo->gem_vaddr, sim_bo->size);
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         u_mmFreeMem(sim_bo->block);
         if (sim_bo->handle) {
                 _mesa_hash_table_remove_key(sim_file->bo_map,
                                             int_to_key(sim_bo->handle));
         }
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
         ralloc_free(sim_bo);
 }
 
@@ -348,10 +349,10 @@ v3d_get_simulator_bo(struct v3d_simulator_file *file, int gem_handle)
         if (gem_handle == 0)
                 return NULL;
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         struct hash_entry *entry =
                 _mesa_hash_table_search(file->bo_map, int_to_key(gem_handle));
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
 
         return entry ? entry->data : NULL;
 }
@@ -416,10 +417,10 @@ v3d_get_simulator_perfmon(int fd, uint32_t perfid)
 
         struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         assert(perfid <= file->perfmons_size);
         struct v3d_simulator_perfmon *perfmon = file->perfmons[perfid - 1];
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
 
         return perfmon;
 }
@@ -723,10 +724,10 @@ v3d_simulator_perfmon_create_ioctl(int fd, struct drm_v3d_perfmon_create *args)
                 }
         }
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         args->id = perfmons_next_id(file);
         file->perfmons[args->id - 1] = perfmon;
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
 
         return 0;
 }
@@ -741,9 +742,9 @@ v3d_simulator_perfmon_destroy_ioctl(int fd, struct drm_v3d_perfmon_destroy *args
         if (!perfmon)
                 return -EINVAL;
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         file->perfmons[args->id - 1] = NULL;
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
 
         ralloc_free(perfmon);
 
@@ -844,9 +845,9 @@ v3d_simulator_get_mem_free(void)
 static void
 v3d_simulator_init_global()
 {
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         if (sim_state.refcount++) {
-                mtx_unlock(&sim_state.mutex);
+                simple_mtx_unlock(&sim_state.mutex);
                 return;
         }
 
@@ -870,7 +871,7 @@ v3d_simulator_init_global()
 
         sim_state.ver = v3d_hw_get_version(sim_state.v3d);
 
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
 
         sim_state.fd_map =
                 _mesa_hash_table_create(NULL,
@@ -906,10 +907,10 @@ v3d_simulator_init(int fd)
                                         _mesa_hash_pointer,
                                         _mesa_key_pointer_equal);
 
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         _mesa_hash_table_insert(sim_state.fd_map, int_to_key(fd + 1),
                                 sim_file);
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
 
         sim_file->gmp = u_mmAllocMem(sim_state.heap, 8096, GMP_ALIGN2, 0);
         sim_file->gmp_vaddr = (sim_state.mem + sim_file->gmp->ofs -
@@ -922,7 +923,7 @@ v3d_simulator_init(int fd)
 void
 v3d_simulator_destroy(struct v3d_simulator_file *sim_file)
 {
-        mtx_lock(&sim_state.mutex);
+        simple_mtx_lock(&sim_state.mutex);
         if (!--sim_state.refcount) {
                 _mesa_hash_table_destroy(sim_state.fd_map, NULL);
                 util_dynarray_fini(&sim_state.bin_oom);
@@ -930,7 +931,7 @@ v3d_simulator_destroy(struct v3d_simulator_file *sim_file)
                 /* No memsetting the struct, because it contains the mutex. */
                 sim_state.mem = NULL;
         }
-        mtx_unlock(&sim_state.mutex);
+        simple_mtx_unlock(&sim_state.mutex);
         ralloc_free(sim_file);
 }
 

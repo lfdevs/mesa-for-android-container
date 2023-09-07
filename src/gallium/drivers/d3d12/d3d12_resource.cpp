@@ -120,7 +120,7 @@ d3d12_resource_wait_idle(struct d3d12_context *ctx,
    } else {
       d3d12_foreach_submitted_batch(ctx, batch) {
          if (d3d12_batch_has_references(batch, res->bo, want_to_write))
-            d3d12_reset_batch(ctx, batch, PIPE_TIMEOUT_INFINITE);
+            d3d12_reset_batch(ctx, batch, OS_TIMEOUT_INFINITE);
       }
    }
 }

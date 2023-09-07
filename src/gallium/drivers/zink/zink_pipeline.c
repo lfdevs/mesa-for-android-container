@@ -26,6 +26,7 @@
 #include "zink_pipeline.h"
 
 #include "zink_compiler.h"
+#include "nir_to_spirv/nir_to_spirv.h"
 #include "zink_context.h"
 #include "zink_program.h"
 #include "zink_render_pass.h"
@@ -38,10 +39,12 @@
 VkPipeline
 zink_create_gfx_pipeline(struct zink_screen *screen,
                          struct zink_gfx_program *prog,
+                         struct zink_shader_object *objs,
                          struct zink_gfx_pipeline_state *state,
                          const uint8_t *binding_map,
                          VkPrimitiveTopology primitive_topology,
-                         bool optimize)
+                         bool optimize,
+                         struct util_dynarray *dgc)
 {
    struct zink_rasterizer_hw_state *hw_rast_state = (void*)&state->dyn_state3;
    VkPipelineVertexInputStateCreateInfo vertex_input_state;
@@ -270,7 +273,7 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    if (screen->info.have_EXT_color_write_enable)
       dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT;
 
-   assert(state->rast_prim != PIPE_PRIM_MAX);
+   assert(state->rast_prim != MESA_PRIM_COUNT);
 
    VkPipelineRasterizationLineStateCreateInfoEXT rast_line_state;
    if (screen->info.have_EXT_line_rasterization &&
@@ -280,7 +283,7 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
       rast_line_state.stippledLineEnable = VK_FALSE;
       rast_line_state.lineRasterizationMode = VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT;
 
-      if (state->rast_prim == PIPE_PRIM_LINES) {
+      if (state->rast_prim == MESA_PRIM_LINES) {
          const char *features[4][2] = {
             [VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT] = {"",""},
             [VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT] = {"rectangularLines", "stippledRectangularLines"},
@@ -326,24 +329,27 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo = {0};
    pipelineDynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
    pipelineDynamicStateCreateInfo.pDynamicStates = dynamicStateEnables;
-   pipelineDynamicStateCreateInfo.dynamicStateCount = state_count;
 
    VkGraphicsPipelineCreateInfo pci = {0};
    pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-   static bool feedback_warn = false;
    if (!optimize)
       pci.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
-   if (state->feedback_loop) {
-      if (screen->info.have_EXT_attachment_feedback_loop_layout)
-         pci.flags |= VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
-      else
-         warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
-   }
-   if (state->feedback_loop_zs) {
-      if (screen->info.have_EXT_attachment_feedback_loop_layout)
-         pci.flags |= VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
-      else
-         warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
+   if (screen->info.have_EXT_attachment_feedback_loop_dynamic_state) {
+      dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_ATTACHMENT_FEEDBACK_LOOP_ENABLE_EXT;
+   } else {
+      static bool feedback_warn = false;
+      if (state->feedback_loop) {
+         if (screen->info.have_EXT_attachment_feedback_loop_layout)
+            pci.flags |= VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+         else
+            warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
+      }
+      if (state->feedback_loop_zs) {
+         if (screen->info.have_EXT_attachment_feedback_loop_layout)
+            pci.flags |= VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+         else
+            warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
+      }
    }
    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
       pci.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -361,10 +367,11 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    pci.pViewportState = &viewport_state;
    pci.pDepthStencilState = &depth_stencil_state;
    pci.pDynamicState = &pipelineDynamicStateCreateInfo;
+   pipelineDynamicStateCreateInfo.dynamicStateCount = state_count;
 
    VkPipelineTessellationStateCreateInfo tci = {0};
    VkPipelineTessellationDomainOriginStateCreateInfo tdci = {0};
-   if (prog->modules[MESA_SHADER_TESS_CTRL] && prog->modules[MESA_SHADER_TESS_EVAL]) {
+   if (objs[MESA_SHADER_TESS_CTRL].mod && objs[MESA_SHADER_TESS_EVAL].mod) {
       tci.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
       tci.patchControlPoints = state->dyn_state2.vertices_per_patch;
       pci.pTessellationState = &tci;
@@ -374,22 +381,51 @@ zink_create_gfx_pipeline(struct zink_screen *screen,
    }
 
    VkPipelineShaderStageCreateInfo shader_stages[ZINK_GFX_SHADER_COUNT];
+   VkShaderModuleCreateInfo smci[ZINK_GFX_SHADER_COUNT] = {0};
    uint32_t num_stages = 0;
    for (int i = 0; i < ZINK_GFX_SHADER_COUNT; ++i) {
-      if (!prog->modules[i])
+      if (!objs[i].obj)
          continue;
 
       VkPipelineShaderStageCreateInfo stage = {0};
       stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
       stage.stage = mesa_to_vk_shader_stage(i);
-      stage.module = prog->modules[i];
       stage.pName = "main";
+      if (objs[i].mod) {
+         stage.module = objs[i].mod;
+      } else {
+         smci[i].sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+         stage.pNext = &smci[i];
+         smci[i].codeSize = objs[i].spirv->num_words * sizeof(uint32_t);
+         smci[i].pCode = objs[i].spirv->words;
+      }
       shader_stages[num_stages++] = stage;
    }
    assert(num_stages > 0);
 
    pci.pStages = shader_stages;
    pci.stageCount = num_stages;
+
+   VkGraphicsShaderGroupCreateInfoNV gci = {
+      VK_STRUCTURE_TYPE_GRAPHICS_SHADER_GROUP_CREATE_INFO_NV,
+      NULL,
+      pci.stageCount,
+      pci.pStages,
+      pci.pVertexInputState,
+      pci.pTessellationState
+   };
+   VkGraphicsPipelineShaderGroupsCreateInfoNV dgci = {
+      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV,
+      pci.pNext,
+      1,
+      &gci,
+      dgc ? util_dynarray_num_elements(dgc, VkPipeline) : 0,
+      dgc ? dgc->data : NULL
+   };
+   if (zink_debug & ZINK_DEBUG_DGC) {
+      pci.flags |= VK_PIPELINE_CREATE_INDIRECT_BINDABLE_BIT_NV;
+      pci.pNext = &dgci;
+   }
 
    VkPipeline pipeline;
    u_rwlock_wrlock(&prog->base.pipeline_cache_lock);
@@ -416,7 +452,7 @@ zink_create_compute_pipeline(struct zink_screen *screen, struct zink_compute_pro
    VkPipelineShaderStageCreateInfo stage = {0};
    stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
    stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-   stage.module = comp->curr->shader;
+   stage.module = comp->curr->obj.mod;
    stage.pName = "main";
 
    VkSpecializationInfo sinfo = {0};
@@ -528,27 +564,31 @@ zink_create_gfx_pipeline_output(struct zink_screen *screen, struct zink_gfx_pipe
    VkPipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo = {0};
    pipelineDynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
    pipelineDynamicStateCreateInfo.pDynamicStates = dynamicStateEnables;
-   pipelineDynamicStateCreateInfo.dynamicStateCount = state_count;
 
    VkGraphicsPipelineCreateInfo pci = {0};
    pci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
    pci.pNext = &gplci;
    pci.flags = VK_PIPELINE_CREATE_LIBRARY_BIT_KHR | VK_PIPELINE_CREATE_RETAIN_LINK_TIME_OPTIMIZATION_INFO_BIT_EXT;
-   static bool feedback_warn = false;
-   if (state->feedback_loop) {
-      if (screen->info.have_EXT_attachment_feedback_loop_layout)
-         pci.flags |= VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
-      else
-         warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
-   }
-   if (state->feedback_loop_zs) {
-      if (screen->info.have_EXT_attachment_feedback_loop_layout)
-         pci.flags |= VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
-      else
-         warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
+   if (screen->info.have_EXT_attachment_feedback_loop_dynamic_state) {
+      dynamicStateEnables[state_count++] = VK_DYNAMIC_STATE_ATTACHMENT_FEEDBACK_LOOP_ENABLE_EXT;
+   } else {
+      static bool feedback_warn = false;
+      if (state->feedback_loop) {
+         if (screen->info.have_EXT_attachment_feedback_loop_layout)
+            pci.flags |= VK_PIPELINE_CREATE_COLOR_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+         else
+            warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
+      }
+      if (state->feedback_loop_zs) {
+         if (screen->info.have_EXT_attachment_feedback_loop_layout)
+            pci.flags |= VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+         else
+            warn_missing_feature(feedback_warn, "EXT_attachment_feedback_loop_layout");
+      }
    }
    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB)
       pci.flags |= VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+   pipelineDynamicStateCreateInfo.dynamicStateCount = state_count;
    pci.pColorBlendState = &blend_state;
    pci.pMultisampleState = &ms_state;
    pci.pDynamicState = &pipelineDynamicStateCreateInfo;
@@ -642,7 +682,7 @@ zink_create_gfx_pipeline_input(struct zink_screen *screen,
 }
 
 static VkPipeline
-create_gfx_pipeline_library(struct zink_screen *screen, VkShaderModule *modules, VkPipelineLayout layout, VkPipelineCache pipeline_cache)
+create_gfx_pipeline_library(struct zink_screen *screen, struct zink_shader_object *objs, VkPipelineLayout layout, VkPipelineCache pipeline_cache)
 {
    assert(screen->info.have_EXT_extended_dynamic_state && screen->info.have_EXT_extended_dynamic_state2);
    VkPipelineRenderingCreateInfo rendering_info;
@@ -654,9 +694,9 @@ create_gfx_pipeline_library(struct zink_screen *screen, VkShaderModule *modules,
       &rendering_info,
       0
    };
-   if (modules[MESA_SHADER_VERTEX])
+   if (objs[MESA_SHADER_VERTEX].mod)
       gplci.flags |= VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT;
-   if (modules[MESA_SHADER_FRAGMENT])
+   if (objs[MESA_SHADER_FRAGMENT].mod)
       gplci.flags |= VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
 
    VkPipelineViewportStateCreateInfo viewport_state = {0};
@@ -727,7 +767,7 @@ create_gfx_pipeline_library(struct zink_screen *screen, VkShaderModule *modules,
 
    VkPipelineTessellationStateCreateInfo tci = {0};
    VkPipelineTessellationDomainOriginStateCreateInfo tdci = {0};
-   if (modules[MESA_SHADER_TESS_CTRL] && modules[MESA_SHADER_TESS_EVAL]) {
+   if (objs[MESA_SHADER_TESS_CTRL].mod && objs[MESA_SHADER_TESS_EVAL].mod) {
       tci.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
       //this is a wild guess; pray for extendedDynamicState2PatchControlPoints
       if (!screen->info.dynamic_state2_feats.extendedDynamicState2PatchControlPoints) {
@@ -744,13 +784,13 @@ create_gfx_pipeline_library(struct zink_screen *screen, VkShaderModule *modules,
    VkPipelineShaderStageCreateInfo shader_stages[ZINK_GFX_SHADER_COUNT];
    uint32_t num_stages = 0;
    for (int i = 0; i < ZINK_GFX_SHADER_COUNT; ++i) {
-      if (!modules[i])
+      if (!objs[i].mod)
          continue;
 
       VkPipelineShaderStageCreateInfo stage = {0};
       stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
       stage.stage = mesa_to_vk_shader_stage(i);
-      stage.module = modules[i];
+      stage.module = objs[i].mod;
       stage.pName = "main";
       shader_stages[num_stages++] = stage;
    }
@@ -778,15 +818,15 @@ VkPipeline
 zink_create_gfx_pipeline_library(struct zink_screen *screen, struct zink_gfx_program *prog)
 {
    u_rwlock_wrlock(&prog->base.pipeline_cache_lock);
-   VkPipeline pipeline = create_gfx_pipeline_library(screen, prog->modules, prog->base.layout, prog->base.pipeline_cache);
+   VkPipeline pipeline = create_gfx_pipeline_library(screen, prog->objs, prog->base.layout, prog->base.pipeline_cache);
    u_rwlock_wrunlock(&prog->base.pipeline_cache_lock);
    return pipeline;
 }
 
 VkPipeline
-zink_create_gfx_pipeline_separate(struct zink_screen *screen, VkShaderModule *modules, VkPipelineLayout layout)
+zink_create_gfx_pipeline_separate(struct zink_screen *screen, struct zink_shader_object *objs, VkPipelineLayout layout)
 {
-   return create_gfx_pipeline_library(screen, modules, layout, VK_NULL_HANDLE);
+   return create_gfx_pipeline_library(screen, objs, layout, VK_NULL_HANDLE);
 }
 
 VkPipeline

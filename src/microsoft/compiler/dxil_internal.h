@@ -269,6 +269,7 @@ struct dxil_const {
       double float_value;
       const struct dxil_value **array_values;
       const struct dxil_value **struct_values;
+      const struct dxil_value **vector_values;
    };
 
    struct list_head head;

@@ -51,8 +51,8 @@ static inline int
 draw_gs_get_input_index(int semantic, int index,
                         const struct tgsi_shader_info *input_info)
 {
-   const ubyte *input_semantic_names = input_info->output_semantic_name;
-   const ubyte *input_semantic_indices = input_info->output_semantic_index;
+   const uint8_t *input_semantic_names = input_info->output_semantic_name;
+   const uint8_t *input_semantic_indices = input_info->output_semantic_index;
    for (int i = 0; i < PIPE_MAX_SHADER_OUTPUTS; i++) {
       if (input_semantic_names[i] == semantic &&
           input_semantic_indices[i] == index)
@@ -68,7 +68,7 @@ draw_gs_get_input_index(int semantic, int index,
  * the number of elements in the SOA vector. This ensures that the
  * throughput is optimized for the given vector instruction set.
  */
-static inline boolean
+static inline bool
 draw_gs_should_flush(struct draw_geometry_shader *shader)
 {
    return (shader->fetched_prim_count == shader->vector_length || shader->num_invocations > 1);
@@ -196,12 +196,11 @@ tgsi_fetch_gs_input(struct draw_geometry_shader *shader,
 
 static void
 tgsi_gs_prepare(struct draw_geometry_shader *shader,
-                const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
-                const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS])
+                const struct draw_buffer_info *constants)
 {
    struct tgsi_exec_machine *machine = shader->machine;
    tgsi_exec_set_constant_buffers(machine, PIPE_MAX_CONSTANT_BUFFERS,
-                                  constants, constants_size);
+                                  (const struct tgsi_exec_consts_info *)constants);
 }
 
 
@@ -380,8 +379,7 @@ llvm_fetch_gs_outputs(struct draw_geometry_shader *shader,
 
 static void
 llvm_gs_prepare(struct draw_geometry_shader *shader,
-                const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
-                const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS])
+                const struct draw_buffer_info *constants)
 {
 }
 
@@ -398,6 +396,7 @@ llvm_gs_run(struct draw_geometry_shader *shader,
    }
 
    shader->current_variant->jit_func(shader->jit_context,
+                                     shader->jit_resources,
                                      shader->gs_input->data,
                                      input,
                                      input_primitives,
@@ -555,7 +554,7 @@ gs_tri_adj(struct draw_geometry_shader *shader,
 
 
 #define FUNC         gs_run_elts
-#define LOCAL_VARS   const ushort *elts = input_prims->elts;
+#define LOCAL_VARS   const uint16_t *elts = input_prims->elts;
 #define GET_ELT(idx) (elts[idx])
 #include "draw_gs_tmp.h"
 
@@ -565,8 +564,7 @@ gs_tri_adj(struct draw_geometry_shader *shader,
  */
 void
 draw_geometry_shader_run(struct draw_geometry_shader *shader,
-                         const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
-                         const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS],
+                         const struct draw_buffer_info *constants,
                          const struct draw_vertex_info *input_verts,
                          const struct draw_prim_info *input_prim,
                          const struct tgsi_shader_info *input_info,
@@ -669,7 +667,7 @@ draw_geometry_shader_run(struct draw_geometry_shader *shader,
    }
 #endif
 
-   shader->prepare(shader, constants, constants_size);
+   shader->prepare(shader, constants);
 
    if (input_prim->linear)
       gs_run(shader, input_prim, input_verts,
@@ -689,7 +687,7 @@ draw_geometry_shader_run(struct draw_geometry_shader *shader,
    /* Update prim_info:
     */
    for (int i = 0; i < shader->num_vertex_streams; i++) {
-      output_prims[i].linear = TRUE;
+      output_prims[i].linear = true;
       output_prims[i].elts = NULL;
       output_prims[i].start = 0;
       output_prims[i].count = shader->stream[i].emitted_vertices;
@@ -721,7 +719,7 @@ void
 draw_geometry_shader_prepare(struct draw_geometry_shader *shader,
                              struct draw_context *draw)
 {
-   boolean use_llvm = draw->llvm != NULL;
+   bool use_llvm = draw->llvm != NULL;
    if (!use_llvm &&
        shader && shader->machine->Tokens != shader->state.tokens) {
       tgsi_exec_machine_bind_shader(shader->machine,
@@ -733,7 +731,7 @@ draw_geometry_shader_prepare(struct draw_geometry_shader *shader,
 }
 
 
-boolean
+bool
 draw_gs_init(struct draw_context *draw)
 {
    if (!draw->llvm) {
@@ -746,7 +744,7 @@ draw_gs_init(struct draw_context *draw)
             MAX_PRIMITIVES * sizeof(struct tgsi_exec_vector), 16);
          if (!draw->gs.tgsi.machine->Primitives[i] ||
              !draw->gs.tgsi.machine->PrimitiveOffsets[i])
-            return FALSE;
+            return false;
          memset(draw->gs.tgsi.machine->Primitives[i], 0,
                 MAX_PRIMITIVES * sizeof(struct tgsi_exec_vector));
          memset(draw->gs.tgsi.machine->PrimitiveOffsets[i], 0,
@@ -754,7 +752,7 @@ draw_gs_init(struct draw_context *draw)
       }
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -779,7 +777,7 @@ draw_create_geometry_shader(struct draw_context *draw,
                             const struct pipe_shader_state *state)
 {
 #ifdef DRAW_LLVM_AVAILABLE
-   boolean use_llvm = draw->llvm != NULL;
+   bool use_llvm = draw->llvm != NULL;
    struct llvm_geometry_shader *llvm_gs = NULL;
 #endif
    struct draw_geometry_shader *gs;
@@ -905,6 +903,7 @@ draw_create_geometry_shader(struct draw_context *draw,
       gs->run = llvm_gs_run;
 
       gs->jit_context = &draw->llvm->gs_jit_context;
+      gs->jit_resources = &draw->llvm->jit_resources[PIPE_SHADER_GEOMETRY];
 
       llvm_gs->variant_key_size =
          draw_gs_llvm_variant_key_size(

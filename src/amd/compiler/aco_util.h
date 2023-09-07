@@ -459,7 +459,7 @@ public:
       free(buffer);
    }
 
-   /* Delete copy-constructor and -assigment to avoid double free() */
+   /* Delete copy-constructor and -assignment to avoid double free() */
    monotonic_buffer_resource(const monotonic_buffer_resource&) = delete;
    monotonic_buffer_resource& operator=(const monotonic_buffer_resource&) = delete;
 
@@ -520,7 +520,7 @@ private:
  * as memory resource. The advantage of this specialization is the absence of
  * virtual function calls and the propagation on swap, copy- and move assignment.
  */
-template <typename T> class monotonic_allocator final {
+template <typename T> class monotonic_allocator {
 public:
    monotonic_allocator() = delete;
    monotonic_allocator(monotonic_buffer_resource& m) : memory_resource(m) {}

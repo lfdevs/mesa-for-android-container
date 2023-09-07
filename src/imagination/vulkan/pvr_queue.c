@@ -361,8 +361,7 @@ static VkResult pvr_process_transfer_cmds(struct pvr_device *device,
       return result;
 
    result =
-      pvr_transfer_job_submit(device,
-                              queue->transfer_ctx,
+      pvr_transfer_job_submit(queue->transfer_ctx,
                               sub_cmd,
                               queue->next_job_wait_sync[PVR_JOB_TYPE_TRANSFER],
                               sync);
@@ -413,17 +412,16 @@ pvr_process_occlusion_query_cmd(struct pvr_device *device,
    return result;
 }
 
-static VkResult pvr_process_event_cmd_barrier(struct pvr_device *device,
-                                              struct pvr_queue *queue,
-                                              struct pvr_sub_cmd_event *sub_cmd)
+static VkResult
+pvr_process_event_cmd_barrier(struct pvr_device *device,
+                              struct pvr_queue *queue,
+                              struct pvr_sub_cmd_event_barrier *sub_cmd)
 {
-   const uint32_t src_mask = sub_cmd->barrier.wait_for_stage_mask;
-   const uint32_t dst_mask = sub_cmd->barrier.wait_at_stage_mask;
+   const uint32_t src_mask = sub_cmd->wait_for_stage_mask;
+   const uint32_t dst_mask = sub_cmd->wait_at_stage_mask;
    struct vk_sync_wait wait_syncs[PVR_JOB_TYPE_MAX + 1];
    uint32_t src_wait_count = 0;
    VkResult result;
-
-   assert(sub_cmd->type == PVR_EVENT_TYPE_BARRIER);
 
    assert(!(src_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
    assert(!(dst_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
@@ -490,7 +488,8 @@ static VkResult pvr_process_event_cmd_barrier(struct pvr_device *device,
 static VkResult
 pvr_process_event_cmd_set_or_reset(struct pvr_device *device,
                                    struct pvr_queue *queue,
-                                   struct pvr_sub_cmd_event *sub_cmd)
+                                   struct pvr_sub_cmd_event_set_reset *sub_cmd,
+                                   const enum pvr_event_state new_event_state)
 {
    /* Not PVR_JOB_TYPE_MAX since that also includes
     * PVR_JOB_TYPE_OCCLUSION_QUERY so no stage in the src mask.
@@ -499,21 +498,12 @@ pvr_process_event_cmd_set_or_reset(struct pvr_device *device,
    struct vk_sync_signal signal;
    struct vk_sync *signal_sync;
 
-   uint32_t wait_for_stage_mask;
    uint32_t wait_count = 0;
    VkResult result;
 
-   assert(sub_cmd->type == PVR_EVENT_TYPE_SET ||
-          sub_cmd->type == PVR_EVENT_TYPE_RESET);
+   assert(!(sub_cmd->wait_for_stage_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
 
-   if (sub_cmd->type == PVR_EVENT_TYPE_SET)
-      wait_for_stage_mask = sub_cmd->set.wait_for_stage_mask;
-   else
-      wait_for_stage_mask = sub_cmd->reset.wait_for_stage_mask;
-
-   assert(!(wait_for_stage_mask & ~PVR_PIPELINE_STAGE_ALL_BITS));
-
-   u_foreach_bit (stage, wait_for_stage_mask) {
+   u_foreach_bit (stage, sub_cmd->wait_for_stage_mask) {
       if (!queue->last_job_signal_sync[stage])
          continue;
 
@@ -545,21 +535,35 @@ pvr_process_event_cmd_set_or_reset(struct pvr_device *device,
       return result;
    }
 
-   if (sub_cmd->type == PVR_EVENT_TYPE_SET) {
-      if (sub_cmd->set.event->sync)
-         vk_sync_destroy(&device->vk, sub_cmd->set.event->sync);
+   if (sub_cmd->event->sync)
+      vk_sync_destroy(&device->vk, sub_cmd->event->sync);
 
-      sub_cmd->set.event->sync = signal_sync;
-      sub_cmd->set.event->state = PVR_EVENT_STATE_SET_BY_DEVICE;
-   } else {
-      if (sub_cmd->reset.event->sync)
-         vk_sync_destroy(&device->vk, sub_cmd->reset.event->sync);
-
-      sub_cmd->reset.event->sync = signal_sync;
-      sub_cmd->reset.event->state = PVR_EVENT_STATE_RESET_BY_DEVICE;
-   }
+   sub_cmd->event->sync = signal_sync;
+   sub_cmd->event->state = new_event_state;
 
    return VK_SUCCESS;
+}
+
+static inline VkResult
+pvr_process_event_cmd_set(struct pvr_device *device,
+                          struct pvr_queue *queue,
+                          struct pvr_sub_cmd_event_set_reset *sub_cmd)
+{
+   return pvr_process_event_cmd_set_or_reset(device,
+                                             queue,
+                                             sub_cmd,
+                                             PVR_EVENT_STATE_SET_BY_DEVICE);
+}
+
+static inline VkResult
+pvr_process_event_cmd_reset(struct pvr_device *device,
+                            struct pvr_queue *queue,
+                            struct pvr_sub_cmd_event_set_reset *sub_cmd)
+{
+   return pvr_process_event_cmd_set_or_reset(device,
+                                             queue,
+                                             sub_cmd,
+                                             PVR_EVENT_STATE_RESET_BY_DEVICE);
 }
 
 /**
@@ -578,29 +582,30 @@ pvr_process_event_cmd_set_or_reset(struct pvr_device *device,
  * \parma[in,out] per_cmd_buffer_syncobjs  Completion syncobjs for the command
  *                                         buffer being processed.
  */
-static VkResult pvr_process_event_cmd_wait(struct pvr_device *device,
-                                           struct pvr_queue *queue,
-                                           struct pvr_sub_cmd_event *sub_cmd)
+static VkResult
+pvr_process_event_cmd_wait(struct pvr_device *device,
+                           struct pvr_queue *queue,
+                           struct pvr_sub_cmd_event_wait *sub_cmd)
 {
    uint32_t dst_mask = 0;
    VkResult result;
 
-   STACK_ARRAY(struct vk_sync_wait, waits, sub_cmd->wait.count + 1);
+   STACK_ARRAY(struct vk_sync_wait, waits, sub_cmd->count + 1);
    if (!waits)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   for (uint32_t i = 0; i < sub_cmd->wait.count; i++)
-      dst_mask |= sub_cmd->wait.wait_at_stage_masks[i];
+   for (uint32_t i = 0; i < sub_cmd->count; i++)
+      dst_mask |= sub_cmd->wait_at_stage_masks[i];
 
    u_foreach_bit (stage, dst_mask) {
       struct vk_sync_signal signal;
       struct vk_sync *signal_sync;
       uint32_t wait_count = 0;
 
-      for (uint32_t i = 0; i < sub_cmd->wait.count; i++) {
-         if (sub_cmd->wait.wait_at_stage_masks[i] & stage) {
+      for (uint32_t i = 0; i < sub_cmd->count; i++) {
+         if (sub_cmd->wait_at_stage_masks[i] & stage) {
             waits[wait_count++] = (struct vk_sync_wait){
-               .sync = sub_cmd->wait.events[i]->sync,
+               .sync = sub_cmd->events[i]->sync,
                .stage_mask = ~(VkPipelineStageFlags2)0,
                .wait_value = 0,
             };
@@ -618,7 +623,7 @@ static VkResult pvr_process_event_cmd_wait(struct pvr_device *device,
          };
       }
 
-      assert(wait_count <= (sub_cmd->wait.count + 1));
+      assert(wait_count <= (sub_cmd->count + 1));
 
       result = vk_sync_create(&device->vk,
                               &device->pdevice->ws->syncobj_type,
@@ -665,12 +670,13 @@ static VkResult pvr_process_event_cmd(struct pvr_device *device,
 {
    switch (sub_cmd->type) {
    case PVR_EVENT_TYPE_SET:
+      return pvr_process_event_cmd_set(device, queue, &sub_cmd->set_reset);
    case PVR_EVENT_TYPE_RESET:
-      return pvr_process_event_cmd_set_or_reset(device, queue, sub_cmd);
+      return pvr_process_event_cmd_reset(device, queue, &sub_cmd->set_reset);
    case PVR_EVENT_TYPE_WAIT:
-      return pvr_process_event_cmd_wait(device, queue, sub_cmd);
+      return pvr_process_event_cmd_wait(device, queue, &sub_cmd->wait);
    case PVR_EVENT_TYPE_BARRIER:
-      return pvr_process_event_cmd_barrier(device, queue, sub_cmd);
+      return pvr_process_event_cmd_barrier(device, queue, &sub_cmd->barrier);
    default:
       unreachable("Invalid event sub-command type.");
    };
@@ -688,23 +694,27 @@ static VkResult pvr_process_cmd_buffer(struct pvr_device *device,
                              link) {
       switch (sub_cmd->type) {
       case PVR_SUB_CMD_TYPE_GRAPHICS: {
+         /* If the fragment job utilizes occlusion queries, for data integrity
+          * it needs to wait for the occlusion query to be processed.
+          */
          if (sub_cmd->gfx.has_occlusion_query) {
-            struct pvr_sub_cmd_event frag_to_transfer_barrier = {
-               .type = PVR_EVENT_TYPE_BARRIER,
-               .barrier = {
-                  .wait_for_stage_mask = PVR_PIPELINE_STAGE_OCCLUSION_QUERY_BIT,
-                  .wait_at_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
-               },
+            struct pvr_sub_cmd_event_barrier barrier = {
+               .wait_for_stage_mask = PVR_PIPELINE_STAGE_OCCLUSION_QUERY_BIT,
+               .wait_at_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
             };
 
-            /* If the fragment job utilizes occlusion queries, for data
-             * integrity it needs to wait for the occlusion query to be
-             * processed.
-             */
+            result = pvr_process_event_cmd_barrier(device, queue, &barrier);
+            if (result != VK_SUCCESS)
+               break;
+         }
 
-            result = pvr_process_event_cmd_barrier(device,
-                                                   queue,
-                                                   &frag_to_transfer_barrier);
+         if (sub_cmd->gfx.wait_on_previous_transfer) {
+            struct pvr_sub_cmd_event_barrier barrier = {
+               .wait_for_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
+               .wait_at_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
+            };
+
+            result = pvr_process_event_cmd_barrier(device, queue, &barrier);
             if (result != VK_SUCCESS)
                break;
          }
@@ -722,17 +732,12 @@ static VkResult pvr_process_cmd_buffer(struct pvr_device *device,
          const bool serialize_with_frag = sub_cmd->transfer.serialize_with_frag;
 
          if (serialize_with_frag) {
-            struct pvr_sub_cmd_event frag_to_transfer_barrier = {
-               .type = PVR_EVENT_TYPE_BARRIER,
-               .barrier = {
-                  .wait_for_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
-                  .wait_at_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
-               },
+            struct pvr_sub_cmd_event_barrier barrier = {
+               .wait_for_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
+               .wait_at_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
             };
 
-            result = pvr_process_event_cmd_barrier(device,
-                                                   queue,
-                                                   &frag_to_transfer_barrier);
+            result = pvr_process_event_cmd_barrier(device, queue, &barrier);
             if (result != VK_SUCCESS)
                break;
          }
@@ -740,20 +745,15 @@ static VkResult pvr_process_cmd_buffer(struct pvr_device *device,
          result = pvr_process_transfer_cmds(device, queue, &sub_cmd->transfer);
 
          if (serialize_with_frag) {
-            struct pvr_sub_cmd_event transfer_to_frag_barrier = {
-               .type = PVR_EVENT_TYPE_BARRIER,
-               .barrier = {
-                  .wait_for_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
-                  .wait_at_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
-               },
+            struct pvr_sub_cmd_event_barrier barrier = {
+               .wait_for_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
+               .wait_at_stage_mask = PVR_PIPELINE_STAGE_FRAG_BIT,
             };
 
             if (result != VK_SUCCESS)
                break;
 
-            result = pvr_process_event_cmd_barrier(device,
-                                                   queue,
-                                                   &transfer_to_frag_barrier);
+            result = pvr_process_event_cmd_barrier(device, queue, &barrier);
          }
 
          break;

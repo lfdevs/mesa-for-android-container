@@ -30,6 +30,7 @@
 
 #include "draw_context.h"
 #include "tgsi/tgsi_exec.h"
+#include "tgsi/tgsi_scan.h"
 #include "draw_private.h"
 
 #define MAX_TGSI_PRIMITIVES 4
@@ -100,6 +101,7 @@ struct draw_geometry_shader {
 #ifdef DRAW_LLVM_AVAILABLE
    struct draw_gs_inputs *gs_input;
    struct draw_gs_jit_context *jit_context;
+   struct lp_jit_resources *jit_resources;
    struct draw_gs_llvm_variant *current_variant;
    struct vertex_header *gs_output[PIPE_MAX_VERTEX_STREAMS];
 
@@ -119,8 +121,7 @@ struct draw_geometry_shader {
                          float (**p_output)[4]);
 
    void (*prepare)(struct draw_geometry_shader *shader,
-                   const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
-                   const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS]);
+                   const struct draw_buffer_info *constants);
    void (*run)(struct draw_geometry_shader *shader,
                unsigned input_primitives, unsigned *out_prims);
 };
@@ -137,8 +138,7 @@ draw_geometry_shader_new_instance(struct draw_geometry_shader *gs);
  */
 void
 draw_geometry_shader_run(struct draw_geometry_shader *shader,
-                         const void *constants[PIPE_MAX_CONSTANT_BUFFERS],
-                         const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS],
+                         const struct draw_buffer_info *constants,
                          const struct draw_vertex_info *input_verts,
                          const struct draw_prim_info *input_prim,
                          const struct tgsi_shader_info *input_info,

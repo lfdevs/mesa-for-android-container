@@ -535,6 +535,17 @@ tu_autotune_use_bypass(struct tu_autotune *at,
    if (cmd_buffer->state.rp.sysmem_single_prim_mode)
       return false;
 
+   /* If the user is using a fragment density map, then this will cause less
+    * FS invocations with GMEM, which has a hard-to-measure impact on
+    * performance because it depends on how heavy the FS is in addition to how
+    * many invocations there were and the density. Let's assume the user knows
+    * what they're doing when they added the map, because if sysmem is
+    * actually faster then they could've just not used the fragment density
+    * map.
+    */
+   if (pass->has_fdm)
+      return false;
+
    /* For VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT buffers
     * we would have to allocate GPU memory at the submit time and copy
     * results into it.

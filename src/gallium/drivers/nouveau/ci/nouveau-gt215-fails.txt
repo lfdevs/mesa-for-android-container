@@ -106,10 +106,6 @@ KHR-GLES31.core.compute_shader.sso-case3,Fail
 KHR-GLES31.core.layout_binding.block_layout_binding_block_ComputeShader,Fail
 
 # TODO
-KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
-KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampZeroInfinity,Fail
-
-# TODO
 KHR-GLES31.core.shader_image_load_store.advanced-allMips-cs,Fail
 KHR-GLES31.core.shader_image_load_store.basic-allTargets-store-cs,Fail
 

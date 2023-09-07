@@ -445,7 +445,7 @@ vmw_svga_winsys_fence_finish(struct svga_winsys_screen *sws,
 static int
 vmw_svga_winsys_fence_get_fd(struct svga_winsys_screen *sws,
                              struct pipe_fence_handle *fence,
-                             boolean duplicate)
+                             bool duplicate)
 {
    if (duplicate)
       return os_dupfd_cloexec(vmw_fence_get_fd(fence));
@@ -467,7 +467,7 @@ vmw_svga_winsys_fence_server_sync(struct svga_winsys_screen *sws,
                                   int32_t *context_fd,
                                   struct pipe_fence_handle *fence)
 {
-   int32_t fd = sws->fence_get_fd(sws, fence, FALSE);
+   int32_t fd = sws->fence_get_fd(sws, fence, false);
 
    /* If we don't have fd, we don't need to merge fd into the context's fd. */
    if (fd == -1)
@@ -630,7 +630,7 @@ no_surface:
    return NULL;
 }
 
-static boolean
+static bool
 vmw_svga_winsys_surface_can_create(struct svga_winsys_screen *sws,
                                SVGA3dSurfaceFormat format,
                                SVGA3dSize size,
@@ -648,13 +648,13 @@ vmw_svga_winsys_surface_can_create(struct svga_winsys_screen *sws,
       buffer_size *= numSamples;
 
    if (buffer_size > vws->ioctl.max_texture_size) {
-	return FALSE;
+	return false;
    }
-   return TRUE;
+   return true;
 }
 
 
-static boolean
+static bool
 vmw_svga_winsys_surface_is_flushed(struct svga_winsys_screen *sws,
                                    struct svga_winsys_surface *surface)
 {
@@ -697,7 +697,7 @@ vmw_svga_winsys_get_hw_version(struct svga_winsys_screen *sws)
 }
 
 
-static boolean
+static bool
 vmw_svga_winsys_get_cap(struct svga_winsys_screen *sws,
                         SVGA3dDevCapIndex index,
                         SVGA3dDevCapResult *result)
@@ -707,10 +707,10 @@ vmw_svga_winsys_get_cap(struct svga_winsys_screen *sws,
    if (index > vws->ioctl.num_cap_3d ||
        index >= SVGA3D_DEVCAP_MAX ||
        !vws->ioctl.cap_3d[index].has_cap)
-      return FALSE;
+      return false;
 
    *result = vws->ioctl.cap_3d[index].result;
-   return TRUE;
+   return true;
 }
 
 struct svga_winsys_gb_shader *
@@ -883,7 +883,7 @@ vmw_svga_winsys_get_fd(struct svga_winsys_screen *sws)
    return vws->ioctl.drm_fd;
 }
 
-boolean
+bool
 vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
 {
    vws->base.destroy = vmw_svga_winsys_destroy;
@@ -933,7 +933,7 @@ vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
 #endif
    vws->base.host_log = vmw_svga_winsys_host_log;
 
-   return TRUE;
+   return true;
 }
 
 

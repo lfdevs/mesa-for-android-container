@@ -299,7 +299,7 @@
     <value name="packed complete patches" value="2"/>
   </enum>
 
-  <enum name="Primitve counters" prefix="V3D_PRIM_COUNTS">
+  <enum name="Primitive counters" prefix="V3D_PRIM_COUNTS">
     <value name="tf_words_buffer0" value="0"/>
     <value name="tf_words_buffer1" value="1"/>
     <value name="tf_words_buffer2" value="2"/>
@@ -896,10 +896,10 @@
   </packet>
 
   <packet name="Viewport Offset" code="108" min_ver="41">
-    <field name="Coarse Y" size="10" start="54" type="uint"/>
-    <field name="Viewport Centre Y-coordinate" size="22" start="32" type="s14.8"/>
-    <field name="Coarse X" size="10" start="22" type="uint"/>
-    <field name="Viewport Centre X-coordinate" size="22" start="0" type="s14.8"/>
+    <field name="Coarse Y" size="10" start="54" type="int"/>
+    <field name="Fine Y" size="22" start="32" type="u14.8"/>
+    <field name="Coarse X" size="10" start="22" type="int"/>
+    <field name="Fine X" size="22" start="0" type="u14.8"/>
   </packet>
 
   <packet shortname="clipz" name="Clipper Z min/max clipping planes" code="109">

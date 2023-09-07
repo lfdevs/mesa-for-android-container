@@ -100,9 +100,9 @@ struct stw_framebuffer
 
    
    /* FIXME: Make this work for multiple contexts bound to the same framebuffer */
-   boolean must_resize;
+   bool must_resize;
 
-   boolean minimized;  /**< Is the window currently minimized? */
+   bool minimized;  /**< Is the window currently minimized? */
 
    unsigned width;
    unsigned height;
@@ -111,7 +111,7 @@ struct stw_framebuffer
    unsigned textureFormat;  /**< WGL_NO_TEXTURE or WGL_TEXTURE_RGB[A]_ARB */
    unsigned textureTarget;  /**< WGL_NO_TEXTURE or WGL_TEXTURE_1D/2D/
                                  CUBE_MAP_ARB */
-   boolean textureMipmap;   /**< TRUE/FALSE */
+   bool textureMipmap;   /**< TRUE/FALSE */
    /** WGL_ARB_render_texture - set with wglSetPbufferAttribARB() */
    unsigned textureLevel;
    unsigned textureFace;    /**< [0..6] */

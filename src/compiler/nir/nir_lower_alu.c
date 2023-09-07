@@ -147,7 +147,7 @@ lower_alu_instr(nir_builder *b, nir_instr *instr_, UNUSED void *cb_data)
             nir_ssa_def *src0_32 = nir_type_convert(b, src0, base_type, base_type | 32, nir_rounding_mode_undef);
             nir_ssa_def *src1_32 = nir_type_convert(b, src1, base_type, base_type | 32, nir_rounding_mode_undef);
             nir_ssa_def *dest_32 = nir_imul(b, src0_32, src1_32);
-            nir_ssa_def *dest_shifted = nir_ishr(b, dest_32, nir_imm_int(b, src0->bit_size));
+            nir_ssa_def *dest_shifted = nir_ishr_imm(b, dest_32, src0->bit_size);
             lowered = nir_type_convert(b, dest_shifted, base_type, base_type | src0->bit_size, nir_rounding_mode_undef);
          } else {
             nir_ssa_def *cshift = nir_imm_int(b, src0->bit_size / 2);

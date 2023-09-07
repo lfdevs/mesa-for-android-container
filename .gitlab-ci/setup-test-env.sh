@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2048
+# shellcheck disable=SC2086 # we want word splitting
+# shellcheck disable=SC2155 # mktemp usually not failing
 
 function x_off {
     if [[ "$-" == *"x"* ]]; then

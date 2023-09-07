@@ -246,7 +246,7 @@ st_interop_export_object(struct st_context *st,
    struct pipe_resource *res = NULL;
    struct winsys_handle whandle;
    unsigned usage;
-   boolean success;
+   bool success;
    bool need_export_dmabuf = true;
 
    /* There is no version 0, thus we do not support it */

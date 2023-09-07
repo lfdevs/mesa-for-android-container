@@ -1112,7 +1112,7 @@ implicitly_convert_component(ir_rvalue * &from, const glsl_base_type to,
                                  from->type->vector_elements,
                                  from->type->matrix_columns);
 
-      if (from->type->can_implicitly_convert_to(desired_type, state)) {
+      if (_mesa_glsl_can_implicitly_convert(from->type, desired_type, state)) {
          /* Even though convert_component() implements the constructor
           * conversion rules (not the implicit conversion rules), its safe
           * to use it here because we already checked that the implicit

@@ -1,32 +1,14 @@
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "si_pipe.h"
 #include "util/format/u_format.h"
 #include "util/format_srgb.h"
 #include "util/u_helpers.h"
+#include "util/hash_table.h"
 
 static bool si_can_use_compute_blit(struct si_context *sctx, enum pipe_format format,
                                     unsigned num_samples, bool is_store, bool has_dcc)
@@ -171,9 +153,6 @@ static void si_launch_grid_internal(struct si_context *sctx, const struct pipe_g
    if (flags & SI_OP_SYNC_CS_BEFORE)
       sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH;
 
-   if (!(flags & SI_OP_CS_IMAGE))
-      sctx->flags |= SI_CONTEXT_PFP_SYNC_ME;
-
    /* Invalidate L0-L1 caches. */
    /* sL0 is never invalidated, because src resources don't use it. */
    if (!(flags & SI_OP_SKIP_CACHE_INV_BEFORE))
@@ -181,7 +160,8 @@ static void si_launch_grid_internal(struct si_context *sctx, const struct pipe_g
 
    /* Set settings for driver-internal compute dispatches. */
    sctx->flags &= ~SI_CONTEXT_START_PIPELINE_STATS;
-   sctx->flags |= SI_CONTEXT_STOP_PIPELINE_STATS;
+   if (sctx->num_hw_pipestat_streamout_queries)
+      sctx->flags |= SI_CONTEXT_STOP_PIPELINE_STATS;
 
    if (!(flags & SI_OP_CS_RENDER_COND_ENABLE))
       sctx->render_cond_enabled = false;
@@ -200,7 +180,9 @@ static void si_launch_grid_internal(struct si_context *sctx, const struct pipe_g
 
    /* Restore default settings. */
    sctx->flags &= ~SI_CONTEXT_STOP_PIPELINE_STATS;
-   sctx->flags |= SI_CONTEXT_START_PIPELINE_STATS;
+   if (sctx->num_hw_pipestat_streamout_queries)
+      sctx->flags |= SI_CONTEXT_START_PIPELINE_STATS;
+
    sctx->render_cond_enabled = sctx->render_cond;
    sctx->blitter_running = false;
 
@@ -494,7 +476,7 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 
       sctx->b.buffer_subdata(&sctx->b, dst,
                              PIPE_MAP_WRITE |
-                             /* TC forbids drivers to invalidate buffers and infer unsychronized mappings,
+                             /* TC forbids drivers to invalidate buffers and infer unsynchronized mappings,
                               * so suppress those optimizations. */
                              (sctx->tc ? TC_TRANSFER_MAP_NO_INFER_UNSYNCHRONIZED |
                                          TC_TRANSFER_MAP_NO_INVALIDATE : 0),

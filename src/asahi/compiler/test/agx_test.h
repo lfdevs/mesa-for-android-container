@@ -62,8 +62,7 @@ agx_block_equal(agx_block *A, agx_block *B)
       return false;
 
    list_pair_for_each_entry(agx_instr, insA, insB, &A->instructions,
-                            &B->instructions, link)
-   {
+                            &B->instructions, link) {
       if (!agx_instr_equal(insA, insB))
          return false;
    }
@@ -78,8 +77,7 @@ agx_shader_equal(agx_context *A, agx_context *B)
       return false;
 
    list_pair_for_each_entry(agx_block, blockA, blockB, &A->blocks, &B->blocks,
-                            link)
-   {
+                            link) {
       if (!agx_block_equal(blockA, blockB))
          return false;
    }

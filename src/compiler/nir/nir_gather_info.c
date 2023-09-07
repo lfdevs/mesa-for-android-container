@@ -340,99 +340,26 @@ nir_intrinsic_writes_external_memory(const nir_intrinsic_instr *instr)
    case nir_intrinsic_atomic_counter_exchange_deref:
    case nir_intrinsic_atomic_counter_comp_swap:
    case nir_intrinsic_atomic_counter_comp_swap_deref:
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
-   case nir_intrinsic_bindless_image_atomic_dec_wrap:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_inc_wrap:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_xor:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
    case nir_intrinsic_bindless_image_store:
    case nir_intrinsic_bindless_image_store_raw_intel:
-   case nir_intrinsic_global_atomic_add:
-   case nir_intrinsic_global_atomic_and:
-   case nir_intrinsic_global_atomic_comp_swap:
-   case nir_intrinsic_global_atomic_exchange:
-   case nir_intrinsic_global_atomic_fadd:
-   case nir_intrinsic_global_atomic_fcomp_swap:
-   case nir_intrinsic_global_atomic_fmax:
-   case nir_intrinsic_global_atomic_fmin:
-   case nir_intrinsic_global_atomic_imax:
-   case nir_intrinsic_global_atomic_imin:
-   case nir_intrinsic_global_atomic_or:
-   case nir_intrinsic_global_atomic_umax:
-   case nir_intrinsic_global_atomic_umin:
-   case nir_intrinsic_global_atomic_xor:
-   case nir_intrinsic_global_atomic_add_ir3:
-   case nir_intrinsic_global_atomic_and_ir3:
-   case nir_intrinsic_global_atomic_comp_swap_ir3:
-   case nir_intrinsic_global_atomic_exchange_ir3:
-   case nir_intrinsic_global_atomic_imax_ir3:
-   case nir_intrinsic_global_atomic_imin_ir3:
-   case nir_intrinsic_global_atomic_or_ir3:
-   case nir_intrinsic_global_atomic_umax_ir3:
-   case nir_intrinsic_global_atomic_umin_ir3:
-   case nir_intrinsic_global_atomic_xor_ir3:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_dec_wrap:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_inc_wrap:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_dec_wrap:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_fadd:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_inc_wrap:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_xor:
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_global_atomic_swap:
+   case nir_intrinsic_global_atomic_ir3:
+   case nir_intrinsic_global_atomic_swap_ir3:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_store:
    case nir_intrinsic_image_deref_store_raw_intel:
    case nir_intrinsic_image_store:
    case nir_intrinsic_image_store_raw_intel:
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_add_ir3:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_and_ir3:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
-   case nir_intrinsic_ssbo_atomic_comp_swap_ir3:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_exchange_ir3:
-   case nir_intrinsic_ssbo_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_fcomp_swap:
-   case nir_intrinsic_ssbo_atomic_fmax:
-   case nir_intrinsic_ssbo_atomic_fmin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_imax_ir3:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_imin_ir3:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_or_ir3:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_umax_ir3:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_umin_ir3:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_xor_ir3:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
+   case nir_intrinsic_ssbo_atomic_ir3:
+   case nir_intrinsic_ssbo_atomic_swap_ir3:
    case nir_intrinsic_store_global:
    case nir_intrinsic_store_global_ir3:
    case nir_intrinsic_store_global_amd:
@@ -441,20 +368,8 @@ nir_intrinsic_writes_external_memory(const nir_intrinsic_instr *instr)
       return true;
 
    case nir_intrinsic_store_deref:
-   case nir_intrinsic_deref_atomic_add:
-   case nir_intrinsic_deref_atomic_imin:
-   case nir_intrinsic_deref_atomic_umin:
-   case nir_intrinsic_deref_atomic_imax:
-   case nir_intrinsic_deref_atomic_umax:
-   case nir_intrinsic_deref_atomic_and:
-   case nir_intrinsic_deref_atomic_or:
-   case nir_intrinsic_deref_atomic_xor:
-   case nir_intrinsic_deref_atomic_exchange:
-   case nir_intrinsic_deref_atomic_comp_swap:
-   case nir_intrinsic_deref_atomic_fadd:
-   case nir_intrinsic_deref_atomic_fmin:
-   case nir_intrinsic_deref_atomic_fmax:
-   case nir_intrinsic_deref_atomic_fcomp_swap:
+   case nir_intrinsic_deref_atomic:
+   case nir_intrinsic_deref_atomic_swap:
       return nir_deref_mode_may_be(nir_src_as_deref(instr->src[0]),
                                    nir_var_mem_ssbo | nir_var_mem_global);
 
@@ -467,21 +382,8 @@ static bool
 intrinsic_is_bindless(nir_intrinsic_instr *instr)
 {
    switch (instr->intrinsic) {
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
-   case nir_intrinsic_bindless_image_atomic_dec_wrap:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_fmax:
-   case nir_intrinsic_bindless_image_atomic_fmin:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_inc_wrap:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_xor:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
    case nir_intrinsic_bindless_image_descriptor_amd:
    case nir_intrinsic_bindless_image_format:
    case nir_intrinsic_bindless_image_load:
@@ -758,6 +660,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_load_mesh_view_count:
    case nir_intrinsic_load_gs_header_ir3:
    case nir_intrinsic_load_tcs_header_ir3:
+   case nir_intrinsic_load_ray_triangle_vertex_positions:
       BITSET_SET(shader->info.system_values_read,
                  nir_system_value_from_intrinsic(instr->intrinsic));
       break;
@@ -797,6 +700,19 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
          shader->info.fs.uses_sample_qualifier = true;
       break;
 
+   case nir_intrinsic_load_barycentric_coord_pixel:
+   case nir_intrinsic_load_barycentric_coord_centroid:
+   case nir_intrinsic_load_barycentric_coord_sample:
+   case nir_intrinsic_load_barycentric_coord_at_offset:
+   case nir_intrinsic_load_barycentric_coord_at_sample:
+      if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
+          nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
+         BITSET_SET(shader->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_PERSP_COORD);
+      } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
+         BITSET_SET(shader->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_LINEAR_COORD);
+      }
+      break;
+
    case nir_intrinsic_quad_broadcast:
    case nir_intrinsic_quad_swap_horizontal:
    case nir_intrinsic_quad_swap_vertical:
@@ -831,9 +747,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_write_invocation_amd:
       if (shader->info.stage == MESA_SHADER_FRAGMENT)
          shader->info.fs.needs_all_helper_invocations = true;
-      if (shader->info.stage == MESA_SHADER_COMPUTE ||
-          gl_shader_stage_is_mesh(shader->info.stage))
-         shader->info.uses_wide_subgroup_intrinsics = true;
+
+      shader->info.uses_wide_subgroup_intrinsics = true;
       break;
 
    case nir_intrinsic_end_primitive:
@@ -848,31 +763,25 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
 
       break;
 
-   case nir_intrinsic_control_barrier:
-      shader->info.uses_control_barrier = true;
-      break;
-
    case nir_intrinsic_scoped_barrier:
       shader->info.uses_control_barrier |=
-         nir_intrinsic_execution_scope(instr) != NIR_SCOPE_NONE;
+         nir_intrinsic_execution_scope(instr) != SCOPE_NONE;
 
       shader->info.uses_memory_barrier |=
-         nir_intrinsic_memory_scope(instr) != NIR_SCOPE_NONE;
-      break;
-
-   case nir_intrinsic_memory_barrier:
-   case nir_intrinsic_group_memory_barrier:
-   case nir_intrinsic_memory_barrier_atomic_counter:
-   case nir_intrinsic_memory_barrier_buffer:
-   case nir_intrinsic_memory_barrier_image:
-   case nir_intrinsic_memory_barrier_shared:
-   case nir_intrinsic_memory_barrier_tcs_patch:
-      shader->info.uses_memory_barrier = true;
+         nir_intrinsic_memory_scope(instr) != SCOPE_NONE;
       break;
 
    case nir_intrinsic_store_zs_agx:
       shader->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
                                       BITFIELD64_BIT(FRAG_RESULT_STENCIL);
+      break;
+
+   case nir_intrinsic_sample_mask_agx:
+      shader->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
+      break;
+
+   case nir_intrinsic_discard_agx:
+      shader->info.fs.uses_discard = true;
       break;
 
    case nir_intrinsic_launch_mesh_workgroups:
@@ -1114,10 +1023,8 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
 
       shader->info.ray_queries += MAX2(glsl_get_aoa_size(var->type), 1);
    }
-   nir_foreach_function(func, shader) {
-      if (!func->impl)
-         continue;
-      nir_foreach_function_temp_variable(var, func->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_function_temp_variable(var, impl) {
          if (!var->data.ray_query)
             continue;
 

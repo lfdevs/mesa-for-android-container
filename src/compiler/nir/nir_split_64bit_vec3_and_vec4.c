@@ -184,8 +184,7 @@ split_load_deref(nir_builder *b, nir_intrinsic_instr *intr,
    }
 
    nir_ssa_def *load1 = nir_build_load_deref(b, 2, 64, &deref1->dest.ssa, 0);
-   nir_ssa_def *load2 = nir_build_load_deref(b, old_components - 2, 64,
-                                             &deref2->dest.ssa, 0);
+   nir_ssa_def *load2 = nir_build_load_deref(b, old_components - 2, 64, &deref2->dest.ssa, 0);
 
    return merge_to_vec3_or_vec4(b, load1, load2);
 }
@@ -208,7 +207,7 @@ split_store_deref(nir_builder *b, nir_intrinsic_instr *intr,
 
    int write_mask_xy = nir_intrinsic_write_mask(intr) & 3;
    if (write_mask_xy) {
-      nir_ssa_def *src_xy = nir_channels(b, intr->src[1].ssa, 3);
+      nir_ssa_def *src_xy = nir_trim_vector(b, intr->src[1].ssa, 2);
       nir_build_store_deref(b, &deref_xy->dest.ssa, src_xy, write_mask_xy);
    }
 
@@ -229,8 +228,7 @@ split_phi(nir_builder *b, nir_phi_instr *phi)
 
    nir_alu_instr *vec = nir_alu_instr_create(b->shader, vec_op);
    nir_ssa_dest_init(&vec->instr, &vec->dest.dest,
-                     phi->dest.ssa.num_components,
-                     64, NULL);
+                     phi->dest.ssa.num_components, 64);
    vec->dest.write_mask = (1 << phi->dest.ssa.num_components) - 1;
 
    int num_comp[2] = {2, phi->dest.ssa.num_components - 2};
@@ -240,7 +238,7 @@ split_phi(nir_builder *b, nir_phi_instr *phi)
    for (unsigned i = 0; i < 2; i++) {
       new_phi[i] = nir_phi_instr_create(b->shader);
       nir_ssa_dest_init(&new_phi[i]->instr, &new_phi[i]->dest, num_comp[i],
-                        phi->dest.ssa.bit_size, NULL);
+                        phi->dest.ssa.bit_size);
 
       nir_foreach_phi_src(src, phi) {
          /* Insert at the end of the predecessor but before the jump

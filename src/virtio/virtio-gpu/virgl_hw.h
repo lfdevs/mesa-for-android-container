@@ -468,6 +468,10 @@ enum virgl_formats {
 #define VIRGL_CAP_V2_TEXTURE_SHADOW_LOD   (1 << 10)
 #define VIRGL_CAP_V2_VS_VERTEX_LAYER      (1 << 11)
 #define VIRGL_CAP_V2_VS_VIEWPORT_INDEX    (1 << 12)
+#define VIRGL_CAP_V2_PIPELINE_STATISTICS_QUERY (1 << 13)
+#define VIRGL_CAP_V2_DRAW_PARAMETERS      (1 << 14)
+#define VIRGL_CAP_V2_GROUP_VOTE           (1 << 15)
+
 /* virgl bind flags - these are compatible with mesa 10.5 gallium.
  * but are fixed, no other should be passed to virgl either.
  */
@@ -677,6 +681,20 @@ enum virgl_ctx_errors {
         VIRGL_ERROR_CTX_ILLEGAL_SAMPLER_VIEW_TARGET,
         VIRGL_ERROR_CTX_TRANSFER_IOV_BOUNDS,
         VIRGL_ERROR_CTX_ILLEGAL_DUAL_SRC_BLEND
+};
+
+enum virgl_statistics_query_index {
+   VIRGL_STAT_QUERY_IA_VERTICES = 0,
+   VIRGL_STAT_QUERY_IA_PRIMITIVES = 1,
+   VIRGL_STAT_QUERY_VS_INVOCATIONS = 2,
+   VIRGL_STAT_QUERY_GS_INVOCATIONS = 3,
+   VIRGL_STAT_QUERY_GS_PRIMITIVES = 4,
+   VIRGL_STAT_QUERY_C_INVOCATIONS = 5,
+   VIRGL_STAT_QUERY_C_PRIMITIVES = 6,
+   VIRGL_STAT_QUERY_PS_INVOCATIONS = 7,
+   VIRGL_STAT_QUERY_HS_INVOCATIONS = 8,
+   VIRGL_STAT_QUERY_DS_INVOCATIONS = 9,
+   VIRGL_STAT_QUERY_CS_INVOCATIONS = 10,
 };
 
 /**

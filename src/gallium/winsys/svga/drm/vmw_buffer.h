@@ -28,7 +28,7 @@
 #define VMW_BUFFER_H_
 
 #include <assert.h>
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipebuffer/pb_bufmgr.h"
 #include "util/u_debug_flush.h"
 
@@ -90,7 +90,7 @@ vmw_svga_winsys_buffer_unmap(struct svga_winsys_screen *sws,
 struct pb_manager *
 vmw_gmr_bufmgr_create(struct vmw_winsys_screen *vws);
 
-boolean
+bool
 vmw_gmr_bufmgr_region_ptr(struct pb_buffer *buf, 
                           struct SVGAGuestPtr *ptr);
 

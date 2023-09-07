@@ -227,6 +227,12 @@ nir_deref_instr_has_complex_use(nir_deref_instr *deref,
                continue;
             return true;
 
+         case nir_intrinsic_deref_atomic:
+         case nir_intrinsic_deref_atomic_swap:
+            if (opts & nir_deref_instr_has_complex_use_allow_atomics)
+               continue;
+            return true;
+
          default:
             return true;
          }
@@ -400,8 +406,8 @@ bool
 nir_remove_dead_derefs(nir_shader *shader)
 {
    bool progress = false;
-   nir_foreach_function(function, shader) {
-      if (function->impl && nir_remove_dead_derefs_impl(function->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (nir_remove_dead_derefs_impl(impl))
          progress = true;
    }
 
@@ -411,11 +417,8 @@ nir_remove_dead_derefs(nir_shader *shader)
 void
 nir_fixup_deref_modes(nir_shader *shader)
 {
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_deref)
                continue;
@@ -788,9 +791,7 @@ rematerialize_deref_in_block(nir_deref_instr *deref,
    }
 
    nir_ssa_dest_init(&new_deref->instr, &new_deref->dest,
-                     deref->dest.ssa.num_components,
-                     deref->dest.ssa.bit_size,
-                     NULL);
+                     deref->dest.ssa.num_components, deref->dest.ssa.bit_size);
    nir_builder_instr_insert(b, &new_deref->instr);
 
    return new_deref;
@@ -829,7 +830,7 @@ bool
 nir_rematerialize_derefs_in_use_blocks_impl(nir_function_impl *impl)
 {
    struct rematerialize_deref_state state = { 0 };
-   nir_builder_init(&state.builder, impl);
+   state.builder = nir_builder_create(impl);
 
    nir_foreach_block_unstructured(block, impl) {
       state.block = block;
@@ -1381,7 +1382,7 @@ opt_store_vec_deref(nir_builder *b, nir_intrinsic_instr *store)
                             nir_src_for_ssa(&parent->dest.ssa));
 
       /* Restrict things down as needed so the bitcast doesn't fail */
-      data = nir_channels(b, data, (1 << util_last_bit(write_mask)) - 1);
+      data = nir_trim_vector(b, data, util_last_bit(write_mask));
       if (old_bit_size != new_bit_size)
          data = nir_bitcast_vector(b, data, new_bit_size);
       data = resize_vector(b, data, new_num_comps);
@@ -1428,8 +1429,7 @@ nir_opt_deref_impl(nir_function_impl *impl)
 {
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -1514,8 +1514,8 @@ nir_opt_deref(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(func, shader) {
-      if (func->impl && nir_opt_deref_impl(func->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (nir_opt_deref_impl(impl))
          progress = true;
    }
 

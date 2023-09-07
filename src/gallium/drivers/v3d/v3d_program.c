@@ -29,7 +29,6 @@
 #include "util/hash_table.h"
 #include "util/u_upload_mgr.h"
 #include "tgsi/tgsi_dump.h"
-#include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_builder.h"
 #include "nir/tgsi_to_nir.h"
@@ -50,6 +49,18 @@ v3d_get_slot_for_driver_location(nir_shader *s, uint32_t driver_location)
         nir_foreach_shader_out_variable(var, s) {
                 if (var->data.driver_location == driver_location) {
                         return var->data.location;
+                }
+
+                /* For compact arrays, we have more than one location to
+                 * check.
+                 */
+                if (var->data.compact) {
+                        assert(glsl_type_is_array(var->type));
+                        for (int i = 0; i < DIV_ROUND_UP(glsl_array_size(var->type), 4); i++) {
+                                if ((var->data.driver_location + i) == driver_location) {
+                                        return var->data.location;
+                                }
+                        }
                 }
         }
 
@@ -313,7 +324,6 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
                          type_size, (nir_lower_io_options)0);
         }
 
-        NIR_PASS(_, s, nir_lower_regs_to_ssa);
         NIR_PASS(_, s, nir_normalize_cubemap_coords);
 
         NIR_PASS(_, s, nir_lower_load_const_to_scalar);
@@ -407,6 +417,14 @@ v3d_get_compiled_shader(struct v3d_context *v3d,
                                         v3d_shader_debug_output,
                                         v3d,
                                         program_id, variant_id, &shader_size);
+
+                /* qpu_insts being NULL can happen if the register allocation
+                 * failed. At this point we can't really trigger an OpenGL API
+                 * error, as the final compilation could happen on the draw
+                 * call. So let's at least assert, so debug builds finish at
+                 * this point.
+                 */
+                assert(qpu_insts);
                 ralloc_steal(shader, shader->prog_data.base);
 
                 if (shader_size) {
@@ -552,9 +570,9 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_FRAGMENT]);
         key->base.shader_state = v3d->prog.bind_fs;
         key->base.ucp_enables = v3d->rasterizer->base.clip_plane_enable;
-        key->is_points = (prim_mode == PIPE_PRIM_POINTS);
-        key->is_lines = (prim_mode >= PIPE_PRIM_LINES &&
-                         prim_mode <= PIPE_PRIM_LINE_STRIP);
+        key->is_points = (prim_mode == MESA_PRIM_POINTS);
+        key->is_lines = (prim_mode >= MESA_PRIM_LINES &&
+                         prim_mode <= MESA_PRIM_LINE_STRIP);
         key->line_smoothing = (key->is_lines &&
                                v3d_line_smoothing_enabled(v3d));
         key->has_gs = v3d->prog.bind_gs != NULL;
@@ -680,7 +698,7 @@ v3d_update_compiled_gs(struct v3d_context *v3d, uint8_t prim_mode)
                sizeof(key->used_outputs));
 
         key->per_vertex_point_size =
-                (prim_mode == PIPE_PRIM_POINTS &&
+                (prim_mode == MESA_PRIM_POINTS &&
                  v3d->rasterizer->base.point_size_per_vertex);
 
         struct v3d_compiled_shader *gs =
@@ -759,7 +777,7 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         key->per_vertex_point_size =
-                (prim_mode == PIPE_PRIM_POINTS &&
+                (prim_mode == MESA_PRIM_POINTS &&
                  v3d->rasterizer->base.point_size_per_vertex);
 
         nir_shader *s = v3d->prog.bind_vs->base.ir.nir;

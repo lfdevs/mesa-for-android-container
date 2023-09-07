@@ -136,8 +136,7 @@ visit_cf_list(nir_builder *b, struct exec_list *list, bool *repair_ssa)
 static bool
 lower_continue_constructs_impl(nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
    bool repair_ssa = false;
    bool progress = visit_cf_list(&b, &impl->body, &repair_ssa);
 
@@ -145,7 +144,7 @@ lower_continue_constructs_impl(nir_function_impl *impl)
       nir_metadata_preserve(impl, nir_metadata_none);
 
       /* Merge the Phis from Header and Continue Target */
-      nir_lower_regs_to_ssa_impl(impl);
+      nir_lower_reg_intrinsics_to_ssa_impl(impl);
 
       /* Re-inserting the Continue Target at the beginning of the loop
        * violates the dominance property if instructions in the continue
@@ -165,8 +164,8 @@ nir_lower_continue_constructs(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl && lower_continue_constructs_impl(function->impl))
+   nir_foreach_function_impl(impl, shader) {
+      if (lower_continue_constructs_impl(impl))
          progress = true;
    }
 

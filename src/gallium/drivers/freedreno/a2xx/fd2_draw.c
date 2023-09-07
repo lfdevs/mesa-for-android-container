@@ -141,7 +141,7 @@ draw_impl(struct fd_context *ctx, const struct pipe_draw_info *info,
    }
 
    enum pc_di_vis_cull_mode vismode = USE_VISIBILITY;
-   if (binning || info->mode == PIPE_PRIM_POINTS)
+   if (binning || info->mode == MESA_PRIM_POINTS)
       vismode = IGNORE_VISIBILITY;
 
    fd_draw_emit(ctx->batch, ring, ctx->screen->primtypes[info->mode],
@@ -169,7 +169,7 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *pinfo,
    if (!ctx->prog.fs || !ctx->prog.vs)
       return false;
 
-   if (pinfo->mode != PIPE_PRIM_MAX && !indirect && !pinfo->primitive_restart &&
+   if (pinfo->mode != MESA_PRIM_COUNT && !indirect && !pinfo->primitive_restart &&
        !u_trim_pipe_prim(pinfo->mode, (unsigned *)&pdraw->count))
       return false;
 
@@ -190,14 +190,14 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *pinfo,
     */
    if (pdraw->count > 32766) {
       /* clang-format off */
-      static const uint16_t step_tbl[PIPE_PRIM_MAX] = {
-         [0 ... PIPE_PRIM_MAX - 1]  = 32766,
-         [PIPE_PRIM_LINE_STRIP]     = 32765,
-         [PIPE_PRIM_TRIANGLE_STRIP] = 32764,
+      static const uint16_t step_tbl[MESA_PRIM_COUNT] = {
+         [0 ... MESA_PRIM_COUNT - 1]  = 32766,
+         [MESA_PRIM_LINE_STRIP]     = 32765,
+         [MESA_PRIM_TRIANGLE_STRIP] = 32764,
 
          /* needs more work */
-         [PIPE_PRIM_TRIANGLE_FAN]   = 0,
-         [PIPE_PRIM_LINE_LOOP]      = 0,
+         [MESA_PRIM_TRIANGLE_FAN]   = 0,
+         [MESA_PRIM_LINE_LOOP]      = 0,
       };
       /* clang-format on */
 

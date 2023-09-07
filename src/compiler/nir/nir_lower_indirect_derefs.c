@@ -51,7 +51,7 @@ emit_indirect_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
       nir_deref_instr *deref = *deref_arr;
       assert(deref->deref_type == nir_deref_type_array);
 
-      nir_push_if(b, nir_ilt(b, deref->arr.index.ssa, nir_imm_intN_t(b, mid, parent->dest.ssa.bit_size)));
+      nir_push_if(b, nir_ilt_imm(b, deref->arr.index.ssa, mid));
       emit_indirect_load_store_deref(b, orig_instr, parent, deref_arr,
                                      start, mid, &then_dest, src);
       nir_push_else(b, NULL);
@@ -102,7 +102,7 @@ emit_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
 
       nir_ssa_dest_init(&load->instr, &load->dest,
                         orig_instr->dest.ssa.num_components,
-                        orig_instr->dest.ssa.bit_size, NULL);
+                        orig_instr->dest.ssa.bit_size);
       nir_builder_instr_insert(b, &load->instr);
       *dest = &load->dest.ssa;
    } else {
@@ -191,8 +191,7 @@ static bool
 lower_indirects_impl(nir_function_impl *impl, nir_variable_mode modes,
                      const struct set *vars, uint32_t max_lower_array_len)
 {
-   nir_builder builder;
-   nir_builder_init(&builder, impl);
+   nir_builder builder = nir_builder_create(impl);
    bool progress = false;
 
    nir_foreach_block_safe(block, impl) {
@@ -219,11 +218,9 @@ nir_lower_indirect_derefs(nir_shader *shader, nir_variable_mode modes,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         progress = lower_indirects_impl(function->impl, modes, NULL,
-                                         max_lower_array_len) || progress;
-      }
+   nir_foreach_function_impl(impl, shader) {
+      progress = lower_indirects_impl(impl, modes, NULL, max_lower_array_len) ||
+                 progress;
    }
 
    return progress;
@@ -235,11 +232,9 @@ nir_lower_indirect_var_derefs(nir_shader *shader, const struct set *vars)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         progress = lower_indirects_impl(function->impl, nir_var_uniform,
-                                         vars, UINT_MAX) || progress;
-      }
+   nir_foreach_function_impl(impl, shader) {
+      progress = lower_indirects_impl(impl, nir_var_uniform, vars, UINT_MAX) ||
+                 progress;
    }
 
    return progress;

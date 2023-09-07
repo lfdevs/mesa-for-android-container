@@ -73,6 +73,20 @@ static inline bool rogue_lower_MOV(rogue_builder *b, rogue_alu_instr *mov)
    if (rogue_ref_is_reg(&mov->dst[0].ref) &&
        mov->dst[0].ref.reg->class == ROGUE_REG_CLASS_VTXOUT) {
       instr = &rogue_UVSW_WRITE(b, mov->dst[0].ref, mov->src[0].ref)->instr;
+   } else if (rogue_ref_is_special_reg(&mov->src[0].ref)) {
+      /* If we're loading a special register, use a movc. */
+      rogue_alu_instr *alu = rogue_MOVC(b,
+                                        mov->dst[0].ref,
+                                        rogue_ref_io(ROGUE_IO_NONE),
+                                        rogue_ref_io(ROGUE_IO_NONE),
+                                        mov->src[0].ref,
+                                        rogue_ref_io(ROGUE_IO_NONE));
+      rogue_set_alu_dst_mod(alu, 0, ROGUE_ALU_DST_MOD_E0);
+      rogue_set_alu_dst_mod(alu, 0, ROGUE_ALU_DST_MOD_E1);
+      rogue_set_alu_dst_mod(alu, 0, ROGUE_ALU_DST_MOD_E2);
+      rogue_set_alu_dst_mod(alu, 0, ROGUE_ALU_DST_MOD_E3);
+
+      instr = &alu->instr;
    } else {
       /* If we're moving an immediate value not in special constants,
        * we need to do a bitwise bypass.

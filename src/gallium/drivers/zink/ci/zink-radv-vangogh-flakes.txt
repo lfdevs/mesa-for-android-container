@@ -1,13 +1,16 @@
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero
 glx@glx_arb_sync_control@waitformsc
+spec@arb_texture_rectangle@copyteximage rect
 spec@arb_timer_query@timestamp-get
 spec@arb_shader_image_load_store@coherency
 spec@!opengl 1.0@rasterpos
 
 # need to handle non-fbfetch feedback loops
-spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader*
+spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader.*
 
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=4
+spec@!opengl 1.1@depthstencil-default_fb-copypixels samples=2
+spec@!opengl 1.1@depthstencil-default_fb-copypixels samples=4
 
 spec@arb_shader_image_load_store@shader-mem-barrier
 spec@arb_shader_image_load_store@shader-mem-barrier@Fragment shader/'coherent' qualifier memory barrier test/modulus=128
@@ -48,3 +51,20 @@ spec@arb_shader_image_load_store@shader-mem-barrier@Vertex shader/'volatile' qua
 spec@arb_shader_image_load_store@shader-mem-barrier@Vertex shader/'volatile' qualifier memory barrier test/modulus=64
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGB9_E5
+
+spec@arb_copy_image@arb_copy_image-targets .* 32 32 1 gl_texture_1d 32 1 1 11 23 0 5 0 0 14 1 1
+
+# noticed in https://gitlab.freedesktop.org/mesa/mesa/-/pipelines/891104
+spec@arb_compute_variable_group_size@execution@basic-local-size
+spec@arb_compute_variable_group_size@execution@global-invocation-id
+spec@arb_compute_variable_group_size@execution@separate-global-id
+spec@arb_compute_variable_group_size@execution@separate-global-id-2
+spec@arb_compute_variable_group_size@local-size
+
+# noticed in a stress test, after over 200 runs
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
+
+# Expects ordering between per-sample invocations generated from the same primitive,
+# contradicts the resolution of GL_ARB_fragment_shader_interlock issue 1.
+# https://gitlab.freedesktop.org/mesa/piglit/-/issues/93
+spec@arb_fragment_shader_interlock@arb_fragment_shader_interlock-image-load-store

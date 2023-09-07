@@ -138,7 +138,8 @@ bi_print_scoreboard_line(unsigned slot, const char *name, uint64_t mask,
 
    fprintf(fp, "slot %u %s:", slot, name);
 
-   u_foreach_bit64(reg, mask) fprintf(fp, " r%" PRId64, reg);
+   u_foreach_bit64(reg, mask)
+      fprintf(fp, " r%" PRId64, reg);
 
    fprintf(fp, "\n");
 }

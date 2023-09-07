@@ -104,7 +104,7 @@ unpack_bitmap(struct st_context *st,
               GLint px, GLint py, GLsizei width, GLsizei height,
               const struct gl_pixelstore_attrib *unpack,
               const GLubyte *bitmap,
-              ubyte *destBuffer, uint destStride)
+              uint8_t *destBuffer, uint destStride)
 {
    destBuffer += py * destStride + px;
 
@@ -124,7 +124,7 @@ st_make_bitmap_texture(struct gl_context *ctx, GLsizei width, GLsizei height,
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
    struct pipe_transfer *transfer;
-   ubyte *dest;
+   uint8_t *dest;
    struct pipe_resource *pt;
 
    if (!st->bitmap.tex_format)
@@ -543,7 +543,7 @@ accum_bitmap(struct gl_context *ctx,
    /* PBO source... */
    bitmap = _mesa_map_pbo_source(ctx, unpack, bitmap);
    if (!bitmap) {
-      return FALSE;
+      return false;
    }
 
    unpack_bitmap(st, px, py, width, height, unpack, bitmap,

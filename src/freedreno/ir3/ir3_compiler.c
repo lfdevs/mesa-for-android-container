@@ -116,7 +116,6 @@ static const nir_shader_compiler_options ir3_base_options = {
    .has_isub = true,
    .force_indirect_unrolling_sampler = true,
    .lower_uniforms_to_ubo = true,
-   .use_scoped_barrier = true,
    .max_unroll_iterations = 32,
 
    .lower_cs_local_index_to_id = true,
@@ -143,6 +142,7 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->dev = dev;
    compiler->dev_id = dev_id;
    compiler->gen = fd_dev_gen(dev_id);
+   compiler->is_64bit = fd_dev_64b(dev_id);
    compiler->options = *options;
 
    /* All known GPU's have 32k local memory (aka shared) */
@@ -283,6 +283,10 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    } else if (compiler->gen <= 2) {
       /* a2xx compiler doesn't handle indirect: */
       compiler->nir_options.force_indirect_unrolling = nir_var_all;
+   }
+
+   if (options->lower_base_vertex) {
+      compiler->nir_options.lower_base_vertex = true;
    }
 
    /* 16-bit ALU op generation is mostly controlled by frontend compiler options, but

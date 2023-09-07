@@ -35,8 +35,8 @@ lower_load_uniform_to_scalar(nir_builder *b, nir_intrinsic_instr *intr)
    for (unsigned i = 0; i < intr->num_components; i++) {
       nir_intrinsic_instr *chan_intr =
          nir_intrinsic_instr_create(b->shader, intr->intrinsic);
-      nir_ssa_dest_init(&chan_intr->instr, &chan_intr->dest,
-                        1, intr->dest.ssa.bit_size, NULL);
+      nir_ssa_dest_init(&chan_intr->instr, &chan_intr->dest, 1,
+                        intr->dest.ssa.bit_size);
       chan_intr->num_components = 1;
 
       nir_intrinsic_set_base(chan_intr, nir_intrinsic_base(intr) * 4 + i);
@@ -61,8 +61,7 @@ lima_nir_lower_uniform_to_scalar(nir_shader *shader)
 {
    nir_foreach_function(function, shader) {
       if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+         nir_builder b = nir_builder_create(function->impl);
 
          nir_foreach_block(block, function->impl) {
             nir_foreach_instr_safe(instr, block) {

@@ -67,9 +67,8 @@ nir_metadata_preserve(nir_function_impl *impl, nir_metadata preserved)
 void
 nir_shader_preserve_all_metadata(nir_shader *shader)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+   nir_foreach_function_impl(impl, shader) {
+      nir_metadata_preserve(impl, nir_metadata_all);
    }
 }
 
@@ -83,10 +82,8 @@ nir_shader_preserve_all_metadata(nir_shader *shader)
 void
 nir_metadata_set_validation_flag(nir_shader *shader)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         function->impl->valid_metadata |= nir_metadata_not_properly_reset;
-      }
+   nir_foreach_function_impl(impl, shader) {
+      impl->valid_metadata |= nir_metadata_not_properly_reset;
    }
 }
 
@@ -100,11 +97,8 @@ nir_metadata_set_validation_flag(nir_shader *shader)
 void
 nir_metadata_check_validation_flag(nir_shader *shader)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         assert(!(function->impl->valid_metadata &
-                  nir_metadata_not_properly_reset));
-      }
+   nir_foreach_function_impl(impl, shader) {
+      assert(!(impl->valid_metadata & nir_metadata_not_properly_reset));
    }
 }
 #endif

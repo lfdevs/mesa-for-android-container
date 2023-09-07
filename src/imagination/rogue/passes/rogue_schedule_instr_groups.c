@@ -47,10 +47,6 @@ static inline void rogue_set_io_sel(rogue_instr_group_io_sel *map,
    if (rogue_ref_is_io(ref) && rogue_ref_get_io(ref) == io)
       return;
 
-   /* Leave source feedthroughs in place. */
-   if (!is_dst && rogue_io_is_ft(io))
-      return;
-
    if (alu == ROGUE_ALU_MAIN) {
       /* Hookup feedthrough outputs to W0 using IS4. */
       if (is_dst && rogue_io_is_ft(io)) {
@@ -65,6 +61,15 @@ static inline void rogue_set_io_sel(rogue_instr_group_io_sel *map,
          }
       }
 
+      /* Movc source. */
+      /* TODO: hardcoded to use fte and s1 for now. */
+      if (!is_dst && io == ROGUE_IO_FTE) {
+         enum rogue_io src = ROGUE_IO_S1;
+         *(rogue_instr_group_io_sel_ref(map, ROGUE_IO_IS0)) = rogue_ref_io(src);
+         *(rogue_instr_group_io_sel_ref(map, ROGUE_IO_IS4)) = rogue_ref_io(io);
+         io = src;
+      }
+
       /* Pack source */
       if (!is_dst && io == ROGUE_IO_IS3) {
          enum rogue_io src = ROGUE_IO_S0;
@@ -74,7 +79,7 @@ static inline void rogue_set_io_sel(rogue_instr_group_io_sel *map,
          io = src;
       }
 
-      /* Movc sources. */
+      /* w0/w1 used as sources. */
       if (!is_dst && rogue_io_is_dst(io)) {
          enum rogue_io dst_ft =
             (io == ROGUE_IO_W0 ? ROGUE_IO_IS4 : ROGUE_IO_IS5);

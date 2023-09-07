@@ -88,6 +88,7 @@
 #include "vk_util.h"
 #include "vk_queue.h"
 #include "vk_log.h"
+#include "vk_ycbcr_conversion.h"
 
 /* Pre-declarations needed for WSI entrypoints */
 struct wl_surface;
@@ -3133,8 +3134,6 @@ anv_get_isl_format(const struct intel_device_info *devinfo, VkFormat vk_format,
 extern VkFormat
 vk_format_from_android(unsigned android_format, unsigned android_usage);
 
-unsigned anv_ahb_format_for_vk_format(VkFormat vk_format);
-
 static inline struct isl_swizzle
 anv_swizzle_for_render(struct isl_swizzle swizzle)
 {
@@ -3460,31 +3459,6 @@ anv_can_sample_with_hiz(const struct intel_device_info * const devinfo,
    return image->vk.samples == 1;
 }
 
-/* Returns true if an MCS-enabled buffer can be sampled from. */
-static inline bool
-anv_can_sample_mcs_with_clear(const struct intel_device_info * const devinfo,
-                              const struct anv_image *image)
-{
-   assert(image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT);
-   const uint32_t plane =
-      anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_COLOR_BIT);
-
-   assert(isl_aux_usage_has_mcs(image->planes[plane].aux_usage));
-
-   const struct anv_surface *anv_surf = &image->planes[plane].primary_surface;
-
-   /* On TGL, the sampler has an issue with some 8 and 16bpp MSAA fast clears.
-    * See HSD 1707282275, wa_14013111325. Due to the use of
-    * format-reinterpretation, a simplified workaround is implemented.
-    */
-   if (devinfo->ver >= 12 &&
-       isl_format_get_layout(anv_surf->isl.format)->bpb <= 16) {
-      return false;
-   }
-
-   return true;
-}
-
 void
 anv_cmd_buffer_mark_image_written(struct anv_cmd_buffer *cmd_buffer,
                                   const struct anv_image *image,
@@ -3729,24 +3703,12 @@ struct gfx8_border_color {
    uint32_t _pad[12];
 };
 
-struct anv_ycbcr_conversion {
-   struct vk_object_base base;
-
-   const struct anv_format *        format;
-   VkSamplerYcbcrModelConversion    ycbcr_model;
-   VkSamplerYcbcrRange              ycbcr_range;
-   VkComponentSwizzle               mapping[4];
-   VkChromaLocation                 chroma_offsets[2];
-   VkFilter                         chroma_filter;
-   bool                             chroma_reconstruction;
-};
-
 struct anv_sampler {
    struct vk_object_base        base;
 
    uint32_t                     state[3][4];
    uint32_t                     n_planes;
-   struct anv_ycbcr_conversion *conversion;
+   struct vk_ycbcr_conversion  *conversion;
 
    /* Blob of sampler state data which is guaranteed to be 32-byte aligned
     * and with a 32-byte stride for use as bindless samplers.
@@ -3913,9 +3875,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(anv_query_pool, base, VkQueryPool,
                                VK_OBJECT_TYPE_QUERY_POOL)
 VK_DEFINE_NONDISP_HANDLE_CASTS(anv_sampler, base, VkSampler,
                                VK_OBJECT_TYPE_SAMPLER)
-VK_DEFINE_NONDISP_HANDLE_CASTS(anv_ycbcr_conversion, base,
-                               VkSamplerYcbcrConversion,
-                               VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION)
 VK_DEFINE_NONDISP_HANDLE_CASTS(anv_performance_configuration_intel, base,
                                VkPerformanceConfigurationINTEL,
                                VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL)

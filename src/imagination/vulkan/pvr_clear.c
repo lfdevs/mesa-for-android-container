@@ -31,6 +31,7 @@
 #include "pvr_private.h"
 #include "pvr_shader_factory.h"
 #include "pvr_static_shaders.h"
+#include "pvr_types.h"
 #include "vk_alloc.h"
 #include "vk_log.h"
 
@@ -120,9 +121,13 @@ static void pvr_device_setup_graphics_static_clear_ppp_templates(
       template->config.pds_state = NULL;
 
       template->config.region_clip0 = CS_HEADER(TA_REGION_CLIP0);
-      template->config.region_clip0.mode = PVRX(TA_REGION_CLIP_MODE_NONE);
+      template->config.region_clip0.mode = PVRX(TA_REGION_CLIP_MODE_OUTSIDE);
+      template->config.region_clip0.left = 0;
+      template->config.region_clip0.right = PVRX(TA_REGION_CLIP_MAX);
 
       template->config.region_clip1 = CS_HEADER(TA_REGION_CLIP1);
+      template->config.region_clip1.top = 0;
+      template->config.region_clip1.bottom = PVRX(TA_REGION_CLIP_MAX);
 
       template->config.output_sel = CS_HEADER(TA_OUTPUT_SEL);
       template->config.output_sel.vtxsize = 4;
@@ -147,7 +152,7 @@ static void pvr_device_setup_graphics_static_clear_ppp_templates(
 VkResult pvr_emit_ppp_from_template(
    struct pvr_csb *const csb,
    const struct pvr_static_clear_ppp_template *const template,
-   struct pvr_bo **const pvr_bo_out)
+   struct pvr_suballoc_bo **const pvr_bo_out)
 {
    const uint32_t dword_count =
       pvr_cmd_length(TA_STATE_HEADER) + pvr_cmd_length(TA_STATE_ISPCTL) +
@@ -164,22 +169,21 @@ VkResult pvr_emit_ppp_from_template(
       rogue_get_slc_cache_line_size(&device->pdevice->dev_info);
    const struct pvr_static_clear_ppp_base *const base =
       &device->static_clear_state.ppp_base;
-   struct pvr_bo *pvr_bo;
+   struct pvr_suballoc_bo *pvr_bo;
    uint32_t *stream;
    VkResult result;
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.general_heap,
-                         dword_count * sizeof(uint32_t),
-                         cache_line_size,
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                         &pvr_bo);
+   result = pvr_bo_suballoc(&device->suballoc_general,
+                            PVR_DW_TO_BYTES(dword_count),
+                            cache_line_size,
+                            false,
+                            &pvr_bo);
    if (result != VK_SUCCESS) {
       *pvr_bo_out = NULL;
       return result;
    }
 
-   stream = (uint32_t *)pvr_bo->bo->map;
+   stream = (uint32_t *)pvr_bo_suballoc_get_map_addr(pvr_bo);
 
    pvr_csb_write_value(stream, TA_STATE_HEADER, template->header);
    pvr_csb_write_struct(stream, TA_STATE_ISPCTL, &template->config.ispctl);
@@ -207,19 +211,23 @@ VkResult pvr_emit_ppp_from_template(
    pvr_csb_write_value(stream, TA_STATE_PPP_CTRL, base->ppp_ctrl);
    pvr_csb_write_value(stream, TA_STATE_STREAM_OUT0, base->stream_out0);
 
-   assert((uint64_t)(stream - (uint32_t *)pvr_bo->bo->map) == dword_count);
+   assert((uint64_t)(stream - (uint32_t *)pvr_bo_suballoc_get_map_addr(
+                                 pvr_bo)) == dword_count);
 
-   pvr_bo_cpu_unmap(device, pvr_bo);
    stream = NULL;
+
+   pvr_csb_set_relocation_mark(csb);
 
    pvr_csb_emit (csb, VDMCTRL_PPP_STATE0, state) {
       state.word_count = dword_count;
-      state.addrmsb = pvr_bo->vma->dev_addr;
+      state.addrmsb = pvr_bo->dev_addr;
    }
 
    pvr_csb_emit (csb, VDMCTRL_PPP_STATE1, state) {
-      state.addrlsb = pvr_bo->vma->dev_addr;
+      state.addrlsb = pvr_bo->dev_addr;
    }
+
+   pvr_csb_clear_relocation_mark(csb);
 
    *pvr_bo_out = pvr_bo;
 
@@ -274,19 +282,19 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
       offset_idx++;
    }
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.usc_heap,
-                         alloc_size,
-                         4,
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                         &clear_state->usc_clear_attachment_programs);
+   result = pvr_bo_suballoc(&device->suballoc_usc,
+                            alloc_size,
+                            4,
+                            false,
+                            &clear_state->usc_clear_attachment_programs);
    if (result != VK_SUCCESS)
       return result;
 
    usc_upload_offset =
-      clear_state->usc_clear_attachment_programs->vma->dev_addr.addr -
+      clear_state->usc_clear_attachment_programs->dev_addr.addr -
       device->heaps.usc_heap->base_addr.addr;
-   ptr = (uint8_t *)clear_state->usc_clear_attachment_programs->bo->map;
+   ptr = (uint8_t *)pvr_bo_suballoc_get_map_addr(
+      clear_state->usc_clear_attachment_programs);
 
    for (uint32_t i = 0, offset_idx = 0;
         i < ARRAY_SIZE(clear_attachment_collection);
@@ -300,8 +308,6 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
 
       offset_idx++;
    }
-
-   pvr_bo_cpu_unmap(device, clear_state->usc_clear_attachment_programs);
 
    /* Upload PDS programs. */
 
@@ -326,8 +332,8 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
       pvr_pds_set_sizes_pixel_shader_uniform_texture_code(&texture_pds_program);
 
       pds_texture_program_offsets[offset_idx] = alloc_size;
-      alloc_size +=
-         ALIGN_POT(texture_pds_program.code_size * 4, pds_prog_alignment);
+      alloc_size += ALIGN_POT(PVR_DW_TO_BYTES(texture_pds_program.code_size),
+                              pds_prog_alignment);
 
       /* Pixel program to load fragment shader. */
 
@@ -343,7 +349,7 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
 
       program_size = pixel_shader_pds_program.code_size +
                      pixel_shader_pds_program.data_size;
-      program_size *= sizeof(uint32_t);
+      program_size = PVR_DW_TO_BYTES(program_size);
 
       pds_pixel_program_offsets[offset_idx] = alloc_size;
       alloc_size += ALIGN_POT(program_size, pds_prog_alignment);
@@ -351,21 +357,21 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
       offset_idx++;
    }
 
-   result = pvr_bo_alloc(device,
-                         device->heaps.pds_heap,
-                         alloc_size,
-                         pds_prog_alignment,
-                         PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                         &clear_state->pds_clear_attachment_programs);
+   result = pvr_bo_suballoc(&device->suballoc_pds,
+                            alloc_size,
+                            pds_prog_alignment,
+                            false,
+                            &clear_state->pds_clear_attachment_programs);
    if (result != VK_SUCCESS) {
-      pvr_bo_free(device, clear_state->usc_clear_attachment_programs);
+      pvr_bo_suballoc_free(clear_state->usc_clear_attachment_programs);
       return result;
    }
 
    pds_upload_offset =
-      clear_state->pds_clear_attachment_programs->vma->dev_addr.addr -
+      clear_state->pds_clear_attachment_programs->dev_addr.addr -
       device->heaps.pds_heap->base_addr.addr;
-   ptr = clear_state->pds_clear_attachment_programs->bo->map;
+   ptr =
+      pvr_bo_suballoc_get_map_addr(clear_state->pds_clear_attachment_programs);
 
    for (uint32_t i = 0, offset_idx = 0;
         i < ARRAY_SIZE(clear_attachment_collection);
@@ -423,8 +429,6 @@ pvr_device_init_clear_attachment_programs(struct pvr_device *device)
       offset_idx++;
    }
 
-   pvr_bo_cpu_unmap(device, clear_state->pds_clear_attachment_programs);
-
    return VK_SUCCESS;
 }
 
@@ -434,8 +438,8 @@ pvr_device_finish_clear_attachment_programs(struct pvr_device *device)
    struct pvr_device_static_clear_state *clear_state =
       &device->static_clear_state;
 
-   pvr_bo_free(device, clear_state->usc_clear_attachment_programs);
-   pvr_bo_free(device, clear_state->pds_clear_attachment_programs);
+   pvr_bo_suballoc_free(clear_state->usc_clear_attachment_programs);
+   pvr_bo_suballoc_free(clear_state->pds_clear_attachment_programs);
 }
 
 /**
@@ -454,7 +458,7 @@ pvr_device_finish_clear_attachment_programs(struct pvr_device *device)
 VkResult pvr_clear_vertices_upload(struct pvr_device *device,
                                    const VkRect2D *rect,
                                    float depth,
-                                   struct pvr_bo **const pvr_bo_out)
+                                   struct pvr_suballoc_bo **const pvr_bo_out)
 {
    const float y1 = (float)(rect->offset.y + rect->extent.height);
    const float x1 = (float)(rect->offset.x + rect->extent.width);
@@ -485,10 +489,13 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
                   .height = rogue_get_param_vf_max_y(dev_info) }
    };
 
+   const uint32_t vdm_state_size_in_dw =
+      pvr_clear_vdm_state_get_size_in_dw(dev_info, 1);
    struct pvr_device_static_clear_state *state = &device->static_clear_state;
    const uint32_t cache_line_size = rogue_get_slc_cache_line_size(dev_info);
-   struct util_dynarray passthrough_vert_shader;
    struct pvr_pds_vertex_shader_program pds_program;
+   struct util_dynarray passthrough_vert_shader;
+   uint32_t *state_buffer;
    VkResult result;
 
    if (PVR_HAS_FEATURE(dev_info, gs_rta_support)) {
@@ -548,6 +555,15 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
 
    assert(pds_program.code_size <= state->pds.code_size);
 
+   state_buffer = vk_alloc(&device->vk.alloc,
+                           PVR_DW_TO_BYTES(vdm_state_size_in_dw * 2),
+                           8,
+                           VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (state_buffer == NULL) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto err_free_pds_program;
+   }
+
    /* TODO: The difference between the large and normal words is only the last
     * word. The value is 3 or 4 depending on the amount of indices. Should we
     * dedup this?
@@ -568,7 +584,9 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
                             3,
                             4 * sizeof(uint32_t),
                             1,
-                            state->vdm_words);
+                            state_buffer);
+   state->vdm_words = state_buffer;
+   state_buffer += vdm_state_size_in_dw;
 
    pvr_pack_clear_vdm_state(&device->pdevice->dev_info,
                             &state->pds,
@@ -576,25 +594,30 @@ VkResult pvr_device_init_graphics_static_clear_state(struct pvr_device *device)
                             4,
                             4 * sizeof(uint32_t),
                             1,
-                            state->large_clear_vdm_words);
+                            state_buffer);
+   state->large_clear_vdm_words = state_buffer;
 
    result = pvr_device_init_clear_attachment_programs(device);
    if (result != VK_SUCCESS)
-      goto err_free_pds_program;
+      goto err_free_vdm_state;
 
    return VK_SUCCESS;
 
+err_free_vdm_state:
+   /* Cast away the const :( */
+   vk_free(&device->vk.alloc, (void *)state->vdm_words);
+
 err_free_pds_program:
-   pvr_bo_free(device, state->pds.pvr_bo);
+   pvr_bo_suballoc_free(state->pds.pvr_bo);
 
 err_free_vertices_buffer:
-   pvr_bo_free(device, state->vertices_bo);
+   pvr_bo_suballoc_free(state->vertices_bo);
 
 err_free_usc_shader:
-   pvr_bo_free(device, state->usc_vertex_shader_bo);
+   pvr_bo_suballoc_free(state->usc_vertex_shader_bo);
 
 err_free_usc_multi_layer_shader:
-   pvr_bo_free(device, state->usc_multi_layer_vertex_shader_bo);
+   pvr_bo_suballoc_free(state->usc_multi_layer_vertex_shader_bo);
 
    return result;
 }
@@ -605,15 +628,21 @@ void pvr_device_finish_graphics_static_clear_state(struct pvr_device *device)
 
    pvr_device_finish_clear_attachment_programs(device);
 
-   pvr_bo_free(device, state->pds.pvr_bo);
-   pvr_bo_free(device, state->vertices_bo);
-   pvr_bo_free(device, state->usc_vertex_shader_bo);
-   pvr_bo_free(device, state->usc_multi_layer_vertex_shader_bo);
+   /* Don't free `large_clear_vdm_words` since it was allocated together with
+    * `vdm_words`.
+    */
+   /* Cast away the const :( */
+   vk_free(&device->vk.alloc, (void *)state->vdm_words);
+
+   pvr_bo_suballoc_free(state->pds.pvr_bo);
+   pvr_bo_suballoc_free(state->vertices_bo);
+   pvr_bo_suballoc_free(state->usc_vertex_shader_bo);
+   pvr_bo_suballoc_free(state->usc_multi_layer_vertex_shader_bo);
 }
 
 void pvr_pds_clear_vertex_shader_program_init_base(
    struct pvr_pds_vertex_shader_program *program,
-   const struct pvr_bo *usc_shader_bo)
+   const struct pvr_suballoc_bo *usc_shader_bo)
 {
    *program = (struct pvr_pds_vertex_shader_program){
       .num_streams = 1,
@@ -635,7 +664,7 @@ void pvr_pds_clear_vertex_shader_program_init_base(
    };
 
    pvr_pds_setup_doutu(&program->usc_task_control,
-                       usc_shader_bo->vma->dev_addr.addr,
+                       usc_shader_bo->dev_addr.addr,
                        0,
                        PVRX(PDSINST_DOUTU_SAMPLE_RATE_INSTANCE),
                        false);
@@ -644,7 +673,7 @@ void pvr_pds_clear_vertex_shader_program_init_base(
 VkResult pvr_pds_clear_vertex_shader_program_create_and_upload(
    struct pvr_pds_vertex_shader_program *program,
    struct pvr_device *device,
-   const struct pvr_bo *vertices_bo,
+   const struct pvr_suballoc_bo *vertices_bo,
    struct pvr_pds_upload *const upload_out)
 {
    const struct pvr_device_info *dev_info = &device->pdevice->dev_info;
@@ -652,12 +681,12 @@ VkResult pvr_pds_clear_vertex_shader_program_create_and_upload(
    uint32_t *staging_buffer;
    VkResult result;
 
-   program->streams[0].address = vertices_bo->vma->dev_addr.addr;
+   program->streams[0].address = vertices_bo->dev_addr.addr;
 
    pvr_pds_vertex_shader(program, NULL, PDS_GENERATE_SIZES, dev_info);
 
    staging_buffer_size =
-      (program->code_size + program->data_size) * sizeof(*staging_buffer);
+      PVR_DW_TO_BYTES(program->code_size + program->data_size);
 
    staging_buffer = vk_alloc(&device->vk.alloc,
                              staging_buffer_size,
@@ -704,7 +733,7 @@ err_exit:
 VkResult pvr_pds_clear_vertex_shader_program_create_and_upload_data(
    struct pvr_pds_vertex_shader_program *program,
    struct pvr_cmd_buffer *cmd_buffer,
-   struct pvr_bo *vertices_bo,
+   struct pvr_suballoc_bo *vertices_bo,
    struct pvr_pds_upload *const pds_upload_out)
 {
    struct pvr_device_info *dev_info = &cmd_buffer->device->pdevice->dev_info;
@@ -712,11 +741,11 @@ VkResult pvr_pds_clear_vertex_shader_program_create_and_upload_data(
    uint32_t *staging_buffer;
    VkResult result;
 
-   program->streams[0].address = vertices_bo->vma->dev_addr.addr;
+   program->streams[0].address = vertices_bo->dev_addr.addr;
 
    pvr_pds_vertex_shader(program, NULL, PDS_GENERATE_SIZES, dev_info);
 
-   staging_buffer_size = program->data_size * sizeof(*staging_buffer);
+   staging_buffer_size = PVR_DW_TO_BYTES(program->data_size);
 
    staging_buffer = vk_alloc(&cmd_buffer->device->vk.alloc,
                              staging_buffer_size,
@@ -725,9 +754,8 @@ VkResult pvr_pds_clear_vertex_shader_program_create_and_upload_data(
    if (!staging_buffer) {
       *pds_upload_out = (struct pvr_pds_upload){ 0 };
 
-      result = vk_error(cmd_buffer, VK_ERROR_OUT_OF_HOST_MEMORY);
-      cmd_buffer->state.status = result;
-      return result;
+      return vk_command_buffer_set_error(&cmd_buffer->vk,
+                                         VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    pvr_pds_vertex_shader(program,
@@ -749,8 +777,7 @@ VkResult pvr_pds_clear_vertex_shader_program_create_and_upload_data(
 
       *pds_upload_out = (struct pvr_pds_upload){ 0 };
 
-      cmd_buffer->state.status = result;
-      return result;
+      return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
    }
 
    vk_free(&cmd_buffer->device->vk.alloc, staging_buffer);
@@ -760,7 +787,7 @@ VkResult pvr_pds_clear_vertex_shader_program_create_and_upload_data(
 
 void pvr_pds_clear_rta_vertex_shader_program_init_base(
    struct pvr_pds_vertex_shader_program *program,
-   const struct pvr_bo *usc_shader_bo)
+   const struct pvr_suballoc_bo *usc_shader_bo)
 {
    pvr_pds_clear_vertex_shader_program_init_base(program, usc_shader_bo);
 
@@ -792,7 +819,7 @@ VkResult pvr_pds_clear_rta_vertex_shader_program_create_and_upload_code(
 
    pvr_pds_vertex_shader(program, NULL, PDS_GENERATE_SIZES, dev_info);
 
-   staging_buffer_size = program->code_size * sizeof(*staging_buffer);
+   staging_buffer_size = PVR_DW_TO_BYTES(program->code_size);
 
    staging_buffer = vk_alloc(&cmd_buffer->device->vk.alloc,
                              staging_buffer_size,
@@ -801,9 +828,8 @@ VkResult pvr_pds_clear_rta_vertex_shader_program_create_and_upload_code(
    if (!staging_buffer) {
       *pds_upload_out = (struct pvr_pds_upload){ 0 };
 
-      result = vk_error(cmd_buffer, VK_ERROR_OUT_OF_HOST_MEMORY);
-      cmd_buffer->state.status = result;
-      return result;
+      return vk_command_buffer_set_error(&cmd_buffer->vk,
+                                         VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    pvr_pds_vertex_shader(program,
@@ -825,8 +851,7 @@ VkResult pvr_pds_clear_rta_vertex_shader_program_create_and_upload_code(
 
       *pds_upload_out = (struct pvr_pds_upload){ 0 };
 
-      cmd_buffer->state.status = result;
-      return result;
+      return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
    }
 
    vk_free(&cmd_buffer->device->vk.alloc, staging_buffer);
@@ -834,14 +859,19 @@ VkResult pvr_pds_clear_rta_vertex_shader_program_create_and_upload_code(
    return VK_SUCCESS;
 }
 
-void pvr_pack_clear_vdm_state(
-   const struct pvr_device_info *const dev_info,
-   const struct pvr_pds_upload *const program,
-   uint32_t temps,
-   uint32_t index_count,
-   uint32_t vs_output_size_in_bytes,
-   uint32_t layer_count,
-   uint32_t state_buffer[const static PVR_CLEAR_VDM_STATE_DWORD_COUNT])
+/**
+ * Pack VDM control stream words for clear.
+ *
+ * The size of the `state_buffer` provided is expected to point to a buffer of
+ * size equal to what is returned by `pvr_clear_vdm_state_get_size_in_dw()`.
+ */
+void pvr_pack_clear_vdm_state(const struct pvr_device_info *const dev_info,
+                              const struct pvr_pds_upload *const program,
+                              uint32_t temps,
+                              uint32_t index_count,
+                              uint32_t vs_output_size_in_bytes,
+                              uint32_t layer_count,
+                              uint32_t *const state_buffer)
 {
    const uint32_t vs_output_size =
       DIV_ROUND_UP(vs_output_size_in_bytes,
@@ -900,10 +930,16 @@ void pvr_pack_clear_vdm_state(
          DIV_ROUND_UP(temps,
                       PVRX(VDMCTRL_VDM_STATE5_VS_PDS_TEMP_SIZE_UNIT_SIZE));
       state5.vs_pds_data_size =
-         DIV_ROUND_UP(program->data_size << 2,
+         DIV_ROUND_UP(PVR_DW_TO_BYTES(program->data_size),
                       PVRX(VDMCTRL_VDM_STATE5_VS_PDS_DATA_SIZE_UNIT_SIZE));
    }
    stream += pvr_cmd_length(VDMCTRL_VDM_STATE5);
+
+   /* TODO: Here we're doing another state update. If emitting directly to the
+    * control stream, we don't mark them as separate state updates by setting
+    * the relocation mark so we might be wasting a little bit of memory. See if
+    * it's worth changing the code to use the relocation mark.
+    */
 
    pvr_csb_pack (stream, VDMCTRL_INDEX_LIST0, index_list0) {
       index_list0.index_count_present = true;
@@ -925,5 +961,6 @@ void pvr_pack_clear_vdm_state(
       stream += pvr_cmd_length(VDMCTRL_INDEX_LIST3);
    }
 
-   assert((uint64_t)(stream - state_buffer) <= PVR_CLEAR_VDM_STATE_DWORD_COUNT);
+   assert((uint64_t)(stream - state_buffer) ==
+          pvr_clear_vdm_state_get_size_in_dw(dev_info, layer_count));
 }

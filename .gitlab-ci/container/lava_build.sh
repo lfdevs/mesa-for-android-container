@@ -1,23 +1,27 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # shellcheck disable=SC1091 # The relative paths in this file only become valid at runtime.
 # shellcheck disable=SC2034 # Variables are used in scripts called from here
 # shellcheck disable=SC2086 # we want word splitting
+# When changing this file, you need to bump the following
+# .gitlab-ci/image-tags.yml tags:
+# KERNEL_ROOTFS_TAG
 
 set -e
 set -o xtrace
 
 export DEBIAN_FRONTEND=noninteractive
+export LLVM_VERSION="${LLVM_VERSION:=15}"
 
 check_minio()
 {
-    MINIO_PATH="${MINIO_HOST}/mesa-lava/$1/${DISTRIBUTION_TAG}/${DEBIAN_ARCH}"
-    if curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -s -X HEAD \
-      "https://${MINIO_PATH}/done"; then
+    S3_PATH="${S3_HOST}/mesa-lava/$1/${DISTRIBUTION_TAG}/${DEBIAN_ARCH}"
+    if curl -L --retry 4 -f --retry-delay 60 -s -X HEAD \
+      "https://${S3_PATH}/done"; then
+        echo "Remote files are up-to-date, skip rebuilding them."
         exit
     fi
 }
 
-# If remote files are up-to-date, skip rebuilding them
 check_minio "${FDO_UPSTREAM_REPO}"
 check_minio "${CI_PROJECT_PATH}"
 
@@ -32,18 +36,19 @@ if [[ "$DEBIAN_ARCH" = "arm64" ]]; then
     SKQP_ARCH="arm64"
     DEFCONFIG="arch/arm64/configs/defconfig"
     DEVICE_TREES="arch/arm64/boot/dts/rockchip/rk3399-gru-kevin.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-gxl-s805x-libretech-ac.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/allwinner/sun50i-h6-pine-h64.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-gxm-khadas-vim2.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/apq8016-sbc.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/apq8096-db820c.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-g12b-a311d-khadas-vim3.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-juniper-sku16.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/nvidia/tegra210-p3450-0000.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-lazor-limozeen-nots-r5.dtb"
-    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-kingoftown-r1.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-gxl-s805x-libretech-ac.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/amlogic/meson-gxm-khadas-vim2.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/allwinner/sun50i-h6-pine-h64.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/freescale/imx8mq-nitrogen.dtb"
     DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8192-asurada-spherion-r0.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/mediatek/mt8183-kukui-jacuzzi-juniper-sku16.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/nvidia/tegra210-p3450-0000.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/apq8016-sbc.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/apq8096-db820c.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-lazor-limozeen-nots-r5.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sc7180-trogdor-kingoftown-r1.dtb"
+    DEVICE_TREES+=" arch/arm64/boot/dts/qcom/sm8350-hdk.dtb"
     KERNEL_IMAGE_NAME="Image"
 
 elif [[ "$DEBIAN_ARCH" = "armhf" ]]; then
@@ -90,10 +95,10 @@ apt-get install -y --no-remove \
                    ${ARCH_PACKAGES} \
                    automake \
                    bc \
-                   clang \
+                   clang-${LLVM_VERSION} \
                    cmake \
 		   curl \
-                   debootstrap \
+                   mmdebstrap \
                    git \
                    glslang-tools \
                    libdrm-dev \
@@ -116,6 +121,7 @@ apt-get install -y --no-remove \
                    libxkbcommon-dev \
                    libwayland-dev \
                    ninja-build \
+                   openssh-server \
                    patch \
                    protobuf-compiler \
                    python-is-python3 \
@@ -142,75 +148,147 @@ if [[ "$DEBIAN_ARCH" = "armhf" ]]; then
                        libxkbcommon-dev:armhf
 fi
 
-mkdir -p "/lava-files/rootfs-${DEBIAN_ARCH}"
+ROOTFS=/lava-files/rootfs-${DEBIAN_ARCH}
+mkdir -p "$ROOTFS"
+
+# rootfs packages
+PKG_BASE=(
+  tzdata mount
+)
+PKG_CI=(
+  firmware-realtek
+  bash ca-certificates curl
+  initramfs-tools jq netcat-openbsd dropbear openssh-server
+  libasan8
+  git
+  python3-dev python3-pip python3-setuptools python3-wheel
+  weston # Wayland
+  xinit xserver-xorg-core xwayland # X11
+)
+PKG_MESA_DEP=(
+  libdrm2 libsensors5 libexpat1 # common
+  libvulkan1 # vulkan
+  libx11-6 libx11-xcb1 libxcb-dri2-0 libxcb-dri3-0 libxcb-glx0 libxcb-present0 libxcb-randr0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrender1 libxshmfence1 libxxf86vm1 # X11
+)
+PKG_DEP=(
+  libpng16-16
+  libwaffle-1-0
+  libpython3.11 python3 python3-lxml python3-mako python3-numpy python3-packaging python3-pil python3-renderdoc python3-requests python3-simplejson python3-yaml # Python
+  sntp
+  strace
+  waffle-utils
+  zstd
+)
+# arch dependent rootfs packages
+[ "$DEBIAN_ARCH" = "arm64" ] && PKG_ARCH=(
+  libgl1 libglu1-mesa
+  libvulkan-dev
+  firmware-linux-nonfree firmware-qcom-media
+  libfontconfig1
+)
+[ "$DEBIAN_ARCH" = "amd64" ] && PKG_ARCH=(
+  firmware-amd-graphics
+  libgl1 libglu1-mesa
+  inetutils-syslogd iptables libcap2
+  libfontconfig1
+  spirv-tools
+  libelf1 libfdt1 "libllvm${LLVM_VERSION}"
+  libva2 libva-drm2
+  libvulkan-dev
+  socat
+  sysvinit-core
+  wine
+)
+[ "$DEBIAN_ARCH" = "armhf" ] && PKG_ARCH=(
+  firmware-misc-nonfree
+)
+
+mmdebstrap \
+    --variant=apt \
+    --arch="${DEBIAN_ARCH}" \
+    --components main,contrib,non-free-firmware \
+    --include "${PKG_BASE[*]} ${PKG_CI[*]} ${PKG_DEP[*]} ${PKG_MESA_DEP[*]} ${PKG_ARCH[*]}" \
+    bookworm \
+    "$ROOTFS/" \
+    "http://deb.debian.org/debian"
 
 ############### Setuping
 if [ "$DEBIAN_ARCH" = "amd64" ]; then
   . .gitlab-ci/container/setup-wine.sh "/dxvk-wine64"
   . .gitlab-ci/container/install-wine-dxvk.sh
-  mv /dxvk-wine64 "/lava-files/rootfs-${DEBIAN_ARCH}/"
+  mv /dxvk-wine64 $ROOTFS
 fi
 
 ############### Installing
-. .gitlab-ci/container/install-wine-apitrace.sh
-mkdir -p "/lava-files/rootfs-${DEBIAN_ARCH}/apitrace-msvc-win64"
-mv /apitrace-msvc-win64/bin "/lava-files/rootfs-${DEBIAN_ARCH}/apitrace-msvc-win64"
-rm -rf /apitrace-msvc-win64
+if [ "$DEBIAN_ARCH" = "amd64" ]; then
+  . .gitlab-ci/container/install-wine-apitrace.sh
+  mkdir -p "$ROOTFS/apitrace-msvc-win64"
+  mv /apitrace-msvc-win64/bin "$ROOTFS/apitrace-msvc-win64"
+  rm -rf /apitrace-msvc-win64
+fi
 
 ############### Building
 STRIP_CMD="${GCC_ARCH}-strip"
-mkdir -p /lava-files/rootfs-${DEBIAN_ARCH}/usr/lib/$GCC_ARCH
+mkdir -p $ROOTFS/usr/lib/$GCC_ARCH
 
+############### Build Vulkan validation layer (for zink)
+if [ "$DEBIAN_ARCH" = "amd64" ]; then
+  . .gitlab-ci/container/build-vulkan-validation.sh
+  mv /usr/lib/x86_64-linux-gnu/libVkLayer_khronos_validation.so $ROOTFS/usr/lib/x86_64-linux-gnu/
+  mkdir -p $ROOTFS/usr/share/vulkan/explicit_layer.d
+  mv /usr/share/vulkan/explicit_layer.d/* $ROOTFS/usr/share/vulkan/explicit_layer.d/
+fi
 
 ############### Build apitrace
 . .gitlab-ci/container/build-apitrace.sh
-mkdir -p /lava-files/rootfs-${DEBIAN_ARCH}/apitrace
-mv /apitrace/build /lava-files/rootfs-${DEBIAN_ARCH}/apitrace
+mkdir -p $ROOTFS/apitrace
+mv /apitrace/build $ROOTFS/apitrace
 rm -rf /apitrace
 
+############### Build ANGLE
+if [[ "$DEBIAN_ARCH" = "amd64" ]]; then
+  . .gitlab-ci/container/build-angle.sh
+  mv /angle /lava-files/rootfs-${DEBIAN_ARCH}/.
+  rm -rf /angle
+fi
 
 ############### Build dEQP runner
 . .gitlab-ci/container/build-deqp-runner.sh
-mkdir -p /lava-files/rootfs-${DEBIAN_ARCH}/usr/bin
-mv /usr/local/bin/*-runner /lava-files/rootfs-${DEBIAN_ARCH}/usr/bin/.
+mkdir -p $ROOTFS/usr/bin
+mv /usr/local/bin/*-runner $ROOTFS/usr/bin/.
 
 
 ############### Build dEQP
 DEQP_TARGET=surfaceless . .gitlab-ci/container/build-deqp.sh
 
-mv /deqp /lava-files/rootfs-${DEBIAN_ARCH}/.
+mv /deqp $ROOTFS/.
 
 
 ############### Build SKQP
 if [[ "$DEBIAN_ARCH" = "arm64" ]] \
   || [[ "$DEBIAN_ARCH" = "amd64" ]]; then
     . .gitlab-ci/container/build-skqp.sh
-    mv /skqp /lava-files/rootfs-${DEBIAN_ARCH}/.
+    mv /skqp $ROOTFS/.
 fi
 
 ############### Build piglit
 PIGLIT_OPTS="-DPIGLIT_BUILD_DMA_BUF_TESTS=ON -DPIGLIT_BUILD_GLX_TESTS=ON" . .gitlab-ci/container/build-piglit.sh
-mv /piglit /lava-files/rootfs-${DEBIAN_ARCH}/.
+mv /piglit $ROOTFS/.
 
 ############### Build libva tests
 if [[ "$DEBIAN_ARCH" = "amd64" ]]; then
     . .gitlab-ci/container/build-va-tools.sh
-    mv /va/bin/* /lava-files/rootfs-${DEBIAN_ARCH}/usr/bin/
+    mv /va/bin/* $ROOTFS/usr/bin/
 fi
 
 ############### Build Crosvm
 if [[ ${DEBIAN_ARCH} = "amd64" ]]; then
     . .gitlab-ci/container/build-crosvm.sh
-    mv /usr/local/bin/crosvm /lava-files/rootfs-${DEBIAN_ARCH}/usr/bin/
-    mv /usr/local/lib/$GCC_ARCH/libvirglrenderer.* /lava-files/rootfs-${DEBIAN_ARCH}/usr/lib/$GCC_ARCH/
-    mkdir -p /lava-files/rootfs-${DEBIAN_ARCH}/usr/local/libexec/
-    mv /usr/local/libexec/virgl* /lava-files/rootfs-${DEBIAN_ARCH}/usr/local/libexec/
+    mv /usr/local/bin/crosvm $ROOTFS/usr/bin/
+    mv /usr/local/lib/libvirglrenderer.* $ROOTFS/usr/lib/$GCC_ARCH/
+    mkdir -p $ROOTFS/usr/local/libexec/
+    mv /usr/local/libexec/virgl* $ROOTFS/usr/local/libexec/
 fi
-
-############### Build libdrm
-EXTRA_MESON_ARGS+=" -D prefix=/libdrm"
-. .gitlab-ci/container/build-libdrm.sh
-
 
 ############### Build local stuff for use by igt and kernel testing, which
 ############### will reuse most of our container build process from a specific
@@ -227,48 +305,26 @@ fi
 rm -rf /root/.cargo
 rm -rf /root/.rustup
 
-############### Create rootfs
-set +e
-if ! debootstrap \
-     --variant=minbase \
-     --arch=${DEBIAN_ARCH} \
-     --components main,contrib,non-free \
-     bullseye \
-     /lava-files/rootfs-${DEBIAN_ARCH}/ \
-     http://deb.debian.org/debian; then
-    cat /lava-files/rootfs-${DEBIAN_ARCH}/debootstrap/debootstrap.log
-    exit 1
-fi
-set -e
+############### Fill rootfs
+cp .gitlab-ci/container/setup-rootfs.sh $ROOTFS/.
+cp .gitlab-ci/container/strip-rootfs.sh $ROOTFS/.
+cp .gitlab-ci/container/debian/llvm-snapshot.gpg.key $ROOTFS/.
+cp .gitlab-ci/container/debian/winehq.gpg.key $ROOTFS/.
+chroot $ROOTFS bash /setup-rootfs.sh
+rm $ROOTFS/{llvm-snapshot,winehq}.gpg.key
+rm "$ROOTFS/setup-rootfs.sh"
+rm "$ROOTFS/strip-rootfs.sh"
+cp /etc/wgetrc $ROOTFS/etc/.
 
-cp .gitlab-ci/container/create-rootfs.sh /lava-files/rootfs-${DEBIAN_ARCH}/.
-cp .gitlab-ci/container/debian/llvm-snapshot.gpg.key /lava-files/rootfs-${DEBIAN_ARCH}/.
-cp .gitlab-ci/container/debian/winehq.gpg.key /lava-files/rootfs-${DEBIAN_ARCH}/.
-chroot /lava-files/rootfs-${DEBIAN_ARCH} sh /create-rootfs.sh
-rm /lava-files/rootfs-${DEBIAN_ARCH}/{llvm-snapshot,winehq}.gpg.key
-rm /lava-files/rootfs-${DEBIAN_ARCH}/create-rootfs.sh
-cp /etc/wgetrc /lava-files/rootfs-${DEBIAN_ARCH}/etc/.
-
-
-############### Install the built libdrm
-# Dependencies pulled during the creation of the rootfs may overwrite
-# the built libdrm. Hence, we add it after the rootfs has been already
-# created.
-find /libdrm/ -name lib\*\.so\* \
-  -exec cp -t /lava-files/rootfs-${DEBIAN_ARCH}/usr/lib/$GCC_ARCH/. {} \;
-mkdir -p /lava-files/rootfs-${DEBIAN_ARCH}/libdrm/
-cp -Rp /libdrm/share /lava-files/rootfs-${DEBIAN_ARCH}/libdrm/share
-rm -rf /libdrm
-
-
-if [ ${DEBIAN_ARCH} = arm64 ]; then
+if [ "${DEBIAN_ARCH}" = "arm64" ]; then
+    mkdir -p /lava-files/rootfs-arm64/lib/firmware/qcom/sm8350/  # for firmware imported later
     # Make a gzipped copy of the Image for db410c.
     gzip -k /lava-files/Image
     KERNEL_IMAGE_NAME+=" Image.gz"
 fi
 
-du -ah /lava-files/rootfs-${DEBIAN_ARCH} | sort -h | tail -100
-pushd /lava-files/rootfs-${DEBIAN_ARCH}
+du -ah "$ROOTFS" | sort -h | tail -100
+pushd $ROOTFS
   tar --zstd -cf /lava-files/lava-rootfs.tar.zst .
 popd
 
@@ -284,8 +340,8 @@ fi
 
 for f in $FILES_TO_UPLOAD; do
     ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/$f \
-             https://${MINIO_PATH}/$f
+             https://${S3_PATH}/$f
 done
 
 touch /lava-files/done
-ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/done https://${MINIO_PATH}/done
+ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" /lava-files/done https://${S3_PATH}/done

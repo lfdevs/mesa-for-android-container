@@ -16,19 +16,75 @@
       }
     }
   },
-  "1207137018": {
+  "1305770284": {
     "mesa_platforms": {
       "INTEL_PLATFORM_EHL": {
         "ids": [
-          14010906865
+          1407403919
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_ICL": {
         "ids": [
-          1207137018,
-          14010892032,
-          14010894115
+          1305770284,
+          1407391552,
+          1407399546
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1306055483": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          1408631644
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1306055483,
+          1408615042,
+          1408626922
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1306463417": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          1409442356
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1306463417,
+          1409433168,
+          1409440821
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1405543622": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          14010909196
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1405586840": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1405862851
         ],
         "steppings": "all"
       }
@@ -51,52 +107,93 @@
       }
     }
   },
-  "1406479881": {
+  "1406337848": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
-          14010698278,
-          14013824370
+          14010698239,
+          14010801505,
+          14013859499
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
-          1406998600,
-          14010679729
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          14010859980
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1406479881,
-          14010857628
+          1406337848,
+          1406680960,
+          14010679640
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_RKL": {
         "ids": [
-          14010680720
+          14010680690
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
-          14010698278,
-          14013824370
+          14010698239,
+          14010801505,
+          14013859499
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_TGL": {
         "ids": [
-          1406998600,
-          14010679729
+          1406337848,
+          1406680960,
+          14010679640
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1406606421": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14010698203,
+          14010801457,
+          14013824293
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          1406606421,
+          14010679611
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14010680668
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14010698203,
+          14010801457,
+          14013824293
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          1406606421,
+          14010679611
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1406609750": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14010680673
         ],
         "steppings": "all"
       }
@@ -114,22 +211,6 @@
         "ids": [
           1406614636,
           14010882322
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1406631448": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          1406631448
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          1406631448
         ],
         "steppings": "all"
       }
@@ -197,54 +278,11 @@
       }
     }
   },
-  "1407385565": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1407385565,
-          1407391147
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1407391552": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          1407403919
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1407391552,
-          1407399546
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1407520876": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          1407533743
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1407520876
-        ],
-        "steppings": "all"
-      }
-    }
-  },
   "1407528679": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          1409386879,
           14010801730,
           14013823841
         ],
@@ -265,6 +303,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          1409386879,
           14010801730,
           14013823841
         ],
@@ -300,6 +339,7 @@
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          1409386784,
           14010801777,
           14013823797
         ],
@@ -314,6 +354,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          1409386784,
           14010801777,
           14013823797
         ],
@@ -332,6 +373,7 @@
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          1409386594,
           14010801791,
           14013823780
         ],
@@ -352,6 +394,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          1409386594,
           14010801791,
           14013823780
         ],
@@ -366,24 +409,17 @@
       }
     }
   },
-  "1408615042": {
+  "1408556878": {
     "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          1408631644
-        ],
-        "steppings": "all"
-      },
       "INTEL_PLATFORM_ICL": {
         "ids": [
-          1408615042,
-          1408626922
+          1408556878
         ],
         "steppings": "all"
       }
     }
   },
-  "1408937953": {
+  "1408908852": {
     "mesa_platforms": {
       "INTEL_PLATFORM_EHL": {
         "ids": [
@@ -394,6 +430,7 @@
       },
       "INTEL_PLATFORM_ICL": {
         "ids": [
+          1408908852,
           1408937953,
           1408941138
         ],
@@ -405,20 +442,23 @@
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
-          1409912632
+          1409912632,
+          14017198887
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
           1409392000,
+          1409392018,
           1409392019
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
-          1409912632
+          1409912632,
+          14017198887
         ],
         "steppings": "all"
       },
@@ -426,23 +466,6 @@
         "ids": [
           1409392000,
           1409392019
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1409433168": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          1409442356
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1409433168,
-          1409440821
         ],
         "steppings": "all"
       }
@@ -484,93 +507,12 @@
       }
     }
   },
-  "1505013527": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          1407064519
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1407058870,
-          1505013527
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1507384622": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          1507384622,
-          14012778449,
-          14013496712
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          14013496847
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14012778449,
-          14013496712
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1508701464": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          1508701464,
-          14013824004,
-          16012203808
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          16012409068,
-          16012414995
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          16012415143
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          1508701464,
-          14013824004,
-          16012203808
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          16012409068,
-          16012414995
-        ],
-        "steppings": "all"
-      }
-    }
-  },
   "1508744258": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
           14013824817,
+          16012812099,
           22012530219
         ],
         "steppings": "all"
@@ -592,6 +534,7 @@
       "INTEL_PLATFORM_RPL": {
         "ids": [
           14013824817,
+          16012812099,
           22012530219
         ],
         "steppings": "all"
@@ -624,6 +567,18 @@
           14016561224
         ],
         "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14015960633
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14015981040
+        ],
+        "steppings": "all"
       }
     }
   },
@@ -631,6 +586,7 @@
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          14010698051,
           14010801151,
           14013824179
         ],
@@ -665,6 +621,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          14010698051,
           14010801151,
           14013824179
         ],
@@ -684,22 +641,6 @@
       "INTEL_PLATFORM_ICL": {
         "ids": [
           1406179177
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1604608133": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          1604608133
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          1604608133
         ],
         "steppings": "all"
       }
@@ -733,48 +674,11 @@
       }
     }
   },
-  "1606376872": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14010802311,
-          14013823897
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          1606376872,
-          2206097244
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          1409629667
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14010802311,
-          14013823897
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          1606376872,
-          2206097244
-        ],
-        "steppings": "all"
-      }
-    }
-  },
   "1606932921": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          1409386777,
           14010802348,
           14013823795
         ],
@@ -795,6 +699,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          1409386777,
           14010802348,
           14013823795
         ],
@@ -804,16 +709,6 @@
         "ids": [
           1606932921,
           1607173532
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "1607225878": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1607225878
         ],
         "steppings": "all"
       }
@@ -859,6 +754,18 @@
       }
     }
   },
+  "1607794140": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          1607794140,
+          14010672564,
+          16011655240
+        ],
+        "steppings": "a0..c0"
+      }
+    }
+  },
   "1607854226": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
@@ -900,6 +807,7 @@
       "INTEL_PLATFORM_ADL": {
         "ids": [
           14010946234,
+          14010958314,
           14013824618
         ],
         "steppings": "all"
@@ -920,6 +828,7 @@
       "INTEL_PLATFORM_RPL": {
         "ids": [
           14010946234,
+          14010958314,
           14013824618
         ],
         "steppings": "all"
@@ -930,40 +839,6 @@
           14010949782
         ],
         "steppings": "all"
-      }
-    }
-  },
-  "1608127078": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14010250229
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14012319693
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015545899
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14011289632
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015762454
-        ],
-        "steppings": "a0..b0"
       }
     }
   },
@@ -984,10 +859,58 @@
       }
     }
   },
+  "1805992985": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          1407064519
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1407058870,
+          1505013527,
+          1805992985
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1806068545": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1407385565,
+          1407391147,
+          1806068545
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "1806230709": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          1407533743
+        ],
+        "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1407520876,
+          1806230709
+        ],
+        "steppings": "all"
+      }
+    }
+  },
   "1806527549": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          1409386580,
           14010802389,
           14013823772
         ],
@@ -1008,6 +931,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          1409386580,
           14010802389,
           14013823772
         ],
@@ -1026,6 +950,7 @@
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          1409434362,
           14010802394,
           14013823913
         ],
@@ -1046,6 +971,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          1409434362,
           14010802394,
           14013823913
         ],
@@ -1060,106 +986,49 @@
       }
     }
   },
-  "2201039848": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          16010793252
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          1406558893,
-          1406569713
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14010013414": {
+  "1808121037": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
-          14011099616
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          14010013414
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14011099616
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14010017096": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14010802501,
-          14013824057
+          14010471882,
+          14010802644,
+          14013824108
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
-          14010017096,
-          14010023643
+          1808121037,
+          14010455700,
+          14010463707
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_RKL": {
         "ids": [
-          14010023672
+          14010466811
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
-          14010802501,
-          14013824057
+          14010471882,
+          14010802644,
+          14013824108
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_TGL": {
         "ids": [
-          14010017096,
-          14010023643
+          1808121037,
+          14010455700,
+          14010463707
         ],
         "steppings": "all"
       }
     }
   },
-  "14010239330": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14010242515
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14012319690
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015545857
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14010357979": {
+  "1808850743": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
@@ -1171,6 +1040,7 @@
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
+          1808850743,
           14010357979,
           14010360148
         ],
@@ -1192,6 +1062,7 @@
       },
       "INTEL_PLATFORM_TGL": {
         "ids": [
+          1808850743,
           14010357979,
           14010360148
         ],
@@ -1199,85 +1070,7 @@
       }
     }
   },
-  "14010595310": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          14010622088
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14012254746
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14010622088
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14010755945": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14011001356,
-          14013824600
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          14010755945,
-          14010784454
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14010785761
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14012319819
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015546033
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          14010768108
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14011001356,
-          14013824600
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14010755945,
-          14010784454
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14010899839": {
+  "1809626530": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
@@ -1289,6 +1082,7 @@
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
+          1809626530,
           14010899839,
           14011581964
         ],
@@ -1328,6 +1122,7 @@
       },
       "INTEL_PLATFORM_TGL": {
         "ids": [
+          1809626530,
           14010899839,
           14011581964
         ],
@@ -1335,7 +1130,145 @@
       }
     }
   },
-  "14010945292": {
+  "2201039848": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          16010793252
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          1406558893,
+          1406569713,
+          2201039848
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14010013414": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14011099616
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          14010013414
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14011099616
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14010017096": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14010028760,
+          14010802501,
+          14013824057
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14010017096,
+          14010023643
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14010023672
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14010028760,
+          14010802501,
+          14013824057
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14010017096,
+          14010023643
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14010755945": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14010765956,
+          14011001356,
+          14013824600
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14010755945,
+          14010784454
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14010785761
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14012319819
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14015546033
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14010768108
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14010765956,
+          14011001356,
+          14013824600
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14010755945,
+          14010784454
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14010840176": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
@@ -1347,6 +1280,7 @@
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
+          14010840176,
           14010945292,
           14010963083
         ],
@@ -1368,8 +1302,49 @@
       },
       "INTEL_PLATFORM_TGL": {
         "ids": [
+          14010840176,
           14010945292,
           14010963083
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14010915640": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14010915719,
+          14010915727,
+          14013824611
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14010915640,
+          14010915726
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14010915725
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14010915719,
+          14010915727,
+          14013824611
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14010915640,
+          14010915726
         ],
         "steppings": "all"
       }
@@ -1397,8 +1372,7 @@
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14014479981,
-          14014488337
+          14014479981
         ],
         "steppings": "a0..b0"
       },
@@ -1438,49 +1412,12 @@
       }
     }
   },
-  "14012865646": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14012871545,
-          14013824777
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          14012865646,
-          14012869417
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          14012869908
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14012871545,
-          14013824777
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14012865646,
-          14012869417
-        ],
-        "steppings": "all"
-      }
-    }
-  },
   "14013111325": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
           14013119307,
+          14013131284,
           14013824779
         ],
         "steppings": "all"
@@ -1501,6 +1438,7 @@
       "INTEL_PLATFORM_RPL": {
         "ids": [
           14013119307,
+          14013131284,
           14013824779
         ],
         "steppings": "all"
@@ -1514,7 +1452,7 @@
       }
     }
   },
-  "14013745556": {
+  "14013672992": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
@@ -1524,12 +1462,14 @@
       },
       "INTEL_PLATFORM_DG1": {
         "ids": [
+          22012546019,
           22012546022
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
+          14013672992,
           14013745556
         ],
         "steppings": "all"
@@ -1546,6 +1486,12 @@
         ],
         "steppings": "all"
       },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          22012546026
+        ],
+        "steppings": "all"
+      },
       "INTEL_PLATFORM_RPL": {
         "ids": [
           22012546016
@@ -1554,6 +1500,7 @@
       },
       "INTEL_PLATFORM_TGL": {
         "ids": [
+          22012546019,
           22012546022
         ],
         "steppings": "all"
@@ -1594,8 +1541,16 @@
       }
     }
   },
-  "14014148106": {
+  "14014097488": {
     "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          22014064474,
+          22014082225,
+          22014087850
+        ],
+        "steppings": "all"
+      },
       "INTEL_PLATFORM_DG1": {
         "ids": [
           22014049541,
@@ -1605,6 +1560,7 @@
       },
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
+          14014097488,
           14014148106
         ],
         "steppings": "all"
@@ -1643,6 +1599,14 @@
       "INTEL_PLATFORM_RKL": {
         "ids": [
           16015045173
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          22014064474,
+          22014082225,
+          22014087850
         ],
         "steppings": "all"
       },
@@ -1717,22 +1681,6 @@
       }
     }
   },
-  "14014427904": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14014427904
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015547818
-        ],
-        "steppings": "all"
-      }
-    }
-  },
   "14014595444": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
@@ -1767,10 +1715,51 @@
       }
     }
   },
-  "14014890652": {
+  "14014617373": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14015128079,
+          14015129550
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14014617373,
+          14014987278,
+          14015127686
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14015129653
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14015128079,
+          14015129550
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14014617373,
+          14014987278,
+          14015127686
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14014851047": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
+          14014851047,
           14014890652
         ],
         "steppings": "all"
@@ -1801,10 +1790,11 @@
       }
     }
   },
-  "14015297576": {
+  "14015055625": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
+          14015055625,
           14015297576
         ],
         "steppings": "all"
@@ -1835,44 +1825,11 @@
       }
     }
   },
-  "14015360373": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14015360373
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14015367677
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015911246
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14015367635
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015379613
-        ],
-        "steppings": "a0..b0"
-      }
-    }
-  },
   "14015360517": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
+          22014048299,
           22014064380
         ],
         "steppings": "all"
@@ -1885,19 +1842,27 @@
       },
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
+          14017988517,
           14017989577
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14018200680
+          14018200680,
+          14019383136
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14017986919
+          14018010541
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14018019666
         ],
         "steppings": "all"
       },
@@ -1909,6 +1874,7 @@
       },
       "INTEL_PLATFORM_RPL": {
         "ids": [
+          22014048299,
           22014064380
         ],
         "steppings": "all"
@@ -1955,156 +1921,11 @@
       }
     }
   },
-  "14015465469": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          14015465469
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14015465525
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          22014124115
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14016074192
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          22014124107
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          22014124652
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14015465469
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14015528146": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14015587347
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          14015557007,
-          14015574113
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14015591708
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14015592720
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015975975
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14015605164
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015605163
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          14015580208
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14015587347
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14015557007,
-          14015574113
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14015590813": {
+  "14015782607": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          14015590813
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14015591663
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14016268871
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14015591654
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015592699
-        ],
-        "steppings": "a0..b0"
-      }
-    }
-  },
-  "14015808183": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
+          14015782607,
           14015808183
         ],
         "steppings": "all"
@@ -2135,37 +1956,31 @@
       }
     }
   },
-  "14015842950": {
+  "14015868140": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          14015842950
+          14015868140
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G11": {
         "ids": [
-          14015846337
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14016268929
+          14015868633
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14015846284
+          14015868602
         ],
-        "steppings": "a0..b0"
+        "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
-          14015853533
+          14015876495
         ],
-        "steppings": "a0..b0"
+        "steppings": "all"
       }
     }
   },
@@ -2191,71 +2006,62 @@
       }
     }
   },
-  "14015965466": {
+  "14016074189": {
     "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14016285087,
+          14016295696,
+          14016990385
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14016278403,
+          14016972022
+        ],
+        "steppings": "all"
+      },
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          14016250955
+          14016074189,
+          14016131311
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G11": {
         "ids": [
-          14016266602
+          14016136609
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14016702274
+          14016702245
         ],
         "steppings": "all"
       },
-      "INTEL_PLATFORM_MTL_M": {
+      "INTEL_PLATFORM_RKL": {
         "ids": [
-          14016266547
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14016276250
-        ],
-        "steppings": "a0..b0"
-      }
-    }
-  },
-  "14016118574": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14016118574
+          14016285098
         ],
         "steppings": "all"
       },
-      "INTEL_PLATFORM_DG2_G11": {
+      "INTEL_PLATFORM_RPL": {
         "ids": [
-          14016119386
+          14016285087,
+          14016295696,
+          14016990385
         ],
         "steppings": "all"
       },
-      "INTEL_PLATFORM_DG2_G12": {
+      "INTEL_PLATFORM_TGL": {
         "ids": [
-          14016381311
+          14016278403,
+          14016972022
         ],
         "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14016119375
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14016120505
-        ],
-        "steppings": "a0..b0"
       }
     }
   },
@@ -2275,85 +2081,12 @@
       }
     }
   },
-  "14016755692": {
+  "14016407139": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          14016755692
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016763918
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14016805056
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14016763783
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14016768589
-        ],
-        "steppings": "a0..b0"
-      }
-    }
-  },
-  "14016880151": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14016882487
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016887844
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14018200257
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14016899350
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14016927025
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14016939504": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
+          14016407139,
           14016939504
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14017425740
         ],
         "steppings": "all"
       },
@@ -2371,144 +2104,62 @@
       }
     }
   },
-  "14017076903": {
+  "14016712196": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          14017076903
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14017085750
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14017425777
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          14017157439
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          14017130196,
-          14017142842
+          14016712196
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14017085266
+          14016755109
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
-          14017094742
+          14016769435
         ],
         "steppings": "all"
       }
     }
   },
-  "14017153641": {
+  "14016896531": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          14017153641
+          14017073359
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G11": {
         "ids": [
-          14017198669
+          14017076904
         ],
         "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14017839303
-        ],
-        "steppings": "all"
-      },
+      }
+    }
+  },
+  "14017240301": {
+    "mesa_platforms": {
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14017198569
+          14017240301,
+          14017330959
         ],
         "steppings": "a0..b0"
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
-          14017221154
+          14017353530
         ],
         "steppings": "a0..b0"
       }
     }
   },
-  "14017171315": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14017181172
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14017187037
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14017990051
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14017333800": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14017677836
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14017688852
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14018210331
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          14017611570
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          14017604598
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "14017341140": {
+  "14017245111": {
     "mesa_platforms": {
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
@@ -2518,18 +2169,20 @@
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
+          14017245111,
           14017341140
         ],
         "steppings": "a0..b0"
       }
     }
   },
-  "14017517122": {
+  "14017468336": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
           14017569933,
-          14017575726
+          14017575726,
+          22015839904
         ],
         "steppings": "all"
       },
@@ -2552,6 +2205,12 @@
         ],
         "steppings": "all"
       },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14017631899
+        ],
+        "steppings": "all"
+      },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
           14017521231
@@ -2560,6 +2219,7 @@
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
+          14017468336,
           14017517122
         ],
         "steppings": "all"
@@ -2573,7 +2233,8 @@
       "INTEL_PLATFORM_RPL": {
         "ids": [
           14017569933,
-          14017575726
+          14017575726,
+          22015839904
         ],
         "steppings": "all"
       },
@@ -2586,57 +2247,178 @@
       }
     }
   },
-  "14017880152": {
+  "14018126777": {
     "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
+      "INTEL_PLATFORM_ADL": {
         "ids": [
-          14017890321
+          14018431260,
+          14018432085,
+          14018435504
         ],
         "steppings": "all"
       },
-      "INTEL_PLATFORM_DG2_G11": {
+      "INTEL_PLATFORM_DG1": {
         "ids": [
-          14017911197
+          14018126777
         ],
         "steppings": "all"
       },
-      "INTEL_PLATFORM_DG2_G12": {
+      "INTEL_PLATFORM_RKL": {
         "ids": [
-          14018200648
+          14018432088
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14018431260,
+          14018432085,
+          14018435504
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14018126777
         ],
         "steppings": "all"
       }
     }
   },
-  "15010599737": {
+  "14018545335": {
     "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
+      "INTEL_PLATFORM_ADL": {
         "ids": [
-          15010599737
+          14019065209,
+          14019071713,
+          14019079421
         ],
         "steppings": "all"
       },
-      "INTEL_PLATFORM_DG2_G11": {
+      "INTEL_PLATFORM_DG1": {
         "ids": [
-          14015884202
+          14019061731,
+          14019065131
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14018545335,
+          14018937673
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14016805092
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          14016769476
+          14019383181
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_ICL": {
         "ids": [
-          14016766419
+          14019054074
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14018952577
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14018953713
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14019071739
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14019065209,
+          14019071713,
+          14019079421
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14019061731,
+          14019065131
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14018912822": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14018912822
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14018919798
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "14019028097": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14019103057
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14019028097,
+          14019100030
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "15011116421": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14016820455,
+          15011116421
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14016821926
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14017100160
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14016821875
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14016829388
         ],
         "steppings": "all"
       }
@@ -2663,6 +2445,7 @@
       "INTEL_PLATFORM_ADL": {
         "ids": [
           14011456774,
+          14011467540,
           14013824699
         ],
         "steppings": "all"
@@ -2683,6 +2466,7 @@
       "INTEL_PLATFORM_RPL": {
         "ids": [
           14011456774,
+          14011467540,
           14013824699
         ],
         "steppings": "all"
@@ -2723,6 +2507,7 @@
       "INTEL_PLATFORM_ADL": {
         "ids": [
           14012248209,
+          14012248623,
           14013824767
         ],
         "steppings": "all"
@@ -2744,6 +2529,7 @@
       "INTEL_PLATFORM_RPL": {
         "ids": [
           14012248209,
+          14012248623,
           14013824767
         ],
         "steppings": "all"
@@ -2752,6 +2538,46 @@
         "ids": [
           14012021069,
           14012243233
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "16011478345": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14012069162,
+          14012069539,
+          14013824739
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14012062750,
+          16011478345
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14012062957
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14012069162,
+          14012069539,
+          14013824739
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14012062750,
+          16011478345
         ],
         "steppings": "all"
       }
@@ -2802,97 +2628,6 @@
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
           14015548451
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16011969663": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14013824773
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          16011969663
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          14012765031
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14013824773
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          16011969663
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16012292205": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          16012292205
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          22012547708
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          22012547707
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015549214
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14013677211
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          16012292205
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16012351604": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_EHL": {
-        "ids": [
-          16012576964
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_ICL": {
-        "ids": [
-          16012351604,
-          16012576933
         ],
         "steppings": "all"
       }
@@ -2967,6 +2702,83 @@
           16013099041
         ],
         "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          16013063651
+        ],
+        "steppings": "a0..a0"
+      }
+    }
+  },
+  "16013994831": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14016937548,
+          14016946037,
+          14016950670
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14016929415,
+          14016937494
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          16013994831,
+          22015224714
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14016872268
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14017100203
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14016872205
+        ],
+        "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14016880026
+        ],
+        "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14016946064
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14016937548,
+          14016946037,
+          14016950670
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14016929415,
+          14016937494
+        ],
+        "steppings": "all"
       }
     }
   },
@@ -3038,135 +2850,79 @@
       }
     }
   },
-  "16016080423": {
+  "16014912113": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          22014125521,
+          22014125855,
+          22014128868
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          16014912113,
+          22014125517
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          22014125857
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          22014125521,
+          22014125855,
+          22014128868
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          16014912113,
+          22014125517
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "16016015852": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14016272710
+        ],
+        "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14016272709
+        ],
+        "steppings": "a0..b0"
+      }
+    }
+  },
+  "16018063123": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          22015761668
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14017483907
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14018200714
+          14017484014
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14017509088
+          14017509079
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
-          14017544766
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16016462106": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14016766481
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016768619
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          22015847488
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14016781071
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14016808835
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16016616742": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14016764149
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016768617
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14017100129
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16016618273": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14016764151
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016768618
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14016973537
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "16016772977": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14017007475
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14017011430
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14018200563
+          14017544764
         ],
         "steppings": "all"
       }
@@ -3194,123 +2950,7 @@
       }
     }
   },
-  "18013179988": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          18013179988
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14016634641
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14015841588
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015846243
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "18018999230": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          18018999230
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14016962649
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016969958
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14018200379
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14015656934
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015656957
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          18018999230
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "22011186057": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          22011186057
-        ],
-        "steppings": "a0..b0"
-      }
-    }
-  },
-  "22011440098": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          22011440098
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14012541948
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015549061
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "22012244936": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14013616359
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "22012575642": {
+  "18012660806": {
     "mesa_platforms": {
       "INTEL_PLATFORM_ADL": {
         "ids": [
@@ -3323,6 +2963,7 @@
       "INTEL_PLATFORM_DG1": {
         "ids": [
           14013839423,
+          18012660806,
           22012575642
         ],
         "steppings": "all"
@@ -3374,67 +3015,498 @@
       "INTEL_PLATFORM_TGL": {
         "ids": [
           14013839423,
+          18012660806,
           22012575642
         ],
         "steppings": "all"
       }
     }
   },
-  "22012725308": {
+  "18013179988": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          22012725308
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14013898759
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "22012766191": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          22012766191,
-          22012817175
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14013938132
+          18013179988
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14015549299
+          14016634641
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          22012851036
+          14015841588
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14015846243
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "18013889147": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          1508701464,
+          14013824004,
+          16012203808,
+          18013889147
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          16012409068,
+          16012414995
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          16012415143
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          1508701464,
+          14013824004,
+          16012203808,
+          18013889147
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          16012409068,
+          16012414995
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "18019110168": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14015590813,
+          18019110168
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14015591663
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14016268871
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14015591654
         ],
         "steppings": "a0..b0"
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
-          22012851016
+          14015592699
         ],
         "steppings": "a0..b0"
       }
     }
   },
-  "22012785325": {
+  "18019816803": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
+          14015842950,
+          18019816803
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14015846337
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14016268929
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14015846284
+        ],
+        "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14015853533
+        ],
+        "steppings": "a0..b0"
+      }
+    }
+  },
+  "18020335297": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14016755692,
+          18020335297
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14016763918
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14016805056
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14016763783
+        ],
+        "steppings": "a0..b0"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14016768589
+        ],
+        "steppings": "a0..b0"
+      }
+    }
+  },
+  "18020603990": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14016946129,
+          14016950673,
+          14016951916
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14016946100,
+          16016275254,
+          18020603990
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14016950680
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14016946129,
+          14016950673,
+          14016951916
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14016946100,
+          16016275254,
+          18020603990
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "18022330953": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14017514984
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14017521730
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14018200597
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14017483381
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          18022330953,
+          22015761040
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "18022502561": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          16018010129,
+          18022502561
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          16018010129,
+          18022502561
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "18022508906": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14017157226,
+          14017161811,
+          14017163994
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14017142770,
+          14017157155
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14017076903,
+          18022508906
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14017085750
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14017425777
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          14017157439
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          14017130196,
+          14017130208,
+          14017142842
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14017085266
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14017094742
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14017161815
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14017157226,
+          14017161811,
+          14017163994
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14017142770,
+          14017157155
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "18023881693": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14017890321
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14017911197
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14018200648
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_M": {
+        "ids": [
+          14017879046,
+          18023881693
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_MTL_P": {
+        "ids": [
+          14017889159
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "22010893396": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_EHL": {
+        "ids": [
+          16012576964
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_ICL": {
+        "ids": [
+          16012351604,
+          16012576933,
+          22010893396
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "22011186057": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          22011186057
+        ],
+        "steppings": "a0..b0"
+      }
+    }
+  },
+  "22011440098": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          22011440098
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G11": {
+        "ids": [
+          14012541948
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG2_G12": {
+        "ids": [
+          14015549061
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "22011782311": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_ADL": {
+        "ids": [
+          14016709056,
+          14016716244,
+          22015117093
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_DG1": {
+        "ids": [
+          14016704427,
+          14016709011
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RKL": {
+        "ids": [
+          14016716271
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_RPL": {
+        "ids": [
+          14016709056,
+          14016716244,
+          22015117093
+        ],
+        "steppings": "all"
+      },
+      "INTEL_PLATFORM_TGL": {
+        "ids": [
+          14016704427,
+          14016709011
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "22012699309": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          22012699309,
           22012785325
         ],
         "steppings": "all"
@@ -3447,46 +3519,29 @@
       }
     }
   },
-  "22012962271": {
+  "22012725308": {
     "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14013824836,
-          22012277731
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          16012061344,
-          22012962271
-        ],
-        "steppings": "all"
-      },
       "INTEL_PLATFORM_DG2_G11": {
         "ids": [
-          14012872280,
-          14013989058
+          14013898759,
+          22012725308
+        ],
+        "steppings": "all"
+      }
+    }
+  },
+  "22013045878": {
+    "mesa_platforms": {
+      "INTEL_PLATFORM_DG2_G10": {
+        "ids": [
+          14014427904,
+          22013045878
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14015548563,
-          14015549349
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14013985222
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14013824836,
-          22012277731
+          14015547818
         ],
         "steppings": "all"
       }
@@ -3509,12 +3564,6 @@
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
           14015549420
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14014068013
         ],
         "steppings": "all"
       }
@@ -3554,40 +3603,6 @@
       }
     }
   },
-  "22014272202": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          22014272202
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14015623797
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14015849599
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14015623708
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14015632631
-        ],
-        "steppings": "a0..b0"
-      }
-    }
-  },
   "22014344549": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
@@ -3610,135 +3625,52 @@
       }
     }
   },
-  "22014559856": {
+  "22014412737": {
     "mesa_platforms": {
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          22014559856
+          14016118574,
+          22014412737
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G11": {
         "ids": [
-          14015910125
+          14016119386
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14016766853
+          14016381311
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_MTL_M": {
         "ids": [
-          14015988698
+          14016119375
         ],
         "steppings": "a0..b0"
       },
       "INTEL_PLATFORM_MTL_P": {
         "ids": [
-          14016001845
+          14016120505
         ],
         "steppings": "a0..b0"
       }
     }
   },
-  "22015224714": {
+  "22015614752": {
     "mesa_platforms": {
-      "INTEL_PLATFORM_ADL": {
-        "ids": [
-          14016937548
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG1": {
-        "ids": [
-          14016929415,
-          14016937494
-        ],
-        "steppings": "all"
-      },
       "INTEL_PLATFORM_DG2_G10": {
         "ids": [
-          22015224714
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14016872268
+          22015614752
         ],
         "steppings": "all"
       },
       "INTEL_PLATFORM_DG2_G12": {
         "ids": [
-          14017100203
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14016872205
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          14016880026
-        ],
-        "steppings": "a0..b0"
-      },
-      "INTEL_PLATFORM_RKL": {
-        "ids": [
-          14016946064
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_RPL": {
-        "ids": [
-          14016937548
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_TGL": {
-        "ids": [
-          14016929415,
-          14016937494
-        ],
-        "steppings": "all"
-      }
-    }
-  },
-  "22015761040": {
-    "mesa_platforms": {
-      "INTEL_PLATFORM_DG2_G10": {
-        "ids": [
-          14017514984
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G11": {
-        "ids": [
-          14017521730
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_DG2_G12": {
-        "ids": [
-          14018200597
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_M": {
-        "ids": [
-          14017483381
-        ],
-        "steppings": "all"
-      },
-      "INTEL_PLATFORM_MTL_P": {
-        "ids": [
-          22015761040
+          14019383215
         ],
         "steppings": "all"
       }

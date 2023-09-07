@@ -63,24 +63,21 @@ ANativeWindow_getFormat(struct ANativeWindow *window)
 
 static inline int
 ANativeWindow_dequeueBuffer(struct ANativeWindow *window,
-                            struct ANativeWindowBuffer **buffer,
-                            int *fenceFd)
+                            struct ANativeWindowBuffer **buffer, int *fenceFd)
 {
    return window->dequeueBuffer(window, buffer, fenceFd);
 }
 
 static inline int
 ANativeWindow_queueBuffer(struct ANativeWindow *window,
-                          struct ANativeWindowBuffer *buffer,
-                          int fenceFd)
+                          struct ANativeWindowBuffer *buffer, int fenceFd)
 {
    return window->queueBuffer(window, buffer, fenceFd);
 }
 
 static inline int
 ANativeWindow_cancelBuffer(struct ANativeWindow *window,
-                           struct ANativeWindowBuffer *buffer,
-                           int fenceFd)
+                           struct ANativeWindowBuffer *buffer, int fenceFd)
 {
    return window->cancelBuffer(window, buffer, fenceFd);
 }
@@ -106,8 +103,7 @@ ANativeWindow_setSwapInterval(struct ANativeWindow *window, int interval)
 
 static inline int
 ANativeWindow_query(const struct ANativeWindow *window,
-                    enum ANativeWindowQuery what,
-                    int *value)
+                    enum ANativeWindowQuery what, int *value)
 {
    switch (what) {
    case ANATIVEWINDOW_QUERY_MIN_UNDEQUEUED_BUFFERS:
@@ -149,7 +145,8 @@ mapper_metadata_get_buffer_info(struct ANativeWindowBuffer *buf,
 #else
 static inline int
 mapper_metadata_get_buffer_info(struct ANativeWindowBuffer *buf,
-                                struct buffer_info *out_buf_info) {
+                                struct buffer_info *out_buf_info)
+{
    return -ENOTSUP;
 }
 #endif /* USE_IMAPPER4_METADATA_API */

@@ -63,6 +63,7 @@ fd_pipe_new2(struct fd_device *dev, enum fd_pipe_id id, uint32_t prio)
    fd_pipe_get_param(pipe, FD_CHIP_ID, &val);
    pipe->dev_id.chip_id = val;
 
+   pipe->is_64bit = fd_dev_64b(&pipe->dev_id);
 
    /* Use the _NOSYNC flags because we don't want the control_mem bo to hold
     * a reference to the ourself.  This also means that we won't be able
@@ -197,7 +198,7 @@ fd_pipe_emit_fence(struct fd_pipe *pipe, struct fd_ringbuffer *ring)
 {
    uint32_t fence = ++pipe->last_fence;
 
-   if (fd_dev_64b(&pipe->dev_id)) {
+   if (pipe->is_64bit) {
       OUT_PKT7(ring, CP_EVENT_WRITE, 4);
       OUT_RING(ring, CP_EVENT_WRITE_0_EVENT(CACHE_FLUSH_TS));
       OUT_RELOC(ring, control_ptr(pipe, fence));   /* ADDR_LO/HI */

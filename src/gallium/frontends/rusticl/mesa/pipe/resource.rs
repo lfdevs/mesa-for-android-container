@@ -66,6 +66,14 @@ impl PipeResource {
         self.as_ref().target() == pipe_texture_target::PIPE_BUFFER
     }
 
+    pub fn is_linear(&self) -> bool {
+        self.as_ref().bind & PIPE_BIND_LINEAR != 0
+    }
+
+    pub fn is_staging(&self) -> bool {
+        self.as_ref().usage() & pipe_resource_usage::PIPE_USAGE_STAGING.0 != 0
+    }
+
     pub fn pipe_image_view(
         &self,
         format: pipe_format,

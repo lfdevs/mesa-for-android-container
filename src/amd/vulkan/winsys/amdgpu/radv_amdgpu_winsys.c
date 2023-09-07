@@ -45,11 +45,23 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
    if (!ac_query_gpu_info(fd, ws->dev, &ws->info))
       return false;
 
+   /*
+    * Override the max submits on video queues.
+    * If you submit multiple session contexts in the same IB sequence the
+    * hardware gets upset as it expects a kernel fence to be emitted to reset
+    * the session context in the hardware.
+    * Avoid this problem by never submitted more than one IB at a time.
+    * This possibly should be fixed in the kernel, and if it is this can be
+    * resolved.
+    */
+   for (enum amd_ip_type ip_type = AMD_IP_UVD; ip_type <= AMD_IP_VCN_ENC; ip_type++)
+      ws->info.max_submitted_ibs[ip_type] = 1;
+
    if (!ac_query_pci_bus_info(fd, &ws->info))
       return false;
 
-   if (ws->info.drm_minor < 23) {
-      fprintf(stderr, "radv/amdgpu: DRM 3.23+ is required (Linux kernel 4.15+)\n");
+   if (ws->info.drm_minor < 27) {
+      fprintf(stderr, "radv/amdgpu: DRM 3.27+ is required (Linux kernel 4.20+)\n");
       return false;
    }
 
@@ -62,7 +74,7 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
    ws->info.ip[AMD_IP_SDMA].num_queues = MIN2(ws->info.ip[AMD_IP_SDMA].num_queues, MAX_RINGS_PER_TYPE);
    ws->info.ip[AMD_IP_COMPUTE].num_queues = MIN2(ws->info.ip[AMD_IP_COMPUTE].num_queues, MAX_RINGS_PER_TYPE);
 
-   ws->use_ib_bos = ws->info.gfx_level >= GFX7;
+   ws->use_ib_bos = true;
    return true;
 }
 
@@ -102,8 +114,7 @@ radv_amdgpu_winsys_query_value(struct radeon_winsys *rws, enum radeon_value_id v
       amdgpu_query_heap_info(ws->dev, AMDGPU_GEM_DOMAIN_VRAM, 0, &heap);
       return heap.heap_usage;
    case RADEON_VRAM_VIS_USAGE:
-      amdgpu_query_heap_info(ws->dev, AMDGPU_GEM_DOMAIN_VRAM, AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED,
-                             &heap);
+      amdgpu_query_heap_info(ws->dev, AMDGPU_GEM_DOMAIN_VRAM, AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED, &heap);
       return heap.heap_usage;
    case RADEON_GTT_USAGE:
       amdgpu_query_heap_info(ws->dev, AMDGPU_GEM_DOMAIN_GTT, 0, &heap);
@@ -125,8 +136,7 @@ radv_amdgpu_winsys_query_value(struct radeon_winsys *rws, enum radeon_value_id v
 }
 
 static bool
-radv_amdgpu_winsys_read_registers(struct radeon_winsys *rws, unsigned reg_offset,
-                                  unsigned num_registers, uint32_t *out)
+radv_amdgpu_winsys_read_registers(struct radeon_winsys *rws, unsigned reg_offset, unsigned num_registers, uint32_t *out)
 {
    struct radv_amdgpu_winsys *ws = (struct radv_amdgpu_winsys *)rws;
 
@@ -228,8 +238,7 @@ radv_amdgpu_winsys_create(int fd, uint64_t debug_flags, uint64_t perftest_flags,
       /* Check that options don't differ from the existing winsys. */
       if (((debug_flags & RADV_DEBUG_ALL_BOS) && !ws->debug_all_bos) ||
           ((debug_flags & RADV_DEBUG_HANG) && !ws->debug_log_bos) ||
-          ((debug_flags & RADV_DEBUG_NO_IBS) && ws->use_ib_bos) ||
-          (perftest_flags != ws->perftest)) {
+          ((debug_flags & RADV_DEBUG_NO_IBS) && ws->use_ib_bos) || (perftest_flags != ws->perftest)) {
          fprintf(stderr, "radv/amdgpu: Found options that differ from the existing winsys.\n");
          return NULL;
       }

@@ -44,6 +44,10 @@ libmesa_rust_files = files(
   'mesa/pipe/transfer.rs',
 )
 
+rusticl_proc_macros_files = files(
+  'proc/lib.rs',
+)
+
 rusticl_files = files(
   'lib.rs',
   'api.rs',
@@ -72,6 +76,8 @@ rusticl_files = files(
 )
 
 rusticl_args = [
+  # we want unsafe blocks inside unsafe functions
+  '-Dunsafe_op_in_unsafe_fn',
   # we error on all clippy warnings unless they are disabled
   '-Dclippy::all',
   # we want to add asserts in control flow
@@ -88,6 +94,11 @@ rusticl_args = [
 rusticl_gen_args = [
   # can't do anything about it anyway
   '-Aclippy::all',
+  # Some bindgen versions assume `unsafe_op_in_unsafe_fn`
+  '-Aunused_unsafe',
+  '-Anon_camel_case_types',
+  '-Anon_snake_case',
+  '-Anon_upper_case_globals',
 ]
 
 rusticl_bindgen_args = [
@@ -158,9 +169,6 @@ rusticl_opencl_gen = static_library(
   rust_crate_type : 'rlib',
   rust_args : [
     rusticl_gen_args,
-    '-Anon_snake_case',
-    '-Anon_camel_case_types',
-    '-Anon_upper_case_globals',
   ],
 )
 
@@ -225,42 +233,60 @@ rusticl_mesa_bindings_rs = rust.bindgen(
   ],
   args : [
     rusticl_bindgen_args,
-    '--allowlist-function', 'blob_.*',
-    '--allowlist-function', 'clc_.*',
-    '--allowlist-function', 'disk_cache_.*',
-    '--allowlist-function', 'free',
-    '--allowlist-function', 'glsl_.*',
-    '--allowlist-function', 'malloc',
-    '--allowlist-function', 'mesa_.*',
-    '--allowlist-function', 'nir_.*',
-    '--allowlist-function', 'pipe_.*',
-    '--allowlist-function', 'rusticl_.*',
-    '--allowlist-function', 'rz?alloc_.*',
-    '--allowlist-function', 'spirv_.*',
-    '--allowlist-function', 'u_.*',
-    '--allowlist-function', 'util_format_.*',
-    '--allowlist-type', 'pipe_endian',
-    '--allowlist-type', 'pipe_resource_usage',
-    '--bitfield-enum', 'pipe_resource_usage',
-    '--allowlist-type', 'clc_kernel_arg_access_qualifier',
-    '--bitfield-enum', 'clc_kernel_arg_access_qualifier',
-    '--allowlist-type', 'clc_kernel_arg_type_qualifier',
-    '--bitfield-enum', 'clc_kernel_arg_type_qualifier',
-    '--bitfield-enum', 'nir_opt_if_options',
-    '--bitfield-enum', 'nir_variable_mode',
-    '--allowlist-type', 'float_controls',
-    '--allowlist-var', 'PIPE_.*',
-    '--bitfield-enum', 'pipe_map_flags',
-    '--allowlist-function', 'std(err|out)_ptr',
-    '--bitfield-enum', 'nir_lower_int64_options',
-    '--allowlist-type', 'pipe_tex_wrap',
-    '--constified-enum-module', 'pipe_tex_wrap',
-    '--allowlist-type', 'pipe_tex_filter',
-    '--constified-enum-module', 'pipe_tex_filter',
-    '--allowlist-type', 'gl_access_qualifier',
-    '--bitfield-enum', 'gl_access_qualifier',
-    '--allowlist-type', 'cl_sampler_.*_mode',
+    # libc
+    '--allowlist-function',     'free',
+    '--allowlist-function',     'malloc',
+
+    # mesa utils
+    '--allowlist-function',     'blob_.*',
+    '--allowlist-function',     'disk_cache_.*',
+    '--allowlist-type',         'float_controls',
+    '--allowlist-function',     'mesa_.*',
+    '--allowlist-var',          'OS_.*',
+    '--allowlist-function',     'rz?alloc_.*',
+    '--allowlist-function',     'SHA1.*',
+    '--allowlist-var',          'SHA1_.*',
+    '--allowlist-function',     'u_.*',
+    '--allowlist-function',     'util_format_.*',
+
+    # CL API
+    '--allowlist-type',         'cl_sampler_.*_mode',
     '--constified-enum-module', 'cl_sampler_.*_mode',
+
+    # clc
+    '--allowlist-function',     'clc_.*',
+    '--allowlist-type',         'clc_kernel_arg_access_qualifier',
+    '--bitfield-enum',          'clc_kernel_arg_access_qualifier',
+    '--allowlist-type',         'clc_kernel_arg_type_qualifier',
+    '--bitfield-enum',          'clc_kernel_arg_type_qualifier',
+
+    # gl
+    '--allowlist-type',         'gl_access_qualifier',
+    '--bitfield-enum',          'gl_access_qualifier',
+    '--allowlist-function',     'glsl_.*',
+
+    # nir and spirv
+    '--allowlist-function',     'nir_.*',
+    '--bitfield-enum',          'nir_lower_int64_options',
+    '--bitfield-enum',          'nir_opt_if_options',
+    '--bitfield-enum',          'nir_variable_mode',
+    '--allowlist-function',     'spirv_.*',
+
+    # gallium
+    '--allowlist-function',     'pipe_.*',
+    '--allowlist-var',          'PIPE_.*',
+    '--allowlist-type',         'pipe_endian',
+    '--bitfield-enum',          'pipe_map_flags',
+    '--allowlist-type',         'pipe_resource_usage',
+    '--bitfield-enum',          'pipe_resource_usage',
+    '--allowlist-type',         'pipe_tex_filter',
+    '--constified-enum-module', 'pipe_tex_filter',
+    '--allowlist-type',         'pipe_tex_wrap',
+    '--constified-enum-module', 'pipe_tex_wrap',
+
+    # rusticl C functions
+    '--allowlist-function',     'rusticl_.*',
+    '--allowlist-function',     'std(err|out)_ptr',
   ],
 )
 
@@ -278,14 +304,11 @@ libmesa_rust_gen = static_library(
     libgallium,
   ],
   dependencies: [
-    idep_clc,
+    idep_mesaclc,
   ],
   rust_crate_type : 'rlib',
   rust_args : [
     rusticl_gen_args,
-    '-Anon_snake_case',
-    '-Anon_camel_case_types',
-    '-Anon_upper_case_globals',
   ],
 )
 
@@ -315,6 +338,15 @@ libmesa_rust = static_library(
   ]
 )
 
+rusticl_proc_macros = shared_library(
+  'rusticl_proc_macros',
+  [rusticl_proc_macros_files],
+  rust_crate_type : 'proc-macro',
+  rust_args : [
+    rusticl_args,
+  ],
+)
+
 librusticl = static_library(
   'rusticl',
   [rusticl_files],
@@ -328,6 +360,7 @@ librusticl = static_library(
     libmesa_rust_gen,
     libmesa_rust_util,
     rusticl_opencl_gen,
+    rusticl_proc_macros,
   ],
   dependencies : [
     idep_rusticl_gen,

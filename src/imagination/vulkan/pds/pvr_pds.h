@@ -624,6 +624,7 @@ uint32_t pvr_pds_encode_dma_burst(uint32_t *dma_control,
                                   uint32_t dest_offset,
                                   uint32_t dma_size,
                                   uint64_t src_address,
+                                  bool last,
                                   const struct pvr_device_info *dev_info);
 
 void pvr_pds_setup_doutu(struct pvr_pds_usc_task_control *usc_task_control,
@@ -977,7 +978,7 @@ struct pvr_pds_vertex_primary_program_input {
    /* Control for the DOUTU that kicks the vertex USC shader. */
    struct pvr_pds_usc_task_control usc_task_control;
    /* List of DMAs (of size dma_count). */
-   struct pvr_pds_vertex_dma *dma_list;
+   const struct pvr_pds_vertex_dma *dma_list;
    uint32_t dma_count;
 
    /* ORd bitfield of PVR_PDS_VERTEX_FLAGS_* */

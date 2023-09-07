@@ -49,7 +49,7 @@ r600_legalize_image_load_store_impl(nir_builder *b,
          nir_imm_zero(b, nir_dest_num_components(ir->dest), nir_dest_bit_size(ir->dest));
 
    auto image_exists =
-      nir_ult(b, ir->src[0].ssa, nir_imm_int(b, b->shader->info.num_images));
+      nir_ult_imm(b, ir->src[0].ssa, b->shader->info.num_images);
 
    nir_if *if_exists = nir_push_if(b, image_exists);
 
@@ -168,16 +168,8 @@ r600_legalize_image_load_store_filter(const nir_instr *instr, UNUSED const void 
    switch (ir->intrinsic) {
    case nir_intrinsic_image_store:
    case nir_intrinsic_image_load:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_imax:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
    case nir_intrinsic_image_size:
       return true;
    default:
@@ -186,7 +178,7 @@ r600_legalize_image_load_store_filter(const nir_instr *instr, UNUSED const void 
 }
 
 /* This pass makes sure only existing images are accessd and
- * the access is withing range, if not zero is returned by all
+ * the access is within range, if not zero is returned by all
  * image ops that return a value.
  */
 bool

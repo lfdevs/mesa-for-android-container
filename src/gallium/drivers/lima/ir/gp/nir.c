@@ -85,7 +85,7 @@ static void register_node_ssa(gpir_block *block, gpir_node *node, nir_ssa_def *s
    }
 }
 
-static void register_node_reg(gpir_block *block, gpir_node *node, nir_reg_dest *nir_reg)
+static void register_node_reg(gpir_block *block, gpir_node *node, nir_register_dest *nir_reg)
 {
    block->comp->node_for_reg[nir_reg->reg->index] = node;
    gpir_store_node *store = gpir_node_create(block, gpir_op_store_reg);

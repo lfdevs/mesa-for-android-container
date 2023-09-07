@@ -199,10 +199,8 @@ nir_move_vec_src_uses_to_dest(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_move_vec_src_uses_to_dest_impl(shader,
-                                                        function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_move_vec_src_uses_to_dest_impl(shader, impl);
    }
 
    return progress;

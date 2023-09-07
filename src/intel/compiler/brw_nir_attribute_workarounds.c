@@ -55,7 +55,7 @@ apply_attr_wa_instr(nir_builder *b, nir_instr *instr, void *cb_data)
     */
    if (wa_flags & BRW_ATTRIB_WA_COMPONENT_MASK) {
       nir_ssa_def *scaled =
-         nir_fmul(b, val, nir_imm_float(b, 1.0f / 65536.0f));
+         nir_fmul_imm(b, val, 1.0f / 65536.0f);
       nir_ssa_def *comps[4];
       for (int i = 0; i < val->num_components; i++) {
          bool rescale = i < (wa_flags & BRW_ATTRIB_WA_COMPONENT_MASK);

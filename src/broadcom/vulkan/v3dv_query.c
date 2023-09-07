@@ -1410,8 +1410,8 @@ nir_get_occlusion_counter_offset(nir_builder *b, nir_ssa_def *query_idx)
    nir_ssa_def *query_group = nir_udiv_imm(b, query_idx, 16);
    nir_ssa_def *query_group_offset = nir_umod_imm(b, query_idx, 16);
    nir_ssa_def *offset =
-      nir_iadd(b, nir_imul(b, query_group, nir_imm_int(b, 1024)),
-                  nir_imul(b, query_group_offset, nir_imm_int(b, 4)));
+      nir_iadd(b, nir_imul_imm(b, query_group, 1024),
+                  nir_imul_imm(b, query_group_offset, 4));
    return offset;
 }
 
@@ -1486,10 +1486,10 @@ write_query_buffer(nir_builder *b,
        */
       nir_ssa_def *value64 = nir_vec2(b, value, nir_imm_int(b, 0));
       nir_store_ssbo(b, value64, buf, *offset, .write_mask = 0x3, .align_mul = 8);
-      *offset = nir_iadd(b, *offset, nir_imm_int(b, 8));
+      *offset = nir_iadd_imm(b, *offset, 8);
    } else {
       nir_store_ssbo(b, value, buf, *offset, .write_mask = 0x1, .align_mul = 4);
-      *offset = nir_iadd(b, *offset, nir_imm_int(b, 4));
+      *offset = nir_iadd_imm(b, *offset, 4);
    }
 }
 

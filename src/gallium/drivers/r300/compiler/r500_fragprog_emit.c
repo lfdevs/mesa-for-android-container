@@ -281,8 +281,10 @@ static void emit_paired(struct r300_fragment_program_compiler *c, struct rc_pair
 
 	code->inst[ip].inst4 |= R500_ALPHA_ADDRD(inst->Alpha.DestIndex);
 	code->inst[ip].inst5 |= R500_ALU_RGBA_ADDRD(inst->RGB.DestIndex);
-	use_temporary(code, inst->Alpha.DestIndex);
-	use_temporary(code, inst->RGB.DestIndex);
+	if (inst->Alpha.WriteMask)
+		use_temporary(code, inst->Alpha.DestIndex);
+	if (inst->RGB.WriteMask)
+		use_temporary(code, inst->RGB.DestIndex);
 
 	if (inst->RGB.Saturate)
 		code->inst[ip].inst0 |= R500_INST_RGB_CLAMP;

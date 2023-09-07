@@ -33,6 +33,7 @@
 bool i915_gem_create_context(int fd, uint32_t *context_id);
 bool i915_gem_destroy_context(int fd, uint32_t context_id);
 bool i915_gem_create_context_engines(int fd,
+                                     enum intel_gem_create_context_flags flags,
                                      const struct intel_query_engine_info *info,
                                      int num_engines, enum intel_engine_class *engine_classes,
                                      uint32_t *context_id);

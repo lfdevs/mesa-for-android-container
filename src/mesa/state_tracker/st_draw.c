@@ -68,10 +68,10 @@
 #include "cso_cache/cso_context.h"
 
 /* GL prims should match Gallium prims, spot-check a few */
-static_assert(GL_POINTS == PIPE_PRIM_POINTS, "enum mismatch");
-static_assert(GL_QUADS == PIPE_PRIM_QUADS, "enum mismatch");
-static_assert(GL_TRIANGLE_STRIP_ADJACENCY == PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY, "enum mismatch");
-static_assert(GL_PATCHES == PIPE_PRIM_PATCHES, "enum mismatch");
+static_assert(GL_POINTS == MESA_PRIM_POINTS, "enum mismatch");
+static_assert(GL_QUADS == MESA_PRIM_QUADS, "enum mismatch");
+static_assert(GL_TRIANGLE_STRIP_ADJACENCY == MESA_PRIM_TRIANGLE_STRIP_ADJACENCY, "enum mismatch");
+static_assert(GL_PATCHES == MESA_PRIM_PATCHES, "enum mismatch");
 
 static inline void
 prepare_draw(struct st_context *st, struct gl_context *ctx, uint64_t state_mask)
@@ -403,8 +403,8 @@ st_get_draw_context(struct st_context *st)
     */
    draw_wide_line_threshold(st->draw, 1000.0f);
    draw_wide_point_threshold(st->draw, 1000.0f);
-   draw_enable_line_stipple(st->draw, FALSE);
-   draw_enable_point_sprites(st->draw, FALSE);
+   draw_enable_line_stipple(st->draw, false);
+   draw_enable_point_sprites(st->draw, false);
 
    return st->draw;
 }
@@ -481,10 +481,10 @@ st_draw_quad(struct st_context *st,
    st->last_num_vbuffers = MAX2(st->last_num_vbuffers, 1);
 
    if (num_instances > 1) {
-      cso_draw_arrays_instanced(st->cso_context, PIPE_PRIM_TRIANGLE_FAN, 0, 4,
+      cso_draw_arrays_instanced(st->cso_context, MESA_PRIM_TRIANGLE_FAN, 0, 4,
                                 0, num_instances);
    } else {
-      cso_draw_arrays(st->cso_context, PIPE_PRIM_TRIANGLE_FAN, 0, 4);
+      cso_draw_arrays(st->cso_context, MESA_PRIM_TRIANGLE_FAN, 0, 4);
    }
 
    pipe_resource_reference(&vb.buffer.resource, NULL);

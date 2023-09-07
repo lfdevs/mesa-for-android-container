@@ -49,14 +49,8 @@ nir_fuse_io_16(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-
-      nir_builder b;
-      nir_builder_init(&b, function->impl);
-
-      nir_foreach_block(block, function->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -87,9 +81,7 @@ nir_fuse_io_16(nir_shader *shader)
 
             intr->dest.ssa.bit_size = 16;
 
-            nir_builder b;
-            nir_builder_init(&b, function->impl);
-            b.cursor = nir_after_instr(instr);
+            nir_builder b = nir_builder_at(nir_after_instr(instr));
 
             /* The f2f32(f2fmp(x)) will cancel by opt_algebraic */
             nir_ssa_def *conv = nir_f2f32(&b, &intr->dest.ssa);
@@ -100,7 +92,7 @@ nir_fuse_io_16(nir_shader *shader)
          }
       }
 
-      nir_metadata_preserve(function->impl,
+      nir_metadata_preserve(impl,
                             nir_metadata_block_index | nir_metadata_dominance);
    }
 

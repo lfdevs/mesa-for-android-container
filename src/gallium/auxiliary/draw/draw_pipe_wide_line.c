@@ -67,7 +67,7 @@ wideline_line(struct draw_stage *stage,
    const float dx = fabsf(pos0[0] - pos2[0]);
    const float dy = fabsf(pos0[1] - pos2[1]);
 
-   const boolean half_pixel_center =
+   const bool half_pixel_center =
       stage->draw->rasterizer->half_pixel_center;
 
    /* small tweak to meet GL specification */
@@ -147,9 +147,9 @@ wideline_first_line(struct draw_stage *stage,
 
    /* Disable triangle culling, stippling, unfilled mode etc. */
    r = draw_get_rasterizer_no_cull(draw, rast);
-   draw->suspend_flushing = TRUE;
+   draw->suspend_flushing = true;
    pipe->bind_rasterizer_state(pipe, r);
-   draw->suspend_flushing = FALSE;
+   draw->suspend_flushing = false;
 
    stage->line = wideline_line;
 
@@ -168,9 +168,9 @@ wideline_flush(struct draw_stage *stage, unsigned flags)
 
    /* restore original rasterizer state */
    if (draw->rast_handle) {
-      draw->suspend_flushing = TRUE;
+      draw->suspend_flushing = true;
       pipe->bind_rasterizer_state(pipe, draw->rast_handle);
-      draw->suspend_flushing = FALSE;
+      draw->suspend_flushing = false;
    }
 }
 

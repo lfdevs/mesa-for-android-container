@@ -182,7 +182,7 @@ xmesa_st_framebuffer_validate_textures(struct pipe_frontend_drawable *drawable,
          xstfb->textures[i] =
             xstfb->screen->resource_create(xstfb->screen, &templ);
          if (!xstfb->textures[i])
-            return FALSE;
+            return false;
       }
    }
 

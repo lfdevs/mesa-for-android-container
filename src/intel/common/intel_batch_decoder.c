@@ -140,15 +140,24 @@ update_count(struct intel_batch_decode_ctx *ctx,
 
 static void
 ctx_disassemble_program(struct intel_batch_decode_ctx *ctx,
-                        uint32_t ksp, const char *type)
+                        uint32_t ksp,
+                        const char *short_name,
+                        const char *name)
 {
    uint64_t addr = ctx->instruction_base + ksp;
    struct intel_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
    if (!bo.map)
       return;
 
-   fprintf(ctx->fp, "\nReferenced %s:\n", type);
+   fprintf(ctx->fp, "\nReferenced %s:\n", name);
    intel_disassemble(ctx->isa, bo.map, 0, ctx->fp);
+
+   if (ctx->shader_binary) {
+      int size = intel_disassemble_find_end(ctx->isa, bo.map, 0);
+
+      ctx->shader_binary(ctx->user_data, short_name, addr,
+                         bo.map, size);
+   }
 }
 
 /* Heuristic to determine whether a uint32_t is probably actually a float
@@ -412,7 +421,7 @@ handle_interface_descriptor_data(struct intel_batch_decode_ctx *ctx,
       }
    }
 
-   ctx_disassemble_program(ctx, ksp, "compute shader");
+   ctx_disassemble_program(ctx, ksp, "CS", "compute shader");
    fprintf(ctx->fp, "\n");
 
    if (sampler_count)
@@ -656,9 +665,19 @@ decode_single_ksp(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
       strcmp(inst->name, "3DSTATE_VS") == 0 ? (is_simd8 ? "SIMD8 vertex shader" : "vec4 vertex shader") :
       strcmp(inst->name, "3DSTATE_GS") == 0 ? (is_simd8 ? "SIMD8 geometry shader" : "vec4 geometry shader") :
       NULL;
+   const char *short_name =
+      strcmp(inst->name,   "VS_STATE") == 0 ? "VS" :
+      strcmp(inst->name,   "GS_STATE") == 0 ? "GS" :
+      strcmp(inst->name,   "SF_STATE") == 0 ? "SF" :
+      strcmp(inst->name, "CLIP_STATE") == 0 ? "CL" :
+      strcmp(inst->name, "3DSTATE_DS") == 0 ? "DS" :
+      strcmp(inst->name, "3DSTATE_HS") == 0 ? "HS" :
+      strcmp(inst->name, "3DSTATE_VS") == 0 ? "VS" :
+      strcmp(inst->name, "3DSTATE_GS") == 0 ? "GS" :
+      NULL;
 
    if (is_enabled) {
-      ctx_disassemble_program(ctx, ksp, type);
+      ctx_disassemble_program(ctx, ksp, short_name, type);
       fprintf(ctx->fp, "\n");
    }
 }
@@ -688,9 +707,13 @@ decode_mesh_task_ksp(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
       strcmp(inst->name,   "3DSTATE_MESH_SHADER") == 0 ? "mesh shader" :
       strcmp(inst->name,   "3DSTATE_TASK_SHADER") == 0 ? "task shader" :
       NULL;
+   const char *short_name =
+      strcmp(inst->name,   "3DSTATE_MESH_SHADER") == 0 ? "MS" :
+      strcmp(inst->name,   "3DSTATE_TASK_SHADER") == 0 ? "TS" :
+      NULL;
 
    if (threads && local_x_maximum) {
-      ctx_disassemble_program(ctx, ksp, type);
+      ctx_disassemble_program(ctx, ksp, short_name, type);
       fprintf(ctx->fp, "\n");
    }
 }
@@ -738,11 +761,11 @@ decode_ps_kern(struct intel_batch_decode_ctx *ctx,
    }
 
    if (enabled[0])
-      ctx_disassemble_program(ctx, ksp[0], "SIMD8 fragment shader");
+      ctx_disassemble_program(ctx, ksp[0], "FS8", "SIMD8 fragment shader");
    if (enabled[1])
-      ctx_disassemble_program(ctx, ksp[1], "SIMD16 fragment shader");
+      ctx_disassemble_program(ctx, ksp[1], "FS16", "SIMD16 fragment shader");
    if (enabled[2])
-      ctx_disassemble_program(ctx, ksp[2], "SIMD32 fragment shader");
+      ctx_disassemble_program(ctx, ksp[2], "FS32", "SIMD32 fragment shader");
 
    if (enabled[0] || enabled[1] || enabled[2])
       fprintf(ctx->fp, "\n");
@@ -1167,7 +1190,7 @@ decode_load_register_imm(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 static void
 disasm_program_from_group(struct intel_batch_decode_ctx *ctx,
                           struct intel_group *strct, const void *map,
-                          const char *type)
+                          const char *short_name, const char *type)
 {
    uint64_t ksp = 0;
    bool is_enabled = true;
@@ -1184,7 +1207,7 @@ disasm_program_from_group(struct intel_batch_decode_ctx *ctx,
    }
 
    if (is_enabled) {
-      ctx_disassemble_program(ctx, ksp, type);
+      ctx_disassemble_program(ctx, ksp, short_name, type);
       fprintf(ctx->fp, "\n");
    }
 }
@@ -1208,7 +1231,7 @@ decode_vs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
-   disasm_program_from_group(ctx, strct, bind_bo.map, "vertex shader");
+   disasm_program_from_group(ctx, strct, bind_bo.map, "VS", "vertex shader");
 }
 
 static void
@@ -1230,7 +1253,7 @@ decode_gs_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
-   disasm_program_from_group(ctx, strct, bind_bo.map, "geometry shader");
+   disasm_program_from_group(ctx, strct, bind_bo.map, "GS", "geometry shader");
 }
 
 static void
@@ -1252,7 +1275,7 @@ decode_clip_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
-   disasm_program_from_group(ctx, strct, bind_bo.map, "clip shader");
+   disasm_program_from_group(ctx, strct, bind_bo.map, "CL", "clip shader");
 
    struct intel_group *vp_strct =
       intel_spec_find_struct(ctx->spec, "CLIP_VIEWPORT");
@@ -1289,7 +1312,7 @@ decode_sf_state(struct intel_batch_decode_ctx *ctx, uint32_t offset)
    }
 
    ctx_print_group(ctx, strct, offset, bind_bo.map);
-   disasm_program_from_group(ctx, strct, bind_bo.map, "strips and fans shader");
+   disasm_program_from_group(ctx, strct, bind_bo.map, "SF", "strips and fans shader");
 
    struct intel_group *vp_strct =
       intel_spec_find_struct(ctx->spec, "SF_VIEWPORT");

@@ -249,10 +249,10 @@ int virgl_encoder_begin_query(struct virgl_context *ctx,
 int virgl_encoder_end_query(struct virgl_context *ctx,
                            uint32_t handle);
 int virgl_encoder_get_query_result(struct virgl_context *ctx,
-                                  uint32_t handle, boolean wait);
+                                  uint32_t handle, bool wait);
 
 int virgl_encoder_render_condition(struct virgl_context *ctx,
-                                  uint32_t handle, boolean condition,
+                                  uint32_t handle, bool condition,
                                   enum pipe_render_cond_flag mode);
 
 int virgl_encoder_set_sub_ctx(struct virgl_context *ctx, uint32_t sub_ctx_id);
@@ -292,7 +292,7 @@ int virgl_encode_host_debug_flagstring(struct virgl_context *ctx,
 
 int virgl_encode_get_query_result_qbo(struct virgl_context *ctx,
                                       uint32_t handle,
-                                      struct virgl_resource *res, boolean wait,
+                                      struct virgl_resource *res, bool wait,
                                       uint32_t result_type,
                                       uint32_t offset,
                                       uint32_t index);

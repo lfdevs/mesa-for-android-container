@@ -63,12 +63,7 @@ static void
 nir_find_ray_queries_read(struct set *queries,
                           nir_shader *shader)
 {
-   nir_foreach_function(function, shader) {
-      nir_function_impl *impl = function->impl;
-
-      if (!impl)
-         continue;
-
+   nir_foreach_function_impl(impl, shader) {
       nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)

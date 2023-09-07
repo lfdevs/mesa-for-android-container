@@ -108,7 +108,7 @@ pan_indirect_dispatch_init(struct panfrost_device *dev)
 
       nir_ssa_def *num_wg_x_ptr = get_input_field(&b, num_wg_sysval[0]);
 
-      nir_push_if(&b, nir_ine(&b, num_wg_x_ptr, nir_imm_int64(&b, 0)));
+      nir_push_if(&b, nir_ine_imm(&b, num_wg_x_ptr, 0));
       {
          nir_store_global(&b, num_wg_x_ptr, 8, num_wg_x, 1);
          nir_store_global(&b, get_input_field(&b, num_wg_sysval[1]), 8,

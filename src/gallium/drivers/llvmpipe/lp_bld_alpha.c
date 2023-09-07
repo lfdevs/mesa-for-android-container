@@ -53,7 +53,7 @@ lp_build_alpha_test(struct gallivm_state *gallivm,
                     struct lp_build_mask_context *mask,
                     LLVMValueRef alpha,
                     LLVMValueRef ref,
-                    boolean do_branch)
+                    bool do_branch)
 {
    struct lp_build_context bld;
 

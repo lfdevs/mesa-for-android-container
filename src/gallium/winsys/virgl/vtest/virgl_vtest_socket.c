@@ -28,8 +28,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include <os/os_process.h>
 #include <util/format/u_format.h>
+#include <util/u_process.h>
 
 #include "virgl_vtest_winsys.h"
 #include "virgl_vtest_public.h"
@@ -120,10 +120,11 @@ static int virgl_vtest_send_init(struct virgl_vtest_winsys *vws)
    uint32_t buf[VTEST_HDR_SIZE];
    const char *nstr = "virtest";
    char cmdline[64] = { 0 };
-   int ret;
+   const char *proc_name = util_get_process_name();
 
-   ret = os_get_process_name(cmdline, 63);
-   if (ret == FALSE)
+   if (proc_name)
+      strncpy(cmdline, proc_name, 63);
+   else
       strcpy(cmdline, nstr);
 #if defined(HAVE_PROGRAM_INVOCATION_NAME)
    if (!strcmp(cmdline, "shader_runner")) {

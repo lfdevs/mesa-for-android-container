@@ -85,14 +85,11 @@ pan_nir_lower_zs_store(nir_shader *nir)
    if (nir->info.stage != MESA_SHADER_FRAGMENT)
       return false;
 
-   nir_foreach_function(function, nir) {
-      if (!function->impl)
-         continue;
-
+   nir_foreach_function_impl(impl, nir) {
       nir_intrinsic_instr *stores[3] = {NULL};
       unsigned writeout = 0;
 
-      nir_foreach_block(block, function->impl) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -135,7 +132,7 @@ pan_nir_lower_zs_store(nir_shader *nir)
 
       bool replaced = false;
 
-      nir_foreach_block(block, function->impl) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
@@ -154,9 +151,8 @@ pan_nir_lower_zs_store(nir_shader *nir)
 
             assert(nir_src_is_const(intr->src[1]) && "no indirect outputs");
 
-            nir_builder b;
-            nir_builder_init(&b, function->impl);
-            b.cursor = nir_after_block_before_jump(instr->block);
+            nir_builder b =
+               nir_builder_at(nir_after_block_before_jump(instr->block));
 
             /* Trying to write depth twice results in the
              * wrong blend shader being executed on
@@ -173,9 +169,8 @@ pan_nir_lower_zs_store(nir_shader *nir)
 
       /* Insert a store to the depth RT (0xff) if needed */
       if (!replaced) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
-         b.cursor = nir_after_block_before_jump(common_block);
+         nir_builder b =
+            nir_builder_at(nir_after_block_before_jump(common_block));
 
          pan_nir_emit_combined_store(&b, NULL, writeout, stores);
       }
@@ -185,7 +180,7 @@ pan_nir_lower_zs_store(nir_shader *nir)
             nir_instr_remove(&stores[i]->instr);
       }
 
-      nir_metadata_preserve(function->impl,
+      nir_metadata_preserve(impl,
                             nir_metadata_block_index | nir_metadata_dominance);
       progress = true;
    }

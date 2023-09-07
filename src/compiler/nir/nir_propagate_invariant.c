@@ -221,8 +221,8 @@ nir_propagate_invariant(nir_shader *shader, bool invariant_prim)
    }
 
    bool progress = false;
-   nir_foreach_function(function, shader) {
-      if (function->impl && propagate_invariant_impl(function->impl, invariants))
+   nir_foreach_function_impl(impl, shader) {
+      if (propagate_invariant_impl(impl, invariants))
          progress = true;
    }
 

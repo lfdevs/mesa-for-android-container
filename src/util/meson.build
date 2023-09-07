@@ -23,6 +23,7 @@
 # util is self contained.
 inc_util = [inc_include, include_directories('..')]
 
+subdir('blake3')
 subdir('format')
 
 files_mesa_util = files(
@@ -64,6 +65,7 @@ files_mesa_util = files(
   'half_float.h',
   'hash_table.c',
   'hash_table.h',
+  'hex.h',
   'u_idalloc.c',
   'u_idalloc.h',
   'list.h',
@@ -73,6 +75,8 @@ files_mesa_util = files(
   'memstream.h',
   'mesa-sha1.c',
   'mesa-sha1.h',
+  'mesa-blake3.c',
+  'mesa-blake3.h',
   'os_time.c',
   'os_time.h',
   'os_file.c',
@@ -131,6 +135,7 @@ files_mesa_util = files(
   'u_debug_refcnt.h',
   'u_dl.c',
   'u_dl.h',
+  'u_dynarray.c',
   'u_dynarray.h',
   'u_endian.h',
   'u_hash_table.c',
@@ -219,6 +224,7 @@ deps_for_libmesa_util = [
   dep_dl,
   dep_unwind,
   dep_futex,
+  idep_blake3,
   idep_mesautilc11
 ]
 
@@ -339,6 +345,7 @@ if with_tests
     'tests/dag_test.cpp',
     'tests/fast_idiv_by_const_test.cpp',
     'tests/fast_urem_by_const_test.cpp',
+    'tests/gc_alloc_tests.cpp',
     'tests/half_float_test.cpp',
     'tests/int_min_max.cpp',
     'tests/mesa-sha1_test.cpp',

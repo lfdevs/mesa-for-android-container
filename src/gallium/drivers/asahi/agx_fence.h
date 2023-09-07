@@ -32,4 +32,11 @@ struct pipe_fence_handle *agx_fence_from_fd(struct agx_context *ctx, int fd,
 
 struct pipe_fence_handle *agx_fence_create(struct agx_context *ctx);
 
+void agx_create_fence_fd(struct pipe_context *pctx,
+                         struct pipe_fence_handle **pfence, int fd,
+                         enum pipe_fd_type type);
+
+void agx_fence_server_sync(struct pipe_context *pctx,
+                           struct pipe_fence_handle *f);
+
 #endif

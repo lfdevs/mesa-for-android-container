@@ -49,8 +49,7 @@ load_frag_coord(nir_builder *b)
 }
 
 static bool
-try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load,
-                     bool use_fragcoord_sysval)
+try_lower_input_load(nir_intrinsic_instr *load, bool use_fragcoord_sysval)
 {
    nir_deref_instr *deref = nir_src_as_deref(load->src[0]);
    assert(glsl_type_is_image(deref->type));
@@ -60,9 +59,7 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load,
        image_dim != GLSL_SAMPLER_DIM_SUBPASS_MS)
       return false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_before_instr(&load->instr);
+   nir_builder b = nir_builder_at(nir_before_instr(&load->instr));
 
    nir_ssa_def *frag_coord = use_fragcoord_sysval ? nir_load_frag_coord(&b)
                                                   : load_frag_coord(&b);
@@ -99,8 +96,7 @@ lvp_lower_input_attachments(nir_shader *shader, bool use_fragcoord_sysval)
             if (load->intrinsic != nir_intrinsic_image_deref_load)
                continue;
 
-            progress |= try_lower_input_load(function->impl, load,
-                                             use_fragcoord_sysval);
+            progress |= try_lower_input_load(load, use_fragcoord_sysval);
          }
       }
    }

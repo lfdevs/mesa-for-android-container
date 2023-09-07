@@ -31,7 +31,7 @@
 #include "main/menums.h"
 #include "main/fbobject.h"
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 
 struct st_context;

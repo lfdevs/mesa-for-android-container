@@ -132,29 +132,6 @@ remove_dead_write_vars_local(void *mem_ctx, nir_shader *shader, nir_block *block
 
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
       switch (intrin->intrinsic) {
-      case nir_intrinsic_control_barrier:
-      case nir_intrinsic_group_memory_barrier:
-      case nir_intrinsic_memory_barrier: {
-         clear_unused_for_modes(&unused_writes, nir_var_shader_out |
-                                                nir_var_mem_ssbo |
-                                                nir_var_mem_shared |
-                                                nir_var_mem_global);
-         break;
-      }
-
-      case nir_intrinsic_memory_barrier_buffer:
-         clear_unused_for_modes(&unused_writes, nir_var_mem_ssbo |
-                                                nir_var_mem_global);
-         break;
-
-      case nir_intrinsic_memory_barrier_shared:
-         clear_unused_for_modes(&unused_writes, nir_var_mem_shared);
-         break;
-
-      case nir_intrinsic_memory_barrier_tcs_patch:
-         clear_unused_for_modes(&unused_writes, nir_var_shader_out);
-         break;
-
       case nir_intrinsic_scoped_barrier: {
          if (nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_RELEASE) {
             clear_unused_for_modes(&unused_writes,
@@ -274,10 +251,8 @@ nir_opt_dead_write_vars(nir_shader *shader)
    void *mem_ctx = ralloc_context(NULL);
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
-      progress |= remove_dead_write_vars_impl(mem_ctx, shader, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= remove_dead_write_vars_impl(mem_ctx, shader, impl);
    }
 
    ralloc_free(mem_ctx);

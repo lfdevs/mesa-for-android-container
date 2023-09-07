@@ -26,7 +26,7 @@ curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
       --profile minimal \
       -y
 
-rustup component add rustfmt
+rustup component add clippy rustfmt
 
 # Set up a config script for cross compiling -- cargo needs your system cc for
 # linking in cross builds, but doesn't know what you want to use for system cc.

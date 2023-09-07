@@ -164,8 +164,7 @@ lower_buffer_interface_derefs_impl(nir_function_impl *impl,
 {
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* this must be a separate loop before the main pass in order to ensure that
     * access info is fully propagated prior to the info being lost during rewrites
@@ -342,9 +341,8 @@ gl_nir_lower_buffers(nir_shader *shader,
     * a nir_address_format_32bit_index_offset pointer.  From there forward,
     * we leave the derefs in place and let nir_lower_explicit_io handle them.
     */
-   nir_foreach_function(function, shader) {
-      if (function->impl &&
-          lower_buffer_interface_derefs_impl(function->impl, shader_program))
+   nir_foreach_function_impl(impl, shader) {
+      if (lower_buffer_interface_derefs_impl(impl, shader_program))
          progress = true;
    }
 

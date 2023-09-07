@@ -38,9 +38,9 @@ is_send(uint32_t opcode)
            opcode == BRW_OPCODE_SENDSC );
 }
 
-static int
-intel_disasm_find_end(const struct brw_isa_info *isa,
-                      const void *assembly, int start)
+int
+intel_disassemble_find_end(const struct brw_isa_info *isa,
+                           const void *assembly, int start)
 {
    const struct intel_device_info *devinfo = isa->devinfo;
    int offset = start;
@@ -69,7 +69,7 @@ void
 intel_disassemble(const struct brw_isa_info *isa,
                   const void *assembly, int start, FILE *out)
 {
-   int end = intel_disasm_find_end(isa, assembly, start);
+   int end = intel_disassemble_find_end(isa, assembly, start);
 
    /* Make a dummy disasm structure that brw_validate_instructions
     * can work from.

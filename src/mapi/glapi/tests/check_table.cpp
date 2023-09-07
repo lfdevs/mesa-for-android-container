@@ -28,7 +28,7 @@
 
 struct name_offset {
    const char *name;
-   unsigned int offset;
+   size_t offset;
 };
 
 extern const struct name_offset linux_gl_abi[];
@@ -108,7 +108,7 @@ TEST(GetProcAddress, QueriedDispatchSizeBigEnough)
     * table.  This is the size of the static table with some extra entries for
     * drivers to use for extensions that the core does not know about.
     */
-   EXPECT_LT(table_entries, _glapi_get_dispatch_table_size());
+   EXPECT_EQ(table_entries, _glapi_get_dispatch_table_size());
 }
 
 TEST(GetProcAddress, KnownDispatchOffsetsAreConsistent)

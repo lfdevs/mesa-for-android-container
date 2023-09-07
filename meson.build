@@ -98,7 +98,7 @@ if gbm_backends_path == ''
   gbm_backends_path = join_paths(get_option('prefix'), get_option('libdir'), 'gbm')
 endif
 
-# Default shared glapi off for windows, on elsewhere.
+# Default shared glapi disabled for windows, enabled elsewhere.
 with_shared_glapi = get_option('shared-glapi') \
   .disable_auto_if(host_machine.system() == 'windows') \
   .allowed()
@@ -135,7 +135,7 @@ if gallium_drivers.contains('auto')
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
       gallium_drivers = [
         'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau', 'svga',
-        'tegra', 'virgl', 'lima', 'panfrost', 'swrast'
+        'tegra', 'virgl', 'lima', 'panfrost', 'swrast', 'iris'
       ]
     elif ['mips', 'mips64', 'riscv32', 'riscv64'].contains(host_machine.cpu_family())
       gallium_drivers = [
@@ -213,7 +213,7 @@ if _vulkan_drivers.contains('auto')
     if host_machine.cpu_family().startswith('x86')
       _vulkan_drivers = ['amd', 'intel', 'intel_hasvk', 'swrast']
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
-      _vulkan_drivers = ['swrast']
+      _vulkan_drivers = ['swrast', 'intel']
     elif ['mips', 'mips64', 'riscv32', 'riscv64'].contains(host_machine.cpu_family())
       _vulkan_drivers = ['amd', 'swrast']
     elif ['loongarch64'].contains(host_machine.cpu_family())
@@ -237,15 +237,27 @@ with_amd_vk = _vulkan_drivers.contains('amd')
 with_freedreno_vk = _vulkan_drivers.contains('freedreno')
 with_panfrost_vk = _vulkan_drivers.contains('panfrost')
 with_swrast_vk = _vulkan_drivers.contains('swrast')
-with_virtio_vk = _vulkan_drivers.contains('virtio-experimental')
+with_virtio_vk = _vulkan_drivers.contains('virtio')
 with_broadcom_vk = _vulkan_drivers.contains('broadcom')
 with_imagination_vk = _vulkan_drivers.contains('imagination-experimental')
 with_imagination_srv = get_option('imagination-srv')
 with_microsoft_vk = _vulkan_drivers.contains('microsoft-experimental')
 with_any_vk = _vulkan_drivers.length() != 0
 
-with_any_broadcom = with_gallium_vc4 or with_gallium_v3d or with_broadcom_vk
-with_any_intel = with_intel_vk or with_intel_hasvk or with_gallium_iris or with_gallium_crocus or with_intel_tools
+with_any_broadcom = [
+  with_gallium_vc4,
+  with_gallium_v3d,
+  with_broadcom_vk,
+].contains(true)
+
+with_any_intel = [
+  with_gallium_crocus,
+  with_gallium_i915,
+  with_gallium_iris,
+  with_intel_hasvk,
+  with_intel_tools,
+  with_intel_vk,
+].contains(true)
 
 if with_swrast_vk and not with_gallium_softpipe
   error('swrast vulkan requires gallium swrast')
@@ -266,7 +278,6 @@ else
   with_intel_vk_rt = false
 endif
 with_clc = with_microsoft_clc or with_intel_clc
-with_libclc = with_clc
 with_spirv_to_dxil = get_option('spirv-to-dxil')
 
 if host_machine.system() == 'darwin'
@@ -502,7 +513,7 @@ if with_gallium_d3d12 or with_microsoft_clc or with_microsoft_vk
   dep_dxheaders = dependency('directx-headers', required : false)
   if not dep_dxheaders.found()
     dep_dxheaders = dependency('DirectX-Headers',
-      version : '>= 1.606.4',
+      version : '>= 1.610.0',
       fallback : ['DirectX-Headers', 'dep_dxheaders'],
       required : with_gallium_d3d12 or with_microsoft_vk
     )
@@ -739,7 +750,7 @@ if _opencl != 'disabled'
     error('The Clover OpenCL state tracker requires rtti')
   endif
 
-  with_libclc = true
+  with_clc = true
   with_gallium_opencl = true
   with_opencl_icd = _opencl == 'icd'
 else
@@ -760,19 +771,20 @@ if with_gallium_rusticl
   add_languages('rust', required: true)
 
   with_clc = true
-  with_libclc = true
 endif
 
 dep_clc = null_dep
-if with_libclc
+if with_clc
   dep_clc = dependency('libclc')
 endif
 
 gl_pkgconfig_c_flags = []
+with_glx_indirect_rendering = false
 if with_platform_x11
   if with_glx == 'xlib'
     pre_args += '-DUSE_XSHM'
   else
+    with_glx_indirect_rendering = true
     pre_args += '-DGLX_INDIRECT_RENDERING'
     if with_glx_direct
       pre_args += '-DGLX_DIRECT_RENDERING'
@@ -786,6 +798,13 @@ if with_platform_x11
     endif
   endif
 endif
+
+with_glapi_export_proto_entry_points = false
+if with_shared_glapi and not with_glx_indirect_rendering
+  # Imply !defined(GLX_INDIRECT_RENDERING)
+  with_glapi_export_proto_entry_points = true
+endif
+pre_args += '-DGLAPI_EXPORT_PROTO_ENTRY_POINTS=@0@'.format(with_glapi_export_proto_entry_points ? '1' : '0')
 
 with_android_stub = get_option('android-stub')
 if with_android_stub and not with_platform_android
@@ -1270,7 +1289,6 @@ endforeach
 functions_to_detect = {
   'strtof': '',
   'mkostemp': '',
-  'timespec_get': '#include <time.h>',
   'memfd_create': '',
   'random_r': '',
   'flock': '',
@@ -1639,9 +1657,11 @@ if draw_with_llvm
   llvm_optional_modules += ['lto']
 endif
 
-if with_intel_clc
+if with_amd_vk or with_gallium_radeonsi
+  _llvm_version = '>= 15.0.0'
+elif with_intel_clc
   _llvm_version = '>= 13.0.0'
-elif with_amd_vk or with_gallium_radeonsi or with_gallium_opencl
+elif with_gallium_opencl
   _llvm_version = '>= 11.0.0'
 elif with_clc
   _llvm_version = '>= 10.0.0'
@@ -1722,7 +1742,7 @@ else
   draw_with_llvm = false
 endif
 
-with_opencl_spirv = (_opencl != 'disabled' and get_option('opencl-spirv')) or with_clc
+with_opencl_spirv = (_opencl != 'disabled' and get_option('opencl-spirv')) or with_intel_clc or with_microsoft_clc or with_gallium_rusticl
 if with_opencl_spirv
   chosen_llvm_version_array = dep_llvm.version().split('.')
   chosen_llvm_version_major = chosen_llvm_version_array[0].to_int()
@@ -1866,15 +1886,8 @@ endif
 
 dep_selinux = null_dep
 if get_option('selinux')
-  if get_option('execmem') != true
-    warning('execmem option is disabled, selinux will not be able to use execmem.')
-  endif
   dep_selinux = dependency('libselinux')
   pre_args += '-DMESA_SELINUX'
-endif
-
-if get_option('execmem')
-  pre_args += '-DMESA_EXECMEM'
 endif
 
 _libunwind = get_option('libunwind') \
@@ -1916,10 +1929,6 @@ if with_platform_wayland
     dep_wayland_egl = dependency('wayland-egl-backend', version : '>= 3')
     dep_wayland_egl_headers = dep_wayland_egl.partial_dependency(compile_args : true)
   endif
-  wayland_dmabuf_xml = join_paths(
-    dep_wl_protocols.get_variable(pkgconfig : 'pkgdatadir'), 'unstable',
-    'linux-dmabuf', 'linux-dmabuf-unstable-v1.xml'
-  )
   pre_args += '-DWL_HIDE_DEPRECATED'
 endif
 
@@ -1928,6 +1937,7 @@ dep_xext = null_dep
 dep_xfixes = null_dep
 dep_x11_xcb = null_dep
 dep_xcb = null_dep
+dep_xcb_keysyms = null_dep
 dep_xcb_glx = null_dep
 dep_xcb_dri2 = null_dep
 dep_xcb_dri3 = null_dep
@@ -1953,6 +1963,7 @@ if host_machine.cpu_family() == 'x86_64' and cc.get_id() == 'gcc'
 endif
 
 with_dri3_modifiers = false
+with_xcb_keysyms = false
 if with_platform_x11
   if with_glx == 'xlib'
     dep_x11 = dependency('x11')
@@ -1970,6 +1981,11 @@ if with_platform_x11
        (with_gallium_vdpau or with_gallium_va or
         with_gallium_omx != 'disabled'))
     dep_xcb = dependency('xcb')
+    dep_xcb_keysyms = dependency('xcb-keysyms', required : false)
+    with_xcb_keysyms = dep_xcb_keysyms.found()
+    if with_xcb_keysyms
+      pre_args += '-DXCB_KEYSYMS_AVAILABLE'
+    endif
     dep_x11_xcb = dependency('x11-xcb')
     if with_dri_platform == 'drm' and not dep_libdrm.found()
       error('libdrm required for gallium video statetrackers when using x11')
@@ -2200,7 +2216,7 @@ if with_any_vk
     vulkan_summary += {'Layers': get_option('vulkan-layers')}
   endif
   vulkan_summary += {'Video codecs': _codecs.length() != 0 ? _codecs : false}
-  vulkan_summary += {'Ray tracing': with_intel_vk_rt ? 'intel' : false}
+  vulkan_summary += {'Intel Ray tracing': with_intel_vk_rt}
 endif
 summary(vulkan_summary, section: 'Vulkan', bool_yn: true, list_sep: ' ')
 
@@ -2238,7 +2254,7 @@ if with_gallium
     gallium_frontends += 'rusticl'
   endif
   gallium_summary += {'Frontends': gallium_frontends}
-  gallium_summary += {'Off-screen rendering': with_osmesa ? 'lib' + osmesa_lib_name : false}
+  gallium_summary += {'Off-screen rendering (OSMesa)': with_osmesa ? 'lib' + osmesa_lib_name : false}
   gallium_summary += {'HUD lm-sensors': dep_lmsensors.found()}
 endif
 summary(gallium_summary, section: 'Gallium', bool_yn: true, list_sep: ' ')

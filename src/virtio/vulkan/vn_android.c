@@ -1319,41 +1319,36 @@ vn_GetMemoryAndroidHardwareBufferANDROID(
    return VK_SUCCESS;
 }
 
-VkResult
-vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev,
-                                           uint32_t *out_mem_type_bits)
+uint32_t
+vn_android_get_ahb_buffer_memory_type_bits(struct vn_device *dev)
 {
-   const uint32_t format = AHARDWAREBUFFER_FORMAT_BLOB;
+   static const uint32_t format = AHARDWAREBUFFER_FORMAT_BLOB;
    /* ensure dma_buf_memory_type_bits covers host visible usage */
-   const uint64_t usage = AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER |
-                          AHARDWAREBUFFER_USAGE_CPU_READ_RARELY |
-                          AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY;
-   AHardwareBuffer *ahb = NULL;
-   int dma_buf_fd = -1;
-   uint64_t alloc_size = 0;
-   uint32_t mem_type_bits = 0;
-   VkResult result;
-
-   ahb = vn_android_ahb_allocate(4096, 1, 1, format, usage);
+   static const uint64_t usage = AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER |
+                                 AHARDWAREBUFFER_USAGE_CPU_READ_RARELY |
+                                 AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY;
+   AHardwareBuffer *ahb = vn_android_ahb_allocate(4096, 1, 1, format, usage);
    if (!ahb)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+      return 0;
 
-   dma_buf_fd =
+   int dma_buf_fd =
       vn_android_gralloc_get_dma_buf_fd(AHardwareBuffer_getNativeHandle(ahb));
    if (dma_buf_fd < 0) {
       AHardwareBuffer_release(ahb);
-      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+      return 0;
    }
 
-   result = vn_get_memory_dma_buf_properties(dev, dma_buf_fd, &alloc_size,
-                                             &mem_type_bits);
-
+   uint64_t alloc_size = 0;
+   uint32_t mem_type_bits = 0;
+   VkResult ret = vn_get_memory_dma_buf_properties(
+      dev, dma_buf_fd, &alloc_size, &mem_type_bits);
+   /* release ahb first as below no longer needs it */
    AHardwareBuffer_release(ahb);
 
-   if (result != VK_SUCCESS)
-      return result;
+   if (ret != VK_SUCCESS) {
+      vn_log(dev->instance, "AHB buffer mem type bits query failed %d", ret);
+      return 0;
+   }
 
-   *out_mem_type_bits = mem_type_bits;
-
-   return VK_SUCCESS;
+   return mem_type_bits;
 }

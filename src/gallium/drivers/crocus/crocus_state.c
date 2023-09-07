@@ -185,31 +185,31 @@ UNUSED static void pipe_asserts()
 }
 
 static unsigned
-translate_prim_type(enum pipe_prim_type prim, uint8_t verts_per_patch)
+translate_prim_type(enum mesa_prim prim, uint8_t verts_per_patch)
 {
    static const unsigned map[] = {
-      [PIPE_PRIM_POINTS]                   = _3DPRIM_POINTLIST,
-      [PIPE_PRIM_LINES]                    = _3DPRIM_LINELIST,
-      [PIPE_PRIM_LINE_LOOP]                = _3DPRIM_LINELOOP,
-      [PIPE_PRIM_LINE_STRIP]               = _3DPRIM_LINESTRIP,
-      [PIPE_PRIM_TRIANGLES]                = _3DPRIM_TRILIST,
-      [PIPE_PRIM_TRIANGLE_STRIP]           = _3DPRIM_TRISTRIP,
-      [PIPE_PRIM_TRIANGLE_FAN]             = _3DPRIM_TRIFAN,
-      [PIPE_PRIM_QUADS]                    = _3DPRIM_QUADLIST,
-      [PIPE_PRIM_QUAD_STRIP]               = _3DPRIM_QUADSTRIP,
-      [PIPE_PRIM_POLYGON]                  = _3DPRIM_POLYGON,
+      [MESA_PRIM_POINTS]                   = _3DPRIM_POINTLIST,
+      [MESA_PRIM_LINES]                    = _3DPRIM_LINELIST,
+      [MESA_PRIM_LINE_LOOP]                = _3DPRIM_LINELOOP,
+      [MESA_PRIM_LINE_STRIP]               = _3DPRIM_LINESTRIP,
+      [MESA_PRIM_TRIANGLES]                = _3DPRIM_TRILIST,
+      [MESA_PRIM_TRIANGLE_STRIP]           = _3DPRIM_TRISTRIP,
+      [MESA_PRIM_TRIANGLE_FAN]             = _3DPRIM_TRIFAN,
+      [MESA_PRIM_QUADS]                    = _3DPRIM_QUADLIST,
+      [MESA_PRIM_QUAD_STRIP]               = _3DPRIM_QUADSTRIP,
+      [MESA_PRIM_POLYGON]                  = _3DPRIM_POLYGON,
 #if GFX_VER >= 6
-      [PIPE_PRIM_LINES_ADJACENCY]          = _3DPRIM_LINELIST_ADJ,
-      [PIPE_PRIM_LINE_STRIP_ADJACENCY]     = _3DPRIM_LINESTRIP_ADJ,
-      [PIPE_PRIM_TRIANGLES_ADJACENCY]      = _3DPRIM_TRILIST_ADJ,
-      [PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
+      [MESA_PRIM_LINES_ADJACENCY]          = _3DPRIM_LINELIST_ADJ,
+      [MESA_PRIM_LINE_STRIP_ADJACENCY]     = _3DPRIM_LINESTRIP_ADJ,
+      [MESA_PRIM_TRIANGLES_ADJACENCY]      = _3DPRIM_TRILIST_ADJ,
+      [MESA_PRIM_TRIANGLE_STRIP_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
 #endif
 #if GFX_VER >= 7
-      [PIPE_PRIM_PATCHES]                  = _3DPRIM_PATCHLIST_1 - 1,
+      [MESA_PRIM_PATCHES]                  = _3DPRIM_PATCHLIST_1 - 1,
 #endif
    };
 
-   return map[prim] + (prim == PIPE_PRIM_PATCHES ? verts_per_patch : 0);
+   return map[prim] + (prim == MESA_PRIM_PATCHES ? verts_per_patch : 0);
 }
 
 static unsigned
@@ -4456,7 +4456,7 @@ crocus_is_drawing_points(const struct crocus_context *ice)
          (void *) ice->shaders.prog[MESA_SHADER_TESS_EVAL]->prog_data;
       return tes_data->output_topology == BRW_TESS_OUTPUT_TOPOLOGY_POINT;
    } else {
-      return ice->state.prim_mode == PIPE_PRIM_POINTS;
+      return ice->state.prim_mode == MESA_PRIM_POINTS;
    }
 }
 #endif
@@ -4815,9 +4815,9 @@ crocus_populate_fs_key(const struct crocus_context *ice,
    uint32_t line_aa = BRW_NEVER;
    if (rast->cso.line_smooth) {
       int reduced_prim = ice->state.reduced_prim_mode;
-      if (reduced_prim == PIPE_PRIM_LINES)
+      if (reduced_prim == MESA_PRIM_LINES)
          line_aa = BRW_ALWAYS;
-      else if (reduced_prim == PIPE_PRIM_TRIANGLES) {
+      else if (reduced_prim == MESA_PRIM_TRIANGLES) {
          if (rast->cso.fill_front == PIPE_POLYGON_MODE_LINE) {
             line_aa = BRW_SOMETIMES;
 
@@ -6505,9 +6505,7 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
           * look useful at the moment.  We might need this in future.
           */
          ps.PositionXYOffsetSelect =
-            brw_wm_prog_data_uses_position_xy_offset(wm_prog_data,
-                                                     0 /* msaa_flags */) ?
-            POSOFFSET_SAMPLE : POSOFFSET_NONE;
+            wm_prog_data->uses_pos_offset ? POSOFFSET_SAMPLE : POSOFFSET_NONE;
 
          if (wm_prog_data->base.total_scratch) {
             struct crocus_bo *bo = crocus_get_scratch_space(ice, wm_prog_data->base.total_scratch, MESA_SHADER_FRAGMENT);
@@ -7274,10 +7272,10 @@ crocus_upload_dirty_render_state(struct crocus_context *ice,
        * We only require XY sample offsets. So, this recommendation doesn't
        * look useful at the moment. We might need this in future.
        */
-      wm.PositionXYOffsetSelect =
-         brw_wm_prog_data_uses_position_xy_offset(wm_prog_data,
-                                                  0 /* msaa_flags */) ?
-         POSOFFSET_SAMPLE : POSOFFSET_NONE;
+      if (wm_prog_data->uses_pos_offset)
+         wm.PositionXYOffsetSelect = POSOFFSET_SAMPLE;
+      else
+         wm.PositionXYOffsetSelect = POSOFFSET_NONE;
 #endif
          wm.LineStippleEnable = cso->cso.line_stipple_enable;
          wm.PolygonStippleEnable = cso->cso.poly_stipple_enable;
@@ -9308,8 +9306,8 @@ genX(crocus_init_state)(struct crocus_context *ice)
 
    ice->state.sample_mask = 0xff;
    ice->state.num_viewports = 1;
-   ice->state.prim_mode = PIPE_PRIM_MAX;
-   ice->state.reduced_prim_mode = PIPE_PRIM_MAX;
+   ice->state.prim_mode = MESA_PRIM_COUNT;
+   ice->state.reduced_prim_mode = MESA_PRIM_COUNT;
    ice->state.genx = calloc(1, sizeof(struct crocus_genx_state));
    ice->draw.derived_params.drawid = -1;
 

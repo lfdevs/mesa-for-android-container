@@ -247,6 +247,14 @@ _isl_memcpy_tiled_to_linear_sse41(uint32_t xt1, uint32_t xt2,
                                   enum isl_tiling tiling,
                                   isl_memcpy_type copy_type);
 
+void PRINTFLIKE(4, 5)
+_isl_notify_failure(const struct isl_surf_init_info *surf_info,
+                    const char *file, int line, const char *fmt, ...);
+
+#define notify_failure(surf_info, ...) \
+   (_isl_notify_failure(surf_info, __FILE__, __LINE__, __VA_ARGS__), false)
+
+
 /* This is useful for adding the isl_prefix to genX functions */
 #define isl_genX(x) CONCAT2(isl_, genX(x))
 

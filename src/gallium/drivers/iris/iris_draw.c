@@ -48,10 +48,10 @@ prim_is_points_or_lines(const struct pipe_draw_info *draw)
    /* We don't need to worry about adjacency - it can only be used with
     * geometry shaders, and we don't care about this info when GS is on.
     */
-   return draw->mode == PIPE_PRIM_POINTS ||
-          draw->mode == PIPE_PRIM_LINES ||
-          draw->mode == PIPE_PRIM_LINE_LOOP ||
-          draw->mode == PIPE_PRIM_LINE_STRIP;
+   return draw->mode == MESA_PRIM_POINTS ||
+          draw->mode == MESA_PRIM_LINES ||
+          draw->mode == MESA_PRIM_LINE_LOOP ||
+          draw->mode == MESA_PRIM_LINE_STRIP;
 }
 
 /**
@@ -82,7 +82,7 @@ iris_update_draw_info(struct iris_context *ice,
       }
    }
 
-   if (info->mode == PIPE_PRIM_PATCHES &&
+   if (info->mode == MESA_PRIM_PATCHES &&
        ice->state.vertices_per_patch != ice->state.patch_vertices) {
       ice->state.vertices_per_patch = ice->state.patch_vertices;
       ice->state.dirty |= IRIS_DIRTY_VF_TOPOLOGY;

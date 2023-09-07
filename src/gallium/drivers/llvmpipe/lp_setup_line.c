@@ -46,7 +46,7 @@ struct lp_line_info {
    float dx;
    float dy;
    float oneoverarea;
-   boolean frontfacing;
+   bool frontfacing;
 
    const float (*v1)[4];
    const float (*v2)[4];
@@ -263,7 +263,7 @@ print_line(struct lp_setup_context *setup,
 }
 
 
-static inline boolean
+static inline bool
 sign(float x)
 {
    return x >= 0;
@@ -279,7 +279,7 @@ fracf(float f)
 }
 
 
-static boolean
+static bool
 try_setup_line(struct lp_setup_context *setup,
                const float (*v1)[4],
                const float (*v2)[4])
@@ -299,7 +299,7 @@ try_setup_line(struct lp_setup_context *setup,
    if (lp_setup_zero_sample_mask(setup)) {
       if (0) debug_printf("zero sample mask\n");
       LP_COUNT(nr_culled_tris);
-      return TRUE;
+      return true;
    }
 
    const float (*pv)[4];
@@ -326,7 +326,7 @@ try_setup_line(struct lp_setup_context *setup,
    const float area = dx * dx + dy * dy;
    if (area == 0) {
       LP_COUNT(nr_culled_tris);
-      return TRUE;
+      return true;
    }
 
    struct lp_line_info info;
@@ -357,6 +357,7 @@ try_setup_line(struct lp_setup_context *setup,
       float x_offset = 0, y_offset=0;
       float x_offset_end = 0, y_offset_end = 0;
 
+      /* FIXME: not taking into account setup->pixel_offset here is wrong. */
       float x1diff = v1[0][0] - floorf(v1[0][0]) - 0.5f;
       float y1diff = v1[0][1] - floorf(v1[0][1]) - 0.5f;
       float x2diff = v2[0][0] - floorf(v2[0][0]) - 0.5f;
@@ -369,18 +370,18 @@ try_setup_line(struct lp_setup_context *setup,
       bool draw_end;
 
       if (fabsf(dx) >= fabsf(dy)) {
-         float dydx = dy / dx;
+         const float dydx = dy / dx;
 
          /* X-MAJOR LINE */
 
-         if (y2diff == -0.5 && dy < 0) {
-            y2diff = 0.5;
+         if (y2diff == -0.5f && dy < 0.0f) {
+            y2diff = 0.5f;
          }
 
          /*
-         * Diamond exit rule test for starting point
-         */
-         if (fabsf(x1diff) + fabsf(y1diff) < 0.5) {
+          * Diamond exit rule test for starting point
+          */
+         if (fabsf(x1diff) + fabsf(y1diff) < 0.5f) {
             draw_start = true;
          } else if (sign(x1diff) == sign(-dx)) {
             draw_start = false;
@@ -389,13 +390,13 @@ try_setup_line(struct lp_setup_context *setup,
          } else {
             /* do intersection test */
             float yintersect = fracf(v1[0][1]) + x1diff * dydx;
-            draw_start = (yintersect < 1.0 && yintersect > 0.0);
+            draw_start = (yintersect < 1.0f && yintersect > 0.0f);
          }
 
          /*
-         * Diamond exit rule test for ending point
-         */
-         if (fabsf(x2diff) + fabsf(y2diff) < 0.5) {
+          * Diamond exit rule test for ending point
+          */
+         if (fabsf(x2diff) + fabsf(y2diff) < 0.5f) {
             draw_end = false;
          } else if (sign(x2diff) != sign(-dx)) {
             draw_end = false;
@@ -404,43 +405,49 @@ try_setup_line(struct lp_setup_context *setup,
          } else {
             /* do intersection test */
             float yintersect = fracf(v2[0][1]) + x2diff * dydx;
-            draw_end = (yintersect < 1.0 && yintersect > 0.0);
+            draw_end = (yintersect < 1.0f && yintersect > 0.0f);
          }
 
-         /* Are we already drawing start/end?
-         */
-         bool will_draw_start = sign(-x1diff) != sign(dx);
-         bool will_draw_end = (sign(x2diff) == sign(-dx)) || x2diff==0;
+         /* Are we already drawing start/end? */
+         bool will_draw_start;
+         bool will_draw_end;
 
          /* interpolate using the preferred wide-lines formula */
-         info.dx *= 1 + dydx * dydx;
-         info.dy = 0;
+         info.dx *= 1.0f + dydx * dydx;
+         info.dy = 0.0f;
 
-         if (dx < 0) {
+         if (dx < 0.0f) {
             /* if v2 is to the right of v1, swap pointers */
             const float (*temp)[4] = v1;
             v1 = v2;
             v2 = temp;
-            dx = -dx;
-            dy = -dy;
+
             /* Otherwise shift planes appropriately */
+            /* left edge */
+            will_draw_start = x1diff <= 0.f;
             if (will_draw_start != draw_start) {
-               x_offset_end = -x1diff - 0.5;
+               x_offset_end = -x1diff - 0.5f;
                y_offset_end = x_offset_end * dydx;
 
             }
+            /* right edge */
+            will_draw_end = x2diff > 0.f;
             if (will_draw_end != draw_end) {
-               x_offset = -x2diff - 0.5;
+               x_offset = -x2diff - 0.5f;
                y_offset = x_offset * dydx;
             }
          } else {
             /* Otherwise shift planes appropriately */
+            /* right edge */
+            will_draw_start = x1diff > 0.f;
             if (will_draw_start != draw_start) {
-               x_offset = -x1diff + 0.5;
+               x_offset = -x1diff + 0.5f;
                y_offset = x_offset * dydx;
             }
+            /* left edge */
+            will_draw_end = x2diff <= 0.f;
             if (will_draw_end != draw_end) {
-               x_offset_end = -x2diff + 0.5;
+               x_offset_end = -x2diff + 0.5f;
                y_offset_end = x_offset_end * dydx;
             }
          }
@@ -459,19 +466,15 @@ try_setup_line(struct lp_setup_context *setup,
          const float dxdy = dx / dy;
 
          /* Y-MAJOR LINE */
-         x1diff = v1[0][0] - floorf(v1[0][0]) - 0.5f;
-         y1diff = v1[0][1] - floorf(v1[0][1]) - 0.5f;
-         x2diff = v2[0][0] - floorf(v2[0][0]) - 0.5f;
-         y2diff = v2[0][1] - floorf(v2[0][1]) - 0.5f;
 
-         if (x2diff == -0.5 && dx < 0) {
-            x2diff = 0.5;
+         if (x2diff == -0.5f && dx < 0.0f) {
+            x2diff = 0.5f;
          }
 
          /*
-         * Diamond exit rule test for starting point
-         */
-         if (fabsf(x1diff) + fabsf(y1diff) < 0.5) {
+          * Diamond exit rule test for starting point
+          */
+         if (fabsf(x1diff) + fabsf(y1diff) < 0.5f) {
             draw_start = true;
          } else if (sign(-y1diff) == sign(dy)) {
             draw_start = false;
@@ -480,13 +483,13 @@ try_setup_line(struct lp_setup_context *setup,
          } else {
             /* do intersection test */
             float xintersect = fracf(v1[0][0]) + y1diff * dxdy;
-            draw_start = (xintersect < 1.0 && xintersect > 0.0);
+            draw_start = (xintersect < 1.0f && xintersect > 0.0f);
          }
 
          /*
-         * Diamond exit rule test for ending point
-         */
-         if (fabsf(x2diff) + fabsf(y2diff) < 0.5) {
+          * Diamond exit rule test for ending point
+          */
+         if (fabsf(x2diff) + fabsf(y2diff) < 0.5f) {
             draw_end = false;
          } else if (sign(-y2diff) != sign(dy)) {
             draw_end = false;
@@ -495,43 +498,66 @@ try_setup_line(struct lp_setup_context *setup,
          } else {
             /* do intersection test */
             float xintersect = fracf(v2[0][0]) + y2diff * dxdy;
-            draw_end = (xintersect < 1.0 && xintersect >= 0.0);
+            draw_end = (xintersect < 1.0f && xintersect >= 0.0f);
          }
 
-         /* Are we already drawing start/end?
-         */
-         bool will_draw_start = sign(y1diff) == sign(dy);
-         bool will_draw_end = (sign(-y2diff) == sign(dy)) || y2diff==0;
+         /*
+          * Are we already drawing start/end?
+          * FIXME: this needs to be done with fixed point arithmetic (otherwise
+          * the comparisons against zero are not mirroring what actually happens
+          * when rasterizing using the plane equations).
+          */
+         
+         bool will_draw_start;
+         bool will_draw_end;
 
          /* interpolate using the preferred wide-lines formula */
-         info.dx = 0;
-         info.dy *= 1 + dxdy * dxdy;
+         info.dx = 0.0f;
+         info.dy *= 1.0f + dxdy * dxdy;
 
-         if (dy > 0) {
+         if (dy > 0.0f) {
             /* if v2 is on top of v1, swap pointers */
             const float (*temp)[4] = v1;
             v1 = v2;
             v2 = temp;
-            dx = -dx;
-            dy = -dy;
+
+            if (setup->bottom_edge_rule) {
+               will_draw_start = y1diff >= 0.f;
+               will_draw_end = y2diff < 0.f;
+            } else {
+               will_draw_start = y1diff > 0.f;
+               will_draw_end = y2diff <= 0.f;
+            }
 
             /* Otherwise shift planes appropriately */
+            /* bottom edge */
             if (will_draw_start != draw_start) {
-               y_offset_end = -y1diff + 0.5;
+               y_offset_end = -y1diff + 0.5f;
                x_offset_end = y_offset_end * dxdy;
             }
+            /* top edge */
             if (will_draw_end != draw_end) {
-               y_offset = -y2diff + 0.5;
+               y_offset = -y2diff + 0.5f;
                x_offset = y_offset * dxdy;
             }
          } else {
+            if (setup->bottom_edge_rule) {
+               will_draw_start = y1diff < 0.f;
+               will_draw_end = y2diff >= 0.f;
+            } else {
+               will_draw_start = y1diff <= 0.f;
+               will_draw_end = y2diff > 0.f;
+            }
+
             /* Otherwise shift planes appropriately */
+            /* top edge */
             if (will_draw_start != draw_start) {
-               y_offset = -y1diff - 0.5;
+               y_offset = -y1diff - 0.5f;
                x_offset = y_offset * dxdy;
             }
+            /* bottom edge */
             if (will_draw_end != draw_end) {
-               y_offset_end = -y2diff - 0.5;
+               y_offset_end = -y2diff - 0.5f;
                x_offset_end = y_offset_end * dxdy;
             }
          }
@@ -573,12 +599,12 @@ try_setup_line(struct lp_setup_context *setup,
    if (!u_rect_test_intersection(&setup->draw_regions[viewport_index], &bbox)) {
       if (0) debug_printf("no intersection\n");
       LP_COUNT(nr_culled_tris);
-      return TRUE;
+      return true;
    }
 
    int max_szorig = ((bbox.x1 - (bbox.x0 & ~3)) |
                      (bbox.y1 - (bbox.y0 & ~3)));
-   boolean use_32bits = max_szorig <= MAX_FIXED_LENGTH32;
+   bool use_32bits = max_szorig <= MAX_FIXED_LENGTH32;
    bboxpos = bbox;
 
    /* Can safely discard negative regions:
@@ -593,17 +619,15 @@ try_setup_line(struct lp_setup_context *setup,
     */
    const struct u_rect *scissor = &setup->draw_regions[viewport_index];
 
-   boolean s_planes[4];
+   bool s_planes[4];
    scissor_planes_needed(s_planes, &bboxpos, scissor);
    nr_planes += s_planes[0] + s_planes[1] + s_planes[2] + s_planes[3];
 
-   unsigned tri_bytes;
    struct lp_rast_triangle *line = lp_setup_alloc_triangle(scene,
                                                            key->num_inputs,
-                                                           nr_planes,
-                                                           &tri_bytes);
+                                                           nr_planes);
    if (!line)
-      return FALSE;
+      return false;
 
 #ifdef DEBUG
    line->v[0][0] = v1[0][0];
@@ -630,7 +654,7 @@ try_setup_line(struct lp_setup_context *setup,
        setup->face_slot > 0) {
       line->inputs.frontfacing = v1[setup->face_slot][0];
    } else {
-      line->inputs.frontfacing = TRUE;
+      line->inputs.frontfacing = true;
    }
 
    /* Setup parameter interpolants:
@@ -641,7 +665,7 @@ try_setup_line(struct lp_setup_context *setup,
    info.frontfacing = line->inputs.frontfacing;
    setup_line_coefficients(setup, &info);
 
-   line->inputs.disable = FALSE;
+   line->inputs.disable = false;
    line->inputs.layer = layer;
    line->inputs.viewport_index = viewport_index;
    line->inputs.view_index = setup->view_index;

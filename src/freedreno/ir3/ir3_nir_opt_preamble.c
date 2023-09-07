@@ -310,9 +310,8 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
    BITSET_DECLARE(promoted_to_float, preamble_size);
    memset(promoted_to_float, 0, sizeof(promoted_to_float));
 
-   nir_builder _b;
-   nir_builder *b = &_b;
-   nir_builder_init(b, main);
+   nir_builder builder_main = nir_builder_create(main);
+   nir_builder *b = &builder_main;
 
    nir_foreach_block (block, main) {
       nir_foreach_instr_safe (instr, block) {
@@ -350,7 +349,8 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
       }
    }
 
-   nir_builder_init(b, preamble);
+   nir_builder builder_preamble = nir_builder_create(preamble);
+   b = &builder_preamble;
 
    nir_foreach_block (block, preamble) {
       nir_foreach_instr_safe (instr, block) {

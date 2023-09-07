@@ -42,33 +42,24 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_TESS_CTRL, options,
                                                   "tcs passthrough");
 
-   unsigned num_inputs = 0;
-   unsigned num_outputs = 0;
-
    nir_variable *in_inner =
-      nir_variable_create(b.shader, nir_var_system_value, glsl_vec_type(2),
-                          "tess inner default");
-   in_inner->data.location = SYSTEM_VALUE_TESS_LEVEL_INNER_DEFAULT;
+      nir_create_variable_with_location(b.shader, nir_var_system_value,
+                                        SYSTEM_VALUE_TESS_LEVEL_INNER_DEFAULT, glsl_vec_type(2));
 
    nir_variable *out_inner =
-      nir_variable_create(b.shader, nir_var_shader_out, glsl_vec_type(2),
-                          "tess inner");
-   out_inner->data.location = VARYING_SLOT_TESS_LEVEL_INNER;
-   out_inner->data.driver_location = num_outputs++;
+      nir_create_variable_with_location(b.shader, nir_var_shader_out,
+                                        VARYING_SLOT_TESS_LEVEL_INNER, glsl_vec_type(2));
 
    nir_ssa_def *inner = nir_load_var(&b, in_inner);
    nir_store_var(&b, out_inner, inner, 0x3);
 
    nir_variable *in_outer =
-      nir_variable_create(b.shader, nir_var_system_value, glsl_vec4_type(),
-                          "tess outer default");
-   in_outer->data.location = SYSTEM_VALUE_TESS_LEVEL_OUTER_DEFAULT;
+       nir_create_variable_with_location(b.shader, nir_var_system_value,
+                                        SYSTEM_VALUE_TESS_LEVEL_OUTER_DEFAULT, glsl_vec4_type());
 
    nir_variable *out_outer =
-      nir_variable_create(b.shader, nir_var_shader_out, glsl_vec4_type(),
-                          "tess outer");
-   out_outer->data.location = VARYING_SLOT_TESS_LEVEL_OUTER;
-   out_outer->data.driver_location = num_outputs++;
+      nir_create_variable_with_location(b.shader, nir_var_shader_out,
+                                        VARYING_SLOT_TESS_LEVEL_OUTER, glsl_vec4_type());
 
    nir_ssa_def *outer = nir_load_var(&b, in_outer);
    nir_store_var(&b, out_outer, outer, 0xf);
@@ -83,24 +74,16 @@ nir_create_passthrough_tcs_impl(const nir_shader_compiler_options *options,
       else
          continue;
 
-      char name[10];
-      snprintf(name, sizeof(name), "in_%d", i);
-      nir_variable *in = nir_variable_create(b.shader, nir_var_shader_in, type, name);
-      in->data.location = semantic;
-      in->data.driver_location = num_inputs++;
+      nir_variable *in = nir_create_variable_with_location(b.shader, nir_var_shader_in,
+                                                            semantic, type);
 
-      snprintf(name, sizeof(name), "out_%d", i);
-      nir_variable *out = nir_variable_create(b.shader, nir_var_shader_out, type, name);
-      out->data.location = semantic;
-      out->data.driver_location = num_outputs++;
+      nir_variable *out = nir_create_variable_with_location(b.shader, nir_var_shader_out,
+                                                            semantic, type);
 
       /* no need to use copy_var to save a lower pass */
       nir_ssa_def *value = nir_load_array_var(&b, in, id);
       nir_store_array_var(&b, out, id, value, 0xf);
    }
-
-   b.shader->num_inputs = num_inputs;
-   b.shader->num_outputs = num_outputs;
 
    b.shader->info.tess.tcs_vertices_out = patch_vertices;
 

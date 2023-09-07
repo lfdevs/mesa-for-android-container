@@ -358,6 +358,7 @@ enum pipe_control_flags
    PIPE_CONTROL_PSS_STALL_SYNC                  = (1 << 27),
    PIPE_CONTROL_L3_READ_ONLY_CACHE_INVALIDATE   = (1 << 28),
    PIPE_CONTROL_UNTYPED_DATAPORT_CACHE_FLUSH    = (1 << 29),
+   PIPE_CONTROL_CCS_CACHE_FLUSH                 = (1 << 30),
 };
 
 #define PIPE_CONTROL_CACHE_FLUSH_BITS \
@@ -649,7 +650,7 @@ struct iris_context {
 
    struct iris_batch batches[IRIS_BATCH_COUNT];
    enum iris_context_priority priority;
-   bool has_engines_context;
+   bool has_engines_context; /* i915 specific */
 
    struct u_upload_mgr *query_buffer_uploader;
 
@@ -738,8 +739,12 @@ struct iris_context {
    struct intel_perf_context *perf_ctx;
 
    /** Frame number for u_trace */
-   uint32_t tracing_begin_frame;
-   uint32_t tracing_end_frame;
+   struct {
+      uint32_t begin_frame;
+      uint32_t end_frame;
+      uint64_t last_full_timestamp;
+      void    *last_compute_walker;
+   } utrace;
 
    /** Frame number for debug prints */
    uint32_t frame;
@@ -772,7 +777,7 @@ struct iris_context {
       uint8_t patch_vertices;
       bool primitive_restart;
       unsigned cut_index;
-      enum pipe_prim_type prim_mode:8;
+      enum mesa_prim prim_mode:8;
       bool prim_is_points_or_lines;
       uint8_t vertices_per_patch;
 

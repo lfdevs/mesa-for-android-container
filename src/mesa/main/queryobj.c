@@ -277,10 +277,10 @@ end_query(struct gl_context *ctx, struct gl_query_object *q)
 }
 
 
-static boolean
+static bool
 get_query_result(struct pipe_context *pipe,
                  struct gl_query_object *q,
-                 boolean wait)
+                 bool wait)
 {
    union pipe_query_result data;
 
@@ -290,11 +290,11 @@ get_query_result(struct pipe_context *pipe,
        *
        * Return TRUE in either case so we don't spin on this forever.
        */
-      return TRUE;
+      return true;
    }
 
    if (!pipe->get_query_result(pipe, q->pq, wait, &data))
-      return FALSE;
+      return false;
 
    switch (q->type) {
    case PIPE_QUERY_PIPELINE_STATISTICS:
@@ -351,13 +351,13 @@ get_query_result(struct pipe_context *pipe,
        q->type == PIPE_QUERY_TIMESTAMP) {
       /* Calculate the elapsed time from the two timestamp queries */
       assert(q->pq_begin);
-      pipe->get_query_result(pipe, q->pq_begin, TRUE, &data);
+      pipe->get_query_result(pipe, q->pq_begin, true, &data);
       q->Result -= data.u64;
    } else {
       assert(!q->pq_begin);
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -370,7 +370,7 @@ _mesa_wait_query(struct gl_context *ctx, struct gl_query_object *q)
    assert(!q->Ready);
 
    while (!q->Ready &&
-          !get_query_result(pipe, q, TRUE))
+          !get_query_result(pipe, q, true))
    {
       /* nothing */
    }
@@ -384,7 +384,7 @@ _mesa_check_query(struct gl_context *ctx, struct gl_query_object *q)
 {
    struct pipe_context *pipe = ctx->pipe;
    assert(!q->Ready);   /* we should not get called if Ready is TRUE */
-   q->Ready = get_query_result(pipe, q, FALSE);
+   q->Ready = get_query_result(pipe, q, false);
 }
 
 

@@ -27,7 +27,7 @@
 #define LP_BLD_CORO_H
 
 #include <stdbool.h>
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_intr.h"
 

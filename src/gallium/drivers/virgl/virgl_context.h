@@ -88,7 +88,7 @@ struct virgl_context {
 
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    unsigned num_vertex_buffers;
-   boolean vertex_array_dirty;
+   bool vertex_array_dirty;
 
    struct virgl_rasterizer_state rs_state;
    struct virgl_so_target so_targets[PIPE_MAX_SO_BUFFERS];

@@ -36,7 +36,7 @@ struct fd6_compute_state {
    uint32_t user_consts_cmdstream_size;
 };
 
-EXTERNC
+template <chip CHIP>
 void fd6_compute_init(struct pipe_context *pctx);
 
 #endif /* FD6_COMPUTE_H_ */

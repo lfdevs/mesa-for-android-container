@@ -47,6 +47,7 @@
 #define INSTR_4XX(i, d, ...) { .gpu_id = 420, .instr = #i, .expected = d, __VA_ARGS__ }
 #define INSTR_5XX(i, d, ...) { .gpu_id = 540, .instr = #i, .expected = d, __VA_ARGS__ }
 #define INSTR_6XX(i, d, ...) { .gpu_id = 630, .instr = #i, .expected = d, __VA_ARGS__ }
+#define INSTR_7XX(i, d, ...) { .gpu_id = 730, .instr = #i, .expected = d, __VA_ARGS__ }
 /* clang-format on */
 
 static const struct test {
@@ -102,6 +103,8 @@ static const struct test {
    INSTR_6XX(20400006_00003800, "mov.f16f16 hr1.z, h(0.500000)"),
    INSTR_6XX(204880f5_00000000, "mova1 a1.x, 0"),
 
+   INSTR_7XX(2004c005_00000405, "cov.f32u32 r1.y, (last)r1.y"),
+
    /* cat2 */
    INSTR_6XX(40104002_0c210001, "add.f hr0.z, r0.y, c<a0.x + 33>"),
    INSTR_6XX(40b80804_10408004, "(nop3) cmps.f.lt r1.x, (abs)r1.x, c16.x"),
@@ -118,6 +121,9 @@ static const struct test {
    INSTR_6XX(42480000_48801086, "(nop2) sub.u hr0.x, hc33.z, (neg)hr<a0.x + 128>"),
    INSTR_6XX(46b00001_00001020, "clz.b r0.y, c8.x"),
    INSTR_6XX(46700009_00000009, "bfrev.b r2.y, r2.y"),
+
+   INSTR_7XX(42380800_04010400, "(nop3) add.s r0.x, (last)r0.x, (last)r0.y"),
+   INSTR_7XX(42930000_04000406, "cmps.u.ge r0.x, (last)r1.z, (last)r0.x"),
 
    /* cat3 */
    INSTR_6XX(66000000_10421041, "sel.f16 hr0.x, hc16.y, hr0.x, hc16.z"),
@@ -141,6 +147,9 @@ static const struct test {
    /* custom test with qcom_dot8 function from cl_qcom_dot_product8 */
    INSTR_6XX(66818c02_0002e003, "(sat)(nop3) dp2acc.mixed.low r0.z, r0.w, r0.w, r0.z"), /* (nop3) dp2acc (sat)r0.z, (signed)(low)(r)r0.w, (low)(r)r0.w, r0.z */
    INSTR_6XX(6681c802_8002a003, "(nop3) dp4acc.unsigned.low r0.z, r0.w, r0.w, (neg)r0.z"), /* (nop3) dp4acc r0.z, (unsigned)(r)r0.w, (r)r0.w, (neg)r0.z */
+
+   INSTR_7XX(61808000_04020400, "madsh.m16 r0.x, (last)r0.x, r0.y, (last)r0.z"),
+   INSTR_7XX(64838806_04088406, "(nop3) sel.b32 r1.z, (last)r1.z, r1.w, (last)r2.x"),
 
    /* cat4 */
    INSTR_6XX(8010000a_00000003, "rcp r2.z, r0.w"),
@@ -210,6 +219,9 @@ static const struct test {
    INSTR_6XX(c0d61104_01800228, "stg.a.u32 g[r2.x+(r1.x+1)<<2], r5.x, 1"),
    INSTR_6XX(c0d61104_01802628, "stg.a.u32 g[r2.x+r1.x<<4+3<<2], r5.x, 1"),
 
+   INSTR_7XX(c0d20505_07bfc006, "stg.a.f32 g[r0.z+r1.y+255], r0.w, 7"),
+   INSTR_7XX(c0d20507_04812006, "stg.a.f32 g[c0.z+r1.w+4], r0.w, 4"),
+
    INSTR_6XX(c0020011_04c08023, "ldg.a.f32 r4.y, g[r0.z+(r4.y)<<2], 4"), /* ldg.a.f32 r4.y, g[r0.z+(r4.y<<2)], 4 */
    INSTR_6XX(c0060006_01c18017, "ldg.a.u32 r1.z, g[r1.z+(r2.w)<<2], 1"), /* ldg.a.u32 r1.z, g[r1.z+(r2.w<<2)], 1 */
    INSTR_6XX(c0060006_0181800f, "ldg.u32 r1.z, g[r1.z+7], 1"),
@@ -229,10 +241,22 @@ static const struct test {
    INSTR_6XX(c0060006_0181800f, "ldg.u32 r1.z, g[r1.z+7], 1"),
    INSTR_6XX(c0060006_01818001, "ldg.u32 r1.z, g[r1.z], 1"),
 
+   INSTR_7XX(c0020411_04c08023, "ldg.a.f32 r4.y, g[r0.z+r4.y+2], 4"),
+   INSTR_7XX(c0004006_01c1a017, "ldg.a.f16 hr1.z, g[c1.z+r2.w+32], 1"),
+
    /* dEQP-GLES3.functional.ubo.random.basic_arrays.0 */
    INSTR_6XX(c7020020_01800000, "stc.f32 c[32], r0.x, 1"), /* stc c[32], r0.x, 1 */
    /* dEQP-VK.image.image_size.cube_array.readonly_writeonly_1x1x12 */
    INSTR_6XX(c7060020_03800000, "stc.u32 c[32], r0.x, 3"), /* stc c[32], r0.x, 3 */
+   /* A660 EQP-VK.robustness.robustness2.push.notemplate.r32i.unroll.nonvolatile.sampled_image.no_fmt_qual.img.samples_1.1d.frag */
+   /* TODO: stc has a similar to stsc DST range */
+   /* INSTR_6XX(c702026e_0480025c, "stc.u32 c[366], r11.z, 4"), */ /* stc c[366], r11.z, 4 */
+
+   /* dEQP-VK.pipeline.monolithic.extended_dynamic_state.two_draws_static.stencil_state_face_both_single_gt_replace_clear_102_ref_103_depthfail */
+   INSTR_7XX(c7420000_0cc00000, "stsc.f32 c[0], 0, 12"),
+   /* dEQP-VK.pipeline.monolithic.push_constant.graphics_pipeline.overlap_4_shaders_vert_tess_frag */
+   INSTR_7XX(c7420000_08c00020, "stsc.f32 c[0], 16, 8"),
+   INSTR_7XX(c742006e_08c00220, "stsc.f32 c[366], 16, 8"),
 
    /* custom */
    INSTR_6XX(c7060100_03800000, "stc.u32 c[a1.x], r0.x, 3"), /* stc c[a1.x], r0.x, 3 */
@@ -421,6 +445,14 @@ static const struct test {
    INSTR_6XX(e1080000_00000000, "sleep.l"),
    INSTR_6XX(e2080000_00000000, "dccln.all"),
 
+   INSTR_7XX(e3c20000_00000000, "lock"),
+   INSTR_7XX(fbc21000_00000000, "(sy)(ss)(jp)lock"),
+
+   /* dEQP-VK.pipeline.monolithic.sampler.border_swizzle.r4g4b4a4_unorm_pack16.rg1a.opaque_white.gather_1.no_swizzle_hint */
+   INSTR_7XX(e45401a0_bfba7736, "alias.tex.b32.1 r40.x, (-1.456763)"),
+   /* dEQP-VK.synchronization.op.single_queue.event.write_draw_indexed_read_image_geometry.image_128x128_r32g32b32a32_sfloat */
+   INSTR_7XX(e44c0009_00000007, "alias.tex.b32.0 r2.y, c1.w"),
+
    INSTR_6XX(ffffffff_ffffffff, "raw 0xFFFFFFFFFFFFFFFF"),
    /* clang-format on */
 };
@@ -489,6 +521,7 @@ main(int argc, char **argv)
       unsigned gen = test->gpu_id / 100;
       if (!compilers[gen]) {
          dev_ids[gen].gpu_id = test->gpu_id;
+         dev_ids[gen].chip_id = 0;
          compilers[gen] = ir3_compiler_create(NULL, &dev_ids[gen],
                                               &(struct ir3_compiler_options){});
       }

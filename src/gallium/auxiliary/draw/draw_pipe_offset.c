@@ -148,11 +148,11 @@ offset_first_tri(struct draw_stage *stage,
    struct offset_stage *offset = offset_stage(stage);
    const struct pipe_rasterizer_state *rast = stage->draw->rasterizer;
    unsigned fill_mode = rast->fill_front;
-   boolean do_offset;
+   bool do_offset;
 
    if (rast->fill_back != rast->fill_front) {
       /* Need to check for back-facing triangle */
-      boolean ccw = header->det < 0.0f;
+      bool ccw = header->det < 0.0f;
       if (ccw != rast->front_ccw)
          fill_mode = rast->fill_back;
    }

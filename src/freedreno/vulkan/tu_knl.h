@@ -54,6 +54,8 @@ struct tu_bo {
 struct tu_knl {
    const char *name;
 
+   VkResult (*device_init)(struct tu_device *dev);
+   void (*device_finish)(struct tu_device *dev);
    int (*device_get_gpu_timestamp)(struct tu_device *dev, uint64_t *ts);
    int (*device_get_suspend_count)(struct tu_device *dev, uint64_t *suspend_count);
    VkResult (*device_check_status)(struct tu_device *dev);
@@ -74,6 +76,13 @@ struct tu_knl {
                             struct vk_queue_submit *submit);
 
    const struct vk_device_entrypoint_table *device_entrypoints;
+};
+
+struct tu_zombie_vma {
+   int fence;
+   uint32_t gem_handle;
+   uint64_t iova;
+   uint64_t size;
 };
 
 struct tu_timeline_sync {
@@ -141,6 +150,12 @@ VkResult
 tu_physical_device_try_create(struct vk_instance *vk_instance,
                               struct _drmDevice *drm_device,
                               struct vk_physical_device **out);
+
+VkResult
+tu_drm_device_init(struct tu_device *dev);
+
+void
+tu_drm_device_finish(struct tu_device *dev);
 
 int
 tu_device_get_gpu_timestamp(struct tu_device *dev,

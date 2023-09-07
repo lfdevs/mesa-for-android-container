@@ -6,22 +6,26 @@ traces-db:
 traces:
   0ad/0ad-v2.trace:
     gl-zink-anv-tgl:
+      label: [skip, broken, flakes]
       checksum: 1da0ecf4034a81aa16e7984b75368aec
+      text: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8986
   behdad-glyphy/glyphy-v2.trace:
     gl-zink-anv-tgl:
       checksum: b743608724c13bc4105e95385fc2b810
   blender/blender-demo-cube_diorama.trace:
     gl-zink-anv-tgl:
-      label: [crash]
-      checksum: 6a0e17d98eca33e80810b6158e998aa1
-      text: "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20319"
+      label: [skip, flakes, broken]
+      checksum: 7b3ebdb5a4a8282ff564a4f14e7791a4
+      text: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8986
   blender/blender-demo-ellie_pose.trace:
     gl-zink-anv-tgl:
-      label: [crash]
-      checksum: f11aa01f5ef3a563567e2a85998c418e
-      text: "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20319"
+      label: [skip, broken, flakes]
+      checksum: 9b5090a236350f04cb2a61c5f0c0fe0f
+      text: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8986
   freedoom/freedoom-phase2-gl-high.trace:
     gl-zink-anv-tgl:
+      label: [skip]
+      text: "Fails on CI as well as when run locally"
       checksum: 288b762ac80ed76e18f848649a618be1
   glxgears/glxgears-2-v2.trace:
     gl-zink-anv-tgl:
@@ -31,7 +35,7 @@ traces:
       checksum: 433b69bea68cfe81914b857bbdc60ea5
   gputest/pixmark-piano-v2.trace:
     gl-zink-anv-tgl:
-      checksum: acdfae98a5a31da0a4450af4eea00aa1
+      checksum: 897c704551c305c1cfb7cc6293cd495d
   gputest/triangle-v2.trace:
     gl-zink-anv-tgl:
       checksum: 5f694874b15bcd7a3689b387c143590b
@@ -134,9 +138,7 @@ traces:
       text: occasional segfaults
   valve/half-life-2-v2.trace:
     gl-zink-anv-tgl:
-      label: [crash]
-      checksum: c4ba4cdc96396b354b0040278b374b15
-      text: "https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20319"
+      checksum: 54149c9a6560176436600bfe8fe2ae1f
   valve/portal-2-v2.trace:
     gl-zink-anv-tgl:
       checksum: a10392dbca5b15cc76468a3a819b9d4d

@@ -75,7 +75,7 @@ traces:
       checksum: 015201fe000d6a323b0f7d3f218d3e47
   bgfx/31-rsm.rdc:
     gl-vmware-llvmpipe:
-      checksum: b59d323511488d5c098ebfa9b434c2dc
+      checksum: 4be8fda5d2289296fee9540306aef92e
   bgfx/32-particles.rdc:
     gl-vmware-llvmpipe:
       checksum: 018418bdd7f60a186cce532613b0c7ab
@@ -132,7 +132,7 @@ traces:
       checksum: db43c733f3f3d5253e263838e58d9111
   paraview/pv-waveletvolume-v2.trace:
     gl-vmware-llvmpipe:
-      checksum: f4af4067b37c00861fa5911e4c0a6629
+      checksum: 7e0fc4f2f8c635e571793ed8fa705f85
   pathfinder/canvas_moire-v2.trace:
     gl-vmware-llvmpipe:
       checksum: 25ba8f18274126670311bd3ffe058f74

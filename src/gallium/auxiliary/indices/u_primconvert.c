@@ -144,7 +144,7 @@ primconvert_init_draw(struct primconvert_context *pc,
    new_info->primitive_restart = info->primitive_restart;
    new_info->restart_index = info->restart_index;
    if (info->index_size) {
-      enum pipe_prim_type mode = new_info->mode = u_index_prim_type_convert(pc->cfg.primtypes_mask, info->mode, true);
+      enum mesa_prim mode = new_info->mode = u_index_prim_type_convert(pc->cfg.primtypes_mask, info->mode, true);
       unsigned index_size = info->index_size;
       unsigned offset = draw.start * info->index_size;
 
@@ -208,7 +208,7 @@ primconvert_init_draw(struct primconvert_context *pc,
       assert(new_info->index_size == index_size);
    }
    else {
-      enum pipe_prim_type mode = 0;
+      enum mesa_prim mode = 0;
       unsigned index_size;
 
       u_index_generator(pc->cfg.primtypes_mask,
@@ -263,7 +263,7 @@ primconvert_init_draw(struct primconvert_context *pc,
    else {
       gen_func(draw.start, new_draw->count, dst);
    }
-   new_info->was_line_loop = info->mode == PIPE_PRIM_LINE_LOOP;
+   new_info->was_line_loop = info->mode == MESA_PRIM_LINE_LOOP;
 
    if (src_transfer)
       pipe_buffer_unmap(pc->pipe, src_transfer);

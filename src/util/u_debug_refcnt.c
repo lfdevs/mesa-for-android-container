@@ -62,11 +62,11 @@ static unsigned serials_last;
 /**
  * Return a small integer serial number for the given pointer.
  */
-static boolean
+static bool
 debug_serial(void *p, unsigned *pserial)
 {
    unsigned serial;
-   boolean found = TRUE;
+   bool found = true;
 
    simple_mtx_lock(&serials_mutex);
    if (!serials_hash)
@@ -84,7 +84,7 @@ debug_serial(void *p, unsigned *pserial)
       }
 
       _mesa_hash_table_insert(serials_hash, p, (void *) (uintptr_t) serial);
-      found = FALSE;
+      found = false;
    }
    simple_mtx_unlock(&serials_mutex);
 
@@ -150,7 +150,7 @@ debug_reference_slowpath(const struct pipe_reference *p,
       unsigned i;
       unsigned refcnt = p->count;
       unsigned serial;
-      boolean existing = debug_serial((void *) p, &serial);
+      bool existing = debug_serial((void *) p, &serial);
 
       debug_backtrace_capture(frames, 1, STACK_LEN);
 

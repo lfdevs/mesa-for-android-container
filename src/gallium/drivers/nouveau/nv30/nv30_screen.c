@@ -110,7 +110,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return eng3d->oclass == NV35_3D_CLASS || eng3d->oclass >= NV40_3D_CLASS;
    case PIPE_CAP_SUPPORTED_PRIM_MODES_WITH_RESTART:
    case PIPE_CAP_SUPPORTED_PRIM_MODES:
-      return BITFIELD_MASK(PIPE_PRIM_MAX);
+      return BITFIELD_MASK(MESA_PRIM_COUNT);
    /* nv4x capabilities */
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
    case PIPE_CAP_NPOT_TEXTURES:
@@ -190,7 +190,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FORCE_PERSAMPLE_INTERP:
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
    case PIPE_CAP_SHAREABLE_SHADERS:
-   case PIPE_CAP_CLEAR_TEXTURE:
    case PIPE_CAP_DRAW_PARAMETERS:
    case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
    case PIPE_CAP_FS_POSITION_IS_SYSVAL:
@@ -344,8 +343,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
          return 1;
       case PIPE_SHADER_CAP_MAX_TEMPS:
          return (eng3d->oclass >= NV40_3D_CLASS) ? 32 : 13;
-      case PIPE_SHADER_CAP_PREFERRED_IR:
-         return (NOUVEAU_DEBUG & NOUVEAU_DEBUG_USE_TGSI) ? PIPE_SHADER_IR_TGSI : PIPE_SHADER_IR_NIR;
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 0;
@@ -399,8 +396,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
          return 16;
-      case PIPE_SHADER_CAP_PREFERRED_IR:
-         return (NOUVEAU_DEBUG & NOUVEAU_DEBUG_USE_TGSI) ? PIPE_SHADER_IR_TGSI : PIPE_SHADER_IR_NIR;
       case PIPE_SHADER_CAP_CONT_SUPPORTED:
       case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -514,11 +509,13 @@ nv30_screen_get_compiler_options(struct pipe_screen *pscreen,
 }
 
 static void
-nv30_screen_fence_emit(struct pipe_context *pcontext, uint32_t *sequence)
+nv30_screen_fence_emit(struct pipe_context *pcontext, uint32_t *sequence,
+                       struct nouveau_bo *wait)
 {
    struct nv30_context *nv30 = nv30_context(pcontext);
    struct nv30_screen *screen = nv30->screen;
    struct nouveau_pushbuf *push = nv30->base.pushbuf;
+   struct nouveau_pushbuf_refn ref = { wait, NOUVEAU_BO_GART | NOUVEAU_BO_RDWR };
 
    *sequence = ++screen->base.fence.sequence;
 
@@ -527,6 +524,8 @@ nv30_screen_fence_emit(struct pipe_context *pcontext, uint32_t *sequence)
               (2 /* size */ << 18) | (7 /* subchan */ << 13));
    PUSH_DATA (push, 0);
    PUSH_DATA (push, *sequence);
+
+   nouveau_pushbuf_refn(push, &ref, 1);
 }
 
 static uint32_t

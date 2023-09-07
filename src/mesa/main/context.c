@@ -1502,7 +1502,9 @@ _mesa_make_current( struct gl_context *newCtx,
        curCtx->Const.ContextReleaseBehavior ==
        GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH) {
       FLUSH_VERTICES(curCtx, 0, 0);
-      st_glFlush(curCtx, 0);
+      if (curCtx->st){
+         st_glFlush(curCtx, 0);
+      }
    }
 
    if (!newCtx) {

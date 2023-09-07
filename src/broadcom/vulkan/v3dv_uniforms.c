@@ -87,7 +87,7 @@ push_constants_bo_free(VkDevice _device,
  * This method checks if the ubo used for push constants is needed to be
  * updated or not.
  *
- * push contants ubo is only used for push constants accessed by a non-const
+ * push constants ubo is only used for push constants accessed by a non-const
  * index.
  */
 static void

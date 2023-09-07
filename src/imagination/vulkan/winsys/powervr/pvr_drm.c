@@ -27,11 +27,12 @@
 #include "pvr_private.h"
 #include "pvr_winsys.h"
 
-struct pvr_winsys *pvr_drm_winsys_create(int master_fd,
-                                         int render_fd,
-                                         const VkAllocationCallbacks *alloc)
+VkResult pvr_drm_winsys_create(const int render_fd,
+                               const int display_fd,
+                               const VkAllocationCallbacks *alloc,
+                               struct pvr_winsys **const ws_out)
 {
    pvr_finishme("Add implementation once powervr UAPI is stable.");
 
-   return NULL;
+   return VK_ERROR_INCOMPATIBLE_DRIVER;
 }

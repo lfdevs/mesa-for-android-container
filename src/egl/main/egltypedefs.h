@@ -27,14 +27,13 @@
  *
  **************************************************************************/
 
-
 #ifndef EGLTYPEDEFS_INCLUDED
 #define EGLTYPEDEFS_INCLUDED
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-#include <EGL/eglmesaext.h>
 #include <EGL/eglext_angle.h>
+#include <EGL/eglmesaext.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,7 +68,6 @@ typedef struct _egl_surface _EGLSurface;
 typedef struct _egl_sync _EGLSync;
 
 typedef struct _egl_thread_info _EGLThreadInfo;
-
 
 #ifdef __cplusplus
 }

@@ -36,15 +36,14 @@ BEGIN_TEST(insert_waitcnt.ds_ordered_count)
    Operand chan_counter(PhysReg(260), v1);
    Operand m(m0, s1);
 
-   Instruction *ds_instr;
+   Instruction* ds_instr;
    //>> ds_ordered_count %0:v[0], %0:v[3], %0:m0 offset0:3072 gds storage:gds semantics:volatile
    //! s_waitcnt lgkmcnt(0)
    ds_instr = bld.ds(aco_opcode::ds_ordered_count, def0, gds_base, m, 3072u, 0u, true);
    ds_instr->ds().sync = memory_sync_info(storage_gds, semantic_volatile);
 
    //! ds_add_rtn_u32 %0:v[1], %0:v[3], %0:v[4], %0:m0 gds storage:gds semantics:volatile,atomic,rmw
-   ds_instr = bld.ds(aco_opcode::ds_add_rtn_u32, def1,
-                     gds_base, chan_counter, m, 0u, 0u, true);
+   ds_instr = bld.ds(aco_opcode::ds_add_rtn_u32, def1, gds_base, chan_counter, m, 0u, 0u, true);
    ds_instr->ds().sync = memory_sync_info(storage_gds, semantic_atomicrmw);
 
    //! s_waitcnt lgkmcnt(0)

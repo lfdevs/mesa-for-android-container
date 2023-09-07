@@ -71,7 +71,10 @@ case nir_intrinsic_##op: {\
 }
 #define LOAD(mode, op, res, base, deref) INFO(mode, load_##op, false, res, base, deref, -1)
 #define STORE(mode, op, res, base, deref, val) INFO(mode, store_##op, false, res, base, deref, val)
-#define ATOMIC(mode, type, op, res, base, deref, val) INFO(mode, type##_atomic_##op, true, res, base, deref, val)
+#define ATOMIC(mode, type, res, base, deref, val) \
+   INFO(mode, type##_atomic, true, res, base, deref, val) \
+   INFO(mode, type##_atomic_swap, true, res, base, deref, val) \
+
    LOAD(nir_var_mem_push_const, push_constant, -1, 0, -1)
    LOAD(nir_var_mem_ubo, ubo, 0, 1, -1)
    LOAD(nir_var_mem_ssbo, ssbo, 0, 1, -1)
@@ -82,82 +85,20 @@ case nir_intrinsic_##op: {\
    STORE(nir_var_mem_shared, shared, -1, 1, -1, 0)
    LOAD(nir_var_mem_global, global, -1, 0, -1)
    STORE(nir_var_mem_global, global, -1, 1, -1, 0)
+   LOAD(nir_var_mem_global, global_constant, -1, 0, -1)
    LOAD(nir_var_mem_task_payload, task_payload, -1, 0, -1)
    STORE(nir_var_mem_task_payload, task_payload, -1, 1, -1, 0)
-   ATOMIC(nir_var_mem_ssbo, ssbo, add, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, imin, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, umin, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, imax, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, umax, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, and, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, or, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, xor, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, exchange, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, comp_swap, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, fadd, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, fmin, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, fmax, 0, 1, -1, 2)
-   ATOMIC(nir_var_mem_ssbo, ssbo, fcomp_swap, 0, 1, -1, 2)
-   ATOMIC(0, deref, add, -1, -1, 0, 1)
-   ATOMIC(0, deref, imin, -1, -1, 0, 1)
-   ATOMIC(0, deref, umin, -1, -1, 0, 1)
-   ATOMIC(0, deref, imax, -1, -1, 0, 1)
-   ATOMIC(0, deref, umax, -1, -1, 0, 1)
-   ATOMIC(0, deref, and, -1, -1, 0, 1)
-   ATOMIC(0, deref, or, -1, -1, 0, 1)
-   ATOMIC(0, deref, xor, -1, -1, 0, 1)
-   ATOMIC(0, deref, exchange, -1, -1, 0, 1)
-   ATOMIC(0, deref, comp_swap, -1, -1, 0, 1)
-   ATOMIC(0, deref, fadd, -1, -1, 0, 1)
-   ATOMIC(0, deref, fmin, -1, -1, 0, 1)
-   ATOMIC(0, deref, fmax, -1, -1, 0, 1)
-   ATOMIC(0, deref, fcomp_swap, -1, -1, 0, 1)
-   ATOMIC(nir_var_mem_shared, shared, add, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, imin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, umin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, imax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, umax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, and, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, or, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, xor, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, exchange, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, comp_swap, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, fadd, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, fmin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, fmax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_shared, shared, fcomp_swap, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, add, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, imin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, umin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, imax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, umax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, and, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, or, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, xor, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, exchange, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, comp_swap, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, fadd, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, fmin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, fmax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_global, global, fcomp_swap, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, add, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, imin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, umin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, imax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, umax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, and, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, or, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, xor, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, exchange, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, comp_swap, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, fadd, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, fmin, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, fmax, -1, 0, -1, 1)
-   ATOMIC(nir_var_mem_task_payload, task_payload, fcomp_swap, -1, 0, -1, 1)
+   ATOMIC(nir_var_mem_ssbo, ssbo, 0, 1, -1, 2)
+   ATOMIC(0, deref, -1, -1, 0, 1)
+   ATOMIC(nir_var_mem_shared, shared, -1, 0, -1, 1)
+   ATOMIC(nir_var_mem_global, global, -1, 0, -1, 1)
+   ATOMIC(nir_var_mem_task_payload, task_payload, -1, 0, -1, 1)
    LOAD(nir_var_shader_temp, stack, -1, -1, -1)
    STORE(nir_var_shader_temp, stack, -1, -1, -1, 0)
+   LOAD(nir_var_mem_ubo, ubo_uniform_block_intel, 0, 1, -1)
    LOAD(nir_var_mem_ssbo, ssbo_uniform_block_intel, 0, 1, -1)
    LOAD(nir_var_mem_shared, shared_uniform_block_intel, -1, 0, -1)
+   LOAD(nir_var_mem_global, global_constant_uniform_block_intel, -1, 0, -1)
    default:
       break;
 #undef ATOMIC
@@ -1186,8 +1127,7 @@ try_vectorize(nir_function_impl *impl, struct vectorize_ctx *ctx,
    unsigned new_num_components = new_size / new_bit_size;
 
    /* vectorize the loads/stores */
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    if (first->is_store)
       vectorize_stores(&b, ctx, low, high, first, second,
@@ -1200,7 +1140,7 @@ try_vectorize(nir_function_impl *impl, struct vectorize_ctx *ctx,
 }
 
 static bool
-try_vectorize_shared2(nir_function_impl *impl, struct vectorize_ctx *ctx,
+try_vectorize_shared2(struct vectorize_ctx *ctx,
                       struct entry *low, struct entry *high,
                       struct entry *first, struct entry *second)
 {
@@ -1238,10 +1178,7 @@ try_vectorize_shared2(nir_function_impl *impl, struct vectorize_ctx *ctx,
    }
 
    /* vectorize the accesses */
-   nir_builder b;
-   nir_builder_init(&b, impl);
-
-   b.cursor = nir_after_instr(first->is_store ? second->instr : first->instr);
+   nir_builder b = nir_builder_at(nir_after_instr(first->is_store ? second->instr : first->instr));
 
    nir_ssa_def *offset = first->intrin->src[first->is_store].ssa;
    offset = nir_iadd_imm(&b, offset, nir_intrinsic_base(first->intrin));
@@ -1308,7 +1245,7 @@ vectorize_sorted_entries(struct vectorize_ctx *ctx, nir_function_impl *impl,
                 get_variable_mode(first) != nir_var_mem_shared)
                break;
 
-            if (try_vectorize_shared2(impl, ctx, low, high, first, second)) {
+            if (try_vectorize_shared2(ctx, low, high, first, second)) {
                low = NULL;
                *util_dynarray_element(arr, struct entry *, second_idx) = NULL;
                progress = true;
@@ -1368,11 +1305,6 @@ handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *imp
    if (instr->type == nir_instr_type_intrinsic) {
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
       switch (intrin->intrinsic) {
-      case nir_intrinsic_group_memory_barrier:
-      case nir_intrinsic_memory_barrier:
-         modes = nir_var_mem_ssbo | nir_var_mem_shared | nir_var_mem_global |
-                 nir_var_mem_task_payload;
-         break;
       /* prevent speculative loads/stores */
       case nir_intrinsic_discard_if:
       case nir_intrinsic_discard:
@@ -1386,14 +1318,8 @@ handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *imp
          acquire = false;
          modes = nir_var_all;
          break;
-      case nir_intrinsic_memory_barrier_buffer:
-         modes = nir_var_mem_ssbo | nir_var_mem_global;
-         break;
-      case nir_intrinsic_memory_barrier_shared:
-         modes = nir_var_mem_shared | nir_var_mem_task_payload;
-         break;
       case nir_intrinsic_scoped_barrier:
-         if (nir_intrinsic_memory_scope(intrin) == NIR_SCOPE_NONE)
+         if (nir_intrinsic_memory_scope(intrin) == SCOPE_NONE)
             break;
 
          modes = nir_intrinsic_memory_modes(intrin) & (nir_var_mem_ssbo |
@@ -1403,7 +1329,7 @@ handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *imp
          acquire = nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_ACQUIRE;
          release = nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_RELEASE;
          switch (nir_intrinsic_memory_scope(intrin)) {
-         case NIR_SCOPE_INVOCATION:
+         case SCOPE_INVOCATION:
             /* a barier should never be required for correctness with these scopes */
             modes = 0;
             break;
@@ -1527,19 +1453,17 @@ nir_opt_load_store_vectorize(nir_shader *shader, const nir_load_store_vectorize_
 
    nir_shader_index_vars(shader, options->modes);
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         if (options->modes & nir_var_function_temp)
-            nir_function_impl_index_vars(function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      if (options->modes & nir_var_function_temp)
+         nir_function_impl_index_vars(impl);
 
-         nir_foreach_block(block, function->impl)
-            progress |= process_block(function->impl, ctx, block);
+      nir_foreach_block(block, impl)
+         progress |= process_block(impl, ctx, block);
 
-         nir_metadata_preserve(function->impl,
-                               nir_metadata_block_index |
-                               nir_metadata_dominance |
-                               nir_metadata_live_ssa_defs);
-      }
+      nir_metadata_preserve(impl,
+                            nir_metadata_block_index |
+                            nir_metadata_dominance |
+                            nir_metadata_live_ssa_defs);
    }
 
    ralloc_free(ctx);

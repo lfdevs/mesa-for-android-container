@@ -136,6 +136,7 @@ nir_constant_clone(const nir_constant *c, nir_variable *nvar)
    nir_constant *nc = ralloc(nvar, nir_constant);
 
    memcpy(nc->values, c->values, sizeof(nc->values));
+   nc->is_null_constant = c->is_null_constant;
    nc->num_elements = c->num_elements;
    nc->elements = ralloc_array(nvar, nir_constant *, c->num_elements);
    for (unsigned i = 0; i < c->num_elements; i++) {
@@ -257,7 +258,7 @@ __clone_dst(clone_state *state, nir_instr *ninstr,
    ndst->is_ssa = dst->is_ssa;
    if (dst->is_ssa) {
       nir_ssa_dest_init(ninstr, ndst, dst->ssa.num_components,
-                        dst->ssa.bit_size, NULL);
+                        dst->ssa.bit_size);
       if (likely(state->remap_table))
          add_remap(state, &ndst->ssa, &dst->ssa);
    } else {
@@ -768,10 +769,9 @@ nir_shader_clone(void *mem_ctx, const nir_shader *s)
     * reference the functions of other functions and we don't know what order
     * the functions will have in the list.
     */
-   nir_foreach_function(fxn, s) {
+   nir_foreach_function_with_impl(fxn, impl, s) {
       nir_function *nfxn = remap_global(&state, fxn);
-      nfxn->impl = clone_function_impl(&state, fxn->impl);
-      nfxn->impl->function = nfxn;
+      nir_function_set_impl(nfxn, clone_function_impl(&state, impl));
    }
 
    ns->info = s->info;

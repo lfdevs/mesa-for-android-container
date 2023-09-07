@@ -1013,6 +1013,7 @@ mir_schedule_condition(compiler_context *ctx,
 
    predicate->exclude = cond->dest;
    cond->dest = SSA_FIXED_REGISTER(31);
+   last->src[condition_index] = cond->dest;
 
    if (!vector) {
       cond->mask = (1 << COMPONENT_W);
@@ -1024,6 +1025,8 @@ mir_schedule_condition(compiler_context *ctx,
          for (unsigned q = 0; q < 4; ++q)
             cond->swizzle[s][q + COMPONENT_W] = cond->swizzle[s][q];
       }
+
+      last->swizzle[condition_index][0] = COMPONENT_W;
    }
 
    /* Schedule the unit: csel is always in the latter pipeline, so a csel
@@ -1290,6 +1293,7 @@ mir_schedule_alu(compiler_context *ctx, midgard_instruction **instructions,
 
    /* Reset */
    predicate.move_mode = 0;
+   predicate.exclude = ~0;
 
    mir_update_worklist(worklist, len, instructions, vlut);
    mir_update_worklist(worklist, len, instructions, vadd);
@@ -1504,8 +1508,7 @@ schedule_block(compiler_context *ctx, midgard_block *block)
    /* We emitted bundles backwards; copy into the block in reverse-order */
 
    util_dynarray_init(&block->bundles, block);
-   util_dynarray_foreach_reverse(&bundles, midgard_bundle, bundle)
-   {
+   util_dynarray_foreach_reverse(&bundles, midgard_bundle, bundle) {
       util_dynarray_append(&block->bundles, midgard_bundle, *bundle);
    }
    util_dynarray_fini(&bundles);
@@ -1600,8 +1603,8 @@ midgard_schedule_program(compiler_context *ctx)
    midgard_promote_uniforms(ctx);
 
    /* Must be lowered right before scheduling */
-   mir_squeeze_index(ctx);
    mir_lower_special_reads(ctx);
+   mir_squeeze_index(ctx);
 
    if (ctx->stage == MESA_SHADER_FRAGMENT) {
       mir_invalidate_liveness(ctx);

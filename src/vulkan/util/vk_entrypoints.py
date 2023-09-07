@@ -98,11 +98,11 @@ class EntrypointAlias(EntrypointBase):
     def call_params(self):
         return self.alias.call_params()
 
-def get_entrypoints(doc, api):
+def get_entrypoints(doc, api, beta):
     """Extract the entry points from the registry."""
     entrypoints = OrderedDict()
 
-    required = get_all_required(doc, 'command', api)
+    required = get_all_required(doc, 'command', api, beta)
 
     for command in doc.findall('./commands/command'):
         if not filter_api(command, api):
@@ -137,11 +137,11 @@ def get_entrypoints(doc, api):
 
     return entrypoints.values()
 
-def get_entrypoints_from_xml(xml_files, api='vulkan'):
+def get_entrypoints_from_xml(xml_files, beta, api='vulkan'):
     entrypoints = []
 
     for filename in xml_files:
         doc = et.parse(filename)
-        entrypoints += get_entrypoints(doc, api)
+        entrypoints += get_entrypoints(doc, api, beta)
 
     return entrypoints

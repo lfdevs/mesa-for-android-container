@@ -121,7 +121,7 @@ struct array_state
 
 
 /**
- * Array state that is pushed / poped by \c glPushClientAttrib and
+ * Array state that is pushed / popped by \c glPushClientAttrib and
  * \c glPopClientAttrib.
  */
 struct array_stack_state
@@ -221,7 +221,7 @@ struct array_state_vector
 
     /**
      * Is the cache of ARRAY_INFO data valid?  The cache can become invalid
-     * when one of several state changes occur.  Among these chages are
+     * when one of several state changes occur.  Among these changes are
      * modifying the array settings for an enabled array and enabling /
      * disabling an array.
      */

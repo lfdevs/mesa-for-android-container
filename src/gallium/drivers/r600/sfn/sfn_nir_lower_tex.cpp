@@ -42,15 +42,15 @@ lower_coord_shift_normalized(nir_builder *b, nir_tex_instr *tex)
    nir_ssa_def *corr = nullptr;
    if (unlikely(tex->array_is_lowered_cube)) {
       auto corr2 = nir_fadd(b,
-                            nir_channels(b, tex->src[coord_index].src.ssa, 3),
-                            nir_fmul(b, nir_imm_float(b, -0.5f), scale));
+                            nir_trim_vector(b, tex->src[coord_index].src.ssa, 2),
+                            nir_fmul_imm(b, scale, -0.5f));
       corr = nir_vec3(b,
                       nir_channel(b, corr2, 0),
                       nir_channel(b, corr2, 1),
                       nir_channel(b, tex->src[coord_index].src.ssa, 2));
    } else {
       corr = nir_fadd(b,
-                      nir_fmul(b, nir_imm_float(b, -0.5f), scale),
+                      nir_fmul_imm(b, scale, -0.5f),
                       tex->src[coord_index].src.ssa);
    }
 
@@ -65,15 +65,15 @@ lower_coord_shift_unnormalized(nir_builder *b, nir_tex_instr *tex)
    int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
    nir_ssa_def *corr = nullptr;
    if (unlikely(tex->array_is_lowered_cube)) {
-      auto corr2 = nir_fadd(b,
-                            nir_channels(b, tex->src[coord_index].src.ssa, 3),
-                            nir_imm_float(b, -0.5f));
+      auto corr2 = nir_fadd_imm(b,
+                                nir_trim_vector(b, tex->src[coord_index].src.ssa, 2),
+                                -0.5f);
       corr = nir_vec3(b,
                       nir_channel(b, corr2, 0),
                       nir_channel(b, corr2, 1),
                       nir_channel(b, tex->src[coord_index].src.ssa, 2));
    } else {
-      corr = nir_fadd(b, tex->src[coord_index].src.ssa, nir_imm_float(b, -0.5f));
+      corr = nir_fadd_imm(b, tex->src[coord_index].src.ssa, -0.5f);
    }
    nir_instr_rewrite_src(&tex->instr, &tex->src[coord_index].src, nir_src_for_ssa(corr));
    return true;
@@ -82,8 +82,7 @@ lower_coord_shift_unnormalized(nir_builder *b, nir_tex_instr *tex)
 static bool
 r600_nir_lower_int_tg4_impl(nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    bool progress = false;
    nir_foreach_block(block, impl)
@@ -135,9 +134,9 @@ r600_nir_lower_int_tg4(nir_shader *shader)
    }
 
    if (need_lowering) {
-      nir_foreach_function(function, shader)
+      nir_foreach_function_impl(impl, shader)
       {
-         if (function->impl && r600_nir_lower_int_tg4_impl(function->impl))
+         if (r600_nir_lower_int_tg4_impl(impl))
             progress = true;
       }
    }
@@ -201,8 +200,7 @@ lower_txl_txf_array_or_cube(nir_builder *b, nir_tex_instr *tex)
 static bool
 r600_nir_lower_txl_txf_array_or_cube_impl(nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    bool progress = false;
    nir_foreach_block(block, impl)
@@ -226,9 +224,9 @@ bool
 r600_nir_lower_txl_txf_array_or_cube(nir_shader *shader)
 {
    bool progress = false;
-   nir_foreach_function(function, shader)
+   nir_foreach_function_impl(impl, shader)
    {
-      if (function->impl && r600_nir_lower_txl_txf_array_or_cube_impl(function->impl))
+      if (r600_nir_lower_txl_txf_array_or_cube_impl(impl))
          progress = true;
    }
    return progress;
@@ -267,7 +265,8 @@ r600_nir_lower_cube_to_2darray_impl(nir_builder *b, nir_instr *instr, void *_opt
    int coord_idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
    assert(coord_idx >= 0);
 
-   auto cubed = nir_cube_r600(b, nir_channels(b, tex->src[coord_idx].src.ssa, 0x7));
+   auto cubed = nir_cube_amd(b,
+                             nir_trim_vector(b, tex->src[coord_idx].src.ssa, 3));
    auto xy = nir_fmad(b,
                       nir_vec2(b, nir_channel(b, cubed, 1), nir_channel(b, cubed, 0)),
                       nir_frcp(b, nir_fabs(b, nir_channel(b, cubed, 2))),
@@ -282,19 +281,18 @@ r600_nir_lower_cube_to_2darray_impl(nir_builder *b, nir_instr *instr, void *_opt
 
    if (tex->op == nir_texop_txd) {
       int ddx_idx = nir_tex_instr_src_index(tex, nir_tex_src_ddx);
-      auto zero_dot_5 = nir_imm_float(b, 0.5);
       nir_instr_rewrite_src(
          &tex->instr,
          &tex->src[ddx_idx].src,
          nir_src_for_ssa(
-            nir_fmul(b, nir_ssa_for_src(b, tex->src[ddx_idx].src, 3), zero_dot_5)));
+            nir_fmul_imm(b, nir_ssa_for_src(b, tex->src[ddx_idx].src, 3), 0.5)));
 
       int ddy_idx = nir_tex_instr_src_index(tex, nir_tex_src_ddy);
       nir_instr_rewrite_src(
          &tex->instr,
          &tex->src[ddy_idx].src,
          nir_src_for_ssa(
-            nir_fmul(b, nir_ssa_for_src(b, tex->src[ddy_idx].src, 3), zero_dot_5)));
+            nir_fmul_imm(b, nir_ssa_for_src(b, tex->src[ddy_idx].src, 3), 0.5)));
    }
 
    auto new_coord = nir_vec3(b, nir_channel(b, xy, 0), nir_channel(b, xy, 1), z);

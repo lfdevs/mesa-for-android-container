@@ -39,6 +39,8 @@ BASE_TYPES = {
     'uint',
     'bool',
     'float',
+    'mbz',
+    'mbo',
 }
 
 FIXED_PATTERN = re.compile(r"(s|u)(\d+)\.(\d+)")

@@ -1,25 +1,7 @@
 /*
  * Copyright 2023 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "nir_builder.h"
@@ -50,8 +32,7 @@ fast_udiv_nuw(nir_builder *b, nir_ssa_def *num, nir_ssa_def *divisor)
 
    num = nir_ushr(b, num, pre_shift);
    num = nir_iadd_nuw(b, num, increment);
-   num = nir_imul(b, nir_u2u64(b, num), nir_u2u64(b, multiplier));
-   num = nir_unpack_64_2x32_split_y(b, num);
+   num = nir_umul_high(b, num, multiplier);
    return nir_ushr(b, num, post_shift);
 }
 
@@ -77,8 +58,8 @@ get_vertex_index_for_mono_shader(nir_builder *b, int input_index,
          index = instance_id;
       } else {
          nir_ssa_def *offset = nir_imm_int(b, input_index * 16);
-         nir_ssa_def *divisor =
-            nir_load_smem_buffer_amd(b, 4, s->instance_divisor_constbuf, offset);
+         nir_ssa_def *divisor = nir_load_ubo(b, 4, 32, s->instance_divisor_constbuf, offset,
+                                             .range = ~0);
 
          /* The faster NUW version doesn't work when InstanceID == UINT_MAX.
           * Such InstanceID might not be achievable in a reasonable time though.
@@ -108,11 +89,8 @@ get_vertex_index_for_all_inputs(nir_shader *nir, struct lower_vs_inputs_state *s
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-   nir_builder builder;
-   nir_builder_init(&builder, impl);
+   nir_builder builder = nir_builder_at(nir_before_cf_list(&impl->body));
    nir_builder *b = &builder;
-
-   b->cursor = nir_before_cf_list(&impl->body);
 
    const struct si_shader_selector *sel = s->shader->selector;
    const union si_shader_key *key = &s->shader->key;
@@ -135,7 +113,7 @@ load_vs_input_from_blit_sgpr(nir_builder *b, unsigned input_index,
                              nir_ssa_def *out[4])
 {
    nir_ssa_def *vertex_id = nir_load_vertex_id_zero_base(b);
-   nir_ssa_def *sel_x1 = nir_uge(b, nir_imm_int(b, 1), vertex_id);
+   nir_ssa_def *sel_x1 = nir_ule_imm(b, vertex_id, 1);
    /* Use nir_ine, because we have 3 vertices and only
     * the middle one should use y2.
     */
@@ -217,10 +195,10 @@ ufN_to_float(nir_builder *b, nir_ssa_def *src, unsigned exp_bits, unsigned mant_
    denormal = nir_iadd(b, denormal, nir_ishl_imm(b, tmp, 23));
 
    /* Select the final result. */
-   nir_ssa_def *cond = nir_uge(b, src, nir_imm_int(b, ((1ULL << exp_bits) - 1) << mant_bits));
+   nir_ssa_def *cond = nir_uge_imm(b, src, ((1ULL << exp_bits) - 1) << mant_bits);
    nir_ssa_def *result = nir_bcsel(b, cond, naninf, normal);
 
-   cond = nir_uge(b, src, nir_imm_int(b, 1ULL << mant_bits));
+   cond = nir_uge_imm(b, src, 1ULL << mant_bits);
    result = nir_bcsel(b, cond, result, denormal);
 
    cond = nir_ine_imm(b, src, 0);

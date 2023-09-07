@@ -3,6 +3,7 @@
 # Authors:
 #   David Heidelberg <david.heidelberg@collabora.com>
 #
+# For the dependencies, see the requirements.txt
 # SPDX-License-Identifier: MIT
 
 """

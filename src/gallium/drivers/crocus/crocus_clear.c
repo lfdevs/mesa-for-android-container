@@ -705,8 +705,7 @@ crocus_clear_texture(struct pipe_context *ctx,
    struct crocus_resource *res = (void *) p_res;
 
    if (devinfo->ver < 6) {
-      util_clear_texture(ctx, p_res,
-                         level, box, data);
+      u_default_clear_texture(ctx, p_res, level, box, data);
       return;
    }
 

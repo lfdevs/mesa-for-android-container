@@ -73,6 +73,8 @@ files_r300 = files(
   'compiler/r500_fragprog.c',
   'compiler/r500_fragprog_emit.c',
   'compiler/r500_fragprog.h',
+  'compiler/r300_nir.c',
+  'compiler/r300_nir.h',
   'compiler/radeon_code.c',
   'compiler/radeon_code.h',
   'compiler/radeon_compiler.c',

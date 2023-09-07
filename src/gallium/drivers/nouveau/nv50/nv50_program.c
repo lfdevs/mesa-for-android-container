@@ -427,15 +427,15 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
    } else
    if (prog->type == PIPE_SHADER_GEOMETRY) {
       switch (info_out.prop.gp.outputPrim) {
-      case PIPE_PRIM_LINE_STRIP:
+      case MESA_PRIM_LINE_STRIP:
          prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_LINE_STRIP;
          break;
-      case PIPE_PRIM_TRIANGLE_STRIP:
+      case MESA_PRIM_TRIANGLE_STRIP:
          prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_TRIANGLE_STRIP;
          break;
-      case PIPE_PRIM_POINTS:
+      case MESA_PRIM_POINTS:
       default:
-         assert(info_out.prop.gp.outputPrim == PIPE_PRIM_POINTS);
+         assert(info_out.prop.gp.outputPrim == MESA_PRIM_POINTS);
          prog->gp.prim_type = NV50_3D_GP_OUTPUT_PRIMITIVE_TYPE_POINTS;
          break;
       }
@@ -544,7 +544,7 @@ void
 nv50_program_destroy(struct nv50_context *nv50, struct nv50_program *p)
 {
    const struct pipe_shader_state pipe = p->pipe;
-   const ubyte type = p->type;
+   const uint8_t type = p->type;
 
    if (p->mem) {
       if (nv50)

@@ -643,10 +643,15 @@ void rogue_print_shader(FILE *fp, const rogue_shader *shader)
 {
    fputs("/*", fp);
 
-   if (shader->name)
-      fprintf(fp, " \"%s\":", shader->name);
+   if (shader->stage == MESA_SHADER_NONE)
+      fputs(" USC program", fp);
+   else
+      fprintf(fp, " %s shader", _mesa_shader_stage_to_string(shader->stage));
 
-   fprintf(fp, " %s shader */\n", _mesa_shader_stage_to_string(shader->stage));
+   if (shader->name)
+      fprintf(fp, " - %s", shader->name);
+
+   fputs(" */\n", fp);
 
    rogue_foreach_block (block, shader)
       rogue_print_block(fp, block);

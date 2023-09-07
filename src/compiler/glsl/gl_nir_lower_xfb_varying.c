@@ -155,9 +155,7 @@ gl_nir_lower_xfb_varying(nir_shader *shader, const char *old_var_name,
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
-   b.cursor = nir_before_block(nir_start_block(impl));
+   nir_builder b = nir_builder_at(nir_before_block(nir_start_block(impl)));
 
    nir_deref_instr *deref = NULL;
    const struct glsl_type *type = NULL;

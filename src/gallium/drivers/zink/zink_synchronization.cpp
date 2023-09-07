@@ -258,19 +258,28 @@ unordered_res_exec(const struct zink_context *ctx, const struct zink_resource *r
    if (res->obj->unordered_read && res->obj->unordered_write)
       return true;
    /* if testing write access but have any ordered read access, cannot promote */
-   if (is_write && zink_batch_usage_matches(res->obj->bo->reads, ctx->batch.state) && !res->obj->unordered_read)
+   if (is_write && zink_batch_usage_matches(res->obj->bo->reads.u, ctx->batch.state) && !res->obj->unordered_read)
       return false;
    /* if write access is unordered or nonexistent, always promote */
-   return res->obj->unordered_write || !zink_batch_usage_matches(res->obj->bo->writes, ctx->batch.state);
+   return res->obj->unordered_write || !zink_batch_usage_matches(res->obj->bo->writes.u, ctx->batch.state);
 }
 
 VkCommandBuffer
 zink_get_cmdbuf(struct zink_context *ctx, struct zink_resource *src, struct zink_resource *dst)
 {
    bool unordered_exec = (zink_debug & ZINK_DEBUG_NOREORDER) == 0;
-   if (src)
+   /* TODO: figure out how to link up unordered layout -> ordered layout and delete these two conditionals */
+   if (src && !src->obj->is_buffer) {
+      if (zink_resource_usage_is_unflushed(src) && !src->obj->unordered_read && !src->obj->unordered_write)
+         unordered_exec = false;
+   }
+   if (dst && !dst->obj->is_buffer) {
+      if (zink_resource_usage_is_unflushed(dst) && !dst->obj->unordered_read && !dst->obj->unordered_write)
+         unordered_exec = false;
+   }
+   if (src && unordered_exec)
       unordered_exec &= unordered_res_exec(ctx, src, false);
-   if (dst)
+   if (dst && unordered_exec)
       unordered_exec &= unordered_res_exec(ctx, dst, true);
    if (src)
       src->obj->unordered_read = unordered_exec;
@@ -450,7 +459,7 @@ zink_resource_image_transfer_dst_barrier(struct zink_context *ctx, struct zink_r
       res->obj->last_write = VK_ACCESS_TRANSFER_WRITE_BIT;
       res->obj->access_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
    }
-   zink_resource_copy_box_add(res, level, box);
+   zink_resource_copy_box_add(ctx, res, level, box);
 }
 
 bool
@@ -480,7 +489,7 @@ zink_resource_buffer_transfer_dst_barrier(struct zink_context *ctx, struct zink_
          res->obj->ordered_access_is_copied = true;
       }
    }
-   zink_resource_copy_box_add(res, 0, &box);
+   zink_resource_copy_box_add(ctx, res, 0, &box);
    /* this return value implies that the caller could do an unordered op on this resource */
    return unordered;
 }
@@ -583,14 +592,7 @@ zink_resource_buffer_barrier(struct zink_context *ctx, struct zink_resource *res
       bool marker = false;
       if (unlikely(zink_tracing)) {
          char buf[4096];
-         bool first = true;
-         unsigned idx = 0;
-         u_foreach_bit64(bit, flags) {
-            if (!first)
-               buf[idx++] = '|';
-            idx += snprintf(&buf[idx], sizeof(buf) - idx, "%s", vk_AccessFlagBits_to_str((VkAccessFlagBits)(1ul<<bit)));
-            first = false;
-         }
+         zink_string_vkflags_unroll(buf, sizeof(buf), flags, (zink_vkflags_func)vk_AccessFlagBits_to_str);
          marker = zink_cmd_debug_marker_begin(ctx, cmdbuf, "buffer_barrier(%s)", buf);
       }
 

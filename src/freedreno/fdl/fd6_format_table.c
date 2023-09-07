@@ -39,7 +39,7 @@ struct fd6_format {
    enum a6xx_format tex;
    enum a6xx_format rb;
    enum a3xx_color_swap swap;
-   boolean present;
+   bool present;
 };
 
 #define FMT(pipe, vtxfmt, texfmt, rbfmt, swapfmt)                              \

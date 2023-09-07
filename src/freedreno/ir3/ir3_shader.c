@@ -394,6 +394,8 @@ ir3_shader_get_variant(struct ir3_shader *shader,
                        const struct ir3_shader_key *key, bool binning_pass,
                        bool write_disasm, bool *created)
 {
+   MESA_TRACE_FUNC();
+
    mtx_lock(&shader->variants_lock);
    struct ir3_shader_variant *v = shader_variant(shader, key);
 
@@ -836,7 +838,7 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 
    isa_decode(bin, so->info.sizedwords * 4, out,
               &(struct isa_decode_options){
-                 .gpu_id = fd_dev_gpu_id(ir->compiler->dev_id),
+                 .gpu_id = ir->compiler->gen * 100,
                  .show_errors = true,
                  .branch_labels = true,
                  .no_match_cb = print_raw,

@@ -89,7 +89,7 @@ vir_has_side_effects(struct v3d_compile *c, struct qinst *inst)
          * pointer, so each read has a side effect (we don't care for ldunif
          * because we reconstruct the uniform stream buffer after compiling
          * with the surviving uniforms), so allowing DCE to remove
-         * one would break follow-up loads. We could fix this by emiting a
+         * one would break follow-up loads. We could fix this by emitting a
          * unifa for each ldunifa, but each unifa requires 3 delay slots
          * before a ldunifa, so that would be quite expensive.
          */
@@ -549,6 +549,7 @@ struct v3d_compiler_strategy {
         bool disable_gcm;
         bool disable_loop_unrolling;
         bool disable_ubo_load_sorting;
+        bool move_buffer_loads;
         bool disable_tmu_pipelining;
         uint32_t max_tmu_spills;
 };
@@ -583,6 +584,7 @@ vir_compile_init(const struct v3d_compiler *compiler,
         c->disable_general_tmu_sched = strategy->disable_general_tmu_sched;
         c->disable_tmu_pipelining = strategy->disable_tmu_pipelining;
         c->disable_constant_ubo_load_sorting = strategy->disable_ubo_load_sorting;
+        c->move_buffer_loads = strategy->move_buffer_loads;
         c->disable_gcm = strategy->disable_gcm;
         c->disable_loop_unrolling = V3D_DBG(NO_LOOP_UNROLL)
                 ? true : strategy->disable_loop_unrolling;
@@ -617,6 +619,7 @@ v3d_lower_nir(struct v3d_compile *c)
 {
         struct nir_lower_tex_options tex_options = {
                 .lower_txd = true,
+                .lower_tg4_offsets = true,
                 .lower_tg4_broadcom_swizzle = true,
 
                 .lower_rect = false, /* XXX: Use this on V3D 3.x */
@@ -657,7 +660,7 @@ v3d_lower_nir(struct v3d_compile *c)
                  */
                 const unsigned chunk_size = 16; /* max single store size */
                 NIR_PASS(_, c->s, nir_zero_initialize_shared_memory,
-                         ALIGN(c->s->info.shared_size, chunk_size), chunk_size);
+                         align(c->s->info.shared_size, chunk_size), chunk_size);
         }
 
         NIR_PASS(_, c->s, nir_lower_compute_system_values, NULL);
@@ -837,7 +840,7 @@ v3d_fs_set_prog_data(struct v3d_compile *c,
                 c->uses_implicit_point_line_varyings;
         prog_data->lock_scoreboard_on_first_thrsw =
                 c->lock_scoreboard_on_first_thrsw;
-        prog_data->force_per_sample_msaa = c->force_per_sample_msaa;
+        prog_data->force_per_sample_msaa = c->s->info.fs.uses_sample_shading;
         prog_data->uses_pid = c->fs_uses_primitive_id;
 }
 
@@ -1159,7 +1162,7 @@ v3d_instr_delay_cb(nir_instr *instr, void *data)
    /* We should not use very large delays for TMU instructions. Typically,
     * thread switches will be sufficient to hide all or most of the latency,
     * so we typically only need a little bit of extra room. If we over-estimate
-    * the latency here we may end up unnecesarily delaying the critical path in
+    * the latency here we may end up unnecessarily delaying the critical path in
     * the shader, which would have a negative effect in performance, so here
     * we are trying to strike a balance based on empirical testing.
     */
@@ -1434,16 +1437,14 @@ v3d_nir_sort_constant_ubo_loads_block(struct v3d_compile *c,
 static bool
 v3d_nir_sort_constant_ubo_loads(nir_shader *s, struct v3d_compile *c)
 {
-        nir_foreach_function(function, s) {
-                if (function->impl) {
-                        nir_foreach_block(block, function->impl) {
-                                c->sorted_any_ubo_loads |=
-                                        v3d_nir_sort_constant_ubo_loads_block(c, block);
-                        }
-                        nir_metadata_preserve(function->impl,
-                                              nir_metadata_block_index |
-                                              nir_metadata_dominance);
+        nir_foreach_function_impl(impl, s) {
+                nir_foreach_block(block, impl) {
+                        c->sorted_any_ubo_loads |=
+                                v3d_nir_sort_constant_ubo_loads_block(c, block);
                 }
+                nir_metadata_preserve(impl,
+                                      nir_metadata_block_index |
+                                      nir_metadata_dominance);
         }
         return c->sorted_any_ubo_loads;
 }
@@ -1503,18 +1504,15 @@ static bool
 v3d_nir_lower_subgroup_intrinsics(nir_shader *s, struct v3d_compile *c)
 {
         bool progress = false;
-        nir_foreach_function(function, s) {
-                if (function->impl) {
-                        nir_builder b;
-                        nir_builder_init(&b, function->impl);
+        nir_foreach_function_impl(impl, s) {
+                nir_builder b = nir_builder_create(impl);
 
-                        nir_foreach_block(block, function->impl)
-                                progress |= lower_subgroup_intrinsics(c, block, &b);
+                nir_foreach_block(block, impl)
+                        progress |= lower_subgroup_intrinsics(c, block, &b);
 
-                        nir_metadata_preserve(function->impl,
-                                              nir_metadata_block_index |
-                                              nir_metadata_dominance);
-                }
+                nir_metadata_preserve(impl,
+                                      nir_metadata_block_index |
+                                      nir_metadata_dominance);
         }
         return progress;
 }
@@ -1579,8 +1577,9 @@ v3d_attempt_compile(struct v3d_compile *c)
         NIR_PASS(_, c->s, nir_lower_idiv, &idiv_options);
         NIR_PASS(_, c->s, nir_lower_alu);
 
-        if (c->key->robust_uniform_access || c->key->robust_storage_access) {
-                /* v3d_nir_lower_robust_buffer_access assumes constant buffer
+        if (c->key->robust_uniform_access || c->key->robust_storage_access ||
+            c->key->robust_image_access) {
+                /* nir_lower_robust_access assumes constant buffer
                  * indices on ubo/ssbo intrinsics so run copy propagation and
                  * constant folding passes before we run the lowering to warrant
                  * this. We also want to run the lowering before v3d_optimize to
@@ -1588,11 +1587,16 @@ v3d_attempt_compile(struct v3d_compile *c)
                  */
                 NIR_PASS(_, c->s, nir_copy_prop);
                 NIR_PASS(_, c->s, nir_opt_constant_folding);
-                NIR_PASS(_, c->s, v3d_nir_lower_robust_buffer_access, c);
-        }
 
-        if (c->key->robust_image_access)
-                NIR_PASS(_, c->s, v3d_nir_lower_robust_image_access, c);
+                nir_lower_robust_access_options opts = {
+                   .lower_image = c->key->robust_image_access,
+                   .lower_ssbo = c->key->robust_storage_access,
+                   .lower_ubo = c->key->robust_uniform_access,
+                   .skip_ubo_0 = c->key->environment == V3D_ENVIRONMENT_VULKAN,
+                };
+
+                NIR_PASS(_, c->s, nir_lower_robust_access, &opts);
+        }
 
         NIR_PASS(_, c->s, nir_lower_wrmasks, should_split_wrmask, c->s);
 
@@ -1620,7 +1624,7 @@ v3d_attempt_compile(struct v3d_compile *c)
         NIR_PASS(_, c->s, nir_lower_bool_to_int32);
         NIR_PASS(_, c->s, nir_convert_to_lcssa, true, true);
         NIR_PASS_V(c->s, nir_divergence_analysis);
-        NIR_PASS(_, c->s, nir_convert_from_ssa, true);
+        NIR_PASS(_, c->s, nir_convert_from_ssa, true, false);
 
         struct nir_schedule_options schedule_options = {
                 /* Schedule for about half our register space, to enable more
@@ -1629,7 +1633,7 @@ v3d_attempt_compile(struct v3d_compile *c)
                 .threshold = c->threads == 4 ? 24 : 48,
 
                 /* Vertex shaders share the same memory for inputs and outputs,
-                 * fragement and geometry shaders do not.
+                 * fragment and geometry shaders do not.
                  */
                 .stages_with_shared_io_memory =
                 (((1 << MESA_ALL_SHADER_STAGES) - 1) &
@@ -1649,8 +1653,11 @@ v3d_attempt_compile(struct v3d_compile *c)
         if (!c->disable_constant_ubo_load_sorting)
                 NIR_PASS(_, c->s, v3d_nir_sort_constant_ubo_loads, c);
 
+        const nir_move_options buffer_opts = c->move_buffer_loads ?
+                (nir_move_load_ubo | nir_move_load_ssbo) : 0;
         NIR_PASS(_, c->s, nir_opt_move, nir_move_load_uniform |
-                                       nir_move_const_undef);
+                                        nir_move_const_undef |
+                                        buffer_opts);
 
         v3d_nir_to_vir(c);
 }
@@ -1710,24 +1717,24 @@ int v3d_shaderdb_dump(struct v3d_compile *c,
  * because v3d_nir_to_vir will cap this to the actual minimum.
  */
 static const struct v3d_compiler_strategy strategies[] = {
-        /*0*/  { "default",                        4, 4, false, false, false, false, false,  0 },
-        /*1*/  { "disable general TMU sched",      4, 4, true,  false, false, false, false,  0 },
-        /*2*/  { "disable gcm",                    4, 4, true,  true,  false, false, false,  0 },
-        /*3*/  { "disable loop unrolling",         4, 4, true,  true,  true,  false, false,  0 },
-        /*4*/  { "disable UBO load sorting",       4, 4, true,  true,  true,  true,  false,  0 },
-        /*5*/  { "disable TMU pipelining",         4, 4, true,  true,  true,  true,  true,   0 },
-        /*6*/  { "lower thread count",             2, 1, false, false, false, false, false, -1 },
-        /*7*/  { "disable general TMU sched (2t)", 2, 1, true,  false, false, false, false, -1 },
-        /*8*/  { "disable gcm (2t)",               2, 1, true,  true,  false, false, false, -1 },
-        /*9*/  { "disable loop unrolling (2t)",    2, 1, true,  true,  true,  false, false, -1 },
-        /*10*/ { "disable UBO load sorting (2t)",  2, 1, true,  true,  true,  true,  false, -1 },
-        /*11*/ { "disable TMU pipelining (2t)",    2, 1, true,  true,  true,  true,  true,  -1 },
-        /*12*/ { "fallback scheduler",             2, 1, true,  true,  true,  true,  true,  -1 }
+        /*0*/  { "default",                        4, 4, false, false, false, false, false, false,  0 },
+        /*1*/  { "disable general TMU sched",      4, 4, true,  false, false, false, false, false,  0 },
+        /*2*/  { "disable gcm",                    4, 4, true,  true,  false, false, false, false,  0 },
+        /*3*/  { "disable loop unrolling",         4, 4, true,  true,  true,  false, false, false,  0 },
+        /*4*/  { "disable UBO load sorting",       4, 4, true,  true,  true,  true,  false, false,  0 },
+        /*5*/  { "disable TMU pipelining",         4, 4, true,  true,  true,  true,  false, true,   0 },
+        /*6*/  { "lower thread count",             2, 1, false, false, false, false, false, false, -1 },
+        /*7*/  { "disable general TMU sched (2t)", 2, 1, true,  false, false, false, false, false, -1 },
+        /*8*/  { "disable gcm (2t)",               2, 1, true,  true,  false, false, false, false, -1 },
+        /*9*/  { "disable loop unrolling (2t)",    2, 1, true,  true,  true,  false, false, false, -1 },
+        /*10*/ { "Move buffer loads (2t)",         2, 1, true,  true,  true,  true,  true,  false, -1 },
+        /*11*/ { "disable TMU pipelining (2t)",    2, 1, true,  true,  true,  true,  true,  true,  -1 },
+        /*12*/ { "fallback scheduler",             2, 1, true,  true,  true,  true,  true,  true,  -1 }
 };
 
 /**
  * If a particular optimization didn't make any progress during a compile
- * attempt disabling it alone won't allow us to compile the shader successfuly,
+ * attempt disabling it alone won't allow us to compile the shader successfully,
  * since we'll end up with the same code. Detect these scenarios so we can
  * avoid wasting time with useless compiles. We should also consider if the
  * gy changes other aspects of the compilation process though, like
@@ -1763,8 +1770,15 @@ skip_compile_strategy(struct v3d_compile *c, uint32_t idx)
            return !c->unrolled_any_loops;
    /* UBO load sorting: skip if we didn't sort any loads */
    case 4:
-   case 10:
            return !c->sorted_any_ubo_loads;
+   /* Move buffer loads: we assume any shader with difficult RA
+    * most likely has UBO / SSBO loads so we never try to skip.
+    * For now, we only try this for 2-thread compiles since it
+    * is expected to impact instruction counts and latency.
+    */
+   case 10:
+          assert(c->threads < 4);
+          return false;
    /* TMU pipelining: skip if we didn't pipeline any TMU ops */
    case 5:
    case 11:
@@ -1909,6 +1923,9 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                 fprintf(stderr, "Failed to compile %s prog %d/%d "
                         "with any strategy.\n",
                         vir_get_stage_name(c), c->program_id, c->variant_id);
+
+                vir_compile_destroy(c);
+                return NULL;
         }
 
         struct v3d_prog_data *prog_data;

@@ -27,6 +27,8 @@
 #include "i915/intel_gem.h"
 #include "xe/intel_gem.h"
 
+#include "util/os_time.h"
+
 bool
 intel_gem_supports_syncobj_wait(int fd)
 {
@@ -74,11 +76,12 @@ intel_gem_destroy_context(int fd, uint32_t context_id)
 
 bool
 intel_gem_create_context_engines(int fd,
+                                 enum intel_gem_create_context_flags flags,
                                  const struct intel_query_engine_info *info,
                                  int num_engines, enum intel_engine_class *engine_classes,
                                  uint32_t *context_id)
 {
-   return i915_gem_create_context_engines(fd, info, num_engines,
+   return i915_gem_create_context_engines(fd, flags, info, num_engines,
                                           engine_classes, context_id);
 }
 
@@ -132,6 +135,26 @@ intel_gem_supports_protected_context(int fd, enum intel_kmd_type kmd_type)
       unreachable("Missing");
       return false;
    }
+}
+
+bool
+intel_gem_wait_on_get_param(int fd, uint32_t param, int target_val,
+                            uint32_t timeout_ms)
+{
+   int64_t start_time = os_time_get();
+   int64_t end_time = start_time + (timeout_ms * 1000);
+   int val = -1;
+
+   errno = 0;
+   do {
+      if (!intel_gem_get_param(fd, param, &val))
+         break;
+   } while (val != target_val && !os_time_timeout(start_time, end_time, os_time_get()));
+
+   if (errno || val != target_val)
+      return false;
+
+   return true;
 }
 
 bool

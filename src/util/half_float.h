@@ -32,7 +32,7 @@
 #include "util/u_cpu_detect.h"
 
 #if defined(USE_X86_64_ASM)
-#include <immintrin.h>
+#include <xmmintrin.h>
 #endif
 
 #ifdef __cplusplus

@@ -103,6 +103,10 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
       return load_sysval_root(b, 1, 32, &u->fs.blend_constant[2]);
    case nir_intrinsic_load_blend_const_color_a_float:
       return load_sysval_root(b, 1, 32, &u->fs.blend_constant[3]);
+   case nir_intrinsic_load_api_sample_mask_agx:
+      return load_sysval_root(b, 1, 16, &u->fs.sample_mask);
+   case nir_intrinsic_load_sample_positions_agx:
+      return load_sysval_root(b, 1, 32, &u->fs.ppp_multisamplectl);
    case nir_intrinsic_load_ssbo_address:
       return load_sysval_indirect(b, 1, 64, AGX_SYSVAL_TABLE_ROOT,
                                   &u->ssbo_base, intr->src[0].ssa);
@@ -111,6 +115,18 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
                                   &u->ssbo_size, intr->src[0].ssa);
    case nir_intrinsic_load_num_workgroups:
       return load_sysval(b, 3, 32, AGX_SYSVAL_TABLE_GRID, 0);
+   case nir_intrinsic_load_xfb_address:
+      return load_sysval_root(b, 1, 64,
+                              &u->vs.xfb.base[nir_intrinsic_base(intr)]);
+   case nir_intrinsic_load_xfb_size:
+      return load_sysval_root(b, 1, 32,
+                              &u->vs.xfb.size[nir_intrinsic_base(intr)]);
+   case nir_intrinsic_load_xfb_index_buffer:
+      return load_sysval_root(b, 1, 64, &u->vs.xfb.index_buffer);
+   case nir_intrinsic_load_base_vertex:
+      return load_sysval_root(b, 1, 32, &u->vs.xfb.base_vertex);
+   case nir_intrinsic_load_num_vertices:
+      return load_sysval_root(b, 1, 32, &u->vs.xfb.num_vertices);
    default:
       return NULL;
    }
@@ -303,5 +319,8 @@ agx_nir_lower_sysvals(nir_shader *shader, struct agx_compiled_shader *compiled,
       &state);
 
    *push_size = lay_out_uniforms(compiled, &state);
+
+   util_dynarray_fini(&state.load_preambles);
+
    return true;
 }

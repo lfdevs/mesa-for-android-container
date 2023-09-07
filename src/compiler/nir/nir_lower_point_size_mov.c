@@ -40,25 +40,19 @@ lower_impl(nir_function_impl *impl,
    nir_builder b;
    nir_variable *in, *new_out = NULL;
 
-   nir_builder_init(&b, impl);
+   b = nir_builder_create(impl);
 
-   in = nir_variable_create(shader, nir_var_uniform,
-                            glsl_vec4_type(), "gl_PointSizeClampedMESA");
-   in->num_state_slots = 1;
-   in->state_slots = ralloc_array(in, nir_state_slot, 1);
-   in->state_slots[0].swizzle = BITFIELD_MASK(4);
-   memcpy(in->state_slots[0].tokens,
-         pointsize_state_tokens,
-         sizeof(in->state_slots[0].tokens));
+   in = nir_state_variable_create(shader, glsl_vec4_type(),
+                                  "gl_PointSizeClampedMESA",
+                                  pointsize_state_tokens);
 
    /* the existing output can't be removed in order to avoid breaking xfb.
     * drivers must check var->data.explicit_location to find the original output
     * and only emit that one for xfb
     */
    if (!out || out->data.explicit_location) {
-      new_out = nir_variable_create(shader, nir_var_shader_out,
-                                    glsl_float_type(), "gl_PointSizeMESA");
-      new_out->data.location = VARYING_SLOT_PSIZ;
+      new_out = nir_create_variable_with_location(shader, nir_var_shader_out,
+                                                  VARYING_SLOT_PSIZ, glsl_float_type());
    }
 
 

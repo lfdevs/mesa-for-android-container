@@ -28,21 +28,21 @@ stage_to_glslang_stage = {
 }
 
 base_layout_qualifier_id_re = r'({0}\s*=\s*(?P<{0}>\d+))'
-id_re = '(?P<name_%d>[^(gl_)]\S+)'
-type_re = '(?P<dtype_%d>\S+)'
+id_re = '(?P<name_%d>[^(gl_)]\w+)'
+type_re = '(?P<dtype_%d>\w+)'
 location_re = base_layout_qualifier_id_re.format('location')
 component_re = base_layout_qualifier_id_re.format('component')
 binding_re = base_layout_qualifier_id_re.format('binding')
 set_re = base_layout_qualifier_id_re.format('set')
-unk_re = r'\S+(=\d+)?'
+unk_re = r'\w+(=\d+)?'
 layout_qualifier_re = r'layout\W*\((%s)+\)' % '|'.join([location_re, binding_re, set_re, unk_re, '[, ]+'])
 ubo_decl_re = 'uniform\W+%s(\W*{)?(?P<type_ubo>)' % (id_re%0)
 ssbo_decl_re = 'buffer\W+%s(\W*{)?(?P<type_ssbo>)' % (id_re%1)
 image_buffer_decl_re = r'uniform\W+imageBuffer\w+%s;(?P<type_img_buf>)' % (id_re%2)
-image_decl_re = r'uniform\W+image\S+\W+%s;(?P<type_img>)' % (id_re%3)
+image_decl_re = r'uniform\W+image\w+\W+%s;(?P<type_img>)' % (id_re%3)
 texture_buffer_decl_re = r'uniform\W+textureBuffer\w+%s;(?P<type_tex_buf>)' % (id_re%4)
-combined_texture_sampler_decl_re = r'uniform\W+sampler\S+\W+%s;(?P<type_combined>)' % (id_re%5)
-texture_decl_re = r'uniform\W+texture\S+\W+%s;(?P<type_tex>)' % (id_re%6)
+combined_texture_sampler_decl_re = r'uniform\W+sampler\w+\W+%s;(?P<type_combined>)' % (id_re%5)
+texture_decl_re = r'uniform\W+texture\w+\W+%s;(?P<type_tex>)' % (id_re%6)
 sampler_decl_re = r'uniform\W+sampler\w+%s;(?P<type_samp>)' % (id_re%7)
 input_re = r'in\W+%s\W+%s;(?P<type_in>)' % (type_re%0, id_re%8)
 output_re = r'out\W+%s\W+%s;(?P<type_out>)' % (type_re%1, id_re%9)

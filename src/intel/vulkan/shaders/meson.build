@@ -32,25 +32,30 @@ float64_spv_h = custom_target(
   ]
 )
 
-generated_draws_shaders = [
-  'gfx9_generated_draws.glsl',
-  'gfx11_generated_draws.glsl',
+anv_internal_shaders = [
+  [ 'gfx9_generated_draws.glsl',  'frag' ],
+  [ 'gfx11_generated_draws.glsl', 'frag' ],
+  [ 'query_copy_compute.glsl',    'comp' ],
+  [ 'query_copy_fragment.glsl',   'frag' ],
 ]
 
-generated_draws_spvs = []
-foreach f : generated_draws_shaders
+anv_internal_spvs = []
+foreach item : anv_internal_shaders
+  f = item[0]
+  stage = item[1]
   spv_filename = f.replace('.glsl', '_spv.h')
   src_name = f.replace('.glsl', '_spv_source')
-  generated_draws_spvs += custom_target(
+  anv_internal_spvs += custom_target(
     spv_filename,
-    input : [glsl2spirv, f, files('common_generated_draws.glsl')],
+    input : [glsl2spirv, f, files('common_generated_draws.glsl',
+                                  'common_query_copy.glsl')],
     output : spv_filename,
     command : [
       prog_python, '@INPUT0@', '@INPUT1@', '@OUTPUT@',
       prog_glslang,
       '--vn', src_name,
       '--glsl-version', '450',
-      '--stage', 'frag',
+      '--stage', stage,
       '-I' + meson.current_source_dir(),
     ])
 endforeach

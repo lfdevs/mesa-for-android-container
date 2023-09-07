@@ -34,7 +34,7 @@
 void
 etna_disk_cache_init(struct etna_compiler *compiler, const char *renderer)
 {
-   if (etna_mesa_debug & ETNA_DBG_NOCACHE)
+   if (DBG_ENABLED(ETNA_DBG_NOCACHE))
       return;
 
    const struct build_id_note *note =

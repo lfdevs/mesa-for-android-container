@@ -48,9 +48,9 @@ struct pt_post_vs {
 
    unsigned flags;
 
-   boolean (*run)(struct pt_post_vs *pvs,
-                  struct draw_vertex_info *info,
-                  const struct draw_prim_info *prim_info);
+   bool (*run)(struct pt_post_vs *pvs,
+               struct draw_vertex_info *info,
+               const struct draw_prim_info *prim_info);
 };
 
 
@@ -122,7 +122,7 @@ dot4(const float *a, const float *b)
 #include "draw_cliptest_tmp.h"
 
 
-boolean
+bool
 draw_pt_post_vs_run(struct pt_post_vs *pvs,
                     struct draw_vertex_info *info,
                     const struct draw_prim_info *prim_info)
@@ -133,13 +133,13 @@ draw_pt_post_vs_run(struct pt_post_vs *pvs,
 
 void
 draw_pt_post_vs_prepare(struct pt_post_vs *pvs,
-                        boolean clip_xy,
-                        boolean clip_z,
-                        boolean clip_user,
-                        boolean guard_band,
-                        boolean bypass_viewport,
-                        boolean clip_halfz,
-                        boolean need_edgeflags)
+                        bool clip_xy,
+                        bool clip_z,
+                        bool clip_user,
+                        bool guard_band,
+                        bool bypass_viewport,
+                        bool clip_halfz,
+                        bool need_edgeflags)
 {
    pvs->flags = 0;
 

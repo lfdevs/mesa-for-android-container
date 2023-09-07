@@ -33,8 +33,7 @@ radv_nir_lower_viewport_to_zero(nir_shader *nir)
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    /* There should be only one deref load for VIEWPORT after lower_io_to_temporaries. */
    nir_foreach_block (block, impl) {

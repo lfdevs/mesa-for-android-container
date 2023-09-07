@@ -114,17 +114,8 @@ inline VkFormat
 vk_format_from_android(unsigned android_format, unsigned android_usage)
 {
    switch (android_format) {
-   case AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM:
-      return VK_FORMAT_R8G8B8A8_UNORM;
    case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM:
-   case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
       return VK_FORMAT_R8G8B8_UNORM;
-   case AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM:
-      return VK_FORMAT_R5G6B5_UNORM_PACK16;
-   case AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT:
-      return VK_FORMAT_R16G16B16A16_SFLOAT;
-   case AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM:
-      return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
    case AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420:
    case HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL:
       return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
@@ -133,9 +124,8 @@ vk_format_from_android(unsigned android_format, unsigned android_usage)
          return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
       else
          return VK_FORMAT_R8G8B8_UNORM;
-   case AHARDWAREBUFFER_FORMAT_BLOB:
    default:
-      return VK_FORMAT_UNDEFINED;
+      return vk_ahb_format_to_image_format(android_format);
    }
 }
 
@@ -143,16 +133,6 @@ unsigned
 anv_ahb_format_for_vk_format(VkFormat vk_format)
 {
    switch (vk_format) {
-   case VK_FORMAT_R8G8B8A8_UNORM:
-      return AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
-   case VK_FORMAT_R8G8B8_UNORM:
-      return AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM;
-   case VK_FORMAT_R5G6B5_UNORM_PACK16:
-      return AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM;
-   case VK_FORMAT_R16G16B16A16_SFLOAT:
-      return AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT;
-   case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-      return AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM;
    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
 #ifdef HAVE_CROS_GRALLOC
       return AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420;
@@ -160,7 +140,7 @@ anv_ahb_format_for_vk_format(VkFormat vk_format)
       return HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL;
 #endif
    default:
-      return AHARDWAREBUFFER_FORMAT_BLOB;
+      return vk_image_format_to_ahb_format(vk_format);
    }
 }
 

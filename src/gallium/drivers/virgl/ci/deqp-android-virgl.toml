@@ -1,5 +1,5 @@
 [[deqp]]
-deqp = "/data/deqp-egl"
+deqp = "/data/deqp-egl-android"
 caselists = ["/data/egl-master.txt"]
 deqp_args = [
     "--deqp-surface-width=256",

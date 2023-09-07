@@ -419,7 +419,6 @@ static bool
 has_bit6_swizzle(int fd)
 {
    struct drm_gem_close close;
-   int ret;
 
    struct drm_i915_gem_create gem_create = {
       .size = 4096,
@@ -435,17 +434,13 @@ has_bit6_swizzle(int fd)
    /* set_tiling overwrites the input on the error path, so we have to open
     * code intel_ioctl.
     */
-   do {
-      struct drm_i915_gem_set_tiling set_tiling = {
-         .handle = gem_create.handle,
-         .tiling_mode = I915_TILING_X,
-         .stride = 512,
-      };
+   struct drm_i915_gem_set_tiling set_tiling = {
+      .handle = gem_create.handle,
+      .tiling_mode = I915_TILING_X,
+      .stride = 512,
+   };
 
-      ret = ioctl(fd, DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling);
-   } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
-
-   if (ret != 0) {
+   if (intel_ioctl(fd, DRM_IOCTL_I915_GEM_SET_TILING, &set_tiling)) {
       unreachable("Failed to set BO tiling");
       goto close_and_return;
    }
@@ -602,6 +597,8 @@ bool intel_device_info_i915_get_info_from_fd(int fd, struct intel_device_info *d
    devinfo->has_tiling_uapi = has_get_tiling(fd);
    devinfo->has_caching_uapi =
       devinfo->platform < INTEL_PLATFORM_DG2_START && !devinfo->has_local_mem;
+   if (devinfo->ver > 12 || intel_device_info_is_mtl(devinfo))
+      devinfo->has_set_pat_uapi = true;
 
    if (getparam(fd, I915_PARAM_MMAP_GTT_VERSION, &val))
       devinfo->has_mmap_offset = val >= 4;
@@ -610,12 +607,9 @@ bool intel_device_info_i915_get_info_from_fd(int fd, struct intel_device_info *d
    if (getparam(fd, I915_PARAM_HAS_CONTEXT_ISOLATION, &val))
       devinfo->has_context_isolation = val;
 
-   /* TODO: i915 don't require anymore the 2Mb alignment for gfx 12.5 and
-    * newer but using 64k brings some issues like unaligned offsets with
-    * aux map aligned to 1Mb in MTL.
-    */
+   /* TODO: We might be able to reduce alignment to 4Kb on DG1. */
    if (devinfo->verx10 >= 125)
-      devinfo->mem_alignment = 2 * 1024 * 1024;
+      devinfo->mem_alignment = 64 * 1024;
    else if (devinfo->has_local_mem)
       devinfo->mem_alignment = 64 * 1024;
    else

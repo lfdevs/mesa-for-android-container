@@ -1,6 +1,9 @@
 /*
  * Copyright © 2022 Imagination Technologies Ltd.
  *
+ * based in part on tu driver which is:
+ * Copyright © 2022 Google LLC
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
@@ -33,6 +36,7 @@
 #   include <memcheck.h>
 #endif
 
+#include "hwdef/rogue_hw_utils.h"
 #include "pvr_bo.h"
 #include "pvr_debug.h"
 #include "pvr_dump.h"
@@ -343,15 +347,18 @@ VkResult pvr_bo_alloc(struct pvr_device *device,
                       struct pvr_bo **const pvr_bo_out)
 {
    struct pvr_bo *pvr_bo;
-   pvr_dev_addr_t addr;
    VkResult result;
 
    if (PVR_IS_DEBUG_SET(ZERO_BOS))
       flags |= PVR_BO_ALLOC_FLAG_ZERO_ON_ALLOC;
 
    pvr_bo = pvr_bo_alloc_bo(device);
-   if (!pvr_bo)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   if (!pvr_bo) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto err_out;
+   }
+
+   pvr_bo->ref_count = 1;
 
    result = device->ws->ops->buffer_create(device->ws,
                                            size,
@@ -363,27 +370,21 @@ VkResult pvr_bo_alloc(struct pvr_device *device,
       goto err_free_bo;
 
    if (flags & PVR_BO_ALLOC_FLAG_CPU_MAPPED) {
-      void *map = device->ws->ops->buffer_map(pvr_bo->bo);
-      if (!map) {
-         result = VK_ERROR_MEMORY_MAP_FAILED;
+      result = device->ws->ops->buffer_map(pvr_bo->bo);
+      if (result != VK_SUCCESS)
          goto err_buffer_destroy;
-      }
 
       if (flags & PVR_BO_ALLOC_FLAG_ZERO_ON_ALLOC)
-         VG(VALGRIND_MAKE_MEM_DEFINED(map, pvr_bo->bo->size));
+         VG(VALGRIND_MAKE_MEM_DEFINED(pvr_bo->bo->map, pvr_bo->bo->size));
    }
 
-   pvr_bo->vma = device->ws->ops->heap_alloc(heap, size, alignment);
-   if (!pvr_bo->vma) {
-      result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+   result = device->ws->ops->heap_alloc(heap, size, alignment, &pvr_bo->vma);
+   if (result != VK_SUCCESS)
       goto err_buffer_unmap;
-   }
 
-   addr = device->ws->ops->vma_map(pvr_bo->vma, pvr_bo->bo, 0, size);
-   if (!addr.addr) {
-      result = VK_ERROR_MEMORY_MAP_FAILED;
+   result = device->ws->ops->vma_map(pvr_bo->vma, pvr_bo->bo, 0, size, NULL);
+   if (result != VK_SUCCESS)
       goto err_heap_free;
-   }
 
    pvr_bo_store_insert(device->bo_store, pvr_bo);
    *pvr_bo_out = pvr_bo;
@@ -403,6 +404,7 @@ err_buffer_destroy:
 err_free_bo:
    pvr_bo_free_bo(device, pvr_bo);
 
+err_out:
    return result;
 }
 
@@ -419,7 +421,7 @@ err_free_bo:
  *
  * \sa #pvr_bo_alloc(), #PVR_BO_ALLOC_FLAG_CPU_MAPPED
  */
-void *pvr_bo_cpu_map(struct pvr_device *device, struct pvr_bo *pvr_bo)
+VkResult pvr_bo_cpu_map(struct pvr_device *device, struct pvr_bo *pvr_bo)
 {
    assert(!pvr_bo->bo->map);
 
@@ -475,6 +477,9 @@ void pvr_bo_free(struct pvr_device *device, struct pvr_bo *pvr_bo)
    if (!pvr_bo)
       return;
 
+   if (!p_atomic_dec_zero(&pvr_bo->ref_count))
+      return;
+
 #if defined(HAVE_VALGRIND)
    vk_free(&device->vk.alloc, pvr_bo->bo->vbits);
 #endif /* defined(HAVE_VALGRIND) */
@@ -492,11 +497,218 @@ void pvr_bo_free(struct pvr_device *device, struct pvr_bo *pvr_bo)
    pvr_bo_free_bo(device, pvr_bo);
 }
 
-#if defined(HAVE_VALGRIND)
-void *pvr_bo_cpu_map_unchanged(struct pvr_device *device, struct pvr_bo *pvr_bo)
+/**
+ * \brief Interface to initialize a pvr_suballocator.
+ *
+ * \param[in] allocator    Sub-allocator to initialize.
+ * \param[in] heap         Heap to sub-allocate device virtual address from.
+ * \param[in] device       Logical device pointer.
+ * \param[in] default_size Minimum size used for pvr bo(s).
+ *
+ * \sa #pvr_bo_suballocator_fini()
+ */
+void pvr_bo_suballocator_init(struct pvr_suballocator *allocator,
+                              struct pvr_winsys_heap *heap,
+                              struct pvr_device *device,
+                              uint32_t default_size)
 {
-   void *map = pvr_bo_cpu_map(device, pvr_bo);
-   if (map) {
+   *allocator = (struct pvr_suballocator){
+      .device = device,
+      .default_size = default_size,
+      .heap = heap,
+   };
+
+   simple_mtx_init(&allocator->mtx, mtx_plain);
+}
+
+/**
+ * \brief Interface to destroy a pvr_suballocator.
+ *
+ * \param[in] allocator Sub-allocator to clean-up.
+ *
+ * \sa #pvr_bo_suballocator_init()
+ */
+void pvr_bo_suballocator_fini(struct pvr_suballocator *allocator)
+{
+   pvr_bo_free(allocator->device, allocator->bo);
+   pvr_bo_free(allocator->device, allocator->bo_cached);
+
+   simple_mtx_destroy(&allocator->mtx);
+}
+
+static inline struct pvr_bo *pvr_bo_get_ref(struct pvr_bo *bo)
+{
+   p_atomic_inc(&bo->ref_count);
+
+   return bo;
+}
+
+/**
+ * \brief Interface to sub-allocate buffer objects.
+ *
+ * \param[in]  allocator       Sub-allocator used to make a sub-allocation.
+ * \param[in]  size            Size of buffer to sub-alllocate.
+ * \param[in]  align           Required alignment of the allocation. Must be
+ *                             a power of two.
+ * \param[in]  zero_on_alloc   Require memory for the sub-allocation to be 0.
+ * \param[out] suballoc_bo_out On success points to the sub-allocated buffer
+ *                             object.
+ * \return VK_SUCCESS on success, or error code otherwise.
+ *
+ * \sa # pvr_bo_suballoc_free()
+ */
+VkResult pvr_bo_suballoc(struct pvr_suballocator *allocator,
+                         uint32_t size,
+                         uint32_t align,
+                         bool zero_on_alloc,
+                         struct pvr_suballoc_bo **const suballoc_bo_out)
+{
+   const struct pvr_device_info *dev_info =
+      &allocator->device->pdevice->dev_info;
+   const uint32_t cache_line_size = rogue_get_slc_cache_line_size(dev_info);
+   struct pvr_suballoc_bo *suballoc_bo;
+   uint32_t alloc_size, aligned_size;
+   VkResult result;
+
+   suballoc_bo = vk_alloc(&allocator->device->vk.alloc,
+                          sizeof(*suballoc_bo),
+                          8,
+                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!suballoc_bo)
+      return vk_error(allocator->device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   /* This cache line value is used for all type of allocations (i.e. USC, PDS,
+    * transfer and general), so always align them to at least the size of the
+    * cache line.
+    */
+   align = MAX2(align, cache_line_size);
+   assert(util_is_power_of_two_nonzero(align));
+   aligned_size = ALIGN_POT(size, align);
+
+   simple_mtx_lock(&allocator->mtx);
+
+   if (allocator->bo) {
+      uint32_t aligned_offset = ALIGN_POT(allocator->next_offset, align);
+
+      if (aligned_offset + aligned_size <= allocator->bo->bo->size) {
+         suballoc_bo->allocator = allocator;
+         suballoc_bo->bo = pvr_bo_get_ref(allocator->bo);
+         suballoc_bo->dev_addr =
+            PVR_DEV_ADDR_OFFSET(allocator->bo->vma->dev_addr, aligned_offset);
+         suballoc_bo->offset = aligned_offset;
+         suballoc_bo->size = aligned_size;
+
+         allocator->next_offset = aligned_offset + aligned_size;
+
+         if (zero_on_alloc)
+            memset(pvr_bo_suballoc_get_map_addr(suballoc_bo), 0, aligned_size);
+
+         *suballoc_bo_out = suballoc_bo;
+         simple_mtx_unlock(&allocator->mtx);
+
+         return VK_SUCCESS;
+      } else {
+         pvr_bo_free(allocator->device, allocator->bo);
+         allocator->bo = NULL;
+      }
+   }
+
+   alloc_size = MAX2(aligned_size, ALIGN_POT(allocator->default_size, align));
+
+   if (allocator->bo_cached) {
+      struct pvr_winsys_bo *bo_cached = allocator->bo_cached->bo;
+
+      if (alloc_size <= bo_cached->size)
+         allocator->bo = allocator->bo_cached;
+      else
+         pvr_bo_free(allocator->device, allocator->bo_cached);
+
+      allocator->bo_cached = NULL;
+   }
+
+   if (!allocator->bo) {
+      result = pvr_bo_alloc(allocator->device,
+                            allocator->heap,
+                            alloc_size,
+                            align,
+                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
+                            &allocator->bo);
+      if (result != VK_SUCCESS) {
+         vk_free(&allocator->device->vk.alloc, suballoc_bo);
+         simple_mtx_unlock(&allocator->mtx);
+         return result;
+      }
+   }
+
+   suballoc_bo->allocator = allocator;
+   suballoc_bo->bo = pvr_bo_get_ref(allocator->bo);
+   suballoc_bo->dev_addr = allocator->bo->vma->dev_addr;
+   suballoc_bo->offset = 0;
+   suballoc_bo->size = aligned_size;
+
+   allocator->next_offset = aligned_size;
+
+   if (zero_on_alloc)
+      memset(pvr_bo_suballoc_get_map_addr(suballoc_bo), 0, aligned_size);
+
+   *suballoc_bo_out = suballoc_bo;
+   simple_mtx_unlock(&allocator->mtx);
+
+   return VK_SUCCESS;
+}
+
+/**
+ * \brief Interface to free a sub-allocated buffer object.
+ *
+ * \param[in] suballoc_bo Sub-allocated buffer object to free.
+ *
+ * \sa #pvr_bo_suballoc()
+ */
+void pvr_bo_suballoc_free(struct pvr_suballoc_bo *suballoc_bo)
+{
+   if (!suballoc_bo)
+      return;
+
+   simple_mtx_lock(&suballoc_bo->allocator->mtx);
+
+   if (p_atomic_read(&suballoc_bo->bo->ref_count) == 1 &&
+       !suballoc_bo->allocator->bo_cached) {
+      suballoc_bo->allocator->bo_cached = suballoc_bo->bo;
+   } else {
+      pvr_bo_free(suballoc_bo->allocator->device, suballoc_bo->bo);
+   }
+
+   simple_mtx_unlock(&suballoc_bo->allocator->mtx);
+
+   vk_free(&suballoc_bo->allocator->device->vk.alloc, suballoc_bo);
+}
+
+/**
+ * \brief Interface to retrieve sub-allocated memory offset from the host
+ * virtual address space.
+ *
+ * \param[in] suballoc_bo Sub-allocated buffer object pointer.
+ *
+ * \return Valid host virtual address on success.
+ *
+ * \sa #pvr_bo_suballoc()
+ */
+void *pvr_bo_suballoc_get_map_addr(const struct pvr_suballoc_bo *suballoc_bo)
+{
+   const struct pvr_bo *pvr_bo = suballoc_bo->bo;
+
+   assert((uint8_t *)pvr_bo->bo->map + suballoc_bo->offset <
+          (uint8_t *)pvr_bo->bo->map + pvr_bo->bo->size);
+
+   return (uint8_t *)pvr_bo->bo->map + suballoc_bo->offset;
+}
+
+#if defined(HAVE_VALGRIND)
+VkResult pvr_bo_cpu_map_unchanged(struct pvr_device *device,
+                                  struct pvr_bo *pvr_bo)
+{
+   VkResult result = pvr_bo_cpu_map(device, pvr_bo);
+   if (result == VK_SUCCESS) {
       unsigned ret = VALGRIND_SET_VBITS(pvr_bo->bo->map,
                                         pvr_bo->bo->vbits,
                                         pvr_bo->bo->size);
@@ -504,6 +716,6 @@ void *pvr_bo_cpu_map_unchanged(struct pvr_device *device, struct pvr_bo *pvr_bo)
          mesa_loge("Failed to set vbits; expect bad valgrind results.");
    }
 
-   return map;
+   return result;
 }
 #endif /* defined(HAVE_VALGRIND) */

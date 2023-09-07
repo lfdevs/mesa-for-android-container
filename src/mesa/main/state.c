@@ -256,12 +256,10 @@ update_program(struct gl_context *ctx)
                               NULL);
    } else {
       /* Use fragment program generated from fixed-function state */
-      struct gl_shader_program *f = _mesa_get_fixed_func_fragment_program(ctx);
-
       _mesa_reference_program(ctx, &ctx->FragmentProgram._Current,
-			      f->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program);
+                              _mesa_get_fixed_func_fragment_program(ctx));
       _mesa_reference_program(ctx, &ctx->FragmentProgram._TexEnvProgram,
-			      f->_LinkedShaders[MESA_SHADER_FRAGMENT]->Program);
+                              ctx->FragmentProgram._Current);
    }
 
    /* Examine vertex program after fragment program as

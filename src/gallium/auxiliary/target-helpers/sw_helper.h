@@ -2,7 +2,7 @@
 #ifndef SW_HELPER_H
 #define SW_HELPER_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_debug.h"
 #include "target-helpers/sw_helper_public.h"
 #include "frontend/sw_winsys.h"
@@ -18,10 +18,6 @@
 
 #ifdef GALLIUM_D3D12
 #include "d3d12/d3d12_public.h"
-#endif
-
-#if defined(GALLIUM_ASAHI) && __APPLE__
-#include "asahi/agx_public.h"
 #endif
 
 #ifdef GALLIUM_SOFTPIPE
@@ -70,11 +66,6 @@ sw_screen_create_named(struct sw_winsys *winsys, const struct pipe_screen_config
       screen = d3d12_create_dxcore_screen(winsys, NULL);
 #endif
 
-#if defined(GALLIUM_ASAHI) && __APPLE__
-   if (screen == NULL && strcmp(driver, "asahi") == 0)
-      screen = agx_screen_create(0, NULL, winsys);
-#endif
-
    return screen;
 }
 
@@ -86,9 +77,6 @@ sw_screen_create_vk(struct sw_winsys *winsys, const struct pipe_screen_config *c
       (sw_vk ? "" : debug_get_option("GALLIUM_DRIVER", "")),
 #if defined(GALLIUM_D3D12)
       (sw_vk || only_sw) ? "" : "d3d12",
-#endif
-#if defined(GALLIUM_ASAHI) && __APPLE__
-      (sw_vk || only_sw) ? "" : "asahi",
 #endif
 #if defined(GALLIUM_LLVMPIPE)
       "llvmpipe",

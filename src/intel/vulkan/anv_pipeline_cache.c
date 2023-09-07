@@ -78,7 +78,8 @@ anv_shader_bin_create(struct anv_device *device,
                       const struct brw_compile_stats *stats, uint32_t num_stats,
                       const nir_xfb_info *xfb_info_in,
                       const struct anv_pipeline_bind_map *bind_map,
-                      const struct anv_push_descriptor_info *push_desc_info)
+                      const struct anv_push_descriptor_info *push_desc_info,
+                      enum anv_dynamic_push_bits dynamic_push_values)
 {
    VK_MULTIALLOC(ma);
    VK_MULTIALLOC_DECL(&ma, struct anv_shader_bin, shader, 1);
@@ -115,17 +116,29 @@ anv_shader_bin_create(struct anv_device *device,
    memcpy(shader->kernel.map, kernel_data, kernel_size);
    shader->kernel_size = kernel_size;
 
-   uint64_t shader_data_addr = INSTRUCTION_STATE_POOL_MIN_ADDRESS +
-                               shader->kernel.offset +
-                               prog_data_in->const_data_offset;
+   uint64_t shader_data_addr =
+      device->physical->va.instruction_state_pool.addr +
+      shader->kernel.offset +
+      prog_data_in->const_data_offset;
 
    int rv_count = 0;
-   struct brw_shader_reloc_value reloc_values[5];
+   struct brw_shader_reloc_value reloc_values[6];
+   assert((device->physical->va.instruction_state_pool.addr & 0xffffffff) == 0);
+   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
+      .id = BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH,
+      .value = device->physical->indirect_descriptors ?
+               (device->physical->va.descriptor_pool.addr >> 32) :
+               (device->physical->va.binding_table_pool.addr >> 32),
+   };
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_LOW,
       .value = shader_data_addr,
    };
-   assert(shader_data_addr >> 32 == INSTRUCTION_STATE_POOL_MIN_ADDRESS >> 32);
+   assert(shader_data_addr >> 32 == device->physical->va.instruction_state_pool.addr >> 32);
+   reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
+      .id = BRW_SHADER_RELOC_CONST_DATA_ADDR_HIGH,
+      .value = device->physical->va.instruction_state_pool.addr >> 32,
+   };
    reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_SHADER_START_OFFSET,
       .value = shader->kernel.offset,
@@ -133,9 +146,10 @@ anv_shader_bin_create(struct anv_device *device,
    if (brw_shader_stage_is_bindless(stage)) {
       const struct brw_bs_prog_data *bs_prog_data =
          brw_bs_prog_data_const(prog_data_in);
-      uint64_t resume_sbt_addr = INSTRUCTION_STATE_POOL_MIN_ADDRESS +
-                                 shader->kernel.offset +
-                                 bs_prog_data->resume_sbt_offset;
+      uint64_t resume_sbt_addr =
+         device->physical->va.instruction_state_pool.addr +
+         shader->kernel.offset +
+         bs_prog_data->resume_sbt_offset;
       reloc_values[rv_count++] = (struct brw_shader_reloc_value) {
          .id = BRW_SHADER_RELOC_RESUME_SBT_ADDR_LOW,
          .value = resume_sbt_addr,
@@ -172,6 +186,8 @@ anv_shader_bin_create(struct anv_device *device,
    } else {
       shader->xfb_info = NULL;
    }
+
+   shader->dynamic_push_values = dynamic_push_values;
 
    typed_memcpy(&shader->push_desc_info, push_desc_info, 1);
 
@@ -219,6 +235,8 @@ anv_shader_bin_serialize(struct vk_pipeline_cache_object *object,
    } else {
       blob_write_uint32(blob, 0);
    }
+
+   blob_write_uint32(blob, shader->dynamic_push_values);
 
    blob_write_uint32(blob, shader->push_desc_info.used_descriptors);
    blob_write_uint32(blob, shader->push_desc_info.fully_promoted_ubo_descriptors);
@@ -286,6 +304,8 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
    if (xfb_size)
       xfb_info = blob_read_bytes(blob, xfb_size);
 
+   enum anv_dynamic_push_bits dynamic_push_values = blob_read_uint32(blob);
+
    struct anv_push_descriptor_info push_desc_info = {};
    push_desc_info.used_descriptors = blob_read_uint32(blob);
    push_desc_info.fully_promoted_ubo_descriptors = blob_read_uint32(blob);
@@ -322,7 +342,8 @@ anv_shader_bin_deserialize(struct vk_pipeline_cache *cache,
                             kernel_data, kernel_size,
                             &prog_data.base, prog_data_size,
                             stats, num_stats, xfb_info, &bind_map,
-                            &push_desc_info);
+                            &push_desc_info,
+                            dynamic_push_values);
    if (shader == NULL)
       return NULL;
 
@@ -365,7 +386,8 @@ anv_device_upload_kernel(struct anv_device *device,
                          uint32_t num_stats,
                          const nir_xfb_info *xfb_info,
                          const struct anv_pipeline_bind_map *bind_map,
-                         const struct anv_push_descriptor_info *push_desc_info)
+                         const struct anv_push_descriptor_info *push_desc_info,
+                         enum anv_dynamic_push_bits dynamic_push_values)
 {
    /* Use the default pipeline cache if none is specified */
    if (cache == NULL)
@@ -378,7 +400,8 @@ anv_device_upload_kernel(struct anv_device *device,
                             prog_data, prog_data_size,
                             stats, num_stats,
                             xfb_info, bind_map,
-                            push_desc_info);
+                            push_desc_info,
+                            dynamic_push_values);
    if (shader == NULL)
       return NULL;
 

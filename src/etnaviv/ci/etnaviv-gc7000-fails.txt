@@ -37,4 +37,4 @@ dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear_clamp,Fail
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear_mirror,Fail
 dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear_repeat,Fail
-dEQP-GLES2.functional.uniform_api.random.79,Fail
+dEQP-GLES2.functional.uniform_api.random.79,Crash

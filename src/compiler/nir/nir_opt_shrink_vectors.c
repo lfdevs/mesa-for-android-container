@@ -90,6 +90,37 @@ shrink_dest_to_read_mask(nir_ssa_def *def)
    return false;
 }
 
+static bool
+shrink_intrinsic_to_non_sparse(nir_intrinsic_instr *instr)
+{
+   unsigned mask = nir_ssa_def_components_read(&instr->dest.ssa);
+   int last_bit = util_last_bit(mask);
+
+   /* If the sparse component is used, do nothing. */
+   if (last_bit == instr->dest.ssa.num_components)
+      return false;
+
+   instr->dest.ssa.num_components -= 1;
+   instr->num_components = instr->dest.ssa.num_components;
+
+   /* Switch to the non-sparse intrinsic. */
+   switch (instr->intrinsic) {
+   case nir_intrinsic_image_sparse_load:
+      instr->intrinsic = nir_intrinsic_image_load;
+      break;
+   case nir_intrinsic_bindless_image_sparse_load:
+      instr->intrinsic = nir_intrinsic_bindless_image_load;
+      break;
+   case nir_intrinsic_image_deref_sparse_load:
+      instr->intrinsic = nir_intrinsic_image_deref_load;
+      break;
+   default:
+      break;
+   }
+
+   return true;
+}
+
 static void
 reswizzle_alu_uses(nir_ssa_def *def, uint8_t *reswizzle)
 {
@@ -267,22 +298,43 @@ opt_shrink_vectors_intrinsic(nir_builder *b, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_global:
    case nir_intrinsic_load_global_constant:
    case nir_intrinsic_load_kernel_input:
-   case nir_intrinsic_load_scratch:
-      break;
-   default:
-      return false;
-   }
+   case nir_intrinsic_load_scratch: {
+      /* Must be a vectorized intrinsic that we can resize. */
+      assert(instr->num_components != 0);
 
-   /* Must be a vectorized intrinsic that we can resize. */
-   assert(instr->num_components != 0);
+      /* Trim the dest to the used channels */
+      if (!shrink_dest_to_read_mask(&instr->dest.ssa))
+         return false;
 
-   /* Trim the dest to the used channels */
-   if (shrink_dest_to_read_mask(&instr->dest.ssa)) {
       instr->num_components = instr->dest.ssa.num_components;
       return true;
    }
+   case nir_intrinsic_image_sparse_load:
+   case nir_intrinsic_bindless_image_sparse_load:
+   case nir_intrinsic_image_deref_sparse_load:
+      return shrink_intrinsic_to_non_sparse(instr);
+   default:
+      return false;
+   }
+}
 
-   return false;
+static bool
+opt_shrink_vectors_tex(nir_builder *b, nir_tex_instr *tex)
+{
+   if (!tex->is_sparse)
+      return false;
+
+   unsigned mask = nir_ssa_def_components_read(&tex->dest.ssa);
+   int last_bit = util_last_bit(mask);
+
+   /* If the sparse component is used, do nothing. */
+   if (last_bit == tex->dest.ssa.num_components)
+      return false;
+
+   tex->dest.ssa.num_components -= 1;
+   tex->is_sparse = false;
+
+   return true;
 }
 
 static bool
@@ -455,6 +507,9 @@ opt_shrink_vectors_instr(nir_builder *b, nir_instr *instr)
    case nir_instr_type_alu:
       return opt_shrink_vectors_alu(b, nir_instr_as_alu(instr));
 
+   case nir_instr_type_tex:
+      return opt_shrink_vectors_tex(b, nir_instr_as_tex(instr));
+
    case nir_instr_type_intrinsic:
       return opt_shrink_vectors_intrinsic(b, nir_instr_as_intrinsic(instr));
 
@@ -479,25 +534,21 @@ nir_opt_shrink_vectors(nir_shader *shader)
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-         continue;
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder b = nir_builder_create(impl);
 
-      nir_builder b;
-      nir_builder_init(&b, function->impl);
-
-      nir_foreach_block_reverse(block, function->impl) {
+      nir_foreach_block_reverse(block, impl) {
          nir_foreach_instr_reverse(instr, block) {
             progress |= opt_shrink_vectors_instr(&b, instr);
          }
       }
 
       if (progress) {
-         nir_metadata_preserve(function->impl,
+         nir_metadata_preserve(impl,
                                nir_metadata_block_index |
                                nir_metadata_dominance);
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 

@@ -1301,8 +1301,8 @@ vtn_handle_bitcast(struct vtn_builder *b, const uint32_t *w, unsigned count)
 
    vtn_fail_if(src->num_components * src->bit_size !=
                glsl_get_vector_elements(type->type) * glsl_get_bit_size(type->type),
-               "Source and destination of OpBitcast must have the same "
-               "total number of bits");
+               "Source (%%%u) and destination (%%%u) of OpBitcast must have the same "
+               "total number of bits", w[3], w[2]);
    nir_ssa_def *val =
       nir_bitcast_vector(&b->nb, src, glsl_get_bit_size(type->type));
    vtn_push_nir_ssa(b, w[2], val);

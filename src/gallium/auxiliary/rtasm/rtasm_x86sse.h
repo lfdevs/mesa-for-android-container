@@ -25,7 +25,7 @@
 #ifndef _RTASM_X86SSE_H_
 #define _RTASM_X86SSE_H_
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/detect.h"
 
 #if DETECT_ARCH_X86 || DETECT_ARCH_X86_64

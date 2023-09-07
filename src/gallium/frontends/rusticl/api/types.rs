@@ -1,5 +1,6 @@
 use rusticl_opencl_gen::*;
 
+use std::borrow::Borrow;
 use std::iter::Product;
 
 #[macro_export]
@@ -89,7 +90,9 @@ impl<T: Copy> CLVec<T> {
     ///
     /// Using it for anything else is undefined.
     pub unsafe fn from_raw(v: *const T) -> Self {
-        Self { vals: *v.cast() }
+        Self {
+            vals: unsafe { *v.cast() },
+        }
     }
 
     pub fn pixels<'a>(&'a self) -> T
@@ -101,8 +104,25 @@ impl<T: Copy> CLVec<T> {
 }
 
 impl CLVec<usize> {
-    pub fn is_in_bound(base: Self, offset: Self, pitch: [usize; 3], size: usize) -> bool {
-        (base + offset - [1, 1, 1]) * pitch < size
+    /// returns the offset of point in linear memory.
+    pub fn calc_offset<T: Borrow<Self>>(point: T, pitch: [usize; 3]) -> usize {
+        *point.borrow() * pitch
+    }
+
+    /// returns the scalar size of the described region in linear memory.
+    pub fn calc_size<T: Borrow<Self>>(region: T, pitch: [usize; 3]) -> usize {
+        (*region.borrow() - [0, 1, 1]) * pitch
+    }
+
+    pub fn calc_offset_size<T1: Borrow<Self>, T2: Borrow<Self>>(
+        base: T1,
+        region: T2,
+        pitch: [usize; 3],
+    ) -> (usize, usize) {
+        (
+            Self::calc_offset(base, pitch),
+            Self::calc_size(region, pitch),
+        )
     }
 }
 
@@ -194,5 +214,37 @@ where
             .map(|v| T::try_from(*v).map_err(|_| CL_OUT_OF_HOST_MEMORY))
             .collect();
         vec?.try_into().map_err(|_| CL_OUT_OF_HOST_MEMORY)
+    }
+}
+
+impl<T> From<[T; 3]> for CLVec<T>
+where
+    T: Copy,
+{
+    fn from(arr: [T; 3]) -> Self {
+        Self::new(arr)
+    }
+}
+
+#[allow(non_snake_case)]
+pub mod IdpAccelProps {
+    use rusticl_opencl_gen::cl_bool;
+    use rusticl_opencl_gen::cl_device_integer_dot_product_acceleration_properties_khr;
+    pub fn new(
+        signed_accelerated: cl_bool,
+        unsigned_accelerated: cl_bool,
+        mixed_signedness_accelerated: cl_bool,
+        accumulating_saturating_signed_accelerated: cl_bool,
+        accumulating_saturating_unsigned_accelerated: cl_bool,
+        accumulating_saturating_mixed_signedness_accelerated: cl_bool,
+    ) -> cl_device_integer_dot_product_acceleration_properties_khr {
+        cl_device_integer_dot_product_acceleration_properties_khr {
+            signed_accelerated,
+            unsigned_accelerated,
+            mixed_signedness_accelerated,
+            accumulating_saturating_signed_accelerated,
+            accumulating_saturating_unsigned_accelerated,
+            accumulating_saturating_mixed_signedness_accelerated,
+        }
     }
 }

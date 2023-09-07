@@ -286,13 +286,13 @@ get_semantic_name(nir_variable *var, struct semantic_info *info,
       break;
 
     case VARYING_SLOT_FACE:
-      assert(glsl_get_components(var->type) == 1);
+      assert(glsl_get_components(type) == 1);
       snprintf(info->name, 64, "%s", "SV_IsFrontFace");
       info->kind = DXIL_SEM_IS_FRONT_FACE;
       break;
 
    case VARYING_SLOT_PRIMITIVE_ID:
-     assert(glsl_get_components(var->type) == 1);
+     assert(glsl_get_components(type) == 1);
      snprintf(info->name, 64, "%s", "SV_PrimitiveID");
      info->kind = DXIL_SEM_PRIMITIVE_ID;
      break;
@@ -307,25 +307,25 @@ get_semantic_name(nir_variable *var, struct semantic_info *info,
       break;
 
    case VARYING_SLOT_TESS_LEVEL_INNER:
-      assert(glsl_get_components(var->type) <= 2);
+      assert(glsl_get_components(type) <= 2);
       snprintf(info->name, 64, "%s", "SV_InsideTessFactor");
       info->kind = DXIL_SEM_INSIDE_TESS_FACTOR;
       break;
 
    case VARYING_SLOT_TESS_LEVEL_OUTER:
-      assert(glsl_get_components(var->type) <= 4);
+      assert(glsl_get_components(type) <= 4);
       snprintf(info->name, 64, "%s", "SV_TessFactor");
       info->kind = DXIL_SEM_TESS_FACTOR;
       break;
 
    case VARYING_SLOT_VIEWPORT:
-      assert(glsl_get_components(var->type) == 1);
+      assert(glsl_get_components(type) == 1);
       snprintf(info->name, 64, "%s", "SV_ViewportArrayIndex");
       info->kind = DXIL_SEM_VIEWPORT_ARRAY_INDEX;
       break;
 
    case VARYING_SLOT_LAYER:
-      assert(glsl_get_components(var->type) == 1);
+      assert(glsl_get_components(type) == 1);
       snprintf(info->name, 64, "%s", "SV_RenderTargetArrayIndex");
       info->kind = DXIL_SEM_RENDERTARGET_ARRAY_INDEX;
       break;
@@ -770,6 +770,61 @@ process_patch_const_signature(struct dxil_module *mod, nir_shader *s)
    mod->num_sig_patch_consts = num_consts;
 }
 
+static void
+prepare_dependency_tables(struct dxil_module *mod, nir_shader *s)
+{
+   bool uses_view_id = BITSET_TEST(s->info.system_values_read, SYSTEM_VALUE_VIEW_INDEX);
+   uint32_t num_output_streams = s->info.stage == MESA_SHADER_GEOMETRY ? 4 : 1;
+   uint32_t num_tables = s->info.stage == MESA_SHADER_TESS_CTRL || s->info.stage == MESA_SHADER_TESS_EVAL ? 2 : num_output_streams;
+
+   const uint32_t output_vecs_per_dword = 32 /* bits per dword */ / 4 /* components per vec */;
+   const uint32_t masks_per_input_vec = 4 /* components per vec */;
+
+   for (uint32_t i = 0; i < num_output_streams; ++i)
+      mod->dependency_table_dwords_per_input[i] = DIV_ROUND_UP(mod->num_psv_outputs[i], output_vecs_per_dword);
+   if (s->info.stage == MESA_SHADER_TESS_CTRL)
+      mod->dependency_table_dwords_per_input[1] = DIV_ROUND_UP(mod->num_psv_patch_consts, output_vecs_per_dword);
+
+   uint32_t view_id_table_sizes[4] = { 0 };
+   if (uses_view_id) {
+      for (uint32_t i = 0; i < 4; ++i)
+         view_id_table_sizes[i] = mod->dependency_table_dwords_per_input[i];
+   }
+
+   for (uint32_t i = 0; i < num_output_streams; ++i)
+      mod->io_dependency_table_size[i] = mod->dependency_table_dwords_per_input[i] * mod->num_psv_inputs * masks_per_input_vec;
+   if (s->info.stage == MESA_SHADER_TESS_CTRL)
+      mod->io_dependency_table_size[1] = mod->dependency_table_dwords_per_input[1] * mod->num_psv_inputs * masks_per_input_vec;
+   else if (s->info.stage == MESA_SHADER_TESS_EVAL)
+      mod->io_dependency_table_size[1] = mod->dependency_table_dwords_per_input[0] * mod->num_psv_patch_consts * masks_per_input_vec;
+
+   mod->serialized_dependency_table_size = num_tables + 1;
+   for (uint32_t i = 0; i < num_tables; ++i) {
+      mod->serialized_dependency_table_size += view_id_table_sizes[i] + mod->io_dependency_table_size[i];
+   }
+
+   uint32_t *table = calloc(mod->serialized_dependency_table_size, sizeof(uint32_t));
+   mod->serialized_dependency_table = table;
+
+   *(table++) = mod->num_psv_inputs * 4;
+   for (uint32_t i = 0; i < num_output_streams; ++i) {
+      *(table++) = mod->num_psv_outputs[i] * 4;
+      mod->viewid_dependency_table[i] = table;
+      table += view_id_table_sizes[i];
+      mod->io_dependency_table[i] = table;
+      table += mod->io_dependency_table_size[i];
+   }
+   if (s->info.stage == MESA_SHADER_TESS_CTRL || s->info.stage == MESA_SHADER_TESS_EVAL) {
+      *(table++) = mod->num_psv_patch_consts * 4;
+      if (s->info.stage == MESA_SHADER_TESS_CTRL) {
+         mod->viewid_dependency_table[1] = table;
+         table += view_id_table_sizes[1];
+      }
+      mod->io_dependency_table[1] = table;
+      table += mod->io_dependency_table_size[1];
+   }
+}
+
 void
 preprocess_signatures(struct dxil_module *mod, nir_shader *s, unsigned input_clip_size)
 {
@@ -780,6 +835,8 @@ preprocess_signatures(struct dxil_module *mod, nir_shader *s, unsigned input_cli
    process_input_signature(mod, s, input_clip_size);
    process_output_signature(mod, s);
    process_patch_const_signature(mod, s);
+
+   prepare_dependency_tables(mod, s);
 }
 
 static const struct dxil_mdnode *

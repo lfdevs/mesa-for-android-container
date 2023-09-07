@@ -157,7 +157,7 @@ glxSendClientInfo(struct glx_display *glx_dpy, int screen)
 
    c = XGetXCBConnection(glx_dpy->dpy);
 
-   /* Depending on the GLX verion and the available extensions on the server,
+   /* Depending on the GLX version and the available extensions on the server,
     * send the correct "flavor" of protocol to the server.
     *
     * THE ORDER IS IMPORTANT.  We want to send the most recent version of the

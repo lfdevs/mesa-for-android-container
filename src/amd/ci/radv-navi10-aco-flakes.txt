@@ -7,3 +7,5 @@ dEQP-VK.pipeline.fast_linked_library.image.suballocation.sampling_type.combined.
 dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.two_draws_static.line_stipple_disable
 dEQP-VK.texture.filtering.3d.combinations.nearest.linear.mirror_clamp_to_edge.mirror_clamp_to_edge.repeat
 dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.two_draws_static.topology_line
+
+dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.contents_secondary_cmdbuffers

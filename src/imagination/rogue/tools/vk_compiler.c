@@ -27,6 +27,7 @@
 #include "util/macros.h"
 #include "util/os_file.h"
 #include "util/ralloc.h"
+#include "util/u_dynarray.h"
 
 #include <getopt.h>
 #include <stdbool.h>
@@ -227,8 +228,10 @@ int main(int argc, char *argv[])
       goto err_free_build_context;
    }
 
-   bytes_written =
-      fwrite(ctx->binary[opts.stage].data, 1, ctx->binary[opts.stage].size, fp);
+   bytes_written = fwrite(util_dynarray_begin(&ctx->binary[opts.stage]),
+                          1,
+                          ctx->binary[opts.stage].size,
+                          fp);
    if (bytes_written != ctx->binary[opts.stage].size) {
       fprintf(
          stderr,

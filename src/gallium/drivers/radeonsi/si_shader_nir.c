@@ -1,25 +1,7 @@
 /*
  * Copyright 2017 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "nir_builder.h"
@@ -28,11 +10,9 @@
 #include "ac_nir.h"
 
 
-static bool si_alu_to_scalar_filter(const nir_instr *instr, const void *data)
+bool si_alu_to_scalar_packed_math_filter(const nir_instr *instr, const void *data)
 {
-   struct si_screen *sscreen = (struct si_screen *)data;
-
-   if (sscreen->info.has_packed_math_16bit && instr->type == nir_instr_type_alu) {
+   if (instr->type == nir_instr_type_alu) {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
 
       if (alu->dest.dest.is_ssa &&
@@ -93,7 +73,8 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       bool lower_phis_to_scalar = false;
 
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
-      NIR_PASS(progress, nir, nir_lower_alu_to_scalar, si_alu_to_scalar_filter, sscreen);
+      NIR_PASS(progress, nir, nir_lower_alu_to_scalar,
+               nir->options->lower_to_scalar_filter, NULL);
       NIR_PASS(progress, nir, nir_lower_phis_to_scalar, false);
 
       if (first) {
@@ -111,12 +92,14 @@ void si_nir_opts(struct si_screen *sscreen, struct nir_shader *nir, bool first)
       NIR_PASS(progress, nir, nir_opt_dce);
       /* nir_opt_if_optimize_phi_true_false is disabled on LLVM14 (#6976) */
       NIR_PASS(lower_phis_to_scalar, nir, nir_opt_if,
-         nir_opt_if_aggressive_last_continue |
-            (LLVM_VERSION_MAJOR == 14 ? 0 : nir_opt_if_optimize_phi_true_false));
+               nir_opt_if_aggressive_last_continue |
+               nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
 
-      if (lower_alu_to_scalar)
-         NIR_PASS_V(nir, nir_lower_alu_to_scalar, si_alu_to_scalar_filter, sscreen);
+      if (lower_alu_to_scalar) {
+         NIR_PASS_V(nir, nir_lower_alu_to_scalar,
+                    nir->options->lower_to_scalar_filter, NULL);
+      }
       if (lower_phis_to_scalar)
          NIR_PASS_V(nir, nir_lower_phis_to_scalar, false);
       progress |= lower_alu_to_scalar | lower_phis_to_scalar;
@@ -202,7 +185,7 @@ static void si_late_optimize_16bit_samplers(struct si_screen *sscreen, nir_shade
     *
     * We only use a16/g16 if all of the affected sources are 16bit.
     */
-   bool has_g16 = sscreen->info.gfx_level >= GFX10 && LLVM_VERSION_MAJOR >= 12;
+   bool has_g16 = sscreen->info.gfx_level >= GFX10;
    struct nir_fold_tex_srcs_options fold_srcs_options[] = {
       {
          .sampler_dims =
@@ -290,6 +273,7 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
 
    const struct nir_lower_tex_options lower_tex_options = {
       .lower_txp = ~0u,
+      .lower_txf_offset = true,
       .lower_txs_cube_array = true,
       .lower_invalid_implicit_lod = true,
       .lower_tg4_offsets = true,
@@ -305,11 +289,11 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
 
    NIR_PASS_V(nir, si_lower_intrinsics);
 
+   NIR_PASS_V(nir, ac_nir_lower_sin_cos);
+
    NIR_PASS_V(nir, nir_lower_subgroups, &si_nir_subgroups_options);
 
-   NIR_PASS_V(nir, nir_lower_discard_or_demote,
-              (sscreen->debug_flags & DBG(FS_CORRECT_DERIVS_AFTER_KILL)) ||
-               nir->info.use_legacy_math_rules);
+   NIR_PASS_V(nir, nir_lower_discard_or_demote, true);
 
    /* Lower load constants to scalar and then clean up the mess */
    NIR_PASS_V(nir, nir_lower_load_const_to_scalar);
@@ -373,12 +357,71 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 }
 
+static bool si_mark_divergent_texture_non_uniform(struct nir_shader *nir)
+{
+   assert(nir->info.divergence_analysis_run);
+
+   /* sampler_non_uniform and texture_non_uniform are always false in GLSL,
+    * but this can lead to unexpected behavior if texture/sampler index come from
+    * a vertex attribute.
+    *
+    * For instance, 2 consecutive draws using 2 different index values,
+    * could be squashed together by the hw - producing a single draw with
+    * non-dynamically uniform index.
+    *
+    * To avoid this, detect divergent indexing, mark them as non-uniform,
+    * so that we can apply waterfall loop on these index later (either llvm
+    * backend or nir_lower_non_uniform_access).
+    *
+    * See https://gitlab.freedesktop.org/mesa/mesa/-/issues/2253
+    */
+
+   bool divergence_changed = false;
+
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_tex)
+            continue;
+
+         nir_tex_instr *tex = nir_instr_as_tex(instr);
+         for (int i = 0; i < tex->num_srcs; i++) {
+            bool divergent = tex->src[i].src.ssa->divergent;
+
+            switch (tex->src[i].src_type) {
+            case nir_tex_src_texture_deref:
+            case nir_tex_src_texture_handle:
+               tex->texture_non_uniform |= divergent;
+               break;
+            case nir_tex_src_sampler_deref:
+            case nir_tex_src_sampler_handle:
+               tex->sampler_non_uniform |= divergent;
+               break;
+            default:
+               break;
+            }
+         }
+
+         /* If dest is already divergent, divergence won't change. */
+         divergence_changed |= !tex->dest.ssa.divergent &&
+            (tex->texture_non_uniform || tex->sampler_non_uniform);
+      }
+   }
+
+   nir_metadata_preserve(impl, nir_metadata_all);
+   return divergence_changed;
+}
+
 char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
    struct nir_shader *nir = (struct nir_shader *)nirptr;
 
-   nir_lower_io_passes(nir);
+   nir_lower_io_passes(nir, false);
+   NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_in | nir_var_shader_out, NULL);
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT)
+      NIR_PASS_V(nir, nir_lower_color_inputs);
 
    NIR_PASS_V(nir, ac_nir_lower_subdword_loads,
               (ac_nir_lower_subdword_options) {
@@ -425,6 +468,13 @@ char *si_finalize_nir(struct pipe_screen *screen, void *nirptr)
 
    NIR_PASS_V(nir, nir_convert_to_lcssa, true, true); /* required by divergence analysis */
    NIR_PASS_V(nir, nir_divergence_analysis); /* to find divergent loops */
+
+   /* Must be after divergence analysis. */
+   bool divergence_changed = false;
+   NIR_PASS(divergence_changed, nir, si_mark_divergent_texture_non_uniform);
+   /* Re-analysis whole shader if texture instruction divergence changed. */
+   if (divergence_changed)
+      NIR_PASS_V(nir, nir_divergence_analysis);
 
    return NULL;
 }

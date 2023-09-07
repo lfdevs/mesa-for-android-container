@@ -70,6 +70,44 @@ pvr_cr_isp_aa_mode_type(uint32_t samples)
    }
 }
 
+/* clang-format off */
+static inline bool
+pvr_zls_format_type_is_packed(enum PVRX(CR_ZLS_FORMAT_TYPE) type)
+/* clang-format on */
+{
+   switch (type) {
+   case PVRX(CR_ZLS_FORMAT_TYPE_24BITINT):
+   case PVRX(CR_ZLS_FORMAT_TYPE_F64Z):
+      return true;
+
+   case PVRX(CR_ZLS_FORMAT_TYPE_F32Z):
+   case PVRX(CR_ZLS_FORMAT_TYPE_16BITINT):
+      return false;
+
+   default:
+      unreachable("Invalid ZLS format type");
+   }
+}
+
+/* clang-format off */
+static inline bool
+pvr_zls_format_type_is_int(enum PVRX(CR_ZLS_FORMAT_TYPE) type)
+/* clang-format on */
+{
+   switch (type) {
+   case PVRX(CR_ZLS_FORMAT_TYPE_24BITINT):
+   case PVRX(CR_ZLS_FORMAT_TYPE_16BITINT):
+      return true;
+
+   case PVRX(CR_ZLS_FORMAT_TYPE_F32Z):
+   case PVRX(CR_ZLS_FORMAT_TYPE_F64Z):
+      return false;
+
+   default:
+      unreachable("Invalid ZLS format type");
+   }
+}
+
 /******************************************************************************
    PDS
  ******************************************************************************/

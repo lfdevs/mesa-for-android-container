@@ -7,3 +7,7 @@ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_
 
 # Flaky with a Fail result since the piglit fix made it stop crashing.
 glx@glx-make-current
+
+# With X11 -> Wayland: Crash -> Flake/Fail
+glx@glx-visuals-stencil -pixmap
+glx@glx-visuals-depth -pixmap

@@ -65,7 +65,7 @@ inject_front_face_info(struct draw_stage *stage,
                        struct prim_header *header)
 {
    struct unfilled_stage *unfilled = unfilled_stage(stage);
-   boolean is_front_face = (
+   bool is_front_face = (
       (stage->draw->rasterizer->front_ccw && header->det < 0.0f) ||
       (!stage->draw->rasterizer->front_ccw && header->det > 0.0f));
    int slot = unfilled->face_slot;
@@ -265,9 +265,9 @@ draw_unfilled_prepare_outputs(struct draw_context *draw,
 {
    struct unfilled_stage *unfilled = unfilled_stage(stage);
    const struct pipe_rasterizer_state *rast = draw ? draw->rasterizer : NULL;
-   boolean is_unfilled = (rast &&
-                          (rast->fill_front != PIPE_POLYGON_MODE_FILL ||
-                           rast->fill_back != PIPE_POLYGON_MODE_FILL));
+   bool is_unfilled = (rast &&
+                       (rast->fill_front != PIPE_POLYGON_MODE_FILL ||
+                        rast->fill_back != PIPE_POLYGON_MODE_FILL));
    const struct draw_fragment_shader *fs = draw ? draw->fs.fragment_shader : NULL;
 
    if (is_unfilled && fs && fs->info.uses_frontface)  {

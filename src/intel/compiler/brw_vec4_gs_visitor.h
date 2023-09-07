@@ -49,8 +49,6 @@ public:
                    bool no_spills,
                    bool debug_enabled);
 
-   virtual void nir_setup_inputs();
-
 protected:
    virtual void setup_payload();
    virtual void emit_prolog();

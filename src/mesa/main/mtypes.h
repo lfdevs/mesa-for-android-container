@@ -1323,6 +1323,8 @@ struct gl_texture_attrib
    /** GL_ARB_seamless_cubemap */
    GLboolean CubeMapSeamless;
 
+   GLshort NumSamplersWithClamp;
+
    struct gl_texture_unit Unit[MAX_COMBINED_TEXTURE_IMAGE_UNITS];
    struct gl_fixedfunc_texture_unit FixedFuncUnit[MAX_TEXTURE_COORD_UNITS];
 };
@@ -2482,31 +2484,11 @@ struct gl_shared_state
     */
    simple_mtx_t ShaderIncludeMutex;
 
-   /**
-    * Some context in this share group was affected by a GPU reset
-    *
-    * On the next call to \c glGetGraphicsResetStatus, contexts that have not
-    * been affected by a GPU reset must also return
-    * \c GL_INNOCENT_CONTEXT_RESET_ARB.
-    *
-    * Once this field becomes true, it is never reset to false.
-    */
-   bool ShareGroupReset;
-
    /** EXT_external_objects */
    struct _mesa_HashTable *MemoryObjects;
 
    /** EXT_semaphore */
    struct _mesa_HashTable *SemaphoreObjects;
-
-   /**
-    * Some context in this share group was affected by a disjoint
-    * operation. This operation can be anything that has effects on
-    * values of timer queries in such manner that they become invalid for
-    * performance metrics. As example gpu reset, counter overflow or gpu
-    * frequency changes.
-    */
-   bool DisjointOperation;
 
    /**
     * Whether at least one image has been imported or exported, excluding
@@ -2594,15 +2576,15 @@ struct gl_renderbuffer
    /**
     * Used only when hardware accumulation buffers are not supported.
     */
-   boolean software;
+   bool software;
    void *data;
 
    bool use_readpix_cache;
 
    /* Inputs from Driver.RenderTexture, don't use directly. */
-   boolean is_rtt; /**< whether Driver.RenderTexture was called */
+   bool is_rtt; /**< whether Driver.RenderTexture was called */
    unsigned rtt_face, rtt_slice;
-   boolean rtt_layered; /**< whether glFramebufferTexture was called */
+   bool rtt_layered; /**< whether glFramebufferTexture was called */
    unsigned rtt_nr_samples; /**< from FramebufferTexture2DMultisampleEXT */
 };
 

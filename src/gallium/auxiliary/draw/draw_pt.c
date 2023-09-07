@@ -44,8 +44,8 @@
 #include "util/u_draw.h"
 
 
-DEBUG_GET_ONCE_BOOL_OPTION(draw_fse, "DRAW_FSE", FALSE)
-DEBUG_GET_ONCE_BOOL_OPTION(draw_no_fse, "DRAW_NO_FSE", FALSE)
+DEBUG_GET_ONCE_BOOL_OPTION(draw_fse, "DRAW_FSE", false)
+DEBUG_GET_ONCE_BOOL_OPTION(draw_no_fse, "DRAW_NO_FSE", false)
 
 
 /* Overall we split things into:
@@ -54,14 +54,14 @@ DEBUG_GET_ONCE_BOOL_OPTION(draw_no_fse, "DRAW_NO_FSE", FALSE)
  *     - pipeline -- the prim pipeline: clipping, wide lines, etc
  *     - backend  -- the vbuf_render provided by the driver.
  */
-static boolean
+static bool
 draw_pt_arrays(struct draw_context *draw,
-               enum pipe_prim_type prim,
+               enum mesa_prim prim,
                bool index_bias_varies,
                const struct pipe_draw_start_count_bias *draw_info,
                unsigned num_draws)
 {
-   enum pipe_prim_type out_prim = prim;
+   enum mesa_prim out_prim = prim;
 
    if (draw->gs.geometry_shader)
       out_prim = draw->gs.geometry_shader->output_primitive;
@@ -129,7 +129,7 @@ draw_pt_arrays(struct draw_context *draw,
    if (draw->pt.rebind_parameters) {
       /* update constants, viewport dims, clip planes, etc */
       middle->bind_parameters(middle);
-      draw->pt.rebind_parameters = FALSE;
+      draw->pt.rebind_parameters = false;
    }
 
    for (unsigned i = 0; i < num_draws; i++) {
@@ -137,7 +137,7 @@ draw_pt_arrays(struct draw_context *draw,
        */
       unsigned first, incr;
 
-      if (prim == PIPE_PRIM_PATCHES) {
+      if (prim == MESA_PRIM_PATCHES) {
          first = draw->pt.vertices_per_patch;
          incr = draw->pt.vertices_per_patch;
       } else {
@@ -164,7 +164,7 @@ draw_pt_arrays(struct draw_context *draw,
          draw->pt.user.drawid++;
    }
 
-   return TRUE;
+   return true;
 }
 
 
@@ -182,12 +182,12 @@ draw_pt_flush(struct draw_context *draw, unsigned flags)
    }
 
    if (flags & DRAW_FLUSH_PARAMETER_CHANGE) {
-      draw->pt.rebind_parameters = TRUE;
+      draw->pt.rebind_parameters = true;
    }
 }
 
 
-boolean
+bool
 draw_pt_init(struct draw_context *draw)
 {
    draw->pt.test_fse = debug_get_option_draw_fse();
@@ -195,28 +195,35 @@ draw_pt_init(struct draw_context *draw)
 
    draw->pt.front.vsplit = draw_pt_vsplit(draw);
    if (!draw->pt.front.vsplit)
-      return FALSE;
+      return false;
 
    draw->pt.middle.fetch_shade_emit = draw_pt_middle_fse(draw);
    if (!draw->pt.middle.fetch_shade_emit)
-      return FALSE;
+      return false;
 
    draw->pt.middle.general = draw_pt_fetch_pipeline_or_emit(draw);
    if (!draw->pt.middle.general)
-      return FALSE;
+      return false;
 
 #ifdef DRAW_LLVM_AVAILABLE
-   if (draw->llvm)
+   if (draw->llvm) {
       draw->pt.middle.llvm = draw_pt_fetch_pipeline_or_emit_llvm(draw);
+      draw->pt.middle.mesh = draw_pt_mesh_pipeline_or_emit(draw);
+   }
 #endif
 
-   return TRUE;
+   return true;
 }
 
 
 void
 draw_pt_destroy(struct draw_context *draw)
 {
+   if (draw->pt.middle.mesh) {
+      draw->pt.middle.mesh->destroy(draw->pt.middle.mesh);
+      draw->pt.middle.mesh = NULL;
+   }
+
    if (draw->pt.middle.llvm) {
       draw->pt.middle.llvm->destroy(draw->pt.middle.llvm);
       draw->pt.middle.llvm = NULL;
@@ -243,14 +250,14 @@ draw_pt_destroy(struct draw_context *draw)
  * Debug- print the first 'count' vertices.
  */
 static void
-draw_print_arrays(struct draw_context *draw, enum pipe_prim_type prim,
-                  int start, uint count, int index_bias)
+draw_print_arrays(struct draw_context *draw, enum mesa_prim prim,
+                  int start, unsigned count, int index_bias)
 {
    debug_printf("Draw arrays(prim = %u, start = %u, count = %u)\n",
                 prim, start, count);
 
    for (unsigned i = 0; i < count; i++) {
-      uint ii = 0;
+      unsigned ii = 0;
 
       if (draw->pt.user.eltSize) {
          /* indexed arrays */
@@ -258,19 +265,19 @@ draw_print_arrays(struct draw_context *draw, enum pipe_prim_type prim,
          switch (draw->pt.user.eltSize) {
          case 1:
             {
-               const ubyte *elem = (const ubyte *) draw->pt.user.elts;
+               const uint8_t *elem = (const uint8_t *) draw->pt.user.elts;
                ii = elem[start + i];
             }
             break;
          case 2:
             {
-               const ushort *elem = (const ushort *) draw->pt.user.elts;
+               const uint16_t *elem = (const uint16_t *) draw->pt.user.elts;
                ii = elem[start + i];
             }
             break;
          case 4:
             {
-               const uint *elem = (const uint *) draw->pt.user.elts;
+               const uint32_t *elem = (const uint32_t *) draw->pt.user.elts;
                ii = elem[start + i];
             }
             break;
@@ -289,8 +296,8 @@ draw_print_arrays(struct draw_context *draw, enum pipe_prim_type prim,
       }
 
       for (unsigned j = 0; j < draw->pt.nr_vertex_elements; j++) {
-         uint buf = draw->pt.vertex_element[j].vertex_buffer_index;
-         ubyte *ptr = (ubyte *) draw->pt.user.vbuffer[buf].map;
+         unsigned buf = draw->pt.vertex_element[j].vertex_buffer_index;
+         uint8_t *ptr = (uint8_t *) draw->pt.user.vbuffer[buf].map;
 
          if (draw->pt.vertex_element[j].instance_divisor) {
             ii = draw->instance_id / draw->pt.vertex_element[j].instance_divisor;
@@ -329,14 +336,14 @@ draw_print_arrays(struct draw_context *draw, enum pipe_prim_type prim,
             break;
          case PIPE_FORMAT_B8G8R8A8_UNORM:
             {
-               ubyte *u = (ubyte *) ptr;
+               uint8_t *u = (uint8_t *) ptr;
                debug_printf("BGRA %d %d %d %d  @ %p\n", u[0], u[1], u[2], u[3],
                             (void *) u);
             }
             break;
          case PIPE_FORMAT_A8R8G8B8_UNORM:
             {
-               ubyte *u = (ubyte *) ptr;
+               uint8_t *u = (uint8_t *) ptr;
                debug_printf("ARGB %d %d %d %d  @ %p\n", u[0], u[1], u[2], u[3],
                             (void *) u);
             }
@@ -624,4 +631,17 @@ draw_vbo(struct draw_context *draw,
       draw->render->pipeline_statistics(draw->render, &draw->statistics);
    }
    util_fpstate_set(fpstate);
+}
+
+/* to be called after a mesh shader is run */
+void
+draw_mesh(struct draw_context *draw,
+          struct draw_vertex_info *vert_info,
+          struct draw_prim_info *prim_info)
+{
+   struct draw_pt_middle_end *middle = draw->pt.middle.mesh;
+
+   middle->prepare(middle, 0, 0, NULL);
+
+   draw_mesh_middle_end_run(middle, vert_info, prim_info);
 }

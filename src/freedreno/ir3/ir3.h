@@ -160,6 +160,12 @@ typedef enum ir3_register_flags {
     * interferes with the sources of the instruction.
     */
    IR3_REG_EARLY_CLOBBER = BIT(17),
+
+   /* If this is the last usage of a specific value in the register, the
+    * register cannot be read without being written to first after this. 
+    * Note: This effectively has the same semantics as IR3_REG_KILL.
+    */
+   IR3_REG_LAST_USE = BIT(18),
 } ir3_register_flags;
 
 struct ir3_register {
@@ -259,6 +265,12 @@ typedef enum {
    REDUCE_OP_OR_B,
    REDUCE_OP_XOR_B,
 } reduce_op_t;
+
+typedef enum {
+   ALIAS_TEX = 0,
+   ALIAS_RT = 3,
+   ALIAS_MEM = 4,
+} ir3_alias_scope;
 
 typedef enum ir3_instruction_flags {
    /* (sy) flag is set on first instruction, and after sample
@@ -393,6 +405,8 @@ struct ir3_instruction {
          unsigned r : 1; /* read */
          unsigned l : 1; /* local */
          unsigned g : 1; /* global */
+
+         ir3_alias_scope alias_scope;
       } cat7;
       /* for meta-instructions, just used to hold extra data
        * before instruction scheduling, etc

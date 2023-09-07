@@ -235,7 +235,7 @@ get_src_chan_idx(enum tgsi_opcode opcode,
 /* XXX: COMMENT
  * It should be assumed that this function ignores writemasks
  */
-boolean
+bool
 lp_build_tgsi_inst_llvm(struct lp_build_tgsi_context *bld_base,
                         const struct tgsi_full_instruction *inst)
 {
@@ -258,13 +258,13 @@ lp_build_tgsi_inst_llvm(struct lp_build_tgsi_context *bld_base,
    case TGSI_OPCODE_UP4UB:
       /* deprecated? */
       assert(0);
-      return FALSE;
+      return false;
       break;
    }
 
    /* Check if the opcode has been implemented */
    if (!action->emit) {
-      return FALSE;
+      return false;
    }
 
    memset(&emit_data, 0, sizeof(emit_data));
@@ -336,7 +336,7 @@ lp_build_tgsi_inst_llvm(struct lp_build_tgsi_context *bld_base,
       if (info->num_dst >= 2)
          bld_base->emit_store(bld_base, inst, info, 1, emit_data.output1);
    }
-   return TRUE;
+   return true;
 }
 
 
@@ -508,7 +508,7 @@ lp_build_emit_fetch_texoffset(struct lp_build_tgsi_context *bld_base,
 }
 
 
-boolean
+bool
 lp_build_tgsi_llvm(struct lp_build_tgsi_context *bld_base,
                    const struct tgsi_token *tokens)
 {
@@ -517,7 +517,7 @@ lp_build_tgsi_llvm(struct lp_build_tgsi_context *bld_base,
    }
 
    if (!lp_bld_tgsi_list_init(bld_base)) {
-      return FALSE;
+      return false;
    }
 
    struct tgsi_parse_context parse;
@@ -554,7 +554,7 @@ lp_build_tgsi_llvm(struct lp_build_tgsi_context *bld_base,
       if (!lp_build_tgsi_inst_llvm(bld_base, instr)) {
          _debug_printf("warning: failed to translate tgsi opcode %s to LLVM\n",
                        tgsi_get_opcode_name(instr->Instruction.Opcode));
-         return FALSE;
+         return false;
       }
    }
 
@@ -566,5 +566,5 @@ lp_build_tgsi_llvm(struct lp_build_tgsi_context *bld_base,
       bld_base->emit_epilogue(bld_base);
    }
 
-   return TRUE;
+   return true;
 }

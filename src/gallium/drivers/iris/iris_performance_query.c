@@ -78,7 +78,7 @@ iris_init_perf_query_info(struct pipe_context *pipe)
                          ice,
                          screen->bufmgr,
                          screen->devinfo,
-                         ice->batches[IRIS_BATCH_RENDER].ctx_id,
+                         ice->batches[IRIS_BATCH_RENDER].i915.ctx_id,
                          screen->fd);
 
    return perf_cfg->n_queries;

@@ -115,41 +115,23 @@ nir_lower_deref_copy_instr(nir_builder *b, nir_intrinsic_instr *copy)
 }
 
 static bool
-lower_var_copies_impl(nir_function_impl *impl)
+lower_var_copies_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-   bool progress = false;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_intrinsic_instr *copy = nir_instr_as_intrinsic(instr);
+   if (copy->intrinsic != nir_intrinsic_copy_deref)
+      return false;
 
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
+   nir_lower_deref_copy_instr(b, copy);
 
-         nir_intrinsic_instr *copy = nir_instr_as_intrinsic(instr);
-         if (copy->intrinsic != nir_intrinsic_copy_deref)
-            continue;
+   nir_instr_remove(&copy->instr);
+   nir_deref_instr_remove_if_unused(nir_src_as_deref(copy->src[0]));
+   nir_deref_instr_remove_if_unused(nir_src_as_deref(copy->src[1]));
 
-         nir_lower_deref_copy_instr(&b, copy);
-
-         nir_instr_remove(&copy->instr);
-         nir_deref_instr_remove_if_unused(nir_src_as_deref(copy->src[0]));
-         nir_deref_instr_remove_if_unused(nir_src_as_deref(copy->src[1]));
-
-         progress = true;
-         nir_instr_free(&copy->instr);
-      }
-   }
-
-   if (progress) {
-      nir_metadata_preserve(impl, nir_metadata_block_index |
-                                  nir_metadata_dominance);
-   } else {
-      nir_metadata_preserve(impl, nir_metadata_all);
-   }
-
-   return progress;
+   nir_instr_free(&copy->instr);
+   return true;
 }
 
 /* Lowers every copy_var instruction in the program to a sequence of
@@ -158,14 +140,11 @@ lower_var_copies_impl(nir_function_impl *impl)
 bool
 nir_lower_var_copies(nir_shader *shader)
 {
-   bool progress = false;
-
    shader->info.var_copies_lowered = true;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= lower_var_copies_impl(function->impl);
-   }
-
-   return progress;
+   return nir_shader_instructions_pass(shader,
+                                       lower_var_copies_instr,
+                                       nir_metadata_block_index |
+                                       nir_metadata_dominance,
+                                       NULL);
 }

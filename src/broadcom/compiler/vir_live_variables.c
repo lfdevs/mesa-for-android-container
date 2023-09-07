@@ -306,6 +306,8 @@ vir_calculate_live_intervals(struct v3d_compile *c)
 
                 vir_for_each_block(block, c) {
                         ralloc_free(block->def);
+                        ralloc_free(block->defin);
+                        ralloc_free(block->defout);
                         ralloc_free(block->use);
                         ralloc_free(block->live_in);
                         ralloc_free(block->live_out);

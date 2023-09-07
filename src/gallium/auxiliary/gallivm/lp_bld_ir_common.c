@@ -51,16 +51,16 @@ func_ctx(struct lp_exec_mask *mask)
  * no loop inside the current function, but we were inside
  * a loop inside another function, from which this one was called.
  */
-static inline boolean
+static inline bool
 mask_has_loop(struct lp_exec_mask *mask)
 {
    int i;
    for (i = mask->function_stack_size - 1; i >= 0; --i) {
       const struct function_ctx *ctx = &mask->function_stack[i];
       if (ctx->loop_stack_size > 0)
-         return TRUE;
+         return true;
    }
-   return FALSE;
+   return false;
 }
 
 /*
@@ -69,16 +69,16 @@ mask_has_loop(struct lp_exec_mask *mask)
  * no switch in the current function, but we were inside
  * a switch inside another function, from which this one was called.
  */
-static inline boolean
+static inline bool
 mask_has_switch(struct lp_exec_mask *mask)
 {
    int i;
    for (i = mask->function_stack_size - 1; i >= 0; --i) {
       const struct function_ctx *ctx = &mask->function_stack[i];
       if (ctx->switch_stack_size > 0)
-         return TRUE;
+         return true;
    }
-   return FALSE;
+   return false;
 }
 
 /*
@@ -87,25 +87,25 @@ mask_has_switch(struct lp_exec_mask *mask)
  * no conditional in the current function, but we were inside
  * a conditional inside another function, from which this one was called.
  */
-static inline boolean
+static inline bool
 mask_has_cond(struct lp_exec_mask *mask)
 {
    int i;
    for (i = mask->function_stack_size - 1; i >= 0; --i) {
       const struct function_ctx *ctx = &mask->function_stack[i];
       if (ctx->cond_stack_size > 0)
-         return TRUE;
+         return true;
    }
-   return FALSE;
+   return false;
 }
 
 void lp_exec_mask_update(struct lp_exec_mask *mask)
 {
    LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   boolean has_loop_mask = mask_has_loop(mask);
-   boolean has_cond_mask = mask_has_cond(mask);
-   boolean has_switch_mask = mask_has_switch(mask);
-   boolean has_ret_mask = mask->function_stack_size > 1 ||
+   bool has_loop_mask = mask_has_loop(mask);
+   bool has_cond_mask = mask_has_cond(mask);
+   bool has_switch_mask = mask_has_switch(mask);
+   bool has_ret_mask = mask->function_stack_size > 1 ||
          mask->ret_in_main;
 
    if (has_loop_mask) {
@@ -173,8 +173,8 @@ lp_exec_mask_function_init(struct lp_exec_mask *mask, int function_idx)
 void lp_exec_mask_init(struct lp_exec_mask *mask, struct lp_build_context *bld)
 {
    mask->bld = bld;
-   mask->has_mask = FALSE;
-   mask->ret_in_main = FALSE;
+   mask->has_mask = false;
+   mask->ret_in_main = false;
    /* For the main function */
    mask->function_stack_size = 1;
 

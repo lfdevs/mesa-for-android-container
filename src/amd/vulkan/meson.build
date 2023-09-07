@@ -21,6 +21,7 @@
 radv_entrypoints_gen_command = [
   prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
   '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@',
+  '--beta', with_vulkan_beta.to_string()
 ]
 
 radv_entrypoints_gen_command += [
@@ -74,9 +75,11 @@ libradv_files = files(
   'nir/radv_nir_apply_pipeline_layout.c',
   'nir/radv_nir_export_multiview.c',
   'nir/radv_nir_lower_abi.c',
+  'nir/radv_nir_lower_fs_barycentric.c',
   'nir/radv_nir_lower_fs_intrinsics.c',
   'nir/radv_nir_lower_intrinsics_early.c',
   'nir/radv_nir_lower_io.c',
+  'nir/radv_nir_lower_poly_line_smooth.c',
   'nir/radv_nir_lower_primitive_shading_rate.c',
   'nir/radv_nir_lower_ray_queries.c',
   'nir/radv_nir_lower_view_index.c',

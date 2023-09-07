@@ -39,18 +39,13 @@
 
 
 struct mapi_stub {
-   const void *name;
+   size_t name_offset;
    int slot;
-   mapi_func addr;
 };
 
 /* define public_string_pool and public_stubs */
 #define MAPI_TMP_PUBLIC_STUBS
 #include "mapi_tmp.h"
-
-static struct mapi_stub dynamic_stubs[MAPI_TABLE_NUM_DYNAMIC];
-static int num_dynamic_stubs;
-static int next_dynamic_slot = MAPI_TABLE_NUM_STATIC;
 
 void
 stub_init_once(void)
@@ -66,7 +61,7 @@ stub_compare(const void *key, const void *elem)
    const struct mapi_stub *stub = (const struct mapi_stub *) elem;
    const char *stub_name;
 
-   stub_name = &public_string_pool[(size_t) stub->name];
+   stub_name = &public_string_pool[stub->name_offset];
 
    return strcmp(name, stub_name);
 }
@@ -81,69 +76,6 @@ stub_find_public(const char *name)
          ARRAY_SIZE(public_stubs), sizeof(public_stubs[0]), stub_compare);
 }
 
-/**
- * Add a dynamic stub.
- */
-static struct mapi_stub *
-stub_add_dynamic(const char *name)
-{
-   struct mapi_stub *stub;
-   int idx;
-
-   idx = num_dynamic_stubs;
-   /* minus 1 to make sure we can never reach the last slot */
-   if (idx >= MAPI_TABLE_NUM_DYNAMIC - 1)
-      return NULL;
-
-   stub = &dynamic_stubs[idx];
-
-   /* dispatch to the last slot, which is reserved for no-op */
-   stub->addr = entry_generate(
-         MAPI_TABLE_NUM_STATIC + MAPI_TABLE_NUM_DYNAMIC - 1);
-   if (!stub->addr)
-      return NULL;
-
-   stub->name = (const void *) strdup(name);
-   /* to be fixed later */
-   stub->slot = -1;
-
-   num_dynamic_stubs = idx + 1;
-
-   return stub;
-}
-
-/**
- * Return the dynamic stub with the given name.  If no such stub exists and
- * generate is true, a new stub is generated.
- */
-struct mapi_stub *
-stub_find_dynamic(const char *name, int generate)
-{
-   static simple_mtx_t dynamic_mutex = SIMPLE_MTX_INITIALIZER;
-   struct mapi_stub *stub = NULL;
-   int count, i;
-
-   simple_mtx_lock(&dynamic_mutex);
-
-   if (generate)
-      assert(!stub_find_public(name));
-
-   count = num_dynamic_stubs;
-   for (i = 0; i < count; i++) {
-      if (strcmp(name, (const char *) dynamic_stubs[i].name) == 0) {
-         stub = &dynamic_stubs[i];
-         break;
-      }
-   }
-
-   /* generate a dynamic stub */
-   if (generate && !stub)
-         stub = stub_add_dynamic(name);
-
-   simple_mtx_unlock(&dynamic_mutex);
-
-   return stub;
-}
 
 static const struct mapi_stub *
 search_table_by_slot(const struct mapi_stub *table, size_t num_entries,
@@ -162,26 +94,7 @@ stub_find_by_slot(int slot)
 {
    const struct mapi_stub *stub =
       search_table_by_slot(public_stubs, ARRAY_SIZE(public_stubs), slot);
-   if (stub)
-      return stub;
-   return search_table_by_slot(dynamic_stubs, num_dynamic_stubs, slot);
-}
-
-void
-stub_fix_dynamic(struct mapi_stub *stub, const struct mapi_stub *alias)
-{
-   int slot;
-
-   if (stub->slot >= 0)
-      return;
-
-   if (alias)
-      slot = alias->slot;
-   else
-      slot = next_dynamic_slot++;
-
-   entry_patch(stub->addr, slot);
-   stub->slot = slot;
+   return stub;
 }
 
 /**
@@ -190,15 +103,7 @@ stub_fix_dynamic(struct mapi_stub *stub, const struct mapi_stub *alias)
 const char *
 stub_get_name(const struct mapi_stub *stub)
 {
-   const char *name;
-
-   if (stub >= public_stubs &&
-       stub < public_stubs + ARRAY_SIZE(public_stubs))
-      name = &public_string_pool[(size_t) stub->name];
-   else
-      name = (const char *) stub->name;
-
-   return name;
+   return &public_string_pool[stub->name_offset];
 }
 
 /**
@@ -216,6 +121,5 @@ stub_get_slot(const struct mapi_stub *stub)
 mapi_func
 stub_get_addr(const struct mapi_stub *stub)
 {
-   assert(stub->addr || (unsigned int) stub->slot < MAPI_TABLE_NUM_STATIC);
-   return (stub->addr) ? stub->addr : entry_get_public(stub->slot);
+   return entry_get_public(stub->slot);
 }

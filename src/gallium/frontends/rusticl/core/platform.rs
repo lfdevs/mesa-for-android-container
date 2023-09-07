@@ -13,25 +13,84 @@ use std::sync::Once;
 #[repr(C)]
 pub struct Platform {
     dispatch: &'static cl_icd_dispatch,
-    pub extensions: [cl_name_version; 2],
     pub devs: Vec<Arc<Device>>,
-    pub debug: PlatformDebug,
 }
 
 pub struct PlatformDebug {
+    pub allow_invalid_spirv: bool,
+    pub clc: bool,
     pub program: bool,
 }
 
+pub struct PlatformFeatures {
+    pub fp16: bool,
+    pub fp64: bool,
+}
+
+static PLATFORM_ENV_ONCE: Once = Once::new();
 static PLATFORM_ONCE: Once = Once::new();
+
+macro_rules! gen_cl_exts {
+    (@COUNT $e:expr) => { 1 };
+    (@COUNT $e:expr, $($es:expr),+) => { 1 + gen_cl_exts!(@COUNT $($es),*) };
+
+    (@CONCAT $e:tt) => { $e };
+    (@CONCAT $e:tt, $($es:tt),+) => { concat!($e, ' ', gen_cl_exts!(@CONCAT $($es),*)) };
+
+    ([$(($major:expr, $minor:expr, $patch:expr, $ext:tt)$(,)?)+]) => {
+        pub static PLATFORM_EXTENSION_STR: &str = concat!(gen_cl_exts!(@CONCAT $($ext),*));
+        pub static PLATFORM_EXTENSIONS: [cl_name_version; gen_cl_exts!(@COUNT $($ext),*)] = [
+            $(mk_cl_version_ext($major, $minor, $patch, $ext)),+
+        ];
+    }
+}
+gen_cl_exts!([
+    (1, 0, 0, "cl_khr_byte_addressable_store"),
+    (1, 0, 0, "cl_khr_create_command_queue"),
+    (1, 0, 0, "cl_khr_extended_versioning"),
+    (1, 0, 0, "cl_khr_icd"),
+    (1, 0, 0, "cl_khr_il_program"),
+    (1, 0, 0, "cl_khr_spirv_no_integer_wrap_decoration"),
+]);
+
 static mut PLATFORM: Platform = Platform {
     dispatch: &DISPATCH,
-    extensions: [
-        mk_cl_version_ext(1, 0, 0, "cl_khr_icd"),
-        mk_cl_version_ext(1, 0, 0, "cl_khr_il_program"),
-    ],
     devs: Vec::new(),
-    debug: PlatformDebug { program: false },
 };
+static mut PLATFORM_DBG: PlatformDebug = PlatformDebug {
+    allow_invalid_spirv: false,
+    clc: false,
+    program: false,
+};
+static mut PLATFORM_FEATURES: PlatformFeatures = PlatformFeatures {
+    fp16: false,
+    fp64: false,
+};
+
+fn load_env() {
+    let debug = unsafe { &mut PLATFORM_DBG };
+    if let Ok(debug_flags) = env::var("RUSTICL_DEBUG") {
+        for flag in debug_flags.split(',') {
+            match flag {
+                "allow_invalid_spirv" => debug.allow_invalid_spirv = true,
+                "clc" => debug.clc = true,
+                "program" => debug.program = true,
+                _ => eprintln!("Unknown RUSTICL_DEBUG flag found: {}", flag),
+            }
+        }
+    }
+
+    let features = unsafe { &mut PLATFORM_FEATURES };
+    if let Ok(feature_flags) = env::var("RUSTICL_FEATURES") {
+        for flag in feature_flags.split(',') {
+            match flag {
+                "fp16" => features.fp16 = true,
+                "fp64" => features.fp64 = true,
+                _ => eprintln!("Unknown RUSTICL_FEATURES flag found: {}", flag),
+            }
+        }
+    }
+}
 
 impl Platform {
     pub fn as_ptr(&self) -> cl_platform_id {
@@ -39,10 +98,19 @@ impl Platform {
     }
 
     pub fn get() -> &'static Self {
-        // SAFETY: no concurrent static mut access due to std::Once
-        PLATFORM_ONCE.call_once(|| unsafe { PLATFORM.init() });
+        debug_assert!(PLATFORM_ONCE.is_completed());
         // SAFETY: no mut references exist at this point
         unsafe { &PLATFORM }
+    }
+
+    pub fn dbg() -> &'static PlatformDebug {
+        debug_assert!(PLATFORM_ENV_ONCE.is_completed());
+        unsafe { &PLATFORM_DBG }
+    }
+
+    pub fn features() -> &'static PlatformFeatures {
+        debug_assert!(PLATFORM_ENV_ONCE.is_completed());
+        unsafe { &PLATFORM_FEATURES }
     }
 
     fn init(&mut self) {
@@ -51,14 +119,12 @@ impl Platform {
         }
 
         self.devs.extend(Device::all());
-        if let Ok(debug_flags) = env::var("RUSTICL_DEBUG") {
-            for flag in debug_flags.split(',') {
-                match flag {
-                    "program" => self.debug.program = true,
-                    _ => eprintln!("Unknown RUSTICL_DEBUG flag found: {}", flag),
-                }
-            }
-        }
+    }
+
+    pub fn init_once() {
+        PLATFORM_ENV_ONCE.call_once(load_env);
+        // SAFETY: no concurrent static mut access due to std::Once
+        PLATFORM_ONCE.call_once(|| unsafe { PLATFORM.init() });
     }
 }
 

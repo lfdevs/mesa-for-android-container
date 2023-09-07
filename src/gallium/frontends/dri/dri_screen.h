@@ -34,7 +34,7 @@
 
 #include "dri_util.h"
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "frontend/api.h"
@@ -90,7 +90,7 @@ struct dri_screen
 
    unsigned int api_mask;
 
-   boolean throttle;
+   bool throttle;
 
    struct st_config_options options;
 
@@ -99,23 +99,23 @@ struct dri_screen
 
    /* drm */
    int fd;
-   boolean can_share_buffer;
+   bool can_share_buffer;
 
    struct pipe_loader_device *dev;
 
    /* gallium */
-   boolean d_depth_bits_last;
-   boolean sd_depth_bits_last;
-   boolean auto_fake_front;
-   boolean has_reset_status_query;
-   boolean has_protected_context;
+   bool d_depth_bits_last;
+   bool sd_depth_bits_last;
+   bool auto_fake_front;
+   bool has_reset_status_query;
+   bool has_protected_context;
    enum pipe_texture_target target;
 
-   boolean swrast_no_present;
+   bool swrast_no_present;
 
    /* hooks filled in by dri2 & drisw */
    __DRIimage * (*lookup_egl_image)(struct dri_screen *ctx, void *handle);
-   boolean (*validate_egl_image)(struct dri_screen *ctx, void *handle);
+   bool (*validate_egl_image)(struct dri_screen *ctx, void *handle);
    __DRIimage * (*lookup_egl_image_validated)(struct dri_screen *ctx, void *handle);
 
    /* DRI exts that vary based on gallium pipe_screen caps. */
@@ -140,7 +140,7 @@ struct dri_screen
 
    struct dri_drawable *(*create_drawable)(struct dri_screen *screen,
                                            const struct gl_config *glVis,
-                                           GLboolean pixmapBuffer,
+                                           bool pixmapBuffer,
                                            void *loaderPrivate);
 
    __DRIbuffer *(*allocate_buffer)(struct dri_screen *screen,
@@ -188,7 +188,7 @@ struct __DRIimageRec {
 
    void *loader_private;
 
-   boolean imported_dmabuf;
+   bool imported_dmabuf;
    /**
     * Provided by EGL_EXT_image_dma_buf_import.
     */
@@ -200,7 +200,7 @@ struct __DRIimageRec {
    struct dri_screen *screen;
 };
 
-static inline boolean
+static inline bool
 dri_with_format(struct dri_screen *screen)
 {
    const __DRIdri2LoaderExtension *loader = screen->dri2.loader;
@@ -219,11 +219,11 @@ void
 dri_init_options(struct dri_screen *screen);
 
 const __DRIconfig **
-dri_init_screen_helper(struct dri_screen *screen,
-                       struct pipe_screen *pscreen);
+dri_init_screen(struct dri_screen *screen,
+                struct pipe_screen *pscreen);
 
 void
-dri_destroy_screen_helper(struct dri_screen * screen);
+dri_release_screen(struct dri_screen * screen);
 
 void
 dri_destroy_screen(struct dri_screen *screen);

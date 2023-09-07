@@ -25,19 +25,34 @@
 #include "nir_builder.h"
 
 static nir_ssa_def *
-load_frag_coord(nir_builder *b, const nir_input_attachment_options *options)
+load_frag_coord(nir_builder *b, nir_deref_instr *deref,
+                const nir_input_attachment_options *options)
 {
-   if (options->use_fragcoord_sysval)
-      return nir_load_frag_coord(b);
-
-   nir_variable *pos =
-      nir_find_variable_with_location(b->shader, nir_var_shader_in,
-                                      VARYING_SLOT_POS);
-   if (pos == NULL) {
-      pos = nir_variable_create(b->shader, nir_var_shader_in,
-                                glsl_vec4_type(), NULL);
-      pos->data.location = VARYING_SLOT_POS;
+   if (options->use_fragcoord_sysval) {
+      nir_ssa_def *frag_coord = nir_load_frag_coord(b);
+      if (options->unscaled_input_attachment_ir3) {
+         nir_variable *var = nir_deref_instr_get_variable(deref);
+         unsigned base = var->data.index;
+         nir_ssa_def *unscaled_frag_coord = nir_load_frag_coord_unscaled_ir3(b);
+         if (deref->deref_type == nir_deref_type_array) {
+            nir_ssa_def *unscaled =
+               nir_i2b(b, nir_iand(b, nir_ishr(b,
+                                               nir_imm_int(b, options->unscaled_input_attachment_ir3 >> base),
+                                            deref->arr.index.ssa),
+                                nir_imm_int(b, 1)));
+            frag_coord = nir_bcsel(b, unscaled, unscaled_frag_coord, frag_coord);
+         } else {
+            assert(deref->deref_type == nir_deref_type_var);
+            bool unscaled = (options->unscaled_input_attachment_ir3 >> base) & 1;
+            frag_coord = unscaled ? unscaled_frag_coord : frag_coord;
+         }
+      }
+      return frag_coord;
    }
+
+   nir_variable *pos = nir_get_variable_with_location(b->shader, nir_var_shader_in,
+                                                      VARYING_SLOT_POS, glsl_vec4_type());
+
    /**
     * From Vulkan spec:
     *   "The OriginLowerLeft execution mode must not be used; fragment entry
@@ -62,16 +77,9 @@ load_layer_id(nir_builder *b, const nir_input_attachment_options *options)
 
    gl_varying_slot slot = options->use_view_id_for_layer ?
       VARYING_SLOT_VIEW_INDEX : VARYING_SLOT_LAYER;
-   nir_variable *layer_id =
-      nir_find_variable_with_location(b->shader, nir_var_shader_in, slot);
-
-   if (layer_id == NULL) {
-      layer_id = nir_variable_create(b->shader, nir_var_shader_in,
-                                     glsl_int_type(), NULL);
-      layer_id->data.location = slot;
-      layer_id->data.interpolation = INTERP_MODE_FLAT;
-      layer_id->data.driver_location = b->shader->num_inputs++;
-   }
+   nir_variable *layer_id = nir_get_variable_with_location(b->shader, nir_var_shader_in,
+                                                           slot, glsl_int_type());
+   layer_id->data.interpolation = INTERP_MODE_FLAT;
 
    return nir_load_var(b, layer_id);
 }
@@ -92,7 +100,7 @@ try_lower_input_load(nir_builder *b, nir_intrinsic_instr *load,
 
    b->cursor = nir_instr_remove(&load->instr);
 
-   nir_ssa_def *frag_coord = load_frag_coord(b, options);
+   nir_ssa_def *frag_coord = load_frag_coord(b, deref, options);
    frag_coord = nir_f2i32(b, frag_coord);
    nir_ssa_def *offset = nir_ssa_for_src(b, load->src[1], 2);
    nir_ssa_def *pos = nir_iadd(b, frag_coord, offset);
@@ -115,15 +123,12 @@ try_lower_input_load(nir_builder *b, nir_intrinsic_instr *load,
    tex->texture_index = 0;
    tex->sampler_index = 0;
 
-   tex->src[0].src_type = nir_tex_src_texture_deref;
-   tex->src[0].src = nir_src_for_ssa(&deref->dest.ssa);
-
-   tex->src[1].src_type = nir_tex_src_coord;
-   tex->src[1].src = nir_src_for_ssa(coord);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_texture_deref,
+                                     &deref->dest.ssa);
+   tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_coord, coord);
    tex->coord_components = 3;
 
-   tex->src[2].src_type = nir_tex_src_lod;
-   tex->src[2].src = nir_src_for_ssa(nir_imm_int(b, 0));
+   tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));
 
    if (image_dim == GLSL_SAMPLER_DIM_SUBPASS_MS) {
       tex->op = nir_texop_txf_ms;
@@ -133,7 +138,8 @@ try_lower_input_load(nir_builder *b, nir_intrinsic_instr *load,
 
    tex->texture_non_uniform = nir_intrinsic_access(load) & ACCESS_NON_UNIFORM;
 
-   nir_ssa_dest_init(&tex->instr, &tex->dest, nir_tex_instr_dest_size(tex), 32, NULL);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, nir_tex_instr_dest_size(tex),
+                     32);
    nir_builder_instr_insert(b, &tex->instr);
 
    if (tex->is_sparse) {
@@ -162,7 +168,7 @@ try_lower_input_texop(nir_builder *b, nir_tex_instr *tex,
 
    b->cursor = nir_before_instr(&tex->instr);
 
-   nir_ssa_def *frag_coord = load_frag_coord(b, options);
+   nir_ssa_def *frag_coord = load_frag_coord(b, deref, options);
    frag_coord = nir_f2i32(b, frag_coord);
 
    nir_ssa_def *layer = load_layer_id(b, options);

@@ -30,6 +30,7 @@
 
 #include "hwdef/rogue_hw_utils.h"
 #include "pvr_bo.h"
+#include "pvr_debug.h"
 #include "pvr_private.h"
 #include "pvr_types.h"
 #include "util/compiler.h"
@@ -42,7 +43,6 @@
 #include "vk_object.h"
 #include "vk_util.h"
 
-#if defined(DEBUG)
 static const struct {
    const char *raw;
    const char *primary;
@@ -78,7 +78,6 @@ static const char *descriptor_names[] = { "VK SAMPLER",
                                           "VK UNIFORM_BUFFER_DYNAMIC",
                                           "VK STORAGE_BUFFER_DYNAMIC",
                                           "VK INPUT_ATTACHMENT" };
-#endif
 
 #define PVR_DESC_IMAGE_SECONDARY_OFFSET_ARRAYBASE 0U
 #define PVR_DESC_IMAGE_SECONDARY_SIZE_ARRAYBASE 2U
@@ -163,7 +162,8 @@ void pvr_descriptor_size_info_init(
 
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-      size_info_out->secondary = (uint32_t)device->features.robustBufferAccess;
+      size_info_out->secondary =
+         (uint32_t)device->vk.enabled_features.robustBufferAccess;
       break;
 
    default:
@@ -331,14 +331,18 @@ static void pvr_setup_in_memory_layout_sizes(
    }
 }
 
-#if defined(DEBUG)
 static void
 pvr_dump_in_memory_layout_sizes(const struct pvr_descriptor_set_layout *layout)
 {
+   const char *const separator =
+      "----------------------------------------------";
+   const char *const big_separator =
+      "==============================================";
+
    mesa_logd("=== SET LAYOUT ===");
-   mesa_logd("----------------------------------------------");
+   mesa_logd("%s", separator);
    mesa_logd(" in memory:");
-   mesa_logd("----------------------------------------------");
+   mesa_logd("%s", separator);
 
    for (uint32_t stage = 0;
         stage < ARRAY_SIZE(layout->memory_layout_in_dwords_per_stage);
@@ -347,7 +351,7 @@ pvr_dump_in_memory_layout_sizes(const struct pvr_descriptor_set_layout *layout)
          "| %-18s @   %04u                |",
          stage_names[stage].primary,
          layout->memory_layout_in_dwords_per_stage[stage].primary_offset);
-      mesa_logd("----------------------------------------------");
+      mesa_logd("%s", separator);
 
       /* Print primaries. */
       for (uint32_t i = 0; i < layout->binding_count; i++) {
@@ -381,12 +385,12 @@ pvr_dump_in_memory_layout_sizes(const struct pvr_descriptor_set_layout *layout)
                    binding->descriptor_count);
       }
 
-      mesa_logd("----------------------------------------------");
+      mesa_logd("%s", separator);
       mesa_logd(
          "| %-18s @   %04u                |",
          stage_names[stage].secondary,
          layout->memory_layout_in_dwords_per_stage[stage].secondary_offset);
-      mesa_logd("----------------------------------------------");
+      mesa_logd("%s", separator);
 
       /* Print secondaries. */
       for (uint32_t i = 0; i < layout->binding_count; i++) {
@@ -420,10 +424,9 @@ pvr_dump_in_memory_layout_sizes(const struct pvr_descriptor_set_layout *layout)
                    binding->descriptor_count);
       }
 
-      mesa_logd("==============================================");
+      mesa_logd("%s", big_separator);
    }
 }
-#endif
 
 VkResult pvr_CreateDescriptorSetLayout(
    VkDevice _device,
@@ -510,10 +513,7 @@ VkResult pvr_CreateDescriptorSetLayout(
       uint8_t shader_stages = 0;
 
       internal_binding->type = binding->descriptorType;
-      /* The binding_numbers can be non-contiguous so we ignore the user
-       * specified binding numbers and make them contiguous ourselves.
-       */
-      internal_binding->binding_number = bind_num;
+      internal_binding->binding_number = binding->binding;
 
       /* From Vulkan spec 1.2.189:
        *
@@ -541,7 +541,7 @@ VkResult pvr_CreateDescriptorSetLayout(
             for (uint32_t j = 0; j < binding->descriptorCount; j++) {
                PVR_FROM_HANDLE(pvr_sampler,
                                sampler,
-                               bindings->pImmutableSamplers[j]);
+                               binding->pImmutableSamplers[j]);
                const uint32_t next = j + layout->immutable_sampler_count;
 
                layout->immutable_samplers[next] = sampler;
@@ -656,9 +656,8 @@ VkResult pvr_CreateDescriptorSetLayout(
 
    pvr_setup_in_memory_layout_sizes(layout, reg_usage);
 
-#if defined(DEBUG)
-   pvr_dump_in_memory_layout_sizes(layout);
-#endif
+   if (PVR_IS_DEBUG_SET(VK_DUMP_DESCRIPTOR_SET_LAYOUT))
+      pvr_dump_in_memory_layout_sizes(layout);
 
    vk_free2(&device->vk.alloc, pAllocator, bindings);
 
@@ -674,28 +673,25 @@ void pvr_DestroyDescriptorSetLayout(VkDevice _device,
    PVR_FROM_HANDLE(pvr_descriptor_set_layout, layout, _set_layout);
    PVR_FROM_HANDLE(pvr_device, device, _device);
 
+   if (!layout)
+      return;
+
    pvr_descriptor_set_layout_free(device, pAllocator, layout);
 }
 
-#if defined(DEBUG)
 static void
 pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
                                   const struct pvr_pipeline_layout *layout)
 {
-#   define SEPARATOR_LENGTH 68
-#   define LOGD_CHAR_NTIMES(c, times)         \
-      do {                                    \
-         char _c_buffer[times + 1];           \
-         for (uint32_t i = 0; i < times; i++) \
-            _c_buffer[i] = c;                 \
-         _c_buffer[times] = '\0';             \
-         mesa_logd("%s", _c_buffer);          \
-      } while (0)
+   const char *const separator =
+      "--------------------------------------------------------------------";
+   const char *const big_separator =
+      "====================================================================";
 
    mesa_logd("=== SET LAYOUT ===");
-   LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+   mesa_logd("%s", separator);
    mesa_logd(" in registers:");
-   LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+   mesa_logd("%s", separator);
 
    for (uint32_t stage = 0;
         stage < ARRAY_SIZE(layout->register_layout_in_dwords_per_stage);
@@ -703,7 +699,7 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
       uint32_t dynamic_offset = 0;
 
       mesa_logd("| %-64s |", stage_names[stage].primary_dynamic);
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
 
       if (layout->per_stage_reg_info[stage].primary_dynamic_size_in_dwords) {
          /* Print dynamic primaries. */
@@ -737,9 +733,9 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
       mesa_logd("| %-64s |", stage_names[stage].secondary_dynamic);
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
 
       if (layout->per_stage_reg_info[stage].secondary_dynamic_size_in_dwords) {
          /* Print dynamic secondaries. */
@@ -778,9 +774,9 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
       mesa_logd("| %-64s |", stage_names[stage].primary);
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
 
       /* Print primaries. */
       for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
@@ -810,9 +806,9 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
       mesa_logd("| %-64s |", stage_names[stage].secondary);
-      LOGD_CHAR_NTIMES('-', SEPARATOR_LENGTH);
+      mesa_logd("%s", separator);
 
       /* Print secondaries. */
       for (uint32_t set_num = 0; set_num < layout->set_count; set_num++) {
@@ -846,13 +842,9 @@ pvr_dump_in_register_layout_sizes(const struct pvr_device *device,
          }
       }
 
-      LOGD_CHAR_NTIMES('=', SEPARATOR_LENGTH);
+      mesa_logd("%s", big_separator);
    }
-
-#   undef LOGD_CHAR_NTIMES
-#   undef SEPARATOR_LENGTH
 }
-#endif
 
 /* Pipeline layouts. These have nothing to do with the pipeline. They are
  * just multiple descriptor set layouts pasted together.
@@ -995,7 +987,8 @@ VkResult pvr_CreatePipelineLayout(VkDevice _device,
    for (uint32_t i = 0; i < pCreateInfo->pushConstantRangeCount; i++) {
       const VkPushConstantRange *range = &pCreateInfo->pPushConstantRanges[i];
 
-      layout->push_constants_shader_stages |= range->stageFlags;
+      layout->push_constants_shader_stages |=
+         vk_to_pvr_shader_stage_flags(range->stageFlags);
 
       /* From the Vulkan spec. 1.3.237
        * VUID-VkPipelineLayoutCreateInfo-pPushConstantRanges-00292 :
@@ -1013,9 +1006,8 @@ VkResult pvr_CreatePipelineLayout(VkDevice _device,
          layout->compute_push_constants_offset = range->offset;
    }
 
-#if defined(DEBUG)
-   pvr_dump_in_register_layout_sizes(device, layout);
-#endif
+   if (PVR_IS_DEBUG_SET(VK_DUMP_DESCRIPTOR_SET_LAYOUT))
+      pvr_dump_in_register_layout_sizes(device, layout);
 
    *pPipelineLayout = pvr_pipeline_layout_to_handle(layout);
 
@@ -1028,6 +1020,9 @@ void pvr_DestroyPipelineLayout(VkDevice _device,
 {
    PVR_FROM_HANDLE(pvr_device, device, _device);
    PVR_FROM_HANDLE(pvr_pipeline_layout, layout, _pipelineLayout);
+
+   if (!layout)
+      return;
 
    vk_object_free(&device->vk, pAllocator, layout);
 }
@@ -1087,7 +1082,7 @@ static void pvr_free_descriptor_set(struct pvr_device *device,
                                     struct pvr_descriptor_set *set)
 {
    list_del(&set->link);
-   pvr_bo_free(device, set->pvr_bo);
+   pvr_bo_suballoc_free(set->pvr_bo);
    vk_object_free(&device->vk, &pool->alloc, set);
 }
 
@@ -1217,12 +1212,11 @@ pvr_descriptor_set_create(struct pvr_device *device,
                               PVR_MAX_DESCRIPTOR_MEM_SIZE_IN_DWORDS) *
                          sizeof(uint32_t);
 
-      result = pvr_bo_alloc(device,
-                            device->heaps.general_heap,
-                            bo_size,
-                            cache_line_size,
-                            PVR_BO_ALLOC_FLAG_CPU_MAPPED,
-                            &set->pvr_bo);
+      result = pvr_bo_suballoc(&device->suballoc_general,
+                               bo_size,
+                               cache_line_size,
+                               false,
+                               &set->pvr_bo);
       if (result != VK_SUCCESS)
          goto err_free_descriptor_set;
    }
@@ -1252,12 +1246,12 @@ pvr_descriptor_set_create(struct pvr_device *device,
                                                  binding,
                                                  stage,
                                                  j);
-            void *map = set->pvr_bo->bo->map;
 
             if (binding->type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                offset_in_dwords += 4;
 
-            memcpy((uint8_t *)map + offset_in_dwords * sizeof(uint32_t),
+            memcpy((uint8_t *)pvr_bo_suballoc_get_map_addr(set->pvr_bo) +
+                      PVR_DW_TO_BYTES(offset_in_dwords),
                    sampler->descriptor.words,
                    sizeof(sampler->descriptor.words));
          }
@@ -1400,8 +1394,12 @@ static void pvr_descriptor_update_buffer_info(
                                                 j,
                                                 write_set->dstArrayElement + i);
 
-         memcpy(mem_ptr + primary_offset, &addr, size_info.primary << 2);
-         memcpy(mem_ptr + secondary_offset, &range, size_info.secondary << 2);
+         memcpy(mem_ptr + primary_offset,
+                &addr,
+                PVR_DW_TO_BYTES(size_info.primary));
+         memcpy(mem_ptr + secondary_offset,
+                &range,
+                PVR_DW_TO_BYTES(size_info.secondary));
       }
    }
 }
@@ -1495,7 +1493,7 @@ pvr_write_image_descriptor_secondaries(const struct pvr_device_info *dev_info,
       iview->vk.view_type == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
 
    if (!PVR_HAS_FEATURE(dev_info, tpu_array_textures)) {
-      const struct pvr_image *image = vk_to_pvr_image(iview->vk.image);
+      const struct pvr_image *image = pvr_image_view_get_image(iview);
       uint64_t addr =
          image->dev_addr.addr + iview->vk.base_array_layer * image->layer_size;
 
@@ -1818,7 +1816,7 @@ static void pvr_write_descriptor_set(struct pvr_device *device,
                                      const VkWriteDescriptorSet *write_set)
 {
    PVR_FROM_HANDLE(pvr_descriptor_set, set, write_set->dstSet);
-   uint32_t *map = set->pvr_bo->bo->map;
+   uint32_t *map = pvr_bo_suballoc_get_map_addr(set->pvr_bo);
    const struct pvr_descriptor_set_layout_binding *binding =
       pvr_get_descriptor_binding(set->layout, write_set->dstBinding);
 
@@ -1963,8 +1961,8 @@ static void pvr_copy_descriptor_set(struct pvr_device *device,
       return;
    }
 
-   src_mem_ptr = src_set->pvr_bo->bo->map;
-   dst_mem_ptr = dst_set->pvr_bo->bo->map;
+   src_mem_ptr = pvr_bo_suballoc_get_map_addr(src_set->pvr_bo);
+   dst_mem_ptr = pvr_bo_suballoc_get_map_addr(dst_set->pvr_bo);
 
    /* From the Vulkan 1.3.232 spec VUID-VkCopyDescriptorSet-dstBinding-02632:
     *
@@ -2014,11 +2012,11 @@ static void pvr_copy_descriptor_set(struct pvr_device *device,
 
       memcpy(dst_mem_ptr + dst_primary_offset,
              src_mem_ptr + src_primary_offset,
-             size_info.primary * 4U * copy_set->descriptorCount);
+             PVR_DW_TO_BYTES(size_info.primary) * copy_set->descriptorCount);
 
       memcpy(dst_mem_ptr + dst_secondary_offset,
              src_mem_ptr + src_secondary_offset,
-             size_info.secondary * 4U * copy_set->descriptorCount);
+             PVR_DW_TO_BYTES(size_info.secondary) * copy_set->descriptorCount);
    }
 }
 

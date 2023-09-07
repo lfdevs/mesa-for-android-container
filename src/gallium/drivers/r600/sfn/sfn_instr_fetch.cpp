@@ -78,7 +78,7 @@ FetchInstr::FetchInstr(EVFetchInstr opcode,
       m_opname = "READ_SCRATCH";
       break;
    default:
-      unreachable("Unknwon fetch instruction");
+      unreachable("Unknown fetch instruction");
    }
 
    if (m_src)
@@ -204,7 +204,7 @@ FetchInstr::do_print(std::ostream& os) const
          os << " NO_IDX_OFFSET";
          break;
       default:
-         unreachable("Unknwon fetch instruction type");
+         unreachable("Unknown fetch instruction type");
       }
    }
 
@@ -214,7 +214,7 @@ FetchInstr::do_print(std::ostream& os) const
       if (fmt != s_data_format_map.end())
          os << fmt->second << ",";
       else
-         unreachable("unknwon data format");
+         unreachable("unknown data format");
 
       if (m_tex_flags.test(format_comp_signed))
          os << "S";
@@ -232,7 +232,7 @@ FetchInstr::do_print(std::ostream& os) const
          os << "SCALED";
          break;
       default:
-         unreachable("Unknwon number format");
+         unreachable("Unknown number format");
       }
 
       os << ")";
@@ -680,7 +680,7 @@ public:
       if (value.sel() == ALU_SRC_1_INT)
          m_lfs->set_array_base(1);
       else if (value.sel() != ALU_SRC_0)
-         unreachable("Scratch array base is an inpossible inline constant");
+         unreachable("Scratch array base is an impossible inline constant");
 
       m_lfs->set_src(new Register(0, 7, pin_none));
    }

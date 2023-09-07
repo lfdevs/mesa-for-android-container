@@ -122,6 +122,12 @@ const_value_for_deref(nir_deref_instr *deref)
    if (var->constant_initializer == NULL)
       goto fail;
 
+   if (var->constant_initializer->is_null_constant) {
+      /* Doesn't matter what casts are in the way, it's all zeros */
+      nir_deref_path_finish(&path);
+      return var->constant_initializer->values;
+   }
+
    nir_constant *c = var->constant_initializer;
    nir_const_value *v = NULL; /* Vector value for array-deref-of-vec */
 

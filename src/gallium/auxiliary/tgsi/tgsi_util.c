@@ -39,17 +39,6 @@ union pointer_hack
    uint64_t uint64;
 };
 
-void *
-tgsi_align_128bit(void *unaligned)
-{
-   union pointer_hack ph;
-
-   ph.uint64 = 0;
-   ph.pointer = unaligned;
-   ph.uint64 = (ph.uint64 + 15) & ~15;
-   return ph.pointer;
-}
-
 unsigned
 tgsi_util_get_src_register_swizzle(const struct tgsi_src_register *reg,
                                    unsigned component)
@@ -76,30 +65,6 @@ tgsi_util_get_full_src_register_swizzle(
    unsigned component)
 {
    return tgsi_util_get_src_register_swizzle(&reg->Register, component);
-}
-
-
-void
-tgsi_util_set_src_register_swizzle(struct tgsi_src_register *reg,
-                                   unsigned swizzle,
-                                   unsigned component)
-{
-   switch (component) {
-   case 0:
-      reg->SwizzleX = swizzle;
-      break;
-   case 1:
-      reg->SwizzleY = swizzle;
-      break;
-   case 2:
-      reg->SwizzleZ = swizzle;
-      break;
-   case 3:
-      reg->SwizzleW = swizzle;
-      break;
-   default:
-      assert(0);
-   }
 }
 
 
@@ -507,8 +472,8 @@ tgsi_is_shadow_target(enum tgsi_texture_type target)
    case TGSI_TEXTURE_SHADOW2D_ARRAY:
    case TGSI_TEXTURE_SHADOWCUBE:
    case TGSI_TEXTURE_SHADOWCUBE_ARRAY:
-      return TRUE;
+      return true;
    default:
-      return FALSE;
+      return false;
    }
 }

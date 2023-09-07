@@ -75,7 +75,7 @@ lp_build_float_to_smallfloat(struct gallivm_state *gallivm,
                              unsigned mantissa_bits,
                              unsigned exponent_bits,
                              unsigned mantissa_start,
-                             boolean has_sign)
+                             bool has_sign)
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef i32_floatexpmask, i32_smallexpmask, magic, normal;
@@ -86,8 +86,8 @@ lp_build_float_to_smallfloat(struct gallivm_state *gallivm,
    struct lp_build_context f32_bld, i32_bld;
    LLVMValueRef zero = lp_build_const_vec(gallivm, f32_type, 0.0f);
    unsigned exponent_start = mantissa_start + mantissa_bits;
-   boolean always_preserve_nans = true;
-   boolean maybe_correct_denorm_rounding = true;
+   bool always_preserve_nans = true;
+   bool maybe_correct_denorm_rounding = true;
 
    lp_build_context_init(&f32_bld, gallivm, f32_type);
    lp_build_context_init(&i32_bld, gallivm, i32_type);
@@ -284,7 +284,7 @@ lp_build_smallfloat_to_float(struct gallivm_state *gallivm,
                              unsigned mantissa_bits,
                              unsigned exponent_bits,
                              unsigned mantissa_start,
-                             boolean has_sign)
+                             bool has_sign)
 {
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef smallexpmask, i32_floatexpmask, magic;

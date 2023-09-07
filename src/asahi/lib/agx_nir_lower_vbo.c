@@ -4,6 +4,7 @@
  */
 
 #include "agx_nir_lower_vbo.h"
+#include "asahi/compiler/agx_internal_formats.h"
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_format_convert.h"
 #include "util/u_math.h"
@@ -169,6 +170,18 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
 
    unsigned stride_el = stride / interchange_align;
    unsigned offset_el = offset / interchange_align;
+   unsigned shift = 0;
+
+   /* Try to use the small shift on the load itself when possible. This can save
+    * an instruction. Shifts are only available for regular interchange formats,
+    * i.e. the set of formats that support masking.
+    */
+   if (offset_el == 0 && (stride_el == 2 || stride_el == 4) &&
+       agx_internal_format_supports_mask(interchange_format)) {
+
+      shift = util_logbase2(stride_el);
+      stride_el = 1;
+   }
 
    nir_ssa_def *stride_offset_el =
       nir_iadd_imm(b, nir_imul_imm(b, el, stride_el), offset_el);
@@ -176,7 +189,7 @@ pass(struct nir_builder *b, nir_instr *instr, void *data)
    /* Load the raw vector */
    nir_ssa_def *memory = nir_load_constant_agx(
       b, interchange_comps, interchange_register_size, base, stride_offset_el,
-      .format = interchange_format);
+      .format = interchange_format, .base = shift);
 
    unsigned dest_size = nir_dest_bit_size(intr->dest);
 

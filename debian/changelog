@@ -1,3 +1,13 @@
+mesa (23.2.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * rules: Add virtio vulkan driver.
+  * rules: Enable panfrost vulkan driver on armhf/arm64. (Closes: #1009027)
+  * rules: Drop optimization workaround for ppc64el to see if the issues
+    are fixed with current toolchain.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 07 Sep 2023 15:28:51 +0300
+
 mesa (23.1.6-1) unstable; urgency=medium
 
   * New upstream release.

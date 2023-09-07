@@ -432,8 +432,11 @@ device::max_block_size() const {
 
 cl_uint
 device::subgroup_size() const {
-   return get_compute_param<uint32_t>(pipe, ir_format(),
-                                      PIPE_COMPUTE_CAP_SUBGROUP_SIZE)[0];
+   cl_uint subgroup_sizes =
+      get_compute_param<uint32_t>(pipe, ir_format(), PIPE_COMPUTE_CAP_SUBGROUP_SIZES)[0];
+   if (!subgroup_sizes)
+      return 0;
+   return 1 << (util_last_bit(subgroup_sizes) - 1);
 }
 
 cl_uint

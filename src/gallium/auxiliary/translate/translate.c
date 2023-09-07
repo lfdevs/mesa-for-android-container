@@ -49,7 +49,7 @@ struct translate *translate_create( const struct translate_key *key )
    return translate_generic_create( key );
 }
 
-boolean translate_is_output_format_supported(enum pipe_format format)
+bool translate_is_output_format_supported(enum pipe_format format)
 {
    return translate_generic_is_output_format_supported(format);
 }

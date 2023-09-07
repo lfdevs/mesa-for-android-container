@@ -67,7 +67,7 @@
  */
 #define ALWAYS_READPIXELS_CACHE false
 
-static boolean
+static bool
 needs_integer_signed_unsigned_conversion(const struct gl_context *ctx,
                                          GLenum format, GLenum type)
 {
@@ -86,10 +86,10 @@ needs_integer_signed_unsigned_conversion(const struct gl_context *ctx,
         (type == GL_INT ||
          type == GL_SHORT ||
          type == GL_BYTE))) {
-      return TRUE;
+      return true;
    }
 
-   return FALSE;
+   return false;
 }
 
 static bool
@@ -152,7 +152,7 @@ try_pbo_readpixels(struct st_context *st, struct gl_renderbuffer *rb,
 
    cso_set_sample_mask(cso, ~0);
    cso_set_min_samples(cso, 1);
-   cso_set_render_condition(cso, NULL, FALSE, 0);
+   cso_set_render_condition(cso, NULL, false, 0);
 
    /* Set up the sampler_view */
    {
@@ -326,7 +326,7 @@ blit_to_staging(struct st_context *st, struct gl_renderbuffer *rb,
    blit.src.box.depth = blit.dst.box.depth = 1;
    blit.mask = st_get_blit_mask(rb->_BaseFormat, format);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
-   blit.scissor_enable = FALSE;
+   blit.scissor_enable = false;
 
    if (invert_y) {
       blit.src.box.y = rb->Height - blit.src.box.y;
@@ -424,7 +424,7 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
    enum pipe_format dst_format, src_format;
    unsigned bind;
    struct pipe_transfer *tex_xfer;
-   ubyte *map = NULL;
+   uint8_t *map = NULL;
    int dst_x, dst_y;
 
    /* Validate state (to be sure we have up-to-date framebuffer surfaces)

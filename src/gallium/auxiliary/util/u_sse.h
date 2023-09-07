@@ -38,7 +38,7 @@
 #define U_SSE_H_
 
 #include "util/detect.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_debug.h"
 
 #if DETECT_ARCH_SSE
@@ -48,9 +48,9 @@
 
 union m128i {
    __m128i m;
-   ubyte ub[16];
-   ushort us[8];
-   uint ui[4];
+   uint8_t ub[16];
+   uint16_t us[8];
+   uint32_t ui[4];
 };
 
 /*

@@ -1,14 +1,20 @@
 workflow:
   rules:
+    # merge pipeline
     - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_COMMIT_BRANCH == null
       variables:
         MESA_CI_PERFORMANCE_ENABLED: 1
+        VALVE_INFRA_VANGOGH_JOB_PRIORITY: ""  # Empty tags are ignored by gitlab
+    # post-merge pipeline
     - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_COMMIT_BRANCH
       variables:
         LAVA_JOB_PRIORITY: 40
+        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
+    # any other pipeline
     - if: $GITLAB_USER_LOGIN != "marge-bot"
       variables:
         LAVA_JOB_PRIORITY: 50
+        VALVE_INFRA_VANGOGH_JOB_PRIORITY: priority:low
     - when: always
 
 variables:
@@ -21,30 +27,23 @@ variables:
           rm download-git-cache.sh
           set +o xtrace
   CI_JOB_JWT_FILE: /minio_jwt
-  MINIO_HOST: s3.freedesktop.org
+  S3_HOST: s3.freedesktop.org
   # per-pipeline artifact storage on MinIO
-  PIPELINE_ARTIFACTS_BASE: ${MINIO_HOST}/artifacts/${CI_PROJECT_PATH}/${CI_PIPELINE_ID}
+  PIPELINE_ARTIFACTS_BASE: ${S3_HOST}/artifacts/${CI_PROJECT_PATH}/${CI_PIPELINE_ID}
   # per-job artifact storage on MinIO
   JOB_ARTIFACTS_BASE: ${PIPELINE_ARTIFACTS_BASE}/${CI_JOB_ID}
   # reference images stored for traces
-  PIGLIT_REPLAY_REFERENCE_IMAGES_BASE: "${MINIO_HOST}/mesa-tracie-results/$FDO_UPSTREAM_REPO"
-  # Individual CI farm status, set to "offline" to disable jobs
-  # running on a particular CI farm (ie. for outages, etc):
-  FD_FARM: "online"
-  COLLABORA_FARM: "online"
-  MICROSOFT_FARM: "online"
-  LIMA_FARM: "online"
-  IGALIA_FARM: "online"
-  ANHOLT_FARM: "online"
-  VALVE_FARM: "online"
-  AUSTRIANCODER_FARM: "online"  # only etnaviv GPUs
+  PIGLIT_REPLAY_REFERENCE_IMAGES_BASE: "${S3_HOST}/mesa-tracie-results/$FDO_UPSTREAM_REPO"
+  # For individual CI farm status see .ci-farms folder
+  # Disable farm with   `git mv .ci-farms{,-disabled}/$farm_name`
+  # Re-enable farm with `git mv .ci-farms{-disabled,}/$farm_name`
+  # NEVER MIX FARM MAINTENANCE WITH ANY OTHER CHANGE IN THE SAME MERGE REQUEST!
 
 default:
   before_script:
     - >
       export SCRIPTS_DIR=$(mktemp -d) &&
       curl -L -s --retry 4 -f --retry-all-errors --retry-delay 60 -O --output-dir "${SCRIPTS_DIR}" "${CI_PROJECT_URL}/-/raw/${CI_COMMIT_SHA}/.gitlab-ci/setup-test-env.sh" &&
-      chmod +x ${SCRIPTS_DIR}/setup-test-env.sh &&
       . ${SCRIPTS_DIR}/setup-test-env.sh &&
       echo -n "${CI_JOB_JWT}" > "${CI_JOB_JWT_FILE}" &&
       unset CI_JOB_JWT  # Unsetting vulnerable env variables
@@ -61,6 +60,16 @@ default:
   # https://gitlab.freedesktop.org/mesa/mesa/-/issues/?sort=created_date&state=opened&label_name%5B%5D=CI%20daily
   retry:
     max: 1
+    # Ignore runner_unsupported, stale_schedule, archived_failure, or
+    # unmet_prerequisites
+    when:
+      - api_failure
+      - runner_system_failure
+      - script_failure
+      - job_execution_timeout
+      - scheduler_failure
+      - data_integrity_failure
+      - unknown_failure
 
 include:
   - project: 'freedesktop/ci-templates'
@@ -78,6 +87,7 @@ include:
   - local: '.gitlab-ci/container/gitlab-ci.yml'
   - local: '.gitlab-ci/build/gitlab-ci.yml'
   - local: '.gitlab-ci/test/gitlab-ci.yml'
+  - local: '.gitlab-ci/farm-rules.yml'
   - local: '.gitlab-ci/test-source-dep.yml'
   - local: 'docs/gitlab-ci.yml'
   - local: 'src/amd/ci/gitlab-ci.yml'
@@ -156,6 +166,7 @@ stages:
       # Source code
       - include/**/*
       - src/**/*
+      - .ci-farms/*
       when: on_success
     # Otherwise, build/test jobs won't run because no rule matched.
 
@@ -219,7 +230,7 @@ make git archive:
     # compress the current folder
     - tar -cvzf ../$CI_PROJECT_NAME.tar.gz .
 
-    - ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" ../$CI_PROJECT_NAME.tar.gz https://$MINIO_HOST/git-cache/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/$CI_PROJECT_NAME.tar.gz
+    - ci-fairy s3cp --token-file "${CI_JOB_JWT_FILE}" ../$CI_PROJECT_NAME.tar.gz https://$S3_HOST/git-cache/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME/$CI_PROJECT_NAME.tar.gz
 
 
 # Sanity checks of MR settings and commit logs
@@ -240,3 +251,12 @@ sanity:
     when: on_failure
     reports:
       junit: check-*.xml
+
+
+# Jobs that need to pass before spending hardware resources on further testing
+.required-for-hardware-jobs:
+  needs:
+    - job: clang-format
+      optional: true
+    - job: rustfmt
+      optional: true

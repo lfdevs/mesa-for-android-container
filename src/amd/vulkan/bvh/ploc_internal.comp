@@ -178,9 +178,9 @@ load_id(VOID_REF ids, uint32_t iter, uint32_t index)
 
 void
 load_bounds(VOID_REF ids, uint32_t iter, uint32_t task_index, uint32_t lds_base,
-            uint32_t neigbourhood_overlap, uint32_t search_bound)
+            uint32_t neighbourhood_overlap, uint32_t search_bound)
 {
-   for (uint32_t i = task_index - 2 * neigbourhood_overlap; i < search_bound;
+   for (uint32_t i = task_index - 2 * neighbourhood_overlap; i < search_bound;
         i += gl_WorkGroupSize.x) {
       uint32_t id = load_id(ids, iter, i);
       if (id == RADV_BVH_INVALID_NODE)
@@ -218,7 +218,7 @@ combined_node_cost(uint32_t lds_base, uint32_t i, uint32_t j)
     * tree depth for internal nodes)
     *
     * Dividing area by both relative costs will make it more likely that we merge nodes with
-    * a hight child cost.
+    * a high child cost.
     */
    float p_i = aabb_surface_area(shared_bounds[i - lds_base]) / area;
    float p_j = aabb_surface_area(shared_bounds[j - lds_base]) / area;
@@ -269,30 +269,30 @@ main(void)
       /* Find preferred partners and merge them */
       PHASE (args.header) {
          uint32_t base_index = task_index - gl_LocalInvocationID.x;
-         uint32_t neigbourhood_overlap = min(PLOC_NEIGHBOURHOOD, base_index);
-         uint32_t double_neigbourhood_overlap = min(2 * PLOC_NEIGHBOURHOOD, base_index);
+         uint32_t neighbourhood_overlap = min(PLOC_NEIGHBOURHOOD, base_index);
+         uint32_t double_neighbourhood_overlap = min(2 * PLOC_NEIGHBOURHOOD, base_index);
          /* Upper bound to where valid nearest node indices are written. */
          uint32_t write_bound =
             min(current_task_count, base_index + gl_WorkGroupSize.x + PLOC_NEIGHBOURHOOD);
          /* Upper bound to where valid nearest node indices are searched. */
          uint32_t search_bound =
             min(current_task_count, base_index + gl_WorkGroupSize.x + 2 * PLOC_NEIGHBOURHOOD);
-         uint32_t lds_base = base_index - double_neigbourhood_overlap;
+         uint32_t lds_base = base_index - double_neighbourhood_overlap;
 
-         load_bounds(src_ids, iter, task_index, lds_base, neigbourhood_overlap, search_bound);
+         load_bounds(src_ids, iter, task_index, lds_base, neighbourhood_overlap, search_bound);
 
          for (uint32_t i = gl_LocalInvocationID.x; i < NUM_PLOC_LDS_ITEMS; i += gl_WorkGroupSize.x)
             nearest_neighbour_indices[i] = 0xFFFFFFFF;
          barrier();
 
-         for (uint32_t i = task_index - double_neigbourhood_overlap; i < write_bound;
+         for (uint32_t i = task_index - double_neighbourhood_overlap; i < write_bound;
               i += gl_WorkGroupSize.x) {
             uint32_t right_bound = min(search_bound - 1 - i, PLOC_NEIGHBOURHOOD);
 
             uint32_t fallback_pair = i == 0 ? (i + 1) : (i - 1);
             uint32_t min_offset = encode_neighbour_offset(INFINITY, i, fallback_pair);
 
-            for (uint32_t j = max(i + 1, base_index - neigbourhood_overlap); j <= i + right_bound;
+            for (uint32_t j = max(i + 1, base_index - neighbourhood_overlap); j <= i + right_bound;
                  ++j) {
 
                float sah = combined_node_cost(lds_base, i, j);
@@ -301,7 +301,7 @@ main(void)
                min_offset = min(min_offset, i_encoded_offset);
                atomicMin(nearest_neighbour_indices[j - lds_base], j_encoded_offset);
             }
-            if (i >= base_index - neigbourhood_overlap)
+            if (i >= base_index - neighbourhood_overlap)
                atomicMin(nearest_neighbour_indices[i - lds_base], min_offset);
          }
 
@@ -309,7 +309,7 @@ main(void)
             shared_aggregate_sum = 0;
          barrier();
 
-         for (uint32_t i = task_index - neigbourhood_overlap; i < write_bound;
+         for (uint32_t i = task_index - neighbourhood_overlap; i < write_bound;
               i += gl_WorkGroupSize.x) {
             uint32_t left_bound = min(i, PLOC_NEIGHBOURHOOD);
             uint32_t right_bound = min(search_bound - 1 - i, PLOC_NEIGHBOURHOOD);

@@ -50,16 +50,9 @@ typedef struct {
 static nir_ssa_def *
 load_frag_coord(nir_builder *b)
 {
-   nir_foreach_shader_in_variable(var, b->shader) {
-      if (var->data.location == VARYING_SLOT_POS)
-         return nir_load_var(b, var);
-   }
-
-   nir_variable *pos = nir_variable_create(b->shader, nir_var_shader_in,
-                                           glsl_vec4_type(), NULL);
-   pos->data.location = VARYING_SLOT_POS;
+   nir_variable *pos = nir_get_variable_with_location(b->shader, nir_var_shader_in,
+                                                      VARYING_SLOT_POS, glsl_vec4_type());
    pos->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
-   pos->data.driver_location = b->shader->num_inputs++;
    return nir_load_var(b, pos);
 }
 
@@ -74,7 +67,7 @@ nir_lower_pstipple_block(nir_block *block,
 
    nir_ssa_def *frag_coord = state->fs_pos_is_sysval ? nir_load_frag_coord(b) : load_frag_coord(b);
 
-   texcoord = nir_fmul(b, nir_channels(b, frag_coord, 0x3),
+   texcoord = nir_fmul(b, nir_trim_vector(b, frag_coord, 2),
                        nir_imm_vec2(b, 1.0/32.0, 1.0/32.0));
 
    nir_tex_instr *tex = nir_tex_instr_create(b->shader, 1);
@@ -84,9 +77,8 @@ nir_lower_pstipple_block(nir_block *block,
    tex->dest_type = nir_type_float32;
    tex->texture_index = state->stip_tex->data.binding;
    tex->sampler_index = state->stip_tex->data.binding;
-   tex->src[0].src_type = nir_tex_src_coord;
-   tex->src[0].src = nir_src_for_ssa(texcoord);
-   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, NULL);
+   tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, texcoord);
+   nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32);
 
    nir_builder_instr_insert(b, &tex->instr);
 
@@ -94,8 +86,7 @@ nir_lower_pstipple_block(nir_block *block,
 
    switch (state->bool_type) {
    case nir_type_bool1:
-      condition = nir_fneu(b, nir_channel(b, &tex->dest.ssa, 3),
-                           nir_imm_floatN_t(b, 0.0, tex->dest.ssa.bit_size));
+      condition = nir_fneu_imm(b, nir_channel(b, &tex->dest.ssa, 3), 0.0);
       break;
    case nir_type_bool32:
       condition = nir_fneu32(b, nir_channel(b, &tex->dest.ssa, 3),
@@ -113,9 +104,7 @@ static void
 nir_lower_pstipple_impl(nir_function_impl *impl,
                         lower_pstipple *state)
 {
-   nir_builder *b = &state->b;
-
-   nir_builder_init(b, impl);
+   state->b = nir_builder_create(impl);
 
    nir_block *start = nir_start_block(impl);
    nir_lower_pstipple_block(start, state);
@@ -159,10 +148,8 @@ nir_lower_pstipple_fs(struct nir_shader *shader,
    BITSET_SET(shader->info.samplers_used, binding);
    state.stip_tex = tex_var;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_lower_pstipple_impl(function->impl, &state);
-      }
+   nir_foreach_function_impl(impl, shader) {
+      nir_lower_pstipple_impl(impl, &state);
    }
    *samplerUnitOut = binding;
 }
@@ -225,7 +212,7 @@ lower_aaline_instr(nir_builder *b, nir_instr *instr, void *data)
 
       // vec2 a = vec2((uvec2(pattern) >> p) & uvec2(1u));
       nir_ssa_def *a = nir_i2f32(b,
-         nir_iand(b, nir_ishr(b, nir_vec2(b, pattern, pattern), p),
+         nir_iand(b, nir_ishr(b, nir_replicate(b, pattern, 2), p),
                   nir_imm_ivec2(b, 1, 1)));
 
       // float cov = mix(a.x, a.y, t);
@@ -324,13 +311,10 @@ static void
 nir_lower_aapoint_impl(nir_function_impl *impl, lower_aapoint *state,
                        nir_alu_type bool_type)
 {
-   nir_builder *b = &state->b;
-
-   nir_builder_init(b, impl);
-
    nir_block *block = nir_start_block(impl);
-   b->cursor = nir_before_block(block);
+   state->b = nir_builder_at(nir_before_block(block));
 
+   nir_builder *b = &state->b;
    nir_ssa_def *aainput = nir_load_var(b, state->input);
 
    nir_ssa_def *dist = nir_fadd(b, nir_fmul(b, nir_channel(b, aainput, 0), nir_channel(b, aainput, 0)),
@@ -449,9 +433,7 @@ nir_lower_aapoint_fs(struct nir_shader *shader, int *varying, const nir_alu_type
    *varying = tgsi_get_generic_gl_varying_index(aapoint_input->data.location, true);
    state.input = aapoint_input;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_lower_aapoint_impl(function->impl, &state, bool_type);
-      }
+   nir_foreach_function_impl(impl, shader) {
+      nir_lower_aapoint_impl(impl, &state, bool_type);
    }
 }

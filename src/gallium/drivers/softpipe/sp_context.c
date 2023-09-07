@@ -327,7 +327,7 @@ softpipe_create_context(struct pipe_screen *screen,
    /* Do polygon stipple w/ texture map + frag prog. */
    draw_install_pstipple_stage(softpipe->draw, &softpipe->pipe);
 
-   draw_wide_point_sprites(softpipe->draw, TRUE);
+   draw_wide_point_sprites(softpipe->draw, true);
 
    sp_init_surface_functions(softpipe);
 

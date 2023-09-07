@@ -167,8 +167,7 @@ lower_tex_src_plane_block(nir_builder *b, lower_tex_src_state *state, nir_block 
 static void
 lower_tex_src_plane_impl(lower_tex_src_state *state, nir_function_impl *impl)
 {
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       lower_tex_src_plane_block(&b, state, block);
@@ -190,8 +189,7 @@ st_nir_lower_tex_src_plane(struct nir_shader *shader, unsigned free_slots,
 
    assign_extra_samplers(&state, free_slots);
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         lower_tex_src_plane_impl(&state, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      lower_tex_src_plane_impl(&state, impl);
    }
 }

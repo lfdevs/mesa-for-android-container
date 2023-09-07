@@ -40,7 +40,7 @@ FUNC(FUNC_VARS)
                    max_count_loop, max_count_fan);
    }
 
-   if (prim == PIPE_PRIM_PATCHES) {
+   if (prim == MESA_PRIM_PATCHES) {
       first = vsplit->draw->pt.vertices_per_patch;
       incr = vsplit->draw->pt.vertices_per_patch;
    } else
@@ -78,22 +78,22 @@ FUNC(FUNC_VARS)
        * That is, remaining is implicitly trimmed.
        */
       switch (prim) {
-      case PIPE_PRIM_PATCHES:
-      case PIPE_PRIM_POINTS:
-      case PIPE_PRIM_LINES:
-      case PIPE_PRIM_LINE_STRIP:
-      case PIPE_PRIM_TRIANGLES:
-      case PIPE_PRIM_TRIANGLE_STRIP:
-      case PIPE_PRIM_QUADS:
-      case PIPE_PRIM_QUAD_STRIP:
-      case PIPE_PRIM_LINES_ADJACENCY:
-      case PIPE_PRIM_LINE_STRIP_ADJACENCY:
-      case PIPE_PRIM_TRIANGLES_ADJACENCY:
-      case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      case MESA_PRIM_PATCHES:
+      case MESA_PRIM_POINTS:
+      case MESA_PRIM_LINES:
+      case MESA_PRIM_LINE_STRIP:
+      case MESA_PRIM_TRIANGLES:
+      case MESA_PRIM_TRIANGLE_STRIP:
+      case MESA_PRIM_QUADS:
+      case MESA_PRIM_QUAD_STRIP:
+      case MESA_PRIM_LINES_ADJACENCY:
+      case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      case MESA_PRIM_TRIANGLES_ADJACENCY:
+      case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
          seg_max =
             draw_pt_trim_count(MIN2(max_count_simple, count), first, incr);
-         if (prim == PIPE_PRIM_TRIANGLE_STRIP ||
-             prim == PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY) {
+         if (prim == MESA_PRIM_TRIANGLE_STRIP ||
+             prim == MESA_PRIM_TRIANGLE_STRIP_ADJACENCY) {
             /* make sure we flush even number of triangles at a time */
             if (seg_max < count && !(((seg_max - first) / incr) & 1))
                seg_max -= incr;
@@ -116,7 +116,7 @@ FUNC(FUNC_VARS)
          } while (seg_start < count);
          break;
 
-      case PIPE_PRIM_LINE_LOOP:
+      case MESA_PRIM_LINE_LOOP:
          seg_max =
             draw_pt_trim_count(MIN2(max_count_loop, count), first, incr);
 
@@ -137,8 +137,8 @@ FUNC(FUNC_VARS)
          } while (seg_start < count);
          break;
 
-      case PIPE_PRIM_TRIANGLE_FAN:
-      case PIPE_PRIM_POLYGON:
+      case MESA_PRIM_TRIANGLE_FAN:
+      case MESA_PRIM_POLYGON:
          seg_max =
             draw_pt_trim_count(MIN2(max_count_fan, count), first, incr);
 

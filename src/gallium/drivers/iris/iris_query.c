@@ -643,7 +643,7 @@ iris_get_query_result(struct pipe_context *ctx,
       struct pipe_screen *screen = ctx->screen;
 
       result->b = screen->fence_finish(screen, ctx, q->fence,
-                                       wait ? PIPE_TIMEOUT_INFINITE : 0);
+                                       wait ? OS_TIMEOUT_INFINITE : 0);
       return result->b;
    }
 

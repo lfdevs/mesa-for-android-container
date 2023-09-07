@@ -201,13 +201,11 @@ instr_try_combine(struct set *instr_set, nir_instr *instr1, nir_instr *instr2)
    if (total_components > instr1->pass_flags)
       return NULL;
 
-   nir_builder b;
-   nir_builder_init(&b, nir_cf_node_get_function(&instr1->block->cf_node));
-   b.cursor = nir_after_instr(instr1);
+   nir_builder b = nir_builder_at(nir_after_instr(instr1));
 
    nir_alu_instr *new_alu = nir_alu_instr_create(b.shader, alu1->op);
-   nir_ssa_dest_init(&new_alu->instr, &new_alu->dest.dest,
-                     total_components, alu1->dest.dest.ssa.bit_size, NULL);
+   nir_ssa_dest_init(&new_alu->instr, &new_alu->dest.dest, total_components,
+                     alu1->dest.dest.ssa.bit_size);
    new_alu->dest.write_mask = (1 << total_components) - 1;
    new_alu->instr.pass_flags = alu1->instr.pass_flags;
 
@@ -410,9 +408,8 @@ nir_opt_vectorize(nir_shader *shader, nir_vectorize_cb filter,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl)
-         progress |= nir_opt_vectorize_impl(function->impl, filter, data);
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_opt_vectorize_impl(impl, filter, data);
    }
 
    return progress;

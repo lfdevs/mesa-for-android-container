@@ -165,6 +165,10 @@ v3dX(format_supports_tlb_resolve)(const struct v3dv_format *format);
 bool
 v3dX(format_supports_blending)(const struct v3dv_format *format);
 
+/* FIXME: tex_format should be `enum V3DX(Texture_Data_Formats)`, but using
+ * that enum type in the header requires including v3dx_pack.h, which triggers
+ * circular include dependencies issues, so we're using a `uint32_t` for now.
+ */
 bool
 v3dX(tfu_supports_tex_format)(uint32_t tex_format);
 

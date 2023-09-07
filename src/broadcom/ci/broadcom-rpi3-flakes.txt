@@ -2,17 +2,13 @@ dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_and_pos_x_a
 dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_and_pos_x_and_pos_y_pos_z
 dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_and_pos_x_neg_y_pos_z_and_neg_x_pos_y_neg_z
 dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_pos_x_and_neg_x_neg_y_pos_z_and_neg_x_pos_y_neg_z
-dEQP-GLES2.functional.draw.random.51
-dEQP-GLES2.functional.texture.size.cube.256x256_rgb888
 
 glx@glx-multi-window-single-context
 shaders@glsl-vs-loop
 shaders@glsl-vs-loop-nested
-spec@arb_framebuffer_srgb@blit renderbuffer srgb single_sampled enabled clear
 spec@ext_framebuffer_blit@fbo-sys-blit
 spec@ext_framebuffer_blit@fbo-sys-sub-blit
 spec@egl_chromium_sync_control@conformance
-spec@ext_packed_depth_stencil@fbo-stencil-gl_depth24_stencil8-readpixels
 
 # CMA allocations that may sometimes succeed
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2

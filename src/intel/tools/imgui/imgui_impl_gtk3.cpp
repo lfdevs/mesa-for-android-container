@@ -173,7 +173,7 @@ void   ImGui_ImplGtk3_HandleEvent(GdkEvent *event)
 static gboolean handle_gdk_event(GtkWidget *widget, GdkEvent *event, void *data)
 {
     ImGui_ImplGtk3_HandleEvent(event);
-    return TRUE;
+    return true;
 }
 
 bool ImGui_ImplGtk3_Init(GtkWidget* gl_area, bool install_callbacks)
@@ -182,7 +182,7 @@ bool ImGui_ImplGtk3_Init(GtkWidget* gl_area, bool install_callbacks)
 
     g_GtkGlArea = GTK_WIDGET(g_object_ref(gl_area));
     gtk_widget_realize(g_GtkGlArea);
-    gtk_widget_set_can_focus(g_GtkGlArea, TRUE);
+    gtk_widget_set_can_focus(g_GtkGlArea, true);
     gtk_widget_grab_focus(g_GtkGlArea);
 
     if (install_callbacks) {
@@ -215,7 +215,7 @@ static gboolean timeout_callback(gpointer data)
 {
     gtk_widget_queue_draw(g_GtkGlArea);
     g_RedrawTimeout = 0;
-    return FALSE;
+    return false;
 }
 
 static void kick_timeout_redraw(float timeout)

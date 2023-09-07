@@ -83,9 +83,8 @@ vc4_blend_channel_f(nir_builder *b,
                 if (channel != 3) {
                         return nir_fmin(b,
                                         src[3],
-                                        nir_fsub(b,
-                                                 nir_imm_float(b, 1.0),
-                                                 dst[3]));
+                                        nir_fsub_imm(b, 1.0,
+                                                     dst[3]));
                 } else {
                         return nir_imm_float(b, 1.0);
                 }
@@ -99,22 +98,22 @@ vc4_blend_channel_f(nir_builder *b,
         case PIPE_BLENDFACTOR_ZERO:
                 return nir_imm_float(b, 0.0);
         case PIPE_BLENDFACTOR_INV_SRC_COLOR:
-                return nir_fsub(b, nir_imm_float(b, 1.0), src[channel]);
+                return nir_fsub_imm(b, 1.0, src[channel]);
         case PIPE_BLENDFACTOR_INV_SRC_ALPHA:
-                return nir_fsub(b, nir_imm_float(b, 1.0), src[3]);
+                return nir_fsub_imm(b, 1.0, src[3]);
         case PIPE_BLENDFACTOR_INV_DST_ALPHA:
-                return nir_fsub(b, nir_imm_float(b, 1.0), dst[3]);
+                return nir_fsub_imm(b, 1.0, dst[3]);
         case PIPE_BLENDFACTOR_INV_DST_COLOR:
-                return nir_fsub(b, nir_imm_float(b, 1.0), dst[channel]);
+                return nir_fsub_imm(b, 1.0, dst[channel]);
         case PIPE_BLENDFACTOR_INV_CONST_COLOR:
-                return nir_fsub(b, nir_imm_float(b, 1.0),
-                                nir_load_system_value(b,
-                                                      nir_intrinsic_load_blend_const_color_r_float +
-                                                      channel,
-                                                      0, 1, 32));
+                return nir_fsub_imm(b, 1.0,
+                                    nir_load_system_value(b,
+                                                          nir_intrinsic_load_blend_const_color_r_float +
+                                                          channel,
+                                                          0, 1, 32));
         case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
-                return nir_fsub(b, nir_imm_float(b, 1.0),
-                                nir_load_blend_const_color_a_float(b));
+                return nir_fsub_imm(b, 1.0,
+                                    nir_load_blend_const_color_a_float(b));
 
         default:
         case PIPE_BLENDFACTOR_SRC1_COLOR:
@@ -133,8 +132,8 @@ vc4_nir_set_packed_chan(nir_builder *b, nir_ssa_def *src0, nir_ssa_def *src1,
 {
         unsigned chan_mask = 0xff << (chan * 8);
         return nir_ior(b,
-                       nir_iand(b, src0, nir_imm_int(b, ~chan_mask)),
-                       nir_iand(b, src1, nir_imm_int(b, chan_mask)));
+                       nir_iand_imm(b, src0, ~chan_mask),
+                       nir_iand_imm(b, src1, chan_mask));
 }
 
 static nir_ssa_def *
@@ -286,8 +285,8 @@ vc4_do_blending_f(struct vc4_compile *c, nir_builder *b, nir_ssa_def **result,
 static nir_ssa_def *
 vc4_nir_splat(nir_builder *b, nir_ssa_def *src)
 {
-        nir_ssa_def *or1 = nir_ior(b, src, nir_ishl(b, src, nir_imm_int(b, 8)));
-        return nir_ior(b, or1, nir_ishl(b, or1, nir_imm_int(b, 16)));
+        nir_ssa_def *or1 = nir_ior(b, src, nir_ishl_imm(b, src, 8));
+        return nir_ior(b, or1, nir_ishl_imm(b, or1, 16));
 }
 
 static nir_ssa_def *
@@ -302,7 +301,6 @@ vc4_do_blending_i(struct vc4_compile *c, nir_builder *b,
 
         enum pipe_format color_format = c->fs_key->color_format;
         const uint8_t *format_swiz = vc4_get_format_swizzle(color_format);
-        nir_ssa_def *imm_0xff = nir_imm_int(b, 0xff);
         nir_ssa_def *src_a = nir_pack_unorm_4x8(b, src_float_a);
         nir_ssa_def *dst_a;
         int alpha_chan;
@@ -311,9 +309,9 @@ vc4_do_blending_i(struct vc4_compile *c, nir_builder *b,
                         break;
         }
         if (alpha_chan != 4) {
-                nir_ssa_def *shift = nir_imm_int(b, alpha_chan * 8);
-                dst_a = vc4_nir_splat(b, nir_iand(b, nir_ushr(b, dst_color,
-                                                              shift), imm_0xff));
+                dst_a = vc4_nir_splat(b, nir_iand_imm(b, nir_ushr_imm(b, dst_color,
+                                                                     alpha_chan * 8),
+                                                      0xff));
         } else {
                 dst_a = nir_imm_int(b, ~0);
         }
@@ -499,10 +497,8 @@ vc4_nir_blend_pipeline(struct vc4_compile *c, nir_builder *b, nir_ssa_def *src,
         }
 
         return nir_ior(b,
-                       nir_iand(b, packed_color,
-                                nir_imm_int(b, colormask)),
-                       nir_iand(b, packed_dst_color,
-                                nir_imm_int(b, ~colormask)));
+                       nir_iand_imm(b, packed_color, colormask),
+                       nir_iand_imm(b, packed_dst_color, ~colormask));
 }
 
 static void
@@ -531,13 +527,12 @@ vc4_nir_lower_blend_instr(struct vc4_compile *c, nir_builder *b,
                 /* XXX: We should do a nice dither based on the fragment
                  * coordinate, instead.
                  */
-                nir_ssa_def *num_samples = nir_imm_float(b, VC4_MAX_SAMPLES);
-                nir_ssa_def *num_bits = nir_f2i32(b, nir_fmul(b, a, num_samples));
-                nir_ssa_def *bitmask = nir_isub(b,
-                                                nir_ishl(b,
-                                                         nir_imm_int(b, 1),
-                                                         num_bits),
-                                                nir_imm_int(b, 1));
+                nir_ssa_def *num_bits = nir_f2i32(b, nir_fmul_imm(b, a, VC4_MAX_SAMPLES));
+                nir_ssa_def *bitmask = nir_iadd_imm(b,
+                                                    nir_ishl(b,
+                                                             nir_imm_int(b, 1),
+                                                             num_bits),
+                                                    -1);
                 vc4_nir_store_sample_mask(c, b, bitmask);
         }
 
@@ -594,11 +589,7 @@ vc4_nir_lower_blend_block(nir_block *block, struct vc4_compile *c)
                         continue;
                 }
 
-                nir_function_impl *impl =
-                        nir_cf_node_get_function(&block->cf_node);
-                nir_builder b;
-                nir_builder_init(&b, impl);
-                b.cursor = nir_before_instr(&intr->instr);
+                nir_builder b = nir_builder_at(nir_before_instr(&intr->instr));
                 vc4_nir_lower_blend_instr(c, &b, intr);
         }
         return true;
@@ -607,16 +598,14 @@ vc4_nir_lower_blend_block(nir_block *block, struct vc4_compile *c)
 void
 vc4_nir_lower_blend(nir_shader *s, struct vc4_compile *c)
 {
-        nir_foreach_function(function, s) {
-                if (function->impl) {
-                        nir_foreach_block(block, function->impl) {
-                                vc4_nir_lower_blend_block(block, c);
-                        }
-
-                        nir_metadata_preserve(function->impl,
-                                              nir_metadata_block_index |
-                                              nir_metadata_dominance);
+        nir_foreach_function_impl(impl, s) {
+                nir_foreach_block(block, impl) {
+                        vc4_nir_lower_blend_block(block, c);
                 }
+
+                nir_metadata_preserve(impl,
+                                      nir_metadata_block_index |
+                                      nir_metadata_dominance);
         }
 
         /* If we didn't do alpha-to-coverage on the output color, we still
@@ -624,9 +613,7 @@ vc4_nir_lower_blend(nir_shader *s, struct vc4_compile *c)
          */
         if (c->fs_key->sample_coverage && !c->fs_key->sample_alpha_to_coverage) {
                 nir_function_impl *impl = nir_shader_get_entrypoint(s);
-                nir_builder b;
-                nir_builder_init(&b, impl);
-                b.cursor = nir_after_block(nir_impl_last_block(impl));
+                nir_builder b = nir_builder_at(nir_after_block(nir_impl_last_block(impl)));
 
                 vc4_nir_store_sample_mask(c, &b, nir_load_sample_mask_in(&b));
         }

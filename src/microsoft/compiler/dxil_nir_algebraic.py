@@ -29,6 +29,8 @@ import sys
 import math
 
 a = 'a'
+b = 'b'
+c = 'c'
 
 # The nir_lower_bit_size() pass gets rid of all 8bit ALUs but insert new u2u8
 # and i2i8 operations to convert the result back to the original type after the
@@ -91,9 +93,13 @@ def remove_unsupported_casts(arr, bit_size, mask, max_unsigned_float, min_signed
 remove_unsupported_casts(no_8bit_conv, 8, 0xff, 255.0, -128.0, 127.0)
 remove_unsupported_casts(no_16bit_conv, 16, 0xffff, 65535.0, -32768.0, 32767.0)
 
-lower_x2b = [
+algebraic_ops = [
   (('b2b32', 'a'), ('b2i32', 'a')),
   (('b2b1', 'a'), ('ine', ('b2i32', a), 0)),
+
+  # We don't support the saturating versions of these
+  (('sdot_4x8_iadd_sat', a, b, c), ('iadd_sat', ('sdot_4x8_iadd', a, b, 0), c)),
+  (('udot_4x8_uadd_sat', a, b, c), ('uadd_sat', ('udot_4x8_uadd', a, b, 0), c)),
 ]
 
 no_16bit_conv += [
@@ -118,8 +124,8 @@ def run():
                                       no_8bit_conv).render())
     print(nir_algebraic.AlgebraicPass("dxil_nir_lower_16bit_conv",
                                       no_16bit_conv).render())
-    print(nir_algebraic.AlgebraicPass("dxil_nir_lower_x2b",
-                                      lower_x2b).render())
+    print(nir_algebraic.AlgebraicPass("dxil_nir_algebraic",
+                                      algebraic_ops).render())
 
 if __name__ == '__main__':
     main()

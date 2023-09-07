@@ -1399,15 +1399,15 @@ public:
    bool run(Function *, bool ordered = false, bool skipPhi = false);
 
 private:
+   bool doRun(Program *, bool ordered, bool skipPhi);
+   bool doRun(Function *, bool ordered, bool skipPhi);
+
+protected:
    // return false to continue with next entity on next higher level
    virtual bool visit(Function *) { return true; }
    virtual bool visit(BasicBlock *) { return true; }
    virtual bool visit(Instruction *) { return false; }
 
-   bool doRun(Program *, bool ordered, bool skipPhi);
-   bool doRun(Function *, bool ordered, bool skipPhi);
-
-protected:
    bool err;
    Function *func;
    Program *prog;

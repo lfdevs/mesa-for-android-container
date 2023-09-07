@@ -662,8 +662,7 @@ remove_out_of_bounds_induction_use(nir_shader *shader, nir_loop *loop,
    nir_cf_reinsert(lp_header, nir_after_block(nir_loop_last_block(loop)));
    nir_cf_reinsert(lp_body, nir_after_block(nir_loop_last_block(loop)));
 
-   nir_builder b;
-   nir_builder_init(&b, nir_cf_node_get_function(&loop->cf_node));
+   nir_builder b = nir_builder_create(nir_cf_node_get_function(&loop->cf_node));
 
    nir_foreach_block_in_cf_node(block, &loop->cf_node) {
       nir_foreach_instr_safe(instr, block) {
@@ -1143,7 +1142,7 @@ nir_opt_loop_unroll_impl(nir_function_impl *impl,
 
    if (progress) {
       nir_metadata_preserve(impl, nir_metadata_none);
-      nir_lower_regs_to_ssa_impl(impl);
+      nir_lower_reg_intrinsics_to_ssa_impl(impl);
    } else {
       nir_metadata_preserve(impl, nir_metadata_all);
    }
@@ -1162,11 +1161,9 @@ nir_opt_loop_unroll(nir_shader *shader)
 
    bool force_unroll_sampler_indirect = shader->options->force_indirect_unrolling_sampler;
    nir_variable_mode indirect_mask = shader->options->force_indirect_unrolling;
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         progress |= nir_opt_loop_unroll_impl(function->impl, indirect_mask,
-                                              force_unroll_sampler_indirect);
-      }
+   nir_foreach_function_impl(impl, shader) {
+      progress |= nir_opt_loop_unroll_impl(impl, indirect_mask,
+                                           force_unroll_sampler_indirect);
    }
    return progress;
 }

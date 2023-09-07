@@ -183,7 +183,7 @@ lower_ishl64(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
    nir_ssa_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
    y = nir_iand_imm(b, y, 0x3f);
 
-   nir_ssa_def *reverse_count = nir_iabs(b, nir_iadd(b, y, nir_imm_int(b, -32)));
+   nir_ssa_def *reverse_count = nir_iabs(b, nir_iadd_imm(b, y, -32));
    nir_ssa_def *lo_shifted = nir_ishl(b, x_lo, y);
    nir_ssa_def *hi_shifted = nir_ishl(b, x_hi, y);
    nir_ssa_def *lo_shifted_hi = nir_ushr(b, x_lo, reverse_count);
@@ -196,7 +196,7 @@ lower_ishl64(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
                                 nir_ishl(b, x_lo, reverse_count));
 
    return nir_bcsel(b, nir_ieq_imm(b, y, 0), x,
-                    nir_bcsel(b, nir_uge(b, y, nir_imm_int(b, 32)),
+                    nir_bcsel(b, nir_uge_imm(b, y, 32),
                                  res_if_ge_32, res_if_lt_32));
 }
 
@@ -230,7 +230,7 @@ lower_ishr64(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
    nir_ssa_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
    y = nir_iand_imm(b, y, 0x3f);
 
-   nir_ssa_def *reverse_count = nir_iabs(b, nir_iadd(b, y, nir_imm_int(b, -32)));
+   nir_ssa_def *reverse_count = nir_iabs(b, nir_iadd_imm(b, y, -32));
    nir_ssa_def *lo_shifted = nir_ushr(b, x_lo, y);
    nir_ssa_def *hi_shifted = nir_ishr(b, x_hi, y);
    nir_ssa_def *hi_shifted_lo = nir_ishl(b, x_hi, reverse_count);
@@ -240,10 +240,10 @@ lower_ishr64(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
                                 hi_shifted);
    nir_ssa_def *res_if_ge_32 =
       nir_pack_64_2x32_split(b, nir_ishr(b, x_hi, reverse_count),
-                                nir_ishr(b, x_hi, nir_imm_int(b, 31)));
+                                nir_ishr_imm(b, x_hi, 31));
 
    return nir_bcsel(b, nir_ieq_imm(b, y, 0), x,
-                    nir_bcsel(b, nir_uge(b, y, nir_imm_int(b, 32)),
+                    nir_bcsel(b, nir_uge_imm(b, y, 32),
                                  res_if_ge_32, res_if_lt_32));
 }
 
@@ -276,7 +276,7 @@ lower_ushr64(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
    nir_ssa_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
    y = nir_iand_imm(b, y, 0x3f);
 
-   nir_ssa_def *reverse_count = nir_iabs(b, nir_iadd(b, y, nir_imm_int(b, -32)));
+   nir_ssa_def *reverse_count = nir_iabs(b, nir_iadd_imm(b, y, -32));
    nir_ssa_def *lo_shifted = nir_ushr(b, x_lo, y);
    nir_ssa_def *hi_shifted = nir_ushr(b, x_hi, y);
    nir_ssa_def *hi_shifted_lo = nir_ishl(b, x_hi, reverse_count);
@@ -289,7 +289,7 @@ lower_ushr64(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
                                 nir_imm_int(b, 0));
 
    return nir_bcsel(b, nir_ieq_imm(b, y, 0), x,
-                    nir_bcsel(b, nir_uge(b, y, nir_imm_int(b, 32)),
+                    nir_bcsel(b, nir_uge_imm(b, y, 32),
                                  res_if_ge_32, res_if_lt_32));
 }
 
@@ -337,7 +337,7 @@ static nir_ssa_def *
 lower_iabs64(nir_builder *b, nir_ssa_def *x)
 {
    nir_ssa_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
-   nir_ssa_def *x_is_neg = nir_ilt(b, x_hi, nir_imm_int(b, 0));
+   nir_ssa_def *x_is_neg = nir_ilt_imm(b, x_hi, 0);
    return nir_bcsel(b, x_is_neg, nir_ineg(b, x), x);
 }
 
@@ -537,9 +537,9 @@ lower_udiv64_mod64(nir_builder *b, nir_ssa_def *n, nir_ssa_def *d,
           *    quot.y |= 1U << i;
           * }
           */
-         nir_ssa_def *d_shift = nir_ishl(b, d_lo, nir_imm_int(b, i));
+         nir_ssa_def *d_shift = nir_ishl_imm(b, d_lo, i);
          nir_ssa_def *new_n_hi = nir_isub(b, n_hi, d_shift);
-         nir_ssa_def *new_q_hi = nir_ior(b, q_hi, nir_imm_int(b, 1u << i));
+         nir_ssa_def *new_q_hi = nir_ior_imm(b, q_hi, 1ull << i);
          nir_ssa_def *cond = nir_iand(b, need_high_div,
                                          nir_uge(b, n_hi, d_shift));
          if (i != 0) {
@@ -547,7 +547,7 @@ lower_udiv64_mod64(nir_builder *b, nir_ssa_def *n, nir_ssa_def *d,
              * in the last iteration.
              */
             cond = nir_iand(b, cond,
-                               nir_ige(b, nir_imm_int(b, 31 - i), log2_d_lo));
+                               nir_ile_imm(b, log2_d_lo, 31 - i));
          }
          n_hi = nir_bcsel(b, cond, new_n_hi, n_hi);
          q_hi = nir_bcsel(b, cond, new_q_hi, q_hi);
@@ -567,16 +567,16 @@ lower_udiv64_mod64(nir_builder *b, nir_ssa_def *n, nir_ssa_def *d,
        *    quot.x |= 1U << i;
        * }
        */
-      nir_ssa_def *d_shift = nir_ishl(b, d, nir_imm_int(b, i));
+      nir_ssa_def *d_shift = nir_ishl_imm(b, d, i);
       nir_ssa_def *new_n = nir_isub(b, n, d_shift);
-      nir_ssa_def *new_q_lo = nir_ior(b, q_lo, nir_imm_int(b, 1u << i));
+      nir_ssa_def *new_q_lo = nir_ior_imm(b, q_lo, 1ull << i);
       nir_ssa_def *cond = nir_uge(b, n, d_shift);
       if (i != 0) {
          /* log2_denom is always <= 31, so we don't need to bother with it
           * in the last iteration.
           */
          cond = nir_iand(b, cond,
-                            nir_ige(b, nir_imm_int(b, 31 - i), log2_denom));
+                            nir_ile_imm(b, log2_denom, 31 - i));
       }
       n = nir_bcsel(b, cond, new_n, n);
       q_lo = nir_bcsel(b, cond, new_q_lo, q_lo);
@@ -600,8 +600,8 @@ lower_idiv64(nir_builder *b, nir_ssa_def *n, nir_ssa_def *d)
    nir_ssa_def *n_hi = nir_unpack_64_2x32_split_y(b, n);
    nir_ssa_def *d_hi = nir_unpack_64_2x32_split_y(b, d);
 
-   nir_ssa_def *negate = nir_ine(b, nir_ilt(b, n_hi, nir_imm_int(b, 0)),
-                                    nir_ilt(b, d_hi, nir_imm_int(b, 0)));
+   nir_ssa_def *negate = nir_ine(b, nir_ilt_imm(b, n_hi, 0),
+                                    nir_ilt_imm(b, d_hi, 0));
    nir_ssa_def *q, *r;
    lower_udiv64_mod64(b, nir_iabs(b, n), nir_iabs(b, d), &q, &r);
    return nir_bcsel(b, negate, nir_ineg(b, q), q);
@@ -620,8 +620,8 @@ lower_imod64(nir_builder *b, nir_ssa_def *n, nir_ssa_def *d)
 {
    nir_ssa_def *n_hi = nir_unpack_64_2x32_split_y(b, n);
    nir_ssa_def *d_hi = nir_unpack_64_2x32_split_y(b, d);
-   nir_ssa_def *n_is_neg = nir_ilt(b, n_hi, nir_imm_int(b, 0));
-   nir_ssa_def *d_is_neg = nir_ilt(b, d_hi, nir_imm_int(b, 0));
+   nir_ssa_def *n_is_neg = nir_ilt_imm(b, n_hi, 0);
+   nir_ssa_def *d_is_neg = nir_ilt_imm(b, d_hi, 0);
 
    nir_ssa_def *q, *r;
    lower_udiv64_mod64(b, nir_iabs(b, n), nir_iabs(b, d), &q, &r);
@@ -637,7 +637,7 @@ static nir_ssa_def *
 lower_irem64(nir_builder *b, nir_ssa_def *n, nir_ssa_def *d)
 {
    nir_ssa_def *n_hi = nir_unpack_64_2x32_split_y(b, n);
-   nir_ssa_def *n_is_neg = nir_ilt(b, n_hi, nir_imm_int(b, 0));
+   nir_ssa_def *n_is_neg = nir_ilt_imm(b, n_hi, 0);
 
    nir_ssa_def *q, *r;
    lower_udiv64_mod64(b, nir_iabs(b, n), nir_iabs(b, d), &q, &r);
@@ -682,8 +682,8 @@ lower_ufind_msb64(nir_builder *b, nir_ssa_def *x)
    nir_ssa_def *hi_count = nir_ufind_msb(b, x_hi);
 
    if (b->shader->options->lower_uadd_sat) {
-      nir_ssa_def *valid_hi_bits = nir_ine(b, x_hi, nir_imm_int(b, 0));
-      nir_ssa_def *hi_res = nir_iadd(b, nir_imm_intN_t(b, 32, 32), hi_count);
+      nir_ssa_def *valid_hi_bits = nir_ine_imm(b, x_hi, 0);
+      nir_ssa_def *hi_res = nir_iadd_imm(b, hi_count, 32);
       return nir_bcsel(b, valid_hi_bits, hi_res, lo_count);
    } else {
       /* If hi_count was -1, it will still be -1 after this uadd_sat. As a
@@ -712,7 +712,7 @@ lower_find_lsb64(nir_builder *b, nir_ssa_def *x)
    /* Use umin so that -1 (no bits found) becomes larger (0xFFFFFFFF)
     * than any actual bit position, so we return a found bit instead.
     */
-   return nir_umin(b, lo_lsb, nir_iadd(b, hi_lsb, nir_imm_int(b, 32)));
+   return nir_umin(b, lo_lsb, nir_iadd_imm(b, hi_lsb, 32));
 }
 
 static nir_ssa_def *
@@ -746,7 +746,7 @@ lower_2f(nir_builder *b, nir_ssa_def *x, unsigned dest_bit_size,
    }
 
    nir_ssa_def *discard =
-      nir_imax(b, nir_isub(b, exp, nir_imm_int(b, significand_bits)),
+      nir_imax(b, nir_iadd_imm(b, exp, -significand_bits),
                   nir_imm_int(b, 0));
    nir_ssa_def *significand = COND_LOWER_OP(b, ushr, x, discard);
    if (significand_bits < 32)
@@ -765,7 +765,7 @@ lower_2f(nir_builder *b, nir_ssa_def *x, unsigned dest_bit_size,
    nir_ssa_def *half = COND_LOWER_OP(b, ishr, lsb_mask, nir_imm_int(b, 1));
    nir_ssa_def *rem = COND_LOWER_OP(b, iand, x, rem_mask);
    nir_ssa_def *halfway = nir_iand(b, COND_LOWER_CMP(b, ieq, rem, half),
-                                   nir_ine(b, discard, nir_imm_int(b, 0)));
+                                   nir_ine_imm(b, discard, 0));
    nir_ssa_def *is_odd = COND_LOWER_CMP(b, ine, nir_imm_int64(b, 0),
                                          COND_LOWER_OP(b, iand, x, lsb_mask));
    nir_ssa_def *round_up = nir_ior(b, COND_LOWER_CMP(b, ilt, half, rem),
@@ -783,7 +783,7 @@ lower_2f(nir_builder *b, nir_ssa_def *x, unsigned dest_bit_size,
        * unrounded input manually.
        */
       nir_ssa_def *shift =
-         nir_imax(b, nir_isub(b, nir_imm_int(b, significand_bits), exp),
+         nir_imax(b, nir_isub_imm(b, significand_bits, exp),
                   nir_imm_int(b, 0));
       significand = COND_LOWER_OP(b, ishl, significand, shift);
 
@@ -796,17 +796,17 @@ lower_2f(nir_builder *b, nir_ssa_def *x, unsigned dest_bit_size,
        * overflow.
        */
       nir_ssa_def *carry = nir_b2i32(
-         b, nir_uge(b, nir_unpack_64_2x32_split_y(b, significand),
-                    nir_imm_int(b, 1 << (significand_bits - 31))));
+         b, nir_uge_imm(b, nir_unpack_64_2x32_split_y(b, significand),
+                        (uint64_t)(1 << (significand_bits - 31))));
       significand = COND_LOWER_OP(b, ishr, significand, carry);
       exp = nir_iadd(b, exp, carry);
 
       /* Compute the biased exponent, taking care to handle a zero
        * input correctly, which would have caused exp to be negative.
        */
-      nir_ssa_def *biased_exp = nir_bcsel(b, nir_ilt(b, exp, nir_imm_int(b, 0)),
+      nir_ssa_def *biased_exp = nir_bcsel(b, nir_ilt_imm(b, exp, 0),
                                           nir_imm_int(b, 0),
-                                          nir_iadd(b, exp, nir_imm_int(b, 1023)));
+                                          nir_iadd_imm(b, exp, 1023));
 
       /* Pack the significand and exponent manually. */
       nir_ssa_def *lo = nir_unpack_64_2x32_split_x(b, significand);
@@ -855,7 +855,7 @@ lower_f2(nir_builder *b, nir_ssa_def *x, bool dst_is_signed)
    }
 
    if (dst_is_signed)
-      res = nir_bcsel(b, nir_flt(b, x_sign, nir_imm_floatN_t(b, 0, x->bit_size)),
+      res = nir_bcsel(b, nir_flt_imm(b, x_sign, 0),
                       nir_ineg(b, res), res);
 
    return res;
@@ -909,8 +909,9 @@ nir_lower_int64_op_to_options_mask(nir_op opcode)
    case nir_op_u2f16:
    case nir_op_f2i64:
    case nir_op_f2u64:
+      return nir_lower_conv64;
    case nir_op_bcsel:
-      return nir_lower_mov64;
+      return nir_lower_bcsel64;
    case nir_op_ieq:
    case nir_op_ine:
    case nir_op_ult:
@@ -1179,7 +1180,7 @@ split_64bit_subgroup_op(nir_builder *b, const nir_intrinsic_instr *intrin)
              sizeof(intrin->const_index));
 
       nir_ssa_dest_init(&split->instr, &split->dest,
-                        intrin->dest.ssa.num_components, 32, NULL);
+                        intrin->dest.ssa.num_components, 32);
       nir_builder_instr_insert(b, &split->instr);
 
       res[i] = &split->dest.ssa;
@@ -1195,7 +1196,7 @@ build_vote_ieq(nir_builder *b, nir_ssa_def *x)
       nir_intrinsic_instr_create(b->shader, nir_intrinsic_vote_ieq);
    vote->src[0] = nir_src_for_ssa(x);
    vote->num_components = x->num_components;
-   nir_ssa_dest_init(&vote->instr, &vote->dest, 1, 1, NULL);
+   nir_ssa_dest_init(&vote->instr, &vote->dest, 1, 1);
    nir_builder_instr_insert(b, &vote->instr);
    return &vote->dest.ssa;
 }
@@ -1219,8 +1220,8 @@ build_scan_intrinsic(nir_builder *b, nir_intrinsic_op scan_op,
    nir_intrinsic_set_reduction_op(scan, reduction_op);
    if (scan_op == nir_intrinsic_reduce)
       nir_intrinsic_set_cluster_size(scan, cluster_size);
-   nir_ssa_dest_init(&scan->instr, &scan->dest,
-                     val->num_components, val->bit_size, NULL);
+   nir_ssa_dest_init(&scan->instr, &scan->dest, val->num_components,
+                     val->bit_size);
    nir_builder_instr_insert(b, &scan->instr);
    return &scan->dest.ssa;
 }
@@ -1243,10 +1244,10 @@ lower_scan_iadd64(nir_builder *b, const nir_intrinsic_instr *intrin)
    nir_ssa_def *x_low =
       nir_u2u32(b, nir_iand_imm(b, x, 0xffffff));
    nir_ssa_def *x_mid =
-      nir_u2u32(b, nir_iand_imm(b, nir_ushr(b, x, nir_imm_int(b, 24)),
+      nir_u2u32(b, nir_iand_imm(b, nir_ushr_imm(b, x, 24),
                                    0xffffff));
    nir_ssa_def *x_hi =
-      nir_u2u32(b, nir_ushr(b, x, nir_imm_int(b, 48)));
+      nir_u2u32(b, nir_ushr_imm(b, x, 48));
 
    nir_ssa_def *scan_low =
       build_scan_intrinsic(b, intrin->intrinsic, nir_op_iadd,
@@ -1259,8 +1260,8 @@ lower_scan_iadd64(nir_builder *b, const nir_intrinsic_instr *intrin)
                               cluster_size, x_hi);
 
    scan_low = nir_u2u64(b, scan_low);
-   scan_mid = nir_ishl(b, nir_u2u64(b, scan_mid), nir_imm_int(b, 24));
-   scan_hi = nir_ishl(b, nir_u2u64(b, scan_hi), nir_imm_int(b, 48));
+   scan_mid = nir_ishl_imm(b, nir_u2u64(b, scan_mid), 24);
+   scan_hi = nir_ishl_imm(b, nir_u2u64(b, scan_hi), 48);
 
    return nir_iadd(b, scan_hi, nir_iadd(b, scan_mid, scan_low));
 }
@@ -1384,6 +1385,43 @@ bool
 nir_lower_int64(nir_shader *shader)
 {
    return nir_shader_lower_instructions(shader, should_lower_int64_instr,
+                                        lower_int64_instr,
+                                        (void *)shader->options);
+}
+
+static bool
+should_lower_int64_float_conv(const nir_instr *instr, const void *_options)
+{
+   if (instr->type != nir_instr_type_alu)
+      return false;
+
+   nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+   switch (alu->op) {
+   case nir_op_i2f64:
+   case nir_op_i2f32:
+   case nir_op_i2f16:
+   case nir_op_u2f64:
+   case nir_op_u2f32:
+   case nir_op_u2f16:
+   case nir_op_f2i64:
+   case nir_op_f2u64:
+      return should_lower_int64_alu_instr(alu, _options);
+   default:
+      return false;
+   }
+}
+
+/**
+ * Like nir_lower_int64(), but only lowers conversions to/from float.
+ *
+ * These operations in particular may affect double-precision lowering,
+ * so it can be useful to run them in tandem with nir_lower_doubles().
+ */
+bool
+nir_lower_int64_float_conversions(nir_shader *shader)
+{
+   return nir_shader_lower_instructions(shader, should_lower_int64_float_conv,
                                         lower_int64_instr,
                                         (void *)shader->options);
 }

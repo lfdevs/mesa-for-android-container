@@ -162,254 +162,11 @@ panvk_get_device_extensions(const struct panvk_physical_device *device,
    };
 }
 
-VkResult panvk_physical_device_try_create(struct vk_instance *vk_instance,
-                                          struct _drmDevice *drm_device,
-                                          struct vk_physical_device **out);
-
 static void
-panvk_physical_device_finish(struct panvk_physical_device *device)
+panvk_get_features(const struct panvk_physical_device *device,
+                   struct vk_features *features)
 {
-   panvk_wsi_finish(device);
-
-   panvk_arch_dispatch(device->pdev.arch, meta_cleanup, device);
-   panfrost_close_device(&device->pdev);
-   if (device->master_fd != -1)
-      close(device->master_fd);
-
-   vk_physical_device_finish(&device->vk);
-}
-
-static void
-panvk_destroy_physical_device(struct vk_physical_device *device)
-{
-   panvk_physical_device_finish((struct panvk_physical_device *)device);
-   vk_free(&device->instance->alloc, device);
-}
-
-VkResult
-panvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
-                     const VkAllocationCallbacks *pAllocator,
-                     VkInstance *pInstance)
-{
-   struct panvk_instance *instance;
-   VkResult result;
-
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);
-
-   pAllocator = pAllocator ?: vk_default_allocator();
-   instance = vk_zalloc(pAllocator, sizeof(*instance), 8,
-                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-   if (!instance)
-      return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   struct vk_instance_dispatch_table dispatch_table;
-
-   vk_instance_dispatch_table_from_entrypoints(
-      &dispatch_table, &panvk_instance_entrypoints, true);
-   vk_instance_dispatch_table_from_entrypoints(
-      &dispatch_table, &wsi_instance_entrypoints, false);
-   result = vk_instance_init(&instance->vk, &panvk_instance_extensions,
-                             &dispatch_table, pCreateInfo, pAllocator);
-   if (result != VK_SUCCESS) {
-      vk_free(pAllocator, instance);
-      return vk_error(NULL, result);
-   }
-
-   instance->vk.physical_devices.try_create_for_drm =
-      panvk_physical_device_try_create;
-   instance->vk.physical_devices.destroy = panvk_destroy_physical_device;
-
-   instance->debug_flags =
-      parse_debug_string(getenv("PANVK_DEBUG"), panvk_debug_options);
-
-   if (instance->debug_flags & PANVK_DEBUG_STARTUP)
-      panvk_logi("Created an instance");
-
-   VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
-
-   *pInstance = panvk_instance_to_handle(instance);
-
-   return VK_SUCCESS;
-}
-
-void
-panvk_DestroyInstance(VkInstance _instance,
-                      const VkAllocationCallbacks *pAllocator)
-{
-   VK_FROM_HANDLE(panvk_instance, instance, _instance);
-
-   if (!instance)
-      return;
-
-   vk_instance_finish(&instance->vk);
-   vk_free(&instance->vk.alloc, instance);
-}
-
-static VkResult
-panvk_physical_device_init(struct panvk_physical_device *device,
-                           struct panvk_instance *instance,
-                           drmDevicePtr drm_device)
-{
-   const char *path = drm_device->nodes[DRM_NODE_RENDER];
-   VkResult result = VK_SUCCESS;
-   drmVersionPtr version;
-   int fd;
-   int master_fd = -1;
-
-   if (!getenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
-      return vk_errorf(
-         instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-         "WARNING: panvk is not a conformant vulkan implementation, "
-         "pass PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1 if you know what you're doing.");
-   }
-
-   fd = open(path, O_RDWR | O_CLOEXEC);
-   if (fd < 0) {
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "failed to open device %s", path);
-   }
-
-   version = drmGetVersion(fd);
-   if (!version) {
-      close(fd);
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "failed to query kernel driver version for device %s",
-                       path);
-   }
-
-   if (strcmp(version->name, "panfrost")) {
-      drmFreeVersion(version);
-      close(fd);
-      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                       "device %s does not use the panfrost kernel driver",
-                       path);
-   }
-
-   drmFreeVersion(version);
-
-   if (instance->debug_flags & PANVK_DEBUG_STARTUP)
-      panvk_logi("Found compatible device '%s'.", path);
-
-   struct vk_device_extension_table supported_extensions;
-   panvk_get_device_extensions(device, &supported_extensions);
-
-   struct vk_physical_device_dispatch_table dispatch_table;
-   vk_physical_device_dispatch_table_from_entrypoints(
-      &dispatch_table, &panvk_physical_device_entrypoints, true);
-   vk_physical_device_dispatch_table_from_entrypoints(
-      &dispatch_table, &wsi_physical_device_entrypoints, false);
-
-   result = vk_physical_device_init(&device->vk, &instance->vk,
-                                    &supported_extensions, &dispatch_table);
-
-   if (result != VK_SUCCESS) {
-      vk_error(instance, result);
-      goto fail;
-   }
-
-   device->instance = instance;
-   assert(strlen(path) < ARRAY_SIZE(device->path));
-   strncpy(device->path, path, ARRAY_SIZE(device->path));
-
-   if (instance->vk.enabled_extensions.KHR_display) {
-      master_fd = open(drm_device->nodes[DRM_NODE_PRIMARY], O_RDWR | O_CLOEXEC);
-      if (master_fd >= 0) {
-         /* TODO: free master_fd is accel is not working? */
-      }
-   }
-
-   device->master_fd = master_fd;
-   if (instance->debug_flags & PANVK_DEBUG_TRACE)
-      device->pdev.debug |= PAN_DBG_TRACE;
-
-   device->pdev.debug |= PAN_DBG_NO_CACHE;
-   panfrost_open_device(NULL, fd, &device->pdev);
-   fd = -1;
-
-   if (device->pdev.arch <= 5) {
-      result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                         "%s not supported", device->pdev.model->name);
-      goto fail;
-   }
-
-   panvk_arch_dispatch(device->pdev.arch, meta_init, device);
-
-   memset(device->name, 0, sizeof(device->name));
-   sprintf(device->name, "%s", device->pdev.model->name);
-
-   if (panvk_device_get_cache_uuid(device->pdev.gpu_id, device->cache_uuid)) {
-      result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
-                         "cannot generate UUID");
-      goto fail_close_device;
-   }
-
-   vk_warn_non_conformant_implementation("panvk");
-
-   panvk_get_driver_uuid(&device->device_uuid);
-   panvk_get_device_uuid(&device->device_uuid);
-
-   device->drm_syncobj_type = vk_drm_syncobj_get_type(device->pdev.fd);
-   /* We don't support timelines in the uAPI yet and we don't want it getting
-    * suddenly turned on by vk_drm_syncobj_get_type() without us adding panvk
-    * code for it first.
-    */
-   device->drm_syncobj_type.features &= ~VK_SYNC_FEATURE_TIMELINE;
-
-   device->sync_types[0] = &device->drm_syncobj_type;
-   device->sync_types[1] = NULL;
-   device->vk.supported_sync_types = device->sync_types;
-
-   result = panvk_wsi_init(device);
-   if (result != VK_SUCCESS) {
-      vk_error(instance, result);
-      goto fail_close_device;
-   }
-
-   return VK_SUCCESS;
-
-fail_close_device:
-   panfrost_close_device(&device->pdev);
-fail:
-   if (fd != -1)
-      close(fd);
-   if (master_fd != -1)
-      close(master_fd);
-   return result;
-}
-
-VkResult
-panvk_physical_device_try_create(struct vk_instance *vk_instance,
-                                 struct _drmDevice *drm_device,
-                                 struct vk_physical_device **out)
-{
-   struct panvk_instance *instance =
-      container_of(vk_instance, struct panvk_instance, vk);
-
-   if (!(drm_device->available_nodes & (1 << DRM_NODE_RENDER)) ||
-       drm_device->bustype != DRM_BUS_PLATFORM)
-      return VK_ERROR_INCOMPATIBLE_DRIVER;
-
-   struct panvk_physical_device *device =
-      vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
-                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-   if (!device)
-      return vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   VkResult result = panvk_physical_device_init(device, instance, drm_device);
-   if (result != VK_SUCCESS) {
-      vk_free(&instance->vk.alloc, device);
-      return result;
-   }
-
-   *out = &device->vk;
-   return VK_SUCCESS;
-}
-
-void
-panvk_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
-                                 VkPhysicalDeviceFeatures2 *pFeatures)
-{
-   struct vk_features features = {
+   *features = (struct vk_features){
       /* Vulkan 1.0 */
       .robustBufferAccess = true,
       .fullDrawIndexUint32 = true,
@@ -524,8 +281,251 @@ panvk_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
       .customBorderColors = true,
       .customBorderColorWithoutFormat = true,
    };
+}
 
-   vk_get_physical_device_features(pFeatures, &features);
+VkResult panvk_physical_device_try_create(struct vk_instance *vk_instance,
+                                          struct _drmDevice *drm_device,
+                                          struct vk_physical_device **out);
+
+static void
+panvk_physical_device_finish(struct panvk_physical_device *device)
+{
+   panvk_wsi_finish(device);
+
+   panvk_arch_dispatch(device->pdev.arch, meta_cleanup, device);
+   panfrost_close_device(&device->pdev);
+   if (device->master_fd != -1)
+      close(device->master_fd);
+
+   vk_physical_device_finish(&device->vk);
+}
+
+static void
+panvk_destroy_physical_device(struct vk_physical_device *device)
+{
+   panvk_physical_device_finish((struct panvk_physical_device *)device);
+   vk_free(&device->instance->alloc, device);
+}
+
+VkResult
+panvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
+                     const VkAllocationCallbacks *pAllocator,
+                     VkInstance *pInstance)
+{
+   struct panvk_instance *instance;
+   VkResult result;
+
+   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);
+
+   pAllocator = pAllocator ?: vk_default_allocator();
+   instance = vk_zalloc(pAllocator, sizeof(*instance), 8,
+                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+   if (!instance)
+      return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   struct vk_instance_dispatch_table dispatch_table;
+
+   vk_instance_dispatch_table_from_entrypoints(
+      &dispatch_table, &panvk_instance_entrypoints, true);
+   vk_instance_dispatch_table_from_entrypoints(
+      &dispatch_table, &wsi_instance_entrypoints, false);
+   result = vk_instance_init(&instance->vk, &panvk_instance_extensions,
+                             &dispatch_table, pCreateInfo, pAllocator);
+   if (result != VK_SUCCESS) {
+      vk_free(pAllocator, instance);
+      return vk_error(NULL, result);
+   }
+
+   instance->vk.physical_devices.try_create_for_drm =
+      panvk_physical_device_try_create;
+   instance->vk.physical_devices.destroy = panvk_destroy_physical_device;
+
+   instance->debug_flags =
+      parse_debug_string(getenv("PANVK_DEBUG"), panvk_debug_options);
+
+   if (instance->debug_flags & PANVK_DEBUG_STARTUP)
+      vk_logi(VK_LOG_NO_OBJS(instance), "Created an instance");
+
+   VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
+
+   *pInstance = panvk_instance_to_handle(instance);
+
+   return VK_SUCCESS;
+}
+
+void
+panvk_DestroyInstance(VkInstance _instance,
+                      const VkAllocationCallbacks *pAllocator)
+{
+   VK_FROM_HANDLE(panvk_instance, instance, _instance);
+
+   if (!instance)
+      return;
+
+   vk_instance_finish(&instance->vk);
+   vk_free(&instance->vk.alloc, instance);
+}
+
+static VkResult
+panvk_physical_device_init(struct panvk_physical_device *device,
+                           struct panvk_instance *instance,
+                           drmDevicePtr drm_device)
+{
+   const char *path = drm_device->nodes[DRM_NODE_RENDER];
+   VkResult result = VK_SUCCESS;
+   drmVersionPtr version;
+   int fd;
+   int master_fd = -1;
+
+   if (!getenv("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
+      return vk_errorf(
+         instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+         "WARNING: panvk is not a conformant vulkan implementation, "
+         "pass PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1 if you know what you're doing.");
+   }
+
+   fd = open(path, O_RDWR | O_CLOEXEC);
+   if (fd < 0) {
+      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                       "failed to open device %s", path);
+   }
+
+   version = drmGetVersion(fd);
+   if (!version) {
+      close(fd);
+      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                       "failed to query kernel driver version for device %s",
+                       path);
+   }
+
+   if (strcmp(version->name, "panfrost")) {
+      drmFreeVersion(version);
+      close(fd);
+      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                       "device %s does not use the panfrost kernel driver",
+                       path);
+   }
+
+   drmFreeVersion(version);
+
+   if (instance->debug_flags & PANVK_DEBUG_STARTUP)
+      vk_logi(VK_LOG_NO_OBJS(instance), "Found compatible device '%s'.", path);
+
+   struct vk_device_extension_table supported_extensions;
+   panvk_get_device_extensions(device, &supported_extensions);
+
+   struct vk_features supported_features;
+   panvk_get_features(device, &supported_features);
+
+   struct vk_physical_device_dispatch_table dispatch_table;
+   vk_physical_device_dispatch_table_from_entrypoints(
+      &dispatch_table, &panvk_physical_device_entrypoints, true);
+   vk_physical_device_dispatch_table_from_entrypoints(
+      &dispatch_table, &wsi_physical_device_entrypoints, false);
+
+   result =
+      vk_physical_device_init(&device->vk, &instance->vk, &supported_extensions,
+                              &supported_features, &dispatch_table);
+
+   if (result != VK_SUCCESS) {
+      vk_error(instance, result);
+      goto fail;
+   }
+
+   device->instance = instance;
+
+   if (instance->vk.enabled_extensions.KHR_display) {
+      master_fd = open(drm_device->nodes[DRM_NODE_PRIMARY], O_RDWR | O_CLOEXEC);
+      if (master_fd >= 0) {
+         /* TODO: free master_fd is accel is not working? */
+      }
+   }
+
+   device->master_fd = master_fd;
+   if (instance->debug_flags & PANVK_DEBUG_TRACE)
+      device->pdev.debug |= PAN_DBG_TRACE;
+
+   device->pdev.debug |= PAN_DBG_NO_CACHE;
+   panfrost_open_device(NULL, fd, &device->pdev);
+   fd = -1;
+
+   if (device->pdev.arch <= 5) {
+      result = vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                         "%s not supported", device->pdev.model->name);
+      goto fail;
+   }
+
+   panvk_arch_dispatch(device->pdev.arch, meta_init, device);
+
+   memset(device->name, 0, sizeof(device->name));
+   sprintf(device->name, "%s", device->pdev.model->name);
+
+   if (panvk_device_get_cache_uuid(device->pdev.gpu_id, device->cache_uuid)) {
+      result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
+                         "cannot generate UUID");
+      goto fail_close_device;
+   }
+
+   vk_warn_non_conformant_implementation("panvk");
+
+   panvk_get_driver_uuid(&device->device_uuid);
+   panvk_get_device_uuid(&device->device_uuid);
+
+   device->drm_syncobj_type = vk_drm_syncobj_get_type(device->pdev.fd);
+   /* We don't support timelines in the uAPI yet and we don't want it getting
+    * suddenly turned on by vk_drm_syncobj_get_type() without us adding panvk
+    * code for it first.
+    */
+   device->drm_syncobj_type.features &= ~VK_SYNC_FEATURE_TIMELINE;
+
+   device->sync_types[0] = &device->drm_syncobj_type;
+   device->sync_types[1] = NULL;
+   device->vk.supported_sync_types = device->sync_types;
+
+   result = panvk_wsi_init(device);
+   if (result != VK_SUCCESS) {
+      vk_error(instance, result);
+      goto fail_close_device;
+   }
+
+   return VK_SUCCESS;
+
+fail_close_device:
+   panfrost_close_device(&device->pdev);
+fail:
+   if (fd != -1)
+      close(fd);
+   if (master_fd != -1)
+      close(master_fd);
+   return result;
+}
+
+VkResult
+panvk_physical_device_try_create(struct vk_instance *vk_instance,
+                                 struct _drmDevice *drm_device,
+                                 struct vk_physical_device **out)
+{
+   struct panvk_instance *instance =
+      container_of(vk_instance, struct panvk_instance, vk);
+
+   if (!(drm_device->available_nodes & (1 << DRM_NODE_RENDER)) ||
+       drm_device->bustype != DRM_BUS_PLATFORM)
+      return VK_ERROR_INCOMPATIBLE_DRIVER;
+
+   struct panvk_physical_device *device =
+      vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+   if (!device)
+      return vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   VkResult result = panvk_physical_device_init(device, instance, drm_device);
+   if (result != VK_SUCCESS) {
+      vk_free(&instance->vk.alloc, device);
+      return result;
+   }
+
+   *out = &device->vk;
+   return VK_SUCCESS;
 }
 
 void
@@ -698,8 +698,7 @@ panvk_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
    };
 
-   vk_foreach_struct(ext, pProperties->pNext)
-   {
+   vk_foreach_struct(ext, pProperties->pNext) {
       if (vk_get_physical_device_core_1_1_property_ext(ext, &core_1_1))
          continue;
       if (vk_get_physical_device_core_1_2_property_ext(ext, &core_1_2))

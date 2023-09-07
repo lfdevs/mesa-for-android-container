@@ -84,12 +84,12 @@ parameter_lists_match(_mesa_glsl_parse_state *state,
       case ir_var_const_in:
       case ir_var_function_in:
          if (param->data.implicit_conversion_prohibited ||
-             !actual->type->can_implicitly_convert_to(param->type, state))
+             !_mesa_glsl_can_implicitly_convert(actual->type, param->type, state))
             return PARAMETER_LIST_NO_MATCH;
 	 break;
 
       case ir_var_function_out:
-	 if (!param->type->can_implicitly_convert_to(actual->type, state))
+	 if (!_mesa_glsl_can_implicitly_convert(param->type, actual->type, state))
 	    return PARAMETER_LIST_NO_MATCH;
 	 break;
 

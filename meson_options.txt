@@ -192,6 +192,13 @@ option(
 )
 
 option(
+  'opencl-external-clang-headers',
+  type : 'feature',
+  description : 'Use system Clang headers at runtime for OpenCL kernel ' +
+                'compilation.',
+)
+
+option(
   'd3d-drivers-path',
   type : 'string',
   value : '',
@@ -203,8 +210,8 @@ option(
   type : 'array',
   value : ['auto'],
   choices : ['auto', 'amd', 'broadcom', 'freedreno', 'intel', 'intel_hasvk',
-             'panfrost', 'swrast', 'imagination-experimental',
-             'microsoft-experimental', 'virtio-experimental'],
+             'panfrost', 'swrast', 'virtio', 'imagination-experimental',
+             'microsoft-experimental'],
   description : 'List of vulkan drivers to build. If this is set to auto ' +
                 'all drivers applicable to the target OS/architecture ' +
                 'will be built'
@@ -288,7 +295,7 @@ option(
   type : 'feature',
   deprecated: {'true': 'enabled', 'false': 'disabled'},
   description : 'Whether to build a shared or static glapi. Defaults to ' +
-                'false on Windows, true elsewhere'
+                'disabled on Windows, enabled elsewhere'
 )
 
 option(
@@ -309,7 +316,7 @@ option(
   'opengl',
   type : 'boolean',
   value : true,
-  description : 'Build support for OpenGL (all versions)'
+  description : 'Build support for desktop OpenGL'
 )
 
 option(
@@ -464,13 +471,8 @@ option(
 option(
   'execmem',
   type : 'boolean',
-  value : true,
-  description : 'Enable execmem support.  Without execmem, glapi will fail ' +
-                'to generate dynamic glapi stubs when entrypoints unknown ' +
-                'to glapi but known to DRI drivers are requested in ' +
-                'eglGetProcAddress or glXGetProcAddress.  This should be ' +
-                'enabled unless the platform can guarantee glapi and DRI ' +
-                'drivers are always built from the same source tree.'
+  deprecated : true,
+  description : 'Does nothing, left here for a while to avoid build breakages.',
 )
 
 option(

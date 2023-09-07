@@ -13,6 +13,8 @@ mount -t debugfs none /sys/kernel/debug
 mount -t devtmpfs none /dev || echo possibly already mounted
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts
+mkdir /dev/shm
+mount -t tmpfs -o noexec,nodev,nosuid tmpfs /dev/shm
 mount -t tmpfs tmpfs /tmp
 
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
@@ -20,4 +22,4 @@ echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 # Set the time so we can validate certificates before we fetch anything;
 # however as not all DUTs have network, make this non-fatal.
-for i in 1 2 3; do sntp -sS pool.ntp.org && break || sleep 2; done || true
+for _ in 1 2 3; do sntp -sS pool.ntp.org && break || sleep 2; done || true

@@ -75,6 +75,20 @@ i915_gem_create(struct anv_device *device,
       .flags = flags,
    };
 
+   struct drm_i915_gem_create_ext_set_pat set_pat_param = { 0 };
+   if (device->info->has_set_pat_uapi) {
+      /* Set PAT param */
+      if (alloc_flags & (ANV_BO_ALLOC_SNOOPED))
+         set_pat_param.pat_index = device->info->pat.coherent;
+      else if (alloc_flags & (ANV_BO_ALLOC_EXTERNAL | ANV_BO_ALLOC_SCANOUT))
+         set_pat_param.pat_index = device->info->pat.scanout;
+      else
+         set_pat_param.pat_index = device->info->pat.writeback;
+      intel_gem_add_ext(&gem_create.extensions,
+                        I915_GEM_CREATE_EXT_SET_PAT,
+                        &set_pat_param.base);
+   }
+
    if (intel_ioctl(device->fd, DRM_IOCTL_I915_GEM_CREATE_EXT, &gem_create))
       return 0;
 
@@ -133,8 +147,6 @@ mmap_calc_flags(struct anv_device *device, struct anv_bo *bo,
    uint32_t flags = 0;
    if (!device->info->has_llc &&
        (property_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
-      flags |= I915_MMAP_WC;
-   if (bo->map_wc)
       flags |= I915_MMAP_WC;
    if (!(property_flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
       flags |= I915_MMAP_WC;

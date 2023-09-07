@@ -1,27 +1,8 @@
 /**************************************************************************
  *
  * Copyright 2017 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR
- * ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  *
  **************************************************************************/
 
@@ -29,6 +10,7 @@
 #define _RADEON_VCN_ENC_H
 
 #include "radeon_vcn.h"
+#include "util/macros.h"
 
 #define RENCODE_IB_OP_INITIALIZE                                                    0x01000001
 #define RENCODE_IB_OP_CLOSE_SESSION                                                 0x01000002
@@ -48,6 +30,7 @@
 
 #define RENCODE_ENCODE_STANDARD_HEVC                                                0
 #define RENCODE_ENCODE_STANDARD_H264                                                1
+#define RENCODE_ENCODE_STANDARD_AV1                                                 2
 
 #define RENCODE_PREENCODE_MODE_NONE                                                 0x00000000
 #define RENCODE_PREENCODE_MODE_1X                                                   0x00000001
@@ -96,6 +79,41 @@
 #define RENCODE_H264_HEADER_INSTRUCTION_FIRST_MB                                    0x00020000
 #define RENCODE_H264_HEADER_INSTRUCTION_SLICE_QP_DELTA                              0x00020001
 
+#define RENCODE_AV1_BITSTREAM_INSTRUCTION_OBU_START                                 0x00000002
+#define RENCODE_AV1_BITSTREAM_INSTRUCTION_OBU_SIZE                                  0x00000003
+#define RENCODE_AV1_BITSTREAM_INSTRUCTION_OBU_END                                   0x00000004
+
+#define RENCODE_OBU_START_TYPE_FRAME                                                1
+#define RENCODE_OBU_START_TYPE_FRAME_HEADER                                         2
+#define RENCODE_OBU_START_TYPE_TILE_GROUP                                           3
+
+#define RENCODE_OBU_TYPE_SEQUENCE_HEADER                                            1
+#define RENCODE_OBU_TYPE_TEMPORAL_DELIMITER                                         2
+#define RENCODE_OBU_TYPE_FRAME_HEADER                                               3
+#define RENCODE_OBU_TYPE_TILE_GROUP                                                 4
+#define RENCODE_OBU_TYPE_METADATA                                                   5
+#define RENCODE_OBU_TYPE_FRAME                                                      6
+#define RENCODE_OBU_TYPE_REDUNDANT_FRAME_HEADER                                     7
+#define RENCODE_OBU_TYPE_TILE_LIST                                                  8
+#define RENCODE_OBU_TYPE_PADDING                                                    15
+
+#define RENCODE_AV1_MV_PRECISION_ALLOW_HIGH_PRECISION                               0x00
+#define RENCODE_AV1_MV_PRECISION_DISALLOW_HIGH_PRECISION                            0x10
+#define RENCODE_AV1_MV_PRECISION_FORCE_INTEGER_MV                                   0x30
+
+#define RENCODE_AV1_CDEF_MODE_DISABLE                                               0
+#define RENCODE_AV1_CDEF_MODE_ENABLE                                                1
+
+#define RENCODE_AV1_ORDER_HINT_BITS                                                 8
+#define RENCODE_AV1_DELTA_FRAME_ID_LENGTH                                           15
+#define RENCODE_AV1_ADDITIONAL_FRAME_ID_LENGTH                                      1
+
+#define RENCDOE_AV1_NUM_REF_FRAMES                                                  8
+#define RENCDOE_AV1_REFS_PER_FRAME                                                  7
+#define RENCODE_AV1_SDB_FRAME_CONTEXT_SIZE                                          947200
+#define RENCODE_AV1_FRAME_CONTEXT_CDF_TABLE_SIZE                                    22528
+#define RENCODE_AV1_CDEF_ALGORITHM_FRAME_CONTEXT_SIZE                               (64 * 8 * 2)
+
 #define RENCODE_PICTURE_TYPE_B                                                      0
 #define RENCODE_PICTURE_TYPE_P                                                      1
 #define RENCODE_PICTURE_TYPE_I                                                      2
@@ -116,7 +134,7 @@
 
 #define RENCODE_H264_DISABLE_DEBLOCKING_FILTER_IDC_ENABLE                           0
 #define RENCODE_H264_DISABLE_DEBLOCKING_FILTER_IDC_DISABLE                          1
-#define RENCODE_H264_DISABLE_DEBLOCKING_FILTER_IDC_DISALBE_ACROSS_SLICE_BOUNDARY    2
+#define RENCODE_H264_DISABLE_DEBLOCKING_FILTER_IDC_DISABLE_ACROSS_SLICE_BOUNDARY    2
 
 #define RENCODE_INTRA_REFRESH_MODE_NONE                                             0
 #define RENCODE_INTRA_REFRESH_MODE_CTB_MB_ROWS                                      1
@@ -126,6 +144,8 @@
 
 #define RENCODE_REC_SWIZZLE_MODE_LINEAR                                             0
 #define RENCODE_REC_SWIZZLE_MODE_256B_S                                             1
+#define RENCODE_REC_SWIZZLE_MODE_256B_D                                             2
+#define RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP                               0x10000001
 
 #define RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_LINEAR                                  0
 #define RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_CIRCULAR                                1
@@ -138,41 +158,50 @@
 
 #define RENCODE_MAX_NUM_TEMPORAL_LAYERS                                             4
 
+#define PIPE_AV1_ENC_SB_SIZE                                                        64
 #define PIPE_H265_ENC_CTB_SIZE                                                      64
 #define PIPE_H264_MB_SIZE                                                           16
 
-#define RENCODE_COLOR_VOLUME_G22_BT709                                               0
+#define RENCODE_COLOR_VOLUME_G22_BT709                                              0
 
-#define RENCODE_COLOR_RANGE_FULL                                                     0
-#define RENCODE_CHROMA_LOCATION_INTERSTITIAL                                         0
+#define RENCODE_COLOR_RANGE_FULL                                                    0
+#define RENCODE_CHROMA_LOCATION_INTERSTITIAL                                        0
 
-#define RENCODE_COLOR_BIT_DEPTH_8_BIT                                                0
-#define RENCODE_COLOR_BIT_DEPTH_10_BIT                                               1
+#define RENCODE_COLOR_BIT_DEPTH_8_BIT                                               0
+#define RENCODE_COLOR_BIT_DEPTH_10_BIT                                              1
 
-#define RENCODE_CHROMA_SUBSAMPLING_4_2_0                                             0
+#define RENCODE_CHROMA_SUBSAMPLING_4_2_0                                            0
 
-#define RENCODE_COLOR_PACKING_FORMAT_NV12                                            0
-#define RENCODE_COLOR_PACKING_FORMAT_P010                                            1
+#define RENCODE_COLOR_PACKING_FORMAT_NV12                                           0
+#define RENCODE_COLOR_PACKING_FORMAT_P010                                           1
 
-#define RENCODE_COLOR_SPACE_YUV                                                      0
+#define RENCODE_COLOR_SPACE_YUV                                                     0
 
-#define PIPE_ALIGN_IN_BLOCK_SIZE(value, align) (((value) + ((align) - 1))/(align))
+#define PIPE_ALIGN_IN_BLOCK_SIZE(value, alignment) DIV_ROUND_UP(value, alignment)
 
 #define RADEON_ENC_CS(value) (enc->cs.current.buf[enc->cs.current.cdw++] = (value))
-#define RADEON_ENC_BEGIN(cmd)                                                                      \
-   {                                                                                               \
+#define RADEON_ENC_BEGIN(cmd)                                                                    \
+   {                                                                                             \
       uint32_t *begin = &enc->cs.current.buf[enc->cs.current.cdw++];                             \
       RADEON_ENC_CS(cmd)
-#define RADEON_ENC_READ(buf, domain, off)                                                          \
+#define RADEON_ENC_READ(buf, domain, off)                                                        \
    radeon_enc_add_buffer(enc, (buf), RADEON_USAGE_READ, (domain), (off))
-#define RADEON_ENC_WRITE(buf, domain, off)                                                         \
+#define RADEON_ENC_WRITE(buf, domain, off)                                                       \
    radeon_enc_add_buffer(enc, (buf), RADEON_USAGE_WRITE, (domain), (off))
-#define RADEON_ENC_READWRITE(buf, domain, off)                                                     \
+#define RADEON_ENC_READWRITE(buf, domain, off)                                                   \
    radeon_enc_add_buffer(enc, (buf), RADEON_USAGE_READWRITE, (domain), (off))
-#define RADEON_ENC_END()                                                                           \
+#define RADEON_ENC_END()                                                                         \
    *begin = (&enc->cs.current.buf[enc->cs.current.cdw] - begin) * 4;                             \
-   enc->total_task_size += *begin;                                                                 \
+   enc->total_task_size += *begin;                                                               \
    }
+#define RADEON_ENC_ADDR_SWAP()                                                                   \
+   do {                                                                                          \
+      unsigned int *low  = &enc->cs.current.buf[enc->cs.current.cdw - 2];                        \
+      unsigned int *high = &enc->cs.current.buf[enc->cs.current.cdw - 1];                        \
+      unsigned int temp = *low;                                                                  \
+      *low = *high;                                                                              \
+      *high = temp;                                                                              \
+   } while(0)
 
 #define RADEON_ENC_DESTROY_VIDEO_BUFFER(buf)                                                     \
    do {                                                                                          \
@@ -263,7 +292,18 @@ typedef struct rvcn_enc_hevc_spec_misc_s {
    uint32_t cabac_init_flag;
    uint32_t half_pel_enabled;
    uint32_t quarter_pel_enabled;
+   uint32_t transform_skip_discarded;
+   uint32_t cu_qp_delta_enabled_flag;
 } rvcn_enc_hevc_spec_misc_t;
+
+typedef struct rvcn_enc_av1_spec_misc_s {
+   uint32_t palette_mode_enable;
+   uint32_t mv_precision;
+   uint32_t cdef_mode;
+   uint32_t disable_cdf_update;
+   uint32_t disable_frame_end_update_cdf;
+   uint32_t num_tiles_per_picture;
+} rvcn_enc_av1_spec_misc_t;
 
 typedef struct rvcn_enc_rate_ctl_session_init_s {
    uint32_t rate_control_method;
@@ -296,6 +336,7 @@ typedef struct rvcn_enc_quality_params_s {
    uint32_t scene_change_sensitivity;
    uint32_t scene_change_min_idr_interval;
    uint32_t two_pass_search_center_map_mode;
+   uint32_t vbaq_strength;
 } rvcn_enc_quality_params_t;
 
 typedef struct rvcn_enc_direct_output_nalu_s {
@@ -375,9 +416,9 @@ typedef struct rvcn_enc_reconstructed_picture_s {
    union {
       struct
       {
-         uint32_t  unused_offset1;
-         uint32_t  unused_offset2;
-      } unused;
+         uint32_t av1_cdf_frame_context_offset;
+         uint32_t av1_cdef_algorithm_context_offset;
+      } av1;
    };
 } rvcn_enc_reconstructed_picture_t;
 
@@ -416,7 +457,12 @@ typedef struct rvcn_enc_encode_context_buffer_s {
    pre_encode_reconstructed_pictures[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
    rvcn_enc_pre_encode_input_picture_t pre_encode_input_picture;
    uint32_t two_pass_search_center_map_offset;
-   uint32_t colloc_buffer_offset;
+   union {
+      uint32_t colloc_buffer_offset;
+      struct {
+         uint32_t av1_sdb_intermedidate_context_offset;
+      } av1;
+   };
 } rvcn_enc_encode_context_buffer_t;
 
 typedef struct rvcn_enc_video_bitstream_buffer_s {
@@ -434,6 +480,12 @@ typedef struct rvcn_enc_feedback_buffer_s {
    uint32_t feedback_buffer_size;
    uint32_t feedback_data_size;
 } rvcn_enc_feedback_buffer_t;
+
+typedef struct rvcn_enc_av1_cdf_default_table_s {
+   uint32_t use_cdf_default;
+   uint32_t cdf_default_buffer_address_lo;
+   uint32_t cdf_default_buffer_address_hi;
+} rvcn_enc_av1_cdf_default_table_t;
 
 typedef struct rvcn_encode_stats_type_0_s
 {
@@ -485,6 +537,9 @@ typedef struct rvcn_enc_cmd_s {
    uint32_t spec_misc_h264;
    uint32_t enc_params_h264;
    uint32_t deblocking_filter_h264;
+   uint32_t spec_misc_av1;
+   uint32_t bitstream_instruction_av1;
+   uint32_t cdf_default_table_av1;
    uint32_t input_format;
    uint32_t output_format;
    uint32_t enc_statistics;
@@ -530,6 +585,37 @@ typedef struct rvcn_enc_output_format_s
    uint32_t output_color_bit_depth;
 } rvcn_enc_output_format_t;
 
+typedef struct rvcn_enc_av1_timing_info_s
+{
+   uint32_t num_units_in_display_tick;
+   uint32_t time_scale;
+   uint32_t num_tick_per_picture_minus1;
+}rvcn_enc_av1_timing_info_t;
+
+typedef struct rvcn_enc_av1_color_description_s
+{
+   uint32_t color_primaries;
+   uint32_t transfer_characteristics;
+   uint32_t maxtrix_coefficients;
+   uint32_t color_range;
+   uint32_t chroma_sample_position;
+}rvcn_enc_av1_color_description_t;
+
+typedef struct rvcn_enc_av1_ref_frame_s
+{
+   bool in_use;
+   uint32_t frame_id;
+   uint32_t temporal_id;
+   uint32_t slot_id;
+   enum pipe_av1_enc_frame_type frame_type;
+} rvcn_enc_av1_ref_frame_t;
+
+typedef struct rvcn_enc_av1_recon_slot_s
+{
+   bool in_use;
+   bool is_orphaned;
+} rvcn_enc_av1_recon_slot_t;
+
 typedef void (*radeon_enc_get_buffer)(struct pipe_resource *resource, struct pb_buffer **handle,
                                       struct radeon_surf **surface);
 
@@ -539,7 +625,10 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
                                                radeon_enc_get_buffer get_buffer);
 
 struct radeon_enc_pic {
-   enum pipe_h2645_enc_picture_type picture_type;
+   union {
+      enum pipe_h2645_enc_picture_type picture_type;
+      enum pipe_av1_enc_frame_type frame_type;
+   };
 
    unsigned frame_num;
    unsigned pic_order_cnt;
@@ -584,6 +673,46 @@ struct radeon_enc_pic {
    bool sample_adaptive_offset_enabled_flag;
    bool pcm_enabled_flag;
    bool sps_temporal_mvp_enabled_flag;
+
+   struct {
+      struct {
+         struct {
+            uint32_t enable_tile_obu:1;
+            uint32_t enable_render_size:1;
+            uint32_t enable_error_resilient_mode:1;
+            uint32_t enable_order_hint:1;
+            uint32_t enable_color_description:1;
+            uint32_t timing_info_present:1;
+            uint32_t timing_info_equal_picture_interval:1;
+            uint32_t frame_id_numbers_present:1;
+            uint32_t force_integer_mv:1;
+            uint32_t disable_screen_content_tools:1;
+            uint32_t is_obu_frame:1;
+            uint32_t stream_obu_frame:1;  /* all frames have the same number of tiles */
+            uint32_t need_av1_seq:1;
+         };
+         uint32_t render_width;
+         uint32_t render_height;
+         uint32_t frame_to_show_map_index;
+         enum pipe_av1_enc_frame_type last_frame_type;
+         uint32_t display_frame_id;
+         uint32_t frame_id;
+         uint32_t order_hint;
+         uint32_t order_hint_bits;
+         uint32_t refresh_frame_flags;
+         uint32_t reference_delta_frame_id;
+         uint32_t reference_frame_index;
+         uint32_t reference_order_hint[RENCDOE_AV1_NUM_REF_FRAMES];
+         uint32_t *copy_start;
+      };
+      rvcn_enc_av1_spec_misc_t av1_spec_misc;
+      rvcn_enc_av1_cdf_default_table_t av1_cdf_default_table;
+      rvcn_enc_av1_timing_info_t av1_timing_info;
+      rvcn_enc_av1_color_description_t av1_color_description;
+      uint32_t count_last_layer;
+      rvcn_enc_av1_ref_frame_t frames[RENCDOE_AV1_NUM_REF_FRAMES];
+      rvcn_enc_av1_recon_slot_t recon_slots[RENCDOE_AV1_NUM_REF_FRAMES + 1];
+   };
 
    rvcn_enc_session_info_t session_info;
    rvcn_enc_task_info_t task_info;
@@ -653,6 +782,8 @@ struct radeon_encoder {
    void (*input_format)(struct radeon_encoder *enc);
    void (*output_format)(struct radeon_encoder *enc);
    void (*encode_statistics)(struct radeon_encoder *enc);
+   void (*obu_instructions)(struct radeon_encoder *enc);
+   void (*cdf_default_table)(struct radeon_encoder *enc);
    /* mq is used for preversing multiple queue ibs */
    void (*mq_begin)(struct radeon_encoder *enc);
    void (*mq_encode)(struct radeon_encoder *enc);
@@ -676,6 +807,7 @@ struct radeon_encoder {
    struct rvid_buffer *si;
    struct rvid_buffer *fb;
    struct rvid_buffer *dpb;
+   struct rvid_buffer *cdf;
    struct radeon_enc_pic enc_pic;
    struct pb_buffer *stats;
    rvcn_enc_cmd_t cmd;
@@ -696,10 +828,14 @@ struct radeon_encoder {
    unsigned dpb_size;
    rvcn_enc_picture_info_t dpb_info[RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES];
    unsigned max_ltr_idx;
+
+   struct pipe_context *ectx;
 };
 
 void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer *buf,
                            unsigned usage, enum radeon_bo_domain domain, signed offset);
+
+void radeon_enc_dummy(struct radeon_encoder *enc);
 
 void radeon_enc_set_emulation_prevention(struct radeon_encoder *enc, bool set);
 
@@ -720,6 +856,11 @@ void radeon_enc_code_ue(struct radeon_encoder *enc, unsigned int value);
 
 void radeon_enc_code_se(struct radeon_encoder *enc, int value);
 
+void radeon_enc_code_uvlc(struct radeon_encoder *enc, unsigned int value);
+
+void radeon_enc_code_leb128(unsigned char *buf, unsigned int value,
+                            unsigned int num_bytes);
+
 void radeon_enc_1_2_init(struct radeon_encoder *enc);
 
 void radeon_enc_2_0_init(struct radeon_encoder *enc);
@@ -727,5 +868,12 @@ void radeon_enc_2_0_init(struct radeon_encoder *enc);
 void radeon_enc_3_0_init(struct radeon_encoder *enc);
 
 void radeon_enc_4_0_init(struct radeon_encoder *enc);
+
+void radeon_enc_av1_bs_instruction_type(struct radeon_encoder *enc,
+                                        unsigned int inst, unsigned int obu_type);
+
+unsigned char *radeon_enc_av1_header_size_offset(struct radeon_encoder *enc);
+
+unsigned int radeon_enc_value_bits(unsigned int value);
 
 #endif // _RADEON_VCN_ENC_H

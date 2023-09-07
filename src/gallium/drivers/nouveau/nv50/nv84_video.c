@@ -554,6 +554,21 @@ fail:
    return NULL;
 }
 
+static void
+nv84_video_buffer_resources(struct pipe_video_buffer *buffer,
+                            struct pipe_resource **resources)
+{
+   struct nv84_video_buffer *buf = (struct nv84_video_buffer *)buffer;
+   unsigned num_planes = util_format_get_num_planes(buffer->buffer_format);
+   unsigned i;
+
+   assert(buf);
+
+   for (i = 0; i < num_planes; ++i) {
+      resources[i] = buf->resources[i];
+   }
+}
+
 static struct pipe_sampler_view **
 nv84_video_buffer_sampler_view_planes(struct pipe_video_buffer *buffer)
 {
@@ -639,6 +654,7 @@ nv84_video_buffer_create(struct pipe_context *pipe,
    buffer->base.destroy = nv84_video_buffer_destroy;
    buffer->base.width = template->width;
    buffer->base.height = template->height;
+   buffer->base.get_resources = nv84_video_buffer_resources;
    buffer->base.get_sampler_view_planes = nv84_video_buffer_sampler_view_planes;
    buffer->base.get_sampler_view_components = nv84_video_buffer_sampler_view_components;
    buffer->base.get_surfaces = nv84_video_buffer_surfaces;

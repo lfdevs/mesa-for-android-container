@@ -37,26 +37,6 @@ namespace r600 {
 
 AluGroup::AluGroup() { std::fill(m_slots.begin(), m_slots.end(), nullptr); }
 
-static bool
-is_kill(EAluOp op)
-{
-   switch (op) {
-   case op2_kille:
-   case op2_kille_int:
-   case op2_killne:
-   case op2_killne_int:
-   case op2_killge:
-   case op2_killge_int:
-   case op2_killge_uint:
-   case op2_killgt:
-   case op2_killgt_int:
-   case op2_killgt_uint:
-      return true;
-   default:
-      return false;
-   }
-}
-
 bool
 AluGroup::add_instruction(AluInstr *instr)
 {
@@ -69,16 +49,14 @@ AluGroup::add_instruction(AluInstr *instr)
       ASSERTED auto opinfo = alu_ops.find(instr->opcode());
       assert(opinfo->second.can_channel(AluOp::t, s_chip_class));
       if (add_trans_instructions(instr)) {
-         if (is_kill(instr->opcode()))
-            m_has_kill_op = true;
+         m_has_kill_op |= instr->is_kill();
          return true;
       }
    }
 
    if (add_vec_instructions(instr) && !instr->has_alu_flag(alu_is_trans)) {
       instr->set_parent_group(this);
-      if (!instr->has_alu_flag(alu_is_lds) && is_kill(instr->opcode()))
-         m_has_kill_op = true;
+      m_has_kill_op |= instr->is_kill();
       return true;
    }
 
@@ -88,8 +66,7 @@ AluGroup::add_instruction(AluInstr *instr)
    if (s_max_slots > 4 && opinfo->second.can_channel(AluOp::t, s_chip_class) &&
        add_trans_instructions(instr)) {
       instr->set_parent_group(this);
-      if (is_kill(instr->opcode()))
-         m_has_kill_op = true;
+      m_has_kill_op |= instr->is_kill();
       return true;
    }
 
@@ -163,6 +140,7 @@ AluGroup::add_trans_instructions(AluInstr *instr)
          /* We added a vector op in the trans channel, so we have to
           * make sure the corresponding vector channel is used */
          assert(instr->has_alu_flag(alu_is_trans) || m_slots[instr->dest_chan()]);
+         m_has_kill_op |= instr->is_kill();
          return true;
       }
    }
@@ -182,7 +160,7 @@ AluGroup::free_slots() const
 
 bool
 AluGroup::add_vec_instructions(AluInstr *instr)
-{
+{   
    int param_src = -1;
    for (auto& s : instr->sources()) {
       auto is = s->as_inline_const();
@@ -203,12 +181,16 @@ AluGroup::add_vec_instructions(AluInstr *instr)
    int preferred_chan = instr->dest_chan();
    if (!m_slots[preferred_chan]) {
       if (instr->bank_swizzle() != alu_vec_unknown) {
-         if (try_readport(instr, instr->bank_swizzle()))
+         if (try_readport(instr, instr->bank_swizzle())) {
+            m_has_kill_op |= instr->is_kill();
             return true;
+         }
       } else {
          for (AluBankSwizzle i = alu_vec_012; i != alu_vec_unknown; ++i) {
-            if (try_readport(instr, i))
+            if (try_readport(instr, i)) {
+               m_has_kill_op |= instr->is_kill();
                return true;
+            }
          }
       }
    } else {
@@ -237,12 +219,16 @@ AluGroup::add_vec_instructions(AluInstr *instr)
             sfn_log << SfnLog::schedule << "V: Try force channel " << free_chan << "\n";
             dest->set_chan(free_chan);
             if (instr->bank_swizzle() != alu_vec_unknown) {
-               if (try_readport(instr, instr->bank_swizzle()))
+               if (try_readport(instr, instr->bank_swizzle())) {
+                  m_has_kill_op |= instr->is_kill();
                   return true;
+               }
             } else {
                for (AluBankSwizzle i = alu_vec_012; i != alu_vec_unknown; ++i) {
-                  if (try_readport(instr, i))
+                  if (try_readport(instr, i)) {
+                     m_has_kill_op |= instr->is_kill();
                      return true;
+                  }
                }
             }
          }
@@ -369,19 +355,35 @@ bool AluGroup::replace_source(PRegister old_src, PVirtualValue new_src)
 bool
 AluGroup::update_indirect_access(AluInstr *instr)
 {
-   auto [indirect_addr, for_src, is_index] = instr->indirect_addr();
+   auto [indirect_addr, for_dest, index_reg] = instr->indirect_addr();
 
    if (indirect_addr) {
+      assert(!index_reg);
       if (!m_addr_used) {
          m_addr_used = indirect_addr;
-         m_addr_for_src = for_src;
-         m_addr_is_index = is_index;
-      } else if (!indirect_addr->equal_to(*m_addr_used)) {
+         m_addr_for_src = !for_dest;
+         m_addr_is_index = false;
+      } else if (!indirect_addr->equal_to(*m_addr_used) || m_addr_is_index) {
          return false;
       }
+   } else if (index_reg) {
+       if (!m_addr_used) {
+           m_addr_used = index_reg;
+           m_addr_is_index = true;
+       } else if (!index_reg->equal_to(*m_addr_used) || !m_addr_is_index) {
+           return false;
+       }
    }
-
    return true;
+}
+
+bool AluGroup::index_mode_load()
+{
+   if (!m_slots[0] || !m_slots[0]->dest())
+      return false;
+
+   Register *dst = m_slots[0]->dest();
+   return dst->has_flag(Register::addr_or_idx) && dst->sel() > 0;
 }
 
 void

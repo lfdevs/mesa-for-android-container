@@ -162,6 +162,8 @@ fill_ssbo_descriptors(struct d3d12_context *ctx,
       uav_desc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
       uav_desc.Buffer.StructureByteStride = 0;
       uav_desc.Buffer.CounterOffsetInBytes = 0;
+      uav_desc.Buffer.FirstElement = 0;
+      uav_desc.Buffer.NumElements = 0;
       ID3D12Resource *d3d12_res = nullptr;
       if (view->buffer) {
          struct d3d12_resource *res = d3d12_resource(view->buffer);
@@ -621,46 +623,46 @@ validate_stream_output_targets(struct d3d12_context *ctx)
 }
 
 static D3D_PRIMITIVE_TOPOLOGY
-topology(enum pipe_prim_type prim_type, uint8_t patch_vertices)
+topology(enum mesa_prim prim_type, uint8_t patch_vertices)
 {
    switch (prim_type) {
-   case PIPE_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
 
-   case PIPE_PRIM_LINES:
+   case MESA_PRIM_LINES:
       return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
 
-   case PIPE_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINE_STRIP:
       return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
 
-   case PIPE_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLES:
       return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-   case PIPE_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
       return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
 
-   case PIPE_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINES_ADJACENCY:
       return D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ;
 
-   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
       return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ;
 
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
       return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ;
 
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ;
 
-   case PIPE_PRIM_PATCHES:
+   case MESA_PRIM_PATCHES:
       return (D3D_PRIMITIVE_TOPOLOGY)(D3D_PRIMITIVE_TOPOLOGY_1_CONTROL_POINT_PATCHLIST + patch_vertices - 1);
 
-   case PIPE_PRIM_QUADS:
-   case PIPE_PRIM_QUAD_STRIP:
+   case MESA_PRIM_QUADS:
+   case MESA_PRIM_QUAD_STRIP:
       return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST; /* HACK: this is just wrong! */
 
    default:
-      debug_printf("pipe_prim_type: %s\n", u_prim_name(prim_type));
-      unreachable("unexpected enum pipe_prim_type");
+      debug_printf("mesa_prim: %s\n", u_prim_name(prim_type));
+      unreachable("unexpected enum mesa_prim");
    }
 }
 
@@ -717,19 +719,19 @@ transition_surface_subresources_state(struct d3d12_context *ctx,
 }
 
 static bool
-prim_supported(enum pipe_prim_type prim_type)
+prim_supported(enum mesa_prim prim_type)
 {
    switch (prim_type) {
-   case PIPE_PRIM_POINTS:
-   case PIPE_PRIM_LINES:
-   case PIPE_PRIM_LINE_STRIP:
-   case PIPE_PRIM_TRIANGLES:
-   case PIPE_PRIM_TRIANGLE_STRIP:
-   case PIPE_PRIM_LINES_ADJACENCY:
-   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
-   case PIPE_PRIM_PATCHES:
+   case MESA_PRIM_POINTS:
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_PATCHES:
       return true;
 
    default:
@@ -901,17 +903,17 @@ d3d12_draw_vbo(struct pipe_context *pctx,
    enum d3d12_surface_conversion_mode conversion_modes[PIPE_MAX_COLOR_BUFS] = {};
    struct pipe_draw_indirect_info patched_indirect = {};
 
-   if (!prim_supported((enum pipe_prim_type)dinfo->mode) ||
+   if (!prim_supported((enum mesa_prim)dinfo->mode) ||
        dinfo->index_size == 1 ||
        (dinfo->primitive_restart && dinfo->restart_index != 0xffff &&
         dinfo->restart_index != 0xffffffff)) {
 
       if (!dinfo->primitive_restart &&
           !indirect &&
-          !u_trim_pipe_prim((enum pipe_prim_type)dinfo->mode, (unsigned *)&draws[0].count))
+          !u_trim_pipe_prim((enum mesa_prim)dinfo->mode, (unsigned *)&draws[0].count))
          return;
 
-      ctx->initial_api_prim = (enum pipe_prim_type)dinfo->mode;
+      ctx->initial_api_prim = (enum mesa_prim)dinfo->mode;
       util_primconvert_save_rasterizer_state(ctx->primconvert, &ctx->gfx_pipeline_state.rast->base);
       util_primconvert_draw_vbo(ctx->primconvert, dinfo, drawid_offset, indirect, draws, num_draws);
       return;
@@ -946,7 +948,7 @@ d3d12_draw_vbo(struct pipe_context *pctx,
 
    struct d3d12_rasterizer_state *rast = ctx->gfx_pipeline_state.rast;
    if (rast->twoface_back) {
-      enum pipe_prim_type saved_mode = ctx->initial_api_prim;
+      enum mesa_prim saved_mode = ctx->initial_api_prim;
       twoface_emulation(ctx, rast, dinfo, indirect, &draws[0]);
       ctx->initial_api_prim = saved_mode;
    }
@@ -956,13 +958,13 @@ d3d12_draw_vbo(struct pipe_context *pctx,
                                                  D3D12_SHADER_DIRTY_SAMPLERS;
 
    /* this should *really* be fixed at a higher level than here! */
-   enum pipe_prim_type reduced_prim = u_reduced_prim((enum pipe_prim_type)dinfo->mode);
-   if (reduced_prim == PIPE_PRIM_TRIANGLES &&
+   enum mesa_prim reduced_prim = u_reduced_prim((enum mesa_prim)dinfo->mode);
+   if (reduced_prim == MESA_PRIM_TRIANGLES &&
        ctx->gfx_pipeline_state.rast->base.cull_face == PIPE_FACE_FRONT_AND_BACK)
       return;
 
    if (ctx->gfx_pipeline_state.prim_type != dinfo->mode) {
-      ctx->gfx_pipeline_state.prim_type = (enum pipe_prim_type)dinfo->mode;
+      ctx->gfx_pipeline_state.prim_type = (enum mesa_prim)dinfo->mode;
       ctx->state_dirty |= D3D12_DIRTY_PRIM_MODE;
    }
 
@@ -977,7 +979,7 @@ d3d12_draw_vbo(struct pipe_context *pctx,
    }
 
    /* Reset to an invalid value after it's been used */
-   ctx->initial_api_prim = PIPE_PRIM_MAX;
+   ctx->initial_api_prim = MESA_PRIM_COUNT;
 
    /* Copy the stream output info from the current vertex/geometry shader */
    if (ctx->state_dirty & D3D12_DIRTY_SHADER) {
@@ -1101,11 +1103,17 @@ d3d12_draw_vbo(struct pipe_context *pctx,
       }
    }
 
-   if (ctx->cmdlist_dirty & D3D12_DIRTY_STENCIL_REF)
-      ctx->cmdlist->OMSetStencilRef(ctx->stencil_ref.ref_value[0]);
+   if (ctx->cmdlist_dirty & D3D12_DIRTY_STENCIL_REF) {
+      if (ctx->gfx_pipeline_state.zsa->backface_enabled &&
+          screen->opts14.IndependentFrontAndBackStencilRefMaskSupported &&
+          ctx->cmdlist8 != nullptr)
+         ctx->cmdlist8->OMSetFrontAndBackStencilRef(ctx->stencil_ref.ref_value[0], ctx->stencil_ref.ref_value[1]);
+      else
+         ctx->cmdlist->OMSetStencilRef(ctx->stencil_ref.ref_value[0]);
+   }
 
    if (ctx->cmdlist_dirty & D3D12_DIRTY_PRIM_MODE)
-      ctx->cmdlist->IASetPrimitiveTopology(topology((enum pipe_prim_type)dinfo->mode, ctx->patch_vertices));
+      ctx->cmdlist->IASetPrimitiveTopology(topology((enum mesa_prim)dinfo->mode, ctx->patch_vertices));
 
    for (unsigned i = 0; i < ctx->num_vbs; ++i) {
       if (ctx->vbs[i].buffer.resource) {
@@ -1153,7 +1161,7 @@ d3d12_draw_vbo(struct pipe_context *pctx,
          d3d12_batch_reference_surface_texture(batch, surface);
          depth_desc = &tmp_desc;
       }
-      ctx->cmdlist->OMSetRenderTargets(ctx->fb.nr_cbufs, render_targets, FALSE, depth_desc);
+      ctx->cmdlist->OMSetRenderTargets(ctx->fb.nr_cbufs, render_targets, false, depth_desc);
    }
 
    struct pipe_stream_output_target **so_targets = ctx->fake_so_buffer_factor ? ctx->fake_so_targets

@@ -36,7 +36,7 @@
 extern "C" {
 #endif
 
-static unsigned util_dynarray_is_data_stack_allocated;
+extern unsigned util_dynarray_is_data_stack_allocated;
 
 /* A zero-initialized version of this is guaranteed to represent an
  * empty array.

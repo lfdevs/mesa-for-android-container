@@ -1,30 +1,11 @@
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
+ * SPDX-License-Identifier: MIT
  */
 /* based on pieces from si_pipe.c and radeon_llvm_emit.c */
 #include "ac_llvm_build.h"
-
+#include "ac_gpu_info.h"
 #include "ac_nir.h"
 #include "ac_llvm_util.h"
 #include "ac_shader_util.h"
@@ -56,16 +37,14 @@ struct ac_llvm_flow {
  * The caller is responsible for initializing ctx::module and ctx::builder.
  */
 void ac_llvm_context_init(struct ac_llvm_context *ctx, struct ac_llvm_compiler *compiler,
-                          enum amd_gfx_level gfx_level, enum radeon_family family,
-                          bool has_3d_cube_border_color_mipmap,
-                          enum ac_float_mode float_mode, unsigned wave_size,
-                          unsigned ballot_mask_bits, bool exports_color_null, bool exports_mrtz)
+                          const struct radeon_info *info, enum ac_float_mode float_mode,
+                          unsigned wave_size, unsigned ballot_mask_bits, bool exports_color_null,
+                          bool exports_mrtz)
 {
    ctx->context = LLVMContextCreate();
 
-   ctx->gfx_level = gfx_level;
-   ctx->family = family;
-   ctx->has_3d_cube_border_color_mipmap = has_3d_cube_border_color_mipmap;
+   ctx->info = info;
+   ctx->gfx_level = info->gfx_level;
    ctx->wave_size = wave_size;
    ctx->ballot_mask_bits = ballot_mask_bits;
    ctx->float_mode = float_mode;
@@ -315,12 +294,8 @@ LLVMValueRef ac_build_intrinsic(struct ac_llvm_context *ctx, const char *name,
 
    call = LLVMBuildCall2(ctx->builder, function_type, function, params, param_count, "");
 
-   if (attrib_mask & AC_ATTR_INVARIANT_LOAD) {
-      if (LLVM_VERSION_MAJOR >= 15)
-         LLVMSetMetadata(call, ctx->invariant_load_md_kind, ctx->empty_md);
-      else
-         LLVMAddCallSiteAttribute(call, -1, ac_get_llvm_attribute(ctx->context, "readnone"));
-   }
+   if (attrib_mask & AC_ATTR_INVARIANT_LOAD)
+      LLVMSetMetadata(call, ctx->invariant_load_md_kind, ctx->empty_md);
 
    if (attrib_mask & AC_ATTR_CONVERGENT)
       LLVMAddCallSiteAttribute(call, -1, ac_get_llvm_attribute(ctx->context, "convergent"));
@@ -483,9 +458,9 @@ void ac_build_optimization_barrier(struct ac_llvm_context *ctx, LLVMValueRef *pg
    }
 }
 
-LLVMValueRef ac_build_shader_clock(struct ac_llvm_context *ctx, nir_scope scope)
+LLVMValueRef ac_build_shader_clock(struct ac_llvm_context *ctx, mesa_scope scope)
 {
-   if (ctx->gfx_level >= GFX11 && scope == NIR_SCOPE_DEVICE) {
+   if (ctx->gfx_level >= GFX11 && scope == SCOPE_DEVICE) {
       const char *name = "llvm.amdgcn.s.sendmsg.rtn.i64";
       LLVMValueRef arg = LLVMConstInt(ctx->i32, 0x83 /* realtime */, 0);
       LLVMValueRef tmp = ac_build_intrinsic(ctx, name, ctx->i64, &arg, 1, 0);
@@ -493,7 +468,7 @@ LLVMValueRef ac_build_shader_clock(struct ac_llvm_context *ctx, nir_scope scope)
    }
 
    const char *subgroup = "llvm.readcyclecounter";
-   const char *name = scope == NIR_SCOPE_DEVICE ? "llvm.amdgcn.s.memrealtime" : subgroup;
+   const char *name = scope == SCOPE_DEVICE ? "llvm.amdgcn.s.memrealtime" : subgroup;
 
    LLVMValueRef tmp = ac_build_intrinsic(ctx, name, ctx->i64, NULL, 0, 0);
    return LLVMBuildBitCast(ctx->builder, tmp, ctx->v2i32, "");
@@ -711,10 +686,6 @@ LLVMValueRef ac_build_fdiv(struct ac_llvm_context *ctx, LLVMValueRef num, LLVMVa
    unsigned type_size = ac_get_type_size(LLVMTypeOf(den));
    const char *name;
 
-   /* For doubles, we need precise division to pass GLCTS. */
-   if (ctx->float_mode == AC_FLOAT_MODE_DEFAULT_OPENGL && type_size == 8)
-      return LLVMBuildFDiv(ctx->builder, num, den, "");
-
    if (type_size == 2)
       name = "llvm.amdgcn.rcp.f16";
    else if (type_size == 4)
@@ -775,190 +746,6 @@ LLVMValueRef ac_build_fast_udiv_u31_d_not_one(struct ac_llvm_context *ctx, LLVMV
    num = LLVMBuildLShr(builder, num, LLVMConstInt(ctx->i64, 32, 0), "");
    num = LLVMBuildTrunc(builder, num, ctx->i32, "");
    return LLVMBuildLShr(builder, num, post_shift, "");
-}
-
-/* Coordinates for cube map selection. sc, tc, and ma are as in Table 8.27
- * of the OpenGL 4.5 (Compatibility Profile) specification, except ma is
- * already multiplied by two. id is the cube face number.
- */
-struct cube_selection_coords {
-   LLVMValueRef stc[2];
-   LLVMValueRef ma;
-   LLVMValueRef id;
-};
-
-static void build_cube_intrinsic(struct ac_llvm_context *ctx, LLVMValueRef in[3],
-                                 struct cube_selection_coords *out)
-{
-   LLVMTypeRef f32 = ctx->f32;
-
-   out->stc[1] = ac_build_intrinsic(ctx, "llvm.amdgcn.cubetc", f32, in, 3, 0);
-   out->stc[0] = ac_build_intrinsic(ctx, "llvm.amdgcn.cubesc", f32, in, 3, 0);
-   out->ma = ac_build_intrinsic(ctx, "llvm.amdgcn.cubema", f32, in, 3, 0);
-   out->id = ac_build_intrinsic(ctx, "llvm.amdgcn.cubeid", f32, in, 3, 0);
-}
-
-/**
- * Build a manual selection sequence for cube face sc/tc coordinates and
- * major axis vector (multiplied by 2 for consistency) for the given
- * vec3 \p coords, for the face implied by \p selcoords.
- *
- * For the major axis, we always adjust the sign to be in the direction of
- * selcoords.ma; i.e., a positive out_ma means that coords is pointed towards
- * the selcoords major axis.
- */
-static void build_cube_select(struct ac_llvm_context *ctx,
-                              const struct cube_selection_coords *selcoords,
-                              const LLVMValueRef *coords, LLVMValueRef *out_st,
-                              LLVMValueRef *out_ma)
-{
-   LLVMBuilderRef builder = ctx->builder;
-   LLVMTypeRef f32 = LLVMTypeOf(coords[0]);
-   LLVMValueRef is_ma_positive;
-   LLVMValueRef sgn_ma;
-   LLVMValueRef is_ma_z, is_not_ma_z;
-   LLVMValueRef is_ma_y;
-   LLVMValueRef is_ma_x;
-   LLVMValueRef sgn;
-   LLVMValueRef tmp;
-
-   is_ma_positive = LLVMBuildFCmp(builder, LLVMRealUGE, selcoords->ma, LLVMConstReal(f32, 0.0), "");
-   sgn_ma = LLVMBuildSelect(builder, is_ma_positive, LLVMConstReal(f32, 1.0),
-                            LLVMConstReal(f32, -1.0), "");
-
-   is_ma_z = LLVMBuildFCmp(builder, LLVMRealUGE, selcoords->id, LLVMConstReal(f32, 4.0), "");
-   is_not_ma_z = LLVMBuildNot(builder, is_ma_z, "");
-   is_ma_y = LLVMBuildAnd(
-      builder, is_not_ma_z,
-      LLVMBuildFCmp(builder, LLVMRealUGE, selcoords->id, LLVMConstReal(f32, 2.0), ""), "");
-   is_ma_x = LLVMBuildAnd(builder, is_not_ma_z, LLVMBuildNot(builder, is_ma_y, ""), "");
-
-   /* Select sc */
-   tmp = LLVMBuildSelect(builder, is_ma_x, coords[2], coords[0], "");
-   sgn = LLVMBuildSelect(
-      builder, is_ma_y, LLVMConstReal(f32, 1.0),
-      LLVMBuildSelect(builder, is_ma_z, sgn_ma, LLVMBuildFNeg(builder, sgn_ma, ""), ""), "");
-   out_st[0] = LLVMBuildFMul(builder, tmp, sgn, "");
-
-   /* Select tc */
-   tmp = LLVMBuildSelect(builder, is_ma_y, coords[2], coords[1], "");
-   sgn = LLVMBuildSelect(builder, is_ma_y, sgn_ma, LLVMConstReal(f32, -1.0), "");
-   out_st[1] = LLVMBuildFMul(builder, tmp, sgn, "");
-
-   /* Select ma */
-   tmp = LLVMBuildSelect(builder, is_ma_z, coords[2],
-                         LLVMBuildSelect(builder, is_ma_y, coords[1], coords[0], ""), "");
-   tmp = ac_build_intrinsic(ctx, "llvm.fabs.f32", ctx->f32, &tmp, 1, 0);
-   *out_ma = LLVMBuildFMul(builder, tmp, LLVMConstReal(f32, 2.0), "");
-}
-
-void ac_prepare_cube_coords(struct ac_llvm_context *ctx, bool is_deriv, bool is_array, bool is_lod,
-                            LLVMValueRef *coords_arg, LLVMValueRef *derivs_arg)
-{
-
-   LLVMBuilderRef builder = ctx->builder;
-   struct cube_selection_coords selcoords;
-   LLVMValueRef coords[3];
-   LLVMValueRef invma;
-
-   if (is_array && !is_lod) {
-      LLVMValueRef tmp = ac_build_round(ctx, coords_arg[3]);
-
-      /* Section 8.9 (Texture Functions) of the GLSL 4.50 spec says:
-       *
-       *    "For Array forms, the array layer used will be
-       *
-       *       max(0, min(d−1, floor(layer+0.5)))
-       *
-       *     where d is the depth of the texture array and layer
-       *     comes from the component indicated in the tables below.
-       *     Workaroudn for an issue where the layer is taken from a
-       *     helper invocation which happens to fall on a different
-       *     layer due to extrapolation."
-       *
-       * GFX8 and earlier attempt to implement this in hardware by
-       * clamping the value of coords[2] = (8 * layer) + face.
-       * Unfortunately, this means that the we end up with the wrong
-       * face when clamping occurs.
-       *
-       * Clamp the layer earlier to work around the issue.
-       */
-      if (ctx->gfx_level <= GFX8) {
-         LLVMValueRef ge0;
-         ge0 = LLVMBuildFCmp(builder, LLVMRealOGE, tmp, ctx->f32_0, "");
-         tmp = LLVMBuildSelect(builder, ge0, tmp, ctx->f32_0, "");
-      }
-
-      coords_arg[3] = tmp;
-   }
-
-   build_cube_intrinsic(ctx, coords_arg, &selcoords);
-
-   invma =
-      ac_build_intrinsic(ctx, "llvm.fabs.f32", ctx->f32, &selcoords.ma, 1, 0);
-   invma = ac_build_fdiv(ctx, LLVMConstReal(ctx->f32, 1.0), invma);
-
-   for (int i = 0; i < 2; ++i)
-      coords[i] = LLVMBuildFMul(builder, selcoords.stc[i], invma, "");
-
-   coords[2] = selcoords.id;
-
-   if (is_deriv && derivs_arg) {
-      LLVMValueRef derivs[4];
-      int axis;
-
-      /* Convert cube derivatives to 2D derivatives. */
-      for (axis = 0; axis < 2; axis++) {
-         LLVMValueRef deriv_st[2];
-         LLVMValueRef deriv_ma;
-
-         /* Transform the derivative alongside the texture
-          * coordinate. Mathematically, the correct formula is
-          * as follows. Assume we're projecting onto the +Z face
-          * and denote by dx/dh the derivative of the (original)
-          * X texture coordinate with respect to horizontal
-          * window coordinates. The projection onto the +Z face
-          * plane is:
-          *
-          *   f(x,z) = x/z
-          *
-          * Then df/dh = df/dx * dx/dh + df/dz * dz/dh
-          *            = 1/z * dx/dh - x/z * 1/z * dz/dh.
-          *
-          * This motivatives the implementation below.
-          *
-          * Whether this actually gives the expected results for
-          * apps that might feed in derivatives obtained via
-          * finite differences is anyone's guess. The OpenGL spec
-          * seems awfully quiet about how textureGrad for cube
-          * maps should be handled.
-          */
-         build_cube_select(ctx, &selcoords, &derivs_arg[axis * 3], deriv_st, &deriv_ma);
-
-         deriv_ma = LLVMBuildFMul(builder, deriv_ma, invma, "");
-
-         for (int i = 0; i < 2; ++i)
-            derivs[axis * 2 + i] =
-               LLVMBuildFSub(builder, LLVMBuildFMul(builder, deriv_st[i], invma, ""),
-                             LLVMBuildFMul(builder, deriv_ma, coords[i], ""), "");
-      }
-
-      memcpy(derivs_arg, derivs, sizeof(derivs));
-   }
-
-   /* Shift the texture coordinate. This must be applied after the
-    * derivative calculation.
-    */
-   for (int i = 0; i < 2; ++i)
-      coords[i] = LLVMBuildFAdd(builder, coords[i], LLVMConstReal(ctx->f32, 1.5), "");
-
-   if (is_array) {
-      /* for cube arrays coord.z = coord.w(array_index) * 8 + face */
-      /* coords_arg.w component - array_index for cube arrays */
-      coords[2] = ac_build_fmad(ctx, coords_arg[3], LLVMConstReal(ctx->f32, 8.0), coords[2]);
-   }
-
-   memcpy(coords_arg, coords, sizeof(coords));
 }
 
 LLVMValueRef ac_build_fs_interp(struct ac_llvm_context *ctx, LLVMValueRef llvm_chan,
@@ -1221,23 +1008,15 @@ LLVMValueRef ac_build_load_to_sgpr_uint_wraparound(struct ac_llvm_context *ctx, 
    return ac_build_load_custom(ctx, ptr.t, ptr.v, index, true, true, false);
 }
 
-static unsigned get_load_cache_policy(struct ac_llvm_context *ctx, unsigned cache_policy)
+static unsigned get_cache_flags(struct ac_llvm_context *ctx, enum gl_access_qualifier access)
 {
-   return cache_policy |
-          (ctx->gfx_level >= GFX10 && ctx->gfx_level < GFX11 && cache_policy & ac_glc ? ac_dlc : 0);
-}
-
-static unsigned get_store_cache_policy(struct ac_llvm_context *ctx, unsigned cache_policy)
-{
-   if (ctx->gfx_level >= GFX11)
-      cache_policy &= ~ac_glc; /* GLC has no effect on stores */
-   return cache_policy;
+   return ac_get_hw_cache_flags(ctx->info, access).value;
 }
 
 static void ac_build_buffer_store_common(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
                                          LLVMValueRef data, LLVMValueRef vindex,
                                          LLVMValueRef voffset, LLVMValueRef soffset,
-                                         unsigned cache_policy, bool use_format)
+                                         enum gl_access_qualifier access, bool use_format)
 {
    LLVMValueRef args[6];
    int idx = 0;
@@ -1247,7 +1026,7 @@ static void ac_build_buffer_store_common(struct ac_llvm_context *ctx, LLVMValueR
       args[idx++] = vindex ? vindex : ctx->i32_0;
    args[idx++] = voffset ? voffset : ctx->i32_0;
    args[idx++] = soffset ? soffset : ctx->i32_0;
-   args[idx++] = LLVMConstInt(ctx->i32, get_store_cache_policy(ctx, cache_policy), 0);
+   args[idx++] = LLVMConstInt(ctx->i32, get_cache_flags(ctx, access | ACCESS_TYPE_STORE), 0);
    const char *indexing_kind = vindex ? "struct" : "raw";
    char name[256], type_name[8];
 
@@ -1264,15 +1043,15 @@ static void ac_build_buffer_store_common(struct ac_llvm_context *ctx, LLVMValueR
 }
 
 void ac_build_buffer_store_format(struct ac_llvm_context *ctx, LLVMValueRef rsrc, LLVMValueRef data,
-                                  LLVMValueRef vindex, LLVMValueRef voffset, unsigned cache_policy)
+                                  LLVMValueRef vindex, LLVMValueRef voffset, enum gl_access_qualifier access)
 {
-   ac_build_buffer_store_common(ctx, rsrc, data, vindex, voffset, NULL, cache_policy, true);
+   ac_build_buffer_store_common(ctx, rsrc, data, vindex, voffset, NULL, access, true);
 }
 
 /* buffer_store_dword(,x2,x3,x4) <- the suffix is selected by the type of vdata. */
 void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc, LLVMValueRef vdata,
                                  LLVMValueRef vindex, LLVMValueRef voffset, LLVMValueRef soffset,
-                                 unsigned cache_policy)
+                                 enum gl_access_qualifier access)
 {
    unsigned num_channels = ac_get_llvm_num_components(vdata);
 
@@ -1288,19 +1067,19 @@ void ac_build_buffer_store_dword(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
       voffset2 = LLVMBuildAdd(ctx->builder, voffset ? voffset : ctx->i32_0,
                               LLVMConstInt(ctx->i32, 8, 0), "");
 
-      ac_build_buffer_store_dword(ctx, rsrc, v01, vindex, voffset, soffset, cache_policy);
-      ac_build_buffer_store_dword(ctx, rsrc, v[2], vindex, voffset2, soffset, cache_policy);
+      ac_build_buffer_store_dword(ctx, rsrc, v01, vindex, voffset, soffset, access);
+      ac_build_buffer_store_dword(ctx, rsrc, v[2], vindex, voffset2, soffset, access);
       return;
    }
 
    ac_build_buffer_store_common(ctx, rsrc, ac_to_float(ctx, vdata), vindex, voffset, soffset,
-                                cache_policy, false);
+                                access, false);
 }
 
 static LLVMValueRef ac_build_buffer_load_common(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
                                                 LLVMValueRef vindex, LLVMValueRef voffset,
                                                 LLVMValueRef soffset, unsigned num_channels,
-                                                LLVMTypeRef channel_type, unsigned cache_policy,
+                                                LLVMTypeRef channel_type, enum gl_access_qualifier access,
                                                 bool can_speculate, bool use_format)
 {
    LLVMValueRef args[5];
@@ -1310,7 +1089,7 @@ static LLVMValueRef ac_build_buffer_load_common(struct ac_llvm_context *ctx, LLV
       args[idx++] = vindex;
    args[idx++] = voffset ? voffset : ctx->i32_0;
    args[idx++] = soffset ? soffset : ctx->i32_0;
-   args[idx++] = LLVMConstInt(ctx->i32, get_load_cache_policy(ctx, cache_policy), 0);
+   args[idx++] = LLVMConstInt(ctx->i32, get_cache_flags(ctx, access | ACCESS_TYPE_LOAD), 0);
    unsigned func =
       !ac_has_vec3_support(ctx->gfx_level, use_format) && num_channels == 3 ? 4 : num_channels;
    const char *indexing_kind = vindex ? "struct" : "raw";
@@ -1339,11 +1118,10 @@ static LLVMValueRef ac_build_buffer_load_common(struct ac_llvm_context *ctx, LLV
 
 LLVMValueRef ac_build_buffer_load(struct ac_llvm_context *ctx, LLVMValueRef rsrc, int num_channels,
                                   LLVMValueRef vindex, LLVMValueRef voffset, LLVMValueRef soffset,
-                                  LLVMTypeRef channel_type, unsigned cache_policy,
+                                  LLVMTypeRef channel_type, enum gl_access_qualifier access,
                                   bool can_speculate, bool allow_smem)
 {
-   if (allow_smem && !(cache_policy & ac_slc) &&
-       (!(cache_policy & ac_glc) || ctx->gfx_level >= GFX8)) {
+   if (allow_smem && (!(access & ACCESS_COHERENT) || ctx->gfx_level >= GFX8)) {
       assert(vindex == NULL);
 
       LLVMValueRef result[32];
@@ -1365,7 +1143,8 @@ LLVMValueRef ac_build_buffer_load(struct ac_llvm_context *ctx, LLVMValueRef rsrc
          LLVMValueRef args[3] = {
             rsrc,
             offset,
-            LLVMConstInt(ctx->i32, get_load_cache_policy(ctx, cache_policy), 0),
+            LLVMConstInt(ctx->i32, get_cache_flags(ctx, access | ACCESS_TYPE_LOAD |
+                                                        ACCESS_TYPE_SMEM), 0),
          };
          result[i] = ac_build_intrinsic(ctx, name, channel_type, args, 3, AC_ATTR_INVARIANT_LOAD);
       }
@@ -1386,7 +1165,7 @@ LLVMValueRef ac_build_buffer_load(struct ac_llvm_context *ctx, LLVMValueRef rsrc
                          LLVMConstInt(ctx->i32, i * ac_get_type_size(channel_type), 0), "");
       LLVMValueRef item =
          ac_build_buffer_load_common(ctx, rsrc, vindex, fetch_voffset, soffset, fetch_num_channels,
-                                     channel_type, cache_policy, can_speculate, false);
+                                     channel_type, access, can_speculate, false);
       result = ac_build_concat(ctx, result, item);
    }
 
@@ -1395,13 +1174,13 @@ LLVMValueRef ac_build_buffer_load(struct ac_llvm_context *ctx, LLVMValueRef rsrc
 
 LLVMValueRef ac_build_buffer_load_format(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
                                          LLVMValueRef vindex, LLVMValueRef voffset,
-                                         unsigned num_channels, unsigned cache_policy,
+                                         unsigned num_channels, enum gl_access_qualifier access,
                                          bool can_speculate, bool d16, bool tfe)
 {
    if (tfe) {
       assert(!d16);
 
-      cache_policy = get_load_cache_policy(ctx, cache_policy);
+      unsigned cache_flags = get_cache_flags(ctx, access | ACCESS_TYPE_LOAD);
 
       char code[256];
       /* The definition in the assembly and the one in the constraint string
@@ -1415,9 +1194,9 @@ LLVMValueRef ac_build_buffer_load_format(struct ac_llvm_context *ctx, LLVMValueR
                "v_mov_b32 v4, 0\n"
                "buffer_load_format_xyzw v[0:3], $1, $2, 0, idxen offen %s %s tfe %s\n"
                "s_waitcnt vmcnt(0)",
-               cache_policy & ac_glc ? "glc" : "",
-               cache_policy & ac_slc ? "slc" : "",
-               cache_policy & ac_dlc ? "dlc" : "");
+               cache_flags & ac_glc ? "glc" : "",
+               cache_flags & ac_slc ? "slc" : "",
+               cache_flags & ac_dlc ? "dlc" : "");
 
       LLVMTypeRef param_types[] = {ctx->v2i32, ctx->v4i32};
       LLVMTypeRef calltype = LLVMFunctionType(LLVMVectorType(ctx->f32, 5), param_types, 2, false);
@@ -1435,7 +1214,7 @@ LLVMValueRef ac_build_buffer_load_format(struct ac_llvm_context *ctx, LLVMValueR
    }
 
    return ac_build_buffer_load_common(ctx, rsrc, vindex, voffset, ctx->i32_0,
-                                      num_channels, d16 ? ctx->f16 : ctx->f32, cache_policy,
+                                      num_channels, d16 ? ctx->f16 : ctx->f32, access,
                                       can_speculate, true);
 }
 
@@ -1443,7 +1222,7 @@ static LLVMValueRef ac_build_tbuffer_load(struct ac_llvm_context *ctx, LLVMValue
                                           LLVMValueRef vindex, LLVMValueRef voffset,
                                           LLVMValueRef soffset, unsigned num_channels,
                                           unsigned tbuffer_format, LLVMTypeRef channel_type,
-                                          unsigned cache_policy, bool can_speculate)
+                                          enum gl_access_qualifier access, bool can_speculate)
 {
    LLVMValueRef args[6];
    int idx = 0;
@@ -1453,7 +1232,7 @@ static LLVMValueRef ac_build_tbuffer_load(struct ac_llvm_context *ctx, LLVMValue
    args[idx++] = voffset ? voffset : ctx->i32_0;
    args[idx++] = soffset ? soffset : ctx->i32_0;
    args[idx++] = LLVMConstInt(ctx->i32, tbuffer_format, 0);
-   args[idx++] = LLVMConstInt(ctx->i32, get_load_cache_policy(ctx, cache_policy), 0);
+   args[idx++] = LLVMConstInt(ctx->i32, get_cache_flags(ctx, access | ACCESS_TYPE_LOAD), 0);
    const char *indexing_kind = vindex ? "struct" : "raw";
    char name[256], type_name[8];
 
@@ -1474,7 +1253,7 @@ LLVMValueRef ac_build_safe_tbuffer_load(struct ac_llvm_context *ctx, LLVMValueRe
                                         unsigned align_offset,
                                         unsigned align_mul,
                                         unsigned num_channels,
-                                        unsigned cache_policy,
+                                        enum gl_access_qualifier access,
                                         bool can_speculate)
 {
    const unsigned max_channels = vtx_info->num_channels;
@@ -1503,7 +1282,7 @@ LLVMValueRef ac_build_safe_tbuffer_load(struct ac_llvm_context *ctx, LLVMValueRe
       LLVMValueRef item =
          ac_build_tbuffer_load(ctx, rsrc, vidx, fetch_voffset, soffset,
                                fetch_num_channels, fetch_format, channel_type,
-                               cache_policy, can_speculate);
+                               access, can_speculate);
       result = ac_build_concat(ctx, result, item);
    }
 
@@ -1513,35 +1292,35 @@ LLVMValueRef ac_build_safe_tbuffer_load(struct ac_llvm_context *ctx, LLVMValueRe
 
 LLVMValueRef ac_build_buffer_load_short(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
                                         LLVMValueRef voffset, LLVMValueRef soffset,
-                                        unsigned cache_policy)
+                                        enum gl_access_qualifier access)
 {
    return ac_build_buffer_load_common(ctx, rsrc, NULL, voffset, soffset, 1, ctx->i16,
-                                      cache_policy, false, false);
+                                      access, false, false);
 }
 
 LLVMValueRef ac_build_buffer_load_byte(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
                                        LLVMValueRef voffset, LLVMValueRef soffset,
-                                       unsigned cache_policy)
+                                       enum gl_access_qualifier access)
 {
-   return ac_build_buffer_load_common(ctx, rsrc, NULL, voffset, soffset, 1, ctx->i8, cache_policy,
+   return ac_build_buffer_load_common(ctx, rsrc, NULL, voffset, soffset, 1, ctx->i8, access,
                                       false, false);
 }
 
 void ac_build_buffer_store_short(struct ac_llvm_context *ctx, LLVMValueRef rsrc,
                                  LLVMValueRef vdata, LLVMValueRef voffset, LLVMValueRef soffset,
-                                 unsigned cache_policy)
+                                 enum gl_access_qualifier access)
 {
    vdata = LLVMBuildBitCast(ctx->builder, vdata, ctx->i16, "");
 
-   ac_build_buffer_store_common(ctx, rsrc, vdata, NULL, voffset, soffset, cache_policy, false);
+   ac_build_buffer_store_common(ctx, rsrc, vdata, NULL, voffset, soffset, access, false);
 }
 
 void ac_build_buffer_store_byte(struct ac_llvm_context *ctx, LLVMValueRef rsrc, LLVMValueRef vdata,
-                                LLVMValueRef voffset, LLVMValueRef soffset, unsigned cache_policy)
+                                LLVMValueRef voffset, LLVMValueRef soffset, enum gl_access_qualifier access)
 {
    vdata = LLVMBuildBitCast(ctx->builder, vdata, ctx->i8, "");
 
-   ac_build_buffer_store_common(ctx, rsrc, vdata, NULL, voffset, soffset, cache_policy, false);
+   ac_build_buffer_store_common(ctx, rsrc, vdata, NULL, voffset, soffset, access, false);
 }
 
 /**
@@ -1632,11 +1411,11 @@ LLVMValueRef ac_build_ddxy(struct ac_llvm_context *ctx, uint32_t mask, int idx, 
    return ac_build_intrinsic(ctx, name, result_type, &result, 1, 0);
 }
 
-void ac_build_sendmsg(struct ac_llvm_context *ctx, uint32_t msg, LLVMValueRef wave_id)
+void ac_build_sendmsg(struct ac_llvm_context *ctx, uint32_t imm, LLVMValueRef m0_content)
 {
    LLVMValueRef args[2];
-   args[0] = LLVMConstInt(ctx->i32, msg, false);
-   args[1] = wave_id;
+   args[0] = LLVMConstInt(ctx->i32, imm, false);
+   args[1] = m0_content;
    ac_build_intrinsic(ctx, "llvm.amdgcn.s.sendmsg", ctx->voidt, args, 2, 0);
 }
 
@@ -1972,7 +1751,7 @@ LLVMValueRef ac_build_image_opcode(struct ac_llvm_context *ctx, struct ac_image_
    if (atomic) {
       data_type = LLVMTypeOf(a->data[0]);
    } else if (a->opcode == ac_image_store || a->opcode == ac_image_store_mip) {
-      /* Image stores might have been shrinked using the format. */
+      /* Image stores might have been shrunk using the format. */
       data_type = LLVMTypeOf(a->data[0]);
       dmask = (1 << ac_get_llvm_num_components(a->data[0])) - 1;
    } else {
@@ -2025,7 +1804,11 @@ LLVMValueRef ac_build_image_opcode(struct ac_llvm_context *ctx, struct ac_image_
 
    args[num_args++] = a->tfe ? ctx->i32_1 : ctx->i32_0; /* texfailctrl */
    args[num_args++] = LLVMConstInt(
-      ctx->i32, load ? get_load_cache_policy(ctx, a->cache_policy) : a->cache_policy, false);
+      ctx->i32, get_cache_flags(ctx,
+                                a->access |
+                                (atomic ? ACCESS_TYPE_ATOMIC :
+                                 load ? ACCESS_TYPE_LOAD : ACCESS_TYPE_STORE)),
+      false);
 
    const char *name;
    const char *atomic_subop = "";
@@ -2766,22 +2549,6 @@ void ac_build_else(struct ac_llvm_context *ctx, int label_id)
    current_branch->next_block = endif_block;
 }
 
-/* Invoked after a branch is exited. */
-static void ac_branch_exited(struct ac_llvm_context *ctx)
-{
-   if (ctx->flow->depth == 0 && ctx->conditional_demote_seen) {
-      /* The previous conditional branch contained demote. Kill threads
-       * after all conditional blocks because amdgcn.wqm.vote doesn't
-       * return usable values inside the blocks.
-       *
-       * This is an optional optimization that only kills whole inactive quads.
-       */
-      LLVMValueRef cond = LLVMBuildLoad2(ctx->builder, ctx->i1, ctx->postponed_kill, "");
-      ac_build_kill_if_false(ctx, ac_build_wqm_vote(ctx, cond));
-      ctx->conditional_demote_seen = false;
-   }
-}
-
 void ac_build_endif(struct ac_llvm_context *ctx, int label_id)
 {
    struct ac_llvm_flow *current_branch = get_current_flow(ctx);
@@ -2793,7 +2560,6 @@ void ac_build_endif(struct ac_llvm_context *ctx, int label_id)
    set_basicblock_name(current_branch->next_block, "endif", label_id);
 
    ctx->flow->depth--;
-   ac_branch_exited(ctx);
 }
 
 void ac_build_endloop(struct ac_llvm_context *ctx, int label_id)
@@ -2807,7 +2573,6 @@ void ac_build_endloop(struct ac_llvm_context *ctx, int label_id)
    LLVMPositionBuilderAtEnd(ctx->builder, current_loop->next_block);
    set_basicblock_name(current_loop->next_block, "endloop", label_id);
    ctx->flow->depth--;
-   ac_branch_exited(ctx);
 }
 
 void ac_build_ifcc(struct ac_llvm_context *ctx, LLVMValueRef cond, int label_id)
@@ -3245,9 +3010,9 @@ static LLVMValueRef get_reduction_identity(struct ac_llvm_context *ctx, nir_op o
       switch (op) {
       case nir_op_ior:
       case nir_op_ixor:
-         return LLVMConstInt(ctx->i1, 0, 0);
+         return ctx->i1false;
       case nir_op_iand:
-         return LLVMConstInt(ctx->i1, 1, 0);
+         return ctx->i1true;
       default:
          unreachable("bad reduction intrinsic");
       }
@@ -3481,7 +3246,7 @@ static LLVMValueRef ac_wavefront_shift_right_1(struct ac_llvm_context *ctx, LLVM
    tmp2 = ac_build_readlane(ctx, src, LLVMConstInt(ctx->i32, 31, 0));
    active = LLVMBuildICmp(ctx->builder, LLVMIntEQ, tid, LLVMConstInt(ctx->i32, 32, 0), "");
    tmp1 = LLVMBuildSelect(ctx->builder, active, tmp2, tmp1, "");
-   active = LLVMBuildICmp(ctx->builder, LLVMIntEQ, tid, LLVMConstInt(ctx->i32, 0, 0), "");
+   active = LLVMBuildICmp(ctx->builder, LLVMIntEQ, tid, ctx->i32_0, "");
    return LLVMBuildSelect(ctx->builder, active, identity, tmp1, "");
 }
 
@@ -3869,30 +3634,9 @@ LLVMValueRef ac_build_ddxy_interp(struct ac_llvm_context *ctx, LLVMValueRef inte
 
 LLVMValueRef ac_build_load_helper_invocation(struct ac_llvm_context *ctx)
 {
-   LLVMValueRef result;
+   LLVMValueRef result = ac_build_intrinsic(ctx, "llvm.amdgcn.live.mask", ctx->i1, NULL, 0, 0);
 
-   if (LLVM_VERSION_MAJOR >= 13) {
-      result = ac_build_intrinsic(ctx, "llvm.amdgcn.live.mask", ctx->i1, NULL, 0, 0);
-   } else {
-      result = ac_build_intrinsic(ctx, "llvm.amdgcn.ps.live", ctx->i1, NULL, 0, 0);
-   }
    return LLVMBuildNot(ctx->builder, result, "");
-}
-
-LLVMValueRef ac_build_is_helper_invocation(struct ac_llvm_context *ctx)
-{
-   if (!ctx->postponed_kill)
-      return ac_build_load_helper_invocation(ctx);
-
-   /* postponed_kill should be NULL on LLVM 13+ */
-   assert(LLVM_VERSION_MAJOR < 13);
-
-   /* !(exact && postponed) */
-   LLVMValueRef exact =
-      ac_build_intrinsic(ctx, "llvm.amdgcn.ps.live", ctx->i1, NULL, 0, 0);
-
-   LLVMValueRef postponed = LLVMBuildLoad2(ctx->builder, ctx->i1, ctx->postponed_kill, "");
-   return LLVMBuildNot(ctx->builder, LLVMBuildAnd(ctx->builder, exact, postponed, ""), "");
 }
 
 LLVMValueRef ac_build_call(struct ac_llvm_context *ctx, LLVMTypeRef fn_type, LLVMValueRef func, LLVMValueRef *args,
@@ -3966,26 +3710,13 @@ void ac_export_mrt_z(struct ac_llvm_context *ctx, LLVMValueRef depth, LLVMValueR
 
    /* GFX6 (except OLAND and HAINAN) has a bug that it only looks
     * at the X writemask component. */
-   if (ctx->gfx_level == GFX6 && ctx->family != CHIP_OLAND && ctx->family != CHIP_HAINAN)
+   if (ctx->gfx_level == GFX6 &&
+       ctx->info->family != CHIP_OLAND &&
+       ctx->info->family != CHIP_HAINAN)
       mask |= 0x1;
 
    /* Specify which components to enable */
    args->enabled_channels = mask;
-}
-
-LLVMValueRef ac_pack_edgeflags_for_export(struct ac_llvm_context *ctx,
-                                          const struct ac_shader_args *args)
-{
-   /* Use the following trick to extract the edge flags:
-    *   extracted = v_and_b32 gs_invocation_id, 0x700 ; get edge flags at bits 8, 9, 10
-    *   shifted = v_mul_u32_u24 extracted, 0x80402u   ; shift the bits: 8->9, 9->19, 10->29
-    *   result = v_and_b32 shifted, 0x20080200        ; remove garbage
-    */
-   LLVMValueRef tmp = LLVMBuildAnd(ctx->builder,
-                                   ac_get_arg(ctx, args->gs_invocation_id),
-                                   LLVMConstInt(ctx->i32, 0x700, 0), "");
-   tmp = LLVMBuildMul(ctx->builder, tmp, LLVMConstInt(ctx->i32, 0x80402u, 0), "");
-   return LLVMBuildAnd(ctx->builder, tmp, LLVMConstInt(ctx->i32, 0x20080200, 0), "");
 }
 
 static LLVMTypeRef arg_llvm_type(enum ac_arg_type type, unsigned size, struct ac_llvm_context *ctx)
@@ -4087,7 +3818,7 @@ struct ac_llvm_pointer ac_build_main(const struct ac_shader_args *args, struct a
    LLVMAddTargetDependentFunctionAttr(main_function, "denormal-fp-math-f32",
                                       "preserve-sign,preserve-sign");
 
-   if (LLVM_VERSION_MAJOR >= 15 && convention == AC_LLVM_AMDGPU_PS) {
+   if (convention == AC_LLVM_AMDGPU_PS) {
       LLVMAddTargetDependentFunctionAttr(main_function, "amdgpu-depth-export",
                                          ctx->exports_mrtz ? "1" : "0");
       LLVMAddTargetDependentFunctionAttr(main_function, "amdgpu-color-export",

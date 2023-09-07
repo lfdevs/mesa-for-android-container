@@ -692,7 +692,7 @@ def is_format_hand_written(format):
 
 def generate(formats):
     print()
-    print('#include "pipe/p_compiler.h"')
+    print('#include "util/compiler.h"')
     print('#include "util/u_math.h"')
     print('#include "util/half_float.h"')
     print('#include "u_format.h"')

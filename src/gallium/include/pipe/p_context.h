@@ -28,7 +28,7 @@
 #ifndef PIPE_CONTEXT_H
 #define PIPE_CONTEXT_H
 
-#include "p_compiler.h"
+#include "util/compiler.h"
 #include "util/format/u_formats.h"
 #include "p_video_enums.h"
 #include "p_defines.h"
@@ -408,6 +408,15 @@ struct pipe_context {
    void   (*bind_vertex_elements_state)(struct pipe_context *, void *);
    void   (*delete_vertex_elements_state)(struct pipe_context *, void *);
 
+   void * (*create_ts_state)(struct pipe_context *,
+                             const struct pipe_shader_state *);
+   void   (*bind_ts_state)(struct pipe_context *, void *);
+   void   (*delete_ts_state)(struct pipe_context *, void *);
+
+   void * (*create_ms_state)(struct pipe_context *,
+                             const struct pipe_shader_state *);
+   void   (*bind_ms_state)(struct pipe_context *, void *);
+   void   (*delete_ms_state)(struct pipe_context *, void *);
    /*@}*/
 
    /**
@@ -884,7 +893,7 @@ struct pipe_context {
                            const struct pipe_box *,
                            const void *data,
                            unsigned stride,
-                           unsigned layer_stride);
+                           uintptr_t layer_stride);
 
    /**
     * Flush any pending framebuffer writes and invalidate texture caches.
@@ -936,6 +945,9 @@ struct pipe_context {
 
    void (*get_compute_state_info)(struct pipe_context *, void *,
                                   struct pipe_compute_state_object_info *);
+
+   uint32_t (*get_compute_state_subgroup_size)(struct pipe_context *, void *,
+                                               const uint32_t block[3]);
 
    /**
     * Bind an array of shader resources that will be used by the
@@ -995,6 +1007,9 @@ struct pipe_context {
     */
    void (*launch_grid)(struct pipe_context *context,
                        const struct pipe_grid_info *info);
+
+   void (*draw_mesh_tasks)(struct pipe_context *context,
+                           const struct pipe_grid_info *info);
    /*@}*/
 
    /**
@@ -1006,11 +1021,12 @@ struct pipe_context {
     *
     * \param to_device - true if the virtual memory is migrated to the device
     *                    false if the virtual memory is migrated to the host
-    * \param migrate_content - whether the content should be migrated as well
+    * \param content_undefined - whether the content of the migrated memory
+    *                            is undefined after migration
     */
    void (*svm_migrate)(struct pipe_context *context, unsigned num_ptrs,
                        const void* const* ptrs, const size_t *sizes,
-                       bool to_device, bool migrate_content);
+                       bool to_device, bool content_undefined);
    /*@}*/
 
    /**

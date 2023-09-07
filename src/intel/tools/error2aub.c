@@ -285,7 +285,7 @@ main(int argc, char *argv[])
          uint32_t ring_buffer_head;
          uint32_t ring_buffer_tail;
       } instances[3];
-   } engines[INTEL_ENGINE_CLASS_VIDEO_ENHANCE + 1];
+   } engines[INTEL_ENGINE_CLASS_INVALID + 1];
    memset(engines, 0, sizeof(engines));
 
    int num_ring_bos = 0;

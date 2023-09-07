@@ -119,7 +119,7 @@ tgsi_default_declaration( void )
 
 static struct tgsi_declaration
 tgsi_build_declaration(
-   unsigned file,
+   enum tgsi_file_type file,
    unsigned usage_mask,
    unsigned interpolate,
    unsigned dimension,
@@ -809,7 +809,9 @@ tgsi_default_texture_offset( void )
 
 static struct tgsi_texture_offset
 tgsi_build_texture_offset(
-   int index, int file, int swizzle_x, int swizzle_y, int swizzle_z,
+   int index,
+   enum tgsi_file_type file,
+   int swizzle_x, int swizzle_y, int swizzle_z,
    struct tgsi_instruction *instruction,
    struct tgsi_header *header )
 {
@@ -848,7 +850,7 @@ tgsi_default_src_register( void )
 
 static struct tgsi_src_register
 tgsi_build_src_register(
-   unsigned file,
+   enum tgsi_file_type file,
    unsigned swizzle_x,
    unsigned swizzle_y,
    unsigned swizzle_z,
@@ -902,7 +904,7 @@ tgsi_default_ind_register( void )
 
 static struct tgsi_ind_register
 tgsi_build_ind_register(
-   unsigned file,
+   enum tgsi_file_type file,
    unsigned swizzle,
    int index,
    unsigned arrayid,
@@ -987,7 +989,7 @@ tgsi_default_dst_register( void )
 
 static struct tgsi_dst_register
 tgsi_build_dst_register(
-   unsigned file,
+   enum tgsi_file_type file,
    unsigned mask,
    unsigned indirect,
    unsigned dimension,

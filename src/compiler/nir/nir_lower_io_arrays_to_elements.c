@@ -176,7 +176,7 @@ lower_array(nir_builder *b, nir_intrinsic_instr *intr, nir_variable *var,
 
    if (intr->intrinsic != nir_intrinsic_store_deref) {
       nir_ssa_dest_init(&element_intr->instr, &element_intr->dest,
-                        intr->num_components, intr->dest.ssa.bit_size, NULL);
+                        intr->num_components, intr->dest.ssa.bit_size);
 
       if (intr->intrinsic == nir_intrinsic_interp_deref_at_offset ||
           intr->intrinsic == nir_intrinsic_interp_deref_at_sample ||
@@ -228,45 +228,42 @@ static void
 create_indirects_mask(nir_shader *shader,
                       BITSET_WORD *indirects, nir_variable_mode mode)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
 
-               if (instr->type != nir_instr_type_intrinsic)
-                  continue;
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
 
-               nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
-               if (intr->intrinsic != nir_intrinsic_load_deref &&
-                   intr->intrinsic != nir_intrinsic_store_deref &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_centroid &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_sample &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_offset &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_vertex)
-                  continue;
+            if (intr->intrinsic != nir_intrinsic_load_deref &&
+                intr->intrinsic != nir_intrinsic_store_deref &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_centroid &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_sample &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_offset &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_vertex)
+               continue;
 
-               nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-               if (!nir_deref_mode_is(deref, mode))
-                  continue;
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            if (!nir_deref_mode_is(deref, mode))
+               continue;
 
-               nir_variable *var = nir_deref_instr_get_variable(deref);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
 
-               nir_deref_path path;
-               nir_deref_path_init(&path, deref, NULL);
+            nir_deref_path path;
+            nir_deref_path_init(&path, deref, NULL);
 
-               int loc = var->data.location * 4 + var->data.location_frac;
-               if (deref_has_indirect(&b, var, &path))
-                  BITSET_SET(indirects, loc);
+            int loc = var->data.location * 4 + var->data.location_frac;
+            if (deref_has_indirect(&b, var, &path))
+               BITSET_SET(indirects, loc);
 
-               nir_deref_path_finish(&path);
-            }
+            nir_deref_path_finish(&path);
          }
       }
-   }
+}
 }
 
 static void
@@ -275,87 +272,84 @@ lower_io_arrays_to_elements(nir_shader *shader, nir_variable_mode mask,
                             struct hash_table *varyings,
                             bool after_cross_stage_opts)
 {
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder b = nir_builder_create(impl);
 
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               if (instr->type != nir_instr_type_intrinsic)
-                  continue;
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
 
-               nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
-               if (intr->intrinsic != nir_intrinsic_load_deref &&
-                   intr->intrinsic != nir_intrinsic_store_deref &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_centroid &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_sample &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_offset &&
-                   intr->intrinsic != nir_intrinsic_interp_deref_at_vertex)
-                  continue;
+            if (intr->intrinsic != nir_intrinsic_load_deref &&
+                intr->intrinsic != nir_intrinsic_store_deref &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_centroid &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_sample &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_offset &&
+                intr->intrinsic != nir_intrinsic_interp_deref_at_vertex)
+               continue;
 
-               nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-               if (!nir_deref_mode_is_one_of(deref, mask))
-                  continue;
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            if (!nir_deref_mode_is_one_of(deref, mask))
+               continue;
 
-               nir_variable *var = nir_deref_instr_get_variable(deref);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
 
-               /* Drivers assume compact arrays are, in fact, arrays. */
-               if (var->data.compact)
-                  continue;
+            /* Drivers assume compact arrays are, in fact, arrays. */
+            if (var->data.compact)
+               continue;
 
-               /* Per-view variables are expected to remain arrays. */
-               if (var->data.per_view)
-                  continue;
+            /* Per-view variables are expected to remain arrays. */
+            if (var->data.per_view)
+               continue;
 
-               /* Skip indirects */
-               int loc = var->data.location * 4 + var->data.location_frac;
-               if (BITSET_TEST(indirects, loc))
-                  continue;
+            /* Skip indirects */
+            int loc = var->data.location * 4 + var->data.location_frac;
+            if (BITSET_TEST(indirects, loc))
+               continue;
 
-               nir_variable_mode mode = var->data.mode;
+            nir_variable_mode mode = var->data.mode;
 
-               const struct glsl_type *type = var->type;
-               if (nir_is_arrayed_io(var, b.shader->info.stage)) {
-                  assert(glsl_type_is_array(type));
-                  type = glsl_get_array_element(type);
-               }
+            const struct glsl_type *type = var->type;
+            if (nir_is_arrayed_io(var, b.shader->info.stage)) {
+               assert(glsl_type_is_array(type));
+               type = glsl_get_array_element(type);
+            }
 
-               /* Skip types we cannot split.
-                *
-                * TODO: Add support for struct splitting.
-                */
-               if ((!glsl_type_is_array(type) && !glsl_type_is_matrix(type))||
-                   glsl_type_is_struct_or_ifc(glsl_without_array(type)))
-                  continue;
+            /* Skip types we cannot split.
+             *
+             * TODO: Add support for struct splitting.
+             */
+            if ((!glsl_type_is_array(type) && !glsl_type_is_matrix(type))||
+                glsl_type_is_struct_or_ifc(glsl_without_array(type)))
+               continue;
 
-               /* Skip builtins */
-               if (!after_cross_stage_opts &&
-                   var->data.location < VARYING_SLOT_VAR0 &&
-                   var->data.location >= 0)
-                  continue;
+            /* Skip builtins */
+            if (!after_cross_stage_opts &&
+                var->data.location < VARYING_SLOT_VAR0 &&
+                var->data.location >= 0)
+               continue;
 
-               /* Don't bother splitting if we can't opt away any unused
-                * elements.
-                */
-               if (!after_cross_stage_opts && var->data.always_active_io)
-                  continue;
+            /* Don't bother splitting if we can't opt away any unused
+             * elements.
+             */
+            if (!after_cross_stage_opts && var->data.always_active_io)
+               continue;
 
-               switch (intr->intrinsic) {
-               case nir_intrinsic_interp_deref_at_centroid:
-               case nir_intrinsic_interp_deref_at_sample:
-               case nir_intrinsic_interp_deref_at_offset:
-               case nir_intrinsic_interp_deref_at_vertex:
-               case nir_intrinsic_load_deref:
-               case nir_intrinsic_store_deref:
-                  if ((mask & nir_var_shader_in && mode == nir_var_shader_in) ||
-                      (mask & nir_var_shader_out && mode == nir_var_shader_out))
-                     lower_array(&b, intr, var, varyings);
-                  break;
-               default:
-                  break;
-               }
+            switch (intr->intrinsic) {
+            case nir_intrinsic_interp_deref_at_centroid:
+            case nir_intrinsic_interp_deref_at_sample:
+            case nir_intrinsic_interp_deref_at_offset:
+            case nir_intrinsic_interp_deref_at_vertex:
+            case nir_intrinsic_load_deref:
+            case nir_intrinsic_store_deref:
+               if ((mask & nir_var_shader_in && mode == nir_var_shader_in) ||
+                   (mask & nir_var_shader_out && mode == nir_var_shader_out))
+                  lower_array(&b, intr, var, varyings);
+               break;
+            default:
+               break;
             }
          }
       }

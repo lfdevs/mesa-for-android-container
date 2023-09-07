@@ -1010,7 +1010,7 @@ gl_nir_lower_packed_varyings(const struct gl_constants *consts,
       assert(f->impl == impl);
    }
 
-   nir_builder_init(&state.b, impl);
+   state.b = nir_builder_create(impl);
    state.consts = consts;
    state.prog = prog;
    state.mem_ctx = mem_ctx;

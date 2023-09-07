@@ -2043,7 +2043,6 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->data.depth_layout = ir_depth_layout_none;
    this->data.used = false;
    this->data.assigned = false;
-   this->data.always_active_io = false;
    this->data.read_only = false;
    this->data.centroid = false;
    this->data.sample = false;

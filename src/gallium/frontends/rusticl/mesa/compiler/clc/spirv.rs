@@ -7,6 +7,7 @@ use mesa_rust_util::serialize::*;
 use mesa_rust_util::string::*;
 
 use std::ffi::CString;
+use std::fmt::Debug;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::ptr;
@@ -37,22 +38,38 @@ pub struct CLCHeader<'a> {
     pub source: &'a CString,
 }
 
+impl<'a> Debug for CLCHeader<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self.name.to_string_lossy();
+        let source = self.source.to_string_lossy();
+
+        f.write_fmt(format_args!("[{name}]:\n{source}"))
+    }
+}
+
 unsafe fn callback_impl(data: *mut c_void, msg: *const c_char) {
-    let msgs = (data as *mut Vec<String>).as_mut().expect("");
+    let data = data as *mut Vec<String>;
+    let msgs = unsafe { data.as_mut() }.unwrap();
     msgs.push(c_string_to_string(msg));
 }
 
 unsafe extern "C" fn spirv_msg_callback(data: *mut c_void, msg: *const c_char) {
-    callback_impl(data, msg);
+    unsafe {
+        callback_impl(data, msg);
+    }
 }
 
 unsafe extern "C" fn spirv_to_nir_msg_callback(
     data: *mut c_void,
-    _dbg_level: mesa_rust_gen::nir_spirv_debug_level,
+    dbg_level: nir_spirv_debug_level,
     _offset: usize,
     msg: *const c_char,
 ) {
-    callback_impl(data, msg);
+    if dbg_level >= nir_spirv_debug_level::NIR_SPIRV_DEBUG_LEVEL_WARNING {
+        unsafe {
+            callback_impl(data, msg);
+        }
+    }
 }
 
 fn create_clc_logger(msgs: &mut Vec<String>) -> clc_logger {
@@ -70,10 +87,14 @@ impl SPIRVBin {
         headers: &[CLCHeader],
         cache: &Option<DiskCache>,
         features: clc_optional_features,
+        spirv_extensions: &[CString],
         address_bits: u32,
     ) -> (Option<Self>, String) {
         let mut hash_key = None;
         let has_includes = args.iter().any(|a| a.as_bytes()[0..2] == *b"-I");
+
+        let mut spirv_extensions: Vec<_> = spirv_extensions.iter().map(|s| s.as_ptr()).collect();
+        spirv_extensions.push(ptr::null());
 
         if let Some(cache) = cache {
             if !has_includes {
@@ -86,6 +107,10 @@ impl SPIRVBin {
                     key.extend_from_slice(h.name.as_bytes());
                     key.extend_from_slice(h.source.as_bytes());
                 });
+
+                // Safety: clc_optional_features is a struct of bools and contains no padding.
+                // Sadly we can't guarentee this.
+                key.extend(unsafe { as_byte_slice(slice::from_ref(&features)) });
 
                 let mut key = cache.gen_key(&key);
                 if let Some(data) = cache.get(&mut key) {
@@ -117,7 +142,7 @@ impl SPIRVBin {
             num_args: c_args.len() as u32,
             spirv_version: clc_spirv_version::CLC_SPIRV_VERSION_MAX,
             features: features,
-            allowed_spirv_extensions: ptr::null(),
+            allowed_spirv_extensions: spirv_extensions.as_ptr(),
             address_bits: address_bits,
         };
         let mut msgs: Vec<String> = Vec::new();
@@ -188,10 +213,10 @@ impl SPIRVBin {
         (res, msgs.join("\n"))
     }
 
-    pub fn clone_on_validate(&self) -> (Option<Self>, String) {
+    pub fn clone_on_validate(&self, options: &clc_validator_options) -> (Option<Self>, String) {
         let mut msgs: Vec<String> = Vec::new();
         let logger = create_clc_logger(&mut msgs);
-        let res = unsafe { clc_validate_spirv(&self.spirv, &logger) };
+        let res = unsafe { clc_validate_spirv(&self.spirv, &logger, options) };
 
         (res.then(|| self.clone()), msgs.join("\n"))
     }
@@ -304,8 +329,10 @@ impl SPIRVBin {
 
             caps: spirv_supported_capabilities {
                 address: true,
+                float16: true,
                 float64: true,
                 generic_pointers: true,
+                groups: true,
                 int8: true,
                 int16: true,
                 int64: true,
@@ -363,7 +390,13 @@ impl SPIRVBin {
         let shader_cache = DiskCacheBorrowed::as_ptr(&screen.shader_cache());
 
         NirShader::new(unsafe {
-            nir_load_libclc_shader(address_bits, shader_cache, &spirv_options, nir_options)
+            nir_load_libclc_shader(
+                address_bits,
+                shader_cache,
+                &spirv_options,
+                nir_options,
+                true,
+            )
         })
     }
 

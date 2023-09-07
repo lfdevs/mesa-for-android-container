@@ -154,7 +154,7 @@ can unroll, that can actually count as constant indexing.
 
 * Increasing GPU memory Increase CMA pool size
 
-The memory for the VC4 driver is allocated from the standard Linux cma
+The memory for the VC4 driver is allocated from the standard Linux CMA
 pool. The size of this pool defaults to 64 MB.  To increase this, pass
 an additional parameter on the kernel command line.  Edit the boot
 partition's ``cmdline.txt`` to add::

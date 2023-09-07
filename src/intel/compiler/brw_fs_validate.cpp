@@ -192,6 +192,17 @@ fs_visitor::validate()
                            alloc.sizes[inst->src[i].nr]);
          }
       }
+
+      /* Accumulator Registers, bspec 47251:
+       *
+       * "When destination is accumulator with offset 0, destination
+       * horizontal stride must be 1."
+       */
+      if (intel_needs_workaround(devinfo, 14014617373) &&
+          inst->dst.is_accumulator() &&
+          inst->dst.offset == 0) {
+         fsv_assert_eq(inst->dst.stride, 1);
+      }
    }
 #endif
 }

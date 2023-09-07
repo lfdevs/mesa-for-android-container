@@ -22,3 +22,6 @@ spec@arb_fragment_program@no-newline
 glx@glx-destroycontext-1
 
 glx@glx-multithread-texture
+
+# does not happen very often, but rarely does
+KHR-GL46.limits.max_fragment_interpolation_offset

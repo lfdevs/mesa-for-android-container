@@ -105,7 +105,7 @@ create_tess_ctrl_shader_variant(struct d3d12_context *ctx, struct d3d12_tcs_vari
          out->data.driver_location = in->data.driver_location = var->driver_location;
 
          for (unsigned i = 0; i < key->vertices_out; i++) {
-            nir_if *start_block = nir_push_if(&b, nir_ieq(&b, invocation_id, nir_imm_int(&b, i)));
+            nir_if *start_block = nir_push_if(&b, nir_ieq_imm(&b, invocation_id, i));
             nir_deref_instr *in_array_var = nir_build_deref_array(&b, nir_build_deref_var(&b, in), invocation_id);
             nir_deref_instr *out_array_var = nir_build_deref_array_imm(&b, nir_build_deref_var(&b, out), i);
             copy_vars(&b, out_array_var, in_array_var);

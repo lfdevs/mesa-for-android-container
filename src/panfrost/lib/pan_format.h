@@ -36,6 +36,12 @@
 
 typedef uint32_t mali_pixel_format;
 
+/* pan bind flags */
+#define PAN_BIND_DEPTH_STENCIL (1 << 0)
+#define PAN_BIND_RENDER_TARGET (1 << 1)
+#define PAN_BIND_SAMPLER_VIEW  (1 << 3)
+#define PAN_BIND_VERTEX_BUFFER (1 << 4)
+
 struct panfrost_format {
    mali_pixel_format hw;
    unsigned bind;

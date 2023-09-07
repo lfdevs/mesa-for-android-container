@@ -342,11 +342,14 @@
     </field>
   </struct>
   <struct name="MEMORYADDRESSATTRIBUTES" length="1">
-    <field name="MOCS" start="1" end="6" type="uint" nonzero="true" />
+    <field name="MOCS" start="0" end="6" type="uint" nonzero="true" />
     <field name="Arbitration Priority Control" start="7" end="8" type="HEVC_ARBITRATION_PRIORITY" />
     <field name="Memory Compression Enable" start="9" end="9" type="bool" />
     <field name="Memory Compression Mode" start="10" end="10" type="uint" />
-    <field name="Row Store Scratch Buffer Cache Select" start="12" end="12" type="uint" />
+    <field name="Row Store Scratch Buffer Cache Select" start="12" end="12" type="uint">
+      <value name="LLC" value="0" />
+      <value name="Internal Media Storage" value="1" />
+    </field>
     <field name="Tiled Resource Mode" start="13" end="14" type="uint">
       <value name="TRMODE_NONE" value="0" />
       <value name="TRMODE_TILEYF" value="1" />
@@ -385,9 +388,9 @@
     </group>
   </struct>
   <struct name="HCP_WEIGHTOFFSET_CHROMA_ENTRY" length="1">
-    <field name="Delta Chroma Weight LX[0]" start="0" end="7" type="int" />
+    <field name="Delta Chroma Weight LX[0]" start="0" end="7" type="uint" />
     <field name="Chroma Offset LX[0]" start="8" end="15" type="uint" />
-    <field name="Delta Chroma Weight LX[1]" start="16" end="23" type="int" />
+    <field name="Delta Chroma Weight LX[1]" start="16" end="23" type="uint" />
     <field name="Chroma Offset LX[1]" start="24" end="31" type="uint" />
   </struct>
   <struct name="HCP_WEIGHTOFFSET_CHROMA_EXT_ENTRY" length="1">
@@ -397,7 +400,7 @@
     <field name="Chroma Offset LX[1] MSByte [i+1]" start="24" end="31" type="uint" />
   </struct>
   <struct name="HCP_WEIGHTOFFSET_LUMA_ENTRY" length="1">
-    <field name="Delta Luma Weight LX" start="0" end="7" type="int" />
+    <field name="Delta Luma Weight LX" start="0" end="7" type="uint" />
     <field name="Luma Offset LX" start="8" end="15" type="uint" />
     <field name="Luma Offset LX MSByte" start="24" end="31" type="uint" />
   </struct>
@@ -1092,7 +1095,7 @@
     <field name="Stream 3 Decl" start="48" end="63" type="SO_DECL" />
   </struct>
   <struct name="VDENC_SURFACE_CONTROL_BITS" length="1">
-    <field name="MOCS" start="1" end="6" type="uint" nonzero="true" />
+    <field name="MOCS" start="0" end="6" type="uint" nonzero="true" />
     <field name="Arbitration Priority Control" start="7" end="8" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -2936,7 +2939,7 @@
     <field name="Bottom Execution Mask" start="448" end="479" type="uint" />
   </instruction>
   <instruction name="HCP_BSD_OBJECT" bias="2" length="3" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="1" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="32" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -2970,8 +2973,8 @@
       <field name="Quantizer Matrix 8x8" start="0" end="7" type="uint" />
     </group>
   </instruction>
-  <instruction name="HCP_IND_OBJ_BASE_ADDR_STATE" bias="2" length="14" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+  <instruction name="HCP_IND_OBJ_BASE_ADDR_STATE" bias="2" length="29" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="27" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="3" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3042,8 +3045,8 @@
     <field name="SSE ClassID 32x32_3" start="140" end="143" type="uint" />
     <field name="LCU Force Zero Coeff" start="144" end="144" type="bool" />
   </instruction>
-  <instruction name="HCP_PIC_STATE" bias="2" length="31" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+  <instruction name="HCP_PIC_STATE" bias="2" length="38" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="36" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="16" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3208,8 +3211,8 @@
     <field name="Cr QP Offset List[5]" start="1081" end="1085" type="int" />
     <field name="RDOQ Intra TU Threshold" start="1184" end="1199" type="uint" />
   </instruction>
-  <instruction name="HCP_PIPE_BUF_ADDR_STATE" bias="2" length="104" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+  <instruction name="HCP_PIPE_BUF_ADDR_STATE" bias="2" length="121" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="119" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="2" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3242,8 +3245,8 @@
     <field name="Reference Picture - Memory Address Attributes" start="1696" end="1727" type="MEMORYADDRESSATTRIBUTES" />
     <field name="Original Uncompressed Picture Source - Address" start="1728" end="1791" type="address" />
     <field name="Original Uncompressed Picture Source - Memory Address Attributes" start="1792" end="1823" type="MEMORYADDRESSATTRIBUTES" />
-    <field name="SAO Row Store Buffer - Address" start="1824" end="1887" type="address" />
-    <field name="SAO Row Store Buffer - Memory Address Attributes" start="1888" end="1919" type="MEMORYADDRESSATTRIBUTES" />
+    <field name="Stream-Out Data Destination - Address" start="1824" end="1887" type="address" />
+    <field name="Stream-Out Data Destination - Memory Address Attributes" start="1888" end="1919" type="MEMORYADDRESSATTRIBUTES" />
     <field name="Decoded Picture Status Buffer - Address" start="1920" end="1983" type="address" />
     <field name="Decoded Picture Status Buffer - Memory Address Attributes" start="1984" end="2015" type="MEMORYADDRESSATTRIBUTES" />
     <field name="LCU ILDB Stream-Out Buffer - Address" start="2016" end="2079" type="address" />
@@ -3279,7 +3282,7 @@
     <field name="HCP Scalability CABAC Decoded Syntax Elements Buffer Max Address" start="3808" end="3871" type="address" />
   </instruction>
   <instruction name="HCP_PIPE_MODE_SELECT" bias="2" length="6" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="4" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="0" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3311,8 +3314,8 @@
     <field name="Media Soft-Reset Counter" start="64" end="95" type="uint" />
     <field name="Pic Status/Error Report ID" start="96" end="127" type="uint" />
   </instruction>
-  <instruction name="HCP_QM_STATE" bias="2" length="34" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+  <instruction name="HCP_QM_STATE" bias="2" length="18" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="16" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="4" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3359,7 +3362,7 @@
     </group>
   </instruction>
   <instruction name="HCP_REF_IDX_STATE" bias="2" length="18" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="16" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="18" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3370,8 +3373,8 @@
       <field name="Reference List Entry" start="0" end="31" type="HCP_REF_LIST_ENTRY" />
     </group>
   </instruction>
-  <instruction name="HCP_SLICE_STATE" bias="2" length="2" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+  <instruction name="HCP_SLICE_STATE" bias="2" length="11" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="9" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="20" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3485,8 +3488,8 @@
     <field name="Transform Skip Number of Zero Coeffs Factor1" start="336" end="343" type="uint" />
     <field name="Transform Skip Number of Non-Zero Coeffs Factor1" start="344" end="351" type="uint" />
   </instruction>
-  <instruction name="HCP_SURFACE_STATE" bias="2" length="3" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+  <instruction name="HCP_SURFACE_STATE" bias="2" length="4" engine="video">
+    <field name="DWord Length" start="0" end="11" type="uint" default="2" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="1" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3549,7 +3552,7 @@
     <field name="HCP Scalability Synchronize Buffer - Attributes" start="480" end="511" type="MEMORYADDRESSATTRIBUTES" />
   </instruction>
   <instruction name="HCP_TILE_STATE" bias="2" length="17" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="15" />
     <field name="Media Instruction Command" start="16" end="22" type="uint" default="17" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -3737,7 +3740,7 @@
     <field name="Segment LF Level Delta" start="240" end="246" type="int" />
   </instruction>
   <instruction name="HCP_WEIGHTOFFSET_STATE" bias="2" length="42" engine="video">
-    <field name="DWord Length" start="0" end="11" type="uint" />
+    <field name="DWord Length" start="0" end="11" type="uint" default="40" />
     <field name="SubOpcode" start="16" end="22" type="uint" default="19" />
     <field name="Media Command Opcode" start="23" end="26" type="uint" default="7" />
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
@@ -4738,7 +4741,7 @@
     <field name="Pipeline" start="27" end="28" type="uint" default="2" />
     <field name="Command Type" start="29" end="31" type="uint" default="3" />
     <field name="Pre Deblocking Source - Address" start="38" end="79" type="address" />
-    <field name="Pre Deblocking Source - MOCS" start="97" end="102" type="uint" nonzero="true" />
+    <field name="Pre Deblocking Source - MOCS" start="96" end="102" type="uint" nonzero="true" />
     <field name="Pre Deblocking Source - Arbitration Priority Control" start="103" end="104" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -4753,7 +4756,7 @@
       <value name="TRMODE_TILEYS" value="2" />
     </field>
     <field name="Deblocking Control - Address" start="134" end="175" type="address" />
-    <field name="Deblocking Control - MOCS" start="193" end="198" type="uint" nonzero="true" />
+    <field name="Deblocking Control - MOCS" start="192" end="198" type="uint" nonzero="true" />
     <field name="Deblocking Control - Arbitration Priority Control" start="199" end="200" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -4768,7 +4771,7 @@
       <value name="TRMODE_TILEYS" value="2" />
     </field>
     <field name="Deblocking Destination - Address High" start="230" end="271" type="address" />
-    <field name="Deblocking Destination - MOCS" start="289" end="294" type="uint" nonzero="true" />
+    <field name="Deblocking Destination - MOCS" start="288" end="294" type="uint" nonzero="true" />
     <field name="Deblocking Destination - Arbitration Priority Control" start="295" end="296" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -4783,7 +4786,7 @@
       <value name="TRMODE_TILEYS" value="2" />
     </field>
     <field name="Deblock Row Store - Address" start="326" end="367" type="address" />
-    <field name="CoeffProbability Stream-In - MOCS" start="385" end="390" type="uint" nonzero="true" />
+    <field name="CoeffProbability Stream-In - MOCS" start="384" end="390" type="uint" nonzero="true" />
     <field name="Deblock Row Store - Arbitration Priority Control" start="391" end="392" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -5447,7 +5450,7 @@
     <field name="Quantizer Value [3][Y2DC]" start="480" end="488" type="uint" />
     <field name="Quantizer Value [3][Y2AC]" start="496" end="504" type="uint" />
     <field name="CoeffProbability Stream-In - Address" start="518" end="559" type="uint" />
-    <field name="CoeffProbability Stream-In - MOCS (Encoder Only)" start="577" end="582" type="uint" nonzero="true" />
+    <field name="CoeffProbability Stream-In - MOCS (Encoder Only)" start="576" end="582" type="uint" nonzero="true" />
     <field name="CoeffProbability Stream-In - Arbitration Priority Control" start="583" end="584" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -5522,7 +5525,7 @@
     <field name="ModeLFDelta2" start="1104" end="1110" type="int" />
     <field name="ModeLFDelta3" start="1112" end="1118" type="int" />
     <field name="Segmentation ID Stream - Address" start="1120" end="1167" type="uint" />
-    <field name="CoeffProbability Stream-In - MOCS" start="1185" end="1190" type="uint" nonzero="true" />
+    <field name="CoeffProbability Stream-In - MOCS" start="1184" end="1190" type="uint" nonzero="true" />
     <field name="Segmentation ID Stream - Arbitration Priority Control" start="1191" end="1192" type="uint">
       <value name="Highest priority" value="0" />
       <value name="Second highest priority" value="1" />
@@ -6196,7 +6199,7 @@
     <field name="Scaling Factor Height" start="448" end="468" type="u4.17" />
     <field name="Scaling Factor Width" start="480" end="500" type="u4.17" />
     <field name="Output Frame - Address" start="556" end="591" type="uint" />
-    <field name="Output Frame - MOCS" start="609" end="614" type="uint" nonzero="true" />
+    <field name="Output Frame - MOCS" start="608" end="614" type="uint" nonzero="true" />
     <field name="Output Frame - Arbitration Priority Control" start="615" end="616" type="HEVC_ARBITRATION_PRIORITY" />
     <field name="Output Frame - Memory Compression Enable" start="617" end="617" type="bool" />
     <field name="Output Frame - Memory Compression Mode" start="618" end="618" type="uint" />
@@ -6207,7 +6210,7 @@
       <value name="TRMODE_TILEYS" value="2" />
     </field>
     <field name="AVS Line Buffer - Address" start="652" end="687" type="uint" />
-    <field name="AVS Line Buffer - MOCS" start="705" end="710" type="uint" nonzero="true" />
+    <field name="AVS Line Buffer - MOCS" start="704" end="710" type="uint" nonzero="true" />
     <field name="AVS Line Buffer - Arbitration Priority Control" start="711" end="712" type="HEVC_ARBITRATION_PRIORITY" />
     <field name="AVS Line Buffer - Memory Compression Enable" start="713" end="713" type="bool" />
     <field name="AVS Line Buffer - Memory Compression Mode" start="714" end="714" type="uint">
@@ -6222,7 +6225,7 @@
       <value name="TRMODE_TILEYS" value="2" />
     </field>
     <field name="IEF Line Buffer - Address" start="748" end="783" type="uint" />
-    <field name="IEF Line Buffer - MOCS" start="801" end="806" type="uint" nonzero="true" />
+    <field name="IEF Line Buffer - MOCS" start="800" end="806" type="uint" nonzero="true" />
     <field name="IEF Line Buffer - Arbitration Priority Control" start="807" end="808" type="HEVC_ARBITRATION_PRIORITY" />
     <field name="IEF Line Buffer - Memory Compression Enable" start="809" end="809" type="bool" />
     <field name="IEF Line Buffer - Memory Compression Mode" start="810" end="810" type="uint" />

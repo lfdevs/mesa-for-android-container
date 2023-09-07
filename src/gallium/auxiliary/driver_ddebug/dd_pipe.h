@@ -170,7 +170,7 @@ struct call_texture_subdata {
    struct pipe_box box;
    const void *data;
    unsigned stride;
-   unsigned layer_stride;
+   uintptr_t layer_stride;
 };
 
 struct dd_call

@@ -74,11 +74,6 @@
 
 #endif /* logging */
 
-#ifdef GLX_INDIRECT_RENDERING
-/* those link to libglapi.a should provide the entry points */
-#define _GLAPI_SKIP_PROTO_ENTRY_POINTS
-#endif
-
 /* Enable frame pointer elimination on Windows, otherwise forgetting to add
  * GLAPIENTRY to _mesa_* entrypoints will not cause crashes on debug builds, as
  * the initial ESP value is saved in the EBP in the function prologue, then

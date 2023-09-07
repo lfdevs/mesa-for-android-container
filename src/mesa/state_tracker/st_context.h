@@ -77,7 +77,7 @@ struct st_bitmap_cache
    GLboolean empty;
 
    /** An I8 texture image: */
-   ubyte *buffer;
+   uint8_t *buffer;
 };
 
 struct st_bound_handles
@@ -140,44 +140,43 @@ struct st_context
 
    GLboolean clamp_frag_color_in_shader;
    GLboolean clamp_vert_color_in_shader;
-   boolean has_stencil_export; /**< can do shader stencil export? */
-   boolean has_time_elapsed;
-   boolean has_etc1;
-   boolean has_etc2;
-   boolean transcode_etc;
-   boolean transcode_astc;
-   boolean has_astc_2d_ldr;
-   boolean has_astc_5x5_ldr;
-   boolean astc_void_extents_need_denorm_flush;
-   boolean has_s3tc;
-   boolean has_rgtc;
-   boolean has_latc;
-   boolean has_bptc;
-   boolean prefer_blit_based_texture_transfer;
-   boolean allow_compute_based_texture_transfer;
-   boolean force_compute_based_texture_transfer;
-   boolean force_specialized_compute_transfer;
-   boolean force_persample_in_shader;
-   boolean has_shareable_shaders;
-   boolean has_half_float_packing;
-   boolean has_multi_draw_indirect;
-   boolean has_indirect_partial_stride;
-   boolean has_occlusion_query;
-   boolean has_single_pipe_stat;
-   boolean has_pipeline_stat;
-   boolean has_indep_blend_enable;
-   boolean has_indep_blend_func;
-   boolean needs_rgb_dst_alpha_override;
-   boolean can_dither;
-   boolean can_bind_const_buffer_as_vertex;
-   boolean lower_flatshade;
-   boolean lower_alpha_test;
-   boolean lower_point_size;
-   boolean lower_two_sided_color;
-   boolean lower_ucp;
-   boolean prefer_real_buffer_in_constbuf0;
-   boolean has_conditional_render;
-   boolean lower_rect_tex;
+   bool has_stencil_export; /**< can do shader stencil export? */
+   bool has_time_elapsed;
+   bool has_etc1;
+   bool has_etc2;
+   bool transcode_etc;
+   bool transcode_astc;
+   bool has_astc_2d_ldr;
+   bool has_astc_5x5_ldr;
+   bool astc_void_extents_need_denorm_flush;
+   bool has_s3tc;
+   bool has_rgtc;
+   bool has_latc;
+   bool has_bptc;
+   bool prefer_blit_based_texture_transfer;
+   bool allow_compute_based_texture_transfer;
+   bool force_compute_based_texture_transfer;
+   bool force_specialized_compute_transfer;
+   bool force_persample_in_shader;
+   bool has_shareable_shaders;
+   bool has_half_float_packing;
+   bool has_multi_draw_indirect;
+   bool has_indirect_partial_stride;
+   bool has_occlusion_query;
+   bool has_single_pipe_stat;
+   bool has_pipeline_stat;
+   bool has_indep_blend_enable;
+   bool has_indep_blend_func;
+   bool can_dither;
+   bool can_bind_const_buffer_as_vertex;
+   bool lower_flatshade;
+   bool lower_alpha_test;
+   bool lower_point_size;
+   bool lower_two_sided_color;
+   bool lower_ucp;
+   bool prefer_real_buffer_in_constbuf0;
+   bool has_conditional_render;
+   bool lower_rect_tex;
 
    /* There are consequences for drivers wanting to call st_finalize_nir
     * twice, once before shader caching and once after lowering for shader
@@ -188,29 +187,29 @@ struct st_context
     * called before the result is stored in the shader cache. If lowering for
     * shader variants is invoked, the functions will be called again.
     */
-   boolean allow_st_finalize_nir_twice;
+   bool allow_st_finalize_nir_twice;
 
    /**
     * If a shader can be created when we get its source.
     * This means it has only 1 variant, not counting glBitmap and
     * glDrawPixels.
     */
-   boolean shader_has_one_variant[MESA_SHADER_STAGES];
+   bool shader_has_one_variant[MESA_SHADER_STAGES];
 
-   boolean needs_texcoord_semantic;
-   boolean apply_texture_swizzle_to_border_color;
-   boolean use_format_with_border_color;
-   boolean alpha_border_color_is_not_w;
-   boolean emulate_gl_clamp;
+   bool needs_texcoord_semantic;
+   bool apply_texture_swizzle_to_border_color;
+   bool use_format_with_border_color;
+   bool alpha_border_color_is_not_w;
+   bool emulate_gl_clamp;
 
-   boolean draw_needs_minmax_index;
-   boolean has_hw_atomics;
+   bool draw_needs_minmax_index;
+   bool has_hw_atomics;
 
-   boolean validate_all_dirty_states;
-   boolean can_null_texture;
+   bool validate_all_dirty_states;
+   bool can_null_texture;
 
    /* driver supports scissored clears */
-   boolean can_scissor_clear;
+   bool can_scissor_clear;
 
    /* Some state is contained in constant objects.
     * Other state is just parameter values.
@@ -237,7 +236,7 @@ struct st_context
       struct pipe_viewport_state viewport[PIPE_MAX_VIEWPORTS];
       struct {
          unsigned num;
-         boolean include;
+         bool include;
          struct pipe_scissor_state rects[PIPE_MAX_WINDOW_RECTANGLES];
       } window_rects;
 

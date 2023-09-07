@@ -27,6 +27,7 @@
 #ifndef SFN_SHADER_H
 #define SFN_SHADER_H
 
+#include "amd_family.h"
 #include "gallium/drivers/r600/r600_shader.h"
 #include "sfn_instr.h"
 #include "sfn_instr_controlflow.h"
@@ -144,7 +145,8 @@ public:
                                      const pipe_stream_output_info *so_info,
                                      r600_shader *gs_shader,
                                      r600_shader_key& key,
-                                     r600_chip_class chip_class);
+                                     r600_chip_class chip_class,
+                                     radeon_family family);
 
    bool process(nir_shader *nir);
 
@@ -192,6 +194,9 @@ public:
    r600_chip_class chip_class() const { return m_chip_class; }
    void set_chip_class(r600_chip_class cls) { m_chip_class = cls; }
 
+   radeon_family chip_family() const { return m_chip_family; }
+   void set_chip_family(radeon_family family) { m_chip_family = family; }
+
    void start_new_block(int nesting_depth);
 
    const ShaderOutput& output(int base) const;
@@ -222,6 +227,7 @@ public:
       sh_indirect_atomic,
       sh_mem_barrier,
       sh_legacy_math_rules,
+      sh_disble_sb,
       sh_flags_count
    };
 
@@ -286,6 +292,7 @@ private:
    bool allocate_arrays_from_string(std::istream& is);
 
    bool read_chipclass(std::istream& is);
+   bool read_family(std::istream& is);
 
    bool scan_shader(const nir_function *impl);
    bool scan_uniforms(nir_variable *uniform);
@@ -308,12 +315,14 @@ private:
    bool emit_control_flow(ControlFlowInstr::CFType type);
    bool emit_store_scratch(nir_intrinsic_instr *intr);
    bool emit_load_scratch(nir_intrinsic_instr *intr);
+   bool emit_load_global(nir_intrinsic_instr *intr);
    bool emit_local_store(nir_intrinsic_instr *intr);
    bool emit_local_load(nir_intrinsic_instr *instr);
    bool emit_load_tcs_param_base(nir_intrinsic_instr *instr, int offset);
-   bool emit_barrier(nir_intrinsic_instr *intr);
+   bool emit_group_barrier(nir_intrinsic_instr *intr);
    bool emit_shader_clock(nir_intrinsic_instr *instr);
    bool emit_wait_ack();
+   bool emit_scoped_barrier(nir_intrinsic_instr *instr);
 
    bool equal_to(const Shader& other) const;
    void finalize();
@@ -330,6 +339,7 @@ private:
    IOMap<ShaderOutput> m_outputs;
    IOMap<ShaderInput> m_inputs;
    r600_chip_class m_chip_class;
+   radeon_family m_chip_family{CHIP_CEDAR};
 
    int m_scratch_size;
    int m_next_block;
@@ -358,7 +368,6 @@ private:
 
    class InstructionChain : public InstrVisitor {
    public:
-      void visit(AluInstr *instr) override { (void)instr; }
       void visit(AluGroup *instr) override { (void)instr; }
       void visit(TexInstr *instr) override { (void)instr; }
       void visit(ExportInstr *instr) override { (void)instr; }
@@ -373,6 +382,7 @@ private:
       void visit(LDSAtomicInstr *instr) override { (void)instr; }
       void visit(LDSReadInstr *instr) override { (void)instr; }
 
+      void visit(AluInstr *instr) override;
       void visit(ScratchIOInstr *instr) override;
       void visit(GDSInstr *instr) override;
       void visit(RatInstr *instr) override;
@@ -383,11 +393,13 @@ private:
       Instr *last_scratch_instr{nullptr};
       Instr *last_gds_instr{nullptr};
       Instr *last_ssbo_instr{nullptr};
+      Instr *last_kill_instr{nullptr};
       bool prepare_mem_barrier{false};
    };
 
    InstructionChain m_chain_instr;
    std::list<Instr *, Allocator<Instr *>> m_loops;
+   int m_control_flow_depth{0};
 };
 
 std::pair<unsigned, unsigned>

@@ -1,25 +1,7 @@
 /*
  * Copyright 2013 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "si_build_pm4.h"
@@ -110,13 +92,8 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
        */
       sctx->flags |= SI_CONTEXT_INV_SCACHE | SI_CONTEXT_INV_VCACHE;
 
-      if (sctx->screen->use_ngg_streamout) {
-         if (sctx->gfx_level >= GFX11) {
-            sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
-         } else {
-            /* The BUFFER_FILLED_SIZE is written using a PS_DONE event. */
-            sctx->flags |= SI_CONTEXT_PS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
-         }
+      if (sctx->gfx_level >= GFX11) {
+         sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH | SI_CONTEXT_PFP_SYNC_ME;
 
          /* Wait now. This is needed to make sure that GDS is not
           * busy at the end of IBs.
@@ -167,7 +144,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
       /* Allocate space for the filled buffer size. */
       struct si_streamout_target *t = sctx->streamout.targets[i];
       if (!t->buf_filled_size) {
-         unsigned buf_filled_size_size = sctx->screen->use_ngg_streamout ? 8 : 4;
+         unsigned buf_filled_size_size = sctx->gfx_level >= GFX11 ? 8 : 4;
          u_suballocator_alloc(&sctx->allocator_zeroed_memory, buf_filled_size_size, 4,
                               &t->buf_filled_size_offset,
                               (struct pipe_resource **)&t->buf_filled_size);
@@ -199,7 +176,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx, unsigned num_targ
          struct pipe_shader_buffer sbuf;
          sbuf.buffer = targets[i]->buffer;
 
-         if (sctx->screen->use_ngg_streamout) {
+         if (sctx->gfx_level >= GFX11) {
             sbuf.buffer_offset = targets[i]->buffer_offset;
             sbuf.buffer_size = targets[i]->buffer_size;
          } else {
@@ -261,7 +238,7 @@ static void si_emit_streamout_begin(struct si_context *sctx)
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    struct si_streamout_target **t = sctx->streamout.targets;
 
-   if (!sctx->screen->use_ngg_streamout)
+   if (sctx->gfx_level < GFX11)
       si_flush_vgt_streamout(sctx);
 
    for (unsigned i = 0; i < sctx->streamout.num_targets; i++) {
@@ -283,27 +260,6 @@ static void si_emit_streamout_begin(struct si_context *sctx)
             radeon_set_uconfig_reg(R_031088_GDS_STRMOUT_DWORDS_WRITTEN_0 + i * 4, 0);
             radeon_end();
          }
-      } else if (sctx->screen->use_ngg_streamout) {
-         bool append = sctx->streamout.append_bitmask & (1 << i);
-         uint64_t va = 0;
-
-         if (append) {
-            radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, t[i]->buf_filled_size,
-                                      RADEON_USAGE_READ | RADEON_PRIO_SO_FILLED_SIZE);
-
-            va = t[i]->buf_filled_size->gpu_address + t[i]->buf_filled_size_offset;
-         }
-
-         radeon_begin(cs);
-         radeon_emit(PKT3(PKT3_DMA_DATA, 5, 0));
-         radeon_emit(S_411_SRC_SEL(append ? V_411_SRC_ADDR_TC_L2 : V_411_DATA) |
-                     S_411_DST_SEL(V_411_GDS) | S_411_CP_SYNC(1));
-         radeon_emit(va);
-         radeon_emit(va >> 32);
-         radeon_emit(4 * i); /* destination in GDS */
-         radeon_emit(0);
-         radeon_emit(S_415_BYTE_COUNT_GFX9(4));
-         radeon_end();
       } else {
          /* Legacy streamout.
           *
@@ -355,7 +311,7 @@ void si_emit_streamout_end(struct si_context *sctx)
       /* Wait for streamout to finish before reading GDS_STRMOUT registers. */
       sctx->flags |= SI_CONTEXT_VS_PARTIAL_FLUSH;
       sctx->emit_cache_flush(sctx, &sctx->gfx_cs);
-   } else if (!sctx->screen->use_ngg_streamout) {
+   } else {
       si_flush_vgt_streamout(sctx);
    }
 
@@ -371,11 +327,6 @@ void si_emit_streamout_end(struct si_context *sctx)
                          COPY_DATA_REG, NULL,
                          (R_031088_GDS_STRMOUT_DWORDS_WRITTEN_0 >> 2) + i);
          sctx->flags |= SI_CONTEXT_PFP_SYNC_ME;
-      } else if (sctx->screen->use_ngg_streamout) {
-         /* TODO: PS_DONE doesn't ensure completion of VS if there are no PS waves. */
-         si_cp_release_mem(sctx, &sctx->gfx_cs, V_028A90_PS_DONE, 0, EOP_DST_SEL_TC_L2,
-                           EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM, EOP_DATA_SEL_GDS,
-                           t[i]->buf_filled_size, va, EOP_DATA_GDS(i, 1), 0);
       } else {
          radeon_begin(cs);
          radeon_emit(PKT3(PKT3_STRMOUT_BUFFER_UPDATE, 4, 0));
@@ -412,7 +363,7 @@ void si_emit_streamout_end(struct si_context *sctx)
 
 static void si_emit_streamout_enable(struct si_context *sctx)
 {
-   assert(!sctx->screen->use_ngg_streamout);
+   assert(sctx->gfx_level < GFX11);
 
    radeon_begin(&sctx->gfx_cs);
    radeon_set_context_reg_seq(R_028B94_VGT_STRMOUT_CONFIG, 2);
@@ -436,7 +387,7 @@ static void si_set_streamout_enable(struct si_context *sctx, bool enable)
       sctx->streamout.enabled_mask | (sctx->streamout.enabled_mask << 4) |
       (sctx->streamout.enabled_mask << 8) | (sctx->streamout.enabled_mask << 12);
 
-   if (!sctx->screen->use_ngg_streamout &&
+   if (sctx->gfx_level < GFX11 &&
        ((old_strmout_en != si_get_strmout_en(sctx)) ||
         (old_hw_enabled_mask != sctx->streamout.hw_enabled_mask)))
       si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
@@ -444,7 +395,7 @@ static void si_set_streamout_enable(struct si_context *sctx, bool enable)
 
 void si_update_prims_generated_query_state(struct si_context *sctx, unsigned type, int diff)
 {
-   if (!sctx->screen->use_ngg_streamout && type == PIPE_QUERY_PRIMITIVES_GENERATED) {
+   if (sctx->gfx_level < GFX11 && type == PIPE_QUERY_PRIMITIVES_GENERATED) {
       bool old_strmout_en = si_get_strmout_en(sctx);
 
       sctx->streamout.num_prims_gen_queries += diff;
@@ -469,6 +420,6 @@ void si_init_streamout_functions(struct si_context *sctx)
    sctx->b.set_stream_output_targets = si_set_streamout_targets;
    sctx->atoms.s.streamout_begin.emit = si_emit_streamout_begin;
 
-   if (!sctx->screen->use_ngg_streamout)
+   if (sctx->gfx_level < GFX11)
       sctx->atoms.s.streamout_enable.emit = si_emit_streamout_enable;
 }

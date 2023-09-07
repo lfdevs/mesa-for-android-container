@@ -41,6 +41,7 @@
 #include "fd6_pack.h"
 
 /* maybe move to fd6_program? */
+template <chip CHIP>
 static void
 cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
                 struct ir3_shader_variant *v)
@@ -49,14 +50,16 @@ cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
    const struct ir3_info *i = &v->info;
    enum a6xx_threadsize thrsz = i->double_threadsize ? THREAD128 : THREAD64;
 
-   OUT_REG(ring, A6XX_HLSQ_INVALIDATE_CMD(.vs_state = true, .hs_state = true,
+   OUT_REG(ring, HLSQ_INVALIDATE_CMD(CHIP, .vs_state = true, .hs_state = true,
                                           .ds_state = true, .gs_state = true,
                                           .fs_state = true, .cs_state = true,
                                           .cs_ibo = true, .gfx_ibo = true, ));
 
-   OUT_PKT4(ring, REG_A6XX_HLSQ_CS_CNTL, 1);
-   OUT_RING(ring, A6XX_HLSQ_CS_CNTL_CONSTLEN(v->constlen) |
-                     A6XX_HLSQ_CS_CNTL_ENABLED);
+   OUT_REG(ring, HLSQ_CS_CNTL(
+         CHIP,
+         .constlen = v->constlen,
+         .enabled = true,
+   ));
 
    OUT_PKT4(ring, REG_A6XX_SP_CS_CONFIG, 1);
    OUT_RING(ring, A6XX_SP_CS_CONFIG_ENABLED |
@@ -103,6 +106,7 @@ cs_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
    fd6_emit_immediates(ctx->screen, v, ring);
 }
 
+template <chip CHIP>
 static void
 fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
 {
@@ -119,14 +123,15 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
          return;
 
       cs->stateobj = fd_ringbuffer_new_object(ctx->pipe, 0x1000);
-      cs_program_emit(ctx, cs->stateobj, cs->v);
+      cs_program_emit<CHIP>(ctx, cs->stateobj, cs->v);
 
       cs->user_consts_cmdstream_size = fd6_user_consts_cmdstream_size(cs->v);
    }
 
    trace_start_compute(&ctx->batch->trace, ring, !!info->indirect, info->work_dim,
                        info->block[0], info->block[1], info->block[2],
-                       info->grid[0],  info->grid[1],  info->grid[2]);
+                       info->grid[0],  info->grid[1],  info->grid[2],
+                       cs->v->shader_id);
 
    if (ctx->batch->barrier)
       fd6_barrier_flush(ctx->batch);
@@ -155,7 +160,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
    }
 
    if (ctx->gen_dirty)
-      fd6_emit_cs_state(ctx, ring, cs);
+      fd6_emit_cs_state<CHIP>(ctx, ring, cs);
 
    if (ctx->gen_dirty & BIT(FD6_GROUP_CONST))
       fd6_emit_cs_user_consts(ctx, ring, cs);
@@ -200,25 +205,37 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info) in_dt
    const unsigned *num_groups = info->grid;
    /* for some reason, mesa/st doesn't set info->work_dim, so just assume 3: */
    const unsigned work_dim = info->work_dim ? info->work_dim : 3;
-   OUT_PKT4(ring, REG_A6XX_HLSQ_CS_NDRANGE_0, 7);
-   OUT_RING(ring, A6XX_HLSQ_CS_NDRANGE_0_KERNELDIM(work_dim) |
-                  A6XX_HLSQ_CS_NDRANGE_0_LOCALSIZEX(local_size[0] - 1) |
-                  A6XX_HLSQ_CS_NDRANGE_0_LOCALSIZEY(local_size[1] - 1) |
-                  A6XX_HLSQ_CS_NDRANGE_0_LOCALSIZEZ(local_size[2] - 1));
-   OUT_RING(ring,
-            A6XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X(local_size[0] * num_groups[0]));
-   OUT_RING(ring, 0); /* HLSQ_CS_NDRANGE_2_GLOBALOFF_X */
-   OUT_RING(ring,
-            A6XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y(local_size[1] * num_groups[1]));
-   OUT_RING(ring, 0); /* HLSQ_CS_NDRANGE_4_GLOBALOFF_Y */
-   OUT_RING(ring,
-            A6XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z(local_size[2] * num_groups[2]));
-   OUT_RING(ring, 0); /* HLSQ_CS_NDRANGE_6_GLOBALOFF_Z */
 
-   OUT_PKT4(ring, REG_A6XX_HLSQ_CS_KERNEL_GROUP_X, 3);
-   OUT_RING(ring, 1); /* HLSQ_CS_KERNEL_GROUP_X */
-   OUT_RING(ring, 1); /* HLSQ_CS_KERNEL_GROUP_Y */
-   OUT_RING(ring, 1); /* HLSQ_CS_KERNEL_GROUP_Z */
+   OUT_REG(ring,
+           HLSQ_CS_NDRANGE_0(
+                 CHIP,
+                 .kerneldim = work_dim,
+                 .localsizex = local_size[0] - 1,
+                 .localsizey = local_size[1] - 1,
+                 .localsizez = local_size[2] - 1,
+           ),
+           HLSQ_CS_NDRANGE_1(
+                 CHIP,
+                 .globalsize_x = local_size[0] * num_groups[0],
+           ),
+           HLSQ_CS_NDRANGE_2(CHIP, .globaloff_x = 0),
+           HLSQ_CS_NDRANGE_3(
+                 CHIP,
+                 .globalsize_y = local_size[1] * num_groups[1],
+           ),
+           HLSQ_CS_NDRANGE_4(CHIP, .globaloff_y = 0),
+           HLSQ_CS_NDRANGE_5(
+                 CHIP,
+                 .globalsize_z = local_size[2] * num_groups[2],
+           ),
+           HLSQ_CS_NDRANGE_6(CHIP, .globaloff_z = 0),
+   );
+
+   OUT_REG(ring,
+           HLSQ_CS_KERNEL_GROUP_X(CHIP, 1),
+           HLSQ_CS_KERNEL_GROUP_Y(CHIP, 1),
+           HLSQ_CS_KERNEL_GROUP_Z(CHIP, 1),
+   );
 
    if (info->indirect) {
       struct fd_resource *rsc = fd_resource(info->indirect);
@@ -263,11 +280,18 @@ fd6_compute_state_delete(struct pipe_context *pctx, void *_hwcso)
    free(hwcso);
 }
 
+template <chip CHIP>
 void
-fd6_compute_init(struct pipe_context *pctx) disable_thread_safety_analysis
+fd6_compute_init(struct pipe_context *pctx)
+   disable_thread_safety_analysis
 {
    struct fd_context *ctx = fd_context(pctx);
-   ctx->launch_grid = fd6_launch_grid;
+
+   ctx->launch_grid = fd6_launch_grid<CHIP>;
    pctx->create_compute_state = fd6_compute_state_create;
    pctx->delete_compute_state = fd6_compute_state_delete;
 }
+
+/* Teach the compiler about needed variants: */
+template void fd6_compute_init<A6XX>(struct pipe_context *pctx);
+template void fd6_compute_init<A7XX>(struct pipe_context *pctx);

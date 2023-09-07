@@ -363,7 +363,7 @@ begin_subquery(struct d3d12_context *ctx, struct d3d12_query *q_parent, unsigned
       query_ensure_ready(d3d12_screen(ctx->base.screen), ctx, q_parent, false);
       d3d12_foreach_submitted_batch(ctx, old_batch) {
          if (old_batch->fence && old_batch->fence->value <= q_parent->fence_value)
-            d3d12_reset_batch(ctx, old_batch, PIPE_TIMEOUT_INFINITE);
+            d3d12_reset_batch(ctx, old_batch, OS_TIMEOUT_INFINITE);
       }
 
       /* Accumulate current results and store in first slot */
@@ -410,7 +410,7 @@ begin_timer_query(struct d3d12_context *ctx, struct d3d12_query *q_parent, bool 
       query_ensure_ready(d3d12_screen(ctx->base.screen), ctx, q_parent, false);
       d3d12_foreach_submitted_batch(ctx, old_batch) {
          if (old_batch->fence && old_batch->fence->value <= q_parent->fence_value)
-            d3d12_reset_batch(ctx, old_batch, PIPE_TIMEOUT_INFINITE);
+            d3d12_reset_batch(ctx, old_batch, OS_TIMEOUT_INFINITE);
       }
 
       accumulate_subresult(ctx, q_parent, 0, &result, true);
@@ -594,7 +594,7 @@ d3d12_render_condition(struct pipe_context *pctx,
       query_ensure_ready(d3d12_screen(ctx->base.screen), ctx, query, false);
       d3d12_foreach_submitted_batch(ctx, old_batch) {
          if (old_batch->fence && old_batch->fence->value <= query->fence_value)
-            d3d12_reset_batch(ctx, old_batch, PIPE_TIMEOUT_INFINITE);
+            d3d12_reset_batch(ctx, old_batch, OS_TIMEOUT_INFINITE);
       }
 
       union pipe_query_result result;

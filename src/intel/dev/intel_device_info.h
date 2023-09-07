@@ -77,6 +77,8 @@ enum intel_platform {
    INTEL_PLATFORM_GROUP_START(DG2, INTEL_PLATFORM_DG2_G10),
    INTEL_PLATFORM_DG2_G11,
    INTEL_PLATFORM_GROUP_END(DG2, INTEL_PLATFORM_DG2_G12),
+   INTEL_PLATFORM_GROUP_START(ATSM, INTEL_PLATFORM_ATSM_G10),
+   INTEL_PLATFORM_GROUP_END(ATSM, INTEL_PLATFORM_ATSM_G11),
    INTEL_PLATFORM_GROUP_START(MTL, INTEL_PLATFORM_MTL_M),
    INTEL_PLATFORM_GROUP_END(MTL, INTEL_PLATFORM_MTL_P),
 };
@@ -88,8 +90,12 @@ enum intel_platform {
    (((platform) >= INTEL_PLATFORM_ ## platform_range ## _START) && \
     ((platform) <= INTEL_PLATFORM_ ## platform_range ## _END))
 
+#define intel_device_info_is_atsm(devinfo) \
+   intel_platform_in_range((devinfo)->platform, ATSM)
+
 #define intel_device_info_is_dg2(devinfo) \
-   intel_platform_in_range((devinfo)->platform, DG2)
+   (intel_platform_in_range((devinfo)->platform, DG2) || \
+    intel_platform_in_range((devinfo)->platform, ATSM))
 
 #define intel_device_info_is_mtl(devinfo) \
    intel_platform_in_range((devinfo)->platform, MTL)
@@ -167,6 +173,7 @@ struct intel_device_info
    bool has_mmap_offset;
    bool has_userptr_probe;
    bool has_context_isolation;
+   bool has_set_pat_uapi;
 
    /**
     * \name Intel hardware quirks
@@ -445,6 +452,12 @@ struct intel_device_info
       } sram, vram;
    } mem;
 
+   struct {
+      uint8_t coherent;
+      uint8_t scanout;
+      uint8_t writeback;
+   } pat;
+
    BITSET_DECLARE(workarounds, INTEL_WA_NUM);
    /** @} */
 };
@@ -577,8 +590,8 @@ void intel_device_info_update_after_hwconfig(struct intel_device_info *devinfo);
 
 #ifdef GFX_VERx10
 #define intel_needs_workaround(devinfo, id)         \
-   INTEL_WA_ ## id ## _GFX_VER &&                              \
-   BITSET_TEST(devinfo->workarounds, INTEL_WA_##id)
+   (INTEL_WA_ ## id ## _GFX_VER &&                              \
+    BITSET_TEST(devinfo->workarounds, INTEL_WA_##id))
 #else
 #define intel_needs_workaround(devinfo, id) \
    BITSET_TEST(devinfo->workarounds, INTEL_WA_##id)

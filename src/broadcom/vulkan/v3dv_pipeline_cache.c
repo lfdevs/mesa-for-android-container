@@ -542,7 +542,7 @@ shader_variant_create_from_blob(struct v3dv_device *device,
    if (blob->overrun)
       return NULL;
 
-   uint ulist_data_size = sizeof(uint32_t) * ulist_count;
+   size_t ulist_data_size = sizeof(uint32_t) * ulist_count;
    const void *ulist_data_data = blob_read_bytes(blob, ulist_data_size);
    if (blob->overrun)
       return NULL;

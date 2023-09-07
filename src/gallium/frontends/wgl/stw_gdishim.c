@@ -63,10 +63,10 @@ BOOL SetPixelFormat(
    if (fb && fb->pfi) {
       fb->pfi->iPixelFormat = format;
       stw_framebuffer_unlock(fb);
-      return TRUE;
+      return true;
    }
 #endif
-   return FALSE;
+   return false;
 }
 
 void StretchDIBits(HDC hdc, unsigned int xDest, unsigned int yDest, unsigned int DestWidth, unsigned int DestHeight, unsigned int xSrc, unsigned int ySrc, unsigned int SrcWidth, unsigned int SrcHeight, void* lpBits, void* lpbmi, unsigned int iUsage, DWORD rop)

@@ -499,7 +499,7 @@ schedule_node::set_latency_gfx7(bool is_haswell)
          break;
 
       case HSW_SFID_DATAPORT_DATA_CACHE_1:
-         switch ((inst->desc >> 14) & 0x1f) {
+         switch (brw_dp_desc_msg_type(isa->devinfo, inst->desc)) {
          case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ:
          case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE:
          case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ:
@@ -609,7 +609,7 @@ class instruction_scheduler {
 public:
    instruction_scheduler(const backend_shader *s, int grf_count,
                          unsigned hw_reg_count, int block_count,
-                         instruction_scheduler_mode mode):
+                         instruction_scheduler_mode mode, int grf_write_scale):
       bs(s)
    {
       this->mem_ctx = ralloc_context(NULL);
@@ -620,6 +620,7 @@ public:
       this->mode = mode;
       this->reg_pressure = 0;
       this->block_idx = 0;
+      this->last_grf_write = rzalloc_array(this->mem_ctx, schedule_node *, grf_count * grf_write_scale);
       if (!post_reg_alloc) {
          this->reg_pressure_in = rzalloc_array(mem_ctx, int, block_count);
 
@@ -739,6 +740,12 @@ public:
     */
 
    int *hw_reads_remaining;
+
+   /**
+    * Last instruction to have written the grf (or a channel in the grf, for the
+    * scalar backend)
+    */
+   schedule_node **last_grf_write;
 };
 
 class fs_instruction_scheduler : public instruction_scheduler
@@ -757,13 +764,14 @@ public:
    void setup_liveness(cfg_t *cfg);
    void update_register_pressure(backend_instruction *inst);
    int get_register_pressure_benefit(backend_instruction *inst);
+   void clear_last_grf_write();
 };
 
 fs_instruction_scheduler::fs_instruction_scheduler(const fs_visitor *v,
                                                    int grf_count, int hw_reg_count,
                                                    int block_count,
                                                    instruction_scheduler_mode mode)
-   : instruction_scheduler(v, grf_count, hw_reg_count, block_count, mode),
+   : instruction_scheduler(v, grf_count, hw_reg_count, block_count, mode, 16),
      v(v)
 {
 }
@@ -939,7 +947,7 @@ public:
 
 vec4_instruction_scheduler::vec4_instruction_scheduler(const vec4_visitor *v,
                                                        int grf_count)
-   : instruction_scheduler(v, grf_count, 0, 0, SCHEDULE_POST),
+   : instruction_scheduler(v, grf_count, 0, 0, SCHEDULE_POST, 1),
      v(v)
 {
 }
@@ -1192,6 +1200,34 @@ fs_instruction_scheduler::is_compressed(const fs_inst *inst)
    return inst->exec_size == 16;
 }
 
+/* Clears last_grf_write to be ready to start calculating deps for a block
+ * again.
+ *
+ * Since pre-ra grf_count scales with instructions, and instructions scale with
+ * BBs, we don't want to memset all of last_grf_write per block or you'll end up
+ * O(n^2) with number of blocks.  For shaders using softfp64, we get a *lot* of
+ * blocks.
+ *
+ * We don't bother being careful for post-ra, since then grf_count doesn't scale
+ * with instructions.
+ */
+void
+fs_instruction_scheduler::clear_last_grf_write()
+{
+   if (!post_reg_alloc) {
+      foreach_in_list(schedule_node, n, &instructions) {
+         fs_inst *inst = (fs_inst *)n->inst;
+
+         if (inst->dst.file == VGRF) {
+            /* Don't bother being careful with regs_written(), quicker to just clear 2 cachelines. */
+            memset(&last_grf_write[inst->dst.nr * 16], 0, sizeof(*last_grf_write) * 16);
+         }
+      }
+   } else {
+      memset(last_grf_write, 0, sizeof(*last_grf_write) * grf_count * 16);
+   }
+}
+
 void
 fs_instruction_scheduler::calculate_deps()
 {
@@ -1199,7 +1235,6 @@ fs_instruction_scheduler::calculate_deps()
     * After register allocation, reg_offsets are gone and we track individual
     * GRF registers.
     */
-   schedule_node **last_grf_write;
    schedule_node *last_mrf_write[BRW_MAX_MRF(v->devinfo->ver)];
    schedule_node *last_conditional_mod[8] = {};
    schedule_node *last_accumulator_write = NULL;
@@ -1210,7 +1245,6 @@ fs_instruction_scheduler::calculate_deps()
     */
    schedule_node *last_fixed_grf_write = NULL;
 
-   last_grf_write = (schedule_node **)calloc(sizeof(schedule_node *), grf_count * 16);
    memset(last_mrf_write, 0, sizeof(last_mrf_write));
 
    /* top-to-bottom dependencies: RAW and WAW. */
@@ -1343,8 +1377,9 @@ fs_instruction_scheduler::calculate_deps()
       }
    }
 
+   clear_last_grf_write();
+
    /* bottom-to-top dependencies: WAR */
-   memset(last_grf_write, 0, sizeof(schedule_node *) * grf_count * 16);
    memset(last_mrf_write, 0, sizeof(last_mrf_write));
    memset(last_conditional_mod, 0, sizeof(last_conditional_mod));
    last_accumulator_write = NULL;
@@ -1461,13 +1496,12 @@ fs_instruction_scheduler::calculate_deps()
       }
    }
 
-   free(last_grf_write);
+   clear_last_grf_write();
 }
 
 void
 vec4_instruction_scheduler::calculate_deps()
 {
-   schedule_node *last_grf_write[grf_count];
    schedule_node *last_mrf_write[BRW_MAX_MRF(v->devinfo->ver)];
    schedule_node *last_conditional_mod = NULL;
    schedule_node *last_accumulator_write = NULL;
@@ -1478,7 +1512,7 @@ vec4_instruction_scheduler::calculate_deps()
     */
    schedule_node *last_fixed_grf_write = NULL;
 
-   memset(last_grf_write, 0, sizeof(last_grf_write));
+   memset(last_grf_write, 0, grf_count * sizeof(*last_grf_write));
    memset(last_mrf_write, 0, sizeof(last_mrf_write));
 
    /* top-to-bottom dependencies: RAW and WAW. */
@@ -1565,7 +1599,7 @@ vec4_instruction_scheduler::calculate_deps()
    }
 
    /* bottom-to-top dependencies: WAR */
-   memset(last_grf_write, 0, sizeof(last_grf_write));
+   memset(last_grf_write, 0, grf_count * sizeof(*last_grf_write));
    memset(last_mrf_write, 0, sizeof(last_mrf_write));
    last_conditional_mod = NULL;
    last_accumulator_write = NULL;
@@ -1916,14 +1950,16 @@ instruction_scheduler::run(cfg_t *cfg)
    if (!post_reg_alloc)
       setup_liveness(cfg);
 
+   if (reads_remaining) {
+      memset(reads_remaining, 0,
+               grf_count * sizeof(*reads_remaining));
+      memset(hw_reads_remaining, 0,
+               hw_reg_count * sizeof(*hw_reads_remaining));
+      memset(written, 0, grf_count * sizeof(*written));
+   }
+
    foreach_block(block, cfg) {
       if (reads_remaining) {
-         memset(reads_remaining, 0,
-                grf_count * sizeof(*reads_remaining));
-         memset(hw_reads_remaining, 0,
-                hw_reg_count * sizeof(*hw_reads_remaining));
-         memset(written, 0, grf_count * sizeof(*written));
-
          foreach_inst_in_block(fs_inst, inst, block)
             count_reads_remaining(inst);
       }

@@ -90,8 +90,8 @@ append_launch_mesh_workgroups_to_nv_task(nir_builder *b,
    nir_store_shared(b, zero, zero, .base = s->task_count_shared_addr);
 
    nir_scoped_barrier(b,
-         .execution_scope = NIR_SCOPE_WORKGROUP,
-         .memory_scope = NIR_SCOPE_WORKGROUP,
+         .execution_scope = SCOPE_WORKGROUP,
+         .memory_scope = SCOPE_WORKGROUP,
          .memory_semantics = NIR_MEMORY_RELEASE,
          .memory_modes = nir_var_mem_shared);
 
@@ -101,8 +101,8 @@ append_launch_mesh_workgroups_to_nv_task(nir_builder *b,
    b->cursor = nir_after_cf_list(&b->impl->body);
 
    nir_scoped_barrier(b,
-         .execution_scope = NIR_SCOPE_WORKGROUP,
-         .memory_scope = NIR_SCOPE_WORKGROUP,
+         .execution_scope = SCOPE_WORKGROUP,
+         .memory_scope = SCOPE_WORKGROUP,
          .memory_semantics = NIR_MEMORY_ACQUIRE,
          .memory_modes = nir_var_mem_shared);
 
@@ -140,8 +140,7 @@ nir_lower_nv_task_count(nir_shader *shader)
                                 nir_metadata_none, &state);
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   nir_builder builder;
-   nir_builder_init(&builder, impl);
+   nir_builder builder = nir_builder_create(impl);
 
    append_launch_mesh_workgroups_to_nv_task(&builder, &state);
    nir_metadata_preserve(impl, nir_metadata_none);
@@ -151,22 +150,10 @@ static nir_intrinsic_op
 shared_opcode_for_task_payload(nir_intrinsic_op task_payload_op)
 {
    switch (task_payload_op) {
-#define OP(O) case nir_intrinsic_task_payload_##O: return nir_intrinsic_shared_##O;
-   OP(atomic_exchange)
-   OP(atomic_comp_swap)
-   OP(atomic_add)
-   OP(atomic_imin)
-   OP(atomic_umin)
-   OP(atomic_imax)
-   OP(atomic_umax)
-   OP(atomic_and)
-   OP(atomic_or)
-   OP(atomic_xor)
-   OP(atomic_fadd)
-   OP(atomic_fmin)
-   OP(atomic_fmax)
-   OP(atomic_fcomp_swap)
-#undef OP
+   case nir_intrinsic_task_payload_atomic:
+      return nir_intrinsic_shared_atomic;
+   case nir_intrinsic_task_payload_atomic_swap:
+      return nir_intrinsic_shared_atomic_swap;
    case nir_intrinsic_load_task_payload:
       return nir_intrinsic_load_shared;
    case nir_intrinsic_store_task_payload:
@@ -185,8 +172,14 @@ lower_task_payload_to_shared(nir_builder *b,
     * have the same number of sources and same indices.
     */
    unsigned base = nir_intrinsic_base(intrin);
+   nir_atomic_op atom_op = nir_intrinsic_has_atomic_op(intrin) ?
+                           nir_intrinsic_atomic_op(intrin) : 0;
+
    intrin->intrinsic = shared_opcode_for_task_payload(intrin->intrinsic);
    nir_intrinsic_set_base(intrin, base + s->payload_shared_addr);
+
+   if (nir_intrinsic_has_atomic_op(intrin))
+      nir_intrinsic_set_atomic_op(intrin, atom_op);
 
    return true;
 }
@@ -239,8 +232,8 @@ emit_shared_to_payload_copy(nir_builder *b,
    /* Wait for all previous shared stores to finish.
     * This is necessary because we placed the payload in shared memory.
     */
-   nir_scoped_barrier(b, .execution_scope = NIR_SCOPE_WORKGROUP,
-                         .memory_scope = NIR_SCOPE_WORKGROUP,
+   nir_scoped_barrier(b, .execution_scope = SCOPE_WORKGROUP,
+                         .memory_scope = SCOPE_WORKGROUP,
                          .memory_semantics = NIR_MEMORY_ACQ_REL,
                          .memory_modes = nir_var_mem_shared);
 
@@ -266,7 +259,7 @@ emit_shared_to_payload_copy(nir_builder *b,
    if (remaining_vec4_copies > 0) {
       assert(remaining_vec4_copies < invocations);
 
-      nir_ssa_def *cmp = nir_ilt(b, invocation_index, nir_imm_int(b, remaining_vec4_copies));
+      nir_ssa_def *cmp = nir_ilt_imm(b, invocation_index, remaining_vec4_copies);
       nir_if *if_stmt = nir_push_if(b, cmp);
       {
          copy_shared_to_payload(b, vec4size / 4, addr, base_shared_addr, off);
@@ -278,7 +271,7 @@ emit_shared_to_payload_copy(nir_builder *b,
    /* Copy the last few dwords not forming full vec4. */
    if (remaining_dwords > 0) {
       assert(remaining_dwords < 4);
-      nir_ssa_def *cmp = nir_ieq(b, invocation_index, nir_imm_int(b, 0));
+      nir_ssa_def *cmp = nir_ieq_imm(b, invocation_index, 0);
       nir_if *if_stmt = nir_push_if(b, cmp);
       {
          copy_shared_to_payload(b, remaining_dwords, addr, base_shared_addr, off);
@@ -355,20 +348,8 @@ lower_task_intrin(nir_builder *b,
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
 
    switch (intrin->intrinsic) {
-   case nir_intrinsic_task_payload_atomic_add:
-   case nir_intrinsic_task_payload_atomic_imin:
-   case nir_intrinsic_task_payload_atomic_umin:
-   case nir_intrinsic_task_payload_atomic_imax:
-   case nir_intrinsic_task_payload_atomic_umax:
-   case nir_intrinsic_task_payload_atomic_and:
-   case nir_intrinsic_task_payload_atomic_or:
-   case nir_intrinsic_task_payload_atomic_xor:
-   case nir_intrinsic_task_payload_atomic_exchange:
-   case nir_intrinsic_task_payload_atomic_comp_swap:
-   case nir_intrinsic_task_payload_atomic_fadd:
-   case nir_intrinsic_task_payload_atomic_fmin:
-   case nir_intrinsic_task_payload_atomic_fmax:
-   case nir_intrinsic_task_payload_atomic_fcomp_swap:
+   case nir_intrinsic_task_payload_atomic:
+   case nir_intrinsic_task_payload_atomic_swap:
    case nir_intrinsic_store_task_payload:
    case nir_intrinsic_load_task_payload:
       if (s->payload_in_shared)
@@ -384,31 +365,16 @@ lower_task_intrin(nir_builder *b,
 static bool
 requires_payload_in_shared(nir_shader *shader, bool atomics, bool small_types)
 {
-   nir_foreach_function(func, shader) {
-      if (!func->impl)
-         continue;
-
-      nir_foreach_block(block, func->impl) {
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
          nir_foreach_instr(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
 
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
             switch (intrin->intrinsic) {
-               case nir_intrinsic_task_payload_atomic_add:
-               case nir_intrinsic_task_payload_atomic_imin:
-               case nir_intrinsic_task_payload_atomic_umin:
-               case nir_intrinsic_task_payload_atomic_imax:
-               case nir_intrinsic_task_payload_atomic_umax:
-               case nir_intrinsic_task_payload_atomic_and:
-               case nir_intrinsic_task_payload_atomic_or:
-               case nir_intrinsic_task_payload_atomic_xor:
-               case nir_intrinsic_task_payload_atomic_exchange:
-               case nir_intrinsic_task_payload_atomic_comp_swap:
-               case nir_intrinsic_task_payload_atomic_fadd:
-               case nir_intrinsic_task_payload_atomic_fmin:
-               case nir_intrinsic_task_payload_atomic_fmax:
-               case nir_intrinsic_task_payload_atomic_fcomp_swap:
+               case nir_intrinsic_task_payload_atomic:
+               case nir_intrinsic_task_payload_atomic_swap:
                   if (atomics)
                      return true;
                   break;
@@ -464,8 +430,7 @@ nir_lower_task_shader(nir_shader *shader,
       return false;
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   nir_builder builder;
-   nir_builder_init(&builder, impl);
+   nir_builder builder = nir_builder_create(impl);
 
    if (shader->info.outputs_written & BITFIELD64_BIT(VARYING_SLOT_TASK_COUNT)) {
       /* NV_mesh_shader:

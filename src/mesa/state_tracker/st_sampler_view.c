@@ -310,7 +310,7 @@ st_delete_texture_sampler_views(struct st_context *st,
  *
  * \param texObj  the st texture object,
  */
-ASSERTED static boolean
+ASSERTED static bool
 check_sampler_swizzle(const struct st_context *st,
                       const struct gl_texture_object *texObj,
                       const struct pipe_sampler_view *sv,
@@ -386,6 +386,12 @@ st_get_sampler_view_format(const struct st_context *st,
          break;
       }
       FALLTHROUGH;
+   case PIPE_FORMAT_NV21:
+      if (texObj->pt->format == PIPE_FORMAT_G8_B8R8_420_UNORM) {
+         format = PIPE_FORMAT_G8_B8R8_420_UNORM;
+         break;
+      }
+      FALLTHROUGH;
    case PIPE_FORMAT_IYUV:
       format = PIPE_FORMAT_R8_UNORM;
       break;
@@ -408,8 +414,12 @@ st_get_sampler_view_format(const struct st_context *st,
       format = PIPE_FORMAT_R16G16B16A16_UNORM;
       break;
    case PIPE_FORMAT_YUYV:
+   case PIPE_FORMAT_YVYU:
    case PIPE_FORMAT_UYVY:
+   case PIPE_FORMAT_VYUY:
       if (texObj->pt->format == PIPE_FORMAT_R8G8_R8B8_UNORM ||
+          texObj->pt->format == PIPE_FORMAT_R8B8_R8G8_UNORM ||
+          texObj->pt->format == PIPE_FORMAT_B8R8_G8R8_UNORM ||
           texObj->pt->format == PIPE_FORMAT_G8R8_B8R8_UNORM) {
          format = texObj->pt->format;
          break;

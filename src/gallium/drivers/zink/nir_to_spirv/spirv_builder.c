@@ -32,6 +32,7 @@
 #include "util/hash_table.h"
 #define XXH_INLINE_ALL
 #include "util/xxhash.h"
+#include "vk_util.h"
 
 #include <stdbool.h>
 #include <inttypes.h>
@@ -147,7 +148,7 @@ spirv_builder_emit_entry_point(struct spirv_builder *b,
    b->entry_points.words[pos] |= (3 + len + num_interfaces) << 16;
    spirv_buffer_prepare(&b->entry_points, b->mem_ctx, num_interfaces);
    for (int i = 0; i < num_interfaces; ++i)
-        spirv_buffer_emit_word(&b->entry_points, interfaces[i]);
+      spirv_buffer_emit_word(&b->entry_points, interfaces[i]);
 }
 
 uint32_t
@@ -1651,7 +1652,7 @@ spirv_builder_emit_var(struct spirv_builder *b, SpvId type,
 {
    assert(storage_class != SpvStorageClassGeneric);
    struct spirv_buffer *buf = storage_class != SpvStorageClassFunction ?
-                              &b->types_const_defs : &b->instructions;
+                              &b->types_const_defs : &b->local_vars;
 
    SpvId ret = spirv_builder_new_id(b);
    spirv_buffer_prepare(buf, b->mem_ctx, 4);
@@ -1708,6 +1709,7 @@ spirv_builder_get_num_words(struct spirv_builder *b)
           b->debug_names.num_words +
           b->decorations.num_words +
           b->types_const_defs.num_words +
+          b->local_vars.num_words +
           b->instructions.num_words;
 }
 
@@ -1741,21 +1743,31 @@ spirv_builder_get_words(struct spirv_builder *b, uint32_t *words,
       &b->debug_names,
       &b->decorations,
       &b->types_const_defs,
-      &b->instructions
    };
 
-   bool find_tcs_vertices_out = *tcs_vertices_out_word > 0;
    for (int i = 0; i < ARRAY_SIZE(buffers); ++i) {
       const struct spirv_buffer *buffer = buffers[i];
-      for (int j = 0; j < buffer->num_words; ++j) {
-         if (find_tcs_vertices_out && buffer == &b->exec_modes && *tcs_vertices_out_word == j) {
-            *tcs_vertices_out_word = written;
-            find_tcs_vertices_out = false;
-         }
-         words[written++] = buffer->words[j];
-      }
+
+      if (buffer == &b->exec_modes && *tcs_vertices_out_word > 0)
+         *tcs_vertices_out_word += written;
+
+      memcpy(words + written, buffer->words,
+             buffer->num_words * sizeof(uint32_t));
+      written += buffer->num_words;
    }
+   typed_memcpy(&words[written], b->instructions.words, b->local_vars_begin);
+   written += b->local_vars_begin;
+   typed_memcpy(&words[written], b->local_vars.words, b->local_vars.num_words);
+   written += b->local_vars.num_words;
+   typed_memcpy(&words[written], &b->instructions.words[b->local_vars_begin], (b->instructions.num_words - b->local_vars_begin));
+   written += b->instructions.num_words - b->local_vars_begin;
 
    assert(written == spirv_builder_get_num_words(b));
    return written;
+}
+
+void
+spirv_builder_begin_local_vars(struct spirv_builder *b)
+{
+   b->local_vars_begin = b->instructions.num_words;
 }

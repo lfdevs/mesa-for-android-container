@@ -112,11 +112,6 @@ typedef uint32_t xcb_window_t;
 #define PANVK_PUSH_CONST_UBO_INDEX 1
 #define PANVK_NUM_BUILTIN_UBOS     2
 
-#define panvk_printflike(a, b) __attribute__((__format__(__printf__, a, b)))
-
-void panvk_logi(const char *format, ...) panvk_printflike(1, 2);
-void panvk_logi_v(const char *format, va_list va);
-
 #define panvk_stub() assert(!"stub")
 
 #define PANVK_META_COPY_BUF2IMG_NUM_FORMATS  12
@@ -182,7 +177,6 @@ struct panvk_physical_device {
 
    struct panvk_instance *instance;
 
-   char path[20];
    char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
    uint8_t driver_uuid[VK_UUID_SIZE];
    uint8_t device_uuid[VK_UUID_SIZE];

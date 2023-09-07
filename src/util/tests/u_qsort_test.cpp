@@ -43,11 +43,11 @@ TEST(u_qsort_test, qsort_test)
    int data[] = { 3, 6, 4, 9, 10, 2, 5, 7, 8, 1 };
    int ctx = CONTEXT_CHECK;
 
-   util_qsort_r(data, GTEST_ARRAY_SIZE_(data),
+   util_qsort_r(data, sizeof(data) / sizeof(data[0]),
                 sizeof(data[0]), cmp_func,
                 reinterpret_cast<void *>(&ctx));
 
-   for (size_t i = 0; i < GTEST_ARRAY_SIZE_(data); ++i) {
+   for (size_t i = 0; i < sizeof(data) / sizeof(data[0]); ++i) {
       EXPECT_EQ(data[i], i + 1);
    }
 }

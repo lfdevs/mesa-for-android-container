@@ -476,7 +476,7 @@ pvr_surface_setup_render_init(struct pvr_renderpass_context *ctx,
                                   sizeof(hw_render->color_init[0U]) *
                                      (hw_render->color_init_count + 1U),
                                   8U,
-                                  VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+                                  VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (!new_color_init)
          return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -494,7 +494,7 @@ pvr_surface_setup_render_init(struct pvr_renderpass_context *ctx,
                            sizeof(hw_render->init_setup.mrt_resources[0U]) *
                               (hw_render->init_setup.num_render_targets + 1U),
                            8U,
-                           VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+                           VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (!new_mrt)
          return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
@@ -821,6 +821,9 @@ pvr_copy_storage_details(struct pvr_renderpass_context *ctx,
       input_subpass->color_count + input_subpass->input_count;
    VkResult result;
 
+   if (max_rts == 0)
+      return VK_SUCCESS;
+
    hw_subpass->setup.mrt_resources =
       vk_zalloc(ctx->allocator,
                 sizeof(hw_subpass->setup.mrt_resources[0U]) * max_rts,
@@ -846,6 +849,9 @@ pvr_copy_storage_details(struct pvr_renderpass_context *ctx,
    }
 
    hw_subpass->setup.num_render_targets = input_subpass->color_count;
+
+   if (input_subpass->input_count == 0)
+      return VK_SUCCESS;
 
    /* For this subpass's input attachments. */
    hw_subpass->input_access = vk_alloc(ctx->allocator,
@@ -2139,7 +2145,7 @@ pvr_merge_subpass(const struct pvr_device *device,
                                         sizeof(hw_subpass->color_initops[0U]) *
                                            input_subpass->color_count,
                                         8,
-                                        VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+                                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!hw_subpass->color_initops) {
       result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto end_merge_subpass;
@@ -2489,9 +2495,8 @@ VkResult pvr_create_renderpass_hwsetup(
                      __typeof__(*subpass_map),
                      pass->subpass_count);
 
-   if (!vk_multialloc_zalloc(&ma, alloc, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT)) {
+   if (!vk_multialloc_zalloc(&ma, alloc, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT))
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-   }
 
    hw_setup->surface_allocate = surface_allocate;
    hw_setup->subpass_map = subpass_map;
@@ -2510,6 +2515,7 @@ VkResult pvr_create_renderpass_hwsetup(
    if (!vk_multialloc_zalloc(&ma_ctx,
                              alloc,
                              VK_SYSTEM_ALLOCATION_SCOPE_COMMAND)) {
+      vk_free(alloc, hw_setup);
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 

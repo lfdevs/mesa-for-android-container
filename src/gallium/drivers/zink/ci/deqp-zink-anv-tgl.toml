@@ -49,11 +49,14 @@ deqp_args = [
     "--deqp-gl-config-name=rgba8888d24s8ms0",
     "--deqp-visibility=hidden"
 ]
+skips = ["/install/zink-anv-tgl-premerge-skips.txt"]
 timeout = 180.0
+[deqp.env]
+  ZINK_DEBUG = "validation"
 
-#[[piglit]]
-#piglit_folder = "/piglit"
-#profile = "gpu"
-#process_isolation = true
-#timeout = 180.0
-#  [piglit.env]
+[[piglit]]
+piglit_folder = "/piglit"
+profile = "quick_gl"
+process_isolation = true
+skips = ["/install/zink-anv-tgl-premerge-skips.txt"]
+timeout = 180.0

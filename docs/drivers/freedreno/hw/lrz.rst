@@ -35,15 +35,15 @@ There are two main limitations of LRZ:
 Pre-a650 (before gen3)
 ----------------------
 
-The direction is fully tracked on CPU. In renderpass LRZ starts with
+The direction is fully tracked on CPU. In render pass LRZ starts with
 unknown direction, the direction is set first time when depth write occurs
 and if it does change afterwards then the direction becomes invalid and LRZ is
-disabled for the rest of the renderpass.
+disabled for the rest of the render pass.
 
 Since the direction is not tracked by the GPU, it's impossible to know whether
 LRZ is enabled during construction of secondary command buffers.
 
-For the same reason, it's impossible to reuse LRZ between renderpasses.
+For the same reason, it's impossible to reuse LRZ between render passes.
 
 A650+ (gen3+)
 -------------
@@ -57,7 +57,7 @@ The idea is the same as when LRZ tracked on CPU: when ``GRAS_LRZ_CNTL``
 is used, its direction is compared to the previously known direction
 and direction byte is set to disabled when directions are incompatible.
 
-Additionally, to reuse LRZ between renderpasses, ``GRAS_LRZ_CNTL`` checks
+Additionally, to reuse LRZ between render passes, ``GRAS_LRZ_CNTL`` checks
 if the current value of ``GRAS_LRZ_DEPTH_VIEW`` is equal to the value
 stored in the buffer. If not, LRZ is disabled. This is necessary
 because depth buffer may have several layers and mip levels, while the

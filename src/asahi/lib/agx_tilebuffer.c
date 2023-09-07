@@ -66,6 +66,13 @@ agx_build_tilebuffer_layout(enum pipe_format *formats, uint8_t nr_cbufs,
    }
 
    assert(offset_B <= 64 && "TIB strides must be <= 64");
+
+   /* Multisampling needs a nonempty allocation.
+    * XXX: Check this against hw
+    */
+   if (nr_samples > 1)
+      offset_B = MAX2(offset_B, 1);
+
    tib.sample_size_B = ALIGN_POT(offset_B, 8);
 
    tib.tile_size = agx_select_tile_size(tib.sample_size_B * nr_samples);

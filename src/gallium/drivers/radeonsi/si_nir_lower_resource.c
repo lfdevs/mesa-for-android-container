@@ -1,25 +1,7 @@
 /*
  * Copyright 2022 Advanced Micro Devices, Inc.
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 /*
@@ -109,7 +91,7 @@ static nir_ssa_def *load_ssbo_desc(nir_builder *b, nir_src *index,
 
    nir_ssa_def *addr = ac_nir_load_arg(b, &s->args->ac, s->args->const_and_shader_buffers);
    nir_ssa_def *slot = clamp_index(b, index->ssa, sel->info.base.num_ssbos);
-   slot = nir_isub(b, nir_imm_int(b, SI_NUM_SHADER_BUFFERS - 1), slot);
+   slot = nir_isub_imm(b, SI_NUM_SHADER_BUFFERS - 1, slot);
 
    nir_ssa_def *offset = nir_ishl_imm(b, slot, 4);
    return nir_load_smem_amd(b, 4, addr, offset);
@@ -253,7 +235,7 @@ static nir_ssa_def *load_deref_image_desc(nir_builder *b, nir_deref_instr *deref
       if (desc_type == AC_DESC_FMASK)
          index = nir_iadd_imm(b, index, SI_NUM_IMAGES);
 
-      index = nir_isub(b, nir_imm_int(b, SI_NUM_IMAGE_SLOTS - 1), index);
+      index = nir_isub_imm(b, SI_NUM_IMAGE_SLOTS - 1, index);
 
       nir_ssa_def *list = ac_nir_load_arg(b, &s->args->ac, s->args->samplers_and_images);
       desc = load_image_desc(b, list, index, desc_type, !is_load, s);
@@ -289,18 +271,8 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
       break;
    }
    case nir_intrinsic_load_ssbo:
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_fmin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_fmax:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_comp_swap: {
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
       nir_ssa_def *desc = load_ssbo_desc(b, &intrin->src[0], s);
@@ -327,21 +299,8 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
    case nir_intrinsic_image_deref_sparse_load:
    case nir_intrinsic_image_deref_fragment_mask_load_amd:
    case nir_intrinsic_image_deref_store:
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_fmin:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_fmax:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_fadd:
-   case nir_intrinsic_image_deref_atomic_inc_wrap:
-   case nir_intrinsic_image_deref_atomic_dec_wrap:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_descriptor_amd: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
@@ -377,21 +336,8 @@ static bool lower_resource_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin
    case nir_intrinsic_bindless_image_sparse_load:
    case nir_intrinsic_bindless_image_fragment_mask_load_amd:
    case nir_intrinsic_bindless_image_store:
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_fmin:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_fmax:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_xor:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_inc_wrap:
-   case nir_intrinsic_bindless_image_atomic_dec_wrap: {
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap: {
       assert(!(nir_intrinsic_access(intrin) & ACCESS_NON_UNIFORM));
 
       enum ac_descriptor_type desc_type;
@@ -496,11 +442,26 @@ static nir_ssa_def *load_bindless_sampler_desc(nir_builder *b, nir_ssa_def *inde
    return load_sampler_desc(b, list, index, desc_type);
 }
 
+static nir_ssa_def *fixup_sampler_desc(nir_builder *b,
+                                       nir_tex_instr *tex,
+                                       nir_ssa_def *sampler,
+                                       struct lower_resource_state *s)
+{
+   const struct si_shader_selector *sel = s->shader->selector;
+
+   if (tex->op != nir_texop_tg4 || sel->screen->info.conformant_trunc_coord)
+      return sampler;
+
+   /* Set TRUNC_COORD=0 for textureGather(). */
+   nir_ssa_def *dword0 = nir_channel(b, sampler, 0);
+   dword0 = nir_iand_imm(b, dword0, C_008F30_TRUNC_COORD);
+   sampler = nir_vector_insert_imm(b, sampler, dword0, 0);
+   return sampler;
+}
+
 static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
                                struct lower_resource_state *s)
 {
-   assert(!tex->texture_non_uniform && !tex->sampler_non_uniform);
-
    nir_deref_instr *texture_deref = NULL;
    nir_deref_instr *sampler_deref = NULL;
    nir_ssa_def *texture_handle = NULL;
@@ -554,14 +515,17 @@ static bool lower_resource_tex(nir_builder *b, nir_tex_instr *tex,
    }
 
    nir_ssa_def *image = texture_deref ?
-      load_deref_sampler_desc(b, texture_deref, desc_type, s, false) :
+      load_deref_sampler_desc(b, texture_deref, desc_type, s, !tex->texture_non_uniform) :
       load_bindless_sampler_desc(b, texture_handle, desc_type, s);
 
    nir_ssa_def *sampler = NULL;
    if (sampler_deref)
-      sampler = load_deref_sampler_desc(b, sampler_deref, AC_DESC_SAMPLER, s, false);
+      sampler = load_deref_sampler_desc(b, sampler_deref, AC_DESC_SAMPLER, s, !tex->sampler_non_uniform);
    else if (sampler_handle)
       sampler = load_bindless_sampler_desc(b, sampler_handle, AC_DESC_SAMPLER, s);
+
+   if (sampler && sampler->num_components > 1)
+      sampler = fixup_sampler_desc(b, tex, sampler, s);
 
    for (unsigned i = 0; i < tex->num_srcs; i++) {
       switch (tex->src[i].src_type) {

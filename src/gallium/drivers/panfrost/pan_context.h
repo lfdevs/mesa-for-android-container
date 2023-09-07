@@ -35,11 +35,11 @@
 #include "pan_resource.h"
 #include "pan_texture.h"
 
-#include "pipe/p_compiler.h"
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "util/compiler.h"
 #include "util/detect.h"
 #include "util/format/u_formats.h"
 #include "util/hash_table.h"
@@ -168,7 +168,7 @@ struct panfrost_context {
    unsigned offset_start;
    unsigned base_vertex;
    unsigned base_instance;
-   enum pipe_prim_type active_prim;
+   enum mesa_prim active_prim;
 
    /* If instancing is enabled, vertex count padded for instance; if
     * it is disabled, just equal to plain vertex count */

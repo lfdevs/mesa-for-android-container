@@ -125,7 +125,7 @@ windows_create_drawable(int type, void *handle)
 
       // Access file mapping object by a name
       snprintf(name, sizeof(name), "Local\\CYGWINX_WINDOWSDRI_%08x", (unsigned int)(uintptr_t)handle);
-      d->hSection = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
+      d->hSection = OpenFileMapping(FILE_MAP_ALL_ACCESS, false, name);
       if (!d->hSection)
          printf("OpenFileMapping failed %x\n", (int)GetLastError());
 

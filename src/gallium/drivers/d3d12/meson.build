@@ -70,6 +70,16 @@ if with_gallium_d3d12_video
     'd3d12_video_dec_av1.cpp',
     'd3d12_video_dec_vp9.cpp',
   ]
+
+  # // TODO: Remove this and #ifdef checks for AV1 encode when header version is release 6xx
+  if dep_dxheaders.version().version_compare('>= 1.711.3')
+  files_libd3d12 += [
+    'd3d12_video_enc_av1.cpp',
+    'd3d12_video_encoder_references_manager_av1.cpp',
+    'd3d12_video_encoder_bitstream_builder_av1.cpp',
+  ]
+  endif
+
 endif
 
 is_xbox = target_machine.system().startswith('Gaming.Xbox')

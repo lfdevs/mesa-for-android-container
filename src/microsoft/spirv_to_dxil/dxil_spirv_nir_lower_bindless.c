@@ -26,6 +26,7 @@
 #include "nir_deref.h"
 
 #include "dxil_spirv_nir.h"
+#include "dxil_nir.h"
 #include "vulkan/vulkan_core.h"
 
 const uint32_t descriptor_size = sizeof(struct dxil_spirv_bindless_entry);
@@ -57,7 +58,8 @@ load_vulkan_ssbo(nir_builder *b, unsigned buf_idx,
                         nir_channel(b, descriptor, 0),
                         offset,
                         .align_mul = num_comps * 4,
-                        .align_offset = 0);
+                        .align_offset = 0,
+                        .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER);
 }
 
 static nir_ssa_def *
@@ -168,21 +170,8 @@ lower_bindless_instr(nir_builder *b, nir_instr *instr, void *data)
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_store:
    case nir_intrinsic_image_deref_size:
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
-   case nir_intrinsic_image_deref_atomic_dec_wrap:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_fadd:
-   case nir_intrinsic_image_deref_atomic_fmax:
-   case nir_intrinsic_image_deref_atomic_fmin:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_inc_wrap:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_xor:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
       return lower_bindless_image_intr(b, intr, options);
    case nir_intrinsic_vulkan_resource_index:
       return lower_vulkan_resource_index(b, intr, options);
@@ -229,11 +218,15 @@ can_remove_var(nir_variable *var, void *data)
 bool
 dxil_spirv_nir_lower_bindless(nir_shader *nir, struct dxil_spirv_nir_lower_bindless_options *options)
 {
-   bool ret = nir_shader_instructions_pass(nir, lower_bindless_instr,
-                                           nir_metadata_dominance |
-                                             nir_metadata_block_index |
-                                             nir_metadata_loop_analysis,
-                                           options);
+   /* While we still have derefs for images, use that to propagate type info back to image vars,
+    * and then forward to the intrinsics that reference them. */
+   bool ret = dxil_nir_guess_image_formats(nir);
+
+   ret |= nir_shader_instructions_pass(nir, lower_bindless_instr,
+                                       nir_metadata_dominance |
+                                          nir_metadata_block_index |
+                                          nir_metadata_loop_analysis,
+                                       options);
    ret |= nir_remove_dead_derefs(nir);
 
    unsigned descriptor_sets = 0;

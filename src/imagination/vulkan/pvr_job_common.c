@@ -36,34 +36,6 @@
 #include "vk_format.h"
 #include "vk_object.h"
 
-/* clang-format off */
-static enum PVRX(PBESTATE_SWIZ)
-pvr_get_pbe_hw_swizzle(VkComponentSwizzle comp, enum pipe_swizzle swz)
-/* clang-format on */
-{
-   switch (swz) {
-   case PIPE_SWIZZLE_0:
-      return ROGUE_PBESTATE_SWIZ_ZERO;
-   case PIPE_SWIZZLE_1:
-      return ROGUE_PBESTATE_SWIZ_ONE;
-   case PIPE_SWIZZLE_X:
-      return ROGUE_PBESTATE_SWIZ_SOURCE_CHAN0;
-   case PIPE_SWIZZLE_Y:
-      return ROGUE_PBESTATE_SWIZ_SOURCE_CHAN1;
-   case PIPE_SWIZZLE_Z:
-      return ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2;
-   case PIPE_SWIZZLE_W:
-      return ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3;
-   case PIPE_SWIZZLE_NONE:
-      if (comp == VK_COMPONENT_SWIZZLE_A)
-         return ROGUE_PBESTATE_SWIZ_ONE;
-      else
-         return ROGUE_PBESTATE_SWIZ_ZERO;
-   default:
-      unreachable("Unknown enum pipe_swizzle");
-   };
-}
-
 void pvr_pbe_get_src_format_and_gamma(VkFormat vk_format,
                                       enum pvr_pbe_gamma default_gamma,
                                       bool with_packed_usc_channel,
@@ -256,14 +228,106 @@ void pvr_pbe_pack_state(
                        PVRX(PBESTATE_REG_WORD0_LINESTRIDE_UNIT_SIZE);
       reg.minclip_x = render_params->min_x_clip;
 
-      reg.swiz_chan0 = pvr_get_pbe_hw_swizzle(VK_COMPONENT_SWIZZLE_R,
-                                              surface_params->swizzle[0]);
-      reg.swiz_chan1 = pvr_get_pbe_hw_swizzle(VK_COMPONENT_SWIZZLE_G,
-                                              surface_params->swizzle[1]);
-      reg.swiz_chan2 = pvr_get_pbe_hw_swizzle(VK_COMPONENT_SWIZZLE_B,
-                                              surface_params->swizzle[2]);
-      reg.swiz_chan3 = pvr_get_pbe_hw_swizzle(VK_COMPONENT_SWIZZLE_A,
-                                              surface_params->swizzle[3]);
+      /* r, y or depth*/
+      switch (surface_params->swizzle[0]) {
+      case PIPE_SWIZZLE_X:
+         reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN0;
+         break;
+      case PIPE_SWIZZLE_Y:
+         reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN0;
+         break;
+      case PIPE_SWIZZLE_Z:
+         reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN0;
+         break;
+      case PIPE_SWIZZLE_W:
+         reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN0;
+         break;
+      case PIPE_SWIZZLE_0:
+      case PIPE_SWIZZLE_NONE:
+         reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_ZERO;
+         break;
+      case PIPE_SWIZZLE_1:
+         reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_ONE;
+         break;
+      default:
+         unreachable("Unknown enum pipe_swizzle");
+         break;
+      }
+      /* g, u or stencil*/
+      switch (surface_params->swizzle[1]) {
+      case PIPE_SWIZZLE_X:
+         reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN1;
+         break;
+      case PIPE_SWIZZLE_Y:
+         reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN1;
+         break;
+      case PIPE_SWIZZLE_Z:
+         reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN1;
+         break;
+      case PIPE_SWIZZLE_W:
+         reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN1;
+         break;
+      case PIPE_SWIZZLE_0:
+      case PIPE_SWIZZLE_NONE:
+         reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_ZERO;
+         break;
+      case PIPE_SWIZZLE_1:
+         reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_ONE;
+         break;
+      default:
+         unreachable("Unknown enum pipe_swizzle");
+         break;
+      }
+      /* b or v*/
+      switch (surface_params->swizzle[2]) {
+      case PIPE_SWIZZLE_X:
+         reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2;
+         break;
+      case PIPE_SWIZZLE_Y:
+         reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2;
+         break;
+      case PIPE_SWIZZLE_Z:
+         reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2;
+         break;
+      case PIPE_SWIZZLE_W:
+         reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2;
+         break;
+      case PIPE_SWIZZLE_0:
+      case PIPE_SWIZZLE_NONE:
+         reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_ZERO;
+         break;
+      case PIPE_SWIZZLE_1:
+         reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_ONE;
+         break;
+      default:
+         unreachable("Unknown enum pipe_swizzle");
+         break;
+      }
+      /* a */
+      switch (surface_params->swizzle[3]) {
+      case PIPE_SWIZZLE_X:
+         reg.swiz_chan0 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3;
+         break;
+      case PIPE_SWIZZLE_Y:
+         reg.swiz_chan1 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3;
+         break;
+      case PIPE_SWIZZLE_Z:
+         reg.swiz_chan2 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3;
+         break;
+      case PIPE_SWIZZLE_W:
+         reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3;
+         break;
+      case PIPE_SWIZZLE_0:
+      case PIPE_SWIZZLE_NONE:
+         reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_ZERO;
+         break;
+      case PIPE_SWIZZLE_1:
+         reg.swiz_chan3 = ROGUE_PBESTATE_SWIZ_ONE;
+         break;
+      default:
+         unreachable("Unknown enum pipe_swizzle");
+         break;
+      }
 
       if (surface_params->mem_layout == PVR_MEMLAYOUT_3DTWIDDLED)
          reg.size_z = util_logbase2_ceil(surface_params->depth);

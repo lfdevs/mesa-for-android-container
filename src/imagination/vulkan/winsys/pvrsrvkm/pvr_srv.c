@@ -39,6 +39,7 @@
 #include "pvr_srv_job_transfer.h"
 #include "pvr_srv_public.h"
 #include "pvr_srv_sync.h"
+#include "pvr_srv_sync_prim.h"
 #include "pvr_srv_job_null.h"
 #include "pvr_types.h"
 #include "pvr_winsys.h"
@@ -46,12 +47,71 @@
 #include "util/log.h"
 #include "util/macros.h"
 #include "util/os_misc.h"
+#include "util/u_atomic.h"
 #include "vk_log.h"
 #include "vk_sync.h"
 #include "vk_sync_timeline.h"
 
-/* Amount of space used to hold sync prim values (in bytes). */
-#define PVR_SRV_SYNC_PRIM_VALUE_SIZE 4U
+/* carveout_size can be 0 when no carveout is needed. carveout_address must
+ * be 0 if carveout_size is 0.
+ */
+static VkResult pvr_winsys_heap_init(
+   struct pvr_winsys *const ws,
+   pvr_dev_addr_t base_address,
+   uint64_t size,
+   pvr_dev_addr_t carveout_address,
+   uint64_t carveout_size,
+   uint32_t log2_page_size,
+   const struct pvr_winsys_static_data_offsets *const static_data_offsets,
+   struct pvr_winsys_heap *const heap)
+{
+   const bool carveout_area_bottom_of_heap = carveout_address.addr ==
+                                             base_address.addr;
+   const pvr_dev_addr_t vma_heap_begin_addr =
+      carveout_area_bottom_of_heap
+         ? PVR_DEV_ADDR_OFFSET(base_address, carveout_size)
+         : base_address;
+   const uint64_t vma_heap_size = size - carveout_size;
+
+   assert(base_address.addr);
+   assert(carveout_size <= size);
+
+   /* As per the static_data_carveout_base powervr-km uapi documentation the
+    * carveout region can only be at the beginning of the heap or at the end.
+    * carveout_address is 0 if there is no carveout region.
+    * pvrsrv-km doesn't explicitly provide this info and it's assumed that it's
+    * always at the beginning.
+    */
+   assert(carveout_area_bottom_of_heap ||
+          carveout_address.addr + carveout_size == base_address.addr + size ||
+          (!carveout_address.addr && !carveout_size));
+
+   heap->ws = ws;
+   heap->base_addr = base_address;
+   heap->static_data_carveout_addr = carveout_address;
+
+   heap->size = size;
+   heap->static_data_carveout_size = carveout_size;
+
+   heap->page_size = 1 << log2_page_size;
+   heap->log2_page_size = log2_page_size;
+
+   util_vma_heap_init(&heap->vma_heap, vma_heap_begin_addr.addr, vma_heap_size);
+
+   heap->vma_heap.alloc_high = false;
+
+   /* It's expected that the heap destroy function to be the last thing that's
+    * called, so we start the ref_count at 0.
+    */
+   p_atomic_set(&heap->ref_count, 0);
+
+   if (pthread_mutex_init(&heap->lock, NULL))
+      return vk_error(NULL, VK_ERROR_INITIALIZATION_FAILED);
+
+   heap->static_data_offsets = *static_data_offsets;
+
+   return VK_SUCCESS;
+}
 
 /**
  * Maximum PB free list size supported by RGX and Services.
@@ -84,7 +144,7 @@ static VkResult pvr_srv_heap_init(
    VkResult result;
    uint64_t size;
 
-   result = pvr_srv_get_heap_details(srv_ws->render_fd,
+   result = pvr_srv_get_heap_details(srv_ws->base.render_fd,
                                      heap_idx,
                                      0,
                                      NULL,
@@ -95,24 +155,25 @@ static VkResult pvr_srv_heap_init(
    if (result != VK_SUCCESS)
       return result;
 
-   result = pvr_winsys_helper_winsys_heap_init(&srv_ws->base,
-                                               base_address,
-                                               size,
-                                               base_address,
-                                               reserved_size,
-                                               log2_page_size,
-                                               static_data_offsets,
-                                               &srv_heap->base);
+   result = pvr_winsys_heap_init(&srv_ws->base,
+                                 base_address,
+                                 size,
+                                 base_address,
+                                 reserved_size,
+                                 log2_page_size,
+                                 static_data_offsets,
+                                 &srv_heap->base);
    if (result != VK_SUCCESS)
       return result;
 
    assert(srv_heap->base.page_size == srv_ws->base.page_size);
    assert(srv_heap->base.log2_page_size == srv_ws->base.log2_page_size);
-   assert(srv_heap->base.reserved_size % PVR_SRV_RESERVED_SIZE_GRANULARITY ==
+   assert(srv_heap->base.static_data_carveout_size %
+             PVR_SRV_CARVEOUT_SIZE_GRANULARITY ==
           0);
 
    /* Create server-side counterpart of Device Memory heap */
-   result = pvr_srv_int_heap_create(srv_ws->render_fd,
+   result = pvr_srv_int_heap_create(srv_ws->base.render_fd,
                                     srv_heap->base.base_addr,
                                     srv_heap->base.size,
                                     srv_heap->base.log2_page_size,
@@ -132,7 +193,7 @@ static bool pvr_srv_heap_finish(struct pvr_srv_winsys *srv_ws,
    if (!pvr_winsys_helper_winsys_heap_finish(&srv_heap->base))
       return false;
 
-   pvr_srv_int_heap_destroy(srv_ws->render_fd, srv_heap->server_heap);
+   pvr_srv_int_heap_destroy(srv_ws->base.render_fd, srv_heap->server_heap);
 
    return true;
 }
@@ -162,7 +223,7 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
    uint32_t heap_count;
    VkResult result;
 
-   result = pvr_srv_int_ctx_create(srv_ws->render_fd,
+   result = pvr_srv_int_ctx_create(srv_ws->base.render_fd,
                                    &srv_ws->server_memctx,
                                    &srv_ws->server_memctx_data);
    if (result != VK_SUCCESS)
@@ -171,14 +232,14 @@ static VkResult pvr_srv_memctx_init(struct pvr_srv_winsys *srv_ws)
    os_get_page_size(&srv_ws->base.page_size);
    srv_ws->base.log2_page_size = util_logbase2(srv_ws->base.page_size);
 
-   result = pvr_srv_get_heap_count(srv_ws->render_fd, &heap_count);
+   result = pvr_srv_get_heap_count(srv_ws->base.render_fd, &heap_count);
    if (result != VK_SUCCESS)
       goto err_pvr_srv_int_ctx_destroy;
 
    assert(heap_count > 0);
 
    for (uint32_t i = 0; i < heap_count; i++) {
-      result = pvr_srv_get_heap_details(srv_ws->render_fd,
+      result = pvr_srv_get_heap_details(srv_ws->base.render_fd,
                                         i,
                                         sizeof(heap_name),
                                         heap_name,
@@ -325,7 +386,7 @@ err_pvr_srv_heap_finish_general:
    pvr_srv_heap_finish(srv_ws, &srv_ws->general_heap);
 
 err_pvr_srv_int_ctx_destroy:
-   pvr_srv_int_ctx_destroy(srv_ws->render_fd, srv_ws->server_memctx);
+   pvr_srv_int_ctx_destroy(srv_ws->base.render_fd, srv_ws->server_memctx);
 
    return result;
 }
@@ -366,34 +427,13 @@ static void pvr_srv_memctx_finish(struct pvr_srv_winsys *srv_ws)
       vk_errorf(NULL, VK_ERROR_UNKNOWN, "General heap in use, can not deinit");
    }
 
-   pvr_srv_int_ctx_destroy(srv_ws->render_fd, srv_ws->server_memctx);
-}
-
-static VkResult pvr_srv_sync_prim_block_init(struct pvr_srv_winsys *srv_ws)
-{
-   /* We don't currently make use of this value, but we're required to provide
-    * a valid pointer to pvr_srv_alloc_sync_primitive_block.
-    */
-   void *sync_block_pmr;
-
-   return pvr_srv_alloc_sync_primitive_block(srv_ws->render_fd,
-                                             &srv_ws->sync_block_handle,
-                                             &sync_block_pmr,
-                                             &srv_ws->sync_block_size,
-                                             &srv_ws->sync_block_fw_addr);
-}
-
-static void pvr_srv_sync_prim_block_finish(struct pvr_srv_winsys *srv_ws)
-{
-   pvr_srv_free_sync_primitive_block(srv_ws->render_fd,
-                                     srv_ws->sync_block_handle);
-   srv_ws->sync_block_handle = NULL;
+   pvr_srv_int_ctx_destroy(srv_ws->base.render_fd, srv_ws->server_memctx);
 }
 
 static void pvr_srv_winsys_destroy(struct pvr_winsys *ws)
 {
    struct pvr_srv_winsys *srv_ws = to_pvr_srv_winsys(ws);
-   int fd = srv_ws->render_fd;
+   int fd = ws->render_fd;
 
    if (srv_ws->presignaled_sync) {
       vk_sync_destroy(&srv_ws->presignaled_sync_device->vk,
@@ -402,7 +442,7 @@ static void pvr_srv_winsys_destroy(struct pvr_winsys *ws)
 
    pvr_srv_sync_prim_block_finish(srv_ws);
    pvr_srv_memctx_finish(srv_ws);
-   vk_free(srv_ws->alloc, srv_ws);
+   vk_free(ws->alloc, srv_ws);
    pvr_srv_connection_destroy(fd);
 }
 
@@ -525,7 +565,7 @@ pvr_srv_get_cdm_max_local_mem_size_regs(const struct pvr_device_info *dev_info)
                ROGUE_MAX_PER_KERNEL_LOCAL_MEM_SIZE_REGS);
 }
 
-static int
+static VkResult
 pvr_srv_winsys_device_info_init(struct pvr_winsys *ws,
                                 struct pvr_device_info *dev_info,
                                 struct pvr_device_runtime_info *runtime_info)
@@ -536,12 +576,13 @@ pvr_srv_winsys_device_info_init(struct pvr_winsys *ws,
 
    ret = pvr_device_info_init(dev_info, srv_ws->bvnc);
    if (ret) {
-      mesa_logw("Unsupported BVNC: %u.%u.%u.%u\n",
-                PVR_BVNC_UNPACK_B(srv_ws->bvnc),
-                PVR_BVNC_UNPACK_V(srv_ws->bvnc),
-                PVR_BVNC_UNPACK_N(srv_ws->bvnc),
-                PVR_BVNC_UNPACK_C(srv_ws->bvnc));
-      return ret;
+      return vk_errorf(NULL,
+                       VK_ERROR_INCOMPATIBLE_DRIVER,
+                       "Unsupported BVNC: %u.%u.%u.%u\n",
+                       PVR_BVNC_UNPACK_B(srv_ws->bvnc),
+                       PVR_BVNC_UNPACK_V(srv_ws->bvnc),
+                       PVR_BVNC_UNPACK_N(srv_ws->bvnc),
+                       PVR_BVNC_UNPACK_C(srv_ws->bvnc));
    }
 
    runtime_info->min_free_list_size = pvr_srv_get_min_free_list_size(dev_info);
@@ -556,12 +597,12 @@ pvr_srv_winsys_device_info_init(struct pvr_winsys *ws,
       pvr_srv_get_cdm_max_local_mem_size_regs(dev_info);
 
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
-      result = pvr_srv_get_multicore_info(srv_ws->render_fd,
+      result = pvr_srv_get_multicore_info(ws->render_fd,
                                           0,
                                           NULL,
                                           &runtime_info->core_count);
       if (result != VK_SUCCESS)
-         return -ENODEV;
+         return result;
    } else {
       runtime_info->core_count = 1;
    }
@@ -576,7 +617,7 @@ static void pvr_srv_winsys_get_heaps_info(struct pvr_winsys *ws,
 
    heaps->general_heap = &srv_ws->general_heap.base;
    heaps->pds_heap = &srv_ws->pds_heap.base;
-   heaps->transfer_3d_heap = &srv_ws->transfer_3d_heap.base;
+   heaps->transfer_frag_heap = &srv_ws->transfer_3d_heap.base;
    heaps->usc_heap = &srv_ws->usc_heap.base;
    heaps->vis_test_heap = &srv_ws->vis_test_heap.base;
 
@@ -644,37 +685,39 @@ static bool pvr_is_driver_compatible(int render_fd)
    return true;
 }
 
-struct pvr_winsys *pvr_srv_winsys_create(int master_fd,
-                                         int render_fd,
-                                         const VkAllocationCallbacks *alloc)
+VkResult pvr_srv_winsys_create(const int render_fd,
+                               const int display_fd,
+                               const VkAllocationCallbacks *alloc,
+                               struct pvr_winsys **const ws_out)
 {
    struct pvr_srv_winsys *srv_ws;
    VkResult result;
    uint64_t bvnc;
 
    if (!pvr_is_driver_compatible(render_fd))
-      return NULL;
+      return VK_ERROR_INCOMPATIBLE_DRIVER;
 
    result = pvr_srv_init_module(render_fd, PVR_SRVKM_MODULE_TYPE_SERVICES);
    if (result != VK_SUCCESS)
-      return NULL;
+      goto err_out;
 
    result = pvr_srv_connection_create(render_fd, &bvnc);
    if (result != VK_SUCCESS)
-      return NULL;
+      goto err_out;
 
    srv_ws =
       vk_zalloc(alloc, sizeof(*srv_ws), 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!srv_ws) {
-      vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
+      result = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto err_pvr_srv_connection_destroy;
    }
 
    srv_ws->base.ops = &srv_winsys_ops;
+   srv_ws->base.render_fd = render_fd;
+   srv_ws->base.display_fd = display_fd;
+   srv_ws->base.alloc = alloc;
+
    srv_ws->bvnc = bvnc;
-   srv_ws->master_fd = master_fd;
-   srv_ws->render_fd = render_fd;
-   srv_ws->alloc = alloc;
 
    srv_ws->base.syncobj_type = pvr_srv_sync_type;
    srv_ws->base.sync_types[0] = &srv_ws->base.syncobj_type;
@@ -697,7 +740,9 @@ struct pvr_winsys *pvr_srv_winsys_create(int master_fd,
    if (result != VK_SUCCESS)
       goto err_pvr_srv_memctx_finish;
 
-   return &srv_ws->base;
+   *ws_out = &srv_ws->base;
+
+   return VK_SUCCESS;
 
 err_pvr_srv_memctx_finish:
    pvr_srv_memctx_finish(srv_ws);
@@ -708,55 +753,8 @@ err_vk_free_srv_ws:
 err_pvr_srv_connection_destroy:
    pvr_srv_connection_destroy(render_fd);
 
-   return NULL;
-}
-
-struct pvr_srv_sync_prim *pvr_srv_sync_prim_alloc(struct pvr_srv_winsys *srv_ws)
-{
-   struct pvr_srv_sync_prim *sync_prim;
-
-   if (p_atomic_read(&srv_ws->sync_block_offset) == srv_ws->sync_block_size) {
-      vk_error(NULL, VK_ERROR_UNKNOWN);
-      return NULL;
-   }
-
-   sync_prim = vk_alloc(srv_ws->alloc,
-                        sizeof(*sync_prim),
-                        8,
-                        VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!sync_prim) {
-      vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-      return NULL;
-   }
-
-   /* p_atomic_add_return() returns the new value rather than the old one, so
-    * we have to subtract PVR_SRV_SYNC_PRIM_VALUE_SIZE to get the old value.
-    */
-   sync_prim->offset = p_atomic_add_return(&srv_ws->sync_block_offset,
-                                           PVR_SRV_SYNC_PRIM_VALUE_SIZE);
-   sync_prim->offset -= PVR_SRV_SYNC_PRIM_VALUE_SIZE;
-   if (sync_prim->offset == srv_ws->sync_block_size) {
-      /* FIXME: need to free offset back to srv_ws->sync_block_offset. */
-      vk_free(srv_ws->alloc, sync_prim);
-
-      vk_error(NULL, VK_ERROR_UNKNOWN);
-
-      return NULL;
-   }
-
-   sync_prim->srv_ws = srv_ws;
-
-   return sync_prim;
-}
-
-/* FIXME: Add support for freeing offsets back to the sync block. */
-void pvr_srv_sync_prim_free(struct pvr_srv_sync_prim *sync_prim)
-{
-   if (sync_prim) {
-      struct pvr_srv_winsys *srv_ws = sync_prim->srv_ws;
-
-      vk_free(srv_ws->alloc, sync_prim);
-   }
+err_out:
+   return result;
 }
 
 static VkResult pvr_srv_create_presignaled_sync(struct pvr_device *device,
@@ -770,7 +768,7 @@ static VkResult pvr_srv_create_presignaled_sync(struct pvr_device *device,
 
    VkResult result;
 
-   result = pvr_srv_create_timeline(srv_ws->render_fd, &timeline_fd);
+   result = pvr_srv_create_timeline(srv_ws->base.render_fd, &timeline_fd);
    if (result != VK_SUCCESS)
       return result;
 

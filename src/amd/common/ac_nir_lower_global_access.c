@@ -1,25 +1,7 @@
 /*
  * Copyright © 2021 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -81,47 +63,11 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
    case nir_intrinsic_load_global_constant:
       op = nir_intrinsic_load_global_amd;
       break;
-   case nir_intrinsic_global_atomic_add:
-      op = nir_intrinsic_global_atomic_add_amd;
+   case nir_intrinsic_global_atomic:
+      op = nir_intrinsic_global_atomic_amd;
       break;
-   case nir_intrinsic_global_atomic_imin:
-      op = nir_intrinsic_global_atomic_imin_amd;
-      break;
-   case nir_intrinsic_global_atomic_umin:
-      op = nir_intrinsic_global_atomic_umin_amd;
-      break;
-   case nir_intrinsic_global_atomic_imax:
-      op = nir_intrinsic_global_atomic_imax_amd;
-      break;
-   case nir_intrinsic_global_atomic_umax:
-      op = nir_intrinsic_global_atomic_umax_amd;
-      break;
-   case nir_intrinsic_global_atomic_and:
-      op = nir_intrinsic_global_atomic_and_amd;
-      break;
-   case nir_intrinsic_global_atomic_or:
-      op = nir_intrinsic_global_atomic_or_amd;
-      break;
-   case nir_intrinsic_global_atomic_xor:
-      op = nir_intrinsic_global_atomic_xor_amd;
-      break;
-   case nir_intrinsic_global_atomic_exchange:
-      op = nir_intrinsic_global_atomic_exchange_amd;
-      break;
-   case nir_intrinsic_global_atomic_fadd:
-      op = nir_intrinsic_global_atomic_fadd_amd;
-      break;
-   case nir_intrinsic_global_atomic_fmin:
-      op = nir_intrinsic_global_atomic_fmin_amd;
-      break;
-   case nir_intrinsic_global_atomic_fmax:
-      op = nir_intrinsic_global_atomic_fmax_amd;
-      break;
-   case nir_intrinsic_global_atomic_comp_swap:
-      op = nir_intrinsic_global_atomic_comp_swap_amd;
-      break;
-   case nir_intrinsic_global_atomic_fcomp_swap:
-      op = nir_intrinsic_global_atomic_fcomp_swap_amd;
+    case nir_intrinsic_global_atomic_swap:
+      op = nir_intrinsic_global_atomic_swap_amd;
       break;
    case nir_intrinsic_store_global:
       op = nir_intrinsic_store_global_amd;
@@ -152,8 +98,9 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
    new_intrin->num_components = intrin->num_components;
 
    if (op != nir_intrinsic_store_global_amd)
-      nir_ssa_dest_init(&new_intrin->instr, &new_intrin->dest, intrin->dest.ssa.num_components,
-                        intrin->dest.ssa.bit_size, NULL);
+      nir_ssa_dest_init(&new_intrin->instr, &new_intrin->dest,
+                        intrin->dest.ssa.num_components,
+                        intrin->dest.ssa.bit_size);
 
    unsigned num_src = nir_intrinsic_infos[intrin->intrinsic].num_srcs;
    for (unsigned i = 0; i < num_src; i++)
@@ -169,6 +116,8 @@ process_instr(nir_builder *b, nir_instr *instr, void *_)
       nir_intrinsic_set_align_offset(new_intrin, nir_intrinsic_align_offset(intrin));
    if (nir_intrinsic_has_write_mask(intrin))
       nir_intrinsic_set_write_mask(new_intrin, nir_intrinsic_write_mask(intrin));
+   if (nir_intrinsic_has_atomic_op(intrin))
+      nir_intrinsic_set_atomic_op(new_intrin, nir_intrinsic_atomic_op(intrin));
    nir_intrinsic_set_base(new_intrin, off_const);
 
    nir_builder_instr_insert(b, &new_intrin->instr);

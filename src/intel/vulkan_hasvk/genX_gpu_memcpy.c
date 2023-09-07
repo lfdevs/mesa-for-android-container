@@ -151,7 +151,7 @@ emit_so_memcpy(struct anv_batch *batch, struct anv_device *device,
 
    anv_batch_emit(batch, GENX(3DSTATE_SO_BUFFER), sob) {
       sob.SOBufferIndex = 0;
-      sob.MOCS = anv_mocs(device, dst.bo, 0),
+      sob.MOCS = anv_mocs(device, dst.bo, ISL_SURF_USAGE_STREAM_OUT_BIT),
       sob.SurfaceBaseAddress = dst;
 
 #if GFX_VER >= 8

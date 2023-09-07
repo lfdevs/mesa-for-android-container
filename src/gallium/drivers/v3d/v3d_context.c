@@ -128,7 +128,7 @@ v3d_update_primitive_counters(struct v3d_context *v3d)
         if (prims_before == prims_after)
                 return;
 
-        enum pipe_prim_type prim_type = u_base_prim_type(v3d->prim_mode);
+        enum mesa_prim prim_type = u_base_prim_type(v3d->prim_mode);
         uint32_t num_verts = u_vertices_for_prims(prim_type,
                                                   prims_after - prims_before);
         for (int i = 0; i < v3d->streamout.num_targets; i++) {
@@ -217,16 +217,6 @@ v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
         default:
                 unreachable("Unsupported shader stage");
         }
-}
-
-void
-v3d_create_texture_shader_state_bo(struct v3d_context *v3d,
-                                   struct v3d_sampler_view *so)
-{
-        if (v3d->screen->devinfo.ver >= 41)
-                v3d41_create_texture_shader_state_bo(v3d, so);
-        else
-                v3d33_create_texture_shader_state_bo(v3d, so);
 }
 
 void
@@ -346,6 +336,7 @@ v3d_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
         struct v3d_screen *screen = v3d_screen(pscreen);
         struct v3d_context *v3d;
+        struct v3d_device_info *devinfo = &screen->devinfo;
 
         /* Prevent dumping of the shaders built during context setup. */
         uint32_t saved_shaderdb_flag = v3d_mesa_debug & V3D_DEBUG_SHADERDB;
@@ -374,13 +365,8 @@ v3d_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         pctx->invalidate_resource = v3d_invalidate_resource;
         pctx->get_sample_position = v3d_get_sample_position;
 
-        if (screen->devinfo.ver >= 41) {
-                v3d41_draw_init(pctx);
-                v3d41_state_init(pctx);
-        } else {
-                v3d33_draw_init(pctx);
-                v3d33_state_init(pctx);
-        }
+        v3d_X(devinfo, draw_init)(pctx);
+        v3d_X(devinfo, state_init)(pctx);
         v3d_program_init(pctx);
         v3d_query_init(pctx);
         v3d_resource_context_init(pctx);

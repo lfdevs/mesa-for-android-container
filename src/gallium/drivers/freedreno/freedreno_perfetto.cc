@@ -265,6 +265,13 @@ stage_end(struct pipe_context *pctx, uint64_t ts_ns, enum fd_stage_id stage)
             data->set_name("num_groups_z");
             data->set_value(std::to_string(p->num_groups_z));
          }
+
+         {
+            auto data = event->add_extra_data();
+
+            data->set_name("shader_id");
+            data->set_value(std::to_string(p->shader_id));
+         }
       }
    });
 }
@@ -445,6 +452,7 @@ fd_start_compute(struct pipe_context *pctx, uint64_t ts_ns,
    p->num_groups_x = payload->num_groups_x;
    p->num_groups_y = payload->num_groups_y;
    p->num_groups_z = payload->num_groups_z;
+   p->shader_id    = payload->shader_id;
 }
 
 void
@@ -456,35 +464,51 @@ fd_end_compute(struct pipe_context *pctx, uint64_t ts_ns,
 }
 
 void
-fd_start_clear_restore(struct pipe_context *pctx, uint64_t ts_ns,
-                       const void *flush_data,
-                       const struct trace_start_clear_restore *payload)
+fd_start_clears(struct pipe_context *pctx, uint64_t ts_ns,
+                const void *flush_data,
+                const struct trace_start_clears *payload)
 {
-   stage_start(pctx, ts_ns, CLEAR_RESTORE_STAGE_ID);
+   stage_start(pctx, ts_ns, CLEAR_STAGE_ID);
 }
 
 void
-fd_end_clear_restore(struct pipe_context *pctx, uint64_t ts_ns,
+fd_end_clears(struct pipe_context *pctx, uint64_t ts_ns,
+              const void *flush_data,
+              const struct trace_end_clears *payload)
+{
+   stage_end(pctx, ts_ns, CLEAR_STAGE_ID);
+}
+
+void
+fd_start_tile_loads(struct pipe_context *pctx, uint64_t ts_ns,
+                    const void *flush_data,
+                    const struct trace_start_tile_loads *payload)
+{
+   stage_start(pctx, ts_ns, TILE_LOAD_STAGE_ID);
+}
+
+void
+fd_end_tile_loads(struct pipe_context *pctx, uint64_t ts_ns,
+                  const void *flush_data,
+                  const struct trace_end_tile_loads *payload)
+{
+   stage_end(pctx, ts_ns, TILE_LOAD_STAGE_ID);
+}
+
+void
+fd_start_tile_stores(struct pipe_context *pctx, uint64_t ts_ns,
                      const void *flush_data,
-                     const struct trace_end_clear_restore *payload)
+                     const struct trace_start_tile_stores *payload)
 {
-   stage_end(pctx, ts_ns, CLEAR_RESTORE_STAGE_ID);
+   stage_start(pctx, ts_ns, TILE_STORE_STAGE_ID);
 }
 
 void
-fd_start_resolve(struct pipe_context *pctx, uint64_t ts_ns,
-                 const void *flush_data,
-                 const struct trace_start_resolve *payload)
+fd_end_tile_stores(struct pipe_context *pctx, uint64_t ts_ns,
+                   const void *flush_data,
+                   const struct trace_end_tile_stores *payload)
 {
-   stage_start(pctx, ts_ns, RESOLVE_STAGE_ID);
-}
-
-void
-fd_end_resolve(struct pipe_context *pctx, uint64_t ts_ns,
-               const void *flush_data,
-               const struct trace_end_resolve *payload)
-{
-   stage_end(pctx, ts_ns, RESOLVE_STAGE_ID);
+   stage_end(pctx, ts_ns, TILE_STORE_STAGE_ID);
 }
 
 void

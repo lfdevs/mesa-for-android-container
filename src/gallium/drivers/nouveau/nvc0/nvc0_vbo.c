@@ -531,7 +531,7 @@ nvc0_vertex_arrays_validate(struct nvc0_context *nvc0)
 }
 
 #define NVC0_PRIM_GL_CASE(n) \
-   case PIPE_PRIM_##n: return NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
+   case MESA_PRIM_##n: return NVC0_3D_VERTEX_BEGIN_GL_PRIMITIVE_##n
 
 static inline unsigned
 nvc0_prim_gl(unsigned prim)
@@ -973,7 +973,7 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
       }
    }
 
-   if (info->mode == PIPE_PRIM_PATCHES &&
+   if (info->mode == MESA_PRIM_PATCHES &&
        nvc0->state.patch_vertices != nvc0->patch_vertices) {
       nvc0->state.patch_vertices = nvc0->patch_vertices;
       PUSH_SPACE(push, 1);

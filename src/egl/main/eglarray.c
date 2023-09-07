@@ -25,14 +25,12 @@
  *
  **************************************************************************/
 
-
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "egllog.h"
 #include "eglarray.h"
-
+#include "egllog.h"
 
 /**
  * Grow the size of the array.
@@ -49,8 +47,8 @@ _eglGrowArray(_EGLArray *array)
 
    elems = realloc(array->Elements, new_size * sizeof(array->Elements[0]));
    if (!elems) {
-      _eglLog(_EGL_DEBUG, "failed to grow %s array to %d",
-            array->Name, new_size);
+      _eglLog(_EGL_DEBUG, "failed to grow %s array to %d", array->Name,
+              new_size);
       return EGL_FALSE;
    }
 
@@ -59,7 +57,6 @@ _eglGrowArray(_EGLArray *array)
 
    return EGL_TRUE;
 }
-
 
 /**
  * Create an array.
@@ -82,7 +79,6 @@ _eglCreateArray(const char *name, EGLint init_size)
    return array;
 }
 
-
 /**
  * Destroy an array, optionally free the data.
  */
@@ -98,7 +94,6 @@ _eglDestroyArray(_EGLArray *array, void (*free_cb)(void *))
    free(array);
 }
 
-
 /**
  * Append a element to an array.
  */
@@ -111,7 +106,6 @@ _eglAppendArray(_EGLArray *array, void *elem)
    array->Elements[array->Size++] = elem;
 }
 
-
 /**
  * Erase an element from an array.
  */
@@ -122,11 +116,10 @@ _eglEraseArray(_EGLArray *array, EGLint i, void (*free_cb)(void *))
       free_cb(array->Elements[i]);
    if (i < array->Size - 1) {
       memmove(&array->Elements[i], &array->Elements[i + 1],
-            (array->Size - i - 1) * sizeof(array->Elements[0]));
+              (array->Size - i - 1) * sizeof(array->Elements[0]));
    }
    array->Size--;
 }
-
 
 /**
  * Find in an array for the given element.
@@ -144,7 +137,6 @@ _eglFindArray(_EGLArray *array, void *elem)
          return elem;
    return NULL;
 }
-
 
 /**
  * Filter an array and return the number of filtered elements.
@@ -172,7 +164,6 @@ _eglFilterArray(_EGLArray *array, void **data, EGLint size,
    return count;
 }
 
-
 /**
  * Flatten an array by converting array elements into another form and store
  * them in a buffer.
@@ -195,8 +186,7 @@ _eglFlattenArray(_EGLArray *array, void *buffer, EGLint elem_size, EGLint size,
       if (count > size)
          count = size;
       for (i = 0; i < count; i++)
-         flatten(array->Elements[i],
-               (void *) ((char *) buffer + elem_size * i));
+         flatten(array->Elements[i], (void *)((char *)buffer + elem_size * i));
    }
 
    return count;

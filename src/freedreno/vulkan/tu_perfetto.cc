@@ -40,7 +40,9 @@ enum {
  */
 enum tu_stage_id {
    CMD_BUFFER_STAGE_ID,
+   CMD_BUFFER_ANNOTATION_STAGE_ID,
    RENDER_PASS_STAGE_ID,
+   CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID,
    BINNING_STAGE_ID,
    GMEM_STAGE_ID,
    BYPASS_STAGE_ID,
@@ -66,7 +68,9 @@ static const struct {
    const char *desc;
 } stages[] = {
    [CMD_BUFFER_STAGE_ID]     = { "Command Buffer" },
+   [CMD_BUFFER_ANNOTATION_STAGE_ID]     = { "Annotation", "Command Buffer Annotation" },
    [RENDER_PASS_STAGE_ID]    = { "Render Pass" },
+   [CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID]    = { "Annotation", "Render Pass Command Buffer Annotation" },
    [BINNING_STAGE_ID]        = { "Binning", "Perform Visibility pass and determine target bins" },
    [GMEM_STAGE_ID]           = { "GMEM", "Rendering to GMEM" },
    [BYPASS_STAGE_ID]         = { "Bypass", "Rendering to system memory" },
@@ -128,11 +132,14 @@ PERFETTO_DECLARE_DATA_SOURCE_STATIC_MEMBERS(TuRenderpassDataSource);
 PERFETTO_DEFINE_DATA_SOURCE_STATIC_MEMBERS(TuRenderpassDataSource);
 
 static void
-send_descriptors(TuRenderpassDataSource::TraceContext &ctx, uint64_t ts_ns)
+send_descriptors(TuRenderpassDataSource::TraceContext &ctx)
 {
    PERFETTO_LOG("Sending renderstage descriptors");
 
    auto packet = ctx.NewTracePacket();
+
+   /* This must be set before interned data is sent. */
+   packet->set_sequence_flags(perfetto::protos::pbzero::TracePacket::SEQ_INCREMENTAL_STATE_CLEARED);
 
    packet->set_timestamp(0);
 
@@ -192,6 +199,7 @@ static void
 stage_start(struct tu_device *dev,
             uint64_t ts_ns,
             enum tu_stage_id stage_id,
+            const char *app_event,
             const void *payload = nullptr,
             size_t payload_size = 0,
             trace_payload_as_extra_func payload_as_extra = nullptr)
@@ -214,18 +222,31 @@ stage_start(struct tu_device *dev,
 
    *stage = (struct tu_perfetto_stage) {
       .stage_id = stage_id,
+      .stage_iid = 0,
       .start_ts = ts_ns,
       .payload = payload,
       .start_payload_function = (void *) payload_as_extra,
    };
+
+   if (app_event) {
+      TuRenderpassDataSource::Trace([=](auto tctx) {
+         stage->stage_iid =
+            tctx.GetDataSourceLocked()->debug_marker_stage(tctx, app_event);
+      });
+   }
 }
 
 static void
 stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
-          uint32_t submission_id, const void* payload = nullptr,
+          const void *flush_data,
+          const void* payload = nullptr,
           trace_payload_as_extra_func payload_as_extra = nullptr)
 {
    struct tu_perfetto_stage *stage = stage_pop(dev);
+   auto trace_flush_data =
+      (const struct tu_u_trace_submission_data *) flush_data;
+   uint32_t submission_id =
+      tu_u_trace_submission_data_get_submit_id(trace_flush_data);
 
    if (!stage)
       return;
@@ -245,7 +266,7 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
 
    TuRenderpassDataSource::Trace([=](TuRenderpassDataSource::TraceContext tctx) {
       if (auto state = tctx.GetIncrementalState(); state->was_cleared) {
-         send_descriptors(tctx, stage->start_ts);
+         send_descriptors(tctx);
          state->was_cleared = false;
       }
 
@@ -260,8 +281,11 @@ stage_end(struct tu_device *dev, uint64_t ts_ns, enum tu_stage_id stage_id,
       event->set_event_id(0); // ???
       event->set_hw_queue_id(DEFAULT_HW_QUEUE_ID);
       event->set_duration(ts_ns - stage->start_ts);
-      event->set_stage_id(stage->stage_id);
-      event->set_context((uintptr_t)dev);
+      if (stage->stage_iid)
+         event->set_stage_iid(stage->stage_iid);
+      else
+         event->set_stage_id(stage->stage_id);
+      event->set_context((uintptr_t) dev);
       event->set_submission_id(submission_id);
 
       if (stage->payload) {
@@ -380,6 +404,13 @@ tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
 /*
  * Trace callbacks, called from u_trace once the timestamps from GPU have been
  * collected.
+ *
+ * The default "extra" funcs are code-generated into tu_tracepoints_perfetto.h
+ * and just take the tracepoint's args and add them as name/value pairs in the
+ * perfetto events.  This file can usually just map a tu_perfetto_* to
+ * stage_start/end with a call to that codegenned "extra" func.  But you can
+ * also provide your own entrypoint and extra funcs if you want to change that
+ * mapping.
  */
 
 #define CREATE_EVENT_CALLBACK(event_name, stage_id)                                 \
@@ -388,8 +419,7 @@ tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
       const struct trace_start_##event_name *payload)                               \
    {                                                                                \
       stage_start(                                                                  \
-         dev, ts_ns, stage_id, payload,                                             \
-         sizeof(struct trace_start_##event_name),                                   \
+         dev, ts_ns, stage_id, NULL, payload, sizeof(*payload),                     \
          (trace_payload_as_extra_func) &trace_payload_as_extra_start_##event_name); \
    }                                                                                \
                                                                                     \
@@ -397,12 +427,8 @@ tu_perfetto_submit(struct tu_device *dev, uint32_t submission_id)
       struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
       const struct trace_end_##event_name *payload)                                 \
    {                                                                                \
-      auto trace_flush_data =                                                       \
-         (const struct tu_u_trace_submission_data *) flush_data;                    \
-      uint32_t submission_id =                                                      \
-         tu_u_trace_submission_data_get_submit_id(trace_flush_data);                \
       stage_end(                                                                    \
-         dev, ts_ns, stage_id, submission_id, payload,                              \
+         dev, ts_ns, stage_id, flush_data, payload,                                 \
          (trace_payload_as_extra_func) &trace_payload_as_extra_end_##event_name);   \
    }
 
@@ -419,6 +445,58 @@ CREATE_EVENT_CALLBACK(sysmem_clear_all, CLEAR_SYSMEM_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_load, GMEM_LOAD_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_store, GMEM_STORE_STAGE_ID)
 CREATE_EVENT_CALLBACK(sysmem_resolve, SYSMEM_RESOLVE_STAGE_ID)
+
+void
+tu_perfetto_start_cmd_buffer_annotation(
+   struct tu_device *dev,
+   uint64_t ts_ns,
+   const void *flush_data,
+   const struct trace_start_cmd_buffer_annotation *payload)
+{
+   /* No extra func necessary, the only arg is in the end payload.*/
+   stage_start(dev, ts_ns, CMD_BUFFER_ANNOTATION_STAGE_ID, payload->str, payload,
+               sizeof(*payload), NULL);
+}
+
+void
+tu_perfetto_end_cmd_buffer_annotation(
+   struct tu_device *dev,
+   uint64_t ts_ns,
+   const void *flush_data,
+   const struct trace_end_cmd_buffer_annotation *payload)
+{
+   /* Pass the payload string as the app_event, which will appear right on the
+    * event block, rather than as metadata inside.
+    */
+   stage_end(dev, ts_ns, CMD_BUFFER_ANNOTATION_STAGE_ID, flush_data,
+             payload, NULL);
+}
+
+void
+tu_perfetto_start_cmd_buffer_annotation_rp(
+   struct tu_device *dev,
+   uint64_t ts_ns,
+   const void *flush_data,
+   const struct trace_start_cmd_buffer_annotation_rp *payload)
+{
+   /* No extra func necessary, the only arg is in the end payload.*/
+   stage_start(dev, ts_ns, CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID,
+               payload->str, payload, sizeof(*payload), NULL);
+}
+
+void
+tu_perfetto_end_cmd_buffer_annotation_rp(
+   struct tu_device *dev,
+   uint64_t ts_ns,
+   const void *flush_data,
+   const struct trace_end_cmd_buffer_annotation_rp *payload)
+{
+   /* Pass the payload string as the app_event, which will appear right on the
+    * event block, rather than as metadata inside.
+    */
+   stage_end(dev, ts_ns, CMD_BUFFER_ANNOTATION_RENDER_PASS_STAGE_ID,
+             flush_data, payload, NULL);
+}
 
 #ifdef __cplusplus
 }

@@ -101,6 +101,8 @@ static const struct debug_control debug_control[] = {
    { "capture-all", DEBUG_CAPTURE_ALL },
    { "perf-symbol-names", DEBUG_PERF_SYMBOL_NAMES },
    { "swsb-stall",  DEBUG_SWSB_STALL },
+   { "heaps",       DEBUG_HEAPS },
+   { "isl",         DEBUG_ISL },
    { NULL,    0 }
 };
 
@@ -177,11 +179,19 @@ intel_debug_flag_for_shader_stage(gl_shader_stage stage)
     DEBUG_MS_SIMD32 | \
     DEBUG_RT_SIMD32)
 
+static uint64_t intel_debug_batch_frame_start = 0;
+static uint64_t intel_debug_batch_frame_stop = -1;
+
 static void
 brw_process_intel_debug_variable_once(void)
 {
    intel_debug = parse_debug_string(getenv("INTEL_DEBUG"), debug_control);
    intel_simd = parse_debug_string(getenv("INTEL_SIMD_DEBUG"), simd_control);
+   intel_debug_batch_frame_start =
+      debug_get_num_option("INTEL_DEBUG_BATCH_FRAME_START", 0);
+   intel_debug_batch_frame_stop =
+      debug_get_num_option("INTEL_DEBUG_BATCH_FRAME_STOP", -1);
+
 
    if (!(intel_simd & DEBUG_FS_SIMD))
       intel_simd |=   DEBUG_FS_SIMD;
@@ -325,4 +335,14 @@ intel_debug_get_identifier_block(void *_buffer,
    }
 
    return NULL;
+}
+
+/**
+ * Check if in valid frame range for batch dumping
+ */
+bool
+intel_debug_batch_in_range(uint64_t frame_id)
+{
+   return frame_id >= intel_debug_batch_frame_start &&
+          frame_id < intel_debug_batch_frame_stop;
 }

@@ -70,17 +70,18 @@ private:
 
    void do_print_properties(std::ostream& os) const override;
 
-   bool m_dual_source_blend;
-   unsigned m_max_color_exports;
-   unsigned m_export_highest;
-   unsigned m_num_color_exports;
-   unsigned m_color_export_mask;
-   ExportInstr *m_last_pixel_export;
+   bool m_dual_source_blend{false};
+   unsigned m_max_color_exports{0};
+   unsigned m_export_highest{0};
+   unsigned m_num_color_exports{0};
+   unsigned m_color_export_mask{0};
+   unsigned m_color_export_written_mask{0};
+   ExportInstr *m_last_pixel_export{nullptr};
 
    std::bitset<s_max_interpolators> m_interpolators_used;
    RegisterVec4 m_pos_input;
    Register *m_face_input{nullptr};
-   bool m_fs_write_all;
+   bool m_fs_write_all{false};
    bool m_uses_discard{false};
    bool m_gs_prim_id_input{false};
    int m_ps_prim_id_input{0};

@@ -50,7 +50,7 @@ build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
       build_write_masked_store(b, vec_deref, value, start);
    } else {
       unsigned mid = start + (end - start) / 2;
-      nir_push_if(b, nir_ilt(b, index, nir_imm_int(b, mid)));
+      nir_push_if(b, nir_ilt_imm(b, index, mid));
       build_write_masked_stores(b, vec_deref, value, index, start, mid);
       nir_push_else(b, NULL);
       build_write_masked_stores(b, vec_deref, value, index, mid, end);
@@ -65,8 +65,7 @@ nir_lower_array_deref_of_vec_impl(nir_function_impl *impl,
 {
    bool progress = false;
 
-   nir_builder b;
-   nir_builder_init(&b, impl);
+   nir_builder b = nir_builder_create(impl);
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr_safe(instr, block) {
@@ -187,9 +186,8 @@ nir_lower_array_deref_of_vec(nir_shader *shader, nir_variable_mode modes,
 {
    bool progress = false;
 
-   nir_foreach_function(function, shader) {
-      if (function->impl &&
-          nir_lower_array_deref_of_vec_impl(function->impl, modes, options))
+   nir_foreach_function_impl(impl, shader) {
+      if (nir_lower_array_deref_of_vec_impl(impl, modes, options))
          progress = true;
    }
 

@@ -39,6 +39,7 @@ enum intel_engine_class {
 struct intel_engine_class_instance {
    enum intel_engine_class engine_class;
    uint16_t engine_instance;
+   uint16_t gt_id;
 };
 
 struct intel_query_engine_info {

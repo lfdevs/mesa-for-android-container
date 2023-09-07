@@ -121,6 +121,20 @@ def define_tracepoints(args):
     # Indirect draw generation, only for Anv
     begin_end_tp('generate_draws')
 
+    # vkCmdResetQuery, only for Anv
+    begin_end_tp('query_clear_blorp',
+                 tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
+    begin_end_tp('query_clear_cs',
+                 tp_args=[Arg(type='uint32_t', var='count', c_format='%u')],
+                 end_pipelined=False)
+
+    # vkCmdCopyQueryResults, only for Anv
+    begin_end_tp('query_copy_cs',
+                 tp_args=[Arg(type='uint32_t', var='count', c_format='%u')],
+                 end_pipelined=False)
+    begin_end_tp('query_copy_shader',
+                 tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
+
     # Various draws/dispatch, Anv & Iris
     begin_end_tp('draw',
                  tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
@@ -196,7 +210,8 @@ def define_tracepoints(args):
                    ['CS_STALL',                      'cs_stall'],
                    ['UNTYPED_DATAPORT_CACHE_FLUSH',  'udp_flush'],
                    ['PSS_STALL_SYNC',                'pss_stall'],
-                   ['END_OF_PIPE',               'eop']]
+                   ['END_OF_PIPE',                   'eop'],
+                   ['CCS_CACHE_FLUSH',               'ccs_flush']]
 
     begin_end_tp('stall',
                  tp_args=[ArgStruct(type='uint32_t', var='flags'),

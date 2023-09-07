@@ -43,7 +43,7 @@ pass(struct nir_builder *b, nir_instr *instr, UNUSED void *data)
          nir_intrinsic_instr *clone_intr = nir_instr_as_intrinsic(clone);
 
          /* Shrink the load to count contiguous components */
-         nir_ssa_dest_init(clone, &clone_intr->dest, count, bit_size, NULL);
+         nir_ssa_dest_init(clone, &clone_intr->dest, count, bit_size);
          nir_ssa_def *clone_vec = &clone_intr->dest.ssa;
          clone_intr->num_components = count;
 

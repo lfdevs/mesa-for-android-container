@@ -29,7 +29,7 @@
 #define TR_TEXTURE_H_
 
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_state.h"
 
 #include "tr_screen.h"

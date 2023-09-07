@@ -78,6 +78,25 @@ TEST_F(Optimizer, FloatCopyprop)
           agx_fadd_to(b, out, agx_neg(wx), wy));
 }
 
+TEST_F(Optimizer, FloatConversion)
+{
+   CASE32(
+      {
+         agx_index cvt = agx_temp(b->shader, AGX_SIZE_32);
+         agx_fmov_to(b, cvt, hx);
+         agx_fadd_to(b, out, cvt, wy);
+      },
+      { agx_fadd_to(b, out, hx, wy); });
+
+   CASE16(
+      {
+         agx_index sum = agx_temp(b->shader, AGX_SIZE_32);
+         agx_fadd_to(b, sum, wx, wy);
+         agx_fmov_to(b, out, sum);
+      },
+      { agx_fadd_to(b, out, wx, wy); });
+}
+
 TEST_F(Optimizer, FusedFABSNEG)
 {
    CASE32(agx_fadd_to(b, out, agx_fmov(b, agx_abs(wx)), wy),
@@ -163,4 +182,15 @@ TEST_F(Optimizer, SkipPreloads)
       agx_index preload = agx_preload(b, agx_register(0, AGX_SIZE_32));
       agx_xor_to(b, out, preload, wy);
    });
+}
+
+TEST_F(Optimizer, NoConversionsOn16BitALU)
+{
+   NEGCASE16({
+      agx_index cvt = agx_temp(b->shader, AGX_SIZE_16);
+      agx_fmov_to(b, cvt, wx);
+      agx_fadd_to(b, out, cvt, hy);
+   });
+
+   NEGCASE32(agx_fmov_to(b, out, agx_fadd(b, hx, hy)));
 }

@@ -136,7 +136,7 @@ vmw_gmr_buffer_map(struct pb_buffer *_buf,
       ret = vmw_ioctl_syncforcpu(buf->region,
                                  !!(flags & PB_USAGE_DONTBLOCK),
                                  !(flags & PB_USAGE_CPU_WRITE),
-                                 FALSE);
+                                 false);
       if (ret)
          return NULL;
    }
@@ -156,7 +156,7 @@ vmw_gmr_buffer_unmap(struct pb_buffer *_buf)
        !(flags & PB_USAGE_UNSYNCHRONIZED)) {
       vmw_ioctl_releasefromcpu(buf->region,
                                !(flags & PB_USAGE_CPU_WRITE),
-                               FALSE);
+                               false);
    }
 
    assert(buf->map_count > 0);
@@ -277,7 +277,7 @@ vmw_gmr_bufmgr_create(struct vmw_winsys_screen *vws)
 }
 
 
-boolean
+bool
 vmw_gmr_bufmgr_region_ptr(struct pb_buffer *buf, 
                           struct SVGAGuestPtr *ptr)
 {
@@ -289,13 +289,13 @@ vmw_gmr_bufmgr_region_ptr(struct pb_buffer *buf,
    
    gmr_buf = vmw_gmr_buffer(base_buf);
    if(!gmr_buf)
-      return FALSE;
+      return false;
    
    *ptr = vmw_ioctl_region_ptr(gmr_buf->region);
    
    ptr->offset += offset;
    
-   return TRUE;
+   return true;
 }
 
 #ifdef DEBUG
@@ -326,7 +326,7 @@ vmw_svga_winsys_buffer_wrap(struct pb_buffer *buffer)
    }
 
    buf->pb_buf = buffer;
-   buf->fbuf = debug_flush_buf_create(FALSE, VMW_DEBUG_FLUSH_STACK);
+   buf->fbuf = debug_flush_buf_create(false, VMW_DEBUG_FLUSH_STACK);
    return buf;
 }
 

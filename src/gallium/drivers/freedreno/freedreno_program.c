@@ -36,11 +36,14 @@ static void
 update_bound_stage(struct fd_context *ctx, enum pipe_shader_type shader,
                    bool bound) assert_dt
 {
+   uint32_t bound_shader_stages = ctx->bound_shader_stages;
    if (bound) {
       ctx->bound_shader_stages |= BIT(shader);
    } else {
       ctx->bound_shader_stages &= ~BIT(shader);
    }
+   if (ctx->update_draw && (bound_shader_stages != ctx->bound_shader_stages))
+      ctx->update_draw(ctx);
 }
 
 static void

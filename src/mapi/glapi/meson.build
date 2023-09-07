@@ -57,8 +57,6 @@ endif
 static_glapi_files += files(
   '../u_current.c',
   '../u_current.h',
-  '../u_execmem.c',
-  '../u_execmem.h',
   'glapi_dispatch.c',
   'glapi_entrypoint.c',
   'glapi_getproc.c',

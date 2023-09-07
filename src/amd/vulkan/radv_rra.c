@@ -67,8 +67,7 @@ struct rra_file_chunk_description {
    uint64_t unused;
 };
 
-static_assert(sizeof(struct rra_file_chunk_description) == 64,
-              "rra_file_chunk_description does not match RRA spec");
+static_assert(sizeof(struct rra_file_chunk_description) == 64, "rra_file_chunk_description does not match RRA spec");
 
 static uint64_t
 node_to_addr(uint64_t node)
@@ -91,8 +90,8 @@ rra_dump_header(FILE *output, uint64_t chunk_descriptions_offset, uint64_t chunk
 }
 
 static void
-rra_dump_chunk_description(uint64_t offset, uint64_t header_size, uint64_t data_size,
-                           const char *name, enum rra_chunk_type type, FILE *output)
+rra_dump_chunk_description(uint64_t offset, uint64_t header_size, uint64_t data_size, const char *name,
+                           enum rra_chunk_type type, FILE *output)
 {
    struct rra_file_chunk_description chunk = {
       .type = type,
@@ -159,7 +158,7 @@ amdgpu_vram_type_to_rra(uint32_t type)
 }
 
 static void
-rra_dump_asic_info(struct radeon_info *rad_info, FILE *output)
+rra_dump_asic_info(const struct radeon_info *rad_info, FILE *output)
 {
    struct rra_asic_info asic_info = {
       /* All frequencies are in Hz */
@@ -178,8 +177,7 @@ rra_dump_asic_info(struct radeon_info *rad_info, FILE *output)
       .rev_id = rad_info->pci_rev_id,
    };
 
-   strncpy(asic_info.device_name,
-           rad_info->marketing_name ? rad_info->marketing_name : rad_info->name,
+   strncpy(asic_info.device_name, rad_info->marketing_name ? rad_info->marketing_name : rad_info->name,
            RRA_FILE_DEVICE_NAME_MAX_SIZE - 1);
 
    fwrite(&asic_info, sizeof(struct rra_asic_info), 1, output);
@@ -246,8 +244,7 @@ struct rra_accel_struct_header {
 
 #define RRA_ROOT_NODE_OFFSET align(sizeof(struct rra_accel_struct_header), 64)
 
-static_assert(sizeof(struct rra_accel_struct_header) == 120,
-              "rra_accel_struct_header does not match RRA spec");
+static_assert(sizeof(struct rra_accel_struct_header) == 120, "rra_accel_struct_header does not match RRA spec");
 
 struct rra_accel_struct_metadata {
    uint64_t virtual_address;
@@ -255,8 +252,7 @@ struct rra_accel_struct_metadata {
    char unused[116];
 };
 
-static_assert(sizeof(struct rra_accel_struct_metadata) == 128,
-              "rra_accel_struct_metadata does not match RRA spec");
+static_assert(sizeof(struct rra_accel_struct_metadata) == 128, "rra_accel_struct_metadata does not match RRA spec");
 
 struct rra_geometry_info {
    uint32_t primitive_count : 29;
@@ -268,9 +264,9 @@ struct rra_geometry_info {
 static_assert(sizeof(struct rra_geometry_info) == 12, "rra_geometry_info does not match RRA spec");
 
 static struct rra_accel_struct_header
-rra_fill_accel_struct_header_common(struct radv_accel_struct_header *header,
-                                    size_t parent_id_table_size, size_t leaf_node_data_size,
-                                    size_t internal_node_data_size, uint64_t primitive_count)
+rra_fill_accel_struct_header_common(struct radv_accel_struct_header *header, size_t parent_id_table_size,
+                                    size_t leaf_node_data_size, size_t internal_node_data_size,
+                                    uint64_t primitive_count)
 {
    struct rra_accel_struct_header result = {
       .post_build_info =
@@ -288,8 +284,8 @@ rra_fill_accel_struct_header_common(struct radv_accel_struct_header *header,
    };
 
    result.metadata_size = sizeof(struct rra_accel_struct_metadata) + parent_id_table_size;
-   result.file_size = result.metadata_size + sizeof(struct rra_accel_struct_header) +
-                      internal_node_data_size + leaf_node_data_size;
+   result.file_size =
+      result.metadata_size + sizeof(struct rra_accel_struct_header) + internal_node_data_size + leaf_node_data_size;
 
    result.internal_nodes_offset = sizeof(struct rra_accel_struct_metadata);
    result.leaf_nodes_offset = result.internal_nodes_offset + internal_node_data_size;
@@ -331,8 +327,7 @@ struct rra_instance_node {
    float otw_matrix[12];
 };
 
-static_assert(sizeof(struct rra_instance_node) == 128,
-              "rra_instance_node does not match RRA spec!");
+static_assert(sizeof(struct rra_instance_node) == 128, "rra_instance_node does not match RRA spec!");
 
 /*
  * Format RRA uses for aabb nodes
@@ -361,9 +356,8 @@ struct rra_triangle_node {
 static_assert(sizeof(struct rra_triangle_node) == 64, "rra_triangle_node does not match RRA spec!");
 
 static void
-rra_dump_tlas_header(struct radv_accel_struct_header *header, size_t parent_id_table_size,
-                     size_t leaf_node_data_size, size_t internal_node_data_size,
-                     uint64_t primitive_count, FILE *output)
+rra_dump_tlas_header(struct radv_accel_struct_header *header, size_t parent_id_table_size, size_t leaf_node_data_size,
+                     size_t internal_node_data_size, uint64_t primitive_count, FILE *output)
 {
    struct rra_accel_struct_header file_header = rra_fill_accel_struct_header_common(
       header, parent_id_table_size, leaf_node_data_size, internal_node_data_size, primitive_count);
@@ -375,15 +369,13 @@ rra_dump_tlas_header(struct radv_accel_struct_header *header, size_t parent_id_t
 
 static void
 rra_dump_blas_header(struct radv_accel_struct_header *header, size_t parent_id_table_size,
-                     struct radv_accel_struct_geometry_info *geometry_infos,
-                     size_t leaf_node_data_size, size_t internal_node_data_size,
-                     uint64_t primitive_count, FILE *output)
+                     struct radv_accel_struct_geometry_info *geometry_infos, size_t leaf_node_data_size,
+                     size_t internal_node_data_size, uint64_t primitive_count, FILE *output)
 {
    struct rra_accel_struct_header file_header = rra_fill_accel_struct_header_common(
       header, parent_id_table_size, leaf_node_data_size, internal_node_data_size, primitive_count);
    file_header.post_build_info.bvh_type = RRA_BVH_TYPE_BLAS;
-   file_header.geometry_type =
-      header->geometry_count ? geometry_infos->type : VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+   file_header.geometry_type = header->geometry_count ? geometry_infos->type : VK_GEOMETRY_TYPE_TRIANGLES_KHR;
 
    fwrite(&file_header, sizeof(struct rra_accel_struct_header), 1, output);
 }
@@ -400,8 +392,7 @@ struct rra_validation_context {
    char location[31];
 };
 
-static void PRINTFLIKE(2, 3)
-rra_validation_fail(struct rra_validation_context *ctx, const char *message, ...)
+static void PRINTFLIKE(2, 3) rra_validation_fail(struct rra_validation_context *ctx, const char *message, ...)
 {
    if (!ctx->failed) {
       fprintf(stderr, "radv: rra: Validation failed at %s:\n", ctx->location);
@@ -419,15 +410,13 @@ rra_validation_fail(struct rra_validation_context *ctx, const char *message, ...
 }
 
 static bool
-rra_validate_header(struct radv_rra_accel_struct_data *accel_struct,
-                    const struct radv_accel_struct_header *header)
+rra_validate_header(struct radv_rra_accel_struct_data *accel_struct, const struct radv_accel_struct_header *header)
 {
    struct rra_validation_context ctx = {
       .location = "header",
    };
 
-   if (accel_struct->type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR &&
-       header->instance_count > 0)
+   if (accel_struct->type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR && header->instance_count > 0)
       rra_validation_fail(&ctx, "BLAS contains instances");
 
    if (header->bvh_offset >= accel_struct->size)
@@ -457,8 +446,8 @@ static const char *node_type_names[8] = {
 };
 
 static bool
-rra_validate_node(struct hash_table_u64 *accel_struct_vas, uint8_t *data, void *node,
-                  uint32_t geometry_count, uint32_t size, bool is_bottom_level)
+rra_validate_node(struct hash_table_u64 *accel_struct_vas, uint8_t *data, void *node, uint32_t geometry_count,
+                  uint32_t size, bool is_bottom_level)
 {
    struct rra_validation_context ctx = {0};
 
@@ -476,8 +465,7 @@ rra_validate_node(struct hash_table_u64 *accel_struct_vas, uint8_t *data, void *
 
       if (!is_internal_node(type) && is_bottom_level == (type == radv_bvh_node_instance))
          rra_validation_fail(&ctx,
-                             is_bottom_level ? "%s node in BLAS (child index %u)"
-                                             : "%s node in TLAS (child index %u)",
+                             is_bottom_level ? "%s node in BLAS (child index %u)" : "%s node in TLAS (child index %u)",
                              node_type_names[type], i);
 
       if (offset > size) {
@@ -486,12 +474,10 @@ rra_validate_node(struct hash_table_u64 *accel_struct_vas, uint8_t *data, void *
       }
 
       struct rra_validation_context child_ctx = {0};
-      snprintf(child_ctx.location, sizeof(child_ctx.location), "%s node (offset=%u)",
-               node_type_names[type], offset);
+      snprintf(child_ctx.location, sizeof(child_ctx.location), "%s node (offset=%u)", node_type_names[type], offset);
 
       if (is_internal_node(type)) {
-         ctx.failed |= rra_validate_node(accel_struct_vas, data, data + offset, geometry_count,
-                                         size, is_bottom_level);
+         ctx.failed |= rra_validate_node(accel_struct_vas, data, data + offset, geometry_count, size, is_bottom_level);
       } else if (type == radv_bvh_node_instance) {
          struct radv_bvh_instance_node *src = (struct radv_bvh_instance_node *)(data + offset);
          uint64_t blas_va = node_to_addr(src->bvh_ptr) - src->bvh_offset;
@@ -525,8 +511,7 @@ struct rra_transcoding_context {
 };
 
 static void
-rra_transcode_triangle_node(struct rra_transcoding_context *ctx,
-                            const struct radv_bvh_triangle_node *src)
+rra_transcode_triangle_node(struct rra_transcoding_context *ctx, const struct radv_bvh_triangle_node *src)
 {
    struct rra_triangle_node *dst = (struct rra_triangle_node *)(ctx->dst + ctx->dst_leaf_offset);
    ctx->dst_leaf_offset += sizeof(struct rra_triangle_node);
@@ -541,8 +526,7 @@ rra_transcode_triangle_node(struct rra_transcoding_context *ctx,
 }
 
 static void
-rra_transcode_aabb_node(struct rra_transcoding_context *ctx, const struct radv_bvh_aabb_node *src,
-                        radv_aabb bounds)
+rra_transcode_aabb_node(struct rra_transcoding_context *ctx, const struct radv_bvh_aabb_node *src, radv_aabb bounds)
 {
    struct rra_aabb_node *dst = (struct rra_aabb_node *)(ctx->dst + ctx->dst_leaf_offset);
    ctx->dst_leaf_offset += sizeof(struct rra_aabb_node);
@@ -560,8 +544,7 @@ rra_transcode_aabb_node(struct rra_transcoding_context *ctx, const struct radv_b
 }
 
 static void
-rra_transcode_instance_node(struct rra_transcoding_context *ctx,
-                            const struct radv_bvh_instance_node *src)
+rra_transcode_instance_node(struct rra_transcoding_context *ctx, const struct radv_bvh_instance_node *src)
 {
    uint64_t blas_va = node_to_addr(src->bvh_ptr) - src->bvh_offset;
 
@@ -580,8 +563,8 @@ rra_transcode_instance_node(struct rra_transcoding_context *ctx,
    memcpy(dst->otw_matrix, src->otw_matrix.values, sizeof(dst->otw_matrix));
 }
 
-static uint32_t rra_transcode_node(struct rra_transcoding_context *ctx, uint32_t parent_id,
-                                   uint32_t src_id, radv_aabb bounds);
+static uint32_t rra_transcode_node(struct rra_transcoding_context *ctx, uint32_t parent_id, uint32_t src_id,
+                                   radv_aabb bounds);
 
 static void
 rra_transcode_box16_node(struct rra_transcoding_context *ctx, const struct radv_bvh_box16_node *src)
@@ -613,8 +596,7 @@ rra_transcode_box16_node(struct rra_transcoding_context *ctx, const struct radv_
             },
       };
 
-      dst->children[i] =
-         rra_transcode_node(ctx, radv_bvh_node_box16 | (dst_offset >> 3), src->children[i], bounds);
+      dst->children[i] = rra_transcode_node(ctx, radv_bvh_node_box16 | (dst_offset >> 3), src->children[i], bounds);
    }
 }
 
@@ -633,8 +615,8 @@ rra_transcode_box32_node(struct rra_transcoding_context *ctx, const struct radv_
          continue;
       }
 
-      dst->children[i] = rra_transcode_node(ctx, radv_bvh_node_box32 | (dst_offset >> 3),
-                                            src->children[i], src->coords[i]);
+      dst->children[i] =
+         rra_transcode_node(ctx, radv_bvh_node_box32 | (dst_offset >> 3), src->children[i], src->coords[i]);
    }
 }
 
@@ -655,8 +637,7 @@ get_geometry_id(const void *node, uint32_t node_type)
 }
 
 static uint32_t
-rra_transcode_node(struct rra_transcoding_context *ctx, uint32_t parent_id, uint32_t src_id,
-                   radv_aabb bounds)
+rra_transcode_node(struct rra_transcoding_context *ctx, uint32_t parent_id, uint32_t src_id, radv_aabb bounds)
 {
    uint32_t node_type = src_id & 7;
    uint32_t src_offset = (src_id & (~7u)) << 3;
@@ -681,8 +662,7 @@ rra_transcode_node(struct rra_transcoding_context *ctx, uint32_t parent_id, uint
          rra_transcode_instance_node(ctx, src_child_node);
    }
 
-   uint32_t parent_id_index =
-      rra_parent_table_index_from_offset(dst_offset, ctx->parent_id_table_size);
+   uint32_t parent_id_index = rra_parent_table_index_from_offset(dst_offset, ctx->parent_id_table_size);
    ctx->parent_id_table[parent_id_index] = parent_id;
 
    uint32_t dst_id = node_type | (dst_offset >> 3);
@@ -737,8 +717,7 @@ rra_gather_bvh_info(const uint8_t *bvh, uint32_t node_id, struct rra_bvh_info *d
 
 static VkResult
 rra_dump_acceleration_structure(struct radv_rra_accel_struct_data *accel_struct, uint8_t *data,
-                                struct hash_table_u64 *accel_struct_vas, bool should_validate,
-                                FILE *output)
+                                struct hash_table_u64 *accel_struct_vas, bool should_validate, FILE *output)
 {
    struct radv_accel_struct_header *header = (struct radv_accel_struct_header *)data;
 
@@ -753,9 +732,8 @@ rra_dump_acceleration_structure(struct radv_rra_accel_struct_data *accel_struct,
       if (rra_validate_header(accel_struct, header)) {
          return VK_ERROR_VALIDATION_FAILED_EXT;
       }
-      if (rra_validate_node(accel_struct_vas, data + header->bvh_offset,
-                            data + header->bvh_offset + src_root_offset, header->geometry_count,
-                            accel_struct->size, !is_tlas)) {
+      if (rra_validate_node(accel_struct_vas, data + header->bvh_offset, data + header->bvh_offset + src_root_offset,
+                            header->geometry_count, accel_struct->size, !is_tlas)) {
          return VK_ERROR_VALIDATION_FAILED_EXT;
       }
    }
@@ -811,8 +789,7 @@ rra_dump_acceleration_structure(struct radv_rra_accel_struct_data *accel_struct,
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto exit;
    }
-   dst_structure_data =
-      calloc(RRA_ROOT_NODE_OFFSET + bvh_info.internal_nodes_size + bvh_info.leaf_nodes_size, 1);
+   dst_structure_data = calloc(RRA_ROOT_NODE_OFFSET + bvh_info.internal_nodes_size + bvh_info.leaf_nodes_size, 1);
    if (!dst_structure_data) {
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto exit;
@@ -858,8 +835,7 @@ rra_dump_acceleration_structure(struct radv_rra_accel_struct_data *accel_struct,
 
    struct rra_accel_struct_metadata rra_metadata = {
       .virtual_address = va,
-      .byte_size = bvh_info.leaf_nodes_size + bvh_info.internal_nodes_size +
-                   sizeof(struct rra_accel_struct_header),
+      .byte_size = bvh_info.leaf_nodes_size + bvh_info.internal_nodes_size + sizeof(struct rra_accel_struct_header),
    };
 
    fwrite(&chunk_header, sizeof(struct rra_accel_struct_chunk_header), 1, output);
@@ -869,15 +845,15 @@ rra_dump_acceleration_structure(struct radv_rra_accel_struct_data *accel_struct,
    fwrite(node_parent_table, 1, node_parent_table_size, output);
 
    if (is_tlas)
-      rra_dump_tlas_header(header, node_parent_table_size, bvh_info.leaf_nodes_size,
-                           bvh_info.internal_nodes_size, primitive_count, output);
+      rra_dump_tlas_header(header, node_parent_table_size, bvh_info.leaf_nodes_size, bvh_info.internal_nodes_size,
+                           primitive_count, output);
    else
       rra_dump_blas_header(header, node_parent_table_size, geometry_infos, bvh_info.leaf_nodes_size,
                            bvh_info.internal_nodes_size, primitive_count, output);
 
    /* Write acceleration structure data  */
-   fwrite(dst_structure_data + RRA_ROOT_NODE_OFFSET, 1,
-          bvh_info.internal_nodes_size + bvh_info.leaf_nodes_size, output);
+   fwrite(dst_structure_data + RRA_ROOT_NODE_OFFSET, 1, bvh_info.internal_nodes_size + bvh_info.leaf_nodes_size,
+          output);
 
    if (!is_tlas)
       fwrite(rra_geometry_infos, sizeof(struct rra_geometry_info), header->geometry_count, output);
@@ -896,41 +872,18 @@ exit:
    return result;
 }
 
-int
-radv_rra_trace_frame()
-{
-   return radv_get_int_debug_option("RADV_RRA_TRACE", -1);
-}
-
-char *
-radv_rra_trace_trigger_file()
-{
-   return getenv("RADV_RRA_TRACE_TRIGGER");
-}
-
-bool
-radv_rra_trace_enabled()
-{
-   return radv_rra_trace_frame() != -1 || radv_rra_trace_trigger_file();
-}
-
 void
 radv_rra_trace_init(struct radv_device *device)
 {
-   device->rra_trace.trace_frame = radv_rra_trace_frame();
-   device->rra_trace.elapsed_frames = 0;
-   device->rra_trace.trigger_file = radv_rra_trace_trigger_file();
-   device->rra_trace.validate_as = radv_get_int_debug_option("RADV_RRA_TRACE_VALIDATE", 0) != 0;
-   device->rra_trace.copy_after_build =
-      radv_get_int_debug_option("RADV_RRA_TRACE_COPY_AFTER_BUILD", 0) != 0;
+   device->rra_trace.validate_as = debug_get_bool_option("RADV_RRA_TRACE_VALIDATE", false);
+   device->rra_trace.copy_after_build = debug_get_bool_option("RADV_RRA_TRACE_COPY_AFTER_BUILD", false);
    device->rra_trace.accel_structs = _mesa_pointer_hash_table_create(NULL);
    device->rra_trace.accel_struct_vas = _mesa_hash_table_u64_create(NULL);
    simple_mtx_init(&device->rra_trace.data_mtx, mtx_plain);
 
-   device->rra_trace.copy_memory_index =
-      radv_find_memory_index(device->physical_device, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                                                         VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+   device->rra_trace.copy_memory_index = radv_find_memory_index(
+      device->physical_device,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 }
 
 void
@@ -1036,8 +989,7 @@ rra_copy_context_init(struct rra_copy_context *ctx)
    if (result != VK_SUCCESS)
       goto fail_buffer;
 
-   result =
-      vk_common_MapMemory(ctx->device, ctx->memory, 0, VK_WHOLE_SIZE, 0, (void **)&ctx->mapped_data);
+   result = vk_common_MapMemory(ctx->device, ctx->memory, 0, VK_WHOLE_SIZE, 0, (void **)&ctx->mapped_data);
    if (result != VK_SUCCESS)
       goto fail_memory;
 
@@ -1186,9 +1138,7 @@ radv_rra_dump_trace(VkQueue vk_queue, char *filename)
    uint64_t written_accel_struct_count = 0;
 
    struct hash_entry *last_entry = NULL;
-   for (unsigned i = 0;
-        (last_entry = _mesa_hash_table_next_entry(device->rra_trace.accel_structs, last_entry));
-        ++i)
+   for (unsigned i = 0; (last_entry = _mesa_hash_table_next_entry(device->rra_trace.accel_structs, last_entry)); ++i)
       hash_entries[i] = last_entry;
 
    qsort(hash_entries, struct_count, sizeof(*hash_entries), accel_struct_entry_cmp);
@@ -1215,9 +1165,8 @@ radv_rra_dump_trace(VkQueue vk_queue, char *filename)
          continue;
 
       accel_struct_offsets[written_accel_struct_count] = (uint64_t)ftell(file);
-      result =
-         rra_dump_acceleration_structure(data, mapped_data, device->rra_trace.accel_struct_vas,
-                                         device->rra_trace.validate_as, file);
+      result = rra_dump_acceleration_structure(data, mapped_data, device->rra_trace.accel_struct_vas,
+                                               device->rra_trace.validate_as, file);
 
       rra_unmap_accel_struct_data(&copy_ctx, i);
 
@@ -1228,8 +1177,7 @@ radv_rra_dump_trace(VkQueue vk_queue, char *filename)
    rra_copy_context_finish(&copy_ctx);
 
    uint64_t chunk_info_offset = (uint64_t)ftell(file);
-   rra_dump_chunk_description(api_info_offset, 0, 8, "ApiInfo", RADV_RRA_CHUNK_ID_ASIC_API_INFO,
-                              file);
+   rra_dump_chunk_description(api_info_offset, 0, 8, "ApiInfo", RADV_RRA_CHUNK_ID_ASIC_API_INFO, file);
    rra_dump_chunk_description(asic_info_offset, 0, sizeof(struct rra_asic_info), "AsicInfo",
                               RADV_RRA_CHUNK_ID_ASIC_API_INFO, file);
 
@@ -1240,9 +1188,8 @@ radv_rra_dump_trace(VkQueue vk_queue, char *filename)
       else
          accel_struct_size = (uint64_t)(accel_struct_offsets[i + 1] - accel_struct_offsets[i]);
 
-      rra_dump_chunk_description(accel_struct_offsets[i],
-                                 sizeof(struct rra_accel_struct_chunk_header), accel_struct_size,
-                                 "RawAccelStruc", RADV_RRA_CHUNK_ID_ACCEL_STRUCT, file);
+      rra_dump_chunk_description(accel_struct_offsets[i], sizeof(struct rra_accel_struct_chunk_header),
+                                 accel_struct_size, "RawAccelStruct", RADV_RRA_CHUNK_ID_ACCEL_STRUCT, file);
    }
 
    uint64_t file_end = (uint64_t)ftell(file);

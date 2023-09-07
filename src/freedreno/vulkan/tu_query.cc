@@ -640,7 +640,7 @@ emit_copy_query_pool_results(struct tu_cmd_buffer *cmdbuf,
       if (flags & VK_QUERY_RESULT_WAIT_BIT) {
          tu_cs_emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
          tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) |
-                        CP_WAIT_REG_MEM_0_POLL_MEMORY);
+                        CP_WAIT_REG_MEM_0_POLL(POLL_MEMORY));
          tu_cs_emit_qw(cs, available_iova);
          tu_cs_emit(cs, CP_WAIT_REG_MEM_3_REF(0x1));
          tu_cs_emit(cs, CP_WAIT_REG_MEM_4_MASK(~0));
@@ -1141,7 +1141,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
 
    tu_cs_emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
    tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_NE) |
-                  CP_WAIT_REG_MEM_0_POLL_MEMORY);
+                  CP_WAIT_REG_MEM_0_POLL(POLL_MEMORY));
    tu_cs_emit_qw(cs, end_iova);
    tu_cs_emit(cs, CP_WAIT_REG_MEM_3_REF(0xffffffff));
    tu_cs_emit(cs, CP_WAIT_REG_MEM_4_MASK(~0));

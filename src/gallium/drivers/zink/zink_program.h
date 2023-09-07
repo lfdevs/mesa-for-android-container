@@ -60,47 +60,47 @@ zink_desc_type_from_vktype(VkDescriptorType type)
 }
 
 static inline VkPrimitiveTopology
-zink_primitive_topology(enum pipe_prim_type mode)
+zink_primitive_topology(enum mesa_prim mode)
 {
    switch (mode) {
-   case PIPE_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 
-   case PIPE_PRIM_LINES:
+   case MESA_PRIM_LINES:
       return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
 
-   case PIPE_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINE_STRIP:
       return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
 
-   case PIPE_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLES:
       return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-   case PIPE_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
       return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 
-   case PIPE_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_TRIANGLE_FAN:
       return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 
-   case PIPE_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
       return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY;
 
-   case PIPE_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINES_ADJACENCY:
       return VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY;
 
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY;
 
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
       return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY;
 
-   case PIPE_PRIM_PATCHES:
+   case MESA_PRIM_PATCHES:
       return VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
 
-   case PIPE_PRIM_QUADS:
+   case MESA_PRIM_QUADS:
       return VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY;
 
    default:
-      unreachable("unexpected enum pipe_prim_type");
+      unreachable("unexpected enum mesa_prim");
    }
 }
 
@@ -135,14 +135,14 @@ void
 zink_gfx_program_compile_queue(struct zink_context *ctx, struct zink_gfx_pipeline_cache_entry *pc_entry);
 
 static inline unsigned
-get_primtype_idx(enum pipe_prim_type mode)
+get_primtype_idx(enum mesa_prim mode)
 {
-   if (mode == PIPE_PRIM_PATCHES)
+   if (mode == MESA_PRIM_PATCHES)
       return 3;
    switch (u_reduced_prim(mode)) {
-   case PIPE_PRIM_POINTS:
+   case MESA_PRIM_POINTS:
       return 0;
-   case PIPE_PRIM_LINES:
+   case MESA_PRIM_LINES:
       return 1;
    default:
       return 2;
@@ -354,7 +354,7 @@ static inline void
 zink_set_fs_point_coord_key(struct zink_context *ctx)
 {
    const struct zink_fs_key_base *fs = zink_get_fs_base_key(ctx);
-   bool disable = ctx->gfx_pipeline_state.rast_prim != PIPE_PRIM_POINTS;
+   bool disable = ctx->gfx_pipeline_state.rast_prim != MESA_PRIM_POINTS;
    uint8_t coord_replace_bits = disable ? 0 : ctx->rast_state->base.sprite_coord_enable;
    bool point_coord_yinvert = disable ? false : !!ctx->rast_state->base.sprite_coord_mode;
    if (fs->coord_replace_bits != coord_replace_bits || fs->point_coord_yinvert != point_coord_yinvert) {

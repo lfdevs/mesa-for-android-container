@@ -96,7 +96,7 @@ enum brw_compression {
 #define GFX6_COMPRESSION_1H		0
 #define GFX6_COMPRESSION_2H		2
 
-enum PACKED brw_conditional_mod {
+enum ENUM_PACKED brw_conditional_mod {
    BRW_CONDITIONAL_NONE = 0,
    BRW_CONDITIONAL_Z    = 1,
    BRW_CONDITIONAL_NZ   = 2,
@@ -119,7 +119,7 @@ enum PACKED brw_conditional_mod {
 #define BRW_DEPENDENCY_NOTCHECKED     2
 #define BRW_DEPENDENCY_DISABLE        3
 
-enum PACKED brw_execution_size {
+enum ENUM_PACKED brw_execution_size {
    BRW_EXECUTE_1  = 0,
    BRW_EXECUTE_2  = 1,
    BRW_EXECUTE_4  = 2,
@@ -128,21 +128,21 @@ enum PACKED brw_execution_size {
    BRW_EXECUTE_32 = 5,
 };
 
-enum PACKED brw_horizontal_stride {
+enum ENUM_PACKED brw_horizontal_stride {
    BRW_HORIZONTAL_STRIDE_0 = 0,
    BRW_HORIZONTAL_STRIDE_1 = 1,
    BRW_HORIZONTAL_STRIDE_2 = 2,
    BRW_HORIZONTAL_STRIDE_4 = 3,
 };
 
-enum PACKED gfx10_align1_3src_src_horizontal_stride {
+enum ENUM_PACKED gfx10_align1_3src_src_horizontal_stride {
    BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_0 = 0,
    BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_1 = 1,
    BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_2 = 2,
    BRW_ALIGN1_3SRC_SRC_HORIZONTAL_STRIDE_4 = 3,
 };
 
-enum PACKED gfx10_align1_3src_dst_horizontal_stride {
+enum ENUM_PACKED gfx10_align1_3src_dst_horizontal_stride {
    BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_1 = 0,
    BRW_ALIGN1_3SRC_DST_HORIZONTAL_STRIDE_2 = 1,
 };
@@ -890,12 +890,38 @@ enum tex_logical_srcs {
 enum pull_uniform_constant_srcs {
    /** Surface binding table index */
    PULL_UNIFORM_CONSTANT_SRC_SURFACE,
+   /** Surface bindless handle */
+   PULL_UNIFORM_CONSTANT_SRC_SURFACE_HANDLE,
    /** Surface offset */
    PULL_UNIFORM_CONSTANT_SRC_OFFSET,
    /** Pull size */
    PULL_UNIFORM_CONSTANT_SRC_SIZE,
 
    PULL_UNIFORM_CONSTANT_SRCS,
+};
+
+enum pull_varying_constant_srcs {
+   /** Surface binding table index */
+   PULL_VARYING_CONSTANT_SRC_SURFACE,
+   /** Surface bindless handle */
+   PULL_VARYING_CONSTANT_SRC_SURFACE_HANDLE,
+   /** Surface offset */
+   PULL_VARYING_CONSTANT_SRC_OFFSET,
+   /** Pull alignment */
+   PULL_VARYING_CONSTANT_SRC_ALIGNMENT,
+
+   PULL_VARYING_CONSTANT_SRCS,
+};
+
+enum get_buffer_size_srcs {
+   /** Surface binding table index */
+   GET_BUFFER_SIZE_SRC_SURFACE,
+   /** Surface bindless handle */
+   GET_BUFFER_SIZE_SRC_SURFACE_HANDLE,
+   /** LOD */
+   GET_BUFFER_SIZE_SRC_LOD,
+
+   GET_BUFFER_SIZE_SRCS
 };
 
 enum surface_logical_srcs {
@@ -971,7 +997,7 @@ operator|(brw_urb_write_flags x, brw_urb_write_flags y)
 }
 #endif
 
-enum PACKED brw_predicate {
+enum ENUM_PACKED brw_predicate {
    BRW_PREDICATE_NONE                =  0,
    BRW_PREDICATE_NORMAL              =  1,
    BRW_PREDICATE_ALIGN1_ANYV         =  2,
@@ -994,7 +1020,7 @@ enum PACKED brw_predicate {
    BRW_PREDICATE_ALIGN16_ALL4H       =  7,
 };
 
-enum PACKED brw_reg_file {
+enum ENUM_PACKED brw_reg_file {
    BRW_ARCHITECTURE_REGISTER_FILE = 0,
    BRW_GENERAL_REGISTER_FILE      = 1,
    BRW_MESSAGE_REGISTER_FILE      = 2,
@@ -1012,7 +1038,7 @@ enum PACKED brw_reg_file {
    BAD_FILE,
 };
 
-enum PACKED gfx10_align1_3src_reg_file {
+enum ENUM_PACKED gfx10_align1_3src_reg_file {
    BRW_ALIGN1_3SRC_GENERAL_REGISTER_FILE = 0,
    BRW_ALIGN1_3SRC_IMMEDIATE_VALUE       = 1, /* src0, src2 */
    BRW_ALIGN1_3SRC_ACCUMULATOR           = 1, /* dest, src1 */
@@ -1023,7 +1049,7 @@ enum PACKED gfx10_align1_3src_reg_file {
  * on float or integer types. The register arguments have fields that offer
  * more fine control their respective types.
  */
-enum PACKED gfx10_align1_3src_exec_type {
+enum ENUM_PACKED gfx10_align1_3src_exec_type {
    BRW_ALIGN1_3SRC_EXEC_TYPE_INT   = 0,
    BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT = 1,
 };
@@ -1055,7 +1081,7 @@ enum PACKED gfx10_align1_3src_exec_type {
 #define BRW_THREAD_ATOMIC     1
 #define BRW_THREAD_SWITCH     2
 
-enum PACKED brw_vertical_stride {
+enum ENUM_PACKED brw_vertical_stride {
    BRW_VERTICAL_STRIDE_0               = 0,
    BRW_VERTICAL_STRIDE_1               = 1,
    BRW_VERTICAL_STRIDE_2               = 2,
@@ -1066,7 +1092,7 @@ enum PACKED brw_vertical_stride {
    BRW_VERTICAL_STRIDE_ONE_DIMENSIONAL = 0xF,
 };
 
-enum PACKED gfx10_align1_3src_vertical_stride {
+enum ENUM_PACKED gfx10_align1_3src_vertical_stride {
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_0 = 0,
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_1 = 1,
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_2 = 1,
@@ -1074,7 +1100,7 @@ enum PACKED gfx10_align1_3src_vertical_stride {
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_8 = 3,
 };
 
-enum PACKED brw_width {
+enum ENUM_PACKED brw_width {
    BRW_WIDTH_1  = 0,
    BRW_WIDTH_2  = 1,
    BRW_WIDTH_4  = 2,
@@ -1701,7 +1727,7 @@ enum brw_message_target {
 #define BRW_CR0_RND_MODE_MASK     0x30
 #define BRW_CR0_RND_MODE_SHIFT    4
 
-enum PACKED brw_rnd_mode {
+enum ENUM_PACKED brw_rnd_mode {
    BRW_RND_MODE_RTNE = 0,  /* Round to Nearest or Even */
    BRW_RND_MODE_RU = 1,    /* Round Up, toward +inf */
    BRW_RND_MODE_RD = 2,    /* Round Down, toward -inf */
@@ -1778,7 +1804,7 @@ enum lsc_opcode {
 /*
  * Specifies the size of the dataport address payload in registers.
  */
-enum PACKED lsc_addr_reg_size {
+enum ENUM_PACKED lsc_addr_reg_size {
    LSC_ADDR_REG_SIZE_1  = 1,
    LSC_ADDR_REG_SIZE_2  = 2,
    LSC_ADDR_REG_SIZE_3  = 3,
@@ -1790,7 +1816,7 @@ enum PACKED lsc_addr_reg_size {
 /*
  * Specifies the size of the address payload item in a dataport message.
  */
-enum PACKED lsc_addr_size {
+enum ENUM_PACKED lsc_addr_size {
   LSC_ADDR_SIZE_A16 = 1,    /* 16-bit address offset */
   LSC_ADDR_SIZE_A32 = 2,    /* 32-bit address offset */
   LSC_ADDR_SIZE_A64 = 3,    /* 64-bit address offset */
@@ -1801,7 +1827,7 @@ enum PACKED lsc_addr_size {
  * address type specifies how the dataport message decodes the Extended
  * Descriptor for the surface attributes and address calculation.
  */
-enum PACKED lsc_addr_surface_type {
+enum ENUM_PACKED lsc_addr_surface_type {
    LSC_ADDR_SURFTYPE_FLAT = 0, /* Flat */
    LSC_ADDR_SURFTYPE_BSS = 1,  /* Bindless surface state */
    LSC_ADDR_SURFTYPE_SS = 2,   /* Surface state */
@@ -1841,7 +1867,7 @@ enum lsc_cache_load {
  * (WT), write-back (WB) and streaming (S). Dataport L3 cache policies are
  * uncached (UC) and cached (WB).
  */
-enum PACKED lsc_cache_store {
+enum ENUM_PACKED lsc_cache_store {
    /* No override. Use the non-pipelined or surface state cache settings for L1
     * and L3.
     */
@@ -1867,7 +1893,7 @@ enum PACKED lsc_cache_store {
  * Specifies which components of the data payload 4-element vector (X,Y,Z,W) is
  * packed into the register payload.
  */
-enum PACKED lsc_cmask {
+enum ENUM_PACKED lsc_cmask {
    LSC_CMASK_X = 0x1,
    LSC_CMASK_Y = 0x2,
    LSC_CMASK_XY = 0x3,
@@ -1888,7 +1914,7 @@ enum PACKED lsc_cmask {
 /*
  * Specifies the size of the data payload item in a dataport message.
  */
-enum PACKED lsc_data_size {
+enum ENUM_PACKED lsc_data_size {
    /* 8-bit scalar data value in memory, packed into a 8-bit data value in
     * register.
     */
@@ -1922,7 +1948,7 @@ enum PACKED lsc_data_size {
 /*
  *  Enum specifies the scope of the fence.
  */
-enum PACKED lsc_fence_scope {
+enum ENUM_PACKED lsc_fence_scope {
    /* Wait until all previous memory transactions from this thread are observed
     * within the local thread-group.
     */
@@ -1959,7 +1985,7 @@ enum PACKED lsc_fence_scope {
  * Specifies the type of cache flush operation to perform after a fence is
  * complete.
  */
-enum PACKED lsc_flush_type {
+enum ENUM_PACKED lsc_flush_type {
    LSC_FLUSH_TYPE_NONE = 0,
    /*
     * For a R/W cache, evict dirty lines (M to I state) and invalidate clean
@@ -1992,7 +2018,7 @@ enum PACKED lsc_flush_type {
 
 };
 
-enum PACKED lsc_backup_fence_routing {
+enum ENUM_PACKED lsc_backup_fence_routing {
    /* Normal routing: UGM fence is routed to UGM pipeline. */
    LSC_NORMAL_ROUTING,
    /* Route UGM fence to LSC unit. */
@@ -2002,7 +2028,7 @@ enum PACKED lsc_backup_fence_routing {
 /*
  * Specifies the size of the vector in a dataport message.
  */
-enum PACKED lsc_vect_size {
+enum ENUM_PACKED lsc_vect_size {
    LSC_VECT_SIZE_V1 = 0,    /* vector length 1 */
    LSC_VECT_SIZE_V2 = 1,    /* vector length 2 */
    LSC_VECT_SIZE_V3 = 2,    /* Vector length 3 */

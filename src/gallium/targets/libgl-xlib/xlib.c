@@ -30,7 +30,7 @@
  * Authors:
  *   Keith Whitwell
  */
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "util/u_debug.h"
 #include "sw/xlib/xlib_sw_winsys.h"
 

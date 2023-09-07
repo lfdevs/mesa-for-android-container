@@ -155,6 +155,15 @@ _legal_parameters(struct gl_context *ctx, GLenum target, GLenum internalformat,
       }
       break;
 
+   case GL_CLEAR_TEXTURE:
+      if (!_mesa_has_ARB_clear_texture(ctx)) {
+         _mesa_error(ctx, GL_INVALID_ENUM,
+                     "glGetInternalformativ(pname=%s)",
+                     _mesa_enum_to_string(pname));
+         return false;
+      }
+      break;
+
    case GL_SRGB_DECODE_ARB:
       /* The ARB_internalformat_query2 spec says:
        *
@@ -389,6 +398,7 @@ _set_default_response(GLenum pname, GLint buffer[16])
    case GL_SIMULTANEOUS_TEXTURE_AND_DEPTH_WRITE:
    case GL_SIMULTANEOUS_TEXTURE_AND_STENCIL_WRITE:
    case GL_CLEAR_BUFFER:
+   case GL_CLEAR_TEXTURE:
    case GL_TEXTURE_VIEW:
    case GL_VIEW_COMPATIBILITY_CLASS:
       buffer[0] = GL_NONE;
@@ -525,7 +535,8 @@ _is_resource_supported(struct gl_context *ctx, GLenum target,
          return false;
 
       /* additional checks for depth textures */
-      if (!_mesa_legal_texture_base_format_for_target(ctx, target, internalformat))
+      if (!_mesa_legal_texture_base_format_for_target(ctx, target, internalformat) &&
+          !(pname == GL_CLEAR_TEXTURE && _mesa_is_depth_or_stencil_format(internalformat)))
          return false;
 
       /* additional checks for compressed textures */
@@ -734,6 +745,7 @@ _mesa_query_internal_format_default(struct gl_context *ctx, GLenum target,
    case GL_SIMULTANEOUS_TEXTURE_AND_DEPTH_WRITE:
    case GL_SIMULTANEOUS_TEXTURE_AND_STENCIL_WRITE:
    case GL_CLEAR_BUFFER:
+   case GL_CLEAR_TEXTURE:
    case GL_TEXTURE_VIEW:
    case GL_TEXTURE_SHADOW:
    case GL_TEXTURE_GATHER:
@@ -856,6 +868,29 @@ _get_min_dimensions(GLenum pname)
       return 3;
    default:
       return 0;
+   }
+}
+
+static bool
+_is_generic_compressed_format(const struct gl_context *ctx,
+                              GLenum intFormat)
+{
+   switch (intFormat) {
+   case GL_COMPRESSED_SRGB:
+   case GL_COMPRESSED_SRGB_ALPHA:
+   case GL_COMPRESSED_SLUMINANCE:
+   case GL_COMPRESSED_SLUMINANCE_ALPHA:
+      return _mesa_has_EXT_texture_sRGB(ctx);
+   case GL_COMPRESSED_RG:
+   case GL_COMPRESSED_RED:
+      return _mesa_is_gles(ctx) ?
+             _mesa_has_EXT_texture_rg(ctx) :
+             _mesa_has_ARB_texture_rg(ctx);
+   case GL_COMPRESSED_RGB:
+   case GL_COMPRESSED_RGBA:
+      return true;
+   default:
+      return false;
    }
 }
 
@@ -1552,6 +1587,19 @@ _mesa_GetInternalformativ(GLenum target, GLenum internalformat, GLenum pname,
       st_QueryInternalFormat(ctx, target, internalformat, pname,
                                       buffer);
       break;
+   case GL_CLEAR_TEXTURE: {
+      if (target == GL_TEXTURE_BUFFER ||
+          target == GL_RENDERBUFFER)
+         goto end;
+
+      if (_mesa_is_compressed_format(ctx, internalformat) ||
+          _is_generic_compressed_format(ctx, internalformat))
+         goto end;
+
+      st_QueryInternalFormat(ctx, target, internalformat, pname,
+                             buffer);
+      break;
+   }
 
    case GL_TEXTURE_VIEW:
    case GL_VIEW_COMPATIBILITY_CLASS:

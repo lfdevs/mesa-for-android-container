@@ -64,6 +64,12 @@ llvmpipe_destroy(struct pipe_context *pipe)
    if (llvmpipe->csctx) {
       lp_csctx_destroy(llvmpipe->csctx);
    }
+   if (llvmpipe->task_ctx) {
+      lp_csctx_destroy(llvmpipe->task_ctx);
+   }
+   if (llvmpipe->mesh_ctx) {
+      lp_csctx_destroy(llvmpipe->mesh_ctx);
+   }
    if (llvmpipe->blitter) {
       util_blitter_destroy(llvmpipe->blitter);
    }
@@ -78,7 +84,7 @@ llvmpipe_destroy(struct pipe_context *pipe)
 
    util_unreference_framebuffer_state(&llvmpipe->framebuffer);
 
-   for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_TYPES; s++) {
+   for (enum pipe_shader_type s = PIPE_SHADER_VERTEX; s < PIPE_SHADER_MESH_TYPES; s++) {
       for (i = 0; i < ARRAY_SIZE(llvmpipe->sampler_views[0]); i++) {
          pipe_sampler_view_reference(&llvmpipe->sampler_views[s][i], NULL);
       }
@@ -98,6 +104,8 @@ llvmpipe_destroy(struct pipe_context *pipe)
    }
 
    lp_delete_setup_variants(llvmpipe);
+
+   llvmpipe_sampler_matrix_destroy(llvmpipe);
 
 #ifndef USE_GLOBAL_LLVM_CONTEXT
    LLVMContextDispose(llvmpipe->context);
@@ -240,9 +248,13 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe_init_vs_funcs(llvmpipe);
    llvmpipe_init_gs_funcs(llvmpipe);
    llvmpipe_init_tess_funcs(llvmpipe);
+   llvmpipe_init_task_funcs(llvmpipe);
+   llvmpipe_init_mesh_funcs(llvmpipe);
    llvmpipe_init_rasterizer_funcs(llvmpipe);
    llvmpipe_init_context_resource_funcs(&llvmpipe->pipe);
    llvmpipe_init_surface_functions(llvmpipe);
+
+   llvmpipe_init_sampler_matrix(llvmpipe);
 
 #ifdef USE_GLOBAL_LLVM_CONTEXT
    llvmpipe->context = LLVMGetGlobalContext();
@@ -283,6 +295,14 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    if (!llvmpipe->csctx)
       goto fail;
 
+   llvmpipe->task_ctx = lp_csctx_create(&llvmpipe->pipe);
+   if (!llvmpipe->task_ctx)
+      goto fail;
+
+   llvmpipe->mesh_ctx = lp_csctx_create(&llvmpipe->pipe);
+   if (!llvmpipe->mesh_ctx)
+      goto fail;
+
    llvmpipe->pipe.stream_uploader = u_upload_create_default(&llvmpipe->pipe);
    if (!llvmpipe->pipe.stream_uploader)
       goto fail;
@@ -305,13 +325,13 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    /* convert points and lines into triangles:
     * (otherwise, draw points and lines natively)
     */
-   draw_wide_point_sprites(llvmpipe->draw, FALSE);
-   draw_enable_point_sprites(llvmpipe->draw, FALSE);
+   draw_wide_point_sprites(llvmpipe->draw, false);
+   draw_enable_point_sprites(llvmpipe->draw, false);
    draw_wide_point_threshold(llvmpipe->draw, 10000.0);
    draw_wide_line_threshold(llvmpipe->draw, 10000.0);
 
    /* initial state for clipping - enabled, with no guardband */
-   draw_set_driver_clipping(llvmpipe->draw, FALSE, FALSE, FALSE, TRUE);
+   draw_set_driver_clipping(llvmpipe->draw, false, false, false, true);
 
    lp_reset_counters();
 

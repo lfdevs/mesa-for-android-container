@@ -30,6 +30,7 @@
 #include "util/set.h"
 #include "util/u_drm.h"
 #include "util/u_inlines.h"
+#include "util/u_sample_positions.h"
 #include "util/u_string.h"
 #include "util/u_surface.h"
 #include "util/u_transfer.h"
@@ -1772,47 +1773,6 @@ fd_resource_screen_init(struct pipe_screen *pscreen)
 }
 
 static void
-fd_get_sample_position(struct pipe_context *context, unsigned sample_count,
-                       unsigned sample_index, float *pos_out)
-{
-   /* The following is copied from nouveau/nv50 except for position
-    * values, which are taken from blob driver */
-   static const uint8_t pos1[1][2] = {{0x8, 0x8}};
-   static const uint8_t pos2[2][2] = {{0xc, 0xc}, {0x4, 0x4}};
-   static const uint8_t pos4[4][2] = {{0x6, 0x2},
-                                      {0xe, 0x6},
-                                      {0x2, 0xa},
-                                      {0xa, 0xe}};
-   /* TODO needs to be verified on supported hw */
-   static const uint8_t pos8[8][2] = {{0x9, 0x5}, {0x7, 0xb}, {0xd, 0x9},
-                                      {0x5, 0x3}, {0x3, 0xd}, {0x1, 0x7},
-                                      {0xb, 0xf}, {0xf, 0x1}};
-
-   const uint8_t(*ptr)[2];
-
-   switch (sample_count) {
-   case 1:
-      ptr = pos1;
-      break;
-   case 2:
-      ptr = pos2;
-      break;
-   case 4:
-      ptr = pos4;
-      break;
-   case 8:
-      ptr = pos8;
-      break;
-   default:
-      assert(0);
-      return;
-   }
-
-   pos_out[0] = ptr[sample_index][0] / 16.0f;
-   pos_out[1] = ptr[sample_index][1] / 16.0f;
-}
-
-static void
 fd_blit_pipe(struct pipe_context *pctx,
              const struct pipe_blit_info *blit_info) in_dt
 {
@@ -1836,5 +1796,5 @@ fd_resource_context_init(struct pipe_context *pctx)
    pctx->blit = fd_blit_pipe;
    pctx->flush_resource = fd_flush_resource;
    pctx->invalidate_resource = fd_invalidate_resource;
-   pctx->get_sample_position = fd_get_sample_position;
+   pctx->get_sample_position = u_default_get_sample_position;
 }

@@ -51,6 +51,148 @@ d3d12_video_encoder_update_current_rate_control_h264(struct d3d12_video_encoder 
             picture->rate_ctrl[0].target_bitrate;
          pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.PeakBitRate =
             picture->rate_ctrl[0].peak_bitrate;
+
+         if (D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE) {
+            debug_printf("[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE environment variable is set, "
+                       ", forcing VBV Size = VBV Initial Capacity = Target Bitrate = %" PRIu64 " (bits)\n", pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.TargetBitRate);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.VBVCapacity =
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.TargetBitRate;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.InitialVBVFullness =
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.TargetBitRate;
+         } else if (picture->rate_ctrl[0].app_requested_hrd_buffer) {
+            debug_printf("[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 HRD required by app,"
+                       " setting VBV Size = %d (bits) - VBV Initial Capacity %d (bits)\n", picture->rate_ctrl[0].vbv_buffer_size, picture->rate_ctrl[0].vbv_buf_initial_size);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.VBVCapacity =
+               picture->rate_ctrl[0].vbv_buffer_size;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.InitialVBVFullness =
+               picture->rate_ctrl[0].vbv_buf_initial_size;
+         }
+
+         if (picture->rate_ctrl[0].max_au_size > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.MaxFrameBitSize =
+               picture->rate_ctrl[0].max_au_size;
+
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MaxFrameBitSize: %" PRIu64 "\n",
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.MaxFrameBitSize);
+         }
+
+         if (picture->rate_ctrl[0].app_requested_qp_range) {
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MinQP: %d MaxQP: %d\n",
+               picture->rate_ctrl[0].min_qp, picture->rate_ctrl[0].max_qp);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QP_RANGE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.MinQP =
+               picture->rate_ctrl[0].min_qp;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_VBR.MaxQP =
+               picture->rate_ctrl[0].max_qp;
+         }
+
+      } break;
+      case PIPE_H2645_ENC_RATE_CONTROL_METHOD_QUALITY_VARIABLE:
+      {
+         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Mode = D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_QVBR;
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate =
+            picture->rate_ctrl[0].target_bitrate;
+         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.PeakBitRate =
+            picture->rate_ctrl[0].peak_bitrate;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.ConstantQualityTarget =
+            picture->rate_ctrl[0].vbr_quality_factor;
+#else
+         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.TargetAvgBitRate =
+            picture->rate_ctrl[0].target_bitrate;
+         pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.PeakBitRate =
+            picture->rate_ctrl[0].peak_bitrate;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.ConstantQualityTarget =
+            picture->rate_ctrl[0].vbr_quality_factor;
+#endif
+
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+         if (D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE) {
+            debug_printf("[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 D3D12_VIDEO_ENC_CBR_FORCE_VBV_EQUAL_BITRATE environment variable is set, "
+                       ", forcing VBV Size = VBV Initial Capacity = Target Bitrate = %" PRIu64 " (bits)\n", pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.VBVCapacity =
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.InitialVBVFullness =
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.TargetAvgBitRate;
+         } else if (picture->rate_ctrl[0].app_requested_hrd_buffer) {
+            debug_printf("[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 HRD required by app,"
+                       " setting VBV Size = %d (bits) - VBV Initial Capacity %d (bits)\n", picture->rate_ctrl[0].vbv_buffer_size, picture->rate_ctrl[0].vbv_buf_initial_size);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_EXTENDED_QVBR1_SUPPORT;               
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.VBVCapacity =
+               picture->rate_ctrl[0].vbv_buffer_size;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.InitialVBVFullness =
+               picture->rate_ctrl[0].vbv_buf_initial_size;
+         }
+#endif
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+         if (picture->rate_ctrl[0].max_au_size > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MaxFrameBitSize =
+               picture->rate_ctrl[0].max_au_size;
+
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MaxFrameBitSize: %" PRIu64 "\n",
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MaxFrameBitSize);
+         }
+
+         if (picture->rate_ctrl[0].app_requested_qp_range) {
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MinQP: %d MaxQP: %d\n",
+               picture->rate_ctrl[0].min_qp, picture->rate_ctrl[0].max_qp);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QP_RANGE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MinQP =
+               picture->rate_ctrl[0].min_qp;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR1.MaxQP =
+               picture->rate_ctrl[0].max_qp;
+         }
+#else
+      if (picture->rate_ctrl[0].max_au_size > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.MaxFrameBitSize =
+               picture->rate_ctrl[0].max_au_size;
+
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MaxFrameBitSize: %" PRIu64 "\n",
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.MaxFrameBitSize);
+         }
+
+         if (picture->rate_ctrl[0].app_requested_qp_range) {
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MinQP: %d MaxQP: %d\n",
+               picture->rate_ctrl[0].min_qp, picture->rate_ctrl[0].max_qp);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QP_RANGE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.MinQP =
+               picture->rate_ctrl[0].min_qp;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_QVBR.MaxQP =
+               picture->rate_ctrl[0].max_qp;
+         }
+#endif
       } break;
       case PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT_SKIP:
       case PIPE_H2645_ENC_RATE_CONTROL_METHOD_CONSTANT:
@@ -72,6 +214,41 @@ d3d12_video_encoder_update_current_rate_control_h264(struct d3d12_video_encoder 
                pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.TargetBitRate;
             pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.InitialVBVFullness =
                pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.TargetBitRate;
+         } else if (picture->rate_ctrl[0].app_requested_hrd_buffer) {
+            debug_printf("[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 HRD required by app,"
+                       " setting VBV Size = %d (bits) - VBV Initial Capacity %d (bits)\n", picture->rate_ctrl[0].vbv_buffer_size, picture->rate_ctrl[0].vbv_buf_initial_size);
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_VBV_SIZES;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.VBVCapacity =
+               picture->rate_ctrl[0].vbv_buffer_size;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.InitialVBVFullness =
+               picture->rate_ctrl[0].vbv_buf_initial_size;
+         }
+
+         if (picture->rate_ctrl[0].max_au_size > 0) {
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_MAX_FRAME_SIZE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.MaxFrameBitSize =
+               picture->rate_ctrl[0].max_au_size;
+
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MaxFrameBitSize: %" PRIu64 "\n",
+               pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.MaxFrameBitSize);
+         }
+
+         if (picture->rate_ctrl[0].app_requested_qp_range) {
+            debug_printf(
+               "[d3d12_video_encoder_h264] d3d12_video_encoder_update_current_rate_control_h264 "
+               "Upper layer requested explicit MinQP: %d MaxQP: %d\n",
+               picture->rate_ctrl[0].min_qp, picture->rate_ctrl[0].max_qp);
+
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Flags |=
+               D3D12_VIDEO_ENCODER_RATE_CONTROL_FLAG_ENABLE_QP_RANGE;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.MinQP =
+               picture->rate_ctrl[0].min_qp;
+            pD3D12Enc->m_currentEncodeConfig.m_encoderRateControlDesc.m_Config.m_Configuration_CBR.MaxQP =
+               picture->rate_ctrl[0].max_qp;
          }
 
       } break;
@@ -690,13 +867,13 @@ d3d12_video_encoder_update_current_encoder_config_state_h264(struct d3d12_video_
 
    // Will call for d3d12 driver support based on the initial requested features, then
    // try to fallback if any of them is not supported and return the negotiated d3d12 settings
-   D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT capEncoderSupportData = {};
-   if (!d3d12_video_encoder_negotiate_requested_features_and_d3d12_driver_caps(pD3D12Enc, capEncoderSupportData)) {
-      debug_printf("[d3d12_video_encoder_h264] After negotiating caps, D3D12_FEATURE_VIDEO_ENCODER_SUPPORT "
+   D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT1 capEncoderSupportData1 = {};
+   if (!d3d12_video_encoder_negotiate_requested_features_and_d3d12_driver_caps(pD3D12Enc, capEncoderSupportData1)) {
+      debug_printf("[d3d12_video_encoder_h264] After negotiating caps, D3D12_FEATURE_VIDEO_ENCODER_SUPPORT1 "
                       "arguments are not supported - "
                       "ValidationFlags: 0x%x - SupportFlags: 0x%x\n",
-                      capEncoderSupportData.ValidationFlags,
-                      capEncoderSupportData.SupportFlags);
+                      capEncoderSupportData1.ValidationFlags,
+                      capEncoderSupportData1.SupportFlags);
       return false;
    }
 
@@ -777,6 +954,12 @@ d3d12_video_encoder_convert_codec_to_d3d12_enc_codec(enum pipe_video_profile pro
       {
          return D3D12_VIDEO_ENCODER_CODEC_HEVC;
       } break;
+#if D3D12_PREVIEW_SDK_VERSION >= 711
+      case PIPE_VIDEO_FORMAT_AV1:
+      {
+         return D3D12_VIDEO_ENCODER_CODEC_AV1;
+      } break;
+#endif
       case PIPE_VIDEO_FORMAT_MPEG12:
       case PIPE_VIDEO_FORMAT_MPEG4:
       case PIPE_VIDEO_FORMAT_VC1:

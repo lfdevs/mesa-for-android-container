@@ -33,11 +33,12 @@
  */
 
 #include "util/detect.h"
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 #include "util/u_debug.h"
 #include "u_cpu_detect.h"
 #include "u_math.h"
+#include "os_file.h"
 #include "c11/threads.h"
 
 #include <stdio.h>
@@ -478,6 +479,40 @@ get_cpu_topology(void)
 
    memset(util_cpu_caps.cpu_to_L3, 0xff, sizeof(util_cpu_caps.cpu_to_L3));
 
+#if DETECT_OS_LINUX
+   uint64_t big_cap = 0;
+   unsigned num_big_cpus = 0;
+   uint64_t *caps = malloc(sizeof(uint64_t) * util_cpu_caps.max_cpus);
+   bool fail = false;
+   for (unsigned i = 0; caps && i < util_cpu_caps.max_cpus; i++) {
+      char name[PATH_MAX];
+      snprintf(name, sizeof(name), "/sys/devices/system/cpu/cpu%u/cpu_capacity", i);
+      size_t size = 0;
+      char *cap = os_read_file(name, &size);
+      if (!cap) {
+         num_big_cpus = 0;
+         fail = true;
+         break;
+      }
+      errno = 0;
+      caps[i] = strtoull(cap, NULL, 10);
+      free(cap);
+      if (errno) {
+         fail = true;
+         break;
+      }
+      big_cap = MAX2(caps[i], big_cap);
+   }
+   if (!fail) {
+      for (unsigned i = 0; caps && i < util_cpu_caps.max_cpus; i++) {
+         if (caps[i] >= big_cap / 2)
+            num_big_cpus++;
+      }
+   }
+   free(caps);
+   util_cpu_caps.nr_big_cpus = num_big_cpus;
+#endif
+
 #if DETECT_ARCH_X86 || DETECT_ARCH_X86_64
    /* AMD Zen */
    if (util_cpu_caps.family >= CPU_AMD_ZEN1_ZEN2 &&
@@ -848,23 +883,19 @@ _util_cpu_detect_once(void)
          uint32_t regs7[4];
          cpuid_count(0x00000007, 0x00000000, regs7);
          util_cpu_caps.has_avx2 = (regs7[1] >> 5) & 1;
-      }
 
-      // check for avx512
-      if (((regs2[2] >> 27) & 1) && // OSXSAVE
-          (xgetbv() & (0x7 << 5)) && // OPMASK: upper-256 enabled by OS
-          ((xgetbv() & 6) == 6)) { // XMM/YMM enabled by OS
-         uint32_t regs3[4];
-         cpuid_count(0x00000007, 0x00000000, regs3);
-         util_cpu_caps.has_avx512f    = (regs3[1] >> 16) & 1;
-         util_cpu_caps.has_avx512dq   = (regs3[1] >> 17) & 1;
-         util_cpu_caps.has_avx512ifma = (regs3[1] >> 21) & 1;
-         util_cpu_caps.has_avx512pf   = (regs3[1] >> 26) & 1;
-         util_cpu_caps.has_avx512er   = (regs3[1] >> 27) & 1;
-         util_cpu_caps.has_avx512cd   = (regs3[1] >> 28) & 1;
-         util_cpu_caps.has_avx512bw   = (regs3[1] >> 30) & 1;
-         util_cpu_caps.has_avx512vl   = (regs3[1] >> 31) & 1;
-         util_cpu_caps.has_avx512vbmi = (regs3[2] >>  1) & 1;
+         // check for avx512
+         if (xgetbv() & (0x7 << 5)) { // OPMASK: upper-256 enabled by OS
+            util_cpu_caps.has_avx512f    = (regs7[1] >> 16) & 1;
+            util_cpu_caps.has_avx512dq   = (regs7[1] >> 17) & 1;
+            util_cpu_caps.has_avx512ifma = (regs7[1] >> 21) & 1;
+            util_cpu_caps.has_avx512pf   = (regs7[1] >> 26) & 1;
+            util_cpu_caps.has_avx512er   = (regs7[1] >> 27) & 1;
+            util_cpu_caps.has_avx512cd   = (regs7[1] >> 28) & 1;
+            util_cpu_caps.has_avx512bw   = (regs7[1] >> 30) & 1;
+            util_cpu_caps.has_avx512vl   = (regs7[1] >> 31) & 1;
+            util_cpu_caps.has_avx512vbmi = (regs7[2] >>  1) & 1;
+         }
       }
 
       if (regs[1] == 0x756e6547 && regs[2] == 0x6c65746e && regs[3] == 0x49656e69) {

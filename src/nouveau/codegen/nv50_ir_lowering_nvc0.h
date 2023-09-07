@@ -56,9 +56,10 @@ namespace nv50_ir {
 
 class NVC0LegalizeSSA : public Pass
 {
-private:
-   virtual bool visit(BasicBlock *);
-   virtual bool visit(Function *);
+protected:
+   using Pass::visit;
+   bool visit(BasicBlock *) override;
+   bool visit(Function *) override;
 
    // we want to insert calls to the builtin library only after optimization
    void handleDIV(Instruction *); // integer division, modulus
@@ -69,7 +70,6 @@ private:
    void handleShift(Instruction *);
    void handleBREV(Instruction *);
 
-protected:
    void handleFTZ(Instruction *);
 
    BuildUtil bld;
@@ -80,10 +80,12 @@ class NVC0LegalizePostRA : public Pass
 public:
    NVC0LegalizePostRA(const Program *);
 
-private:
-   virtual bool visit(Function *);
-   virtual bool visit(BasicBlock *);
+protected:
+   using Pass::visit;
+   bool visit(Function *) override;
+   bool visit(BasicBlock *) override;
 
+private:
    void replaceCvt(Instruction *);
    void replaceZero(Instruction *);
    bool tryReplaceContWithBra(BasicBlock *);
@@ -155,12 +157,11 @@ protected:
    void checkPredicate(Instruction *);
    Value *loadMsAdjInfo32(TexInstruction::Target targ, uint32_t index, int slot, Value *ind, bool bindless);
 
-   virtual bool visit(Instruction *);
+   bool visit(Instruction *) override;
+   bool visit(Function *) override;
+   bool visit(BasicBlock *) override;
 
 private:
-   virtual bool visit(Function *);
-   virtual bool visit(BasicBlock *);
-
    void readTessCoord(LValue *dst, int c);
 
    Value *loadResInfo32(Value *ptr, uint32_t off, uint16_t base);

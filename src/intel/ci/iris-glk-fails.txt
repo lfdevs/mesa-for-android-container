@@ -9,6 +9,3 @@ KHR-GLES31.core.texture_buffer.texture_buffer_atomic_functions,Fail
 # Image comparison failed: reference = 0.000488281, expected = 0:1:0:0, result = 0:1:0:3
 # Image comparison failed: reference = 0.000976562, expected = 1:1:0:0, result = 1:1:0:3
 wayland-dEQP-EGL.functional.wide_color.pbuffer_888_colorspace_default,Fail
-
-# New CTS failures in 1.3.5.0
-KHR-GL46.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail

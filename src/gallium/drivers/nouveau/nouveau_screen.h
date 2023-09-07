@@ -65,7 +65,6 @@ struct nouveau_screen {
 
    struct disk_cache *disk_shader_cache;
 
-   bool prefer_nir;
    bool force_enable_cl;
    bool has_svm;
    bool is_uma;

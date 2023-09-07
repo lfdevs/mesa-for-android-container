@@ -37,6 +37,7 @@ static const struct {
    uint32_t num_render_backends;
    bool has_dedicated_vram;
 } gpu_info[] = {
+   /* clang-format off */
    [CHIP_TAHITI] = {0x6780, 8, true},
    [CHIP_PITCAIRN] = {0x6800, 8, true},
    [CHIP_VERDE] = {0x6820, 4, true},
@@ -69,6 +70,7 @@ static const struct {
    [CHIP_NAVI22] = {0x73C0, 8, true},
    [CHIP_NAVI23] = {0x73E0, 8, true},
    [CHIP_GFX1100] = {0x744C, 24, true},
+   /* clang-format on */
 };
 
 static void
@@ -141,27 +143,23 @@ radv_null_winsys_query_info(struct radeon_winsys *rws, struct radeon_info *info)
                                   : info->gfx_level >= GFX7 ? 64 * 1024
                                                             : 32 * 1024;
    info->lds_encode_granularity = info->gfx_level >= GFX7 ? 128 * 4 : 64 * 4;
-   info->lds_alloc_granularity =
-      info->gfx_level >= GFX10_3 ? 256 * 4 : info->lds_encode_granularity;
+   info->lds_alloc_granularity = info->gfx_level >= GFX10_3 ? 256 * 4 : info->lds_encode_granularity;
    info->max_render_backends = gpu_info[info->family].num_render_backends;
 
    info->has_dedicated_vram = gpu_info[info->family].has_dedicated_vram;
    info->has_packed_math_16bit = info->gfx_level >= GFX9;
 
-   info->has_image_load_dcc_bug =
-      info->family == CHIP_NAVI23 || info->family == CHIP_VANGOGH;
+   info->has_image_load_dcc_bug = info->family == CHIP_NAVI23 || info->family == CHIP_VANGOGH;
 
    info->has_accelerated_dot_product =
-      info->family == CHIP_VEGA20 ||
-      (info->family >= CHIP_MI100 && info->family != CHIP_NAVI10);
+      info->family == CHIP_VEGA20 || (info->family >= CHIP_MI100 && info->family != CHIP_NAVI10);
 
    info->address32_hi = info->gfx_level >= GFX9 ? 0xffff8000u : 0x0;
 
    info->has_rbplus = info->family == CHIP_STONEY || info->gfx_level >= GFX9;
    info->rbplus_allowed =
-      info->has_rbplus &&
-      (info->family == CHIP_STONEY || info->family == CHIP_VEGA12 || info->family == CHIP_RAVEN ||
-       info->family == CHIP_RAVEN2 || info->family == CHIP_RENOIR || info->gfx_level >= GFX10_3);
+      info->has_rbplus && (info->family == CHIP_STONEY || info->family == CHIP_VEGA12 || info->family == CHIP_RAVEN ||
+                           info->family == CHIP_RAVEN2 || info->family == CHIP_RENOIR || info->gfx_level >= GFX10_3);
 
    info->has_scheduled_fence_dependency = true;
    info->has_gang_submit = true;

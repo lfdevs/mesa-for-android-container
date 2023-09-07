@@ -149,7 +149,6 @@ nir_lower_ubo_vec4_lower(nir_builder *b, nir_instr *instr, void *data)
       /* General fallback case: Per-result-channel bcsel-based extraction
        * from two separate vec4 loads.
        */
-      assert(num_components == 4);
       nir_ssa_def *next_vec4_offset = nir_iadd_imm(b, vec4_offset, 1);
       nir_intrinsic_instr *next_load = create_load(b, intr->src[0].ssa, next_vec4_offset,
                                                    intr->dest.ssa.bit_size,

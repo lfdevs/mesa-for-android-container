@@ -118,7 +118,7 @@ tu_is_r8g8_compatible(enum pipe_format format)
 void
 tu_cs_image_ref(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer)
 {
-   tu_cs_emit(cs, iview->PITCH);
+   tu_cs_emit(cs, A6XX_RB_MRT_PITCH(0, iview->pitch).value);
    tu_cs_emit(cs, iview->layer_size >> 6);
    tu_cs_emit_qw(cs, iview->base_addr + iview->layer_size * layer);
 }
@@ -126,7 +126,7 @@ tu_cs_image_ref(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer)
 void
 tu_cs_image_stencil_ref(struct tu_cs *cs, const struct tu_image_view *iview, uint32_t layer)
 {
-   tu_cs_emit(cs, iview->stencil_PITCH);
+   tu_cs_emit(cs, A6XX_RB_STENCIL_BUFFER_PITCH(iview->stencil_pitch).value);
    tu_cs_emit(cs, iview->stencil_layer_size >> 6);
    tu_cs_emit_qw(cs, iview->stencil_base_addr + iview->stencil_layer_size * layer);
 }
@@ -134,7 +134,7 @@ tu_cs_image_stencil_ref(struct tu_cs *cs, const struct tu_image_view *iview, uin
 void
 tu_cs_image_depth_ref(struct tu_cs *cs, const struct tu_image_view *iview, uint32_t layer)
 {
-   tu_cs_emit(cs, iview->depth_PITCH);
+   tu_cs_emit(cs, A6XX_RB_DEPTH_BUFFER_PITCH(iview->depth_pitch).value);
    tu_cs_emit(cs, iview->depth_layer_size >> 6);
    tu_cs_emit_qw(cs, iview->depth_base_addr + iview->depth_layer_size * layer);
 }
@@ -144,7 +144,10 @@ tu_cs_image_ref_2d(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t lay
 {
    tu_cs_emit_qw(cs, iview->base_addr + iview->layer_size * layer);
    /* SP_PS_2D_SRC_PITCH has shifted pitch field */
-   tu_cs_emit(cs, iview->PITCH << (src ? 9 : 0));
+   if (src)
+      tu_cs_emit(cs, A6XX_SP_PS_2D_SRC_PITCH(.pitch = iview->pitch).value);
+   else
+      tu_cs_emit(cs, A6XX_RB_2D_DST_PITCH(iview->pitch).value);
 }
 
 void
@@ -204,6 +207,9 @@ tu_image_view_init(struct tu_device *device,
       layouts[2] = &image->layout[2];
    }
 
+   vk_component_mapping_to_pipe_swizzle(pCreateInfo->components,
+                                        iview->swizzle);
+
    struct fdl_view_args args = {};
    args.iova = image->iova;
    args.base_array_layer = range->baseArrayLayer;
@@ -255,13 +261,13 @@ tu_image_view_init(struct tu_device *device,
       iview->depth_base_addr = image->iova +
          fdl_surface_offset(layout, range->baseMipLevel, range->baseArrayLayer);
       iview->depth_layer_size = fdl_layer_stride(layout, range->baseMipLevel);
-      iview->depth_PITCH = A6XX_RB_DEPTH_BUFFER_PITCH(fdl_pitch(layout, range->baseMipLevel)).value;
+      iview->depth_pitch = fdl_pitch(layout, range->baseMipLevel);
 
       layout = &image->layout[1];
       iview->stencil_base_addr = image->iova +
          fdl_surface_offset(layout, range->baseMipLevel, range->baseArrayLayer);
       iview->stencil_layer_size = fdl_layer_stride(layout, range->baseMipLevel);
-      iview->stencil_PITCH = A6XX_RB_STENCIL_BUFFER_PITCH(fdl_pitch(layout, range->baseMipLevel)).value;
+      iview->stencil_pitch = fdl_pitch(layout, range->baseMipLevel);
    }
 }
 
@@ -450,6 +456,14 @@ tu_image_init(struct tu_device *device, struct tu_image *image,
 
    /* No sense in tiling a 1D image, you'd just waste space and cache locality. */
    if (pCreateInfo->imageType == VK_IMAGE_TYPE_1D) {
+      tile_mode = TILE6_LINEAR;
+      ubwc_enabled = false;
+   }
+
+   /* Fragment density maps are sampled on the CPU and we don't support
+    * sampling tiled images on the CPU or UBWC at the moment.
+    */
+   if (pCreateInfo->usage & VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT) {
       tile_mode = TILE6_LINEAR;
       ubwc_enabled = false;
    }
@@ -938,4 +952,39 @@ tu_DestroyBufferView(VkDevice _device,
       return;
 
    vk_object_free(&device->vk, pAllocator, view);
+}
+
+/* Impelements the operations described in "Fragment Density Map Operations."
+ */
+void
+tu_fragment_density_map_sample(const struct tu_image_view *fdm,
+                               uint32_t x, uint32_t y,
+                               uint32_t width, uint32_t height,
+                               uint32_t layers,
+                               struct tu_frag_area *areas)
+{
+   assert(fdm->image->layout[0].tile_mode == TILE6_LINEAR);
+
+   uint32_t fdm_shift_x = util_logbase2_ceil(DIV_ROUND_UP(width, fdm->vk.extent.width));
+   uint32_t fdm_shift_y = util_logbase2_ceil(DIV_ROUND_UP(height, fdm->vk.extent.height));
+
+   fdm_shift_x = CLAMP(fdm_shift_x, MIN_FDM_TEXEL_SIZE_LOG2, MAX_FDM_TEXEL_SIZE_LOG2);
+   fdm_shift_y = CLAMP(fdm_shift_y, MIN_FDM_TEXEL_SIZE_LOG2, MAX_FDM_TEXEL_SIZE_LOG2);
+
+   uint32_t i = x >> fdm_shift_x;
+   uint32_t j = y >> fdm_shift_y;
+
+   unsigned cpp = fdm->image->layout[0].cpp;
+   unsigned pitch = fdm->view.pitch;
+
+   void *pixel = (char *)fdm->image->map + fdm->view.offset + cpp * i + pitch * j;
+   for (unsigned i = 0; i < layers; i++) {
+      float density_src[4], density[4];
+      util_format_unpack_rgba(fdm->view.format, density_src, pixel, 1);
+      pipe_swizzle_4f(density, density_src, fdm->swizzle);
+      areas[i].width = 1.0f / density[0];
+      areas[i].height = 1.0f / density[1];
+
+      pixel = (char *)pixel + fdm->view.layer_size;
+   }
 }

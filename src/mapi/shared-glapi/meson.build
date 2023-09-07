@@ -22,8 +22,6 @@ files_shared_glapi = files(
   '../entry.c',
   '../u_current.c',
   '../u_current.h',
-  '../u_execmem.c',
-  '../u_execmem.h',
   'glapi.c',
   'stub.c',
   'stub.h',

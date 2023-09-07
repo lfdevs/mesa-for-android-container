@@ -27,15 +27,12 @@ dEQP-GLES3.functional.clipping.point.wide_point_clip,Fail
 dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_center,Fail
 dEQP-GLES3.functional.clipping.point.wide_point_clip_viewport_corner,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_mag_reverse_src_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_dst_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_min_reverse_src_x,Fail
 
 KHR-GL43.compute_shader.resource-subroutine,Fail
 KHR-GL43.cull_distance.functional,Fail
@@ -60,9 +57,6 @@ KHR-Single-GL43.arrays_of_arrays_gl.SubroutineArgumentAliasing3,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.SubroutineArgumentAliasing4,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.SubroutineFunctionCalls1,Fail
 KHR-Single-GL43.arrays_of_arrays_gl.SubroutineFunctionCalls2,Fail
-
-KHR-GL43.shading_language_420pack.binding_images,Fail
-KHR-GL43.texture_view.view_sampling,Fail
 
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
@@ -396,19 +390,7 @@ spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRE
 spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM- swizzled- border color only,Fail
 spec@arb_texture_cube_map_array@fbo-generatemipmap-cubemap array s3tc_dxt1,Fail
 spec@arb_texture_float@fbo-blending-formats,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_float@fbo-blending-formats@GL_ALPHA32F_ARB,Fail
 spec@arb_texture_float@fbo-blending-formats@GL_RGB32F,Fail
-spec@arb_texture_float@fbo-clear-formats,Fail
-spec@arb_texture_float@fbo-clear-formats@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_float@fbo-clear-formats@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_float@fbo-colormask-formats,Fail
-spec@arb_texture_float@fbo-colormask-formats@GL_ALPHA16F_ARB,Fail
-spec@arb_texture_float@fbo-colormask-formats@GL_ALPHA32F_ARB,Fail
-spec@arb_texture_float@fbo-fast-clear,Fail
-spec@arb_texture_float@multisample-fast-clear gl_arb_texture_float,Fail
-spec@arb_texture_float@multisample-formats 2 gl_arb_texture_float,Fail
-spec@arb_texture_float@multisample-formats 4 gl_arb_texture_float,Fail
 spec@arb_texture_float@texwrap formats bordercolor,Fail
 spec@arb_texture_float@texwrap formats bordercolor-swizzled,Fail
 spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_ALPHA16F_ARB- swizzled- border color only,Fail
@@ -462,10 +444,6 @@ spec@arb_texture_rg@texwrap formats-float bordercolor@GL_R16F- border color only
 spec@arb_texture_rg@texwrap formats-float bordercolor@GL_R32F- border color only,Fail
 spec@arb_texture_rg@texwrap formats-float bordercolor@GL_RG16F- border color only,Fail
 spec@arb_texture_rg@texwrap formats-float bordercolor@GL_RG32F- border color only,Fail
-spec@arb_texture_view@rendering-layers-image,Fail
-spec@arb_texture_view@rendering-layers-image@layers rendering of image1DArray,Fail
-spec@arb_texture_view@rendering-layers-image@layers rendering of image2DArray,Fail
-spec@arb_texture_view@rendering-layers-image@layers rendering of imageCubeArray,Fail
 spec@arb_transform_feedback_overflow_query@arb_transform_feedback_overflow_query-basic,Fail
 spec@arb_transform_feedback_overflow_query@arb_transform_feedback_overflow_query-basic@arb_transform_feedback_overflow_query-buffer_object_0,Fail
 spec@arb_transform_feedback_overflow_query@arb_transform_feedback_overflow_query-basic@arb_transform_feedback_overflow_query-buffer_object_2,Fail
@@ -505,8 +483,6 @@ spec@ext_framebuffer_object@fbo-blending-formats@GL_INTENSITY8,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT/GL_FLOAT,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT24/GL_FLOAT,Fail
-spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render,Fail
-spec@ext_framebuffer_object@getteximage-formats init-by-rendering,Fail
 spec@ext_packed_depth_stencil@fbo-depthstencil-gl_depth24_stencil8-copypixels,Fail
 spec@ext_packed_depth_stencil@fbo-depthstencil-gl_depth24_stencil8-drawpixels-24_8,Fail
 spec@ext_packed_depth_stencil@fbo-depthstencil-gl_depth24_stencil8-drawpixels-32f_24_8_rev,Fail
@@ -699,3 +675,9 @@ spec@!opengl 1.0@depth-clear-precision-check,Fail
 spec@!opengl 1.0@depth-clear-precision-check@depth32,Fail
 
 spec@!opengl 1.1@line-smooth-stipple,Fail
+
+# fails since CI uprev to Debian 12
+spec@arb_viewport_array@display-list,Fail
+
+spec@arb_gl_spirv@execution@ssbo@unsized-array,Fail
+spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-frag,Fail

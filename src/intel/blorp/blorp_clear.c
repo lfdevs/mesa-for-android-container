@@ -527,7 +527,7 @@ blorp_clear_supports_compute(struct blorp_context *blorp,
    if (color_write_disable != 0 || blend_enabled)
       return false;
    if (blorp->isl_dev->info->ver >= 12) {
-      return aux_usage == ISL_AUX_USAGE_GFX12_CCS_E ||
+      return aux_usage == ISL_AUX_USAGE_FCV_CCS_E ||
              aux_usage == ISL_AUX_USAGE_CCS_E ||
              aux_usage == ISL_AUX_USAGE_NONE;
    } else {
@@ -1324,8 +1324,7 @@ blorp_ccs_resolve(struct blorp_batch *batch,
 static nir_ssa_def *
 blorp_nir_bit(nir_builder *b, nir_ssa_def *src, unsigned bit)
 {
-   return nir_iand(b, nir_ushr(b, src, nir_imm_int(b, bit)),
-                      nir_imm_int(b, 1));
+   return nir_iand_imm(b, nir_ushr_imm(b, src, bit), 1);
 }
 
 #pragma pack(push, 1)
@@ -1441,6 +1440,94 @@ blorp_mcs_partial_resolve(struct blorp_batch *batch,
           surf->clear_color.f32, sizeof(float) * 4);
 
    if (!blorp_params_get_mcs_partial_resolve_kernel(batch, &params))
+      return;
+
+   batch->blorp->exec(batch, &params);
+}
+
+static uint64_t
+get_mcs_ambiguate_pixel(int sample_count)
+{
+   /* See the Broadwell PRM, Volume 5 "Memory Views", Section "Compressed
+    * Multisample Surfaces".
+    */
+   assert(sample_count >= 2);
+   assert(sample_count <= 16);
+
+   /* Each MCS element contains an array of sample slice (SS) elements. The
+    * size of this array matches the sample count.
+    */
+   const int num_ss_entries = sample_count;
+
+   /* The width of each SS entry is just large enough to index every slice. */
+   const int ss_entry_size_b = util_logbase2(num_ss_entries);
+
+   /* The encoding for "ambiguated" has each sample slice value storing its
+    * index (e.g., SS[0] = 0, SS[1] = 1, etc.). The values are stored in
+    * little endian order. The unused bits are defined as either Reserved or
+    * Reserved (MBZ). We choose to interpret both as MBZ.
+    */
+   uint64_t ambiguate_pixel = 0;
+   for (uint64_t entry = 0; entry < num_ss_entries; entry++)
+      ambiguate_pixel |= entry << (entry * ss_entry_size_b);
+
+   return ambiguate_pixel;
+}
+
+/** Clear an MCS to the "uncompressed" state
+ *
+ * This pass is the MCS equivalent of a "HiZ resolve".  It sets the MCS values
+ * for a given layer of a surface to a sample-count dependent value which is
+ * the "uncompressed" state which tells the sampler to go look at the main
+ * surface.
+ */
+void
+blorp_mcs_ambiguate(struct blorp_batch *batch,
+                    struct blorp_surf *surf,
+                    uint32_t start_layer, uint32_t num_layers)
+{
+   assert((batch->flags & BLORP_BATCH_USE_COMPUTE) == 0);
+
+   struct blorp_params params;
+   blorp_params_init(&params);
+   params.op = BLORP_OP_MCS_AMBIGUATE;
+
+   assert(ISL_GFX_VER(batch->blorp->isl_dev) >= 7);
+
+   enum isl_format renderable_format;
+   switch (isl_format_get_layout(surf->aux_surf->format)->bpb) {
+   case 8:  renderable_format = ISL_FORMAT_R8_UINT;     break;
+   case 32: renderable_format = ISL_FORMAT_R32_UINT;    break;
+   case 64: renderable_format = ISL_FORMAT_R32G32_UINT; break;
+   default: unreachable("Unexpected MCS format size for ambiguate");
+   }
+
+   params.dst = (struct brw_blorp_surface_info) {
+      .enabled = true,
+      .surf = *surf->aux_surf,
+      .addr = surf->aux_addr,
+      .view = {
+         .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT,
+         .format = renderable_format,
+         .base_level = 0,
+         .base_array_layer = start_layer,
+         .levels = 1,
+         .array_len = num_layers,
+         .swizzle = ISL_SWIZZLE_IDENTITY,
+      },
+   };
+
+   params.x0 = 0;
+   params.y0 = 0;
+   params.x1 = params.dst.surf.logical_level0_px.width;
+   params.y1 = params.dst.surf.logical_level0_px.height;
+   params.num_layers = params.dst.view.array_len;
+
+   const uint64_t pixel = get_mcs_ambiguate_pixel(surf->surf->samples);
+   params.wm_inputs.clear_color[0] = pixel & 0xFFFFFFFF;
+   params.wm_inputs.clear_color[1] = pixel >> 32;
+
+   if (!blorp_params_get_clear_kernel(batch, &params, true, false))
       return;
 
    batch->blorp->exec(batch, &params);

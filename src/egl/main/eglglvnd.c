@@ -25,8 +25,8 @@
  *    Kyle Brenneman <kbrenneman@nvidia.com>
  */
 
-#include <string.h>
 #include <assert.h>
+#include <string.h>
 
 #include <glvnd/libeglabi.h>
 
@@ -36,7 +36,7 @@
 
 static const __EGLapiExports *__eglGLVNDApiExports = NULL;
 
-static const char * EGLAPIENTRY
+static const char *EGLAPIENTRY
 __eglGLVNDQueryString(EGLDisplay dpy, EGLenum name)
 {
    // For client extensions, return the list of non-platform extensions. The
@@ -59,12 +59,12 @@ __eglGLVNDGetVendorString(int name)
 
 static EGLDisplay
 __eglGLVNDGetPlatformDisplay(EGLenum platform, void *native_display,
-      const EGLAttrib *attrib_list)
+                             const EGLAttrib *attrib_list)
 {
    if (platform == EGL_NONE) {
-      assert(native_display == (void *) EGL_DEFAULT_DISPLAY);
+      assert(native_display == (void *)EGL_DEFAULT_DISPLAY);
       assert(attrib_list == NULL);
-      return eglGetDisplay((EGLNativeDisplayType) native_display);
+      return eglGetDisplay((EGLNativeDisplayType)native_display);
    } else {
       return eglGetPlatformDisplay(platform, native_display, attrib_list);
    }
@@ -74,14 +74,14 @@ static void *
 __eglGLVNDGetProcAddress(const char *procName)
 {
    if (strcmp(procName, "eglQueryString") == 0)
-      return (void *) __eglGLVNDQueryString;
+      return (void *)__eglGLVNDQueryString;
 
-   return (void *) eglGetProcAddress(procName);
+   return (void *)eglGetProcAddress(procName);
 }
 
 PUBLIC EGLAPI EGLBoolean
 __egl_Main(uint32_t version, const __EGLapiExports *exports,
-     __EGLvendorInfo *vendor, __EGLapiImports *imports)
+           __EGLvendorInfo *vendor, __EGLapiImports *imports)
 {
    if (EGL_VENDOR_ABI_GET_MAJOR_VERSION(version) !=
        EGL_VENDOR_ABI_MAJOR_VERSION)
@@ -99,4 +99,3 @@ __egl_Main(uint32_t version, const __EGLapiExports *exports,
 
    return EGL_TRUE;
 }
-

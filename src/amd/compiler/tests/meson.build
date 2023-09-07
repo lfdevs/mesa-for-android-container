@@ -24,6 +24,7 @@ aco_tests_files = files(
   'main.cpp',
   'test_assembler.cpp',
   'test_builder.cpp',
+  'test_d3d11_derivs.cpp',
   'test_hard_clause.cpp',
   'test_insert_nops.cpp',
   'test_insert_waitcnt.cpp',
@@ -39,6 +40,7 @@ aco_tests_files = files(
 
 spirv_files = files(
   'test_isel.cpp',
+  'test_d3d11_derivs.cpp',
 )
 
 gen_spirv = generator(prog_python,

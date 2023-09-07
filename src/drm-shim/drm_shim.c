@@ -48,13 +48,15 @@
 #include <c11/threads.h>
 #include <drm-uapi/drm.h>
 
+#include "util/anon_file.h"
 #include "util/set.h"
+#include "util/simple_mtx.h"
 #include "util/u_debug.h"
 #include "drm_shim.h"
 
 #define REAL_FUNCTION_POINTER(x) __typeof__(x) *real_##x
 
-static mtx_t shim_lock = _MTX_INITIALIZER_NP;
+static simple_mtx_t shim_lock = SIMPLE_MTX_INITIALIZER;
 struct set *opendir_set;
 bool drm_shim_debug;
 
@@ -293,21 +295,29 @@ static bool hide_drm_device_path(const char *path)
    return false;
 }
 
+static int file_override_open(const char *path)
+{
+   for (int i = 0; i < file_overrides_count; i++) {
+      if (strcmp(file_overrides[i].path, path) == 0) {
+         int fd = os_create_anonymous_file(0, "shim file");
+         write(fd, file_overrides[i].contents,
+               strlen(file_overrides[i].contents));
+         lseek(fd, 0, SEEK_SET);
+         return fd;
+      }
+   }
+
+   return -1;
+}
+
 /* Override libdrm's reading of various sysfs files for device enumeration. */
 PUBLIC FILE *fopen(const char *path, const char *mode)
 {
    init_shim();
 
-   for (int i = 0; i < file_overrides_count; i++) {
-      if (strcmp(file_overrides[i].path, path) == 0) {
-         int fds[2];
-         pipe(fds);
-         write(fds[1], file_overrides[i].contents,
-               strlen(file_overrides[i].contents));
-         close(fds[1]);
-         return fdopen(fds[0], "r");
-      }
-   }
+   int fd = file_override_open(path);
+   if (fd >= 0)
+      return fdopen(fd, "r");
 
    return real_fopen(path, mode);
 }
@@ -324,6 +334,10 @@ PUBLIC int open(const char *path, int flags, ...)
    mode_t mode = va_arg(ap, mode_t);
    va_end(ap);
 
+   int fd = file_override_open(path);
+   if (fd >= 0)
+      return fd;
+
    if (hide_drm_device_path(path)) {
       errno = ENOENT;
       return -1;
@@ -332,7 +346,7 @@ PUBLIC int open(const char *path, int flags, ...)
    if (strcmp(path, render_node_path) != 0)
       return real_open(path, flags, mode);
 
-   int fd = real_open("/dev/null", O_RDWR, 0);
+   fd = real_open("/dev/null", O_RDWR, 0);
 
    drm_shim_fd_register(fd, NULL);
 
@@ -595,9 +609,9 @@ opendir(const char *name)
          dir = fake_dev_dri;
       }
 
-      mtx_lock(&shim_lock);
+      simple_mtx_lock(&shim_lock);
       _mesa_set_add(opendir_set, dir);
-      mtx_unlock(&shim_lock);
+      simple_mtx_unlock(&shim_lock);
    }
 
    return dir;
@@ -615,14 +629,15 @@ readdir(DIR *dir)
 
    static struct dirent render_node_dirent = { 0 };
 
-   mtx_lock(&shim_lock);
+   simple_mtx_lock(&shim_lock);
    if (_mesa_set_search(opendir_set, dir)) {
       strcpy(render_node_dirent.d_name,
              render_node_dirent_name);
+      render_node_dirent.d_type = DT_CHR;
       ent = &render_node_dirent;
       _mesa_set_remove_key(opendir_set, dir);
    }
-   mtx_unlock(&shim_lock);
+   simple_mtx_unlock(&shim_lock);
 
    if (!ent && dir != fake_dev_dri)
       ent = real_readdir(dir);
@@ -642,14 +657,15 @@ readdir64(DIR *dir)
 
    static struct dirent64 render_node_dirent = { 0 };
 
-   mtx_lock(&shim_lock);
+   simple_mtx_lock(&shim_lock);
    if (_mesa_set_search(opendir_set, dir)) {
       strcpy(render_node_dirent.d_name,
              render_node_dirent_name);
+      render_node_dirent.d_type = DT_CHR;
       ent = &render_node_dirent;
       _mesa_set_remove_key(opendir_set, dir);
    }
-   mtx_unlock(&shim_lock);
+   simple_mtx_unlock(&shim_lock);
 
    if (!ent && dir != fake_dev_dri)
       ent = real_readdir64(dir);
@@ -663,9 +679,9 @@ closedir(DIR *dir)
 {
    init_shim();
 
-   mtx_lock(&shim_lock);
+   simple_mtx_lock(&shim_lock);
    _mesa_set_remove_key(opendir_set, dir);
-   mtx_unlock(&shim_lock);
+   simple_mtx_unlock(&shim_lock);
 
    if (dir != fake_dev_dri)
       return real_closedir(dir);

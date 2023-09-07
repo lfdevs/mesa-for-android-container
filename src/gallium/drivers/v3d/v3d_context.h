@@ -600,6 +600,7 @@ struct v3d_context {
 
         uint32_t tf_prims_generated;
         uint32_t prims_generated;
+        bool prim_restart;
 
         uint32_t n_primitives_generated_queries_in_flight;
 
@@ -759,13 +760,6 @@ uint8_t v3d_get_tex_return_channels(const struct v3d_device_info *devinfo,
                                     enum pipe_format f);
 const uint8_t *v3d_get_format_swizzle(const struct v3d_device_info *devinfo,
                                       enum pipe_format f);
-void v3d_get_internal_type_bpp_for_output_format(const struct v3d_device_info *devinfo,
-                                                 uint32_t format,
-                                                 uint32_t *type,
-                                                 uint32_t *bpp);
-bool v3d_tfu_supports_tex_format(const struct v3d_device_info *devinfo,
-                                 uint32_t tex_format,
-                                 bool for_mipmap);
 bool v3d_format_supports_tlb_msaa_resolve(const struct v3d_device_info *devinfo,
                                           enum pipe_format f);
 
@@ -800,9 +794,6 @@ void v3d_ensure_prim_counts_allocated(struct v3d_context *ctx);
 void v3d_flag_dirty_sampler_state(struct v3d_context *v3d,
                                   enum pipe_shader_type shader);
 
-void v3d_create_texture_shader_state_bo(struct v3d_context *v3d,
-                                        struct v3d_sampler_view *so);
-
 void v3d_get_tile_buffer_size(bool is_msaa,
                               bool double_buffer,
                               uint32_t nr_cbufs,
@@ -825,6 +816,18 @@ void v3d_disk_cache_store(struct v3d_context *v3d,
                           uint32_t qpu_size);
 #endif /* ENABLE_SHADER_CACHE */
 
+/* Helper to call hw ver specific functions */
+#define v3d_X(devinfo, thing) ({                                \
+        __typeof(&v3d42_##thing) v3d_X_thing;                   \
+        if ((devinfo)->ver >= 42)                               \
+                v3d_X_thing = &v3d42_##thing;                   \
+        else if ((devinfo)->ver >= 33)                          \
+                v3d_X_thing = &v3d33_##thing;                   \
+        else                                                    \
+                unreachable("Unsupported hardware generation"); \
+        v3d_X_thing;                                            \
+})
+
 #ifdef v3dX
 #  include "v3dx_context.h"
 #else
@@ -832,7 +835,7 @@ void v3d_disk_cache_store(struct v3d_context *v3d,
 #  include "v3dx_context.h"
 #  undef v3dX
 
-#  define v3dX(x) v3d41_##x
+#  define v3dX(x) v3d42_##x
 #  include "v3dx_context.h"
 #  undef v3dX
 #endif

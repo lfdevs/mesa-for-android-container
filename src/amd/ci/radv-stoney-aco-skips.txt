@@ -164,3 +164,6 @@ dEQP-VK.api.buffer.basic.max_size_sparse
 # Timeouts in VK-GL-CTS 1.3.5.0
 dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
 dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic
+
+# timeout after switch to Debian 12
+dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_frag_buffers32_sets1

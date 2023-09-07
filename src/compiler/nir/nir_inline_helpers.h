@@ -21,7 +21,7 @@ _nir_foreach_dest(nir_instr *instr, nir_foreach_dest_cb cb, void *state)
       return cb(&nir_instr_as_phi(instr)->dest, state);
    case nir_instr_type_parallel_copy: {
       nir_foreach_parallel_copy_entry(entry, nir_instr_as_parallel_copy(instr)) {
-         if (!cb(&entry->dest, state))
+         if (!entry->dest_is_reg && !cb(&entry->dest.dest, state))
             return false;
       }
       return true;
@@ -136,6 +136,8 @@ nir_foreach_src(nir_instr *instr, nir_foreach_src_cb cb, void *state)
       nir_parallel_copy_instr *pc = nir_instr_as_parallel_copy(instr);
       nir_foreach_parallel_copy_entry(entry, pc) {
          if (!_nir_visit_src(&entry->src, cb, state))
+            return false;
+         if (entry->dest_is_reg && !_nir_visit_src(&entry->dest.reg, cb, state))
             return false;
       }
       break;

@@ -28,12 +28,12 @@ import argparse
 import itertools
 import typing as T
 
-GENERATE, UBYTE, USHORT, UINT = 'generate', 'ubyte', 'ushort', 'uint'
+GENERATE, UINT8, UINT16, UINT32 = 'generate', 'uint8', 'uint16', 'uint32'
 FIRST, LAST = 'first', 'last'
 PRDISABLE, PRENABLE = 'prdisable', 'prenable'
 
-INTYPES = (GENERATE, UBYTE, USHORT, UINT)
-OUTTYPES = (USHORT, UINT)
+INTYPES = (GENERATE, UINT8, UINT16, UINT32)
+OUTTYPES = (UINT16, UINT32)
 PVS=(FIRST, LAST)
 PRS=(PRDISABLE, PRENABLE)
 PRIMS=('points',
@@ -53,24 +53,24 @@ PRIMS=('points',
 
 OUT_TRIS, OUT_QUADS = 'tris', 'quads'
 
-LONGPRIMS=('PIPE_PRIM_POINTS',
-           'PIPE_PRIM_LINES',
-           'PIPE_PRIM_LINE_STRIP',
-           'PIPE_PRIM_LINE_LOOP',
-           'PIPE_PRIM_TRIANGLES',
-           'PIPE_PRIM_TRIANGLE_FAN',
-           'PIPE_PRIM_TRIANGLE_STRIP',
-           'PIPE_PRIM_QUADS',
-           'PIPE_PRIM_QUAD_STRIP',
-           'PIPE_PRIM_POLYGON',
-           'PIPE_PRIM_LINES_ADJACENCY',
-           'PIPE_PRIM_LINE_STRIP_ADJACENCY',
-           'PIPE_PRIM_TRIANGLES_ADJACENCY',
-           'PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY')
+LONGPRIMS=('MESA_PRIM_POINTS',
+           'MESA_PRIM_LINES',
+           'MESA_PRIM_LINE_STRIP',
+           'MESA_PRIM_LINE_LOOP',
+           'MESA_PRIM_TRIANGLES',
+           'MESA_PRIM_TRIANGLE_FAN',
+           'MESA_PRIM_TRIANGLE_STRIP',
+           'MESA_PRIM_QUADS',
+           'MESA_PRIM_QUAD_STRIP',
+           'MESA_PRIM_POLYGON',
+           'MESA_PRIM_LINES_ADJACENCY',
+           'MESA_PRIM_LINE_STRIP_ADJACENCY',
+           'MESA_PRIM_TRIANGLES_ADJACENCY',
+           'MESA_PRIM_TRIANGLE_STRIP_ADJACENCY')
 
 longprim = dict(zip(PRIMS, LONGPRIMS))
-intype_idx = dict(ubyte='IN_UBYTE', ushort='IN_USHORT', uint='IN_UINT')
-outtype_idx = dict(ushort='OUT_USHORT', uint='OUT_UINT')
+intype_idx = dict(uint8='IN_UINT8', uint16='IN_UINT16', uint32='IN_UINT32')
+outtype_idx = dict(uint16='OUT_UINT16', uint32='OUT_UINT32')
 pv_idx = dict(first='PV_FIRST', last='PV_LAST')
 pr_idx = dict(prdisable='PR_DISABLE', prenable='PR_ENABLE')
 
@@ -101,9 +101,9 @@ static u_generate_func  generate_quads[OUT_COUNT][PV_COUNT][PV_COUNT][PRIM_COUNT
 
 def vert( intype, outtype, v0 ):
     if intype == GENERATE:
-        return '(' + outtype + ')(' + v0 + ')'
+        return '(' + outtype + '_t)(' + v0 + ')'
     else:
-        return '(' + outtype + ')in[' + v0 + ']'
+        return '(' + outtype + '_t)in[' + v0 + ']'
 
 def shape(f: 'T.TextIO', intype, outtype, ptr, *vertices):
     for i, v in enumerate(vertices):
@@ -173,8 +173,8 @@ def preamble(f: 'T.TextIO', intype, outtype, inpv, outpv, pr, prim, out_prim):
     f.write('    void * restrict _out )\n')
     f.write('{\n')
     if intype != GENERATE:
-        f.write('  const ' + intype + '* restrict in = (const ' + intype + '* restrict)_in;\n')
-    f.write('  ' + outtype + ' * restrict out = (' + outtype + '* restrict)_out;\n')
+        f.write('  const ' + intype + '_t* restrict in = (const ' + intype + '_t* restrict)_in;\n')
+    f.write('  ' + outtype + '_t * restrict out = (' + outtype + '_t* restrict)_out;\n')
     f.write('  unsigned i, j;\n')
     f.write('  (void)j;\n')
 

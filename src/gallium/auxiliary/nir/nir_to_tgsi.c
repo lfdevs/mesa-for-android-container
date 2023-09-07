@@ -1859,6 +1859,24 @@ ntt_get_access_qualifier(nir_intrinsic_instr *instr)
    return qualifier;
 }
 
+static unsigned
+ntt_translate_atomic_op(nir_atomic_op op)
+{
+   switch (op) {
+   case nir_atomic_op_iadd: return TGSI_OPCODE_ATOMUADD;
+   case nir_atomic_op_fadd: return TGSI_OPCODE_ATOMFADD;
+   case nir_atomic_op_imin: return TGSI_OPCODE_ATOMIMIN;
+   case nir_atomic_op_imax: return TGSI_OPCODE_ATOMIMAX;
+   case nir_atomic_op_umin: return TGSI_OPCODE_ATOMUMIN;
+   case nir_atomic_op_umax: return TGSI_OPCODE_ATOMUMAX;
+   case nir_atomic_op_iand: return TGSI_OPCODE_ATOMAND;
+   case nir_atomic_op_ixor: return TGSI_OPCODE_ATOMXOR;
+   case nir_atomic_op_ior:  return TGSI_OPCODE_ATOMOR;
+   case nir_atomic_op_xchg: return TGSI_OPCODE_ATOMXCHG;
+   default: unreachable("invalid atomic");
+   }
+}
+
 static void
 ntt_emit_mem(struct ntt_compile *c, nir_intrinsic_instr *instr,
              nir_variable_mode mode)
@@ -1933,58 +1951,36 @@ ntt_emit_mem(struct ntt_compile *c, nir_intrinsic_instr *instr,
 
 
    switch (instr->intrinsic) {
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_shared_atomic:
+      opcode = ntt_translate_atomic_op(nir_intrinsic_atomic_op(instr));
+      break;
    case nir_intrinsic_atomic_counter_add:
    case nir_intrinsic_atomic_counter_inc:
    case nir_intrinsic_atomic_counter_post_dec:
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_shared_atomic_add:
       opcode = TGSI_OPCODE_ATOMUADD;
       break;
-   case nir_intrinsic_ssbo_atomic_fadd:
-   case nir_intrinsic_shared_atomic_fadd:
-      opcode = TGSI_OPCODE_ATOMFADD;
-      break;
    case nir_intrinsic_atomic_counter_min:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_shared_atomic_imin:
       opcode = TGSI_OPCODE_ATOMIMIN;
       break;
    case nir_intrinsic_atomic_counter_max:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_shared_atomic_imax:
       opcode = TGSI_OPCODE_ATOMIMAX;
       break;
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_shared_atomic_umin:
-      opcode = TGSI_OPCODE_ATOMUMIN;
-      break;
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_shared_atomic_umax:
-      opcode = TGSI_OPCODE_ATOMUMAX;
-      break;
    case nir_intrinsic_atomic_counter_and:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_shared_atomic_and:
       opcode = TGSI_OPCODE_ATOMAND;
       break;
    case nir_intrinsic_atomic_counter_or:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_shared_atomic_or:
       opcode = TGSI_OPCODE_ATOMOR;
       break;
    case nir_intrinsic_atomic_counter_xor:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_shared_atomic_xor:
       opcode = TGSI_OPCODE_ATOMXOR;
       break;
    case nir_intrinsic_atomic_counter_exchange:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_shared_atomic_exchange:
       opcode = TGSI_OPCODE_ATOMXCHG;
       break;
    case nir_intrinsic_atomic_counter_comp_swap:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
-   case nir_intrinsic_shared_atomic_comp_swap:
+   case nir_intrinsic_ssbo_atomic_swap:
+   case nir_intrinsic_shared_atomic_swap:
       opcode = TGSI_OPCODE_ATOMCAS;
       src[num_src++] = ntt_get_src(c, instr->src[next_src++]);
       break;
@@ -2048,17 +2044,8 @@ ntt_emit_image_load_store(struct ntt_compile *c, nir_intrinsic_instr *instr)
    case nir_intrinsic_bindless_image_store:
    case nir_intrinsic_bindless_image_size:
    case nir_intrinsic_bindless_image_samples:
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_xor:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
       resource = ntt_get_src(c, instr->src[0]);
       break;
    default:
@@ -2095,8 +2082,8 @@ ntt_emit_image_load_store(struct ntt_compile *c, nir_intrinsic_instr *instr)
       if (instr->intrinsic != nir_intrinsic_image_load &&
           instr->intrinsic != nir_intrinsic_bindless_image_load) {
          srcs[num_src++] = ntt_get_src(c, instr->src[3]); /* data */
-         if (instr->intrinsic == nir_intrinsic_image_atomic_comp_swap ||
-             instr->intrinsic == nir_intrinsic_bindless_image_atomic_comp_swap)
+         if (instr->intrinsic == nir_intrinsic_image_atomic_swap ||
+             instr->intrinsic == nir_intrinsic_bindless_image_atomic_swap)
             srcs[num_src++] = ntt_get_src(c, instr->src[4]); /* data2 */
       }
    }
@@ -2119,48 +2106,12 @@ ntt_emit_image_load_store(struct ntt_compile *c, nir_intrinsic_instr *instr)
       op = TGSI_OPCODE_RESQ;
       opcode_dst = ureg_writemask(ntt_temp(c), TGSI_WRITEMASK_W);
       break;
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_add:
-      op = TGSI_OPCODE_ATOMUADD;
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_bindless_image_atomic:
+      op = ntt_translate_atomic_op(nir_intrinsic_atomic_op(instr));
       break;
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-      op = TGSI_OPCODE_ATOMFADD;
-      break;
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_imin:
-      op = TGSI_OPCODE_ATOMIMIN;
-      break;
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-      op = TGSI_OPCODE_ATOMUMIN;
-      break;
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_imax:
-      op = TGSI_OPCODE_ATOMIMAX;
-      break;
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-      op = TGSI_OPCODE_ATOMUMAX;
-      break;
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_and:
-      op = TGSI_OPCODE_ATOMAND;
-      break;
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_or:
-      op = TGSI_OPCODE_ATOMOR;
-      break;
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_bindless_image_atomic_xor:
-      op = TGSI_OPCODE_ATOMXOR;
-      break;
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-      op = TGSI_OPCODE_ATOMXCHG;
-      break;
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
+   case nir_intrinsic_image_atomic_swap:
+   case nir_intrinsic_bindless_image_atomic_swap:
       op = TGSI_OPCODE_ATOMCAS;
       break;
    default:
@@ -2390,6 +2341,50 @@ ntt_emit_load_sysval(struct ntt_compile *c, nir_intrinsic_instr *instr)
 }
 
 static void
+ntt_emit_barrier(struct ntt_compile *c, nir_intrinsic_instr *intr)
+{
+   bool compute = gl_shader_stage_is_compute(c->s->info.stage);
+
+   if (nir_intrinsic_memory_scope(intr) != SCOPE_NONE) {
+      nir_variable_mode modes = nir_intrinsic_memory_modes(intr);
+      unsigned membar = 0;
+
+      if (modes & nir_var_image)
+         membar |= TGSI_MEMBAR_SHADER_IMAGE;
+
+      if (modes & nir_var_mem_shared)
+         membar |= TGSI_MEMBAR_SHARED;
+
+      /* Atomic counters are lowered to SSBOs, there's no NIR mode corresponding
+       * exactly to atomics. Take the closest match.
+       */
+      if (modes & nir_var_mem_ssbo)
+         membar |= TGSI_MEMBAR_SHADER_BUFFER | TGSI_MEMBAR_ATOMIC_BUFFER;
+
+      if (modes & nir_var_mem_global)
+         membar |= TGSI_MEMBAR_SHADER_BUFFER;
+
+      /* If we only need workgroup scope (not device-scope), we might be able to
+       * optimize a bit.
+       */
+      if (membar && compute &&
+          nir_intrinsic_memory_scope(intr) == SCOPE_WORKGROUP) {
+
+         membar |= TGSI_MEMBAR_THREAD_GROUP;
+      }
+
+      /* Only emit a memory barrier if there are any relevant modes */
+      if (membar)
+         ntt_MEMBAR(c, ureg_imm1u(c->ureg, membar));
+   }
+
+   if (nir_intrinsic_execution_scope(intr) != SCOPE_NONE) {
+      assert(compute || c->s->info.stage == MESA_SHADER_TESS_CTRL);
+      ntt_BARRIER(c);
+   }
+}
+
+static void
 ntt_emit_intrinsic(struct ntt_compile *c, nir_intrinsic_instr *instr)
 {
    switch (instr->intrinsic) {
@@ -2495,34 +2490,16 @@ ntt_emit_intrinsic(struct ntt_compile *c, nir_intrinsic_instr *instr)
 
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_store_ssbo:
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
    case nir_intrinsic_get_ssbo_size:
       ntt_emit_mem(c, instr, nir_var_mem_ssbo);
       break;
 
    case nir_intrinsic_load_shared:
    case nir_intrinsic_store_shared:
-   case nir_intrinsic_shared_atomic_add:
-   case nir_intrinsic_shared_atomic_fadd:
-   case nir_intrinsic_shared_atomic_imin:
-   case nir_intrinsic_shared_atomic_imax:
-   case nir_intrinsic_shared_atomic_umin:
-   case nir_intrinsic_shared_atomic_umax:
-   case nir_intrinsic_shared_atomic_and:
-   case nir_intrinsic_shared_atomic_or:
-   case nir_intrinsic_shared_atomic_xor:
-   case nir_intrinsic_shared_atomic_exchange:
-   case nir_intrinsic_shared_atomic_comp_swap:
+   case nir_intrinsic_shared_atomic:
+   case nir_intrinsic_shared_atomic_swap:
       ntt_emit_mem(c, instr, nir_var_mem_shared);
       break;
 
@@ -2547,71 +2524,19 @@ ntt_emit_intrinsic(struct ntt_compile *c, nir_intrinsic_instr *instr)
    case nir_intrinsic_image_store:
    case nir_intrinsic_image_size:
    case nir_intrinsic_image_samples:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_comp_swap:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_bindless_image_store:
    case nir_intrinsic_bindless_image_size:
    case nir_intrinsic_bindless_image_samples:
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_xor:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
       ntt_emit_image_load_store(c, instr);
       break;
 
-   case nir_intrinsic_control_barrier:
-   case nir_intrinsic_memory_barrier_tcs_patch:
-      ntt_BARRIER(c);
-      break;
-
-   case nir_intrinsic_memory_barrier:
-      ntt_MEMBAR(c, ureg_imm1u(c->ureg,
-                               TGSI_MEMBAR_SHADER_BUFFER |
-                               TGSI_MEMBAR_ATOMIC_BUFFER |
-                               TGSI_MEMBAR_SHADER_IMAGE |
-                               TGSI_MEMBAR_SHARED));
-      break;
-
-   case nir_intrinsic_memory_barrier_atomic_counter:
-      ntt_MEMBAR(c, ureg_imm1u(c->ureg, TGSI_MEMBAR_ATOMIC_BUFFER));
-      break;
-
-   case nir_intrinsic_memory_barrier_buffer:
-      ntt_MEMBAR(c, ureg_imm1u(c->ureg, TGSI_MEMBAR_SHADER_BUFFER));
-      break;
-
-   case nir_intrinsic_memory_barrier_image:
-      ntt_MEMBAR(c, ureg_imm1u(c->ureg, TGSI_MEMBAR_SHADER_IMAGE));
-      break;
-
-   case nir_intrinsic_memory_barrier_shared:
-      ntt_MEMBAR(c, ureg_imm1u(c->ureg, TGSI_MEMBAR_SHARED));
-      break;
-
-   case nir_intrinsic_group_memory_barrier:
-      ntt_MEMBAR(c, ureg_imm1u(c->ureg,
-                               TGSI_MEMBAR_SHADER_BUFFER |
-                               TGSI_MEMBAR_ATOMIC_BUFFER |
-                               TGSI_MEMBAR_SHADER_IMAGE |
-                               TGSI_MEMBAR_SHARED |
-                               TGSI_MEMBAR_THREAD_GROUP));
+   case nir_intrinsic_scoped_barrier:
+      ntt_emit_barrier(c, instr);
       break;
 
    case nir_intrinsic_end_primitive:
@@ -3758,15 +3683,8 @@ nir_lower_primid_sysval_to_input_filter(const nir_instr *instr, const void *_dat
 static nir_ssa_def *
 nir_lower_primid_sysval_to_input_lower(nir_builder *b, nir_instr *instr, void *data)
 {
-   nir_variable *var = *(nir_variable **)data;
-   if (!var) {
-      var = nir_variable_create(b->shader, nir_var_shader_in, glsl_uint_type(), "gl_PrimitiveID");
-      var->data.location = VARYING_SLOT_PRIMITIVE_ID;
-      b->shader->info.inputs_read |= VARYING_BIT_PRIMITIVE_ID;
-      var->data.driver_location = b->shader->num_inputs++;
-
-      *(nir_variable **)data = var;
-   }
+   nir_variable *var = nir_get_variable_with_location(b->shader, nir_var_shader_in,
+                                                      VARYING_SLOT_PRIMITIVE_ID, glsl_uint_type());
 
    nir_io_semantics semantics = {
       .location = var->data.location,
@@ -3780,11 +3698,9 @@ nir_lower_primid_sysval_to_input_lower(nir_builder *b, nir_instr *instr, void *d
 static bool
 nir_lower_primid_sysval_to_input(nir_shader *s)
 {
-   nir_variable *input = NULL;
-
    return nir_shader_lower_instructions(s,
                                         nir_lower_primid_sysval_to_input_filter,
-                                        nir_lower_primid_sysval_to_input_lower, &input);
+                                        nir_lower_primid_sysval_to_input_lower, NULL);
 }
 
 const void *
@@ -3868,7 +3784,6 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
 
    NIR_PASS_V(s, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
               type_size, (nir_lower_io_options)0);
-   NIR_PASS_V(s, nir_lower_regs_to_ssa);
 
    nir_to_tgsi_lower_txp(s);
    NIR_PASS_V(s, nir_to_tgsi_lower_tex);
@@ -3919,6 +3834,8 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
       }
    } while (progress);
 
+   NIR_PASS_V(s, nir_opt_combine_barriers, NULL, NULL);
+
    if (screen->get_shader_param(screen,
                                 pipe_shader_type_from_mesa(s->info.stage),
                                 PIPE_SHADER_CAP_INTEGERS)) {
@@ -3938,9 +3855,9 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
 
    NIR_PASS_V(s, nir_opt_move, move_all);
 
-   /* Only lower 32-bit floats.  The only other modifier type officially
-    * supported by TGSI is 32-bit integer negates, but even those are broken on
-    * virglrenderer, so skip lowering all integer and f64 float mods.
+   /* We're fine lowering only 32-bit floats. TGSI officially supports 32-bit
+    * integer negates, but even those are broken on virglrenderer, so we don't
+    * use integer or f64 float mods.
     *
     * The options->lower_fabs requests that we not have native source modifiers
     * for fabs, and instead emit MAX(a,-a) for nir_op_fabs.
@@ -3950,11 +3867,11 @@ const void *nir_to_tgsi_options(struct nir_shader *s,
       source_mods |= nir_lower_fabs_source_mods;
    NIR_PASS_V(s, nir_lower_to_source_mods, source_mods);
 
-   NIR_PASS_V(s, nir_convert_from_ssa, true);
+   NIR_PASS_V(s, nir_convert_from_ssa, true, false);
    NIR_PASS_V(s, nir_lower_vec_to_movs, ntt_vec_to_mov_writemask_cb, NULL);
 
    /* locals_to_regs will leave dead derefs that are good to clean up. */
-   NIR_PASS_V(s, nir_lower_locals_to_regs);
+   NIR_PASS_V(s, nir_lower_locals_to_regs, 32);
    NIR_PASS_V(s, nir_opt_dce);
 
    if (NIR_DEBUG(TGSI)) {

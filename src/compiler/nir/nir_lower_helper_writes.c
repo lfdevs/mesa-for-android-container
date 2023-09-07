@@ -35,33 +35,10 @@ lower(nir_builder *b, nir_instr *instr, void *data)
    bool *lower_plain_stores = data;
 
    switch (intr->intrinsic) {
-   case nir_intrinsic_global_atomic_add:
-   case nir_intrinsic_global_atomic_and:
-   case nir_intrinsic_global_atomic_comp_swap:
-   case nir_intrinsic_global_atomic_exchange:
-   case nir_intrinsic_global_atomic_fadd:
-   case nir_intrinsic_global_atomic_fcomp_swap:
-   case nir_intrinsic_global_atomic_fmax:
-   case nir_intrinsic_global_atomic_fmin:
-   case nir_intrinsic_global_atomic_imax:
-   case nir_intrinsic_global_atomic_imin:
-   case nir_intrinsic_global_atomic_or:
-   case nir_intrinsic_global_atomic_umax:
-   case nir_intrinsic_global_atomic_umin:
-   case nir_intrinsic_global_atomic_xor:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_dec_wrap:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_inc_wrap:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_xor:
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_global_atomic_swap:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
       break;
    case nir_intrinsic_store_global:
    case nir_intrinsic_image_store:

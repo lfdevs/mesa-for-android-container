@@ -97,18 +97,18 @@ void
 renderonly_scanout_destroy(struct renderonly_scanout *scanout,
 			   struct renderonly *ro);
 
-static inline boolean
+static inline bool
 renderonly_get_handle(struct renderonly_scanout *scanout,
       struct winsys_handle *handle)
 {
    if (!scanout)
-      return FALSE;
+      return false;
 
    assert(handle->type == WINSYS_HANDLE_TYPE_KMS);
    handle->handle = scanout->handle;
    handle->stride = scanout->stride;
 
-   return TRUE;
+   return true;
 }
 
 /**

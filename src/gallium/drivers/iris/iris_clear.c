@@ -134,7 +134,7 @@ can_fast_clear_color(struct iris_context *ice,
     * to avoid stomping on other LODs.
     */
    if (level > 0 && util_format_get_blocksizebits(p_res->format) == 8 &&
-       res->aux.usage == ISL_AUX_USAGE_GFX12_CCS_E && p_res->width0 % 64) {
+       p_res->width0 % 64) {
       return false;
    }
 
@@ -481,9 +481,13 @@ fast_clear_depth(struct iris_context *ice,
        *
        * There may have been a write to this depth buffer. Flush it from the
        * tile cache just in case.
+       *
+       * Set CS stall bit to guarantee that the fast clear starts the execution
+       * after the tile cache flush completed.
        */
       iris_emit_pipe_control_flush(batch, "hiz_ccs_wt: before fast clear",
                                    PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                   PIPE_CONTROL_CS_STALL |
                                    PIPE_CONTROL_TILE_CACHE_FLUSH);
    }
 

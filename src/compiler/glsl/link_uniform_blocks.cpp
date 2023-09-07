@@ -26,6 +26,7 @@
 #include "ir_uniform.h"
 #include "link_uniform_block_active_visitor.h"
 #include "util/hash_table.h"
+#include "util/u_math.h"
 #include "program.h"
 #include "main/errors.h"
 #include "main/shader_types.h"
@@ -71,10 +72,10 @@ private:
    {
       assert(type->is_struct());
       if (packing == GLSL_INTERFACE_PACKING_STD430)
-         this->offset = glsl_align(
+         this->offset = align(
             this->offset, type->std430_base_alignment(row_major));
       else
-         this->offset = glsl_align(
+         this->offset = align(
             this->offset, type->std140_base_alignment(row_major));
    }
 
@@ -92,10 +93,10 @@ private:
        *    multiple of the base alignment of the structure.
        */
       if (packing == GLSL_INTERFACE_PACKING_STD430)
-         this->offset = glsl_align(
+         this->offset = align(
             this->offset, type->std430_base_alignment(row_major));
       else
-         this->offset = glsl_align(
+         this->offset = align(
             this->offset, type->std140_base_alignment(row_major));
    }
 
@@ -169,7 +170,7 @@ private:
          size = type_for_size->std140_size(v->RowMajor);
       }
 
-      this->offset = glsl_align(this->offset, alignment);
+      this->offset = align(this->offset, alignment);
       v->Offset = this->offset;
 
       this->offset += size;
@@ -184,7 +185,7 @@ private:
        *    rounding up to the next multiple of the base alignment required
        *    for a vec4.
        */
-      this->buffer_size = glsl_align(this->offset, 16);
+      this->buffer_size = align(this->offset, 16);
    }
 
    bool use_std430_as_default;

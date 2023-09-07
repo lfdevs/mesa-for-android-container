@@ -26,7 +26,8 @@
 
 using namespace aco;
 
-static void create_mubuf(Temp desc=Temp(0, s8))
+static void
+create_mubuf(Temp desc = Temp(0, s8))
 {
    Operand desc_op(desc);
    desc_op.setFixed(PhysReg(0));
@@ -34,13 +35,15 @@ static void create_mubuf(Temp desc=Temp(0, s8))
              Operand(PhysReg(256), v1), Operand::zero(), 0, false);
 }
 
-static void create_mubuf_store()
+static void
+create_mubuf_store()
 {
    bld.mubuf(aco_opcode::buffer_store_dword, Operand(PhysReg(0), s4), Operand(PhysReg(256), v1),
              Operand(PhysReg(256), v1), Operand::zero(), 0, false);
 }
 
-static void create_mtbuf(Temp desc=Temp(0, s8))
+static void
+create_mtbuf(Temp desc = Temp(0, s8))
 {
    Operand desc_op(desc);
    desc_op.setFixed(PhysReg(0));
@@ -49,22 +52,25 @@ static void create_mtbuf(Temp desc=Temp(0, s8))
              V_008F0C_BUF_NUM_FORMAT_FLOAT, 0, false);
 }
 
-static void create_flat()
+static void
+create_flat()
 {
-   bld.flat(aco_opcode::flat_load_dword, Definition(PhysReg(256), v1),
-             Operand(PhysReg(256), v2), Operand(s2));
+   bld.flat(aco_opcode::flat_load_dword, Definition(PhysReg(256), v1), Operand(PhysReg(256), v2),
+            Operand(s2));
 }
 
-static void create_global()
+static void
+create_global()
 {
    bld.global(aco_opcode::global_load_dword, Definition(PhysReg(256), v1),
               Operand(PhysReg(256), v2), Operand(s2));
 }
 
-static void create_mimg(bool nsa, Temp desc=Temp(0, s8))
+static void
+create_mimg(bool nsa, Temp desc = Temp(0, s8))
 {
-   aco_ptr<MIMG_instruction> mimg{create_instruction<MIMG_instruction>(
-      aco_opcode::image_sample, Format::MIMG, 5, 1)};
+   aco_ptr<MIMG_instruction> mimg{
+      create_instruction<MIMG_instruction>(aco_opcode::image_sample, Format::MIMG, 5, 1)};
    mimg->definitions[0] = Definition(PhysReg(256), v1);
    mimg->operands[0] = Operand(desc);
    mimg->operands[0].setFixed(PhysReg(0));
@@ -78,13 +84,15 @@ static void create_mimg(bool nsa, Temp desc=Temp(0, s8))
    bld.insert(std::move(mimg));
 }
 
-static void create_smem()
+static void
+create_smem()
 {
    bld.smem(aco_opcode::s_load_dword, Definition(PhysReg(0), s1), Operand(PhysReg(0), s2),
             Operand::zero());
 }
 
-static void create_smem_buffer(Temp desc=Temp(0, s4))
+static void
+create_smem_buffer(Temp desc = Temp(0, s4))
 {
    Operand desc_op(desc);
    desc_op.setFixed(PhysReg(0));
@@ -307,67 +315,48 @@ BEGIN_TEST(form_hard_clauses.heuristic)
 END_TEST
 
 BEGIN_TEST(form_hard_clauses.stores)
-   if (!setup_cs(NULL, GFX10))
-      return;
+   for (amd_gfx_level gfx : {GFX10, GFX11}) {
+      if (!setup_cs(NULL, gfx))
+         continue;
 
-   //>> p_unit_test 0
-   //; search_re('buffer_store_dword')
-   //; search_re('buffer_store_dword')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
-   create_mubuf_store();
-   create_mubuf_store();
+      //>> p_unit_test 0
+      //~gfx11! s_clause imm:1
+      //; search_re('buffer_store_dword')
+      //; search_re('buffer_store_dword')
+      bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
+      create_mubuf_store();
+      create_mubuf_store();
 
-   //>> p_unit_test 1
-   //! s_clause imm:1
-   //; search_re('buffer_load_dword')
-   //; search_re('buffer_load_dword')
-   //; search_re('buffer_store_dword')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1u));
-   create_mubuf();
-   create_mubuf();
-   create_mubuf_store();
+      //>> p_unit_test 1
+      //! s_clause imm:1
+      //; search_re('buffer_load_dword')
+      //; search_re('buffer_load_dword')
+      //; search_re('buffer_store_dword')
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(1u));
+      create_mubuf();
+      create_mubuf();
+      create_mubuf_store();
 
-   //>> p_unit_test 2
-   //; search_re('buffer_store_dword')
-   //! s_clause imm:1
-   //; search_re('buffer_load_dword')
-   //; search_re('buffer_load_dword')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2u));
-   create_mubuf_store();
-   create_mubuf();
-   create_mubuf();
-
-   /* Unclear whether this is the best behaviour */
-   //>> p_unit_test 3
-   //; search_re('buffer_load_dword')
-   //; search_re('buffer_store_dword')
-   //; search_re('buffer_load_dword')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3u));
-   create_mubuf();
-   create_mubuf_store();
-   create_mubuf();
-
-   /* Unimportant pass limitations */
-   //>> p_unit_test 4
-   //; search_re('buffer_store_dword')
-   //! s_clause imm:61
-   //; for i in range(62):
-   //;    search_re('buffer_load_dword')
-   //; search_re('buffer_load_dword')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(4u));
-   create_mubuf_store();
-   for (unsigned i = 0; i < 63; i++)
+      //>> p_unit_test 2
+      //; search_re('buffer_store_dword')
+      //! s_clause imm:1
+      //; search_re('buffer_load_dword')
+      //; search_re('buffer_load_dword')
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(2u));
+      create_mubuf_store();
+      create_mubuf();
       create_mubuf();
 
-   //>> p_unit_test 5
-   //! s_clause imm:62
-   //; for i in range(63):
-   //;    search_re('buffer_load_dword')
-   //; search_re('buffer_store_dword')
-   bld.pseudo(aco_opcode::p_unit_test, Operand::c32(5u));
-   for (unsigned i = 0; i < 63; i++)
+      /* Unclear whether this is the best behaviour */
+      //>> p_unit_test 3
+      //; search_re('buffer_load_dword')
+      //; search_re('buffer_store_dword')
+      //; search_re('buffer_load_dword')
+      bld.pseudo(aco_opcode::p_unit_test, Operand::c32(3u));
       create_mubuf();
-   create_mubuf_store();
+      create_mubuf_store();
+      create_mubuf();
 
-   finish_form_hard_clause_test();
+      finish_form_hard_clause_test();
+   }
 END_TEST

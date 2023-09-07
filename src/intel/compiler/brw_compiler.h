@@ -39,7 +39,6 @@ extern "C" {
 
 struct ra_regs;
 struct nir_shader;
-struct brw_program;
 struct shader_info;
 
 struct nir_shader_compiler_options;
@@ -113,6 +112,21 @@ struct brw_compiler {
     * constant or data cache, UBOs must use VK_FORMAT_RAW.
     */
    bool indirect_ubos_use_sampler;
+
+   /**
+    * Gfx12.5+ has a bit in the SEND instruction extending the bindless
+    * surface offset range from 20 to 26 bits, effectively giving us 4Gb of
+    * bindless surface descriptors instead of 64Mb previously.
+    */
+   bool extended_bindless_surface_offset;
+
+   /**
+    * Gfx11+ has a bit in the dword 3 of the sampler message header that
+    * indicates whether the sampler handle is relative to the dynamic state
+    * base address (0) or the bindless sampler base address (1). The driver
+    * can select this.
+    */
+   bool use_bindless_sampler_offset;
 
    struct nir_shader *clc_shader;
 };
@@ -322,6 +336,7 @@ struct brw_tcs_prog_key
 
    enum tess_primitive_mode _tes_primitive_mode;
 
+   /** Number of input vertices, 0 means dynamic */
    unsigned input_vertices;
 
    /** A bitfield of per-patch outputs written. */
@@ -330,6 +345,15 @@ struct brw_tcs_prog_key
    bool quads_workaround;
    uint32_t padding:24;
 };
+
+#define BRW_MAX_TCS_INPUT_VERTICES (32)
+
+static inline uint32_t
+brw_tcs_prog_key_input_vertices(const struct brw_tcs_prog_key *key)
+{
+   return key->input_vertices != 0 ?
+          key->input_vertices : BRW_MAX_TCS_INPUT_VERTICES;
+}
 
 /** The program key for Tessellation Evaluation Shaders. */
 struct brw_tes_prog_key
@@ -712,6 +736,7 @@ enum brw_shader_reloc_id {
    BRW_SHADER_RELOC_SHADER_START_OFFSET,
    BRW_SHADER_RELOC_RESUME_SBT_ADDR_LOW,
    BRW_SHADER_RELOC_RESUME_SBT_ADDR_HIGH,
+   BRW_SHADER_RELOC_DESCRIPTORS_ADDR_HIGH,
 };
 
 enum brw_shader_reloc_type {
@@ -923,8 +948,7 @@ struct brw_wm_prog_data {
    bool dispatch_16;
    bool dispatch_32;
    bool dual_src_blend;
-   enum brw_sometimes uses_pos_offset;
-   bool read_pos_offset_input;
+   bool uses_pos_offset;
    bool uses_omask;
    bool uses_kill;
    bool uses_src_depth;
@@ -1185,25 +1209,6 @@ brw_wm_prog_data_is_coarse(const struct brw_wm_prog_data *prog_data,
           prog_data->coarse_pixel_dispatch == BRW_NEVER);
 
    return prog_data->coarse_pixel_dispatch;
-}
-
-static inline bool
-brw_wm_prog_data_uses_position_xy_offset(const struct brw_wm_prog_data *prog_data,
-                                         enum brw_wm_msaa_flags pushed_msaa_flags)
-{
-   bool per_sample;
-   if (pushed_msaa_flags & BRW_WM_MSAA_FLAG_ENABLE_DYNAMIC) {
-      per_sample = (pushed_msaa_flags & BRW_WM_MSAA_FLAG_PERSAMPLE_INTERP) != 0;
-   } else {
-      assert(prog_data->persample_dispatch == BRW_ALWAYS ||
-             prog_data->persample_dispatch == BRW_NEVER);
-      per_sample = prog_data->persample_dispatch == BRW_ALWAYS;
-   }
-
-   if (!per_sample)
-      return false;
-
-   return prog_data->read_pos_offset_input;
 }
 
 struct brw_push_const_block {
@@ -1748,9 +1753,6 @@ brw_prog_data_size(gl_shader_stage stage);
 
 unsigned
 brw_prog_key_size(gl_shader_stage stage);
-
-void
-brw_prog_key_set_id(union brw_any_prog_key *key, gl_shader_stage, unsigned id);
 
 /**
  * Parameters for compiling a vertex shader.

@@ -1,6 +1,6 @@
-.etnaviv-armhf-test:
+.etnaviv-test:arm32:
   extends:
-    - .baremetal-test-armhf
+    - .baremetal-test-arm32
     - .etnaviv-rules
   script:
     - ./install/bare-metal/fastboot.sh
@@ -9,7 +9,7 @@
     BM_KERNEL: /baremetal-files/zImage
     FLAKES_CHANNEL: "#etnaviv-ci"
 
-.etnaviv-arm64-test:
+.etnaviv-test:arm64:
   extends:
     - .baremetal-test-arm64
     - .etnaviv-rules
@@ -20,9 +20,9 @@
     BM_KERNEL: /baremetal-files/Image
     FLAKES_CHANNEL: "#etnaviv-ci"
 
-.etnaviv-armhf-gc2000:
+.etnaviv-gc2000:arm32:
   extends:
-    - .etnaviv-armhf-test
+    - .etnaviv-test:arm32
   variables:
     BM_DTB: /baremetal-files/imx6q-cubox-i.dtb
     DEQP_EXPECTED_RENDERER: GC2000
@@ -30,9 +30,9 @@
   tags:
     - etnaviv-gc2000
 
-.etnaviv-arm64-gc7000:
+.etnaviv-gc7000:arm64:
   extends:
-    - .etnaviv-arm64-test
+    - .etnaviv-test:arm64
   variables:
     BM_DTB: /baremetal-files/imx8mq-nitrogen.dtb
     DEQP_EXPECTED_RENDERER: GC7000
@@ -42,16 +42,24 @@
 
 gc2000_gles2:
   extends:
-    - .etnaviv-armhf-gc2000
+    - .etnaviv-gc2000:arm32
     - .etnaviv-manual-rules
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
     DEQP_VER: gles2
 
+gc2000_gles2_asan:
+  extends:
+    - gc2000_gles2
+    - .baremetal-arm32-asan-test
+  variables:
+    DEQP_FRACTION: 100
+    FDO_CI_CONCURRENT: 1
+
 gc2000_piglit:
   extends:
     - .piglit-test
-    - .etnaviv-armhf-gc2000
+    - .etnaviv-gc2000:arm32
     - .etnaviv-manual-rules
   variables:
     PIGLIT_PLATFORM: gbm
@@ -60,7 +68,7 @@ gc2000_piglit:
 
 gc7000_gles2:
   extends:
-    - .etnaviv-arm64-gc7000
+    - .etnaviv-gc7000:arm64
     - .etnaviv-manual-rules
   variables:
     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"

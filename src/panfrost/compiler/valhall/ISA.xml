@@ -2074,7 +2074,7 @@
       Mux between A and B based on the provided mask. The condition specified
       as the `mux` modifier is evaluated on the mask. If true, `A` is chosen,
       else `B` is chosen. The `bit` modifier acts bitwise, equivalent to
-      `bitselect()` in OpenCL, so `MUX.i32.bit A, B, mask` calculates
+      `bitselect()` in OpenCL, so `MUX.v2i16.bit A, B, mask` calculates
       `(A &amp; mask) | (B &amp; ~mask)`.
     </desc>
     <mod name="mux" start="32" size="2"/>
@@ -2088,8 +2088,8 @@
       Mux between A and B based on the provided mask. The condition specified
       as the `mux` modifier is evaluated on the mask. If true, `A` is chosen,
       else `B` is chosen. The `bit` modifier acts bitwise, equivalent to
-      `bitselect()` in OpenCL, so `MUX.i32.bit A, B, mask` calculates
-      `(A &amp; mask) | (A &amp; ~mask)`.
+      `bitselect()` in OpenCL, so `MUX.v4i8.bit A, B, mask` calculates
+      `(A &amp; mask) | (B &amp; ~mask)`.
     </desc>
     <mod name="mux" start="32" size="2"/>
     <src>A</src>
@@ -2291,7 +2291,7 @@
       Adds an arbitrary 32-bit immediate embedded within the instruction stream.
       If no modifiers are required, this is preferred to `IADD.i32` with a
       constant accessed as a uniform. However, if the constant is available
-      inline, `IADD.f32` is preferred.
+      inline, `IADD.i32` is preferred.
 
       `IADD_IMM.i32` with the source tied to zero is the canonical immediate move.
     </desc>

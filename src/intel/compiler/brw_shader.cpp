@@ -25,6 +25,7 @@
 #include "brw_eu.h"
 #include "brw_fs.h"
 #include "brw_nir.h"
+#include "brw_private.h"
 #include "brw_vec4_tes.h"
 #include "dev/intel_debug.h"
 #include "main/uniforms.h"
@@ -79,25 +80,6 @@ brw_type_for_base_type(const struct glsl_type *type)
    }
 
    return BRW_REGISTER_TYPE_F;
-}
-
-enum brw_conditional_mod
-brw_conditional_for_comparison(unsigned int op)
-{
-   switch (op) {
-   case ir_binop_less:
-      return BRW_CONDITIONAL_L;
-   case ir_binop_gequal:
-      return BRW_CONDITIONAL_GE;
-   case ir_binop_equal:
-   case ir_binop_all_equal: /* same as equal for scalars */
-      return BRW_CONDITIONAL_Z;
-   case ir_binop_nequal:
-   case ir_binop_any_nequal: /* same as nequal for scalars */
-      return BRW_CONDITIONAL_NZ;
-   default:
-      unreachable("not reached: bad operation for comparison");
-   }
 }
 
 uint32_t
@@ -908,6 +890,32 @@ backend_instruction::is_math() const
 }
 
 bool
+backend_instruction::is_control_flow_begin() const
+{
+   switch (opcode) {
+   case BRW_OPCODE_DO:
+   case BRW_OPCODE_IF:
+   case BRW_OPCODE_ELSE:
+      return true;
+   default:
+      return false;
+   }
+}
+
+bool
+backend_instruction::is_control_flow_end() const
+{
+   switch (opcode) {
+   case BRW_OPCODE_ELSE:
+   case BRW_OPCODE_WHILE:
+   case BRW_OPCODE_ENDIF:
+      return true;
+   default:
+      return false;
+   }
+}
+
+bool
 backend_instruction::is_control_flow() const
 {
    switch (opcode) {
@@ -1236,12 +1244,6 @@ backend_instruction::remove(bblock_t *block, bool defer_later_block_ip_updates)
 }
 
 void
-backend_shader::dump_instructions() const
-{
-   dump_instructions(NULL);
-}
-
-void
 backend_shader::dump_instructions(const char *name) const
 {
    FILE *file = stderr;
@@ -1251,6 +1253,16 @@ backend_shader::dump_instructions(const char *name) const
          file = stderr;
    }
 
+   dump_instructions_to_file(file);
+
+   if (file != stderr) {
+      fclose(file);
+   }
+}
+
+void
+backend_shader::dump_instructions_to_file(FILE *file) const
+{
    if (cfg) {
       int ip = 0;
       foreach_block_and_inst(block, backend_instruction, inst, cfg) {
@@ -1265,10 +1277,6 @@ backend_shader::dump_instructions(const char *name) const
             fprintf(file, "%4d: ", ip++);
          dump_instruction(inst, file);
       }
-   }
-
-   if (file != stderr) {
-      fclose(file);
    }
 }
 
@@ -1298,7 +1306,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
    struct brw_tes_prog_data *prog_data = params->prog_data;
 
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_EVAL];
-   const bool debug_enabled = INTEL_DEBUG(DEBUG_TES);
+   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TES);
    const unsigned *assembly;
 
    prog_data->base.base.stage = MESA_SHADER_TESS_EVAL;
@@ -1307,10 +1315,10 @@ brw_compile_tes(const struct brw_compiler *compiler,
    nir->info.inputs_read = key->inputs_read;
    nir->info.patch_inputs_read = key->patch_inputs_read;
 
-   brw_nir_apply_key(nir, compiler, &key->base, 8, is_scalar);
+   brw_nir_apply_key(nir, compiler, &key->base, 8);
    brw_nir_lower_tes_inputs(nir, input_vue_map);
    brw_nir_lower_vue_outputs(nir);
-   brw_postprocess_nir(nir, compiler, is_scalar, debug_enabled,
+   brw_postprocess_nir(nir, compiler, debug_enabled,
                        key->base.robust_buffer_access);
 
    brw_compute_vue_map(devinfo, &prog_data->base.vue_map,

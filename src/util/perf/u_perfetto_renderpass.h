@@ -114,6 +114,9 @@ class MesaRenderpassDataSource
     * event in the UI, rather than needing to click into the event to find the
     * name in the metadata.  Intended for use with
     * vkCmdBeginDebugUtilsLabelEXT() and glPushDebugGroup().
+    *
+    * Note that SEQ_INCREMENTAL_STATE_CLEARED must have been set in the
+    * sequence before this is called.
     */
    uint64_t debug_marker_stage(TraceContext &ctx, const char *name)
    {

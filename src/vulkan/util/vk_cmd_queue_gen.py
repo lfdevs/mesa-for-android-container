@@ -69,6 +69,9 @@ TEMPLATE_H = Template(COPYRIGHT + """\
 
 #define VK_PROTOTYPES
 #include <vulkan/vulkan_core.h>
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+#include <vulkan/vulkan_beta.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -94,6 +97,7 @@ enum vk_cmd_type {
 };
 
 extern const char *vk_cmd_queue_type_names[];
+extern size_t vk_cmd_queue_type_sizes[];
 
 % for c in commands:
 % if len(c.params) <= 1:             # Avoid "error C2016: C requires that a struct or union have at least one member"
@@ -112,9 +116,24 @@ struct ${to_struct_name(c.name)} {
 % endif
 % endfor
 
+struct vk_cmd_queue_entry;
+
+/* this ordering must match vk_cmd_queue_entry */
+struct vk_cmd_queue_entry_base {
+   struct list_head cmd_link;
+   enum vk_cmd_type type;
+   void *driver_data;
+   void (*driver_free_cb)(struct vk_cmd_queue *queue,
+                          struct vk_cmd_queue_entry *cmd);
+};
+
+/* this ordering must match vk_cmd_queue_entry_base */
 struct vk_cmd_queue_entry {
    struct list_head cmd_link;
    enum vk_cmd_type type;
+   void *driver_data;
+   void (*driver_free_cb)(struct vk_cmd_queue *queue,
+                          struct vk_cmd_queue_entry *cmd);
    union {
 % for c in commands:
 % if len(c.params) <= 1:
@@ -129,9 +148,6 @@ struct vk_cmd_queue_entry {
 % endif
 % endfor
    } u;
-   void *driver_data;
-   void (*driver_free_cb)(struct vk_cmd_queue *queue,
-                          struct vk_cmd_queue_entry *cmd);
 };
 
 % for c in commands:
@@ -191,6 +207,9 @@ TEMPLATE_C = Template(COPYRIGHT + """
 
 #define VK_PROTOTYPES
 #include <vulkan/vulkan_core.h>
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+#include <vulkan/vulkan_beta.h>
+#endif
 
 #include "vk_alloc.h"
 #include "vk_cmd_enqueue_entrypoints.h"
@@ -204,6 +223,21 @@ const char *vk_cmd_queue_type_names[] = {
 #ifdef ${c.guard}
 % endif
    "${to_enum_name(c.name)}",
+% if c.guard is not None:
+#endif // ${c.guard}
+% endif
+% endfor
+};
+
+size_t vk_cmd_queue_type_sizes[] = {
+% for c in commands:
+% if c.guard is not None:
+#ifdef ${c.guard}
+% endif
+% if len(c.params) > 1:
+   sizeof(struct ${to_struct_name(c.name)}) +
+% endif
+   sizeof(struct vk_cmd_queue_entry_base),
 % if c.guard is not None:
 #endif // ${c.guard}
 % endif
@@ -240,8 +274,7 @@ VkResult vk_enqueue_${to_underscore(c.name)}(struct vk_cmd_queue *queue
 % endfor
 )
 {
-   struct vk_cmd_queue_entry *cmd = vk_zalloc(queue->alloc,
-                                              sizeof(*cmd), 8,
+   struct vk_cmd_queue_entry *cmd = vk_zalloc(queue->alloc, vk_cmd_queue_type_sizes[${to_enum_name(c.name)}], 8,
                                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!cmd) return VK_ERROR_OUT_OF_HOST_MEMORY;
 
@@ -528,11 +561,11 @@ def get_types_defines(doc):
 
     return types_to_defines
 
-def get_types(doc, api, types_to_defines):
+def get_types(doc, beta, api, types_to_defines):
     """Extract the types from the registry."""
     types = {}
 
-    required = get_all_required(doc, 'type', api)
+    required = get_all_required(doc, 'type', api, beta)
 
     for _type in doc.findall('./types/type'):
         if _type.attrib.get('category') != 'struct':
@@ -579,12 +612,12 @@ def get_types(doc, api, types_to_defines):
 
     return types
 
-def get_types_from_xml(xml_files, api='vulkan'):
+def get_types_from_xml(xml_files, beta, api='vulkan'):
     types = {}
 
     for filename in xml_files:
         doc = et.parse(filename)
-        types.update(get_types(doc, api, get_types_defines(doc)))
+        types.update(get_types(doc, beta, api, get_types_defines(doc)))
 
     return types
 
@@ -592,18 +625,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-c', required=True, help='Output C file.')
     parser.add_argument('--out-h', required=True, help='Output H file.')
+    parser.add_argument('--beta', required=True, help='Enable beta extensions.')
     parser.add_argument('--xml',
                         help='Vulkan API XML file.',
                         required=True, action='append', dest='xml_files')
     args = parser.parse_args()
 
     commands = []
-    for e in get_entrypoints_from_xml(args.xml_files):
+    for e in get_entrypoints_from_xml(args.xml_files, args.beta):
         if e.name.startswith('Cmd') and \
            not e.alias:
             commands.append(e)
 
-    types = get_types_from_xml(args.xml_files)
+    types = get_types_from_xml(args.xml_files, args.beta)
 
     assert os.path.dirname(args.out_c) == os.path.dirname(args.out_h)
 

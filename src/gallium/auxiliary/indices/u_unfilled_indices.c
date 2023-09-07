@@ -40,21 +40,21 @@ static void translate_ubyte_ushort( const void *in,
                                     unsigned restart_index,
                                     void *out )
 {
-   const ubyte *in_ub = (const ubyte *)in;
-   ushort *out_us = (ushort *)out;
+   const uint8_t *in_ub = (const uint8_t *)in;
+   uint16_t *out_us = (uint16_t *)out;
    unsigned i;
    for (i = 0; i < out_nr; i++)
-      out_us[i] = (ushort) in_ub[i+start];
+      out_us[i] = (uint16_t) in_ub[i+start];
 }
 
 static void generate_linear_ushort( unsigned start,
                                     unsigned nr,
                                     void *out )
 {
-   ushort *out_us = (ushort *)out;
+   uint16_t *out_us = (uint16_t *)out;
    unsigned i;
    for (i = 0; i < nr; i++)
-      out_us[i] = (ushort)(i + start);
+      out_us[i] = (uint16_t)(i + start);
 }
 
 static void generate_linear_uint( unsigned start,
@@ -71,31 +71,31 @@ static void generate_linear_uint( unsigned start,
 /**
  * Given a primitive type and number of vertices, return the number of vertices
  * needed to draw the primitive with fill mode = PIPE_POLYGON_MODE_LINE using
- * separate lines (PIPE_PRIM_LINES).
+ * separate lines (MESA_PRIM_LINES).
  */
 static unsigned
-nr_lines(enum pipe_prim_type prim, unsigned nr)
+nr_lines(enum mesa_prim prim, unsigned nr)
 {
    switch (prim) {
-   case PIPE_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLES:
       return (nr / 3) * 6;
-   case PIPE_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
       return (nr - 2) * 6;
-   case PIPE_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_TRIANGLE_FAN:
       return (nr - 2)  * 6;
-   case PIPE_PRIM_QUADS:
+   case MESA_PRIM_QUADS:
       return (nr / 4) * 8;
-   case PIPE_PRIM_QUAD_STRIP:
+   case MESA_PRIM_QUAD_STRIP:
       return (nr - 2) / 2 * 8;
-   case PIPE_PRIM_POLYGON:
+   case MESA_PRIM_POLYGON:
       return 2 * nr; /* a line (two verts) for each polygon edge */
    /* Note: these cases can't really be handled since drawing lines instead
     * of triangles would also require changing the GS.  But if there's no GS,
     * this should work.
     */
-   case PIPE_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
       return (nr / 6) * 6;
-   case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return ((nr - 4) / 2) * 6;
    default:
       assert(0);
@@ -105,11 +105,11 @@ nr_lines(enum pipe_prim_type prim, unsigned nr)
 
 
 enum indices_mode
-u_unfilled_translator(enum pipe_prim_type prim,
+u_unfilled_translator(enum mesa_prim prim,
                       unsigned in_index_size,
                       unsigned nr,
                       unsigned unfilled_mode,
-                      enum pipe_prim_type *out_prim,
+                      enum mesa_prim *out_prim,
                       unsigned *out_index_size,
                       unsigned *out_nr,
                       u_translate_func *out_translate)
@@ -117,7 +117,7 @@ u_unfilled_translator(enum pipe_prim_type prim,
    unsigned in_idx;
    unsigned out_idx;
 
-   assert(u_reduced_prim(prim) == PIPE_PRIM_TRIANGLES);
+   assert(u_reduced_prim(prim) == MESA_PRIM_TRIANGLES);
 
    u_unfilled_init();
 
@@ -126,7 +126,7 @@ u_unfilled_translator(enum pipe_prim_type prim,
    out_idx = out_size_idx(*out_index_size);
 
    if (unfilled_mode == PIPE_POLYGON_MODE_POINT) {
-      *out_prim = PIPE_PRIM_POINTS;
+      *out_prim = MESA_PRIM_POINTS;
       *out_nr = nr;
 
       switch (in_index_size) {
@@ -148,7 +148,7 @@ u_unfilled_translator(enum pipe_prim_type prim,
    }
    else {
       assert(unfilled_mode == PIPE_POLYGON_MODE_LINE);
-      *out_prim = PIPE_PRIM_LINES;
+      *out_prim = MESA_PRIM_LINES;
       *out_translate = translate_line[in_idx][out_idx][prim];
       *out_nr = nr_lines( prim, nr );
       return U_TRANSLATE_NORMAL;
@@ -165,18 +165,18 @@ u_unfilled_translator(enum pipe_prim_type prim,
  * 'draw' module.
  */
 enum indices_mode
-u_unfilled_generator(enum pipe_prim_type prim,
+u_unfilled_generator(enum mesa_prim prim,
                      unsigned start,
                      unsigned nr,
                      unsigned unfilled_mode,
-                     enum pipe_prim_type *out_prim,
+                     enum mesa_prim *out_prim,
                      unsigned *out_index_size,
                      unsigned *out_nr,
                      u_generate_func *out_generate)
 {
    unsigned out_idx;
 
-   assert(u_reduced_prim(prim) == PIPE_PRIM_TRIANGLES);
+   assert(u_reduced_prim(prim) == MESA_PRIM_TRIANGLES);
 
    u_unfilled_init();
 
@@ -189,13 +189,13 @@ u_unfilled_generator(enum pipe_prim_type prim,
       else
          *out_generate = generate_linear_ushort;
 
-      *out_prim = PIPE_PRIM_POINTS;
+      *out_prim = MESA_PRIM_POINTS;
       *out_nr = nr;
       return U_GENERATE_LINEAR;
    }
    else {
       assert(unfilled_mode == PIPE_POLYGON_MODE_LINE);
-      *out_prim = PIPE_PRIM_LINES;
+      *out_prim = MESA_PRIM_LINES;
       *out_generate = generate_line[out_idx][prim];
       *out_nr = nr_lines( prim, nr );
 

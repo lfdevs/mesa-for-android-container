@@ -1,26 +1,8 @@
 /*
  * Copyright 2020 Advanced Micro Devices, Inc.
  * Copyright 2020 Valve Corporation
- * All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * on the rights to use, copy, modify, merge, publish, distribute, sub
- * license, and/or sell copies of the Software, and to permit persons to whom
- * the Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHOR(S) AND/OR THEIR SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef AC_RGP_H
@@ -32,9 +14,9 @@
 #include "util/simple_mtx.h"
 
 struct radeon_info;
-struct ac_thread_trace;
-struct ac_thread_trace_data;
-struct ac_spm_trace_data;
+struct ac_sqtt_trace;
+struct ac_sqtt;
+struct ac_spm_trace;
 
 enum rgp_hardware_stages {
    RGP_HW_STAGE_VS = 0,
@@ -188,10 +170,8 @@ struct rgp_clock_calibration {
    simple_mtx_t lock;
 };
 
-int
-ac_dump_rgp_capture(struct radeon_info *info,
-                    struct ac_thread_trace *thread_trace,
-                    const struct ac_spm_trace_data *spm_trace);
+int ac_dump_rgp_capture(const struct radeon_info *info, struct ac_sqtt_trace *sqtt_trace,
+                        const struct ac_spm_trace *spm_trace);
 
 void
 ac_rgp_file_write_elf_object(FILE *output, size_t file_elf_start,

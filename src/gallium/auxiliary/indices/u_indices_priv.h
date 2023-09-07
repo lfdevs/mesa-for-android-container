@@ -25,20 +25,20 @@
 #ifndef U_INDICES_PRIV_H
 #define U_INDICES_PRIV_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "u_indices.h"
 
-#define IN_UBYTE      0
-#define IN_USHORT     1
-#define IN_UINT       2
+#define IN_UINT8      0
+#define IN_UINT16     1
+#define IN_UINT32     2
 #define IN_COUNT      3
 
-#define OUT_USHORT    0
-#define OUT_UINT      1
+#define OUT_UINT16    0
+#define OUT_UINT32    1
 #define OUT_COUNT     2
 
 
-#define PRIM_COUNT   (PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY + 1)
+#define PRIM_COUNT   (MESA_PRIM_TRIANGLE_STRIP_ADJACENCY + 1)
 
 static void translate_memcpy_uint( const void *in,
                                    unsigned start,
@@ -63,19 +63,19 @@ static void translate_memcpy_ushort( const void *in,
 static unsigned out_size_idx( unsigned index_size )
 {
    switch (index_size) {
-   case 4: return OUT_UINT;
-   case 2: return OUT_USHORT;
-   default: assert(0); return OUT_USHORT;
+   case 4: return OUT_UINT32;
+   case 2: return OUT_UINT16;
+   default: assert(0); return OUT_UINT16;
    }
 }
 
 static unsigned in_size_idx( unsigned index_size )
 {
    switch (index_size) {
-   case 4: return IN_UINT;
-   case 2: return IN_USHORT;
-   case 1: return IN_UBYTE;
-   default: assert(0); return IN_UBYTE;
+   case 4: return IN_UINT32;
+   case 2: return IN_UINT16;
+   case 1: return IN_UINT8;
+   default: assert(0); return IN_UINT8;
    }
 }
 

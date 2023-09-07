@@ -587,9 +587,6 @@ nouveau_copy_buffer(struct nouveau_context *nv,
 {
    assert(dst->base.target == PIPE_BUFFER && src->base.target == PIPE_BUFFER);
 
-   assert(!(dst->status & NOUVEAU_BUFFER_STATUS_USER_PTR));
-   assert(!(src->status & NOUVEAU_BUFFER_STATUS_USER_PTR));
-
    if (likely(dst->domain) && likely(src->domain)) {
       nv->copy_data(nv,
                     dst->bo, dst->offset + dstx, dst->domain,

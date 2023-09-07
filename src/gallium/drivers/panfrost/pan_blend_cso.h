@@ -53,6 +53,9 @@ struct panfrost_blend_state {
 
    /* info.load presented as a bitfield for draw call hot paths */
    unsigned load_dest_mask : PIPE_MAX_COLOR_BUFS;
+
+   /* info.enabled presented as a bitfield for draw call hot paths */
+   unsigned enabled_mask : PIPE_MAX_COLOR_BUFS;
 };
 
 mali_ptr panfrost_get_blend(struct panfrost_batch *batch, unsigned rt,

@@ -97,7 +97,7 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
       mapped_indices = info->has_user_indices ? info->index.user : NULL;
       if (!mapped_indices)
          mapped_indices = i915_buffer(info->index.resource)->data;
-      draw_set_indexes(draw, (ubyte *)mapped_indices, info->index_size, ~0);
+      draw_set_indexes(draw, (uint8_t *)mapped_indices, info->index_size, ~0);
    }
 
    if (i915->constants[PIPE_SHADER_VERTEX])

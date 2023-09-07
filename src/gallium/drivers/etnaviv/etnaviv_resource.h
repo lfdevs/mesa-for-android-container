@@ -54,8 +54,8 @@ struct etna_ts_sw_meta {
 };
 
 struct etna_resource_level {
-   unsigned width, padded_width; /* in pixels */
-   unsigned height, padded_height; /* in samples */
+   unsigned width, height; /* in pixels */
+   unsigned padded_width, padded_height; /* in samples */
    unsigned depth;
    unsigned offset; /* offset into memory area */
    uint32_t stride; /* row stride */

@@ -64,7 +64,7 @@ __reg_iova(const struct fd_reg_pair *reg)
    return iova << reg->bo_low;
 }
 
-#define __ONE_REG(i, ...)                                                      \
+#define __ONE_REG(ring, i, ...)                                                \
    do {                                                                        \
       const struct fd_reg_pair __regs[] = {__VA_ARGS__};                       \
       /* NOTE: allow __regs[0].reg==0, this happens in OUT_PKT() */            \
@@ -74,7 +74,6 @@ __reg_iova(const struct fd_reg_pair *reg)
             uint64_t *__p64 = (uint64_t *)__p;                                 \
             *__p64 = __reg_iova(&__regs[i]) | __regs[i].value;                 \
             __p += 2;                                                          \
-            fd_ringbuffer_attach_bo(ring, __regs[i].bo);                       \
          } else {                                                              \
             *__p++ = __regs[i].value;                                          \
             if (__regs[i].is_address)                                          \
@@ -93,24 +92,24 @@ __reg_iova(const struct fd_reg_pair *reg)
                                                                                \
       BEGIN_RING(ring, count + 1);                                             \
       uint32_t *__p = ring->cur;                                               \
-      *__p++ = pm4_pkt4_hdr(__regs[0].reg, count);                             \
+      *__p++ = pm4_pkt4_hdr((uint16_t)__regs[0].reg, (uint16_t)count);         \
                                                                                \
-      __ONE_REG(0, __VA_ARGS__);                                               \
-      __ONE_REG(1, __VA_ARGS__);                                               \
-      __ONE_REG(2, __VA_ARGS__);                                               \
-      __ONE_REG(3, __VA_ARGS__);                                               \
-      __ONE_REG(4, __VA_ARGS__);                                               \
-      __ONE_REG(5, __VA_ARGS__);                                               \
-      __ONE_REG(6, __VA_ARGS__);                                               \
-      __ONE_REG(7, __VA_ARGS__);                                               \
-      __ONE_REG(8, __VA_ARGS__);                                               \
-      __ONE_REG(9, __VA_ARGS__);                                               \
-      __ONE_REG(10, __VA_ARGS__);                                              \
-      __ONE_REG(11, __VA_ARGS__);                                              \
-      __ONE_REG(12, __VA_ARGS__);                                              \
-      __ONE_REG(13, __VA_ARGS__);                                              \
-      __ONE_REG(14, __VA_ARGS__);                                              \
-      __ONE_REG(15, __VA_ARGS__);                                              \
+      __ONE_REG(ring, 0, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 1, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 2, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 3, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 4, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 5, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 6, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 7, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 8, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 9, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 10, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 11, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 12, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 13, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 14, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 15, __VA_ARGS__);                                        \
       ring->cur = __p;                                                         \
    } while (0)
 
@@ -125,22 +124,22 @@ __reg_iova(const struct fd_reg_pair *reg)
       uint32_t *__p = ring->cur;                                               \
       *__p++ = pm4_pkt7_hdr(opcode, count);                                    \
                                                                                \
-      __ONE_REG(0, __VA_ARGS__);                                               \
-      __ONE_REG(1, __VA_ARGS__);                                               \
-      __ONE_REG(2, __VA_ARGS__);                                               \
-      __ONE_REG(3, __VA_ARGS__);                                               \
-      __ONE_REG(4, __VA_ARGS__);                                               \
-      __ONE_REG(5, __VA_ARGS__);                                               \
-      __ONE_REG(6, __VA_ARGS__);                                               \
-      __ONE_REG(7, __VA_ARGS__);                                               \
-      __ONE_REG(8, __VA_ARGS__);                                               \
-      __ONE_REG(9, __VA_ARGS__);                                               \
-      __ONE_REG(10, __VA_ARGS__);                                              \
-      __ONE_REG(11, __VA_ARGS__);                                              \
-      __ONE_REG(12, __VA_ARGS__);                                              \
-      __ONE_REG(13, __VA_ARGS__);                                              \
-      __ONE_REG(14, __VA_ARGS__);                                              \
-      __ONE_REG(15, __VA_ARGS__);                                              \
+      __ONE_REG(ring, 0, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 1, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 2, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 3, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 4, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 5, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 6, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 7, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 8, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 9, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 10, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 11, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 12, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 13, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 14, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 15, __VA_ARGS__);                                        \
       ring->cur = __p;                                                         \
    } while (0)
 
@@ -160,22 +159,22 @@ __reg_iova(const struct fd_reg_pair *reg)
       uint32_t *__p = ring->cur;                                               \
       *__p++ = pm4_pkt7_hdr(opcode, count);                                    \
                                                                                \
-      __ONE_REG(0, __VA_ARGS__);                                               \
-      __ONE_REG(1, __VA_ARGS__);                                               \
-      __ONE_REG(2, __VA_ARGS__);                                               \
-      __ONE_REG(3, __VA_ARGS__);                                               \
-      __ONE_REG(4, __VA_ARGS__);                                               \
-      __ONE_REG(5, __VA_ARGS__);                                               \
-      __ONE_REG(6, __VA_ARGS__);                                               \
-      __ONE_REG(7, __VA_ARGS__);                                               \
-      __ONE_REG(8, __VA_ARGS__);                                               \
-      __ONE_REG(9, __VA_ARGS__);                                               \
-      __ONE_REG(10, __VA_ARGS__);                                              \
-      __ONE_REG(11, __VA_ARGS__);                                              \
-      __ONE_REG(12, __VA_ARGS__);                                              \
-      __ONE_REG(13, __VA_ARGS__);                                              \
-      __ONE_REG(14, __VA_ARGS__);                                              \
-      __ONE_REG(15, __VA_ARGS__);                                              \
+      __ONE_REG(ring, 0, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 1, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 2, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 3, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 4, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 5, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 6, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 7, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 8, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 9, __VA_ARGS__);                                         \
+      __ONE_REG(ring, 10, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 11, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 12, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 13, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 14, __VA_ARGS__);                                        \
+      __ONE_REG(ring, 15, __VA_ARGS__);                                        \
       memcpy(__p, dwords, 4 * sizedwords);                                     \
       __p += sizedwords;                                                       \
       ring->cur = __p;                                                         \

@@ -35,7 +35,7 @@ v3d33_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
 {
         /* FIXME: We don't bother implementing pipelining for texture reads
          * for any pre 4.x hardware. It should be straight forward to do but
-         * we are not really testing or even targetting this hardware at
+         * we are not really testing or even targeting this hardware at
          * present.
          */
         ntq_flush_tmu(c);

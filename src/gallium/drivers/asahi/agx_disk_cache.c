@@ -77,7 +77,8 @@ agx_disk_cache_store(struct disk_cache *cache,
    blob_write_bytes(&blob, binary->bo->ptr.cpu, shader_size);
    blob_write_bytes(&blob, &binary->info, sizeof(binary->info));
    blob_write_uint32(&blob, binary->push_range_count);
-   blob_write_bytes(&blob, binary->push, sizeof(binary->push));
+   blob_write_bytes(&blob, binary->push,
+                    sizeof(binary->push[0]) * binary->push_range_count);
 
    disk_cache_put(cache, cache_key, blob.data, blob.size, NULL);
    blob_finish(&blob);
@@ -118,7 +119,8 @@ agx_disk_cache_retrieve(struct agx_screen *screen,
 
    blob_copy_bytes(&blob, &binary->info, sizeof(binary->info));
    binary->push_range_count = blob_read_uint32(&blob);
-   blob_copy_bytes(&blob, binary->push, sizeof(binary->push));
+   blob_copy_bytes(&blob, binary->push,
+                   sizeof(binary->push[0]) * binary->push_range_count);
 
    free(buffer);
    return binary;

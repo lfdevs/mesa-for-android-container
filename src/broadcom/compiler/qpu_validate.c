@@ -128,7 +128,7 @@ qpu_validate_inst(struct v3d_qpu_validate_state *state, struct qinst *qinst)
          *
          * FIXME: This would not check correctly for V3D 4.2 versions lower
          * than V3D 4.2.14, but that is not a real issue because the simulator
-         * will still catch this, and we are not really targetting any such
+         * will still catch this, and we are not really targeting any such
          * versions anyway.
          */
         if (state->c->devinfo->ver < 42) {

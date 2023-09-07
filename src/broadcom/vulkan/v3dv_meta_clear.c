@@ -73,7 +73,7 @@ clear_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
     *   conversion"
     */
    assert(image->plane_count == 1);
-   if (!v3dv_meta_can_use_tlb(image, 0, &origin, &fb_format))
+   if (!v3dv_meta_can_use_tlb(image, 0, 0, &origin, NULL, &fb_format))
       return false;
 
    uint32_t internal_type, internal_bpp;
@@ -352,8 +352,8 @@ get_clear_rect_gs(uint32_t push_constant_layer_base)
    nir->info.inputs_read = 1ull << VARYING_SLOT_POS;
    nir->info.outputs_written = (1ull << VARYING_SLOT_POS) |
                                (1ull << VARYING_SLOT_LAYER);
-   nir->info.gs.input_primitive = SHADER_PRIM_TRIANGLES;
-   nir->info.gs.output_primitive = SHADER_PRIM_TRIANGLE_STRIP;
+   nir->info.gs.input_primitive = MESA_PRIM_TRIANGLES;
+   nir->info.gs.output_primitive = MESA_PRIM_TRIANGLE_STRIP;
    nir->info.gs.vertices_in = 3;
    nir->info.gs.vertices_out = 3;
    nir->info.gs.invocations = 1;

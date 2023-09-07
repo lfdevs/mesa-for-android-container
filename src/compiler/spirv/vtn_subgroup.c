@@ -52,8 +52,7 @@ vtn_build_subgroup_instr(struct vtn_builder *b,
 
    nir_intrinsic_instr *intrin =
       nir_intrinsic_instr_create(b->nb.shader, nir_op);
-   nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest,
-                              dst->type, NULL);
+   nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest, dst->type);
    intrin->num_components = intrin->dest.ssa.num_components;
 
    intrin->src[0] = nir_src_for_ssa(src0->def);
@@ -82,8 +81,7 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
                   "OpGroupNonUniformElect must return a Bool");
       nir_intrinsic_instr *elect =
          nir_intrinsic_instr_create(b->nb.shader, nir_intrinsic_elect);
-      nir_ssa_dest_init_for_type(&elect->instr, &elect->dest,
-                                 dest_type->type, NULL);
+      nir_ssa_dest_init_for_type(&elect->instr, &elect->dest, dest_type->type);
       nir_builder_instr_insert(&b->nb, &elect->instr);
       vtn_push_nir_ssa(b, w[2], &elect->dest.ssa);
       break;
@@ -97,7 +95,7 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
       nir_intrinsic_instr *ballot =
          nir_intrinsic_instr_create(b->nb.shader, nir_intrinsic_ballot);
       ballot->src[0] = nir_src_for_ssa(vtn_get_nir_ssa(b, w[3 + has_scope]));
-      nir_ssa_dest_init(&ballot->instr, &ballot->dest, 4, 32, NULL);
+      nir_ssa_dest_init(&ballot->instr, &ballot->dest, 4, 32);
       ballot->num_components = 4;
       nir_builder_instr_insert(&b->nb, &ballot->instr);
       vtn_push_nir_ssa(b, w[2], &ballot->dest.ssa);
@@ -117,7 +115,7 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
       intrin->src[1] = nir_src_for_ssa(nir_load_subgroup_invocation(&b->nb));
 
       nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest,
-                                 dest_type->type, NULL);
+                                 dest_type->type);
       nir_builder_instr_insert(&b->nb, &intrin->instr);
 
       vtn_push_nir_ssa(b, w[2], &intrin->dest.ssa);
@@ -172,7 +170,7 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
          intrin->src[1] = nir_src_for_ssa(src1);
 
       nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest,
-                                 dest_type->type, NULL);
+                                 dest_type->type);
       nir_builder_instr_insert(&b->nb, &intrin->instr);
 
       vtn_push_nir_ssa(b, w[2], &intrin->dest.ssa);
@@ -265,7 +263,7 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
          intrin->num_components = src0->num_components;
       intrin->src[0] = nir_src_for_ssa(src0);
       nir_ssa_dest_init_for_type(&intrin->instr, &intrin->dest,
-                                 dest_type->type, NULL);
+                                 dest_type->type);
       nir_builder_instr_insert(&b->nb, &intrin->instr);
 
       vtn_push_nir_ssa(b, w[2], &intrin->dest.ssa);
@@ -343,7 +341,7 @@ vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpGroupNonUniformRotateKHR: {
-      const nir_scope scope = vtn_scope_to_nir_scope(b, vtn_constant_uint(b, w[3]));
+      const mesa_scope scope = vtn_translate_scope(b, vtn_constant_uint(b, w[3]));
       const uint32_t cluster_size = count > 6 ? vtn_constant_uint(b, w[6]) : 0;
       vtn_fail_if(cluster_size && !IS_POT(cluster_size),
                   "Behavior is undefined unless ClusterSize is at least 1 and a power of 2.");

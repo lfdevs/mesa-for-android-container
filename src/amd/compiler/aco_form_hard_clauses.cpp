@@ -55,16 +55,18 @@ void
 emit_clause(Builder& bld, unsigned num_instrs, aco_ptr<Instruction>* instrs)
 {
    unsigned start = 0;
+   unsigned end = num_instrs;
 
-   /* skip any stores at the start */
-   for (; (start < num_instrs) && instrs[start]->definitions.empty(); start++)
-      bld.insert(std::move(instrs[start]));
+   if (bld.program->gfx_level < GFX11) {
+      /* skip any stores at the start */
+      for (; (start < num_instrs) && instrs[start]->definitions.empty(); start++)
+         bld.insert(std::move(instrs[start]));
 
-   unsigned end = start;
-   for (; (end < num_instrs) && !instrs[end]->definitions.empty(); end++)
-      ;
+      for (end = start; (end < num_instrs) && !instrs[end]->definitions.empty(); end++)
+         ;
+   }
+
    unsigned clause_size = end - start;
-
    if (clause_size > 1)
       bld.sopp(aco_opcode::s_clause, -1, clause_size - 1);
 

@@ -185,6 +185,8 @@ vl_vlc_init(struct vl_vlc *vlc, unsigned num_inputs,
    vlc->inputs = inputs;
    vlc->sizes = sizes;
    vlc->bytes_left = 0;
+   vlc->data = NULL;
+   vlc->end = NULL;
 
    for (i = 0; i < num_inputs; ++i)
       vlc->bytes_left += sizes[i];

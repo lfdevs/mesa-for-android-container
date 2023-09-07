@@ -104,18 +104,18 @@ struct range_info {
  * Helper function for util_draw_vbo_without_prim_restart()
  * \return true for success, false if out of memory
  */
-static boolean
-add_range(enum pipe_prim_type mode, struct range_info *info, unsigned start, unsigned count, unsigned index_bias)
+static bool
+add_range(enum mesa_prim mode, struct range_info *info, unsigned start, unsigned count, unsigned index_bias)
 {
    /* degenerate primitive: ignore */
    if (!u_trim_pipe_prim(mode, (unsigned*)&count))
-      return TRUE;
+      return true;
 
    if (info->max == 0) {
       info->max = 10;
       info->draws = MALLOC(info->max * sizeof(struct pipe_draw_start_count_bias));
       if (!info->draws) {
-         return FALSE;
+         return false;
       }
    }
    else if (info->count == info->max) {
@@ -124,7 +124,7 @@ add_range(enum pipe_prim_type mode, struct range_info *info, unsigned start, uns
                              info->max * sizeof(struct pipe_draw_start_count_bias),
                              2 * info->max * sizeof(struct pipe_draw_start_count_bias));
       if (!info->draws) {
-         return FALSE;
+         return false;
       }
 
       info->max *= 2;
@@ -139,7 +139,7 @@ add_range(enum pipe_prim_type mode, struct range_info *info, unsigned start, uns
    info->count++;
    info->total_index_count += count;
 
-   return TRUE;
+   return true;
 }
 
 struct pipe_draw_start_count_bias *
@@ -270,7 +270,7 @@ util_draw_vbo_without_prim_restart(struct pipe_context *context,
    if (src_transfer)
       pipe_buffer_unmap(context, src_transfer);
 
-   new_info.primitive_restart = FALSE;
+   new_info.primitive_restart = false;
    new_info.index_bounds_valid = true;
    if (direct_draws)
       context->draw_vbo(context, &new_info, drawid_offset, NULL, direct_draws, num_draws);

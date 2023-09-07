@@ -73,7 +73,7 @@ msm_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
       .op = op,
    };
 
-   get_abs_timeout(&req.timeout, PIPE_TIMEOUT_INFINITE);
+   get_abs_timeout(&req.timeout, OS_TIMEOUT_INFINITE);
 
    return drmCommandWrite(bo->dev->fd, DRM_MSM_GEM_CPU_PREP, &req, sizeof(req));
 }

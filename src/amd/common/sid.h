@@ -1,24 +1,7 @@
 /*
- * Southern Islands Register documentation
- *
  * Copyright (C) 2011  Advanced Micro Devices, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included
- * in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE COPYRIGHT HOLDER(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
- * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef SID_H
@@ -132,7 +115,7 @@
 #define   WAIT_REG_MEM_MEM_SPACE(x)                   (((unsigned)(x)&0x3) << 4)
 #define   WAIT_REG_MEM_PFP                            (1 << 8)
 #define PKT3_MEM_WRITE                             0x3D /* GFX6 only */
-#define PKT3_INDIRECT_BUFFER_CIK                   0x3F /* GFX7+ */
+#define PKT3_INDIRECT_BUFFER                       0x3F /* GFX6+ */
 #define PKT3_COPY_DATA                             0x40
 #define   COPY_DATA_SRC_SEL(x)                        ((x)&0xf)
 #define   COPY_DATA_REG                               0
@@ -273,31 +256,32 @@
 #define   S_AD4_XYZ_DIM_REG(x)                        ((x & 0xFFFF))
 #define PKT3_EVENT_WRITE_ZPASS                     0xB1 /* GFX11+ & PFP version >= 1458 */
 #define   EVENT_WRITE_ZPASS_PFP_VERSION               1458
-/* All PAIRS packets require GFX11+ and PFP version >= 1448.
+/* All PAIRS packets require GFX11+.
  *
  * SET_CONTEXT_REG_PAIRS:
  * SET_SH_REG_PAIRS:
  *   Format: header, (offset, value)^n.
- *   Consecutive offsets must not be equal. Not recommended because the PACKED variants are better.
+ *   Don't use these because the PACKED variants are faster.
+ *   - Consecutive offsets must not be equal.
+ *   - RESET_FILTER_CAM must be set to 1.
  *
  * SET_CONTEXT_REG_PAIRS_PACKED:
  * SET_SH_REG_PAIRS_PACKED:
  * SET_SH_REG_PAIRS_PACKED_N:
  *   Format: header, count, (offset0 | (offset1 << 16), value0, value1)^(count / 2)
- *   Consecutive offsets must not be equal. "count" is the register count and must be aligned to 2.
- *   If the register count is odd, it's recommended to duplicate the first register in the last register.
- *   The SH_*_PACKED* variants require register shadowing to be enabled. The *_N variant is
- *   identical to the non-N variant, but is faster with the following limitation:
- *   If PFP version >= 1463, "count" must be at most 14, else "count" must be at most 8. If "count"
- *   is greater than the limit, use the non-N variant.
+ *   - "count" is the register count and must be aligned to 2.
+ *   - Consecutive offsets must not be equal.
+ *   - RESET_FILTER_CAM must be set to 1.
+ *   - If the register count is odd, write the first register again at the end to make it even.
+ *   - The SH_*_PACKED* variants require register shadowing to be enabled.
+ *   - The *_N variant is identical to the non-N variant, but the maximum allowed "count" is 14
+ *     and it's faster.
  */
-#define PKT3_SET_CONTEXT_REG_PAIRS                 0xB8 /* GFX11+, PFP version >= 1448 */
-#define PKT3_SET_CONTEXT_REG_PAIRS_PACKED          0xB9 /* GFX11+, PFP version >= 1448 */
-#define PKT3_SET_SH_REG_PAIRS                      0xBA /* GFX11+, PFP version >= 1448 */
-#define PKT3_SET_SH_REG_PAIRS_PACKED               0xBB /* GFX11+, PFP version >= 1448 */
-#define PKT3_SET_SH_REG_PAIRS_PACKED_N             0xBD /* GFX11+, PFP version >= 1448 */
-#define   SET_REG_PAIRS_PFP_VERSION                   1448
-#define   SET_REG_PAIRS_PACKED_N_COUNT14_PFP_VERSION  1463
+#define PKT3_SET_CONTEXT_REG_PAIRS                 0xB8 /* GFX11+, don't use */
+#define PKT3_SET_CONTEXT_REG_PAIRS_PACKED          0xB9 /* GFX11+ */
+#define PKT3_SET_SH_REG_PAIRS                      0xBA /* GFX11+, don't use */
+#define PKT3_SET_SH_REG_PAIRS_PACKED               0xBB /* GFX11+ */
+#define PKT3_SET_SH_REG_PAIRS_PACKED_N             0xBD /* GFX11+ */
 
 #define PKT_TYPE_S(x)         (((unsigned)(x)&0x3) << 30)
 #define PKT_TYPE_G(x)         (((x) >> 30) & 0x3)
@@ -305,16 +289,14 @@
 #define PKT_COUNT_S(x)        (((unsigned)(x)&0x3FFF) << 16)
 #define PKT_COUNT_G(x)        (((x) >> 16) & 0x3FFF)
 #define PKT_COUNT_C           0xC000FFFF
-#define PKT0_BASE_INDEX_S(x)  (((unsigned)(x)&0xFFFF) << 0)
-#define PKT0_BASE_INDEX_G(x)  (((x) >> 0) & 0xFFFF)
-#define PKT0_BASE_INDEX_C     0xFFFF0000
 #define PKT3_IT_OPCODE_S(x)   (((unsigned)(x)&0xFF) << 8)
 #define PKT3_IT_OPCODE_G(x)   (((x) >> 8) & 0xFF)
 #define PKT3_IT_OPCODE_C      0xFFFF00FF
 #define PKT3_PREDICATE(x)     (((x) >> 0) & 0x1)
-#define PKT3_SHADER_TYPE_S(x) (((unsigned)(x)&0x1) << 1)
-#define PKT3_RESET_FILTER_CAM(x) (((unsigned)(x)&0x1) << 2)
-#define PKT0(index, count)    (PKT_TYPE_S(0) | PKT0_BASE_INDEX_S(index) | PKT_COUNT_S(count))
+#define PKT3_SHADER_TYPE_S(x) (((unsigned)(x) & 0x1) << 1)
+#define PKT3_SHADER_TYPE_G(x) (((x) >> 1) & 0x1)
+#define PKT3_RESET_FILTER_CAM_S(x) (((unsigned)(x) & 0x1) << 2)
+#define PKT3_RESET_FILTER_CAM_G(x) (((unsigned)(x) >> 2) & 0x1)
 #define PKT3(op, count, predicate)                                                                 \
    (PKT_TYPE_S(3) | PKT_COUNT_S(count) | PKT3_IT_OPCODE_S(op) | PKT3_PREDICATE(predicate))
 
@@ -358,7 +340,7 @@
 #define CIK_SDMA_COPY_SUB_OPCODE_T2T_SUB_WINDOW    0x6
 #define CIK_SDMA_OPCODE_WRITE                      0x2
 #define SDMA_WRITE_SUB_OPCODE_LINEAR               0x0
-#define SDMA_WRTIE_SUB_OPCODE_TILED                0x1
+#define SDMA_WRITE_SUB_OPCODE_TILED                0x1
 #define CIK_SDMA_OPCODE_INDIRECT_BUFFER            0x4
 #define CIK_SDMA_PACKET_FENCE                      0x5
 #define CIK_SDMA_PACKET_TRAP                       0x6

@@ -443,6 +443,14 @@ util_format_test_cases[] =
    {PIPE_FORMAT_YUYV, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0xeb, 0x80, 0x10, 0x80), UNPACKED_2x1(1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0)},
    {PIPE_FORMAT_YUYV, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0x10, 0x80, 0xeb, 0x80), UNPACKED_2x1(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0)},
 
+   {PIPE_FORMAT_YVYU, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0x10, 0x80, 0x10, 0x80), UNPACKED_2x1(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)},
+   {PIPE_FORMAT_YVYU, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0xeb, 0x80, 0x10, 0x80), UNPACKED_2x1(1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0)},
+   {PIPE_FORMAT_YVYU, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0x10, 0x80, 0xeb, 0x80), UNPACKED_2x1(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0)},
+
+   {PIPE_FORMAT_VYUY, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0x80, 0x10, 0x80, 0x10), UNPACKED_2x1(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)},
+   {PIPE_FORMAT_VYUY, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0x80, 0xeb, 0x80, 0x10), UNPACKED_2x1(1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0)},
+   {PIPE_FORMAT_VYUY, PACKED_4x8(0xff, 0xff, 0xff, 0xff), PACKED_4x8(0x80, 0x10, 0x80, 0xeb), UNPACKED_2x1(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0)},
+
    /*
     * Compressed formats
     */

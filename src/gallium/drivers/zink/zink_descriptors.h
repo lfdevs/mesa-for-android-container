@@ -173,6 +173,8 @@ zink_descriptors_update(struct zink_context *ctx, bool is_compute);
 
 void
 zink_context_invalidate_descriptor_state(struct zink_context *ctx, gl_shader_stage shader, enum zink_descriptor_type type, unsigned, unsigned);
+void
+zink_context_invalidate_descriptor_state_compact(struct zink_context *ctx, gl_shader_stage shader, enum zink_descriptor_type type, unsigned, unsigned);
 
 void
 zink_batch_descriptor_deinit(struct zink_screen *screen, struct zink_batch_state *bs);

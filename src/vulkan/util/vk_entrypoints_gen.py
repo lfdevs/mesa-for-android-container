@@ -223,6 +223,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-c', required=True, help='Output C file.')
     parser.add_argument('--out-h', required=True, help='Output H file.')
+    parser.add_argument('--beta', required=True, help='Enable beta extensions.')
     parser.add_argument('--xml',
                         help='Vulkan API XML file.',
                         required=True, action='append', dest='xml_files')
@@ -257,7 +258,7 @@ def main():
     tmpl_variants_sanitized = [
         ''.join(filter(str.isalnum, v)).lower() for v in args.tmpl_variants]
 
-    entrypoints = get_entrypoints_from_xml(args.xml_files)
+    entrypoints = get_entrypoints_from_xml(args.xml_files, args.beta)
 
     device_entrypoints = []
     physical_device_entrypoints = []

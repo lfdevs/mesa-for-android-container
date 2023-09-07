@@ -102,16 +102,11 @@ nir_lower_variable_initializers(nir_shader *shader, nir_variable_mode modes)
             nir_var_function_temp |
             nir_var_system_value;
 
-   nir_foreach_function(function, shader) {
-      if (!function->impl)
-	 continue;
-
+   nir_foreach_function_with_impl(func, impl, shader) {
       bool impl_progress = false;
+      nir_builder builder = nir_builder_create(impl);
 
-      nir_builder builder;
-      nir_builder_init(&builder, function->impl);
-
-      if ((modes & ~nir_var_function_temp) && function->is_entrypoint) {
+      if ((modes & ~nir_var_function_temp) && func->is_entrypoint) {
          impl_progress |= lower_const_initializer(&builder,
                                                   &shader->variables,
                                                   modes);
@@ -119,17 +114,17 @@ nir_lower_variable_initializers(nir_shader *shader, nir_variable_mode modes)
 
       if (modes & nir_var_function_temp) {
          impl_progress |= lower_const_initializer(&builder,
-                                                  &function->impl->locals,
+                                                  &impl->locals,
                                                   nir_var_function_temp);
       }
 
       if (impl_progress) {
          progress = true;
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
+         nir_metadata_preserve(impl, nir_metadata_block_index |
                                                nir_metadata_dominance |
                                                nir_metadata_live_ssa_defs);
       } else {
-         nir_metadata_preserve(function->impl, nir_metadata_all);
+         nir_metadata_preserve(impl, nir_metadata_all);
       }
    }
 
@@ -150,9 +145,8 @@ nir_zero_initialize_shared_memory(nir_shader *shader,
    assert(chunk_size > 0);
    assert(chunk_size % 4 == 0);
 
-   nir_builder b;
-   nir_builder_init(&b, nir_shader_get_entrypoint(shader));
-   b.cursor = nir_before_cf_list(&b.impl->body);
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+   nir_builder b = nir_builder_at(nir_before_cf_list(&impl->body));
 
    assert(!shader->info.workgroup_size_variable);
    const unsigned local_count = shader->info.workgroup_size[0] *
@@ -176,7 +170,7 @@ nir_zero_initialize_shared_memory(nir_shader *shader,
    {
       nir_ssa_def *offset = nir_load_var(&b, it);
 
-      nir_push_if(&b, nir_uge(&b, offset, nir_imm_int(&b, shared_size)));
+      nir_push_if(&b, nir_uge_imm(&b, offset, shared_size));
       {
          nir_jump(&b, nir_jump_break);
       }
@@ -191,12 +185,8 @@ nir_zero_initialize_shared_memory(nir_shader *shader,
    }
    nir_pop_loop(&b, loop);
 
-   if (shader->options->use_scoped_barrier) {
-      nir_scoped_barrier(&b, NIR_SCOPE_WORKGROUP, NIR_SCOPE_WORKGROUP,
-                         NIR_MEMORY_ACQ_REL, nir_var_mem_shared);
-   } else {
-      nir_memory_barrier_shared(&b);
-   }
+   nir_scoped_barrier(&b, SCOPE_WORKGROUP, SCOPE_WORKGROUP,
+                      NIR_MEMORY_ACQ_REL, nir_var_mem_shared);
 
    nir_metadata_preserve(nir_shader_get_entrypoint(shader), nir_metadata_none);
 

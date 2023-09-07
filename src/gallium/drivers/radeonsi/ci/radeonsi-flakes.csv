@@ -1,5 +1,9 @@
 # piglit
 
+# This crashes on Ubuntu 20.04, but not later LTS versions
+glx@glx-make-current
+
+glx@glx-swap-event_interval
 glx@glx-multithread-texture
 glx@glx-visuals-depth -pixmap
 glx@glx-visuals-stencil -pixmap

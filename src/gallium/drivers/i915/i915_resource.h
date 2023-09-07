@@ -150,6 +150,6 @@ void i915_texture_subdata(struct pipe_context *pipe,
                           struct pipe_resource *resource, unsigned level,
                           unsigned usage, const struct pipe_box *box,
                           const void *data, unsigned stride,
-                          unsigned layer_stride);
+                          uintptr_t layer_stride);
 
 #endif /* I915_RESOURCE_H */

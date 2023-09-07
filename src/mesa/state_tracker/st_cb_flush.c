@@ -78,7 +78,7 @@ st_finish(struct st_context *st)
 
    if (fence) {
       st->screen->fence_finish(st->screen, NULL, fence,
-                               PIPE_TIMEOUT_INFINITE);
+                               OS_TIMEOUT_INFINITE);
       st->screen->fence_reference(st->screen, &fence, NULL);
    }
 

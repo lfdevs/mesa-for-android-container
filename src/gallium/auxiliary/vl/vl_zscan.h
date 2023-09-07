@@ -28,7 +28,7 @@
 #ifndef vl_zscan_h
 #define vl_zscan_h
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_state.h"
 
 #ifdef __cplusplus

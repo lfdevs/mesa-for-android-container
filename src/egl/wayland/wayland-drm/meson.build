@@ -57,16 +57,24 @@ libwayland_drm = static_library(
 #
 # Moving these to a src/wsi/ was suggested but shot down, so put these
 # here for now as the maybe-least-bad solution.
-linux_dmabuf_unstable_v1_protocol_c = custom_target(
-  'linux-dmabuf-unstable-v1-protocol.c',
-  input : wayland_dmabuf_xml,
-  output : 'linux-dmabuf-unstable-v1-protocol.c',
-  command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
-)
-
-linux_dmabuf_unstable_v1_client_protocol_h = custom_target(
-  'linux-dmabuf-unstable-v1-client-protocol.h',
-  input : wayland_dmabuf_xml,
-  output : 'linux-dmabuf-unstable-v1-client-protocol.h',
-  command : [prog_wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
-)
+wp_dir = dep_wl_protocols.get_variable(pkgconfig : 'pkgdatadir')
+wp_protos = {
+  'linux-dmabuf-unstable-v1': 'unstable/linux-dmabuf/linux-dmabuf-unstable-v1.xml',
+  'presentation-time': 'stable/presentation-time/presentation-time.xml',
+}
+wp_files = {}
+foreach name, xml : wp_protos
+  code = custom_target(
+    name + '-protocol.c',
+    input : join_paths(wp_dir, xml),
+    output : name + '-protocol.c',
+    command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
+  )
+  header = custom_target(
+    name + '-client-protocol.h',
+    input : join_paths(wp_dir, xml),
+    output : name + '-client-protocol.h',
+    command : [prog_wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+  )
+  wp_files += { name: [code, header] }
+endforeach

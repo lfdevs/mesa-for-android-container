@@ -70,8 +70,8 @@ isl_gfx125_filter_tiling(const struct isl_device *dev,
    if (info->dim != ISL_SURF_DIM_2D)
       *flags &= ~ISL_TILING_X_BIT;
 
-   /* ISL only implements Tile64 support for 2D surfaces. */
-   if (info->dim != ISL_SURF_DIM_2D)
+   /* ISL only implements Tile64 support for 1D and 2D surfaces. */
+   if (info->dim == ISL_SURF_DIM_3D)
       *flags &= ~ISL_TILING_64_BIT;
 
    /* TILE64 does not work with YCRCB formats, according to bspec 58767:

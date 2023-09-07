@@ -287,7 +287,7 @@ static void
 nvc0_validate_stencil_ref(struct nvc0_context *nvc0)
 {
     struct nouveau_pushbuf *push = nvc0->base.pushbuf;
-    const ubyte *ref = &nvc0->stencil_ref.ref_value[0];
+    const uint8_t *ref = &nvc0->stencil_ref.ref_value[0];
 
     IMMED_NVC0(push, NVC0_3D(STENCIL_FRONT_FUNC_REF), ref[0]);
     IMMED_NVC0(push, NVC0_3D(STENCIL_BACK_FUNC_REF), ref[1]);

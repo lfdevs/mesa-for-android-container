@@ -29,7 +29,7 @@
 #define U_DRAWQUAD_H
 
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 #include "pipe/p_context.h"
 
 #include "util/u_draw.h"
@@ -43,13 +43,14 @@ struct cso_context;
 
 extern void 
 util_draw_vertex_buffer(struct pipe_context *pipe, struct cso_context *cso,
-                        struct pipe_resource *vbuf, uint vbuf_slot,
-                        uint offset, uint prim_type, uint num_attribs,
-                        uint num_verts);
+                        struct pipe_resource *vbuf, unsigned vbuf_slot,
+                        unsigned offset, enum mesa_prim prim_type,
+                        unsigned num_attribs, unsigned num_verts);
 
 void
 util_draw_user_vertex_buffer(struct cso_context *cso, void *buffer,
-                             uint prim_type, uint num_verts, uint num_attribs);
+                             enum mesa_prim prim_type, unsigned num_verts,
+                             unsigned num_attribs);
 
 #ifdef __cplusplus
 }

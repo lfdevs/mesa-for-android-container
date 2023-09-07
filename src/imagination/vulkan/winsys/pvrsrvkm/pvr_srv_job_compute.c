@@ -82,14 +82,14 @@ VkResult pvr_srv_winsys_compute_ctx_create(
    struct pvr_srv_winsys_compute_ctx *srv_ctx;
    VkResult result;
 
-   srv_ctx = vk_alloc(srv_ws->alloc,
+   srv_ctx = vk_alloc(ws->alloc,
                       sizeof(*srv_ctx),
                       8U,
                       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
    if (!srv_ctx)
       return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   result = pvr_srv_create_timeline(srv_ws->render_fd, &srv_ctx->timeline);
+   result = pvr_srv_create_timeline(ws->render_fd, &srv_ctx->timeline);
    if (result != VK_SUCCESS)
       goto err_free_srv_ctx;
 
@@ -97,7 +97,7 @@ VkResult pvr_srv_winsys_compute_ctx_create(
     * reset_cmd.regs size from reset_cmd size to only pass empty flags field.
     */
    result = pvr_srv_rgx_create_compute_context(
-      srv_ws->render_fd,
+      ws->render_fd,
       pvr_srv_from_winsys_priority(create_info->priority),
       sizeof(reset_cmd) - sizeof(reset_cmd.regs),
       (uint8_t *)&reset_cmd,
@@ -122,7 +122,7 @@ err_close_timeline:
    close(srv_ctx->timeline);
 
 err_free_srv_ctx:
-   vk_free(srv_ws->alloc, srv_ctx);
+   vk_free(ws->alloc, srv_ctx);
 
    return result;
 }
@@ -133,12 +133,12 @@ void pvr_srv_winsys_compute_ctx_destroy(struct pvr_winsys_compute_ctx *ctx)
    struct pvr_srv_winsys_compute_ctx *srv_ctx =
       to_pvr_srv_winsys_compute_ctx(ctx);
 
-   pvr_srv_rgx_destroy_compute_context(srv_ws->render_fd, srv_ctx->handle);
+   pvr_srv_rgx_destroy_compute_context(srv_ws->base.render_fd, srv_ctx->handle);
    close(srv_ctx->timeline);
-   vk_free(srv_ws->alloc, srv_ctx);
+   vk_free(srv_ws->base.alloc, srv_ctx);
 }
 
-static void
+static uint32_t
 pvr_srv_compute_cmd_stream_load(struct rogue_fwif_cmd_compute *const cmd,
                                 const uint8_t *const stream,
                                 const uint32_t stream_len,
@@ -146,6 +146,10 @@ pvr_srv_compute_cmd_stream_load(struct rogue_fwif_cmd_compute *const cmd,
 {
    const uint32_t *stream_ptr = (const uint32_t *)stream;
    struct rogue_fwif_cdm_regs *const regs = &cmd->regs;
+   uint32_t main_stream_len =
+      pvr_csb_unpack((uint64_t *)stream_ptr, KMD_STREAM_HDR).length;
+
+   stream_ptr += pvr_cmd_length(KMD_STREAM_HDR);
 
    regs->tpu_border_colour_table = *(const uint64_t *)stream_ptr;
    stream_ptr += pvr_cmd_length(CR_TPU_BORDER_COLOUR_TABLE_CDM);
@@ -172,22 +176,27 @@ pvr_srv_compute_cmd_stream_load(struct rogue_fwif_cmd_compute *const cmd,
       stream_ptr++;
    }
 
-   assert((const uint8_t *)stream_ptr - stream == stream_len);
+   assert((const uint8_t *)stream_ptr - stream <= stream_len);
+   assert((const uint8_t *)stream_ptr - stream == main_stream_len);
+
+   return main_stream_len;
 }
 
 static void pvr_srv_compute_cmd_ext_stream_load(
    struct rogue_fwif_cmd_compute *const cmd,
-   const uint8_t *const ext_stream,
-   const uint32_t ext_stream_len,
+   const uint8_t *const stream,
+   const uint32_t stream_len,
+   const uint32_t ext_stream_offset,
    const struct pvr_device_info *const dev_info)
 {
-   const uint32_t *ext_stream_ptr = (const uint32_t *)ext_stream;
+   const uint32_t *ext_stream_ptr =
+      (const uint32_t *)((uint8_t *)stream + ext_stream_offset);
    struct rogue_fwif_cdm_regs *const regs = &cmd->regs;
 
-   struct PVRX(FW_STREAM_EXTHDR_COMPUTE0) header0;
+   struct PVRX(KMD_STREAM_EXTHDR_COMPUTE0) header0;
 
-   header0 = pvr_csb_unpack(ext_stream_ptr, FW_STREAM_EXTHDR_COMPUTE0);
-   ext_stream_ptr += pvr_cmd_length(FW_STREAM_EXTHDR_COMPUTE0);
+   header0 = pvr_csb_unpack(ext_stream_ptr, KMD_STREAM_EXTHDR_COMPUTE0);
+   ext_stream_ptr += pvr_cmd_length(KMD_STREAM_EXTHDR_COMPUTE0);
 
    assert(PVR_HAS_QUIRK(dev_info, 49927) == header0.has_brn49927);
    if (header0.has_brn49927) {
@@ -195,7 +204,7 @@ static void pvr_srv_compute_cmd_ext_stream_load(
       ext_stream_ptr += pvr_cmd_length(CR_TPU);
    }
 
-   assert((const uint8_t *)ext_stream_ptr - ext_stream == ext_stream_len);
+   assert((const uint8_t *)ext_stream_ptr - stream == stream_len);
 }
 
 static void pvr_srv_compute_cmd_init(
@@ -203,26 +212,30 @@ static void pvr_srv_compute_cmd_init(
    struct rogue_fwif_cmd_compute *cmd,
    const struct pvr_device_info *const dev_info)
 {
+   uint32_t ext_stream_offset;
+
    memset(cmd, 0, sizeof(*cmd));
 
    cmd->cmn.frame_num = submit_info->frame_num;
 
-   pvr_srv_compute_cmd_stream_load(cmd,
-                                   submit_info->fw_stream,
-                                   submit_info->fw_stream_len,
-                                   dev_info);
+   ext_stream_offset =
+      pvr_srv_compute_cmd_stream_load(cmd,
+                                      submit_info->fw_stream,
+                                      submit_info->fw_stream_len,
+                                      dev_info);
 
-   if (submit_info->fw_ext_stream_len) {
+   if (ext_stream_offset < submit_info->fw_stream_len) {
       pvr_srv_compute_cmd_ext_stream_load(cmd,
-                                          submit_info->fw_ext_stream,
-                                          submit_info->fw_ext_stream_len,
+                                          submit_info->fw_stream,
+                                          submit_info->fw_stream_len,
+                                          ext_stream_offset,
                                           dev_info);
    }
 
-   if (submit_info->flags & PVR_WINSYS_COMPUTE_FLAG_PREVENT_ALL_OVERLAP)
+   if (submit_info->flags.prevent_all_overlap)
       cmd->flags |= ROGUE_FWIF_COMPUTE_FLAG_PREVENT_ALL_OVERLAP;
 
-   if (submit_info->flags & PVR_WINSYS_COMPUTE_FLAG_SINGLE_CORE)
+   if (submit_info->flags.use_single_core)
       cmd->flags |= ROGUE_FWIF_COMPUTE_FLAG_SINGLE_CORE;
 }
 
@@ -258,7 +271,7 @@ VkResult pvr_srv_winsys_compute_submit(
    }
 
    do {
-      result = pvr_srv_rgx_kick_compute2(srv_ws->render_fd,
+      result = pvr_srv_rgx_kick_compute2(srv_ws->base.render_fd,
                                          srv_ctx->handle,
                                          0U,
                                          NULL,

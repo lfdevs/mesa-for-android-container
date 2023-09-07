@@ -173,10 +173,10 @@ void
 d3d12_video_nalu_writer_h264::write_nalu_end(d3d12_video_encoder_bitstream *pNALU)
 {
    pNALU->flush();
-   pNALU->set_start_code_prevention(FALSE);
+   pNALU->set_start_code_prevention(false);
    int32_t iNALUnitLen = pNALU->get_byte_count();
 
-   if (FALSE == pNALU->m_bBufferOverflow && 0x00 == pNALU->get_bitstream_buffer()[iNALUnitLen - 1]) {
+   if (false == pNALU->m_bBufferOverflow && 0x00 == pNALU->get_bitstream_buffer()[iNALUnitLen - 1]) {
       pNALU->put_bits(8, 0x03);
       pNALU->flush();
    }
@@ -193,7 +193,7 @@ d3d12_video_nalu_writer_h264::wrap_rbsp_into_nalu(d3d12_video_encoder_bitstream 
 
    int32_t iBytesWritten = pNALU->get_byte_count();
 
-   pNALU->set_start_code_prevention(FALSE);
+   pNALU->set_start_code_prevention(false);
 
    // NAL start code
    pNALU->put_bits(24, 0);
@@ -213,7 +213,7 @@ d3d12_video_nalu_writer_h264::wrap_rbsp_into_nalu(d3d12_video_encoder_bitstream 
       pNALU->append_byte_stream(pRBSP);
    } else {
       // Copy with start code prevention.
-      pNALU->set_start_code_prevention(TRUE);
+      pNALU->set_start_code_prevention(true);
       int32_t  iLength = pRBSP->get_byte_count();
       uint8_t *pBuffer = pRBSP->get_bitstream_buffer();
 
@@ -251,7 +251,7 @@ d3d12_video_nalu_writer_h264::sps_to_nalu_bytes(H264_SPS *                     p
       assert(false);
    }
 
-   rbsp.set_start_code_prevention(TRUE);
+   rbsp.set_start_code_prevention(true);
    if (write_sps_bytes(&rbsp, pSPS) <= 0u) {
       debug_printf("write_sps_bytes(&rbsp, pSPS) didn't write any bytes.\n");
       assert(false);
@@ -296,7 +296,7 @@ d3d12_video_nalu_writer_h264::pps_to_nalu_bytes(H264_PPS *                     p
       assert(false);
    }
 
-   rbsp.set_start_code_prevention(TRUE);
+   rbsp.set_start_code_prevention(true);
 
    if (write_pps_bytes(&rbsp, pPPS, bIsHighProfile) <= 0u) {
       debug_printf("write_pps_bytes(&rbsp, pPPS, bIsHighProfile) didn't write any bytes.\n");
@@ -338,7 +338,7 @@ d3d12_video_nalu_writer_h264::write_end_of_stream_nalu(std::vector<uint8_t> &   
       assert(false);
    }
 
-   rbsp.set_start_code_prevention(TRUE);
+   rbsp.set_start_code_prevention(true);
    if (wrap_rbsp_into_nalu(&nalu, &rbsp, NAL_REFIDC_REF, NAL_TYPE_END_OF_STREAM) <= 0u) {
       debug_printf(
          "wrap_rbsp_into_nalu(&nalu, &rbsp, NAL_REFIDC_REF, NAL_TYPE_END_OF_STREAM) didn't write any bytes.\n");;
@@ -376,7 +376,7 @@ d3d12_video_nalu_writer_h264::write_end_of_sequence_nalu(std::vector<uint8_t> & 
       assert(false);
    }
 
-   rbsp.set_start_code_prevention(TRUE);
+   rbsp.set_start_code_prevention(true);
    if (wrap_rbsp_into_nalu(&nalu, &rbsp, NAL_REFIDC_REF, NAL_TYPE_END_OF_SEQUENCE) <= 0u) {
 
       debug_printf(

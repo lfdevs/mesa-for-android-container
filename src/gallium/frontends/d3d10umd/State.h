@@ -58,7 +58,7 @@ struct Shader
    uint type;
    struct pipe_shader_state state;
    unsigned output_mapping[PIPE_MAX_SHADER_OUTPUTS];
-   boolean output_resolved;
+   bool output_resolved;
 };
 
 struct Query;
@@ -79,7 +79,7 @@ struct Device
    void *empty_fs;
    void *empty_vs;
 
-   enum pipe_prim_type primitive;
+   enum mesa_prim primitive;
 
    struct pipe_stream_output_target *so_targets[PIPE_MAX_SO_BUFFERS];
    struct pipe_stream_output_target *draw_so_target;

@@ -167,10 +167,16 @@ intel_gem_read_render_timestamp(int fd, enum intel_kmd_type kmd_type,
 bool intel_gem_can_render_on_fd(int fd, enum intel_kmd_type kmd_type);
 
 /* Functions only used by i915 */
+enum intel_gem_create_context_flags {
+   INTEL_GEM_CREATE_CONTEXT_EXT_RECOVERABLE_FLAG = BITFIELD_BIT(0),
+   INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG   = BITFIELD_BIT(1),
+};
+
 bool intel_gem_create_context(int fd, uint32_t *context_id);
 bool intel_gem_destroy_context(int fd, uint32_t context_id);
 bool
 intel_gem_create_context_engines(int fd,
+                                 enum intel_gem_create_context_flags flags,
                                  const struct intel_query_engine_info *info,
                                  int num_engines, enum intel_engine_class *engine_classes,
                                  uint32_t *context_id);
@@ -181,15 +187,13 @@ bool
 intel_gem_get_context_param(int fd, uint32_t context, uint32_t param,
                             uint64_t *value);
 bool intel_gem_get_param(int fd, uint32_t param, int *value);
+bool intel_gem_wait_on_get_param(int fd, uint32_t param, int target_val,
+                                 uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }
 #endif
 
-enum intel_gem_create_context_flags {
-   INTEL_GEM_CREATE_CONTEXT_EXT_RECOVERABLE_FLAG = BITFIELD_BIT(0),
-   INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG   = BITFIELD_BIT(1),
-};
 bool intel_gem_create_context_ext(int fd, enum intel_gem_create_context_flags flags,
                                   uint32_t *ctx_id);
 bool intel_gem_supports_protected_context(int fd,

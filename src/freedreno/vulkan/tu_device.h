@@ -21,6 +21,7 @@
 #include "tu_util.h"
 
 #include "util/vma.h"
+#include "util/u_vector.h"
 
 /* queue types */
 #define TU_QUEUE_GENERAL 0
@@ -73,6 +74,7 @@ struct tu_physical_device
 
    struct wsi_device wsi_device;
 
+   char fd_path[20];
    int local_fd;
    bool has_local;
    int64_t local_major;
@@ -106,15 +108,10 @@ struct tu_physical_device
    int msm_major_version;
    int msm_minor_version;
 
-   /* Address space and global fault count for this local_fd with DRM backend */
-   uint64_t fault_count;
-
    /* with 0 being the highest priority */
    uint32_t submitqueue_priority_count;
 
    struct tu_memory_heap heap;
-   mtx_t                 vma_mutex;
-   struct util_vma_heap  vma;
 
    struct vk_sync_type syncobj_type;
    struct vk_sync_timeline_type timeline_type;
@@ -157,7 +154,7 @@ struct tu_queue
 
    uint32_t msm_queue_id;
 
-   int64_t last_submit_timestamp; /* timestamp of the last queue submission for kgsl */
+   int fence;           /* timestamp/fence of the last queue submission */
 };
 VK_DEFINE_HANDLE_CASTS(tu_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 
@@ -289,6 +286,9 @@ struct tu_device
    BITSET_DECLARE(custom_border_color, TU_BORDER_COLOR_COUNT);
    mtx_t mutex;
 
+   mtx_t vma_mutex;
+   struct util_vma_heap vma;
+
    /* bo list for submits: */
    struct drm_msm_gem_submit_bo *bo_list;
    /* map bo handles to bo list index: */
@@ -318,6 +318,12 @@ struct tu_device
     */
    struct util_sparse_array bo_map;
 
+   /* We cannot immediately free VMA when freeing BO, kernel truly
+    * frees BO when it stops being busy.
+    * So we have to free our VMA only after the kernel does it.
+    */
+   struct u_vector zombie_vmas;
+
    /* Command streams to set pass index to a scratch reg */
    struct tu_cs *perfcntrs_pass_cs;
    struct tu_cs_entry *perfcntrs_pass_cs_entries;
@@ -344,6 +350,9 @@ struct tu_device
 #endif
 
    uint32_t submit_count;
+
+   /* Address space and global fault count for this local_fd with DRM backend */
+   uint64_t fault_count;
 
    struct u_trace_context trace_context;
 

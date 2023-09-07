@@ -104,7 +104,7 @@ wglMakeCurrent(
    HDC hdc,
    HGLRC hglrc )
 {
-   return DrvSetContext( hdc, (DHGLRC)(UINT_PTR)hglrc, NULL ) ? TRUE : FALSE;
+   return DrvSetContext( hdc, (DHGLRC)(UINT_PTR)hglrc, NULL ) ? true : false;
 }
 
 
@@ -229,7 +229,7 @@ wglUseFontBitmapsW(
    MAT2 tra;
    FIXED one, minus_one, zero;
    void *buffer = NULL;
-   BOOL result = TRUE;
+   BOOL result = true;
 
    one.value = 1;
    one.fract = 0;
@@ -266,7 +266,7 @@ wglUseFontBitmapsW(
          }
       }
       else {
-         result = FALSE;
+         result = false;
       }
 
       glEndList();
@@ -276,7 +276,7 @@ wglUseFontBitmapsW(
 
    return result;
 #else
-   return FALSE;
+   return false;
 #endif /* _GAMING_XBOX */
 }
 
@@ -302,7 +302,7 @@ wglUseFontOutlinesA(
 
    assert( 0 );
 
-   return FALSE;
+   return false;
 }
 
 WINGDIAPI BOOL APIENTRY
@@ -327,7 +327,7 @@ wglUseFontOutlinesW(
 
    assert( 0 );
 
-   return FALSE;
+   return false;
 }
 
 WINGDIAPI BOOL APIENTRY
@@ -375,7 +375,7 @@ wglRealizeLayerPalette(
 
    assert( 0 );
 
-   return FALSE;
+   return false;
 }
 
 

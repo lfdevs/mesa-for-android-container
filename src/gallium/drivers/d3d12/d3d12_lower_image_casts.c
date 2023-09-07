@@ -73,7 +73,8 @@ convert_value(nir_builder *b, nir_ssa_def *value,
          src_as_vec = nir_pack_unorm_4x8(b, value);
       else {
          nir_ssa_def *packed_channels[2];
-         packed_channels[0] = nir_pack_unorm_2x16(b, nir_channels(b, value, 0x3));
+         packed_channels[0] = nir_pack_unorm_2x16(b,
+                                                  nir_trim_vector(b, value, 2));
          packed_channels[1] = nir_pack_unorm_2x16(b, nir_channels(b, value, 0x3 << 2));
          src_as_vec = nir_vec(b, packed_channels, 2);
       }
@@ -82,7 +83,8 @@ convert_value(nir_builder *b, nir_ssa_def *value,
          src_as_vec = nir_pack_snorm_4x8(b, value);
       else {
          nir_ssa_def *packed_channels[2];
-         packed_channels[0] = nir_pack_snorm_2x16(b, nir_channels(b, value, 0x3));
+         packed_channels[0] = nir_pack_snorm_2x16(b,
+                                                  nir_trim_vector(b, value, 2));
          packed_channels[1] = nir_pack_snorm_2x16(b, nir_channels(b, value, 0x3 << 2));
          src_as_vec = nir_vec(b, packed_channels, 2);
       }
@@ -106,10 +108,10 @@ convert_value(nir_builder *b, nir_ssa_def *value,
        to_desc->format == PIPE_FORMAT_R10G10B10A2_UNORM) {
       nir_ssa_def *u32 = nir_extract_bits(b, &src_as_vec, 1, 0, 1, 32);
       nir_ssa_def *channels[4] = {
-         nir_iand(b, u32,                                  nir_imm_int(b, (1 << 10) - 1)),
-         nir_iand(b, nir_ushr(b, u32, nir_imm_int(b, 10)), nir_imm_int(b, (1 << 10) - 1)),
-         nir_iand(b, nir_ushr(b, u32, nir_imm_int(b, 20)), nir_imm_int(b, (1 << 10) - 1)),
-                     nir_ushr(b, u32, nir_imm_int(b, 30))
+         nir_iand_imm(b, u32,                      (1 << 10) - 1),
+         nir_iand_imm(b, nir_ushr_imm(b, u32, 10), (1 << 10) - 1),
+         nir_iand_imm(b, nir_ushr_imm(b, u32, 20), (1 << 10) - 1),
+                         nir_ushr_imm(b, u32, 30)
       };
       nir_ssa_def *vec = nir_vec(b, channels, 4);
       if (to_desc->format == PIPE_FORMAT_R10G10B10A2_UNORM)
@@ -198,7 +200,7 @@ lower_image_cast_instr(nir_builder *b, nir_instr *instr, void *_data)
       return false;
 
    const struct d3d12_image_format_conversion_info_arr* info = _data;
-   nir_variable *image = nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
+   nir_variable *image = nir_intrinsic_get_var(intr, 0);
    assert(image);
 
    if (image->data.driver_location >= info->n_images)

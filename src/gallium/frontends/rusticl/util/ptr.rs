@@ -10,9 +10,16 @@ pub trait CheckedPtr<T> {
 }
 
 impl<T> CheckedPtr<T> for *mut T {
+    /// # Safety
+    ///
+    /// This function follows the same safety rules as `std::ptr::copy` except that it already
+    /// checks for a NULL pointer.
     unsafe fn copy_checked(self, val: *const T, size: usize) {
         if !self.is_null() {
-            ptr::copy(val, self, size);
+            // SAFETY: we move the responsibilities up to the caller
+            unsafe {
+                ptr::copy(val, self, size);
+            }
         }
     }
 

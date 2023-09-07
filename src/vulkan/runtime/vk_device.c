@@ -179,6 +179,8 @@ vk_device_init(struct vk_device *device,
    device->swapchain_private = NULL;
 #endif /* ANDROID */
 
+   simple_mtx_init(&device->trace_mtx, mtx_plain);
+
    return VK_SUCCESS;
 }
 
@@ -197,6 +199,8 @@ vk_device_finish(struct vk_device *device)
       ralloc_free(device->swapchain_private);
    }
 #endif /* ANDROID */
+
+   simple_mtx_destroy(&device->trace_mtx);
 
    vk_object_base_finish(&device->base);
 }

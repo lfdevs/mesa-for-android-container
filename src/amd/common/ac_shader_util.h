@@ -1,24 +1,7 @@
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef AC_SHADER_UTIL_H
@@ -36,6 +19,50 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define AC_SENDMSG_GS           2
+#define AC_SENDMSG_GS_DONE      3
+#define AC_SENDMSG_GS_ALLOC_REQ 9
+
+#define AC_SENDMSG_GS_OP_NOP      (0 << 4)
+#define AC_SENDMSG_GS_OP_CUT      (1 << 4)
+#define AC_SENDMSG_GS_OP_EMIT     (2 << 4)
+#define AC_SENDMSG_GS_OP_EMIT_CUT (3 << 4)
+
+/* An extension of gl_access_qualifier describing other aspects of memory operations
+ * for code generation.
+ */
+enum {
+   /* Only one of LOAD/STORE/ATOMIC can be set. */
+   ACCESS_TYPE_LOAD            = BITFIELD_BIT(27),
+   ACCESS_TYPE_STORE           = BITFIELD_BIT(28),
+   ACCESS_TYPE_ATOMIC          = BITFIELD_BIT(29),
+
+   /* This access is expected to use an SMEM instruction if source operands are non-divergent.
+    * Only loads can set this.
+    */
+   ACCESS_TYPE_SMEM            = BITFIELD_BIT(30),
+
+   /* Whether a store offset or size alignment is less than 4. */
+   ACCESS_MAY_STORE_SUBDWORD   = BITFIELD_BIT(31),
+};
+
+/* The meaning of these enums is different between chips. They match LLVM definitions,
+ * but they can also be used by ACO. Use ac_get_hw_cache_flags to get these.
+ */
+enum ac_cache_flags
+{
+   ac_glc = BITFIELD_BIT(0),
+   ac_slc = BITFIELD_BIT(1),
+   ac_dlc = BITFIELD_BIT(2),
+   ac_swizzled = BITFIELD_BIT(3),
+};
+
+union ac_hw_cache_flags
+{
+   /* NOTE: This will contain more fields in the future. */
+   enum ac_cache_flags value;
+};
 
 enum ac_image_dim
 {
@@ -146,6 +173,8 @@ unsigned ac_get_fs_input_vgpr_cnt(const struct ac_shader_config *config,
                                   signed char *face_vgpr_index, signed char *ancillary_vgpr_index,
                                   signed char *sample_coverage_vgpr_index_ptr);
 
+uint16_t ac_get_ps_iter_mask(unsigned ps_iter_samples);
+
 void ac_choose_spi_color_formats(unsigned format, unsigned swap, unsigned ntype,
                                  bool is_depth, bool use_rbplus,
                                  struct ac_spi_color_formats *formats);
@@ -189,6 +218,13 @@ ac_ngg_get_scratch_lds_size(gl_shader_stage stage,
                             unsigned wave_size,
                             bool streamout_enabled,
                             bool can_cull);
+
+enum gl_access_qualifier ac_get_mem_access_flags(const nir_intrinsic_instr *instr);
+
+union ac_hw_cache_flags ac_get_hw_cache_flags(const struct radeon_info *info,
+                                              enum gl_access_qualifier access);
+
+unsigned ac_get_all_edge_flag_bits(void);
 
 #ifdef __cplusplus
 }

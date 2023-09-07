@@ -207,6 +207,234 @@ get_device_extensions(const struct v3dv_physical_device *device,
    };
 }
 
+static void
+get_features(const struct v3dv_physical_device *physical_device,
+             struct vk_features *features)
+{
+   *features = (struct vk_features) {
+      /* Vulkan 1.0 */
+      .robustBufferAccess = true, /* This feature is mandatory */
+      .fullDrawIndexUint32 = false, /* Only available since V3D 4.4.9.1 */
+      .imageCubeArray = true,
+      .independentBlend = true,
+      .geometryShader = true,
+      .tessellationShader = false,
+      .sampleRateShading = true,
+      .dualSrcBlend = false,
+      .logicOp = true,
+      .multiDrawIndirect = false,
+      .drawIndirectFirstInstance = true,
+      .depthClamp = false, /* Only available since V3D 4.5.1.1 */
+      .depthBiasClamp = true,
+      .fillModeNonSolid = true,
+      .depthBounds = false, /* Only available since V3D 4.3.16.2 */
+      .wideLines = true,
+      .largePoints = true,
+      .alphaToOne = true,
+      .multiViewport = false,
+      .samplerAnisotropy = true,
+      .textureCompressionETC2 = true,
+      .textureCompressionASTC_LDR = true,
+      /* Note that textureCompressionBC requires that the driver support all
+       * the BC formats. V3D 4.2 only support the BC1-3, so we can't claim
+       * that we support it.
+       */
+      .textureCompressionBC = false,
+      .occlusionQueryPrecise = true,
+      .pipelineStatisticsQuery = false,
+      .vertexPipelineStoresAndAtomics = true,
+      .fragmentStoresAndAtomics = true,
+      .shaderTessellationAndGeometryPointSize = true,
+      .shaderImageGatherExtended = true,
+      .shaderStorageImageExtendedFormats = true,
+      .shaderStorageImageMultisample = false,
+      .shaderStorageImageReadWithoutFormat = true,
+      .shaderStorageImageWriteWithoutFormat = false,
+      .shaderUniformBufferArrayDynamicIndexing = false,
+      .shaderSampledImageArrayDynamicIndexing = false,
+      .shaderStorageBufferArrayDynamicIndexing = false,
+      .shaderStorageImageArrayDynamicIndexing = false,
+      .shaderClipDistance = true,
+      .shaderCullDistance = false,
+      .shaderFloat64 = false,
+      .shaderInt64 = false,
+      .shaderInt16 = false,
+      .shaderResourceResidency = false,
+      .shaderResourceMinLod = false,
+      .sparseBinding = false,
+      .sparseResidencyBuffer = false,
+      .sparseResidencyImage2D = false,
+      .sparseResidencyImage3D = false,
+      .sparseResidency2Samples = false,
+      .sparseResidency4Samples = false,
+      .sparseResidency8Samples = false,
+      .sparseResidency16Samples = false,
+      .sparseResidencyAliased = false,
+      .variableMultisampleRate = false,
+      .inheritedQueries = true,
+
+      /* Vulkan 1.1 */
+      .storageBuffer16BitAccess = true,
+      .uniformAndStorageBuffer16BitAccess = true,
+      .storagePushConstant16 = true,
+      .storageInputOutput16 = false,
+      .multiview = true,
+      .multiviewGeometryShader = false,
+      .multiviewTessellationShader = false,
+      .variablePointersStorageBuffer = true,
+      /* FIXME: this needs support for non-constant index on UBO/SSBO */
+      .variablePointers = false,
+      .protectedMemory = false,
+#ifdef ANDROID
+      .samplerYcbcrConversion = false,
+#else
+      .samplerYcbcrConversion = true,
+#endif
+      .shaderDrawParameters = false,
+
+      /* Vulkan 1.2 */
+      .hostQueryReset = true,
+      .uniformAndStorageBuffer8BitAccess = true,
+      .uniformBufferStandardLayout = true,
+      /* V3D 4.2 wraps TMU vector accesses to 16-byte boundaries, so loads and
+       * stores of vectors that cross these boundaries would not work correctly
+       * with scalarBlockLayout and would need to be split into smaller vectors
+       * (and/or scalars) that don't cross these boundaries. For load/stores
+       * with dynamic offsets where we can't identify if the offset is
+       * problematic, we would always have to scalarize. Overall, this would
+       * not lead to best performance so let's just not support it.
+       */
+      .scalarBlockLayout = false,
+      /* This tells applications 2 things:
+       *
+       * 1. If they can select just one aspect for barriers. For us barriers
+       *    decide if we need to split a job and we don't care if it is only
+       *    for one of the aspects of the image or both, so we don't really
+       *    benefit from seeing barriers that select just one aspect.
+       *
+       * 2. If they can program different layouts for each aspect. We
+       *    generally don't care about layouts, so again, we don't get any
+       *    benefits from this to limit the scope of image layout transitions.
+       *
+       * Still, Vulkan 1.2 requires this feature to be supported so we
+       * advertise it even though we don't really take advantage of it.
+       */
+      .separateDepthStencilLayouts = true,
+      .storageBuffer8BitAccess = true,
+      .storagePushConstant8 = true,
+      .imagelessFramebuffer = true,
+      .timelineSemaphore = true,
+
+      .samplerMirrorClampToEdge = true,
+
+      /* These are mandatory by Vulkan 1.2, however, we don't support any of
+       * the optional features affected by them (non 32-bit types for
+       * shaderSubgroupExtendedTypes and additional subgroup ballot for
+       * subgroupBroadcastDynamicId), so in practice setting them to true
+       * doesn't have any implications for us until we implement any of these
+       * optional features.
+       */
+      .shaderSubgroupExtendedTypes = true,
+      .subgroupBroadcastDynamicId = true,
+
+      .vulkanMemoryModel = true,
+      .vulkanMemoryModelDeviceScope = true,
+      .vulkanMemoryModelAvailabilityVisibilityChains = true,
+
+      .bufferDeviceAddress = true,
+      .bufferDeviceAddressCaptureReplay = false,
+      .bufferDeviceAddressMultiDevice = false,
+
+      /* Vulkan 1.3 */
+      .inlineUniformBlock  = true,
+      /* Inline buffers work like push constants, so after their are bound
+       * some of their contents may be copied into the uniform stream as soon
+       * as the next draw/dispatch is recorded in the command buffer. This means
+       * that if the client updates the buffer contents after binding it to
+       * a command buffer, the next queue submit of that command buffer may
+       * not use the latest update to the buffer contents, but the data that
+       * was present in the buffer at the time it was bound to the command
+       * buffer.
+       */
+      .descriptorBindingInlineUniformBlockUpdateAfterBind = false,
+      .pipelineCreationCacheControl = true,
+      .privateData = true,
+      .maintenance4 = true,
+      .shaderZeroInitializeWorkgroupMemory = true,
+      .synchronization2 = true,
+      .robustImageAccess = true,
+      .shaderIntegerDotProduct = true,
+
+      /* VK_EXT_4444_formats */
+      .formatA4R4G4B4 = true,
+      .formatA4B4G4R4 = true,
+
+      /* VK_EXT_custom_border_color */
+      .customBorderColors = true,
+      .customBorderColorWithoutFormat = false,
+
+      /* VK_EXT_index_type_uint8 */
+      .indexTypeUint8 = true,
+
+      /* VK_EXT_line_rasterization */
+      .rectangularLines = true,
+      .bresenhamLines = true,
+      .smoothLines = false,
+      .stippledRectangularLines = false,
+      .stippledBresenhamLines = false,
+      .stippledSmoothLines = false,
+
+      /* VK_EXT_color_write_enable */
+      .colorWriteEnable = true,
+
+      /* VK_KHR_pipeline_executable_properties */
+      .pipelineExecutableInfo = true,
+
+      /* VK_EXT_provoking_vertex */
+      .provokingVertexLast = true,
+      /* FIXME: update when supporting EXT_transform_feedback */
+      .transformFeedbackPreservesProvokingVertex = false,
+
+      /* VK_EXT_vertex_attribute_divisor */
+      .vertexAttributeInstanceRateDivisor = true,
+      .vertexAttributeInstanceRateZeroDivisor = false,
+
+      /* VK_KHR_performance_query */
+      .performanceCounterQueryPools = physical_device->caps.perfmon,
+      .performanceCounterMultipleQueryPools = false,
+
+      /* VK_EXT_texel_buffer_alignment */
+      .texelBufferAlignment = true,
+
+      /* VK_KHR_workgroup_memory_explicit_layout */
+      .workgroupMemoryExplicitLayout = true,
+      .workgroupMemoryExplicitLayoutScalarBlockLayout = false,
+      .workgroupMemoryExplicitLayout8BitAccess = true,
+      .workgroupMemoryExplicitLayout16BitAccess = true,
+
+      /* VK_EXT_border_color_swizzle */
+      .borderColorSwizzle = true,
+      .borderColorSwizzleFromImage = true,
+
+      /* VK_EXT_shader_module_identifier */
+      .shaderModuleIdentifier = true,
+
+      /* VK_EXT_depth_clip_control */
+      .depthClipControl = true,
+
+      /* VK_EXT_attachment_feedback_loop_layout */
+      .attachmentFeedbackLoopLayout = true,
+
+      /* VK_EXT_primitive_topology_list_restart */
+      .primitiveTopologyListRestart = true,
+      /* FIXME: we don't support tessellation shaders yet */
+      .primitiveTopologyPatchListRestart = false,
+
+      /* VK_EXT_pipeline_robustness */
+      .pipelineRobustness = true,
+   };
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 v3dv_EnumerateInstanceExtensionProperties(const char *pLayerName,
                                           uint32_t *pPropertyCount,
@@ -783,7 +1011,7 @@ create_physical_device(struct v3dv_instance *instance,
    vk_physical_device_dispatch_table_from_entrypoints(
       &dispatch_table, &wsi_physical_device_entrypoints, false);
 
-   result = vk_physical_device_init(&device->vk, &instance->vk, NULL,
+   result = vk_physical_device_init(&device->vk, &instance->vk, NULL, NULL,
                                     &dispatch_table);
 
    if (result != VK_SUCCESS)
@@ -978,6 +1206,7 @@ create_physical_device(struct v3dv_instance *instance,
    }
 
    get_device_extensions(device, &device->vk.supported_extensions);
+   get_features(device, &device->vk.supported_features);
 
    mtx_init(&device->mutex, mtx_plain);
 
@@ -1080,238 +1309,6 @@ enumerate_devices(struct vk_instance *vk_instance)
    drmFreeDevices(devices, max_devices);
 
    return result;
-}
-
-VKAPI_ATTR void VKAPI_CALL
-v3dv_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
-                                VkPhysicalDeviceFeatures2 *pFeatures)
-{
-   V3DV_FROM_HANDLE(v3dv_physical_device, physical_device, physicalDevice);
-
-   struct vk_features features = {
-      /* Vulkan 1.0 */
-      .robustBufferAccess = true, /* This feature is mandatory */
-      .fullDrawIndexUint32 = false, /* Only available since V3D 4.4.9.1 */
-      .imageCubeArray = true,
-      .independentBlend = true,
-      .geometryShader = true,
-      .tessellationShader = false,
-      .sampleRateShading = true,
-      .dualSrcBlend = false,
-      .logicOp = true,
-      .multiDrawIndirect = false,
-      .drawIndirectFirstInstance = true,
-      .depthClamp = false, /* Only available since V3D 4.5.1.1 */
-      .depthBiasClamp = true,
-      .fillModeNonSolid = true,
-      .depthBounds = false, /* Only available since V3D 4.3.16.2 */
-      .wideLines = true,
-      .largePoints = true,
-      .alphaToOne = true,
-      .multiViewport = false,
-      .samplerAnisotropy = true,
-      .textureCompressionETC2 = true,
-      .textureCompressionASTC_LDR = true,
-      /* Note that textureCompressionBC requires that the driver support all
-       * the BC formats. V3D 4.2 only support the BC1-3, so we can't claim
-       * that we support it.
-       */
-      .textureCompressionBC = false,
-      .occlusionQueryPrecise = true,
-      .pipelineStatisticsQuery = false,
-      .vertexPipelineStoresAndAtomics = true,
-      .fragmentStoresAndAtomics = true,
-      .shaderTessellationAndGeometryPointSize = true,
-      .shaderImageGatherExtended = false,
-      .shaderStorageImageExtendedFormats = true,
-      .shaderStorageImageMultisample = false,
-      .shaderStorageImageReadWithoutFormat = true,
-      .shaderStorageImageWriteWithoutFormat = false,
-      .shaderUniformBufferArrayDynamicIndexing = false,
-      .shaderSampledImageArrayDynamicIndexing = false,
-      .shaderStorageBufferArrayDynamicIndexing = false,
-      .shaderStorageImageArrayDynamicIndexing = false,
-      .shaderClipDistance = true,
-      .shaderCullDistance = false,
-      .shaderFloat64 = false,
-      .shaderInt64 = false,
-      .shaderInt16 = false,
-      .shaderResourceResidency = false,
-      .shaderResourceMinLod = false,
-      .sparseBinding = false,
-      .sparseResidencyBuffer = false,
-      .sparseResidencyImage2D = false,
-      .sparseResidencyImage3D = false,
-      .sparseResidency2Samples = false,
-      .sparseResidency4Samples = false,
-      .sparseResidency8Samples = false,
-      .sparseResidency16Samples = false,
-      .sparseResidencyAliased = false,
-      .variableMultisampleRate = false,
-      .inheritedQueries = true,
-
-      /* Vulkan 1.1 */
-      .storageBuffer16BitAccess = true,
-      .uniformAndStorageBuffer16BitAccess = true,
-      .storagePushConstant16 = true,
-      .storageInputOutput16 = false,
-      .multiview = true,
-      .multiviewGeometryShader = false,
-      .multiviewTessellationShader = false,
-      .variablePointersStorageBuffer = true,
-      /* FIXME: this needs support for non-constant index on UBO/SSBO */
-      .variablePointers = false,
-      .protectedMemory = false,
-#ifdef ANDROID
-      .samplerYcbcrConversion = false,
-#else
-      .samplerYcbcrConversion = true,
-#endif
-      .shaderDrawParameters = false,
-
-      /* Vulkan 1.2 */
-      .hostQueryReset = true,
-      .uniformAndStorageBuffer8BitAccess = true,
-      .uniformBufferStandardLayout = true,
-      /* V3D 4.2 wraps TMU vector accesses to 16-byte boundaries, so loads and
-       * stores of vectors that cross these boundaries would not work correcly
-       * with scalarBlockLayout and would need to be split into smaller vectors
-       * (and/or scalars) that don't cross these boundaries. For load/stores
-       * with dynamic offsets where we can't identify if the offset is
-       * problematic, we would always have to scalarize. Overall, this would
-       * not lead to best performance so let's just not support it.
-       */
-      .scalarBlockLayout = false,
-      /* This tells applications 2 things:
-       *
-       * 1. If they can select just one aspect for barriers. For us barriers
-       *    decide if we need to split a job and we don't care if it is only
-       *    for one of the aspects of the image or both, so we don't really
-       *    benefit from seeing barriers that select just one aspect.
-       *
-       * 2. If they can program different layouts for each aspect. We
-       *    generally don't care about layouts, so again, we don't get any
-       *    benefits from this to limit the scope of image layout transitions.
-       *
-       * Still, Vulkan 1.2 requires this feature to be supported so we
-       * advertise it even though we don't really take advantage of it.
-       */
-      .separateDepthStencilLayouts = true,
-      .storageBuffer8BitAccess = true,
-      .storagePushConstant8 = true,
-      .imagelessFramebuffer = true,
-      .timelineSemaphore = true,
-
-      .samplerMirrorClampToEdge = true,
-
-      /* These are mandatory by Vulkan 1.2, however, we don't support any of
-       * the optional features affected by them (non 32-bit types for
-       * shaderSubgroupExtendedTypes and additional subgroup ballot for
-       * subgroupBroadcastDynamicId), so in practice setting them to true
-       * doesn't have any implications for us until we implement any of these
-       * optional features.
-       */
-      .shaderSubgroupExtendedTypes = true,
-      .subgroupBroadcastDynamicId = true,
-
-      .vulkanMemoryModel = true,
-      .vulkanMemoryModelDeviceScope = true,
-      .vulkanMemoryModelAvailabilityVisibilityChains = true,
-
-      .bufferDeviceAddress = true,
-      .bufferDeviceAddressCaptureReplay = false,
-      .bufferDeviceAddressMultiDevice = false,
-
-      /* Vulkan 1.3 */
-      .inlineUniformBlock  = true,
-      /* Inline buffers work like push constants, so after their are bound
-       * some of their contents may be copied into the uniform stream as soon
-       * as the next draw/dispatch is recorded in the command buffer. This means
-       * that if the client updates the buffer contents after binding it to
-       * a command buffer, the next queue submit of that command buffer may
-       * not use the latest update to the buffer contents, but the data that
-       * was present in the buffer at the time it was bound to the command
-       * buffer.
-       */
-      .descriptorBindingInlineUniformBlockUpdateAfterBind = false,
-      .pipelineCreationCacheControl = true,
-      .privateData = true,
-      .maintenance4 = true,
-      .shaderZeroInitializeWorkgroupMemory = true,
-      .synchronization2 = true,
-      .robustImageAccess = true,
-      .shaderIntegerDotProduct = true,
-
-      /* VK_EXT_4444_formats */
-      .formatA4R4G4B4 = true,
-      .formatA4B4G4R4 = true,
-
-      /* VK_EXT_custom_border_color */
-      .customBorderColors = true,
-      .customBorderColorWithoutFormat = false,
-
-      /* VK_EXT_index_type_uint8 */
-      .indexTypeUint8 = true,
-
-      /* VK_EXT_line_rasterization */
-      .rectangularLines = true,
-      .bresenhamLines = true,
-      .smoothLines = false,
-      .stippledRectangularLines = false,
-      .stippledBresenhamLines = false,
-      .stippledSmoothLines = false,
-
-      /* VK_EXT_color_write_enable */
-      .colorWriteEnable = true,
-
-      /* VK_KHR_pipeline_executable_properties */
-      .pipelineExecutableInfo = true,
-
-      /* VK_EXT_provoking_vertex */
-      .provokingVertexLast = true,
-      /* FIXME: update when supporting EXT_transform_feedback */
-      .transformFeedbackPreservesProvokingVertex = false,
-
-      /* VK_EXT_vertex_attribute_divisor */
-      .vertexAttributeInstanceRateDivisor = true,
-      .vertexAttributeInstanceRateZeroDivisor = false,
-
-      /* VK_KHR_performance_query */
-      .performanceCounterQueryPools = physical_device->caps.perfmon,
-      .performanceCounterMultipleQueryPools = false,
-
-      /* VK_EXT_texel_buffer_alignment */
-      .texelBufferAlignment = true,
-
-      /* VK_KHR_workgroup_memory_explicit_layout */
-      .workgroupMemoryExplicitLayout = true,
-      .workgroupMemoryExplicitLayoutScalarBlockLayout = false,
-      .workgroupMemoryExplicitLayout8BitAccess = true,
-      .workgroupMemoryExplicitLayout16BitAccess = true,
-
-      /* VK_EXT_border_color_swizzle */
-      .borderColorSwizzle = true,
-      .borderColorSwizzleFromImage = true,
-
-      /* VK_EXT_shader_module_identifier */
-      .shaderModuleIdentifier = true,
-
-      /* VK_EXT_depth_clip_control */
-      .depthClipControl = true,
-
-      /* VK_EXT_attachment_feedback_loop_layout */
-      .attachmentFeedbackLoopLayout = true,
-
-      /* VK_EXT_primitive_topology_list_restart */
-      .primitiveTopologyListRestart = true,
-      /* FIXME: we don't support tessellation shaders yet */
-      .primitiveTopologyPatchListRestart = false,
-
-      /* VK_EXT_pipeline_robustness */
-      .pipelineRobustness = true,
-   };
-
-   vk_get_physical_device_features(pFeatures, &features);
 }
 
 uint32_t
@@ -1579,8 +1576,8 @@ v3dv_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
       .driverID = VK_DRIVER_ID_MESA_V3DV,
       .conformanceVersion = {
          .major = 1,
-         .minor = 2,
-         .subminor = 7,
+         .minor = 3,
+         .subminor = 6,
          .patch = 1,
       },
       .supportedDepthResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
@@ -2360,7 +2357,7 @@ v3dv_AllocateMemory(VkDevice _device,
    /* We always allocate device memory in multiples of a page, so round up
     * requested size to that.
     */
-   const VkDeviceSize alloc_size = ALIGN(pAllocateInfo->allocationSize, 4096);
+   const VkDeviceSize alloc_size = align64(pAllocateInfo->allocationSize, 4096);
 
    if (unlikely(alloc_size > MAX_MEMORY_ALLOCATION_SIZE))
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
@@ -2436,7 +2433,7 @@ v3dv_AllocateMemory(VkDevice _device,
 
    /* If this memory can be used via VK_KHR_buffer_device_address then we
     * will need to manually add the BO to any job submit that makes use of
-    * VK_KHR_buffer_device_address, since such jobs may produde buffer
+    * VK_KHR_buffer_device_address, since such jobs may produce buffer
     * load/store operations that may access any buffer memory allocated with
     * this flag and we don't have any means to tell which buffers will be
     * accessed through this mechanism since they don't even have to be bound
@@ -3079,9 +3076,9 @@ vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t* pSupportedVersion)
     *
     *    - Loader interface v4 differs from v3 in:
     *        - The ICD must implement vk_icdGetPhysicalDeviceProcAddr().
-    * 
+    *
     *    - Loader interface v5 differs from v4 in:
-    *        - The ICD must support Vulkan API version 1.1 and must not return 
+    *        - The ICD must support Vulkan API version 1.1 and must not return
     *          VK_ERROR_INCOMPATIBLE_DRIVER from vkCreateInstance() unless a
     *          Vulkan Loader with interface v4 or smaller is being used and the
     *          application provides an API version that is greater than 1.0.

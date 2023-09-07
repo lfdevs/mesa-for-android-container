@@ -112,18 +112,18 @@ lp_scene_destroy(struct lp_scene *scene)
  * Check if the scene's bins are all empty.
  * For debugging purposes.
  */
-boolean
+bool
 lp_scene_is_empty(struct lp_scene *scene)
 {
    for (unsigned y = 0; y < scene->tiles_y; y++) {
       for (unsigned x = 0; x < scene->tiles_x; x++) {
          const struct cmd_bin *bin = lp_scene_get_bin(scene, x, y);
          if (bin->head) {
-            return FALSE;
+            return false;
          }
       }
    }
-   return TRUE;
+   return true;
 }
 
 
@@ -131,7 +131,7 @@ lp_scene_is_empty(struct lp_scene *scene)
  * this scene.  Used in triangle/rectangle emit to avoid having to
  * check success at each bin.
  */
-boolean
+bool
 lp_scene_is_oom(struct lp_scene *scene)
 {
    return scene->alloc_failed;
@@ -323,7 +323,7 @@ lp_scene_end_rasterization(struct lp_scene *scene)
    scene->scene_size = 0;
    scene->resource_reference_size = 0;
 
-   scene->alloc_failed = FALSE;
+   scene->alloc_failed = false;
 
    util_unreference_framebuffer_state(&scene->fb);
 
@@ -357,7 +357,7 @@ lp_scene_new_data_block(struct lp_scene *scene)
 {
    if (scene->scene_size + DATA_BLOCK_SIZE > LP_SCENE_MAX_SIZE) {
       if (0) debug_printf("%s: failed\n", __func__);
-      scene->alloc_failed = TRUE;
+      scene->alloc_failed = true;
       return NULL;
    } else {
       struct data_block *block = MALLOC_STRUCT(data_block);
@@ -395,11 +395,11 @@ lp_scene_data_size(const struct lp_scene *scene)
 /**
  * Add a reference to a resource by the scene.
  */
-boolean
+bool
 lp_scene_add_resource_reference(struct lp_scene *scene,
                                 struct pipe_resource *resource,
-                                boolean initializing_scene,
-                                boolean writeable)
+                                bool initializing_scene,
+                                bool writeable)
 {
    struct resource_ref *ref;
    int i;
@@ -418,7 +418,7 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
       for (i = 0; i < ref->count; i++)
          if (ref->resource[i] == resource) {
             mtx_unlock(&scene->mutex);
-            return TRUE;
+            return true;
       }
 
       if (ref->count < RESOURCE_REF_SZ) {
@@ -435,7 +435,7 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
       *last = lp_scene_alloc(scene, sizeof *ref);
       if (*last == NULL) {
           mtx_unlock(&scene->mutex);
-          return FALSE;
+          return false;
       }
 
       ref = *last;
@@ -467,7 +467,7 @@ lp_scene_add_resource_reference(struct lp_scene *scene,
  * Add a reference to a fragment shader variant
  * Return FALSE if out of memory, TRUE otherwise.
  */
-boolean
+bool
 lp_scene_add_frag_shader_reference(struct lp_scene *scene,
                                    struct lp_fragment_shader_variant *variant)
 {
@@ -482,7 +482,7 @@ lp_scene_add_frag_shader_reference(struct lp_scene *scene,
        */
       for (int i = 0; i < ref->count; i++)
          if (ref->variant[i] == variant)
-            return TRUE;
+            return true;
 
       if (ref->count < SHADER_REF_SZ) {
          /* If the block is half-empty, then append the reference here.
@@ -497,7 +497,7 @@ lp_scene_add_frag_shader_reference(struct lp_scene *scene,
       assert(*last == NULL);
       *last = lp_scene_alloc(scene, sizeof *ref);
       if (*last == NULL)
-          return FALSE;
+          return false;
 
       ref = *last;
       memset(ref, 0, sizeof *ref);
@@ -508,7 +508,7 @@ lp_scene_add_frag_shader_reference(struct lp_scene *scene,
    lp_fs_variant_reference(llvmpipe_context(scene->pipe),
                            &ref->variant[ref->count++], variant);
 
-   return TRUE;
+   return true;
 }
 
 
@@ -548,7 +548,7 @@ lp_scene_is_resource_referenced(const struct lp_scene *scene,
 
 
 /** advance curr_x,y to the next bin */
-static boolean
+static bool
 next_bin(struct lp_scene *scene)
 {
    scene->curr_x++;
@@ -558,9 +558,9 @@ next_bin(struct lp_scene *scene)
    }
    if (scene->curr_y >= scene->tiles_y) {
       /* no more bins */
-      return FALSE;
+      return false;
    }
-   return TRUE;
+   return true;
 }
 
 

@@ -4,6 +4,7 @@
 #   Tomeu Vizoso <tomeu.vizoso@collabora.com>
 #   David Heidelberg <david.heidelberg@collabora.com>
 #
+# For the dependencies, see the requirements.txt
 # SPDX-License-Identifier: MIT
 
 """
@@ -25,6 +26,8 @@ import gitlab
 from colorama import Fore, Style
 from gitlab_common import get_gitlab_project, read_token, wait_for_pipeline
 from gitlab_gql import GitlabGQL, create_job_needs_dag, filter_dag, print_dag
+
+GITLAB_URL = "https://gitlab.freedesktop.org"
 
 REFRESH_WAIT_LOG = 10
 REFRESH_WAIT_JOBS = 6
@@ -237,9 +240,6 @@ def parse_args() -> None:
     )
     parser.add_argument("--target", metavar="target-job", help="Target job")
     parser.add_argument(
-        "--rev", metavar="revision", help="repository git revision (default: HEAD)"
-    )
-    parser.add_argument(
         "--token",
         metavar="token",
         help="force GitLab token, otherwise it's read from ~/.config/gitlab-token",
@@ -248,6 +248,16 @@ def parse_args() -> None:
         "--force-manual", action="store_true", help="Force jobs marked as manual"
     )
     parser.add_argument("--stress", action="store_true", help="Stresstest job(s)")
+
+    mutex_group1 = parser.add_mutually_exclusive_group()
+    mutex_group1.add_argument(
+        "--rev", metavar="revision", help="repository git revision (default: HEAD)"
+    )
+    mutex_group1.add_argument(
+        "--pipeline-url",
+        help="URL of the pipeline to use, instead of auto-detecting it.",
+    )
+
     return parser.parse_args()
 
 
@@ -277,18 +287,32 @@ if __name__ == "__main__":
 
         token = read_token(args.token)
 
-        gl = gitlab.Gitlab(url="https://gitlab.freedesktop.org",
+        gl = gitlab.Gitlab(url=GITLAB_URL,
                            private_token=token,
                            retry_transient_errors=True)
 
-        cur_project = get_gitlab_project(gl, "mesa")
-
         REV: str = args.rev
-        if not REV:
-            REV = check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+
+        if args.pipeline_url:
+            assert args.pipeline_url.startswith(GITLAB_URL)
+            url_path = args.pipeline_url[len(GITLAB_URL):]
+            url_path_components = url_path.split("/")
+            project_name = "/".join(url_path_components[1:3])
+            assert url_path_components[3] == "-"
+            assert url_path_components[4] == "pipelines"
+            pipeline_id = int(url_path_components[5])
+            cur_project = gl.projects.get(project_name)
+            pipe = cur_project.pipelines.get(pipeline_id)
+            REV = pipe.sha
+        else:
+            cur_project = get_gitlab_project(gl, "mesa")
+            if not REV:
+                REV = check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+            pipe = wait_for_pipeline(cur_project, REV)
+
         print(f"Revision: {REV}")
-        pipe = wait_for_pipeline(cur_project, REV)
         print(f"Pipeline: {pipe.web_url}")
+
         deps = set()
         if args.target:
             print("🞋 job: " + Fore.BLUE + args.target + Style.RESET_ALL)

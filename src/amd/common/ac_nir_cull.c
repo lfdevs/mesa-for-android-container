@@ -2,25 +2,7 @@
  * Copyright 2019 Advanced Micro Devices, Inc.
  * Copyright 2021 Valve Corporation
  *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
+ * SPDX-License-Identifier: MIT
  */
 
 #include "ac_nir.h"
@@ -39,12 +21,12 @@ static void
 analyze_position_w(nir_builder *b, nir_ssa_def *pos[][4], unsigned num_vertices,
                    position_w_info *w_info)
 {
-   w_info->all_w_negative = nir_imm_bool(b, true);
-   w_info->w_reflection = nir_imm_bool(b, false);
-   w_info->any_w_negative = nir_imm_bool(b, false);
+   w_info->all_w_negative = nir_imm_true(b);
+   w_info->w_reflection = nir_imm_false(b);
+   w_info->any_w_negative = nir_imm_false(b);
 
    for (unsigned i = 0; i < num_vertices; ++i) {
-      nir_ssa_def *neg_w = nir_flt(b, pos[i][3], nir_imm_float(b, 0.0f));
+      nir_ssa_def *neg_w = nir_flt_imm(b, pos[i][3], 0.0f);
       w_info->w_reflection = nir_ixor(b, neg_w, w_info->w_reflection);
       w_info->any_w_negative = nir_ior(b, neg_w, w_info->any_w_negative);
       w_info->all_w_negative = nir_iand(b, neg_w, w_info->all_w_negative);
@@ -64,8 +46,8 @@ cull_face_triangle(nir_builder *b, nir_ssa_def *pos[3][4], const position_w_info
 
    det = nir_bcsel(b, w_info->w_reflection, nir_fneg(b, det), det);
 
-   nir_ssa_def *front_facing_ccw = nir_flt(b, nir_imm_float(b, 0.0f), det);
-   nir_ssa_def *zero_area = nir_feq(b, nir_imm_float(b, 0.0f), det);
+   nir_ssa_def *front_facing_ccw = nir_fgt_imm(b, det, 0.0f);
+   nir_ssa_def *zero_area = nir_feq_imm(b, det, 0.0f);
    nir_ssa_def *ccw = nir_load_cull_ccw_amd(b);
    nir_ssa_def *front_facing = nir_ieq(b, front_facing_ccw, ccw);
    nir_ssa_def *cull_front = nir_load_cull_front_face_enabled_amd(b);
@@ -95,8 +77,8 @@ cull_frustrum(nir_builder *b, nir_ssa_def *bbox_min[2], nir_ssa_def *bbox_max[2]
    nir_ssa_def *prim_outside_view = nir_imm_false(b);
 
    for (unsigned chan = 0; chan < 2; ++chan) {
-      prim_outside_view = nir_ior(b, prim_outside_view, nir_flt(b, bbox_max[chan], nir_imm_float(b, -1.0f)));
-      prim_outside_view = nir_ior(b, prim_outside_view, nir_flt(b, nir_imm_float(b, 1.0f), bbox_min[chan]));
+      prim_outside_view = nir_ior(b, prim_outside_view, nir_flt_imm(b, bbox_max[chan], -1.0f));
+      prim_outside_view = nir_ior(b, prim_outside_view, nir_fgt_imm(b, bbox_min[chan], 1.0f));
    }
 
    return prim_outside_view;
@@ -241,7 +223,7 @@ cull_small_primitive_line(nir_builder *b, nir_ssa_def *pos[3][4],
        * it doesn't exit it. If a line is entirely inside a corner diamond, it can be culled
        * because it doesn't enter any diamond and thus can't exit any diamond.
        *
-       * The viewport is rotated by 45 degress to turn diamonds into squares, and a bounding
+       * The viewport is rotated by 45 degrees to turn diamonds into squares, and a bounding
        * box test is used to determine whether a line is entirely inside any square (diamond).
        *
        * The line width doesn't matter. Wide lines only duplicate filled pixels in either X or
@@ -264,7 +246,7 @@ cull_small_primitive_line(nir_builder *b, nir_ssa_def *pos[3][4],
          v1[chan] = nir_ffma(b, pos[1][chan], vp_scale, vp_translate);
       }
 
-      /* Rotate the viewport by 45 degress, so that diamonds become squares. */
+      /* Rotate the viewport by 45 degrees, so that diamonds become squares. */
       rotate_45degrees(b, v0);
       rotate_45degrees(b, v1);
 

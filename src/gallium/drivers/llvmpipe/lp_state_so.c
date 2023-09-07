@@ -78,7 +78,7 @@ llvmpipe_set_so_targets(struct pipe_context *pipe,
    struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
    unsigned i;
    for (i = 0; i < num_targets; i++) {
-      const boolean append = (offsets[i] == (unsigned)-1);
+      const bool append = (offsets[i] == (unsigned)-1);
       /*
        * Warn if the so target was created in another context.
        * XXX Not entirely sure if mesa/st may rely on this?

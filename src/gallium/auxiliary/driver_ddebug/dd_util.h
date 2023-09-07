@@ -32,7 +32,6 @@
 #include <errno.h>
 
 #include "c99_alloca.h"
-#include "os/os_process.h"
 #include "util/u_atomic.h"
 #include "util/u_debug.h"
 #include "util/u_string.h"

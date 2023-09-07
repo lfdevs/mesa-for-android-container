@@ -39,7 +39,6 @@ libintel_driver_ds = static_library(
   include_directories : [inc_src, inc_include, inc_intel, inc_mapi, inc_mesa],
   link_with : [libintel_perf, libintel_common],
   dependencies : [libintel_driver_ds_deps, idep_intel_dev],
-  override_options : ['cpp_std=c++17'],
   gnu_symbol_visibility : 'hidden',
 )
 
@@ -61,7 +60,6 @@ if with_perfetto and (with_datasources.contains('intel') or with_datasources.con
     include_directories: [inc_tool, inc_src, inc_include, inc_intel],
     link_with: [libintel_perf, libintel_common],
     dependencies: [dep_perfetto, dep_libdrm, idep_mesautil, idep_intel_dev],
-    override_options: ['cpp_std=c++17']
   )
 
   compile_args_pps_intel = ['-DPPS_INTEL']

@@ -41,7 +41,6 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_framebuffer.h"
-#include "tgsi/tgsi_parse.h"
 #include "pipebuffer/pb_buffer.h"
 #include "evergreend.h"
 #include "r600_shader.h"
@@ -57,7 +56,7 @@
 RAT0 is for global binding write
 VTX1 is for global binding read
 
-for wrting images RAT1...
+for writing images RAT1...
 for reading images TEX2...
   TEX2-RAT1 is paired
 
@@ -370,7 +369,7 @@ static const unsigned char *r600_shader_binary_config_start(
 static void r600_shader_binary_read_config(const struct r600_shader_binary *binary,
 					   struct r600_bytecode *bc,
 					   uint64_t symbol_offset,
-					   boolean *use_kill)
+					   bool *use_kill)
 {
        unsigned i;
        const unsigned char *config =
@@ -404,7 +403,7 @@ static void r600_shader_binary_read_config(const struct r600_shader_binary *bina
 
 static unsigned r600_create_shader(struct r600_bytecode *bc,
 				   const struct r600_shader_binary *binary,
-				   boolean *use_kill)
+				   bool *use_kill)
 
 {
 	assert(binary->code_size % 4 == 0);
@@ -431,7 +430,7 @@ static void *evergreen_create_compute_state(struct pipe_context *ctx,
 #ifdef HAVE_OPENCL
 	const struct pipe_binary_program_header *header;
 	void *p;
-	boolean use_kill;
+	bool use_kill;
 #endif
 
 	shader->ctx = rctx;
@@ -928,7 +927,7 @@ static void evergreen_launch_grid(struct pipe_context *ctx,
 	struct r600_context *rctx = (struct r600_context *)ctx;
 #ifdef HAVE_OPENCL
 	struct r600_pipe_compute *shader = rctx->cs_shader_state.shader;
-	boolean use_kill;
+	bool use_kill;
 
 	if (shader->ir_type != PIPE_SHADER_IR_TGSI &&
 	    shader->ir_type != PIPE_SHADER_IR_NIR) {
@@ -1155,7 +1154,7 @@ void evergreen_init_atom_start_compute_cs(struct r600_context *rctx)
 		r600_store_value(cb, 0);
 
 		/* R_008C28_SQ_STACK_RESOURCE_MGMT_3
-		 * Set the Contol Flow stack entries to 0 for the HS stage, and
+		 * Set the Control Flow stack entries to 0 for the HS stage, and
 		 * set it to the maximum value for the CS (aka LS) stage. */
 		r600_store_value(cb,
 			S_008C28_NUM_LS_STACK_ENTRIES(num_stack_entries));

@@ -185,23 +185,17 @@ pan_unpack_reorder(nir_builder *b, const struct util_format_description *desc,
 }
 
 static nir_ssa_def *
-pan_replicate_4(nir_builder *b, nir_ssa_def *v)
-{
-   return nir_vec4(b, v, v, v, v);
-}
-
-static nir_ssa_def *
 pan_pack_pure_8(nir_builder *b, nir_ssa_def *v, unsigned num_components)
 {
-   return pan_replicate_4(
-      b, nir_pack_32_4x8(b, pan_replicate(b, v, num_components)));
+   return nir_replicate(
+      b, nir_pack_32_4x8(b, pan_replicate(b, v, num_components)), 4);
 }
 
 static nir_ssa_def *
 pan_unpack_pure_8(nir_builder *b, nir_ssa_def *pack, unsigned num_components)
 {
    nir_ssa_def *unpacked = nir_unpack_32_4x8(b, nir_channel(b, pack, 0));
-   return nir_channels(b, unpacked, (1 << num_components) - 1);
+   return nir_trim_vector(b, unpacked, num_components);
 }
 
 static nir_ssa_def *
@@ -246,7 +240,7 @@ pan_pack_norm(nir_builder *b, nir_ssa_def *v, unsigned x, unsigned y,
    nir_ssa_def *s = nir_ishl(b, u8, shifts);
    nir_ssa_def *repl = nir_pack_32_4x8(b, s);
 
-   return pan_replicate_4(b, repl);
+   return nir_replicate(b, repl, 4);
 }
 
 static nir_ssa_def *
@@ -272,17 +266,15 @@ pan_pack_unorm_1010102(nir_builder *b, nir_ssa_def *v)
 
    nir_ssa_def *bottom2 = nir_iand(b, s, nir_imm_ivec4(b, 0x3, 0x3, 0x3, 0x3));
 
-   nir_ssa_def *top = nir_ior(
-      b,
+   nir_ssa_def *top =
       nir_ior(b,
-              nir_ishl(b, nir_channel(b, bottom2, 0), nir_imm_int(b, 24 + 0)),
-              nir_ishl(b, nir_channel(b, bottom2, 1), nir_imm_int(b, 24 + 2))),
-      nir_ior(b,
-              nir_ishl(b, nir_channel(b, bottom2, 2), nir_imm_int(b, 24 + 4)),
-              nir_ishl(b, nir_channel(b, bottom2, 3), nir_imm_int(b, 24 + 6))));
+              nir_ior(b, nir_ishl_imm(b, nir_channel(b, bottom2, 0), 24 + 0),
+                      nir_ishl_imm(b, nir_channel(b, bottom2, 1), 24 + 2)),
+              nir_ior(b, nir_ishl_imm(b, nir_channel(b, bottom2, 2), 24 + 4),
+                      nir_ishl_imm(b, nir_channel(b, bottom2, 3), 24 + 6)));
 
    nir_ssa_def *p = nir_ior(b, top, top8_rgb);
-   return pan_replicate_4(b, p);
+   return nir_replicate(b, p, 4);
 }
 
 /* On the other hand, the pure int RGB10_A2 is identical to the spec */
@@ -304,13 +296,13 @@ pan_pack_int_1010102(nir_builder *b, nir_ssa_def *v, bool is_signed)
    v = nir_ior(b, nir_ior(b, nir_channel(b, v, 0), nir_channel(b, v, 1)),
                nir_ior(b, nir_channel(b, v, 2), nir_channel(b, v, 3)));
 
-   return pan_replicate_4(b, v);
+   return nir_replicate(b, v, 4);
 }
 
 static nir_ssa_def *
 pan_unpack_int_1010102(nir_builder *b, nir_ssa_def *packed, bool is_signed)
 {
-   nir_ssa_def *v = pan_replicate_4(b, nir_channel(b, packed, 0));
+   nir_ssa_def *v = nir_replicate(b, nir_channel(b, packed, 0), 4);
 
    /* Left shift all components so the sign bit is on the MSB, and
     * can be extended by ishr(). The ishl()+[u,i]shr() combination
@@ -331,7 +323,7 @@ pan_unpack_int_1010102(nir_builder *b, nir_ssa_def *packed, bool is_signed)
 static nir_ssa_def *
 pan_pack_r11g11b10(nir_builder *b, nir_ssa_def *v)
 {
-   return pan_replicate_4(b, nir_format_pack_11f11f10f(b, nir_f2f32(b, v)));
+   return nir_replicate(b, nir_format_pack_11f11f10f(b, nir_f2f32(b, v)), 4);
 }
 
 static nir_ssa_def *
@@ -353,7 +345,7 @@ pan_unpack_r11g11b10(nir_builder *b, nir_ssa_def *v)
 static nir_ssa_def *
 pan_linear_to_srgb(nir_builder *b, nir_ssa_def *linear)
 {
-   nir_ssa_def *rgb = nir_channels(b, linear, 0x7);
+   nir_ssa_def *rgb = nir_trim_vector(b, linear, 3);
 
    /* TODO: fp16 native conversion */
    nir_ssa_def *srgb =

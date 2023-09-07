@@ -73,8 +73,6 @@ void lower_named_interface_blocks(void *mem_ctx, gl_linked_shader *shader);
 void optimize_dead_builtin_variables(exec_list *instructions,
                                      enum ir_variable_mode other);
 
-bool lower_blend_equation_advanced(gl_linked_shader *shader, bool coherent);
-
 bool lower_builtins(exec_list *instructions);
 bool lower_subroutine(exec_list *instructions, struct _mesa_glsl_parse_state *state);
 bool propagate_invariance(exec_list *instructions);

@@ -32,16 +32,27 @@ struct vn_physical_device_features {
    VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT texel_buffer_alignment;
    VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT ycbcr_2plane_444_formats;
 
+   /* KHR */
+   VkPhysicalDeviceShaderClockFeaturesKHR shader_clock;
+
    /* EXT */
+   VkPhysicalDeviceBorderColorSwizzleFeaturesEXT border_color_swizzle;
+   VkPhysicalDeviceColorWriteEnableFeaturesEXT color_write_enable;
    VkPhysicalDeviceConditionalRenderingFeaturesEXT conditional_rendering;
    VkPhysicalDeviceCustomBorderColorFeaturesEXT custom_border_color;
    VkPhysicalDeviceDepthClipControlFeaturesEXT depth_clip_control;
    VkPhysicalDeviceDepthClipEnableFeaturesEXT depth_clip_enable;
+   VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT
+      dynamic_rendering_unused_attachments;
+   VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT
+      fragment_shader_interlock;
+   VkPhysicalDeviceImage2DViewOf3DFeaturesEXT image_2d_view_of_3d;
    VkPhysicalDeviceImageViewMinLodFeaturesEXT image_view_min_lod;
    VkPhysicalDeviceIndexTypeUint8FeaturesEXT index_type_uint8;
    VkPhysicalDeviceLineRasterizationFeaturesEXT line_rasterization;
    VkPhysicalDeviceMultiDrawFeaturesEXT multi_draw;
    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutable_descriptor_type;
+   VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT non_seamless_cube_map;
    VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT
       primitive_topology_list_restart;
    VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT
@@ -106,9 +117,11 @@ struct vn_physical_device {
 
    struct vn_physical_device_features features;
    struct vn_physical_device_properties properties;
+   enum VkDriverId renderer_driver_id;
 
    VkQueueFamilyProperties2 *queue_family_properties;
    uint32_t queue_family_count;
+   bool sparse_binding_disabled;
 
    VkPhysicalDeviceMemoryProperties2 memory_properties;
 

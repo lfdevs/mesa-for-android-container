@@ -38,6 +38,7 @@
 #include <inttypes.h>
 
 #include "dev/intel_device_info.h"
+#include "util/os_time.h"
 #include "util/u_debug.h"
 #include "util/macros.h"
 
@@ -97,6 +98,7 @@ intel_measure_init(struct intel_measure_device *device)
       const char *interval_s = strstr(env_copy, "interval=");
       const char *batch_size_s = strstr(env_copy, "batch_size=");
       const char *buffer_size_s = strstr(env_copy, "buffer_size=");
+      const char *cpu_s = strstr(env_copy, "cpu");
       while (true) {
          char *sep = strrchr(env_copy, ',');
          if (sep == NULL)
@@ -206,14 +208,24 @@ intel_measure_init(struct intel_measure_device *device)
          config.buffer_size = buffer_size;
       }
 
-      fputs("draw_start,draw_end,frame,batch,"
-            "event_index,event_count,type,count,vs,tcs,tes,"
-            "gs,fs,cs,ms,ts,framebuffer,idle_us,time_us\n",
-            config.file);
+      if (cpu_s) {
+         config.cpu_measure = true;
+      }
+
+      if (!config.cpu_measure)
+         fputs("draw_start,draw_end,frame,batch,renderpass,"
+               "event_index,event_count,type,count,vs,tcs,tes,"
+               "gs,fs,cs,ms,ts,idle_us,time_us\n",
+               config.file);
+      else
+         fputs("draw_start,frame,batch,event_index,event_count,"
+               "type,count\n",
+               config.file);
    }
 
    device->config = NULL;
    device->frame = 0;
+   device->render_pass_count = 0;
    device->release_batch = NULL;
    pthread_mutex_init(&device->mutex, NULL);
    list_inithead(&device->queued_snapshots);
@@ -238,6 +250,7 @@ intel_measure_snapshot_string(enum intel_measure_snapshot_type type)
       [INTEL_SNAPSHOT_HIZ_AMBIGUATE]       = "hiz ambiguate",
       [INTEL_SNAPSHOT_HIZ_CLEAR]           = "hiz clear",
       [INTEL_SNAPSHOT_HIZ_RESOLVE]         = "hiz resolve",
+      [INTEL_SNAPSHOT_MCS_AMBIGUATE]       = "mcs ambiguate",
       [INTEL_SNAPSHOT_MCS_COLOR_CLEAR]     = "mcs color clear",
       [INTEL_SNAPSHOT_MCS_PARTIAL_RESOLVE] = "mcs partial resolve",
       [INTEL_SNAPSHOT_SLOW_COLOR_CLEAR]    = "slow color clear",
@@ -292,9 +305,9 @@ intel_measure_state_changed(const struct intel_measure_batch *batch,
    }
 
    if (config.flags & INTEL_MEASURE_RENDERPASS) {
-      return ((last_snap->framebuffer != batch->framebuffer) ||
-              /* compute workloads are always in their own renderpass */
-              (cs != 0));
+      bool new_renderpass = !cs && last_snap->renderpass != batch->renderpass;
+      bool new_compute_block = cs && last_snap->type != INTEL_SNAPSHOT_COMPUTE;
+      return new_renderpass || new_compute_block;
    }
 
    /* remaining comparisons check the state of the render pipeline for
@@ -420,6 +433,7 @@ intel_measure_push_result(struct intel_measure_device *device,
       if (begin->type == INTEL_SNAPSHOT_SECONDARY_BATCH) {
          assert(begin->secondary != NULL);
          begin->secondary->batch_count = batch->batch_count;
+         begin->secondary->primary_renderpass = batch->renderpass;
          intel_measure_push_result(device, begin->secondary);
          continue;
       }
@@ -454,6 +468,7 @@ intel_measure_push_result(struct intel_measure_device *device,
          raw_timestamp_delta(prev_end_ts, buffered_result->start_ts);
       buffered_result->frame = batch->frame;
       buffered_result->batch_count = batch->batch_count;
+      buffered_result->primary_renderpass = batch->primary_renderpass;
       buffered_result->event_index = i / 2;
       buffered_result->snapshot.event_count = end->event_count;
    }
@@ -603,17 +618,38 @@ print_combined_results(struct intel_measure_device *measure_device,
    uint64_t duration_time_ns =
       intel_device_info_timebase_scale(info, duration_ts);
    const struct intel_measure_snapshot *begin = &start_result->snapshot;
-   fprintf(config.file, "%"PRIu64",%"PRIu64",%u,%u,%u,%u,%s,%u,"
-           "0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR","
-           "0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",0x%"PRIxPTR",%.3lf,%.3lf\n",
+   uint32_t renderpass = (start_result->primary_renderpass)
+      ? start_result->primary_renderpass : begin->renderpass;
+   fprintf(config.file, "%"PRIu64",%"PRIu64",%u,%u,%u,%u,%u,%s,%u,"
+           "0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,0x%x,%.3lf,%.3lf\n",
            start_result->start_ts, current_result->end_ts,
            start_result->frame, start_result->batch_count,
-           start_result->event_index, event_count,
+           renderpass, start_result->event_index, event_count,
            begin->event_name, begin->count,
-           begin->vs, begin->tcs, begin->tes, begin->gs, begin->fs, begin->cs,
-           begin->ms, begin->ts, begin->framebuffer,
+           (uint32_t)begin->vs, (uint32_t)begin->tcs, (uint32_t)begin->tes,
+           (uint32_t)begin->gs, (uint32_t)begin->fs, (uint32_t)begin->cs,
+           (uint32_t)begin->ms, (uint32_t)begin->ts,
            (double)duration_idle_ns / 1000.0,
            (double)duration_time_ns / 1000.0);
+}
+
+/**
+ * Write data for a cpu event.
+ */
+void
+intel_measure_print_cpu_result(unsigned int frame,
+                               unsigned int batch_count,
+                               unsigned int event_index,
+                               unsigned int event_count,
+                               unsigned int count,
+                               const char* event_name)
+{
+   assert(config.cpu_measure);
+   uint64_t start_ns = os_time_get_nano();
+
+   fprintf(config.file, "%"PRIu64",%u,%3u,%3u,%u,%s,%u\n",
+           start_ns, frame, batch_count, event_index, event_count,
+           event_name, count);
 }
 
 /**

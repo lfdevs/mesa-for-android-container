@@ -71,7 +71,7 @@ static const uint32_t isl_encode_aux_mode[] = {
    [ISL_AUX_USAGE_NONE] = AUX_NONE,
    [ISL_AUX_USAGE_MC] = AUX_NONE,
    [ISL_AUX_USAGE_MCS] = AUX_CCS_E,
-   [ISL_AUX_USAGE_GFX12_CCS_E] = AUX_CCS_E,
+   [ISL_AUX_USAGE_FCV_CCS_E] = AUX_CCS_E,
    [ISL_AUX_USAGE_CCS_E] = AUX_CCS_E,
    [ISL_AUX_USAGE_HIZ_CCS_WT] = AUX_CCS_E,
    [ISL_AUX_USAGE_MCS_CCS] = AUX_MCS_LCE,
@@ -336,32 +336,12 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          s.RenderTargetViewExtent = s.Depth;
       break;
    case SURFTYPE_3D:
-      assert(info->view->base_array_layer + info->view->array_len <=
-             isl_minify(info->surf->logical_level0_px.depth,
-                        info->view->base_level));
-
       /* From the Broadwell PRM >> RENDER_SURFACE_STATE::Depth:
        *
        *    If the volume texture is MIP-mapped, this field specifies the
        *    depth of the base MIP level.
        */
-      if (GFX_VER >= 9 && info->view->usage & ISL_SURF_USAGE_STORAGE_BIT) {
-         /* From the Kaby Lake docs for the RESINFO message:
-          *
-          *    "Surface Type | ... | Blue
-          *    --------------+-----+----------------
-          *     SURFTYPE_3D  | ... | (Depth+1)»LOD"
-          *
-          * which isn't actually what the Vulkan or D3D specs want for storage
-          * images.  We want the requested array size.  The good news is that,
-          * thanks to Skylake and later using the same image layout for 3D
-          * images as 2D array images, we should be able to adjust the depth
-          * without affecting the layout.
-          */
-         s.Depth = (info->view->array_len << info->view->base_level) - 1;
-      } else {
-         s.Depth = info->surf->logical_level0_px.depth - 1;
-      }
+      s.Depth = info->surf->logical_level0_px.depth - 1;
 
       /* From the Broadwell PRM >> RENDER_SURFACE_STATE::RenderTargetViewExtent:
        *
@@ -388,19 +368,21 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       unreachable("bad SurfaceType");
    }
 
-#if GFX_VER >= 12
-   /* Wa_1806565034:
-    *
-    *    "Only set SurfaceArray if arrayed surface is > 1."
-    *
-    * Since this is a performance workaround, we only enable it when robust
-    * image access is disabled. Otherwise layered robust access is not
-    * specification compliant.
-    */
-   s.SurfaceArray = info->surf->dim != ISL_SURF_DIM_3D &&
-      (info->robust_image_access || info->view->array_len > 1);
-#elif GFX_VER >= 7
-   s.SurfaceArray = info->surf->dim != ISL_SURF_DIM_3D;
+#if GFX_VER >= 7
+   if (INTEL_NEEDS_WA_1806565034) {
+      /* Wa_1806565034:
+       *
+       *    "Only set SurfaceArray if arrayed surface is > 1."
+       *
+       * Since this is a performance workaround, we only enable it when robust
+       * image access is disabled. Otherwise layered robust access is not
+       * specification compliant.
+       */
+      s.SurfaceArray = info->surf->dim != ISL_SURF_DIM_3D &&
+         (info->robust_image_access || info->view->array_len > 1);
+   } else {
+      s.SurfaceArray = info->surf->dim != ISL_SURF_DIM_3D;
+   }
 #endif
 
    if (info->view->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT) {
@@ -425,7 +407,6 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    /* We don't use miptails yet.  The PRM recommends that you set "Mip Tail
     * Start LOD" to 15 to prevent the hardware from trying to use them.
     */
-   s.TiledResourceMode = NONE;
    s.MipTailStartLOD = 15;
 #endif
 
@@ -480,7 +461,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    s.RenderCacheReadWriteMode = 0;
 #endif
 
-#if GFX_VER >= 11
+#if GFX_VER >= 11 && GFX_VERx10 < 125
    /* We've seen dEQP failures when enabling this bit with UINT formats,
     * which particularly affects blorp_copy() operations.  It shouldn't
     * have any effect on UINT textures anyway, so disable it for them.
@@ -585,7 +566,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       if (GFX_VER >= 12) {
          assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
                 info->aux_usage == ISL_AUX_USAGE_CCS_E ||
-                info->aux_usage == ISL_AUX_USAGE_GFX12_CCS_E ||
+                info->aux_usage == ISL_AUX_USAGE_FCV_CCS_E ||
                 info->aux_usage == ISL_AUX_USAGE_MC ||
                 info->aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
                 info->aux_usage == ISL_AUX_USAGE_MCS_CCS ||
@@ -695,8 +676,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
        *
        * If CCS_E is in use, the format must support it.
        */
-      if (info->aux_usage == ISL_AUX_USAGE_CCS_E ||
-          info->aux_usage == ISL_AUX_USAGE_GFX12_CCS_E)
+      if (isl_aux_usage_has_ccs_e(info->aux_usage))
          assert(isl_format_supports_ccs_e(dev->info, info->view->format));
 
       /* It also says:

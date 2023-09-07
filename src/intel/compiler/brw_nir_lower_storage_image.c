@@ -51,8 +51,7 @@ _load_image_param(nir_builder *b, nir_deref_instr *deref, unsigned offset)
    default:
       unreachable("Invalid param offset");
    }
-   nir_ssa_dest_init(&load->instr, &load->dest,
-                     load->num_components, 32, NULL);
+   nir_ssa_dest_init(&load->instr, &load->dest, load->num_components, 32);
 
    nir_builder_instr_insert(b, &load->instr);
    return &load->dest.ssa;
@@ -117,7 +116,7 @@ image_address(nir_builder *b, const struct intel_device_info *devinfo,
     */
    nir_ssa_def *xypos = (coord->num_components == 1) ?
                         nir_vec2(b, coord, nir_imm_int(b, 0)) :
-                        nir_channels(b, coord, 0x3);
+                        nir_trim_vector(b, coord, 2);
    xypos = nir_iadd(b, xypos, offset);
 
    /* The layout of 3-D textures in memory is sort-of like a tiling
@@ -175,8 +174,8 @@ image_address(nir_builder *b, const struct intel_device_info *devinfo,
 
       /* Calculate the minor x and y indices. */
       nir_ssa_def *minor = nir_ubfe(b, xypos, nir_imm_int(b, 0),
-                                       nir_channels(b, tiling, 0x3));
-      nir_ssa_def *major = nir_ushr(b, xypos, nir_channels(b, tiling, 0x3));
+                                       nir_trim_vector(b, tiling, 2));
+      nir_ssa_def *major = nir_ushr(b, xypos, nir_trim_vector(b, tiling, 2));
 
       /* Calculate the texel index from the start of the tile row and the
        * vertical coordinate of the row.
@@ -421,7 +420,7 @@ lower_image_load_instr(nir_builder *b,
           */
          nir_ssa_def *stride = load_image_param(b, deref, STRIDE);
          nir_ssa_def *is_raw =
-            nir_ilt(b, nir_imm_int(b, 4), nir_channel(b, stride, 0));
+            nir_igt_imm(b, nir_channel(b, stride, 0), 4);
          do_load = nir_iand(b, do_load, is_raw);
       }
       nir_push_if(b, do_load);
@@ -572,7 +571,7 @@ lower_image_store_instr(nir_builder *b,
           */
          nir_ssa_def *stride = load_image_param(b, deref, STRIDE);
          nir_ssa_def *is_raw =
-            nir_ilt(b, nir_imm_int(b, 4), nir_channel(b, stride, 0));
+            nir_igt_imm(b, nir_channel(b, stride, 0), 4);
          do_store = nir_iand(b, do_store, is_raw);
       }
       nir_push_if(b, do_store);
@@ -686,30 +685,30 @@ brw_nir_lower_storage_image_instr(nir_builder *b,
 {
    if (instr->type != nir_instr_type_intrinsic)
       return false;
-   const struct intel_device_info *devinfo = cb_data;
+   const struct brw_nir_lower_storage_image_opts *opts = cb_data;
 
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
    switch (intrin->intrinsic) {
    case nir_intrinsic_image_deref_load:
-      return lower_image_load_instr(b, devinfo, intrin);
+      if (opts->lower_loads)
+         return lower_image_load_instr(b, opts->devinfo, intrin);
+      return false;
 
    case nir_intrinsic_image_deref_store:
-      return lower_image_store_instr(b, devinfo, intrin);
+      if (opts->lower_stores)
+         return lower_image_store_instr(b, opts->devinfo, intrin);
+      return false;
 
-   case nir_intrinsic_image_deref_atomic_add:
-   case nir_intrinsic_image_deref_atomic_imin:
-   case nir_intrinsic_image_deref_atomic_umin:
-   case nir_intrinsic_image_deref_atomic_imax:
-   case nir_intrinsic_image_deref_atomic_umax:
-   case nir_intrinsic_image_deref_atomic_and:
-   case nir_intrinsic_image_deref_atomic_or:
-   case nir_intrinsic_image_deref_atomic_xor:
-   case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_comp_swap:
-      return lower_image_atomic_instr(b, devinfo, intrin);
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
+      if (opts->lower_atomics)
+         return lower_image_atomic_instr(b, opts->devinfo, intrin);
+      return false;
 
    case nir_intrinsic_image_deref_size:
-      return lower_image_size_instr(b, devinfo, intrin);
+      if (opts->lower_get_size)
+         return lower_image_size_instr(b, opts->devinfo, intrin);
+      return false;
 
    default:
       /* Nothing to do */
@@ -719,7 +718,7 @@ brw_nir_lower_storage_image_instr(nir_builder *b,
 
 bool
 brw_nir_lower_storage_image(nir_shader *shader,
-                            const struct intel_device_info *devinfo)
+                            const struct brw_nir_lower_storage_image_opts *opts)
 {
    bool progress = false;
 
@@ -733,7 +732,7 @@ brw_nir_lower_storage_image(nir_shader *shader,
    progress |= nir_shader_instructions_pass(shader,
                                             brw_nir_lower_storage_image_instr,
                                             nir_metadata_none,
-                                            (void *)devinfo);
+                                            (void *)opts);
 
    return progress;
 }

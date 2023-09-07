@@ -59,7 +59,7 @@ pipe_reference_init(struct pipe_reference *dst, unsigned count)
    dst->count = count;
 }
 
-static inline boolean
+static inline bool
 pipe_is_referenced(struct pipe_reference *src)
 {
    return p_atomic_read(&src->count) != 0;
@@ -71,7 +71,7 @@ pipe_is_referenced(struct pipe_reference *src)
  * Both 'dst' and 'src' may be NULL.
  * \return TRUE if the object's refcount hits zero and should be destroyed.
  */
-static inline boolean
+static inline bool
 pipe_reference_described(struct pipe_reference *dst,
                          struct pipe_reference *src,
                          debug_reference_descriptor get_desc)
@@ -96,7 +96,7 @@ pipe_reference_described(struct pipe_reference *dst,
    return false;
 }
 
-static inline boolean
+static inline bool
 pipe_reference(struct pipe_reference *dst, struct pipe_reference *src)
 {
    return pipe_reference_described(dst, src,
@@ -300,7 +300,7 @@ pipe_surface_init(struct pipe_context *ctx, struct pipe_surface* ps,
 }
 
 /* Return true if the surfaces are equal. */
-static inline boolean
+static inline bool
 pipe_surface_equal(struct pipe_surface *s1, struct pipe_surface *s2)
 {
    return s1->texture == s2->texture &&
@@ -526,9 +526,9 @@ pipe_buffer_read(struct pipe_context *pipe,
                  void *data)
 {
    struct pipe_transfer *src_transfer;
-   ubyte *map;
+   uint8_t *map;
 
-   map = (ubyte *) pipe_buffer_map_range(pipe,
+   map = (uint8_t *) pipe_buffer_map_range(pipe,
                                          buf,
                                          offset, size,
                                          PIPE_MAP_READ,
@@ -609,7 +609,7 @@ pipe_set_constant_buffer(struct pipe_context *pipe,
  * Get the polygon offset enable/disable flag for the given polygon fill mode.
  * \param fill_mode  one of PIPE_POLYGON_MODE_POINT/LINE/FILL
  */
-static inline boolean
+static inline bool
 util_get_offset(const struct pipe_rasterizer_state *templ,
                 unsigned fill_mode)
 {
@@ -622,7 +622,7 @@ util_get_offset(const struct pipe_rasterizer_state *templ,
       return templ->offset_tri;
    default:
       assert(0);
-      return FALSE;
+      return false;
    }
 }
 
@@ -645,7 +645,7 @@ util_query_clear_result(union pipe_query_result *result, unsigned type)
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
    case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
    case PIPE_QUERY_GPU_FINISHED:
-      result->b = FALSE;
+      result->b = false;
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_TIMESTAMP:

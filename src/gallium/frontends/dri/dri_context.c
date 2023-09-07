@@ -38,6 +38,7 @@
 #include "pipe-loader/pipe_loader.h"
 #include "state_tracker/st_context.h"
 
+#include "util/u_cpu_detect.h"
 #include "util/u_memory.h"
 #include "util/u_debug.h"
 
@@ -200,8 +201,34 @@ dri_create_context(struct dri_screen *screen,
                             ctx->st, st_context_invalidate_state);
    }
 
+   /* order of precedence (least to most):
+    * - driver setting
+    * - app setting
+    * - user setting
+    */
+   bool enable_glthread = driQueryOptionb(&screen->dev->option_cache, "mesa_glthread_driver");
+
+   /* always disable glthread by default if fewer than 5 "big" CPUs are active */
+   unsigned nr_big_cpus = util_get_cpu_caps()->nr_big_cpus;
+   if (util_get_cpu_caps()->nr_cpus < 4 || (nr_big_cpus && nr_big_cpus < 5))
+      enable_glthread = false;
+
+   int app_enable_glthread = driQueryOptioni(&screen->dev->option_cache, "mesa_glthread_app_profile");
+   if (app_enable_glthread != -1) {
+      /* if set (not -1), apply the app setting */
+      enable_glthread = app_enable_glthread == 1;
+   }
+   if (getenv("mesa_glthread")) {
+      /* only apply the env var if set */
+      bool user_enable_glthread = debug_get_bool_option("mesa_glthread", false);
+      if (user_enable_glthread != enable_glthread) {
+         /* print warning to mimic old behavior */
+         fprintf(stderr, "ATTENTION: default value of option mesa_glthread overridden by environment.\n");
+      }
+      enable_glthread = user_enable_glthread;
+   }
    /* Do this last. */
-   if (driQueryOptionb(&screen->dev->option_cache, "mesa_glthread")) {
+   if (enable_glthread) {
       bool safe = true;
 
       /* This is only needed by X11/DRI2, which can be unsafe. */
@@ -252,7 +279,7 @@ dri_destroy_context(struct dri_context *ctx)
 }
 
 /* This is called inside MakeCurrent to unbind the context. */
-GLboolean
+bool
 dri_unbind_context(struct dri_context *ctx)
 {
    /* dri_util.c ensures cPriv is not null */
@@ -283,7 +310,7 @@ dri_unbind_context(struct dri_context *ctx)
    return GL_TRUE;
 }
 
-GLboolean
+bool
 dri_make_current(struct dri_context *ctx,
 		 struct dri_drawable *draw,
 		 struct dri_drawable *read)

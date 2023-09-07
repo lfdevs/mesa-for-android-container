@@ -77,9 +77,9 @@ static nir_ssa_def *
 vc4_nir_unpack_16u(nir_builder *b, nir_ssa_def *src, unsigned chan)
 {
         if (chan == 0) {
-                return nir_iand(b, src, nir_imm_int(b, 0xffff));
+                return nir_iand_imm(b, src, 0xffff);
         } else {
-                return nir_ushr(b, src, nir_imm_int(b, 16));
+                return nir_ushr_imm(b, src, 16);
         }
 }
 
@@ -106,10 +106,9 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
                 return vc4_nir_get_swizzled_channel(b, vpm_reads, swiz);
         } else if (chan->size == 32 && chan->type == UTIL_FORMAT_TYPE_SIGNED) {
                 if (chan->normalized) {
-                        return nir_fmul(b,
-                                        nir_i2f32(b, vpm_reads[swiz]),
-                                        nir_imm_float(b,
-                                                      1.0 / 0x7fffffff));
+                        return nir_fmul_imm(b,
+                                            nir_i2f32(b, vpm_reads[swiz]),
+                                            1.0 / 0x7fffffff);
                 } else {
                         return nir_i2f32(b, vpm_reads[swiz]);
                 }
@@ -120,16 +119,16 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
                 if (chan->type == UTIL_FORMAT_TYPE_SIGNED) {
                         temp = nir_ixor(b, vpm, nir_imm_int(b, 0x80808080));
                         if (chan->normalized) {
-                                return nir_fsub(b, nir_fmul(b,
-                                                            vc4_nir_unpack_8f(b, temp, swiz),
-                                                            nir_imm_float(b, 2.0)),
-                                                nir_imm_float(b, 1.0));
+                                return nir_fadd_imm(b, nir_fmul_imm(b,
+                                                                    vc4_nir_unpack_8f(b, temp, swiz),
+                                                                    2.0),
+                                                    -1.0);
                         } else {
-                                return nir_fadd(b,
-                                                nir_i2f32(b,
-                                                          vc4_nir_unpack_8i(b, temp,
-                                                                            swiz)),
-                                                nir_imm_float(b, -128.0));
+                                return nir_fadd_imm(b,
+                                                    nir_i2f32(b,
+                                                              vc4_nir_unpack_8i(b, temp,
+                                                                                swiz)),
+                                                    -128.0);
                         }
                 } else {
                         if (chan->normalized) {
@@ -149,16 +148,14 @@ vc4_nir_get_vattr_channel_vpm(struct vc4_compile *c,
                 if (chan->type == UTIL_FORMAT_TYPE_SIGNED) {
                         temp = nir_i2f32(b, vc4_nir_unpack_16i(b, vpm, swiz & 1));
                         if (chan->normalized) {
-                                return nir_fmul(b, temp,
-                                                nir_imm_float(b, 1/32768.0f));
+                                return nir_fmul_imm(b, temp, 1 / 32768.0f);
                         } else {
                                 return temp;
                         }
                 } else {
                         temp = nir_i2f32(b, vc4_nir_unpack_16u(b, vpm, swiz & 1));
                         if (chan->normalized) {
-                                return nir_fmul(b, temp,
-                                                nir_imm_float(b, 1 / 65535.0));
+                                return nir_fmul_imm(b, temp, 1 / 65535.0);
                         } else {
                                 return temp;
                         }
@@ -263,7 +260,7 @@ vc4_nir_lower_fs_input(struct vc4_compile *c, nir_builder *b,
                 }
 
                 if (c->fs_key->point_coord_upper_left && comp == 1)
-                        result = nir_fsub(b, nir_imm_float(b, 1.0), result);
+                        result = nir_fsub_imm(b, 1.0, result);
 
                 if (result != &intr->dest.ssa) {
                         nir_ssa_def_rewrite_uses_after(&intr->dest.ssa,
@@ -303,7 +300,7 @@ vc4_nir_lower_uniform(struct vc4_compile *c, nir_builder *b,
                         nir_intrinsic_instr_create(c->s, intr->intrinsic);
                 intr_comp->num_components = 1;
                 nir_ssa_dest_init(&intr_comp->instr, &intr_comp->dest, 1,
-                                  intr->dest.ssa.bit_size, NULL);
+                                  intr->dest.ssa.bit_size);
 
                 /* Convert the uniform offset to bytes.  If it happens
                  * to be a constant, constant-folding will clean up
@@ -316,8 +313,7 @@ vc4_nir_lower_uniform(struct vc4_compile *c, nir_builder *b,
                                         nir_intrinsic_range(intr) * 16 - i * 4);
 
                 intr_comp->src[0] =
-                        nir_src_for_ssa(nir_ishl(b, intr->src[0].ssa,
-                                                 nir_imm_int(b, 4)));
+                        nir_src_for_ssa(nir_ishl_imm(b, intr->src[0].ssa, 4));
 
                 dests[i] = &intr_comp->dest.ssa;
 
@@ -360,8 +356,7 @@ vc4_nir_lower_io_instr(struct vc4_compile *c, nir_builder *b,
 static bool
 vc4_nir_lower_io_impl(struct vc4_compile *c, nir_function_impl *impl)
 {
-        nir_builder b;
-        nir_builder_init(&b, impl);
+        nir_builder b = nir_builder_create(impl);
 
         nir_foreach_block(block, impl) {
                 nir_foreach_instr_safe(instr, block)
@@ -377,8 +372,7 @@ vc4_nir_lower_io_impl(struct vc4_compile *c, nir_function_impl *impl)
 void
 vc4_nir_lower_io(nir_shader *s, struct vc4_compile *c)
 {
-        nir_foreach_function(function, s) {
-                if (function->impl)
-                        vc4_nir_lower_io_impl(c, function->impl);
+        nir_foreach_function_impl(impl, s) {
+                vc4_nir_lower_io_impl(c, impl);
         }
 }

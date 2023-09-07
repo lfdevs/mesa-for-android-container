@@ -58,10 +58,7 @@ anv_xe_create_engine(struct anv_device *device,
 
       instances[count].engine_class = intel_engine_class_to_xe(engine.engine_class);
       instances[count].engine_instance = engine.engine_instance;
-      /* TODO: handle gt_id, MTL and newer platforms will have media engines
-       * in a separated gt
-       */
-      instances[count++].gt_id = 0;
+      instances[count++].gt_id = engine.gt_id;
    }
 
    assert(device->vm_id != 0);

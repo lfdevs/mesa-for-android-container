@@ -429,9 +429,14 @@ LiveRangeInstrVisitor::visit(UNUSED LDSReadInstr *instr)
 void
 LiveRangeInstrVisitor::record_write(const Register *reg)
 {
+   if (reg->has_flag(Register::addr_or_idx))
+      return;
+
    auto addr = reg->get_addr();
-   if (addr && addr->as_register()) {
-      record_read(addr->as_register(), LiveRangeEntry::use_unspecified);
+   if (addr) {
+
+      if (addr->as_register() && !addr->as_register()->has_flag(Register::addr_or_idx))
+         record_read(addr->as_register(), LiveRangeEntry::use_unspecified);
 
       const auto av = static_cast<const LocalArrayValue *>(reg);
       auto& array = av->array();
@@ -440,7 +445,7 @@ LiveRangeInstrVisitor::record_write(const Register *reg)
 
       for (auto i = 0u; i < array.size(); ++i) {
          auto& rav = m_register_access(array(i, reg->chan()));
-         rav.record_write(m_line, m_current_scope);
+         rav.record_write(m_line > 0 ? m_line - 1 : 0, m_current_scope);
       }
    } else {
       auto& ra = m_register_access(*reg);
@@ -455,12 +460,15 @@ LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUse use
    if (!reg)
       return;
 
-   auto addr = reg->get_addr();
-   if (addr && addr->as_register()) {
-      sfn_log << SfnLog::merge << "Record reading address register " << *addr << "\n";
+   if (reg->has_flag(Register::addr_or_idx))
+      return;
 
-      auto& ra = m_register_access(*addr->as_register());
-      ra.record_read(m_line, m_current_scope, use);
+   auto addr = reg->get_addr();
+   if (addr) {
+      if (addr->as_register() && !addr->as_register()->has_flag(Register::addr_or_idx)) {
+         auto& ra = m_register_access(*addr->as_register());
+         ra.record_read(m_line, m_current_scope, use);
+      }
 
       const auto av = static_cast<const LocalArrayValue *>(reg);
       auto& array = av->array();
@@ -468,7 +476,7 @@ LiveRangeInstrVisitor::record_read(const Register *reg, LiveRangeEntry::EUse use
 
       for (auto i = 0u; i < array.size(); ++i) {
          auto& rav = m_register_access(array(i, reg->chan()));
-         rav.record_read(m_line, m_current_scope, use);
+         rav.record_read(m_line + 1, m_current_scope, use);
       }
    } else {
       sfn_log << SfnLog::merge << *reg << " read:" << m_line << "\n";

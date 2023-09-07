@@ -22,12 +22,11 @@
  */
 
 #include "radv_private.h"
-#include "vk_framebuffer.h"
 #include "vk_common_entrypoints.h"
+#include "vk_framebuffer.h"
 
 VKAPI_ATTR void VKAPI_CALL
-rage2_CmdBeginRenderPass(VkCommandBuffer commandBuffer,
-                         const VkRenderPassBeginInfo* pRenderPassBegin,
+rage2_CmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *pRenderPassBegin,
                          VkSubpassContents contents)
 {
    VK_FROM_HANDLE(vk_framebuffer, framebuffer, pRenderPassBegin->framebuffer);

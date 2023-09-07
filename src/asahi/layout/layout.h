@@ -190,6 +190,28 @@ ail_is_compressed(struct ail_layout *layout)
    return layout->tiling == AIL_TILING_TWIDDLED_COMPRESSED;
 }
 
+static inline unsigned
+ail_effective_width_sa(unsigned width_px, unsigned sample_count_sa)
+{
+   return width_px * (sample_count_sa == 4 ? 2 : 1);
+}
+
+static inline unsigned
+ail_effective_height_sa(unsigned height_px, unsigned sample_count_sa)
+{
+   return height_px * (sample_count_sa >= 2 ? 2 : 1);
+}
+
+static inline bool
+ail_can_compress(unsigned w_px, unsigned h_px, unsigned sample_count_sa)
+{
+   assert(sample_count_sa == 1 || sample_count_sa == 2 || sample_count_sa == 4);
+
+   /* Small textures cannot be compressed */
+   return ail_effective_width_sa(w_px, sample_count_sa) >= 16 &&
+          ail_effective_height_sa(h_px, sample_count_sa) >= 16;
+}
+
 void ail_make_miptree(struct ail_layout *layout);
 
 void ail_detile(void *_tiled, void *_linear, struct ail_layout *tiled_layout,

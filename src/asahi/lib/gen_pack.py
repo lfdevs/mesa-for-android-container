@@ -143,6 +143,7 @@ def to_alphanum(name):
         '"': '',
         '+': '',
         '\'': '',
+        '?': '',
     }
 
     for i, j in substitutions.items():

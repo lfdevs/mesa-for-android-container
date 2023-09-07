@@ -19,7 +19,7 @@ spill-dEQP-VK.graphicsfuzz.cov-nested-loop-undefined-smoothstep-never-executed
 
 # 60s timeout
 KHR-GLES31.core.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_MaxPatchVertices_Position_PointSize
-KHR-GL45.copy_image.functional
+KHR-GL46.copy_image.functional
 
 # These take most of a minute to run
 spec@!opengl 3.0@clearbuffer-depth-cs-probe
@@ -54,7 +54,3 @@ spec@arb_buffer_storage@bufferstorage-persistent_gles3 read coherent client-stor
 # These are redundant with arb_copy_image, so skip them to cut down
 # on CI runtime:
 spec@nv_copy_image@nv_copy_image.*
-
-# CTS bug, these will just be extremely noisy flakes until it's fixed.
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/4304
-dEQP-VK.image.queue_transfer.*

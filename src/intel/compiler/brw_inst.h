@@ -620,8 +620,10 @@ FC(send_sel_reg32_desc,       /* 4+ */ 77, 77, /* 12+ */  48,  48, devinfo->ver 
 FC(send_sel_reg32_ex_desc,    /* 4+ */ 61, 61, /* 12+ */  49,  49, devinfo->ver >= 9)
 F8(send_src0_reg_file,        /* 4+ */ 38, 37, /* 8+ */   42,  41, /* 12+ */ 66, 66)
 FC(send_src1_reg_nr,          /* 4+ */ 51, 44, /* 12+ */ 111, 104, devinfo->ver >= 9)
+FC(send_src1_len,             /* 4+ */ -1, -1, /* 12+ */ 103,  99, devinfo->verx10 >= 125)
 FC(send_src1_reg_file,        /* 4+ */ 36, 36, /* 12+ */  98,  98, devinfo->ver >= 9)
 FC(send_dst_reg_file,         /* 4+ */ 35, 35, /* 12+ */  50,  50, devinfo->ver >= 9)
+FC(send_ex_bso,               /* 4+ */ -1, -1, /* 12+ */  39,  39, devinfo->verx10 >= 125)
 /** @} */
 
 /* Message descriptor bits */

@@ -40,7 +40,7 @@ struct user_cull_stage {
 };
 
 
-static inline boolean
+static inline bool
 cull_distance_is_out(float dist)
 {
    return (dist < 0.0f) || util_is_inf_or_nan(dist);
@@ -70,7 +70,7 @@ user_cull_point(struct draw_stage *stage,
          draw_current_shader_ccdistance_output(stage->draw, cull_idx);
       unsigned idx = (num_written_clipdistances + i) % 4;
       float cull1 = header->v[0]->data[out_idx][idx];
-      boolean vert1_out = cull_distance_is_out(cull1);
+      bool vert1_out = cull_distance_is_out(cull1);
       if (vert1_out)
          return;
    }
@@ -102,8 +102,8 @@ user_cull_line(struct draw_stage *stage,
       unsigned idx = (num_written_clipdistances + i) % 4;
       float cull1 = header->v[0]->data[out_idx][idx];
       float cull2 = header->v[1]->data[out_idx][idx];
-      boolean vert1_out = cull_distance_is_out(cull1);
-      boolean vert2_out = cull_distance_is_out(cull2);
+      bool vert1_out = cull_distance_is_out(cull1);
+      bool vert2_out = cull_distance_is_out(cull2);
       if (vert1_out && vert2_out)
          return;
    }
@@ -137,9 +137,9 @@ user_cull_tri(struct draw_stage *stage,
       float cull1 = header->v[0]->data[out_idx][idx];
       float cull2 = header->v[1]->data[out_idx][idx];
       float cull3 = header->v[2]->data[out_idx][idx];
-      boolean vert1_out = cull_distance_is_out(cull1);
-      boolean vert2_out = cull_distance_is_out(cull2);
-      boolean vert3_out = cull_distance_is_out(cull3);
+      bool vert1_out = cull_distance_is_out(cull1);
+      bool vert2_out = cull_distance_is_out(cull2);
+      bool vert3_out = cull_distance_is_out(cull3);
       if (vert1_out && vert2_out && vert3_out) {
          return;
       }

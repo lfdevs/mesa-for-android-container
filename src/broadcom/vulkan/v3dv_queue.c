@@ -135,7 +135,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue, struct v3dv_job *job,
     * we handle those in the CPU.
     */
    if (info->pool->query_type == VK_QUERY_TYPE_OCCLUSION)
-      v3dv_bo_wait(job->device, info->pool->occlusion.bo, PIPE_TIMEOUT_INFINITE);
+      v3dv_bo_wait(job->device, info->pool->occlusion.bo, OS_TIMEOUT_INFINITE);
 
    if (info->pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR) {
       struct vk_sync_wait waits[info->count];
@@ -392,7 +392,7 @@ handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
 
    /* Make sure the GPU is no longer using the indirect buffer*/
    assert(info->buffer && info->buffer->mem && info->buffer->mem->bo);
-   v3dv_bo_wait(queue->device, info->buffer->mem->bo, PIPE_TIMEOUT_INFINITE);
+   v3dv_bo_wait(queue->device, info->buffer->mem->bo, OS_TIMEOUT_INFINITE);
 
    /* Map the indirect buffer and read the dispatch parameters */
    assert(info->buffer && info->buffer->mem && info->buffer->mem->bo);
@@ -757,7 +757,7 @@ handle_cl_job(struct v3dv_queue *queue,
    if (job->tmu_dirty_rcl)
       submit.flags |= DRM_V3D_SUBMIT_CL_FLUSH_CACHE;
 
-   /* If the job uses VK_KHR_buffer_device_addess we need to ensure all
+   /* If the job uses VK_KHR_buffer_device_address we need to ensure all
     * buffers flagged with VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR
     * are included.
     */
@@ -923,7 +923,7 @@ handle_csd_job(struct v3dv_queue *queue,
 
    struct drm_v3d_submit_csd *submit = &job->csd.submit;
 
-   /* If the job uses VK_KHR_buffer_device_addess we need to ensure all
+   /* If the job uses VK_KHR_buffer_device_address we need to ensure all
     * buffers flagged with VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR
     * are included.
     */

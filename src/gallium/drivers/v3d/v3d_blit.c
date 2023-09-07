@@ -56,10 +56,10 @@ v3d_blitter_save(struct v3d_context *v3d, bool op_blit, bool render_cond)
         util_blitter_save_sample_mask(v3d->blitter, v3d->sample_mask, 0);
         util_blitter_save_so_targets(v3d->blitter, v3d->streamout.num_targets,
                                      v3d->streamout.targets);
+        util_blitter_save_framebuffer(v3d->blitter, &v3d->framebuffer);
 
         if (op_blit) {
                 util_blitter_save_scissor(v3d->blitter, &v3d->scissor);
-                util_blitter_save_framebuffer(v3d->blitter, &v3d->framebuffer);
                 util_blitter_save_fragment_sampler_states(v3d->blitter,
                                                           v3d->tex[PIPE_SHADER_FRAGMENT].num_samplers,
                                                           (void **)v3d->tex[PIPE_SHADER_FRAGMENT].samplers);
@@ -174,7 +174,9 @@ v3d_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
 
         /* Initialize the sampler view. */
         struct pipe_sampler_view src_tmpl = {
-                .target = src->base.target,
+                .target = (src->base.target == PIPE_TEXTURE_CUBE_ARRAY) ?
+                          PIPE_TEXTURE_2D_ARRAY :
+                          src->base.target,
                 .format = src_format,
                 .u.tex = {
                         .first_level = info->src.level,
@@ -258,8 +260,9 @@ v3d_tfu(struct pipe_context *pctx,
         }
 
         uint32_t tex_format = v3d_get_tex_format(&screen->devinfo, pformat);
+        struct v3d_device_info *devinfo = &screen->devinfo;
 
-        if (!v3d_tfu_supports_tex_format(&screen->devinfo, tex_format, for_mipmap)) {
+        if (!v3d_X(devinfo, tfu_supports_tex_format)(tex_format, for_mipmap)) {
                 assert(for_mipmap);
                 return false;
         }
@@ -430,8 +433,9 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 {
         struct v3d_context *v3d = v3d_context(pctx);
         struct v3d_screen *screen = v3d->screen;
+        struct v3d_device_info *devinfo = &screen->devinfo;
 
-        if (screen->devinfo.ver < 40 || !info->mask)
+        if (devinfo->ver < 40 || !info->mask)
                 return;
 
         bool is_color_blit = info->mask & PIPE_MASK_RGBA;
@@ -457,11 +461,15 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
             util_format_is_depth_or_stencil(info->dst.format))
                 return;
 
-        if (!v3d_rt_format_supported(&screen->devinfo, info->src.format))
+        if ((is_depth_blit || is_stencil_blit) &&
+            !util_format_is_depth_or_stencil(info->dst.format))
                 return;
 
-        if (v3d_get_rt_format(&screen->devinfo, info->src.format) !=
-            v3d_get_rt_format(&screen->devinfo, info->dst.format))
+        if (!v3d_rt_format_supported(devinfo, info->src.format))
+                return;
+
+        if (v3d_get_rt_format(devinfo, info->src.format) !=
+            v3d_get_rt_format(devinfo, info->dst.format))
                 return;
 
         bool msaa = (info->src.resource->nr_samples > 1 ||
@@ -470,7 +478,7 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                                 info->dst.resource->nr_samples < 2);
 
         if (is_msaa_resolve &&
-            !v3d_format_supports_tlb_msaa_resolve(&screen->devinfo, info->src.format))
+            !v3d_format_supports_tlb_msaa_resolve(devinfo, info->src.format))
                 return;
 
         v3d_flush_jobs_writing_resource(v3d, info->src.resource, V3D_FLUSH_DEFAULT, false);
@@ -552,7 +560,7 @@ v3d_tlb_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 info->mask &= ~PIPE_MASK_S;
         }
 
-        v3d41_start_binning(v3d, job);
+        v3d_X(devinfo, start_binning)(v3d, job);
 
         v3d_job_submit(v3d, job);
 
@@ -915,7 +923,7 @@ extract_unorm_2xrgb10a2_component_to_4xunorm16(nir_builder *b,
                                           BITFIELD_MASK(30));
         nir_ssa_def *finalword0 = nir_ushr(b, word0, shiftw0);
         nir_ssa_def *word1 = nir_channel(b, value, 1);
-        nir_ssa_def *shiftw0tow1 = nir_isub(b, nir_imm_int(b, 30), shiftw0);
+        nir_ssa_def *shiftw0tow1 = nir_isub_imm(b, 30, shiftw0);
         nir_ssa_def *word1toword0 =  nir_ishl(b, word1, shiftw0tow1);
         finalword0 = nir_ior(b, finalword0, word1toword0);
         nir_ssa_def *finalword1 = nir_ushr(b, word1, shiftw0);

@@ -44,7 +44,7 @@
 #ifndef CSO_HASH_H
 #define CSO_HASH_H
 
-#include "pipe/p_compiler.h"
+#include "util/compiler.h"
 
 #ifdef __cplusplus
 extern "C" {

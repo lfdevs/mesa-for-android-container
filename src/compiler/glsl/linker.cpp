@@ -481,28 +481,6 @@ linker_warning(gl_shader_program *prog, const char *fmt, ...)
 }
 
 
-void
-link_invalidate_variable_locations(exec_list *ir)
-{
-   foreach_in_list(ir_instruction, node, ir) {
-      ir_variable *const var = node->as_variable();
-
-      if (var == NULL)
-         continue;
-
-      /* Only assign locations for variables that lack an explicit location.
-       * Explicit locations are set for all built-in variables, generic vertex
-       * shader inputs (via layout(location=...)), and generic fragment shader
-       * outputs (also via layout(location=...)).
-       */
-      if (!var->data.explicit_location) {
-         var->data.location = -1;
-         var->data.location_frac = 0;
-      }
-   }
-}
-
-
 /**
  * Set clip_distance_array_size based and cull_distance_array_size on the given
  * shader.
@@ -2060,8 +2038,8 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
    int vertices_out = -1;
 
    gl_prog->info.gs.invocations = 0;
-   gl_prog->info.gs.input_primitive = SHADER_PRIM_UNKNOWN;
-   gl_prog->info.gs.output_primitive = SHADER_PRIM_UNKNOWN;
+   gl_prog->info.gs.input_primitive = MESA_PRIM_UNKNOWN;
+   gl_prog->info.gs.output_primitive = MESA_PRIM_UNKNOWN;
 
    /* From the GLSL 1.50 spec, page 46:
     *
@@ -2076,26 +2054,26 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
    for (unsigned i = 0; i < num_shaders; i++) {
       struct gl_shader *shader = shader_list[i];
 
-      if (shader->info.Geom.InputType != SHADER_PRIM_UNKNOWN) {
-         if (gl_prog->info.gs.input_primitive != SHADER_PRIM_UNKNOWN &&
+      if (shader->info.Geom.InputType != MESA_PRIM_UNKNOWN) {
+         if (gl_prog->info.gs.input_primitive != MESA_PRIM_UNKNOWN &&
              gl_prog->info.gs.input_primitive !=
              shader->info.Geom.InputType) {
             linker_error(prog, "geometry shader defined with conflicting "
                          "input types\n");
             return;
          }
-         gl_prog->info.gs.input_primitive = (enum shader_prim)shader->info.Geom.InputType;
+         gl_prog->info.gs.input_primitive = (enum mesa_prim)shader->info.Geom.InputType;
       }
 
-      if (shader->info.Geom.OutputType != SHADER_PRIM_UNKNOWN) {
-         if (gl_prog->info.gs.output_primitive != SHADER_PRIM_UNKNOWN &&
+      if (shader->info.Geom.OutputType != MESA_PRIM_UNKNOWN) {
+         if (gl_prog->info.gs.output_primitive != MESA_PRIM_UNKNOWN &&
              gl_prog->info.gs.output_primitive !=
              shader->info.Geom.OutputType) {
             linker_error(prog, "geometry shader defined with conflicting "
                          "output types\n");
             return;
          }
-         gl_prog->info.gs.output_primitive = (enum shader_prim)shader->info.Geom.OutputType;
+         gl_prog->info.gs.output_primitive = (enum mesa_prim)shader->info.Geom.OutputType;
       }
 
       if (shader->info.Geom.VerticesOut != -1) {
@@ -2127,13 +2105,13 @@ link_gs_inout_layout_qualifiers(struct gl_shader_program *prog,
     * since we already know we're in the right type of shader program
     * for doing it.
     */
-   if (gl_prog->info.gs.input_primitive == SHADER_PRIM_UNKNOWN) {
+   if (gl_prog->info.gs.input_primitive == MESA_PRIM_UNKNOWN) {
       linker_error(prog,
                    "geometry shader didn't declare primitive input type\n");
       return;
    }
 
-   if (gl_prog->info.gs.output_primitive == SHADER_PRIM_UNKNOWN) {
+   if (gl_prog->info.gs.output_primitive == MESA_PRIM_UNKNOWN) {
       linker_error(prog,
                    "geometry shader didn't declare primitive output type\n");
       return;
@@ -2612,555 +2590,6 @@ resize_tes_inputs(const struct gl_constants *consts,
    }
 }
 
-/**
- * Find a contiguous set of available bits in a bitmask.
- *
- * \param used_mask     Bits representing used (1) and unused (0) locations
- * \param needed_count  Number of contiguous bits needed.
- *
- * \return
- * Base location of the available bits on success or -1 on failure.
- */
-static int
-find_available_slots(unsigned used_mask, unsigned needed_count)
-{
-   unsigned needed_mask = (1 << needed_count) - 1;
-   const int max_bit_to_test = (8 * sizeof(used_mask)) - needed_count;
-
-   /* The comparison to 32 is redundant, but without it GCC emits "warning:
-    * cannot optimize possibly infinite loops" for the loop below.
-    */
-   if ((needed_count == 0) || (max_bit_to_test < 0) || (max_bit_to_test > 32))
-      return -1;
-
-   for (int i = 0; i <= max_bit_to_test; i++) {
-      if ((needed_mask & ~used_mask) == needed_mask)
-         return i;
-
-      needed_mask <<= 1;
-   }
-
-   return -1;
-}
-
-
-#define SAFE_MASK_FROM_INDEX(i) (((i) >= 32) ? ~0 : ((1 << (i)) - 1))
-
-/**
- * Assign locations for either VS inputs or FS outputs.
- *
- * \param mem_ctx        Temporary ralloc context used for linking.
- * \param prog           Shader program whose variables need locations
- *                       assigned.
- * \param constants      Driver specific constant values for the program.
- * \param target_index   Selector for the program target to receive location
- *                       assignmnets.  Must be either \c MESA_SHADER_VERTEX or
- *                       \c MESA_SHADER_FRAGMENT.
- * \param do_assignment  Whether we are actually marking the assignment or we
- *                       are just doing a dry-run checking.
- *
- * \return
- * If locations are (or can be, in case of dry-running) successfully assigned,
- * true is returned.  Otherwise an error is emitted to the shader link log and
- * false is returned.
- */
-static bool
-assign_attribute_or_color_locations(void *mem_ctx,
-                                    gl_shader_program *prog,
-                                    const struct gl_constants *constants,
-                                    unsigned target_index,
-                                    bool do_assignment)
-{
-   /* Maximum number of generic locations.  This corresponds to either the
-    * maximum number of draw buffers or the maximum number of generic
-    * attributes.
-    */
-   unsigned max_index = (target_index == MESA_SHADER_VERTEX) ?
-      constants->Program[target_index].MaxAttribs :
-      MAX2(constants->MaxDrawBuffers, constants->MaxDualSourceDrawBuffers);
-
-   /* Mark invalid locations as being used.
-    */
-   unsigned used_locations = ~SAFE_MASK_FROM_INDEX(max_index);
-   unsigned double_storage_locations = 0;
-
-   assert((target_index == MESA_SHADER_VERTEX)
-          || (target_index == MESA_SHADER_FRAGMENT));
-
-   gl_linked_shader *const sh = prog->_LinkedShaders[target_index];
-   if (sh == NULL)
-      return true;
-
-   /* Operate in a total of four passes.
-    *
-    * 1. Invalidate the location assignments for all vertex shader inputs.
-    *
-    * 2. Assign locations for inputs that have user-defined (via
-    *    glBindVertexAttribLocation) locations and outputs that have
-    *    user-defined locations (via glBindFragDataLocation).
-    *
-    * 3. Sort the attributes without assigned locations by number of slots
-    *    required in decreasing order.  Fragmentation caused by attribute
-    *    locations assigned by the application may prevent large attributes
-    *    from having enough contiguous space.
-    *
-    * 4. Assign locations to any inputs without assigned locations.
-    */
-
-   const int generic_base = (target_index == MESA_SHADER_VERTEX)
-      ? (int) VERT_ATTRIB_GENERIC0 : (int) FRAG_RESULT_DATA0;
-
-   const enum ir_variable_mode direction =
-      (target_index == MESA_SHADER_VERTEX)
-      ? ir_var_shader_in : ir_var_shader_out;
-
-
-   /* Temporary storage for the set of attributes that need locations assigned.
-    */
-   struct temp_attr {
-      unsigned slots;
-      ir_variable *var;
-
-      /* Used below in the call to qsort. */
-      static int compare(const void *a, const void *b)
-      {
-         const temp_attr *const l = (const temp_attr *) a;
-         const temp_attr *const r = (const temp_attr *) b;
-
-         /* Reversed because we want a descending order sort below. */
-         return r->slots - l->slots;
-      }
-   } to_assign[32];
-   assert(max_index <= 32);
-
-   /* Temporary array for the set of attributes that have locations assigned,
-    * for the purpose of checking overlapping slots/components of (non-ES)
-    * fragment shader outputs.
-    */
-   ir_variable *assigned[12 * 4]; /* (max # of FS outputs) * # components */
-   unsigned assigned_attr = 0;
-
-   unsigned num_attr = 0;
-
-   foreach_in_list(ir_instruction, node, sh->ir) {
-      ir_variable *const var = node->as_variable();
-
-      if ((var == NULL) || (var->data.mode != (unsigned) direction))
-         continue;
-
-      if (var->data.explicit_location) {
-         if ((var->data.location >= (int)(max_index + generic_base))
-             || (var->data.location < 0)) {
-            linker_error(prog,
-                         "invalid explicit location %d specified for `%s'\n",
-                         (var->data.location < 0)
-                         ? var->data.location
-                         : var->data.location - generic_base,
-                         var->name);
-            return false;
-         }
-      } else if (target_index == MESA_SHADER_VERTEX) {
-         unsigned binding;
-
-         if (prog->AttributeBindings->get(binding, var->name)) {
-            assert(binding >= VERT_ATTRIB_GENERIC0);
-            var->data.location = binding;
-         }
-      } else if (target_index == MESA_SHADER_FRAGMENT) {
-         unsigned binding;
-         unsigned index;
-         const char *name = var->name;
-         const glsl_type *type = var->type;
-
-         while (type) {
-            /* Check if there's a binding for the variable name */
-            if (prog->FragDataBindings->get(binding, name)) {
-               assert(binding >= FRAG_RESULT_DATA0);
-               var->data.location = binding;
-
-               if (prog->FragDataIndexBindings->get(index, name)) {
-                  var->data.index = index;
-               }
-               break;
-            }
-
-            /* If not, but it's an array type, look for name[0] */
-            if (type->is_array()) {
-               name = ralloc_asprintf(mem_ctx, "%s[0]", name);
-               type = type->fields.array;
-               continue;
-            }
-
-            break;
-         }
-      }
-
-      if (strcmp(var->name, "gl_LastFragData") == 0)
-         continue;
-
-      /* From GL4.5 core spec, section 15.2 (Shader Execution):
-       *
-       *     "Output binding assignments will cause LinkProgram to fail:
-       *     ...
-       *     If the program has an active output assigned to a location greater
-       *     than or equal to the value of MAX_DUAL_SOURCE_DRAW_BUFFERS and has
-       *     an active output assigned an index greater than or equal to one;"
-       */
-      if (target_index == MESA_SHADER_FRAGMENT && var->data.index >= 1 &&
-          var->data.location - generic_base >=
-          (int) constants->MaxDualSourceDrawBuffers) {
-         linker_error(prog,
-                      "output location %d >= GL_MAX_DUAL_SOURCE_DRAW_BUFFERS "
-                      "with index %u for %s\n",
-                      var->data.location - generic_base, var->data.index,
-                      var->name);
-         return false;
-      }
-
-      const unsigned slots = var->type->count_attribute_slots(target_index == MESA_SHADER_VERTEX);
-
-      /* If the variable is not a built-in and has a location statically
-       * assigned in the shader (presumably via a layout qualifier), make sure
-       * that it doesn't collide with other assigned locations.  Otherwise,
-       * add it to the list of variables that need linker-assigned locations.
-       */
-      if (var->data.location != -1) {
-         if (var->data.location >= generic_base && var->data.index < 1) {
-            /* From page 61 of the OpenGL 4.0 spec:
-             *
-             *     "LinkProgram will fail if the attribute bindings assigned
-             *     by BindAttribLocation do not leave not enough space to
-             *     assign a location for an active matrix attribute or an
-             *     active attribute array, both of which require multiple
-             *     contiguous generic attributes."
-             *
-             * I think above text prohibits the aliasing of explicit and
-             * automatic assignments. But, aliasing is allowed in manual
-             * assignments of attribute locations. See below comments for
-             * the details.
-             *
-             * From OpenGL 4.0 spec, page 61:
-             *
-             *     "It is possible for an application to bind more than one
-             *     attribute name to the same location. This is referred to as
-             *     aliasing. This will only work if only one of the aliased
-             *     attributes is active in the executable program, or if no
-             *     path through the shader consumes more than one attribute of
-             *     a set of attributes aliased to the same location. A link
-             *     error can occur if the linker determines that every path
-             *     through the shader consumes multiple aliased attributes,
-             *     but implementations are not required to generate an error
-             *     in this case."
-             *
-             * From GLSL 4.30 spec, page 54:
-             *
-             *    "A program will fail to link if any two non-vertex shader
-             *     input variables are assigned to the same location. For
-             *     vertex shaders, multiple input variables may be assigned
-             *     to the same location using either layout qualifiers or via
-             *     the OpenGL API. However, such aliasing is intended only to
-             *     support vertex shaders where each execution path accesses
-             *     at most one input per each location. Implementations are
-             *     permitted, but not required, to generate link-time errors
-             *     if they detect that every path through the vertex shader
-             *     executable accesses multiple inputs assigned to any single
-             *     location. For all shader types, a program will fail to link
-             *     if explicit location assignments leave the linker unable
-             *     to find space for other variables without explicit
-             *     assignments."
-             *
-             * From OpenGL ES 3.0 spec, page 56:
-             *
-             *    "Binding more than one attribute name to the same location
-             *     is referred to as aliasing, and is not permitted in OpenGL
-             *     ES Shading Language 3.00 vertex shaders. LinkProgram will
-             *     fail when this condition exists. However, aliasing is
-             *     possible in OpenGL ES Shading Language 1.00 vertex shaders.
-             *     This will only work if only one of the aliased attributes
-             *     is active in the executable program, or if no path through
-             *     the shader consumes more than one attribute of a set of
-             *     attributes aliased to the same location. A link error can
-             *     occur if the linker determines that every path through the
-             *     shader consumes multiple aliased attributes, but implemen-
-             *     tations are not required to generate an error in this case."
-             *
-             * After looking at above references from OpenGL, OpenGL ES and
-             * GLSL specifications, we allow aliasing of vertex input variables
-             * in: OpenGL 2.0 (and above) and OpenGL ES 2.0.
-             *
-             * NOTE: This is not required by the spec but its worth mentioning
-             * here that we're not doing anything to make sure that no path
-             * through the vertex shader executable accesses multiple inputs
-             * assigned to any single location.
-             */
-
-            /* Mask representing the contiguous slots that will be used by
-             * this attribute.
-             */
-            const unsigned attr = var->data.location - generic_base;
-            const unsigned use_mask = (1 << slots) - 1;
-            const char *const string = (target_index == MESA_SHADER_VERTEX)
-               ? "vertex shader input" : "fragment shader output";
-
-            /* Generate a link error if the requested locations for this
-             * attribute exceed the maximum allowed attribute location.
-             */
-            if (attr + slots > max_index) {
-               linker_error(prog,
-                           "insufficient contiguous locations "
-                           "available for %s `%s' %d %d %d\n", string,
-                           var->name, used_locations, use_mask, attr);
-               return false;
-            }
-
-            /* Generate a link error if the set of bits requested for this
-             * attribute overlaps any previously allocated bits.
-             */
-            if ((~(use_mask << attr) & used_locations) != used_locations) {
-               if (target_index == MESA_SHADER_FRAGMENT && !prog->IsES) {
-                  /* From section 4.4.2 (Output Layout Qualifiers) of the GLSL
-                   * 4.40 spec:
-                   *
-                   *    "Additionally, for fragment shader outputs, if two
-                   *    variables are placed within the same location, they
-                   *    must have the same underlying type (floating-point or
-                   *    integer). No component aliasing of output variables or
-                   *    members is allowed.
-                   */
-                  for (unsigned i = 0; i < assigned_attr; i++) {
-                     unsigned assigned_slots =
-                        assigned[i]->type->count_attribute_slots(false);
-                     unsigned assig_attr =
-                        assigned[i]->data.location - generic_base;
-                     unsigned assigned_use_mask = (1 << assigned_slots) - 1;
-
-                     if ((assigned_use_mask << assig_attr) &
-                         (use_mask << attr)) {
-
-                        const glsl_type *assigned_type =
-                           assigned[i]->type->without_array();
-                        const glsl_type *type = var->type->without_array();
-                        if (assigned_type->base_type != type->base_type) {
-                           linker_error(prog, "types do not match for aliased"
-                                        " %ss %s and %s\n", string,
-                                        assigned[i]->name, var->name);
-                           return false;
-                        }
-
-                        unsigned assigned_component_mask =
-                           ((1 << assigned_type->vector_elements) - 1) <<
-                           assigned[i]->data.location_frac;
-                        unsigned component_mask =
-                           ((1 << type->vector_elements) - 1) <<
-                           var->data.location_frac;
-                        if (assigned_component_mask & component_mask) {
-                           linker_error(prog, "overlapping component is "
-                                        "assigned to %ss %s and %s "
-                                        "(component=%d)\n",
-                                        string, assigned[i]->name, var->name,
-                                        var->data.location_frac);
-                           return false;
-                        }
-                     }
-                  }
-               } else if (target_index == MESA_SHADER_FRAGMENT ||
-                          (prog->IsES && prog->GLSL_Version >= 300)) {
-                  linker_error(prog, "overlapping location is assigned "
-                               "to %s `%s' %d %d %d\n", string, var->name,
-                               used_locations, use_mask, attr);
-                  return false;
-               } else {
-                  linker_warning(prog, "overlapping location is assigned "
-                                 "to %s `%s' %d %d %d\n", string, var->name,
-                                 used_locations, use_mask, attr);
-               }
-            }
-
-            if (target_index == MESA_SHADER_FRAGMENT && !prog->IsES) {
-               /* Only track assigned variables for non-ES fragment shaders
-                * to avoid overflowing the array.
-                *
-                * At most one variable per fragment output component should
-                * reach this.
-                */
-               assert(assigned_attr < ARRAY_SIZE(assigned));
-               assigned[assigned_attr] = var;
-               assigned_attr++;
-            }
-
-            used_locations |= (use_mask << attr);
-
-            /* From the GL 4.5 core spec, section 11.1.1 (Vertex Attributes):
-             *
-             * "A program with more than the value of MAX_VERTEX_ATTRIBS
-             *  active attribute variables may fail to link, unless
-             *  device-dependent optimizations are able to make the program
-             *  fit within available hardware resources. For the purposes
-             *  of this test, attribute variables of the type dvec3, dvec4,
-             *  dmat2x3, dmat2x4, dmat3, dmat3x4, dmat4x3, and dmat4 may
-             *  count as consuming twice as many attributes as equivalent
-             *  single-precision types. While these types use the same number
-             *  of generic attributes as their single-precision equivalents,
-             *  implementations are permitted to consume two single-precision
-             *  vectors of internal storage for each three- or four-component
-             *  double-precision vector."
-             *
-             * Mark this attribute slot as taking up twice as much space
-             * so we can count it properly against limits.  According to
-             * issue (3) of the GL_ARB_vertex_attrib_64bit behavior, this
-             * is optional behavior, but it seems preferable.
-             */
-            if (var->type->without_array()->is_dual_slot())
-               double_storage_locations |= (use_mask << attr);
-         }
-
-         continue;
-      }
-
-      if (num_attr >= max_index) {
-         linker_error(prog, "too many %s (max %u)",
-                      target_index == MESA_SHADER_VERTEX ?
-                      "vertex shader inputs" : "fragment shader outputs",
-                      max_index);
-         return false;
-      }
-      to_assign[num_attr].slots = slots;
-      to_assign[num_attr].var = var;
-      num_attr++;
-   }
-
-   if (!do_assignment)
-      return true;
-
-   if (target_index == MESA_SHADER_VERTEX) {
-      unsigned total_attribs_size =
-         util_bitcount(used_locations & SAFE_MASK_FROM_INDEX(max_index)) +
-         util_bitcount(double_storage_locations);
-      if (total_attribs_size > max_index) {
-         linker_error(prog,
-                      "attempt to use %d vertex attribute slots only %d available ",
-                      total_attribs_size, max_index);
-         return false;
-      }
-   }
-
-   /* If all of the attributes were assigned locations by the application (or
-    * are built-in attributes with fixed locations), return early.  This should
-    * be the common case.
-    */
-   if (num_attr == 0)
-      return true;
-
-   qsort(to_assign, num_attr, sizeof(to_assign[0]), temp_attr::compare);
-
-   if (target_index == MESA_SHADER_VERTEX) {
-      /* VERT_ATTRIB_GENERIC0 is a pseudo-alias for VERT_ATTRIB_POS.  It can
-       * only be explicitly assigned by via glBindAttribLocation.  Mark it as
-       * reserved to prevent it from being automatically allocated below.
-       */
-      find_deref_visitor find("gl_Vertex");
-      find.run(sh->ir);
-      if (find.variable_found())
-         used_locations |= (1 << 0);
-   }
-
-   for (unsigned i = 0; i < num_attr; i++) {
-      /* Mask representing the contiguous slots that will be used by this
-       * attribute.
-       */
-      const unsigned use_mask = (1 << to_assign[i].slots) - 1;
-
-      int location = find_available_slots(used_locations, to_assign[i].slots);
-
-      if (location < 0) {
-         const char *const string = (target_index == MESA_SHADER_VERTEX)
-            ? "vertex shader input" : "fragment shader output";
-
-         linker_error(prog,
-                      "insufficient contiguous locations "
-                      "available for %s `%s'\n",
-                      string, to_assign[i].var->name);
-         return false;
-      }
-
-      to_assign[i].var->data.location = generic_base + location;
-      used_locations |= (use_mask << location);
-
-      if (to_assign[i].var->type->without_array()->is_dual_slot())
-         double_storage_locations |= (use_mask << location);
-   }
-
-   /* Now that we have all the locations, from the GL 4.5 core spec, section
-    * 11.1.1 (Vertex Attributes), dvec3, dvec4, dmat2x3, dmat2x4, dmat3,
-    * dmat3x4, dmat4x3, and dmat4 count as consuming twice as many attributes
-    * as equivalent single-precision types.
-    */
-   if (target_index == MESA_SHADER_VERTEX) {
-      unsigned total_attribs_size =
-         util_bitcount(used_locations & SAFE_MASK_FROM_INDEX(max_index)) +
-         util_bitcount(double_storage_locations);
-      if (total_attribs_size > max_index) {
-         linker_error(prog,
-                      "attempt to use %d vertex attribute slots only %d available ",
-                      total_attribs_size, max_index);
-         return false;
-      }
-   }
-
-   return true;
-}
-
-/**
- * Store the gl_FragDepth layout in the gl_shader_program struct.
- */
-static void
-store_fragdepth_layout(struct gl_shader_program *prog)
-{
-   if (prog->_LinkedShaders[MESA_SHADER_FRAGMENT] == NULL) {
-      return;
-   }
-
-   struct exec_list *ir = prog->_LinkedShaders[MESA_SHADER_FRAGMENT]->ir;
-
-   /* We don't look up the gl_FragDepth symbol directly because if
-    * gl_FragDepth is not used in the shader, it's removed from the IR.
-    * However, the symbol won't be removed from the symbol table.
-    *
-    * We're only interested in the cases where the variable is NOT removed
-    * from the IR.
-    */
-   foreach_in_list(ir_instruction, node, ir) {
-      ir_variable *const var = node->as_variable();
-
-      if (var == NULL || var->data.mode != ir_var_shader_out) {
-         continue;
-      }
-
-      if (strcmp(var->name, "gl_FragDepth") == 0) {
-         switch (var->data.depth_layout) {
-         case ir_depth_layout_none:
-            prog->FragDepthLayout = FRAG_DEPTH_LAYOUT_NONE;
-            return;
-         case ir_depth_layout_any:
-            prog->FragDepthLayout = FRAG_DEPTH_LAYOUT_ANY;
-            return;
-         case ir_depth_layout_greater:
-            prog->FragDepthLayout = FRAG_DEPTH_LAYOUT_GREATER;
-            return;
-         case ir_depth_layout_less:
-            prog->FragDepthLayout = FRAG_DEPTH_LAYOUT_LESS;
-            return;
-         case ir_depth_layout_unchanged:
-            prog->FragDepthLayout = FRAG_DEPTH_LAYOUT_UNCHANGED;
-            return;
-         default:
-            assert(0);
-            return;
-         }
-      }
-   }
-}
-
 
 /**
  * Initializes explicit location slots to INACTIVE_UNIFORM_EXPLICIT_LOCATION
@@ -3445,111 +2874,6 @@ verify_subroutine_associated_funcs(struct gl_shader_program *prog)
          }
       }
    }
-}
-
-
-static void
-set_always_active_io(exec_list *ir, ir_variable_mode io_mode)
-{
-   assert(io_mode == ir_var_shader_in || io_mode == ir_var_shader_out);
-
-   foreach_in_list(ir_instruction, node, ir) {
-      ir_variable *const var = node->as_variable();
-
-      if (var == NULL || var->data.mode != io_mode)
-         continue;
-
-      /* Don't set always active on builtins that haven't been redeclared */
-      if (var->data.how_declared == ir_var_declared_implicitly)
-         continue;
-
-      var->data.always_active_io = true;
-   }
-}
-
-/**
- * When separate shader programs are enabled, only input/outputs between
- * the stages of a multi-stage separate program can be safely removed
- * from the shader interface. Other inputs/outputs must remain active.
- */
-static void
-disable_varying_optimizations_for_sso(struct gl_shader_program *prog)
-{
-   unsigned first, last;
-   assert(prog->SeparateShader);
-
-   first = MESA_SHADER_STAGES;
-   last = 0;
-
-   /* Determine first and last stage. Excluding the compute stage */
-   for (unsigned i = 0; i < MESA_SHADER_COMPUTE; i++) {
-      if (!prog->_LinkedShaders[i])
-         continue;
-      if (first == MESA_SHADER_STAGES)
-         first = i;
-      last = i;
-   }
-
-   if (first == MESA_SHADER_STAGES)
-      return;
-
-   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
-      gl_linked_shader *sh = prog->_LinkedShaders[stage];
-      if (!sh)
-         continue;
-
-      /* Prevent the removal of inputs to the first and outputs from the last
-       * stage, unless they are the initial pipeline inputs or final pipeline
-       * outputs, respectively.
-       *
-       * The removal of IO between shaders in the same program is always
-       * allowed.
-       */
-      if (stage == first && stage != MESA_SHADER_VERTEX)
-         set_always_active_io(sh->ir, ir_var_shader_in);
-      if (stage == last && stage != MESA_SHADER_FRAGMENT)
-         set_always_active_io(sh->ir, ir_var_shader_out);
-   }
-}
-
-static bool
-link_varyings(const struct gl_constants *consts, struct gl_shader_program *prog,
-              void *mem_ctx)
-{
-   /* Mark all generic shader inputs and outputs as unpaired. */
-   for (unsigned i = MESA_SHADER_VERTEX; i <= MESA_SHADER_FRAGMENT; i++) {
-      if (prog->_LinkedShaders[i] != NULL) {
-         link_invalidate_variable_locations(prog->_LinkedShaders[i]->ir);
-      }
-   }
-
-   if (!assign_attribute_or_color_locations(mem_ctx, prog, consts,
-                                            MESA_SHADER_VERTEX, true)) {
-      return false;
-   }
-
-   if (!assign_attribute_or_color_locations(mem_ctx, prog, consts,
-                                            MESA_SHADER_FRAGMENT, true)) {
-      return false;
-   }
-
-   prog->last_vert_prog = NULL;
-   for (int i = MESA_SHADER_GEOMETRY; i >= MESA_SHADER_VERTEX; i--) {
-      if (prog->_LinkedShaders[i] == NULL)
-         continue;
-
-      prog->last_vert_prog = prog->_LinkedShaders[i]->Program;
-      break;
-   }
-
-   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
-      if (prog->_LinkedShaders[i] == NULL)
-         continue;
-
-      lower_vector_derefs(prog->_LinkedShaders[i]);
-   }
-
-   return true;
 }
 
 void
@@ -3837,9 +3161,6 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       }
    }
 
-   if (prog->SeparateShader)
-      disable_varying_optimizations_for_sso(prog);
-
    /* Process UBOs */
    if (!interstage_cross_validate_uniform_blocks(prog, false))
       goto done;
@@ -3848,10 +3169,6 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    if (!interstage_cross_validate_uniform_blocks(prog, true))
       goto done;
 
-   /* Do common optimization before assigning storage for attributes,
-    * uniforms, and varyings.  Later optimization could possibly make
-    * some of that unused.
-    */
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
          continue;
@@ -3863,41 +3180,17 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       if (consts->ShaderCompilerOptions[i].LowerCombinedClipCullDistance) {
          lower_clip_cull_distance(prog, prog->_LinkedShaders[i]);
       }
-
-      /* Section 13.46 (Vertex Attribute Aliasing) of the OpenGL ES 3.2
-       * specification says:
-       *
-       *    "In general, the behavior of GLSL ES should not depend on compiler
-       *    optimizations which might be implementation-dependent. Name matching
-       *    rules in most languages, including C++ from which GLSL ES is derived,
-       *    are based on declarations rather than use.
-       *
-       *    RESOLUTION: The existence of aliasing is determined by declarations
-       *    present after preprocessing."
-       *
-       * Because of this rule, we do a 'dry-run' of attribute assignment for
-       * vertex shader inputs here.
-       */
-      if (prog->IsES && i == MESA_SHADER_VERTEX) {
-         if (!assign_attribute_or_color_locations(mem_ctx, prog, consts,
-                                                  MESA_SHADER_VERTEX, false)) {
-            goto done;
-         }
-      }
-
-      /* Run it just once, since NIR will do the real optimizaiton. */
-      do_common_optimization(prog->_LinkedShaders[i]->ir, true,
-                             &consts->ShaderCompilerOptions[i],
-                             consts->NativeIntegers);
    }
 
    /* Check and validate stream emissions in geometry shaders */
    validate_geometry_shader_emissions(consts, prog);
 
-   store_fragdepth_layout(prog);
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      if (prog->_LinkedShaders[i] == NULL)
+         continue;
 
-   if(!link_varyings(consts, prog, mem_ctx))
-      goto done;
+      lower_vector_derefs(prog->_LinkedShaders[i]);
+   }
 
 done:
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {

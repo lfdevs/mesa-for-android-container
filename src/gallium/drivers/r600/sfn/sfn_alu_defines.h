@@ -242,13 +242,8 @@ enum EAluOp {
 };
 
 enum AluModifiers {
-   alu_src0_neg,
-   alu_src0_abs,
    alu_src0_rel,
-   alu_src1_neg,
-   alu_src1_abs,
    alu_src1_rel,
-   alu_src2_neg,
    alu_src2_rel,
    alu_dst_clamp,
    alu_dst_rel,
@@ -265,6 +260,7 @@ enum AluModifiers {
    alu_lds_address,
    alu_no_schedule_bias,
    alu_64bit_op,
+   alu_flag_none,
    alu_flag_count
 };
 
@@ -314,9 +310,12 @@ struct AluOp {
    static constexpr int t = 16;
    static constexpr int a = 31;
 
-   AluOp(int ns, int f, uint8_t um_r600, uint8_t um_r700, uint8_t um_eg, const char *n):
+   AluOp(int ns, bool src_mod, bool clamp, bool fp64, uint8_t um_r600,
+         uint8_t um_r700, uint8_t um_eg, const char *n):
        nsrc(ns),
-       is_float(f),
+       can_srcmod(src_mod),
+       can_clamp(clamp),
+       is_fp64(fp64),
        name(n)
    {
       unit_mask[0] = um_r600;
@@ -331,7 +330,9 @@ struct AluOp {
    }
 
    int nsrc : 4;
-   int is_float : 1;
+   int can_srcmod : 1;
+   int can_clamp : 1;
+   int is_fp64 : 1;
    uint8_t unit_mask[3];
    const char *name;
 };
@@ -470,6 +471,7 @@ struct KCacheLine {
    int bank{0};
    int addr{0};
    int len{0};
+   int index_mode{0};
    enum KCacheLockMode {
       free,
       lock_1,

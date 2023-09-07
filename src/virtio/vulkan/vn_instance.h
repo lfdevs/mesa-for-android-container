@@ -58,9 +58,6 @@ struct vn_instance {
       uint64_t roundtrip_next;
    } ring;
 
-   /* XXX staged features to be merged to core venus protocol */
-   VkVenusExperimentalFeatures100000MESA experimental;
-
    /* Between the driver and the app, VN_MAX_API_VERSION is what we advertise
     * and base.base.app_info.api_version is what the app requests.
     *

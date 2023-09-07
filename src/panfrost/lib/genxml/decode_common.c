@@ -34,6 +34,7 @@
 #include "util/simple_mtx.h"
 #include "util/u_debug.h"
 #include "util/u_dynarray.h"
+#include "util/u_hexdump.h"
 #include "decode.h"
 
 #include "compiler/bifrost/disassemble.h"
@@ -337,7 +338,7 @@ pandecode_dump_mappings(void)
       fprintf(pandecode_dump_stream, "Buffer: %s gpu %" PRIx64 "\n\n", it->name,
               it->gpu_va);
 
-      pan_hexdump(pandecode_dump_stream, it->addr, it->length, false);
+      u_hexdump(pandecode_dump_stream, it->addr, it->length, false);
       fprintf(pandecode_dump_stream, "\n");
    }
 

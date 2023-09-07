@@ -44,8 +44,8 @@ TEST_F(InstrTest, test_alu_uni_op_mov)
    EXPECT_FALSE(alu.has_alu_flag(alu_last_instr));
    EXPECT_FALSE(alu.end_group());
    EXPECT_FALSE(alu.has_alu_flag(alu_op3));
-   EXPECT_FALSE(alu.has_alu_flag(alu_src0_abs));
-   EXPECT_FALSE(alu.has_alu_flag(alu_src0_neg));
+   EXPECT_FALSE(alu.has_source_mod(0, AluInstr::mod_abs));
+   EXPECT_FALSE(alu.has_source_mod(0, AluInstr::mod_neg));
 
    EXPECT_EQ(alu.opcode(), op1_mov);
 
@@ -69,11 +69,11 @@ TEST_F(InstrTest, test_alu_uni_op_mov)
    EXPECT_FALSE(alu.psrc(1));
    EXPECT_FALSE(alu.psrc(2));
 
-   alu.set_alu_flag(alu_src0_abs);
-   EXPECT_TRUE(alu.has_alu_flag(alu_src0_abs));
+   alu.set_source_mod(0, AluInstr::mod_abs);;
+   EXPECT_TRUE(alu.has_source_mod(0, AluInstr::mod_abs));
 
-   alu.set_alu_flag(alu_src0_neg);
-   EXPECT_TRUE(alu.has_alu_flag(alu_src0_neg));
+   alu.set_source_mod(0, AluInstr::mod_neg);
+   EXPECT_TRUE(alu.has_source_mod(0, AluInstr::mod_neg));
 }
 
 TEST_F(InstrTest, test_alu_op2)
@@ -89,9 +89,9 @@ TEST_F(InstrTest, test_alu_op2)
    EXPECT_TRUE(alu.has_alu_flag(alu_last_instr));
    EXPECT_FALSE(alu.has_alu_flag(alu_op3));
 
-   EXPECT_FALSE(alu.has_alu_flag(alu_src0_neg));
-   EXPECT_FALSE(alu.has_alu_flag(alu_src1_neg));
-   EXPECT_FALSE(alu.has_alu_flag(alu_src2_neg));
+   EXPECT_FALSE(alu.has_source_mod(0, AluInstr::mod_neg));
+   EXPECT_FALSE(alu.has_source_mod(1, AluInstr::mod_neg));
+   EXPECT_FALSE(alu.has_source_mod(2, AluInstr::mod_neg));
 
    EXPECT_FALSE(alu.has_alu_flag(alu_src0_rel));
    EXPECT_FALSE(alu.has_alu_flag(alu_src1_rel));

@@ -250,15 +250,8 @@ d3d12_lower_point_sprite(nir_shader *shader,
 
    /* Create uniform to retrieve inverse of viewport size and point size:
     * (1/ViewportWidth, 1/ViewportHeight, PointSize, MaxPointSize) */
-   state.uniform = nir_variable_create(shader,
-                                       nir_var_uniform,
-                                       glsl_vec4_type(),
-                                       "d3d12_ViewportSizeRcp");
-   state.uniform->num_state_slots = 1;
-   state.uniform->state_slots = ralloc_array(state.uniform, nir_state_slot, 1);
-   memcpy(state.uniform->state_slots[0].tokens, tokens,
-          sizeof(state.uniform->state_slots[0].tokens));
-   shader->num_uniforms++;
+   state.uniform = nir_state_variable_create(shader, glsl_vec4_type(),
+                                             "d3d12_ViewportSizeRcp", tokens);
 
    /* Create new outputs for point tex coordinates */
    unsigned count = 0;
@@ -292,22 +285,19 @@ d3d12_lower_point_sprite(nir_shader *shader,
                                      next_inputs_read);
    }
 
-   nir_foreach_function(function, shader) {
-      if (function->impl) {
-         nir_builder builder;
-         nir_builder_init(&builder, function->impl);
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               if (instr->type == nir_instr_type_intrinsic)
-                  progress |= lower_instr(nir_instr_as_intrinsic(instr),
-                                          &builder,
-                                          &state);
-            }
+   nir_foreach_function_impl(impl, shader) {
+      nir_builder builder = nir_builder_create(impl);
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type == nir_instr_type_intrinsic)
+               progress |= lower_instr(nir_instr_as_intrinsic(instr),
+                                       &builder,
+                                       &state);
          }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
       }
+
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
    }
 
    shader->info.gs.output_primitive = GL_TRIANGLE_STRIP;

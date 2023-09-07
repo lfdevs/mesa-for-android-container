@@ -141,6 +141,7 @@ private:
 
    int getSubOp(nir_intrinsic_op);
    int getSubOp(nir_op);
+   int getAtomicSubOp(nir_atomic_op);
 
    CondCode getCondCode(nir_op);
 
@@ -268,21 +269,16 @@ Converter::getDType(nir_intrinsic_instr *insn)
 {
    bool isFloat, isSigned;
    switch (insn->intrinsic) {
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_global_atomic_fadd:
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_shared_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_fadd:
-      isFloat = true;
-      isSigned = false;
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_shared_atomic:
+   case nir_intrinsic_ssbo_atomic: {
+      nir_alu_type type = nir_atomic_op_type(nir_intrinsic_atomic_op(insn));
+      isFloat = type == nir_type_float;
+      isSigned = type == nir_type_int;
       break;
-   case nir_intrinsic_shared_atomic_imax:
-   case nir_intrinsic_shared_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_imin:
-      isFloat = false;
-      isSigned = true;
-      break;
+   }
    default:
       isFloat = false;
       isSigned = false;
@@ -558,30 +554,10 @@ Converter::getOperation(nir_intrinsic_op op)
       return OP_EMIT;
    case nir_intrinsic_end_primitive:
       return OP_RESTART;
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_xor:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_bindless_image_atomic_inc_wrap:
-   case nir_intrinsic_image_atomic_inc_wrap:
-   case nir_intrinsic_bindless_image_atomic_dec_wrap:
-   case nir_intrinsic_image_atomic_dec_wrap:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
+   case nir_intrinsic_image_atomic_swap:
       return OP_SUREDP;
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_image_load:
@@ -630,88 +606,43 @@ Converter::getSubOp(nir_op op)
 }
 
 int
+Converter::getAtomicSubOp(nir_atomic_op op)
+{
+   switch (op) {
+   case nir_atomic_op_fadd:
+   case nir_atomic_op_iadd:
+      return NV50_IR_SUBOP_ATOM_ADD;
+   case nir_atomic_op_iand:
+      return NV50_IR_SUBOP_ATOM_AND;
+   case nir_atomic_op_cmpxchg:
+      return NV50_IR_SUBOP_ATOM_CAS;
+   case nir_atomic_op_imax:
+   case nir_atomic_op_umax:
+      return NV50_IR_SUBOP_ATOM_MAX;
+   case nir_atomic_op_imin:
+   case nir_atomic_op_umin:
+      return NV50_IR_SUBOP_ATOM_MIN;
+   case nir_atomic_op_xchg:
+      return NV50_IR_SUBOP_ATOM_EXCH;
+   case nir_atomic_op_ior:
+      return NV50_IR_SUBOP_ATOM_OR;
+   case nir_atomic_op_ixor:
+      return NV50_IR_SUBOP_ATOM_XOR;
+   case nir_atomic_op_dec_wrap:
+      return NV50_IR_SUBOP_ATOM_DEC;
+   case nir_atomic_op_inc_wrap:
+      return NV50_IR_SUBOP_ATOM_INC;
+   default:
+      ERROR("couldn't get SubOp for atomic\n");
+      assert(false);
+      return 0;
+   }
+}
+
+int
 Converter::getSubOp(nir_intrinsic_op op)
 {
    switch (op) {
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_global_atomic_add:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_shared_atomic_add:
-   case nir_intrinsic_ssbo_atomic_add:
-      return  NV50_IR_SUBOP_ATOM_ADD;
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_global_atomic_fadd:
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_shared_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_fadd:
-      return  NV50_IR_SUBOP_ATOM_ADD;
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_global_atomic_and:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_shared_atomic_and:
-   case nir_intrinsic_ssbo_atomic_and:
-      return  NV50_IR_SUBOP_ATOM_AND;
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
-   case nir_intrinsic_global_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_shared_atomic_comp_swap:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
-      return  NV50_IR_SUBOP_ATOM_CAS;
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_global_atomic_exchange:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_shared_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_exchange:
-      return  NV50_IR_SUBOP_ATOM_EXCH;
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_global_atomic_or:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_shared_atomic_or:
-   case nir_intrinsic_ssbo_atomic_or:
-      return  NV50_IR_SUBOP_ATOM_OR;
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_global_atomic_imax:
-   case nir_intrinsic_global_atomic_umax:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_shared_atomic_imax:
-   case nir_intrinsic_shared_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_umax:
-      return  NV50_IR_SUBOP_ATOM_MAX;
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_global_atomic_imin:
-   case nir_intrinsic_global_atomic_umin:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_shared_atomic_imin:
-   case nir_intrinsic_shared_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_umin:
-      return  NV50_IR_SUBOP_ATOM_MIN;
-   case nir_intrinsic_bindless_image_atomic_xor:
-   case nir_intrinsic_global_atomic_xor:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_shared_atomic_xor:
-   case nir_intrinsic_ssbo_atomic_xor:
-      return  NV50_IR_SUBOP_ATOM_XOR;
-   case nir_intrinsic_bindless_image_atomic_inc_wrap:
-   case nir_intrinsic_image_atomic_inc_wrap:
-      return NV50_IR_SUBOP_ATOM_INC;
-   case nir_intrinsic_bindless_image_atomic_dec_wrap:
-   case nir_intrinsic_image_atomic_dec_wrap:
-      return NV50_IR_SUBOP_ATOM_DEC;
-
-   case nir_intrinsic_memory_barrier:
-   case nir_intrinsic_memory_barrier_buffer:
-   case nir_intrinsic_memory_barrier_image:
-      return NV50_IR_SUBOP_MEMBAR(M, GL);
-   case nir_intrinsic_group_memory_barrier:
-   case nir_intrinsic_memory_barrier_shared:
-      return NV50_IR_SUBOP_MEMBAR(M, CTA);
-
    case nir_intrinsic_vote_all:
       return NV50_IR_SUBOP_VOTE_ALL;
    case nir_intrinsic_vote_any:
@@ -1029,9 +960,15 @@ bool Converter::assignSlots() {
 
    uint8_t i;
    BITSET_FOREACH_SET(i, nir->info.system_values_read, SYSTEM_VALUE_MAX) {
-      info_out->sv[info_out->numSysVals].sn = tgsi_get_sysval_semantic(i);
-      info_out->sv[info_out->numSysVals].si = 0;
-      info_out->sv[info_out->numSysVals].input = 0;
+      switch (i) {
+      case SYSTEM_VALUE_BASE_GLOBAL_INVOCATION_ID:
+         continue;
+      default:
+         info_out->sv[info_out->numSysVals].sn = tgsi_get_sysval_semantic(i);
+         info_out->sv[info_out->numSysVals].si = 0;
+         info_out->sv[info_out->numSysVals].input = 0;
+         break;
+      }
 
       switch (i) {
       case SYSTEM_VALUE_VERTEX_ID:
@@ -1381,7 +1318,7 @@ Converter::parseNIR()
       info_out->prop.tp.domain = u_tess_prim_from_shader(nir->info.tess._primitive_mode);
       info_out->prop.tp.outputPatchSize = nir->info.tess.tcs_vertices_out;
       info_out->prop.tp.outputPrim =
-         nir->info.tess.point_mode ? PIPE_PRIM_POINTS : PIPE_PRIM_TRIANGLES;
+         nir->info.tess.point_mode ? MESA_PRIM_POINTS : MESA_PRIM_TRIANGLES;
       info_out->prop.tp.partitioning = (nir->info.tess.spacing + 1) % 3;
       info_out->prop.tp.winding = !nir->info.tess.ccw;
       break;
@@ -1689,16 +1626,6 @@ Converter::visit(nir_intrinsic_instr *insn)
    unsigned dest_components = nir_intrinsic_dest_components(insn);
 
    switch (op) {
-   case nir_intrinsic_load_uniform: {
-      LValues &newDefs = convert(&insn->dest);
-      const DataType dType = getDType(insn);
-      Value *indirect;
-      uint32_t coffset = getIndirect(insn, 0, 0, indirect);
-      for (uint8_t i = 0; i < dest_components; ++i) {
-         loadFrom(FILE_MEMORY_CONST, 0, dType, newDefs[i], 16 * coffset, i, indirect);
-      }
-      break;
-   }
    case nir_intrinsic_store_output:
    case nir_intrinsic_store_per_vertex_output: {
       Value *indirect;
@@ -2056,7 +1983,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       LValues &newDefs = convert(&insn->dest);
       Value *indirectIndex;
       Value *indirectOffset;
-      uint32_t index = getIndirect(&insn->src[0], 0, indirectIndex) + 1;
+      uint32_t index = getIndirect(&insn->src[0], 0, indirectIndex);
       uint32_t offset = getIndirect(&insn->src[1], 0, indirectOffset);
       if (indirectOffset)
          indirectOffset = mkOp1v(OP_MOV, TYPE_U32, getSSA(4, FILE_ADDRESS), indirectOffset);
@@ -2115,40 +2042,22 @@ Converter::visit(nir_intrinsic_instr *insn)
       info_out->io.globalAccess |= 0x1;
       break;
    }
-   case nir_intrinsic_shared_atomic_add:
-   case nir_intrinsic_shared_atomic_fadd:
-   case nir_intrinsic_shared_atomic_and:
-   case nir_intrinsic_shared_atomic_comp_swap:
-   case nir_intrinsic_shared_atomic_exchange:
-   case nir_intrinsic_shared_atomic_or:
-   case nir_intrinsic_shared_atomic_imax:
-   case nir_intrinsic_shared_atomic_imin:
-   case nir_intrinsic_shared_atomic_umax:
-   case nir_intrinsic_shared_atomic_umin:
-   case nir_intrinsic_shared_atomic_xor: {
+   case nir_intrinsic_shared_atomic:
+   case nir_intrinsic_shared_atomic_swap: {
       const DataType dType = getDType(insn);
       LValues &newDefs = convert(&insn->dest);
       Value *indirectOffset;
       uint32_t offset = getIndirect(&insn->src[0], 0, indirectOffset);
       Symbol *sym = mkSymbol(FILE_MEMORY_SHARED, 0, dType, offset);
       Instruction *atom = mkOp2(OP_ATOM, dType, newDefs[0], sym, getSrc(&insn->src[1], 0));
-      if (op == nir_intrinsic_shared_atomic_comp_swap)
+      if (op == nir_intrinsic_shared_atomic_swap)
          atom->setSrc(2, getSrc(&insn->src[2], 0));
       atom->setIndirect(0, 0, indirectOffset);
-      atom->subOp = getSubOp(op);
+      atom->subOp = getAtomicSubOp(nir_intrinsic_atomic_op(insn));
       break;
    }
-   case nir_intrinsic_ssbo_atomic_add:
-   case nir_intrinsic_ssbo_atomic_fadd:
-   case nir_intrinsic_ssbo_atomic_and:
-   case nir_intrinsic_ssbo_atomic_comp_swap:
-   case nir_intrinsic_ssbo_atomic_exchange:
-   case nir_intrinsic_ssbo_atomic_or:
-   case nir_intrinsic_ssbo_atomic_imax:
-   case nir_intrinsic_ssbo_atomic_imin:
-   case nir_intrinsic_ssbo_atomic_umax:
-   case nir_intrinsic_ssbo_atomic_umin:
-   case nir_intrinsic_ssbo_atomic_xor: {
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap: {
       const DataType dType = getDType(insn);
       LValues &newDefs = convert(&insn->dest);
       Value *indirectBuffer;
@@ -2159,26 +2068,17 @@ Converter::visit(nir_intrinsic_instr *insn)
       Symbol *sym = mkSymbol(FILE_MEMORY_BUFFER, buffer, dType, offset);
       Instruction *atom = mkOp2(OP_ATOM, dType, newDefs[0], sym,
                                 getSrc(&insn->src[2], 0));
-      if (op == nir_intrinsic_ssbo_atomic_comp_swap)
+      if (op == nir_intrinsic_ssbo_atomic_swap)
          atom->setSrc(2, getSrc(&insn->src[3], 0));
       atom->setIndirect(0, 0, indirectOffset);
       atom->setIndirect(0, 1, indirectBuffer);
-      atom->subOp = getSubOp(op);
+      atom->subOp = getAtomicSubOp(nir_intrinsic_atomic_op(insn));
 
       info_out->io.globalAccess |= 0x2;
       break;
    }
-   case nir_intrinsic_global_atomic_add:
-   case nir_intrinsic_global_atomic_fadd:
-   case nir_intrinsic_global_atomic_and:
-   case nir_intrinsic_global_atomic_comp_swap:
-   case nir_intrinsic_global_atomic_exchange:
-   case nir_intrinsic_global_atomic_or:
-   case nir_intrinsic_global_atomic_imax:
-   case nir_intrinsic_global_atomic_imin:
-   case nir_intrinsic_global_atomic_umax:
-   case nir_intrinsic_global_atomic_umin:
-   case nir_intrinsic_global_atomic_xor: {
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_global_atomic_swap: {
       const DataType dType = getDType(insn);
       LValues &newDefs = convert(&insn->dest);
       Value *address;
@@ -2187,44 +2087,22 @@ Converter::visit(nir_intrinsic_instr *insn)
       Symbol *sym = mkSymbol(FILE_MEMORY_GLOBAL, 0, dType, offset);
       Instruction *atom =
          mkOp2(OP_ATOM, dType, newDefs[0], sym, getSrc(&insn->src[1], 0));
-      if (op == nir_intrinsic_global_atomic_comp_swap)
+      if (op == nir_intrinsic_global_atomic_swap)
          atom->setSrc(2, getSrc(&insn->src[2], 0));
       atom->setIndirect(0, 0, address);
-      atom->subOp = getSubOp(op);
+      atom->subOp = getAtomicSubOp(nir_intrinsic_atomic_op(insn));
 
       info_out->io.globalAccess |= 0x2;
       break;
    }
-   case nir_intrinsic_bindless_image_atomic_add:
-   case nir_intrinsic_bindless_image_atomic_fadd:
-   case nir_intrinsic_bindless_image_atomic_and:
-   case nir_intrinsic_bindless_image_atomic_comp_swap:
-   case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_imax:
-   case nir_intrinsic_bindless_image_atomic_umax:
-   case nir_intrinsic_bindless_image_atomic_imin:
-   case nir_intrinsic_bindless_image_atomic_umin:
-   case nir_intrinsic_bindless_image_atomic_or:
-   case nir_intrinsic_bindless_image_atomic_xor:
-   case nir_intrinsic_bindless_image_atomic_inc_wrap:
-   case nir_intrinsic_bindless_image_atomic_dec_wrap:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
    case nir_intrinsic_bindless_image_load:
    case nir_intrinsic_bindless_image_samples:
    case nir_intrinsic_bindless_image_size:
    case nir_intrinsic_bindless_image_store:
-   case nir_intrinsic_image_atomic_add:
-   case nir_intrinsic_image_atomic_fadd:
-   case nir_intrinsic_image_atomic_and:
-   case nir_intrinsic_image_atomic_comp_swap:
-   case nir_intrinsic_image_atomic_exchange:
-   case nir_intrinsic_image_atomic_imax:
-   case nir_intrinsic_image_atomic_umax:
-   case nir_intrinsic_image_atomic_imin:
-   case nir_intrinsic_image_atomic_umin:
-   case nir_intrinsic_image_atomic_or:
-   case nir_intrinsic_image_atomic_xor:
-   case nir_intrinsic_image_atomic_inc_wrap:
-   case nir_intrinsic_image_atomic_dec_wrap:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_samples:
    case nir_intrinsic_image_size:
@@ -2232,6 +2110,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       std::vector<Value*> srcs, defs;
       Value *indirect;
       DataType ty;
+      int subOp = 0;
 
       uint32_t mask = 0;
       TexInstruction::Target target =
@@ -2250,41 +2129,21 @@ Converter::visit(nir_intrinsic_instr *insn)
       int lod_src = -1;
       bool bindless = false;
       switch (op) {
-      case nir_intrinsic_bindless_image_atomic_add:
-      case nir_intrinsic_bindless_image_atomic_fadd:
-      case nir_intrinsic_bindless_image_atomic_and:
-      case nir_intrinsic_bindless_image_atomic_comp_swap:
-      case nir_intrinsic_bindless_image_atomic_exchange:
-      case nir_intrinsic_bindless_image_atomic_imax:
-      case nir_intrinsic_bindless_image_atomic_umax:
-      case nir_intrinsic_bindless_image_atomic_imin:
-      case nir_intrinsic_bindless_image_atomic_umin:
-      case nir_intrinsic_bindless_image_atomic_or:
-      case nir_intrinsic_bindless_image_atomic_xor:
-      case nir_intrinsic_bindless_image_atomic_inc_wrap:
-      case nir_intrinsic_bindless_image_atomic_dec_wrap:
+      case nir_intrinsic_bindless_image_atomic:
+      case nir_intrinsic_bindless_image_atomic_swap:
          ty = getDType(insn);
          bindless = true;
          info_out->io.globalAccess |= 0x2;
          mask = 0x1;
+         subOp = getAtomicSubOp(nir_intrinsic_atomic_op(insn));
          break;
-      case nir_intrinsic_image_atomic_add:
-      case nir_intrinsic_image_atomic_fadd:
-      case nir_intrinsic_image_atomic_and:
-      case nir_intrinsic_image_atomic_comp_swap:
-      case nir_intrinsic_image_atomic_exchange:
-      case nir_intrinsic_image_atomic_imax:
-      case nir_intrinsic_image_atomic_umax:
-      case nir_intrinsic_image_atomic_imin:
-      case nir_intrinsic_image_atomic_umin:
-      case nir_intrinsic_image_atomic_or:
-      case nir_intrinsic_image_atomic_xor:
-      case nir_intrinsic_image_atomic_inc_wrap:
-      case nir_intrinsic_image_atomic_dec_wrap:
+      case nir_intrinsic_image_atomic:
+      case nir_intrinsic_image_atomic_swap:
          ty = getDType(insn);
          bindless = false;
          info_out->io.globalAccess |= 0x2;
          mask = 0x1;
+         subOp = getAtomicSubOp(nir_intrinsic_atomic_op(insn));
          break;
       case nir_intrinsic_bindless_image_load:
       case nir_intrinsic_image_load:
@@ -2305,6 +2164,7 @@ Converter::visit(nir_intrinsic_instr *insn)
          mask = 0x8;
          FALLTHROUGH;
       case nir_intrinsic_image_samples:
+         argCount = 0; /* No coordinates */
          ty = TYPE_U32;
          bindless = op == nir_intrinsic_bindless_image_samples;
          mask = 0x8;
@@ -2312,6 +2172,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       case nir_intrinsic_bindless_image_size:
       case nir_intrinsic_image_size:
          assert(nir_src_as_uint(insn->src[1]) == 0);
+         argCount = 0; /* No coordinates */
          ty = TYPE_U32;
          bindless = op == nir_intrinsic_bindless_image_size;
          break;
@@ -2357,7 +2218,7 @@ Converter::visit(nir_intrinsic_instr *insn)
       texi->tex.mask = mask;
       texi->cache = convert(nir_intrinsic_access(insn));
       texi->setType(ty);
-      texi->subOp = getSubOp(op);
+      texi->subOp = subOp;
 
       if (indirect)
          texi->setIndirectR(indirect);
@@ -2395,26 +2256,34 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       break;
    }
-   case nir_intrinsic_control_barrier: {
-      // TODO: add flag to shader_info
-      info_out->numBarriers = 1;
-      Instruction *bar = mkOp2(OP_BAR, TYPE_U32, NULL, mkImm(0), mkImm(0));
-      bar->fixed = 1;
-      bar->subOp = NV50_IR_SUBOP_BAR_SYNC;
+   case nir_intrinsic_scoped_barrier: {
+      mesa_scope exec_scope = nir_intrinsic_execution_scope(insn);
+      mesa_scope mem_scope = nir_intrinsic_memory_scope(insn);
+      nir_variable_mode modes = nir_intrinsic_memory_modes(insn);
+      nir_variable_mode valid_modes =
+         nir_var_mem_global | nir_var_image | nir_var_mem_ssbo | nir_var_mem_shared;
+
+      if (mem_scope != SCOPE_NONE && (modes & valid_modes)) {
+
+         Instruction *bar = mkOp(OP_MEMBAR, TYPE_NONE, NULL);
+         bar->fixed = 1;
+
+         if (mem_scope >= SCOPE_QUEUE_FAMILY)
+            bar->subOp = NV50_IR_SUBOP_MEMBAR(M, GL);
+         else
+            bar->subOp = NV50_IR_SUBOP_MEMBAR(M, CTA);
+      }
+
+      if (exec_scope != SCOPE_NONE &&
+          !(exec_scope == SCOPE_WORKGROUP && nir->info.stage == MESA_SHADER_TESS_CTRL)) {
+         Instruction *bar = mkOp2(OP_BAR, TYPE_U32, NULL, mkImm(0), mkImm(0));
+         bar->fixed = 1;
+         bar->subOp = NV50_IR_SUBOP_BAR_SYNC;
+         info_out->numBarriers = 1;
+      }
+
       break;
    }
-   case nir_intrinsic_group_memory_barrier:
-   case nir_intrinsic_memory_barrier:
-   case nir_intrinsic_memory_barrier_buffer:
-   case nir_intrinsic_memory_barrier_image:
-   case nir_intrinsic_memory_barrier_shared: {
-      Instruction *bar = mkOp(OP_MEMBAR, TYPE_NONE, NULL);
-      bar->fixed = 1;
-      bar->subOp = getSubOp(op);
-      break;
-   }
-   case nir_intrinsic_memory_barrier_tcs_patch:
-      break;
    case nir_intrinsic_shader_clock: {
       const DataType dType = getDType(insn);
       LValues &newDefs = convert(&insn->dest);
@@ -3336,7 +3205,6 @@ Converter::run()
    /* prepare for IO lowering */
    NIR_PASS_V(nir, nir_lower_flrp, lower_flrp, false);
    NIR_PASS_V(nir, nir_opt_deref);
-   NIR_PASS_V(nir, nir_lower_regs_to_ssa);
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
 
    /* codegen assumes vec4 alignment for memory */
@@ -3382,6 +3250,8 @@ Converter::run()
       NIR_PASS(progress, nir, nir_lower_64bit_phis);
    } while (progress);
 
+   NIR_PASS_V(nir, nir_opt_combine_barriers, NULL, NULL);
+
    nir_move_options move_options =
       (nir_move_options)(nir_move_const_undef |
                          nir_move_load_ubo |
@@ -3398,7 +3268,7 @@ Converter::run()
    NIR_PASS_V(nir, nir_lower_bool_to_int32);
    NIR_PASS_V(nir, nir_lower_bit_size, Converter::lowerBitSizeCB, this);
 
-   NIR_PASS_V(nir, nir_convert_from_ssa, true);
+   NIR_PASS_V(nir, nir_convert_from_ssa, true, false);
 
    // Garbage collect dead instructions
    nir_sweep(nir);
@@ -3446,7 +3316,7 @@ Program::makeFromNIR(struct nv50_ir_prog_info *info,
 } // namespace nv50_ir
 
 static nir_shader_compiler_options
-nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type, bool prefer_nir)
+nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type)
 {
    nir_shader_compiler_options op = {};
    op.lower_fdiv = (chipset >= NVISA_GV100_CHIPSET);
@@ -3527,8 +3397,9 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type, bool prefer_n
    op.lower_mul_2x32_64 = true; // TODO
    op.lower_rotate = (chipset < NVISA_GV100_CHIPSET);
    op.has_imul24 = false;
-   op.has_fmulz = (prefer_nir && (chipset > NVISA_G80_CHIPSET));
+   op.has_fmulz = (chipset > NVISA_G80_CHIPSET);
    op.intel_vec4 = false;
+   op.lower_uniforms_to_ubo = true;
    op.force_indirect_unrolling = (nir_variable_mode) (
       ((shader_type == PIPE_SHADER_FRAGMENT) ? nir_var_shader_out : 0) |
       /* HW doesn't support indirect addressing of fragment program inputs
@@ -3538,14 +3409,14 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type, bool prefer_n
        */
       ((chipset >= NVISA_GV100_CHIPSET && shader_type == PIPE_SHADER_FRAGMENT) ? nir_var_shader_in : 0)
    );
-   op.force_indirect_unrolling_sampler = (chipset < NVISA_GF100_CHIPSET),
+   op.force_indirect_unrolling_sampler = (chipset < NVISA_GF100_CHIPSET);
    op.max_unroll_iterations = 32;
    op.lower_int64_options = (nir_lower_int64_options) (
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_imul64 : 0) |
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_isign64 : 0) |
       nir_lower_divmod64 |
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_imul_high64 : 0) |
-      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_mov64 : 0) |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_bcsel64 : 0) |
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_icmp64 : 0) |
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_iabs64 : 0) |
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_ineg64 : 0) |
@@ -3554,7 +3425,8 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type, bool prefer_n
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_shift64 : 0) |
       nir_lower_imul_2x32_64 |
       ((chipset >= NVISA_GM107_CHIPSET) ? nir_lower_extract64 : 0) |
-      nir_lower_ufind_msb64
+      nir_lower_ufind_msb64 |
+      ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_conv64 : 0)
    );
    op.lower_doubles_options = (nir_lower_doubles_options) (
       ((chipset >= NVISA_GV100_CHIPSET) ? nir_lower_drcp : 0) |
@@ -3569,93 +3441,52 @@ nvir_nir_shader_compiler_options(int chipset, uint8_t shader_type, bool prefer_n
 }
 
 static const nir_shader_compiler_options g80_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET, PIPE_SHADER_TYPES, true);
+nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET, PIPE_SHADER_TYPES);
 static const nir_shader_compiler_options g80_fs_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET, PIPE_SHADER_FRAGMENT, true);
+nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET, PIPE_SHADER_FRAGMENT);
 static const nir_shader_compiler_options gf100_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET, PIPE_SHADER_TYPES, true);
+nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET, PIPE_SHADER_TYPES);
 static const nir_shader_compiler_options gf100_fs_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET, PIPE_SHADER_FRAGMENT, true);
+nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET, PIPE_SHADER_FRAGMENT);
 static const nir_shader_compiler_options gm107_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET, PIPE_SHADER_TYPES, true);
+nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET, PIPE_SHADER_TYPES);
 static const nir_shader_compiler_options gm107_fs_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET, PIPE_SHADER_FRAGMENT, true);
+nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET, PIPE_SHADER_FRAGMENT);
 static const nir_shader_compiler_options gv100_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET, PIPE_SHADER_TYPES, true);
+nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET, PIPE_SHADER_TYPES);
 static const nir_shader_compiler_options gv100_fs_nir_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET, PIPE_SHADER_FRAGMENT, true);
-
-static const nir_shader_compiler_options g80_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET, PIPE_SHADER_TYPES, false);
-static const nir_shader_compiler_options g80_fs_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_G80_CHIPSET, PIPE_SHADER_FRAGMENT, false);
-static const nir_shader_compiler_options gf100_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET, PIPE_SHADER_TYPES, false);
-static const nir_shader_compiler_options gf100_fs_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GF100_CHIPSET, PIPE_SHADER_FRAGMENT, false);
-static const nir_shader_compiler_options gm107_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET, PIPE_SHADER_TYPES, false);
-static const nir_shader_compiler_options gm107_fs_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GM107_CHIPSET, PIPE_SHADER_FRAGMENT, false);
-static const nir_shader_compiler_options gv100_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET, PIPE_SHADER_TYPES, false);
-static const nir_shader_compiler_options gv100_fs_tgsi_shader_compiler_options =
-nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET, PIPE_SHADER_FRAGMENT, false);
+nvir_nir_shader_compiler_options(NVISA_GV100_CHIPSET, PIPE_SHADER_FRAGMENT);
 
 const nir_shader_compiler_options *
-nv50_ir_nir_shader_compiler_options(int chipset,  uint8_t shader_type, bool prefer_nir)
+nv50_ir_nir_shader_compiler_options(int chipset,  uint8_t shader_type)
 {
    if (chipset >= NVISA_GV100_CHIPSET) {
       if (shader_type == PIPE_SHADER_FRAGMENT) {
-         if (prefer_nir)
-            return &gv100_fs_nir_shader_compiler_options;
-         else
-            return &gv100_fs_tgsi_shader_compiler_options;
+         return &gv100_fs_nir_shader_compiler_options;
       } else {
-         if (prefer_nir)
-            return &gv100_nir_shader_compiler_options;
-         else
-            return &gv100_tgsi_shader_compiler_options;
+         return &gv100_nir_shader_compiler_options;
       }
    }
 
    if (chipset >= NVISA_GM107_CHIPSET) {
       if (shader_type == PIPE_SHADER_FRAGMENT) {
-         if (prefer_nir)
-            return &gm107_fs_nir_shader_compiler_options;
-         else
-            return &gm107_fs_tgsi_shader_compiler_options;
+         return &gm107_fs_nir_shader_compiler_options;
       } else {
-         if (prefer_nir)
-            return &gm107_nir_shader_compiler_options;
-         else
-            return &gm107_tgsi_shader_compiler_options;
+         return &gm107_nir_shader_compiler_options;
       }
    }
 
    if (chipset >= NVISA_GF100_CHIPSET) {
       if (shader_type == PIPE_SHADER_FRAGMENT) {
-         if (prefer_nir)
-            return &gf100_fs_nir_shader_compiler_options;
-         else
-            return &gf100_fs_tgsi_shader_compiler_options;
+         return &gf100_fs_nir_shader_compiler_options;
       } else {
-         if (prefer_nir)
-            return &gf100_nir_shader_compiler_options;
-         else
-            return &gf100_tgsi_shader_compiler_options;
+         return &gf100_nir_shader_compiler_options;
       }
    }
 
    if (shader_type == PIPE_SHADER_FRAGMENT) {
-      if (prefer_nir)
-         return &g80_fs_nir_shader_compiler_options;
-      else
-         return &g80_fs_tgsi_shader_compiler_options;
+      return &g80_fs_nir_shader_compiler_options;
    } else {
-      if (prefer_nir)
-         return &g80_nir_shader_compiler_options;
-      else
-         return &g80_tgsi_shader_compiler_options;
+      return &g80_nir_shader_compiler_options;
    }
 }

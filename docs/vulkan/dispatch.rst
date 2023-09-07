@@ -152,6 +152,7 @@ the following in the driver's ``meson.build``, modified as necessary:
       command : [
         prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
         '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@', '--prefix', 'drv',
+        '--beta', with_vulkan_beta.to_string(),
       ],
       depend_files : vk_entrypoints_gen_depend_files,
     )

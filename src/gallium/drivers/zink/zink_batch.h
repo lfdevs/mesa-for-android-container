@@ -83,31 +83,31 @@ zink_batch_bind_db(struct zink_context *ctx);
 void
 debug_describe_zink_batch_state(char *buf, const struct zink_batch_state *ptr);
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_batch_usage_is_unflushed(const struct zink_batch_usage *u)
 {
    return u && u->unflushed;
 }
 
-static inline void
+static ALWAYS_INLINE void
 zink_batch_usage_unset(struct zink_batch_usage **u, struct zink_batch_state *bs)
 {
    (void)p_atomic_cmpxchg((uintptr_t *)u, (uintptr_t)&bs->usage, (uintptr_t)NULL);
 }
 
-static inline void
+static ALWAYS_INLINE void
 zink_batch_usage_set(struct zink_batch_usage **u, struct zink_batch_state *bs)
 {
    *u = &bs->usage;
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_batch_usage_matches(const struct zink_batch_usage *u, const struct zink_batch_state *bs)
 {
    return u == &bs->usage;
 }
 
-static inline bool
+static ALWAYS_INLINE bool
 zink_batch_usage_exists(const struct zink_batch_usage *u)
 {
    return u && (u->usage || u->unflushed);

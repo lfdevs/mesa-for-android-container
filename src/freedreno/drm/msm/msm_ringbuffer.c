@@ -514,7 +514,7 @@ msm_ringbuffer_emit_reloc(struct fd_ringbuffer *ring,
 
    ring->cur++;
 
-   if (fd_dev_64b(&pipe->dev_id)) {
+   if (pipe->is_64bit) {
       APPEND(msm_ring->cmd, relocs,
              (struct drm_msm_gem_submit_reloc){
                 .reloc_idx = reloc_idx,

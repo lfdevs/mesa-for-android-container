@@ -50,9 +50,8 @@ flip_endian(nir_builder *b, nir_ssa_def *src, unsigned cnt)
       nir_ssa_def *chan = cnt == 1 ? src : nir_channel(b, src, i);
       for (unsigned j = 0; j < 4; ++j)
          intermediate[j] = nir_ubfe_imm(b, chan, 8 * j, 8);
-      v[i] = nir_ior(
-         b, nir_ior(b, nir_ishl_imm(b, intermediate[0], 24), nir_ishl_imm(b, intermediate[1], 16)),
-         nir_ior(b, nir_ishl_imm(b, intermediate[2], 8), nir_ishl_imm(b, intermediate[3], 0)));
+      v[i] = nir_ior(b, nir_ior(b, nir_ishl_imm(b, intermediate[0], 24), nir_ishl_imm(b, intermediate[1], 16)),
+                     nir_ior(b, nir_ishl_imm(b, intermediate[2], 8), nir_ishl_imm(b, intermediate[3], 0)));
    }
    return cnt == 1 ? v[0] : nir_vec(b, v, cnt);
 }
@@ -60,13 +59,11 @@ flip_endian(nir_builder *b, nir_ssa_def *src, unsigned cnt)
 static nir_ssa_def *
 etc1_color_modifier_lookup(nir_builder *b, nir_ssa_def *x, nir_ssa_def *y)
 {
-   const unsigned table[8][2] = {{2, 8},   {5, 17},  {9, 29},   {13, 42},
-                                 {18, 60}, {24, 80}, {33, 106}, {47, 183}};
+   const unsigned table[8][2] = {{2, 8}, {5, 17}, {9, 29}, {13, 42}, {18, 60}, {24, 80}, {33, 106}, {47, 183}};
    nir_ssa_def *upper = nir_ieq_imm(b, y, 1);
    nir_ssa_def *result = NULL;
    for (unsigned i = 0; i < 8; ++i) {
-      nir_ssa_def *tmp =
-         nir_bcsel(b, upper, nir_imm_int(b, table[i][1]), nir_imm_int(b, table[i][0]));
+      nir_ssa_def *tmp = nir_bcsel(b, upper, nir_imm_int(b, table[i][1]), nir_imm_int(b, table[i][0]));
       if (result)
          result = nir_bcsel(b, nir_ieq_imm(b, x, i), tmp, result);
       else
@@ -114,8 +111,8 @@ etc_extend(nir_builder *b, nir_ssa_def *v, int bits)
 }
 
 static nir_ssa_def *
-decode_etc2_alpha(struct nir_builder *b, nir_ssa_def *alpha_payload, nir_ssa_def *linear_pixel,
-                  bool eac, nir_ssa_def *is_signed)
+decode_etc2_alpha(struct nir_builder *b, nir_ssa_def *alpha_payload, nir_ssa_def *linear_pixel, bool eac,
+                  nir_ssa_def *is_signed)
 {
    alpha_payload = flip_endian(b, alpha_payload, 2);
    nir_ssa_def *alpha_x = nir_channel(b, alpha_payload, 1);
@@ -133,15 +130,12 @@ decode_etc2_alpha(struct nir_builder *b, nir_ssa_def *alpha_payload, nir_ssa_def
       multiplier = nir_imax(b, nir_imul_imm(b, multiplier, 8), nir_imm_int(b, 1));
    }
 
-   nir_ssa_def *lsb_index =
-      nir_ubfe(b, nir_bcsel(b, nir_uge(b, bit_offset, nir_imm_int(b, 32)), alpha_y, alpha_x),
-               nir_iand_imm(b, bit_offset, 31), nir_imm_int(b, 2));
+   nir_ssa_def *lsb_index = nir_ubfe(b, nir_bcsel(b, nir_uge_imm(b, bit_offset, 32), alpha_y, alpha_x),
+                                     nir_iand_imm(b, bit_offset, 31), nir_imm_int(b, 2));
    bit_offset = nir_iadd_imm(b, bit_offset, 2);
-   nir_ssa_def *msb =
-      nir_ubfe(b, nir_bcsel(b, nir_uge(b, bit_offset, nir_imm_int(b, 32)), alpha_y, alpha_x),
-               nir_iand_imm(b, bit_offset, 31), nir_imm_int(b, 1));
-   nir_ssa_def *mod =
-      nir_ixor(b, etc1_alpha_modifier_lookup(b, table, lsb_index), nir_iadd_imm(b, msb, -1));
+   nir_ssa_def *msb = nir_ubfe(b, nir_bcsel(b, nir_uge_imm(b, bit_offset, 32), alpha_y, alpha_x),
+                               nir_iand_imm(b, bit_offset, 31), nir_imm_int(b, 1));
+   nir_ssa_def *mod = nir_ixor(b, etc1_alpha_modifier_lookup(b, table, lsb_index), nir_iadd_imm(b, msb, -1));
    nir_ssa_def *a = nir_iadd(b, base, nir_imul(b, mod, multiplier));
 
    nir_ssa_def *low_bound = nir_imm_int(b, 0);
@@ -150,8 +144,7 @@ decode_etc2_alpha(struct nir_builder *b, nir_ssa_def *alpha_payload, nir_ssa_def
    if (eac) {
       low_bound = nir_bcsel(b, is_signed, nir_imm_int(b, -1023), low_bound);
       high_bound = nir_bcsel(b, is_signed, nir_imm_int(b, 1023), nir_imm_int(b, 2047));
-      final_mult =
-         nir_bcsel(b, is_signed, nir_imm_float(b, 1 / 1023.0), nir_imm_float(b, 1 / 2047.0));
+      final_mult = nir_bcsel(b, is_signed, nir_imm_float(b, 1 / 1023.0), nir_imm_float(b, 1 / 2047.0));
    }
 
    return nir_fmul(b, nir_i2f32(b, nir_iclamp(b, a, low_bound, high_bound)), final_mult);
@@ -160,83 +153,67 @@ decode_etc2_alpha(struct nir_builder *b, nir_ssa_def *alpha_payload, nir_ssa_def
 static nir_shader *
 build_shader(struct radv_device *dev)
 {
-   const struct glsl_type *sampler_type_2d =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, true, GLSL_TYPE_UINT);
-   const struct glsl_type *sampler_type_3d =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_3D, false, false, GLSL_TYPE_UINT);
-   const struct glsl_type *img_type_2d =
-      glsl_image_type(GLSL_SAMPLER_DIM_2D, true, GLSL_TYPE_FLOAT);
-   const struct glsl_type *img_type_3d =
-      glsl_image_type(GLSL_SAMPLER_DIM_3D, false, GLSL_TYPE_FLOAT);
+   const struct glsl_type *sampler_type_2d = glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, true, GLSL_TYPE_UINT);
+   const struct glsl_type *sampler_type_3d = glsl_sampler_type(GLSL_SAMPLER_DIM_3D, false, false, GLSL_TYPE_UINT);
+   const struct glsl_type *img_type_2d = glsl_image_type(GLSL_SAMPLER_DIM_2D, true, GLSL_TYPE_FLOAT);
+   const struct glsl_type *img_type_3d = glsl_image_type(GLSL_SAMPLER_DIM_3D, false, GLSL_TYPE_FLOAT);
    nir_builder b = radv_meta_init_shader(dev, MESA_SHADER_COMPUTE, "meta_decode_etc");
    b.shader->info.workgroup_size[0] = 8;
    b.shader->info.workgroup_size[1] = 8;
 
-   nir_variable *input_img_2d =
-      nir_variable_create(b.shader, nir_var_uniform, sampler_type_2d, "s_tex_2d");
+   nir_variable *input_img_2d = nir_variable_create(b.shader, nir_var_uniform, sampler_type_2d, "s_tex_2d");
    input_img_2d->data.descriptor_set = 0;
    input_img_2d->data.binding = 0;
 
-   nir_variable *input_img_3d =
-      nir_variable_create(b.shader, nir_var_uniform, sampler_type_3d, "s_tex_3d");
+   nir_variable *input_img_3d = nir_variable_create(b.shader, nir_var_uniform, sampler_type_3d, "s_tex_3d");
    input_img_2d->data.descriptor_set = 0;
    input_img_2d->data.binding = 0;
 
-   nir_variable *output_img_2d =
-      nir_variable_create(b.shader, nir_var_image, img_type_2d, "out_img_2d");
+   nir_variable *output_img_2d = nir_variable_create(b.shader, nir_var_image, img_type_2d, "out_img_2d");
    output_img_2d->data.descriptor_set = 0;
    output_img_2d->data.binding = 1;
 
-   nir_variable *output_img_3d =
-      nir_variable_create(b.shader, nir_var_image, img_type_3d, "out_img_3d");
+   nir_variable *output_img_3d = nir_variable_create(b.shader, nir_var_image, img_type_3d, "out_img_3d");
    output_img_3d->data.descriptor_set = 0;
    output_img_3d->data.binding = 1;
 
    nir_ssa_def *global_id = get_global_ids(&b, 3);
 
    nir_ssa_def *consts = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 0), .range = 16);
-   nir_ssa_def *consts2 =
-      nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 0, .range = 4);
+   nir_ssa_def *consts2 = nir_load_push_constant(&b, 1, 32, nir_imm_int(&b, 0), .base = 0, .range = 4);
    nir_ssa_def *offset = nir_channels(&b, consts, 7);
    nir_ssa_def *format = nir_channel(&b, consts, 3);
    nir_ssa_def *image_type = nir_channel(&b, consts2, 0);
    nir_ssa_def *is_3d = nir_ieq_imm(&b, image_type, VK_IMAGE_TYPE_3D);
    nir_ssa_def *coord = nir_iadd(&b, global_id, offset);
-   nir_ssa_def *src_coord =
-      nir_vec3(&b, nir_ushr_imm(&b, nir_channel(&b, coord, 0), 2),
-               nir_ushr_imm(&b, nir_channel(&b, coord, 1), 2), nir_channel(&b, coord, 2));
+   nir_ssa_def *src_coord = nir_vec3(&b, nir_ushr_imm(&b, nir_channel(&b, coord, 0), 2),
+                                     nir_ushr_imm(&b, nir_channel(&b, coord, 1), 2), nir_channel(&b, coord, 2));
 
-   nir_variable *payload_var =
-      nir_variable_create(b.shader, nir_var_shader_temp, glsl_vec4_type(), "payload");
+   nir_variable *payload_var = nir_variable_create(b.shader, nir_var_shader_temp, glsl_vec4_type(), "payload");
    nir_push_if(&b, is_3d);
    {
-      nir_ssa_def *color = nir_txf_deref(&b, nir_build_deref_var(&b, input_img_3d), src_coord,
-                                         nir_imm_int(&b, 0));
+      nir_ssa_def *color = nir_txf_deref(&b, nir_build_deref_var(&b, input_img_3d), src_coord, nir_imm_int(&b, 0));
       nir_store_var(&b, payload_var, color, 0xf);
    }
    nir_push_else(&b, NULL);
    {
-      nir_ssa_def *color = nir_txf_deref(&b, nir_build_deref_var(&b, input_img_2d), src_coord,
-                                         nir_imm_int(&b, 0));
+      nir_ssa_def *color = nir_txf_deref(&b, nir_build_deref_var(&b, input_img_2d), src_coord, nir_imm_int(&b, 0));
       nir_store_var(&b, payload_var, color, 0xf);
    }
    nir_pop_if(&b, NULL);
 
    nir_ssa_def *pixel_coord = nir_iand_imm(&b, nir_channels(&b, coord, 3), 3);
-   nir_ssa_def *linear_pixel = nir_iadd(&b, nir_imul_imm(&b, nir_channel(&b, pixel_coord, 0), 4),
-                                        nir_channel(&b, pixel_coord, 1));
+   nir_ssa_def *linear_pixel =
+      nir_iadd(&b, nir_imul_imm(&b, nir_channel(&b, pixel_coord, 0), 4), nir_channel(&b, pixel_coord, 1));
 
    nir_ssa_def *payload = nir_load_var(&b, payload_var);
-   nir_variable *color =
-      nir_variable_create(b.shader, nir_var_shader_temp, glsl_vec4_type(), "color");
+   nir_variable *color = nir_variable_create(b.shader, nir_var_shader_temp, glsl_vec4_type(), "color");
    nir_store_var(&b, color, nir_imm_vec4(&b, 1.0, 0.0, 0.0, 1.0), 0xf);
-   nir_push_if(&b, nir_ilt(&b, format, nir_imm_int(&b, VK_FORMAT_EAC_R11_UNORM_BLOCK)));
+   nir_push_if(&b, nir_ilt_imm(&b, format, VK_FORMAT_EAC_R11_UNORM_BLOCK));
    {
-      nir_ssa_def *alpha_bits_8 =
-         nir_ige(&b, format, nir_imm_int(&b, VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK));
-      nir_ssa_def *alpha_bits_1 =
-         nir_iand(&b, nir_ige(&b, format, nir_imm_int(&b, VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK)),
-                  nir_ilt(&b, format, nir_imm_int(&b, VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK)));
+      nir_ssa_def *alpha_bits_8 = nir_ige_imm(&b, format, VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK);
+      nir_ssa_def *alpha_bits_1 = nir_iand(&b, nir_ige_imm(&b, format, VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK),
+                                           nir_ilt_imm(&b, format, VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK));
 
       nir_ssa_def *color_payload =
          nir_bcsel(&b, alpha_bits_8, nir_channels(&b, payload, 0xC), nir_channels(&b, payload, 3));
@@ -244,27 +221,22 @@ build_shader(struct radv_device *dev)
       nir_ssa_def *color_y = nir_channel(&b, color_payload, 0);
       nir_ssa_def *color_x = nir_channel(&b, color_payload, 1);
       nir_ssa_def *flip = nir_test_mask(&b, color_y, 1);
-      nir_ssa_def *subblock = nir_ushr_imm(
-         &b, nir_bcsel(&b, flip, nir_channel(&b, pixel_coord, 1), nir_channel(&b, pixel_coord, 0)),
-         1);
+      nir_ssa_def *subblock =
+         nir_ushr_imm(&b, nir_bcsel(&b, flip, nir_channel(&b, pixel_coord, 1), nir_channel(&b, pixel_coord, 0)), 1);
 
-      nir_variable *punchthrough =
-         nir_variable_create(b.shader, nir_var_shader_temp, glsl_bool_type(), "punchthrough");
-      nir_ssa_def *punchthrough_init =
-         nir_iand(&b, alpha_bits_1, nir_inot(&b, nir_test_mask(&b, color_y, 2)));
+      nir_variable *punchthrough = nir_variable_create(b.shader, nir_var_shader_temp, glsl_bool_type(), "punchthrough");
+      nir_ssa_def *punchthrough_init = nir_iand(&b, alpha_bits_1, nir_inot(&b, nir_test_mask(&b, color_y, 2)));
       nir_store_var(&b, punchthrough, punchthrough_init, 0x1);
 
-      nir_variable *etc1_compat =
-         nir_variable_create(b.shader, nir_var_shader_temp, glsl_bool_type(), "etc1_compat");
-      nir_store_var(&b, etc1_compat, nir_imm_bool(&b, false), 0x1);
+      nir_variable *etc1_compat = nir_variable_create(b.shader, nir_var_shader_temp, glsl_bool_type(), "etc1_compat");
+      nir_store_var(&b, etc1_compat, nir_imm_false(&b), 0x1);
 
       nir_variable *alpha_result =
          nir_variable_create(b.shader, nir_var_shader_temp, glsl_float_type(), "alpha_result");
       nir_push_if(&b, alpha_bits_8);
       {
-         nir_store_var(
-            &b, alpha_result,
-            decode_etc2_alpha(&b, nir_channels(&b, payload, 3), linear_pixel, false, NULL), 1);
+         nir_store_var(&b, alpha_result, decode_etc2_alpha(&b, nir_channels(&b, payload, 3), linear_pixel, false, NULL),
+                       1);
       }
       nir_push_else(&b, NULL);
       {
@@ -273,27 +245,21 @@ build_shader(struct radv_device *dev)
       nir_pop_if(&b, NULL);
 
       const struct glsl_type *uvec3_type = glsl_vector_type(GLSL_TYPE_UINT, 3);
-      nir_variable *rgb_result =
-         nir_variable_create(b.shader, nir_var_shader_temp, uvec3_type, "rgb_result");
-      nir_variable *base_rgb =
-         nir_variable_create(b.shader, nir_var_shader_temp, uvec3_type, "base_rgb");
+      nir_variable *rgb_result = nir_variable_create(b.shader, nir_var_shader_temp, uvec3_type, "rgb_result");
+      nir_variable *base_rgb = nir_variable_create(b.shader, nir_var_shader_temp, uvec3_type, "base_rgb");
       nir_store_var(&b, rgb_result, nir_imm_ivec3(&b, 255, 0, 0), 0x7);
 
-      nir_ssa_def *msb =
-         nir_iand_imm(&b, nir_ushr(&b, color_x, nir_iadd_imm(&b, linear_pixel, 15)), 2);
+      nir_ssa_def *msb = nir_iand_imm(&b, nir_ushr(&b, color_x, nir_iadd_imm(&b, linear_pixel, 15)), 2);
       nir_ssa_def *lsb = nir_iand_imm(&b, nir_ushr(&b, color_x, linear_pixel), 1);
 
-      nir_push_if(
-         &b, nir_iand(&b, nir_inot(&b, alpha_bits_1), nir_inot(&b, nir_test_mask(&b, color_y, 2))));
+      nir_push_if(&b, nir_iand(&b, nir_inot(&b, alpha_bits_1), nir_inot(&b, nir_test_mask(&b, color_y, 2))));
       {
-         nir_store_var(&b, etc1_compat, nir_imm_bool(&b, true), 1);
+         nir_store_var(&b, etc1_compat, nir_imm_true(&b), 1);
          nir_ssa_def *tmp[3];
          for (unsigned i = 0; i < 3; ++i)
             tmp[i] = etc_extend(
                &b,
-               nir_iand_imm(&b,
-                            nir_ushr(&b, color_y,
-                                     nir_isub_imm(&b, 28 - 8 * i, nir_imul_imm(&b, subblock, 4))),
+               nir_iand_imm(&b, nir_ushr(&b, color_y, nir_isub_imm(&b, 28 - 8 * i, nir_imul_imm(&b, subblock, 4))),
                             0xf),
                4);
          nir_store_var(&b, base_rgb, nir_vec(&b, tmp, 3), 0x7);
@@ -310,23 +276,22 @@ build_shader(struct radv_device *dev)
          nir_ssa_def *g1 = nir_iadd(&b, gb, gd);
          nir_ssa_def *b1 = nir_iadd(&b, bb, bd);
 
-         nir_push_if(&b, nir_ult(&b, nir_imm_int(&b, 31), r1));
+         nir_push_if(&b, nir_ugt_imm(&b, r1, 31));
          {
-            nir_ssa_def *r0 = nir_ior(&b, nir_ubfe_imm(&b, color_y, 24, 2),
-                                      nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 27, 2), 2));
+            nir_ssa_def *r0 =
+               nir_ior(&b, nir_ubfe_imm(&b, color_y, 24, 2), nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 27, 2), 2));
             nir_ssa_def *g0 = nir_ubfe_imm(&b, color_y, 20, 4);
             nir_ssa_def *b0 = nir_ubfe_imm(&b, color_y, 16, 4);
             nir_ssa_def *r2 = nir_ubfe_imm(&b, color_y, 12, 4);
             nir_ssa_def *g2 = nir_ubfe_imm(&b, color_y, 8, 4);
             nir_ssa_def *b2 = nir_ubfe_imm(&b, color_y, 4, 4);
-            nir_ssa_def *da = nir_ior(&b, nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 2, 2), 1),
-                                      nir_iand_imm(&b, color_y, 1));
+            nir_ssa_def *da =
+               nir_ior(&b, nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 2, 2), 1), nir_iand_imm(&b, color_y, 1));
             nir_ssa_def *dist = etc2_distance_lookup(&b, da);
             nir_ssa_def *index = nir_ior(&b, lsb, msb);
 
             nir_store_var(&b, punchthrough,
-                          nir_iand(&b, nir_load_var(&b, punchthrough),
-                                   nir_ieq_imm(&b, nir_iadd(&b, lsb, msb), 2)),
+                          nir_iand(&b, nir_load_var(&b, punchthrough), nir_ieq_imm(&b, nir_iadd(&b, lsb, msb), 2)),
                           0x1);
             nir_push_if(&b, nir_ieq_imm(&b, index, 0));
             {
@@ -342,48 +307,43 @@ build_shader(struct radv_device *dev)
             nir_pop_if(&b, NULL);
          }
          nir_push_else(&b, NULL);
-         nir_push_if(&b, nir_ult(&b, nir_imm_int(&b, 31), g1));
+         nir_push_if(&b, nir_ugt_imm(&b, g1, 31));
          {
             nir_ssa_def *r0 = nir_ubfe_imm(&b, color_y, 27, 4);
             nir_ssa_def *g0 = nir_ior(&b, nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 24, 3), 1),
                                       nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 20), 1));
-            nir_ssa_def *b0 = nir_ior(&b, nir_ubfe_imm(&b, color_y, 15, 3),
-                                      nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 16), 8));
+            nir_ssa_def *b0 =
+               nir_ior(&b, nir_ubfe_imm(&b, color_y, 15, 3), nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 16), 8));
             nir_ssa_def *r2 = nir_ubfe_imm(&b, color_y, 11, 4);
             nir_ssa_def *g2 = nir_ubfe_imm(&b, color_y, 7, 4);
             nir_ssa_def *b2 = nir_ubfe_imm(&b, color_y, 3, 4);
             nir_ssa_def *da = nir_iand_imm(&b, color_y, 4);
             nir_ssa_def *db = nir_iand_imm(&b, color_y, 1);
             nir_ssa_def *d = nir_iadd(&b, da, nir_imul_imm(&b, db, 2));
-            nir_ssa_def *d0 =
-               nir_iadd(&b, nir_ishl_imm(&b, r0, 16), nir_iadd(&b, nir_ishl_imm(&b, g0, 8), b0));
-            nir_ssa_def *d2 =
-               nir_iadd(&b, nir_ishl_imm(&b, r2, 16), nir_iadd(&b, nir_ishl_imm(&b, g2, 8), b2));
+            nir_ssa_def *d0 = nir_iadd(&b, nir_ishl_imm(&b, r0, 16), nir_iadd(&b, nir_ishl_imm(&b, g0, 8), b0));
+            nir_ssa_def *d2 = nir_iadd(&b, nir_ishl_imm(&b, r2, 16), nir_iadd(&b, nir_ishl_imm(&b, g2, 8), b2));
             d = nir_bcsel(&b, nir_uge(&b, d0, d2), nir_iadd_imm(&b, d, 1), d);
             nir_ssa_def *dist = etc2_distance_lookup(&b, d);
-            nir_ssa_def *base = nir_bcsel(&b, nir_ine_imm(&b, msb, 0), nir_vec3(&b, r2, g2, b2),
-                                          nir_vec3(&b, r0, g0, b0));
+            nir_ssa_def *base =
+               nir_bcsel(&b, nir_ine_imm(&b, msb, 0), nir_vec3(&b, r2, g2, b2), nir_vec3(&b, r0, g0, b0));
             base = etc_extend(&b, base, 4);
-            base = nir_iadd(&b, base,
-                            nir_imul(&b, dist, nir_isub_imm(&b, 1, nir_imul_imm(&b, lsb, 2))));
+            base = nir_iadd(&b, base, nir_imul(&b, dist, nir_isub_imm(&b, 1, nir_imul_imm(&b, lsb, 2))));
             nir_store_var(&b, rgb_result, base, 0x7);
             nir_store_var(&b, punchthrough,
-                          nir_iand(&b, nir_load_var(&b, punchthrough),
-                                   nir_ieq_imm(&b, nir_iadd(&b, lsb, msb), 2)),
+                          nir_iand(&b, nir_load_var(&b, punchthrough), nir_ieq_imm(&b, nir_iadd(&b, lsb, msb), 2)),
                           0x1);
          }
          nir_push_else(&b, NULL);
-         nir_push_if(&b, nir_ult(&b, nir_imm_int(&b, 31), b1));
+         nir_push_if(&b, nir_ugt_imm(&b, b1, 31));
          {
             nir_ssa_def *r0 = nir_ubfe_imm(&b, color_y, 25, 6);
-            nir_ssa_def *g0 = nir_ior(&b, nir_ubfe_imm(&b, color_y, 17, 6),
-                                      nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 18), 0x40));
-            nir_ssa_def *b0 =
-               nir_ior(&b, nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 11, 2), 3),
-                       nir_ior(&b, nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 11), 0x20),
-                               nir_ubfe_imm(&b, color_y, 7, 3)));
-            nir_ssa_def *rh = nir_ior(&b, nir_iand_imm(&b, color_y, 1),
-                                      nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 2, 5), 1));
+            nir_ssa_def *g0 =
+               nir_ior(&b, nir_ubfe_imm(&b, color_y, 17, 6), nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 18), 0x40));
+            nir_ssa_def *b0 = nir_ior(
+               &b, nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 11, 2), 3),
+               nir_ior(&b, nir_iand_imm(&b, nir_ushr_imm(&b, color_y, 11), 0x20), nir_ubfe_imm(&b, color_y, 7, 3)));
+            nir_ssa_def *rh =
+               nir_ior(&b, nir_iand_imm(&b, color_y, 1), nir_ishl_imm(&b, nir_ubfe_imm(&b, color_y, 2, 5), 1));
             nir_ssa_def *rv = nir_ubfe_imm(&b, color_x, 13, 6);
             nir_ssa_def *gh = nir_ubfe_imm(&b, color_x, 25, 7);
             nir_ssa_def *gv = nir_ubfe_imm(&b, color_x, 6, 7);
@@ -401,17 +361,17 @@ build_shader(struct radv_device *dev)
             bv = etc_extend(&b, bv, 6);
 
             nir_ssa_def *rgb = nir_vec3(&b, r0, g0, b0);
-            nir_ssa_def *dx = nir_imul(&b, nir_isub(&b, nir_vec3(&b, rh, gh, bh), rgb),
-                                       nir_channel(&b, pixel_coord, 0));
-            nir_ssa_def *dy = nir_imul(&b, nir_isub(&b, nir_vec3(&b, rv, gv, bv), rgb),
-                                       nir_channel(&b, pixel_coord, 1));
+            nir_ssa_def *dx =
+               nir_imul(&b, nir_isub(&b, nir_vec3(&b, rh, gh, bh), rgb), nir_channel(&b, pixel_coord, 0));
+            nir_ssa_def *dy =
+               nir_imul(&b, nir_isub(&b, nir_vec3(&b, rv, gv, bv), rgb), nir_channel(&b, pixel_coord, 1));
             rgb = nir_iadd(&b, rgb, nir_ishr_imm(&b, nir_iadd_imm(&b, nir_iadd(&b, dx, dy), 2), 2));
             nir_store_var(&b, rgb_result, rgb, 0x7);
-            nir_store_var(&b, punchthrough, nir_imm_bool(&b, false), 0x1);
+            nir_store_var(&b, punchthrough, nir_imm_false(&b), 0x1);
          }
          nir_push_else(&b, NULL);
          {
-            nir_store_var(&b, etc1_compat, nir_imm_bool(&b, true), 1);
+            nir_store_var(&b, etc1_compat, nir_imm_true(&b), 1);
             nir_ssa_def *subblock_b = nir_ine_imm(&b, subblock, 0);
             nir_ssa_def *tmp[] = {
                nir_bcsel(&b, subblock_b, r1, rb),
@@ -427,16 +387,13 @@ build_shader(struct radv_device *dev)
       nir_pop_if(&b, NULL);
       nir_push_if(&b, nir_load_var(&b, etc1_compat));
       {
-         nir_ssa_def *etc1_table_index = nir_ubfe(
-            &b, color_y, nir_isub_imm(&b, 5, nir_imul_imm(&b, subblock, 3)), nir_imm_int(&b, 3));
+         nir_ssa_def *etc1_table_index =
+            nir_ubfe(&b, color_y, nir_isub_imm(&b, 5, nir_imul_imm(&b, subblock, 3)), nir_imm_int(&b, 3));
          nir_ssa_def *sgn = nir_isub_imm(&b, 1, msb);
          sgn = nir_bcsel(&b, nir_load_var(&b, punchthrough), nir_imul(&b, sgn, lsb), sgn);
          nir_store_var(&b, punchthrough,
-                       nir_iand(&b, nir_load_var(&b, punchthrough),
-                                nir_ieq_imm(&b, nir_iadd(&b, lsb, msb), 2)),
-                       0x1);
-         nir_ssa_def *off =
-            nir_imul(&b, etc1_color_modifier_lookup(&b, etc1_table_index, lsb), sgn);
+                       nir_iand(&b, nir_load_var(&b, punchthrough), nir_ieq_imm(&b, nir_iadd(&b, lsb, msb), 2)), 0x1);
+         nir_ssa_def *off = nir_imul(&b, etc1_color_modifier_lookup(&b, etc1_table_index, lsb), sgn);
          nir_ssa_def *result = nir_iadd(&b, nir_load_var(&b, base_rgb), off);
          nir_store_var(&b, rgb_result, result, 0x7);
       }
@@ -449,8 +406,7 @@ build_shader(struct radv_device *dev)
       nir_pop_if(&b, NULL);
       nir_ssa_def *col[4];
       for (unsigned i = 0; i < 3; ++i)
-         col[i] = nir_fdiv(&b, nir_i2f32(&b, nir_channel(&b, nir_load_var(&b, rgb_result), i)),
-                           nir_imm_float(&b, 255.0));
+         col[i] = nir_fdiv_imm(&b, nir_i2f32(&b, nir_channel(&b, nir_load_var(&b, rgb_result), i)), 255.0);
       col[3] = nir_load_var(&b, alpha_result);
       nir_store_var(&b, color, nir_vec(&b, col, 4), 0xf);
    }
@@ -460,8 +416,7 @@ build_shader(struct radv_device *dev)
                                        nir_ieq_imm(&b, format, VK_FORMAT_EAC_R11G11_SNORM_BLOCK));
       nir_ssa_def *val[4];
       for (int i = 0; i < 2; ++i) {
-         val[i] = decode_etc2_alpha(&b, nir_channels(&b, payload, 3 << (2 * i)), linear_pixel, true,
-                                    is_signed);
+         val[i] = decode_etc2_alpha(&b, nir_channels(&b, payload, 3 << (2 * i)), linear_pixel, true, is_signed);
       }
       val[2] = nir_imm_float(&b, 0.0);
       val[3] = nir_imm_float(&b, 1.0);
@@ -475,15 +430,13 @@ build_shader(struct radv_device *dev)
 
    nir_push_if(&b, is_3d);
    {
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img_3d)->dest.ssa, img_coord,
-                            nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0),
-                            .image_dim = GLSL_SAMPLER_DIM_3D);
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img_3d)->dest.ssa, img_coord, nir_ssa_undef(&b, 1, 32),
+                            outval, nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_3D);
    }
    nir_push_else(&b, NULL);
    {
-      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img_2d)->dest.ssa, img_coord,
-                            nir_ssa_undef(&b, 1, 32), outval, nir_imm_int(&b, 0),
-                            .image_dim = GLSL_SAMPLER_DIM_2D, .image_array = true);
+      nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img_2d)->dest.ssa, img_coord, nir_ssa_undef(&b, 1, 32),
+                            outval, nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D, .image_array = true);
    }
    nir_pop_if(&b, NULL);
    return b.shader;
@@ -493,25 +446,23 @@ static VkResult
 create_layout(struct radv_device *device)
 {
    VkResult result;
-   VkDescriptorSetLayoutCreateInfo ds_create_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-      .bindingCount = 2,
-      .pBindings = (VkDescriptorSetLayoutBinding[]){
-         {.binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-          .pImmutableSamplers = NULL},
-         {.binding = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-          .pImmutableSamplers = NULL},
-      }};
+   VkDescriptorSetLayoutCreateInfo ds_create_info = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                                                     .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+                                                     .bindingCount = 2,
+                                                     .pBindings = (VkDescriptorSetLayoutBinding[]){
+                                                        {.binding = 0,
+                                                         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                                         .descriptorCount = 1,
+                                                         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                                                         .pImmutableSamplers = NULL},
+                                                        {.binding = 1,
+                                                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                                         .descriptorCount = 1,
+                                                         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                                                         .pImmutableSamplers = NULL},
+                                                     }};
 
-   result = radv_CreateDescriptorSetLayout(radv_device_to_handle(device), &ds_create_info,
-                                           &device->meta_state.alloc,
+   result = radv_CreateDescriptorSetLayout(radv_device_to_handle(device), &ds_create_info, &device->meta_state.alloc,
                                            &device->meta_state.etc_decode.ds_layout);
    if (result != VK_SUCCESS)
       goto fail;
@@ -524,9 +475,8 @@ create_layout(struct radv_device *device)
       .pPushConstantRanges = &(VkPushConstantRange){VK_SHADER_STAGE_COMPUTE_BIT, 0, 20},
    };
 
-   result =
-      radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info,
-                                &device->meta_state.alloc, &device->meta_state.etc_decode.p_layout);
+   result = radv_CreatePipelineLayout(radv_device_to_handle(device), &pl_create_info, &device->meta_state.alloc,
+                                      &device->meta_state.etc_decode.p_layout);
    if (result != VK_SUCCESS)
       goto fail;
    return VK_SUCCESS;
@@ -564,8 +514,8 @@ create_decode_pipeline(struct radv_device *device, VkPipeline *pipeline)
       .layout = device->meta_state.resolve_compute.p_layout,
    };
 
-   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache,
-                                         &vk_pipeline_info, NULL, pipeline);
+   result = radv_compute_pipeline_create(radv_device_to_handle(device), device->meta_state.cache, &vk_pipeline_info,
+                                         NULL, pipeline);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -602,10 +552,9 @@ radv_device_finish_meta_etc_decode_state(struct radv_device *device)
 {
    struct radv_meta_state *state = &device->meta_state;
    radv_DestroyPipeline(radv_device_to_handle(device), state->etc_decode.pipeline, &state->alloc);
-   radv_DestroyPipelineLayout(radv_device_to_handle(device), state->etc_decode.p_layout,
-                              &state->alloc);
-   device->vk.dispatch_table.DestroyDescriptorSetLayout(radv_device_to_handle(device),
-                                                        state->etc_decode.ds_layout, &state->alloc);
+   radv_DestroyPipelineLayout(radv_device_to_handle(device), state->etc_decode.p_layout, &state->alloc);
+   device->vk.dispatch_table.DestroyDescriptorSetLayout(radv_device_to_handle(device), state->etc_decode.ds_layout,
+                                                        &state->alloc);
 }
 
 static VkPipeline
@@ -628,63 +577,59 @@ radv_get_etc_decode_pipeline(struct radv_cmd_buffer *cmd_buffer)
 }
 
 static void
-decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview,
-           struct radv_image_view *dest_iview, const VkOffset3D *offset, const VkExtent3D *extent)
+decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview, struct radv_image_view *dst_iview,
+           const VkOffset3D *offset, const VkExtent3D *extent)
 {
    struct radv_device *device = cmd_buffer->device;
 
-   radv_meta_push_descriptor_set(
-      cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, device->meta_state.resolve_compute.p_layout,
-      0, /* set */
-      2, /* descriptorWriteCount */
-      (VkWriteDescriptorSet[]){{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                .dstBinding = 0,
-                                .dstArrayElement = 0,
-                                .descriptorCount = 1,
-                                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                .pImageInfo =
-                                   (VkDescriptorImageInfo[]){
-                                      {.sampler = VK_NULL_HANDLE,
-                                       .imageView = radv_image_view_to_handle(src_iview),
-                                       .imageLayout = VK_IMAGE_LAYOUT_GENERAL},
-                                   }},
-                               {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                                .dstBinding = 1,
-                                .dstArrayElement = 0,
-                                .descriptorCount = 1,
-                                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                .pImageInfo = (VkDescriptorImageInfo[]){
-                                   {
-                                      .sampler = VK_NULL_HANDLE,
-                                      .imageView = radv_image_view_to_handle(dest_iview),
-                                      .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-                                   },
-                                }}});
+   radv_meta_push_descriptor_set(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                 device->meta_state.resolve_compute.p_layout, 0, /* set */
+                                 2,                                              /* descriptorWriteCount */
+                                 (VkWriteDescriptorSet[]){{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                                           .dstBinding = 0,
+                                                           .dstArrayElement = 0,
+                                                           .descriptorCount = 1,
+                                                           .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                                           .pImageInfo =
+                                                              (VkDescriptorImageInfo[]){
+                                                                 {.sampler = VK_NULL_HANDLE,
+                                                                  .imageView = radv_image_view_to_handle(src_iview),
+                                                                  .imageLayout = VK_IMAGE_LAYOUT_GENERAL},
+                                                              }},
+                                                          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                                           .dstBinding = 1,
+                                                           .dstArrayElement = 0,
+                                                           .descriptorCount = 1,
+                                                           .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                                           .pImageInfo = (VkDescriptorImageInfo[]){
+                                                              {
+                                                                 .sampler = VK_NULL_HANDLE,
+                                                                 .imageView = radv_image_view_to_handle(dst_iview),
+                                                                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+                                                              },
+                                                           }}});
 
    VkPipeline pipeline = radv_get_etc_decode_pipeline(cmd_buffer);
 
-   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE,
-                        pipeline);
+   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
    unsigned push_constants[5] = {
       offset->x, offset->y, offset->z, src_iview->image->vk.format, src_iview->image->vk.image_type,
    };
 
-   radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer),
-                         device->meta_state.resolve_compute.p_layout, VK_SHADER_STAGE_COMPUTE_BIT,
-                         0, 20, push_constants);
+   radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.resolve_compute.p_layout,
+                         VK_SHADER_STAGE_COMPUTE_BIT, 0, 20, push_constants);
    radv_unaligned_dispatch(cmd_buffer, extent->width, extent->height, extent->depth);
 }
 
 void
-radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-                     VkImageLayout layout, const VkImageSubresourceLayers *subresource,
-                     VkOffset3D offset, VkExtent3D extent)
+radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
+                     const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent)
 {
    struct radv_meta_saved_state saved_state;
    radv_meta_save(&saved_state, cmd_buffer,
-                  RADV_META_SAVE_COMPUTE_PIPELINE | RADV_META_SAVE_CONSTANTS |
-                     RADV_META_SAVE_DESCRIPTORS | RADV_META_SUSPEND_PREDICATING);
+                  RADV_META_SAVE_COMPUTE_PIPELINE | RADV_META_SAVE_CONSTANTS | RADV_META_SAVE_DESCRIPTORS |
+                     RADV_META_SUSPEND_PREDICATING);
 
    uint32_t base_slice = radv_meta_get_iview_layer(image, subresource, &offset);
    uint32_t slice_count = image->vk.image_type == VK_IMAGE_TYPE_3D ? extent.depth : subresource->layerCount;
@@ -692,27 +637,25 @@ radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
    extent = vk_image_sanitize_extent(&image->vk, extent);
    offset = vk_image_sanitize_offset(&image->vk, offset);
 
-   VkFormat load_format = vk_format_get_blocksize(image->vk.format) == 16
-                             ? VK_FORMAT_R32G32B32A32_UINT
-                             : VK_FORMAT_R32G32_UINT;
+   VkFormat load_format =
+      vk_format_get_blocksize(image->vk.format) == 16 ? VK_FORMAT_R32G32B32A32_UINT : VK_FORMAT_R32G32_UINT;
    struct radv_image_view src_iview;
-   radv_image_view_init(
-      &src_iview, cmd_buffer->device,
-      &(VkImageViewCreateInfo){
-         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-         .image = radv_image_to_handle(image),
-         .viewType = radv_meta_get_view_type(image),
-         .format = load_format,
-         .subresourceRange =
-            {
-               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-               .baseMipLevel = subresource->mipLevel,
-               .levelCount = 1,
-               .baseArrayLayer = 0,
-               .layerCount = subresource->baseArrayLayer + subresource->layerCount,
-            },
-      },
-      0, NULL);
+   radv_image_view_init(&src_iview, cmd_buffer->device,
+                        &(VkImageViewCreateInfo){
+                           .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                           .image = radv_image_to_handle(image),
+                           .viewType = radv_meta_get_view_type(image),
+                           .format = load_format,
+                           .subresourceRange =
+                              {
+                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = subresource->mipLevel,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = subresource->baseArrayLayer + subresource->layerCount,
+                              },
+                        },
+                        0, NULL);
 
    VkFormat store_format;
    switch (image->vk.format) {
@@ -731,30 +674,29 @@ radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
    default:
       store_format = VK_FORMAT_R8G8B8A8_UNORM;
    }
-   struct radv_image_view dest_iview;
-   radv_image_view_init(
-      &dest_iview, cmd_buffer->device,
-      &(VkImageViewCreateInfo){
-         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-         .image = radv_image_to_handle(image),
-         .viewType = radv_meta_get_view_type(image),
-         .format = store_format,
-         .subresourceRange =
-            {
-               .aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT,
-               .baseMipLevel = subresource->mipLevel,
-               .levelCount = 1,
-               .baseArrayLayer = 0,
-               .layerCount = subresource->baseArrayLayer + subresource->layerCount,
-            },
-      },
-      0, NULL);
+   struct radv_image_view dst_iview;
+   radv_image_view_init(&dst_iview, cmd_buffer->device,
+                        &(VkImageViewCreateInfo){
+                           .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                           .image = radv_image_to_handle(image),
+                           .viewType = radv_meta_get_view_type(image),
+                           .format = store_format,
+                           .subresourceRange =
+                              {
+                                 .aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT,
+                                 .baseMipLevel = subresource->mipLevel,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = subresource->baseArrayLayer + subresource->layerCount,
+                              },
+                        },
+                        0, NULL);
 
-   decode_etc(cmd_buffer, &src_iview, &dest_iview, &(VkOffset3D){offset.x, offset.y, base_slice},
+   decode_etc(cmd_buffer, &src_iview, &dst_iview, &(VkOffset3D){offset.x, offset.y, base_slice},
               &(VkExtent3D){extent.width, extent.height, slice_count});
 
    radv_image_view_finish(&src_iview);
-   radv_image_view_finish(&dest_iview);
+   radv_image_view_finish(&dst_iview);
 
    radv_meta_restore(&saved_state, cmd_buffer);
 }
