@@ -63,7 +63,12 @@ else
   # radv/lavapipe needs LLVM and the Vulkan loader, so only build on the subset of
   # arches where we have LLVM enabled and where the Vulkan loader is built.
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
-	VULKAN_DRIVERS += amd swrast virtio
+  # drop virtio from armel, it doesn't build
+	ifneq (,$(filter $(DEB_HOST_ARCH), armel))
+		VULKAN_DRIVERS += amd swrast
+	else
+		VULKAN_DRIVERS += amd swrast virtio
+	endif
   endif
 
   # Only enable amd on riscv64, swrast needs CPU JIT support which doesn't work properly yet
@@ -85,7 +90,7 @@ else
 	# etnaviv, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
 		GALLIUM_DRIVERS += etnaviv panfrost svga tegra vc4 v3d
-		VULKAN_DRIVERS += broadcom freedreno panfrost
+		VULKAN_DRIVERS += broadcom freedreno
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64 riscv64))

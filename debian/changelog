@@ -1,3 +1,12 @@
+mesa (23.2.0~rc3-2) unstable; urgency=medium
+
+  * Upload to unstable.
+  * rules: Disable panfrost vulkan driver again as upstream doesn't want
+    it shipped yet.
+  * rules: Drop virtio from armel, FTBFS.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 19 Sep 2023 11:46:59 +0300
+
 mesa (23.2.0~rc3-1) experimental; urgency=medium
 
   * New upstream release candidate.
