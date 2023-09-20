@@ -1,3 +1,13 @@
+mesa (23.2.0~rc3-3) unstable; urgency=medium
+
+  * control, rules: Drop mipsel.
+  * rules: Update archs which have rustc (add powerpc, ppc64, riscv64,
+    x32)
+  * egl-wayland-Always-initialise-fd_display_gpu.patch: Re-add the fix
+    for gtk4 autopkgtests.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 20 Sep 2023 15:49:02 +0300
+
 mesa (23.2.0~rc3-2) unstable; urgency=medium
 
   * Upload to unstable.
@@ -16,6 +26,12 @@ mesa (23.2.0~rc3-1) experimental; urgency=medium
     are fixed with current toolchain.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 07 Sep 2023 15:28:51 +0300
+
+mesa (23.1.7-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 Sep 2023 13:32:25 +0300
 
 mesa (23.1.6-1) unstable; urgency=medium
 
