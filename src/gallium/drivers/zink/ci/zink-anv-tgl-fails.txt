@@ -117,7 +117,6 @@ glx@glx-buffer-age,Fail
 glx@glx-buffer-age vblank_mode=0,Fail
 
 glx@glx-swap-pixmap-bad,Fail
-glx@glx-tfp,Crash
 
 # ../src/gallium/drivers/zink/zink_kopper.c:859: zink_kopper_update: Assertion `pres->bind & PIPE_BIND_DISPLAY_TARGET' failed.
 glx@glx-visuals-depth -pixmap,Crash

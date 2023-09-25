@@ -1442,6 +1442,7 @@ static const driOptionDescription dzn_dri_options[] = {
    DRI_CONF_SECTION_DEBUG
       DRI_CONF_DZN_CLAIM_WIDE_LINES(false)
       DRI_CONF_DZN_ENABLE_8BIT_LOADS_STORES(false)
+      DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
    DRI_CONF_SECTION_END
 };
 

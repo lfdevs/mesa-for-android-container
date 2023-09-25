@@ -621,6 +621,9 @@ msm_bo_init_dmabuf(struct tu_device *dev,
    if (real_size < 0 || (uint64_t) real_size < size)
       return vk_error(dev, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
+   /* iova allocation needs to consider the object's *real* size: */
+   size = real_size;
+
    /* Importing the same dmabuf several times would yield the same
     * gem_handle. Thus there could be a race when destroying
     * BO and importing the same dmabuf from different threads.

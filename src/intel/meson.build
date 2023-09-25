@@ -22,12 +22,18 @@ inc_intel = include_directories('.')
 
 subdir('genxml')
 subdir('dev')
-subdir('blorp')
+if with_intel_hasvk or with_intel_vk or with_gallium_crocus or with_gallium_iris
+  subdir('blorp')
+endif
 subdir('isl')
 subdir('common')
 subdir('compiler')
-subdir('perf')
-subdir('ds')
+if with_intel_hasvk or with_intel_vk or with_gallium_crocus or with_gallium_iris or with_intel_tools
+  subdir('perf')
+endif
+if with_intel_hasvk or with_intel_vk or with_gallium_iris
+  subdir('ds')
+endif
 if with_intel_tools
   subdir('tools')
 endif

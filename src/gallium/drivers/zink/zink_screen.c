@@ -359,7 +359,7 @@ zink_screen_update_pipeline_cache(struct zink_screen *screen, struct zink_progra
 
    if (in_thread)
       cache_put_job(pg, screen, 0);
-   else
+   else if (util_queue_fence_is_signalled(&pg->cache_fence))
       util_queue_add_job(&screen->cache_put_thread, pg, &pg->cache_fence, cache_put_job, NULL, 0);
 }
 

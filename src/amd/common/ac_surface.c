@@ -2211,9 +2211,8 @@ static int gfx9_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
    AddrSurfInfoIn.flags.depth = (surf->flags & RADEON_SURF_ZBUFFER) != 0;
    AddrSurfInfoIn.flags.display = get_display_flag(config, surf);
    /* flags.texture currently refers to TC-compatible HTILE */
-   AddrSurfInfoIn.flags.texture = !(surf->flags & RADEON_SURF_NO_TEXTURE) &&
-                                  (is_color_surface ||
-                                   surf->flags & RADEON_SURF_TC_COMPATIBLE_HTILE);
+   AddrSurfInfoIn.flags.texture = (is_color_surface && !(surf->flags & RADEON_SURF_NO_TEXTURE)) ||
+                                  (surf->flags & RADEON_SURF_TC_COMPATIBLE_HTILE);
    AddrSurfInfoIn.flags.opt4space = 1;
    AddrSurfInfoIn.flags.prt = (surf->flags & RADEON_SURF_PRT) != 0;
 

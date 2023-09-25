@@ -71,8 +71,8 @@ enum radeon_micro_mode
 #define RADEON_SURF_PRT                   (1ull << 32)
 #define RADEON_SURF_VRS_RATE              (1ull << 33)
 /* Block compressed + linear format is not supported in addrlib. These surface can be
- * used as transfer resource. This flag indicates not to set flags.texture flag in
- * gfx9_compute_surface(). */
+ * used as transfer resource. This flag indicates not to set flags.texture flag for
+ * color surface in gfx9_compute_surface(). */
 #define RADEON_SURF_NO_TEXTURE            (1ull << 34)
 #define RADEON_SURF_NO_STENCIL_ADJUST     (1ull << 35)
 

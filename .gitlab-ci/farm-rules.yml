@@ -134,6 +134,7 @@
       if: '$RUNNER_FARM_LOCATION == "keywords" && $CI_PIPELINE_SOURCE != "schedule"'
       when: on_success
     - changes: [ .ci-farms-disabled/* ]
+      if: '$CI_PIPELINE_SOURCE != "schedule"'
       when: never
 
 .valve-farm-manual-rules:

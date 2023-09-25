@@ -513,11 +513,14 @@ populate_task_prog_key(const struct anv_device *device,
 static void
 populate_mesh_prog_key(const struct anv_device *device,
                        bool robust_buffer_access,
+                       bool compact_mue,
                        struct brw_mesh_prog_key *key)
 {
    memset(key, 0, sizeof(*key));
 
    populate_base_prog_key(device, robust_buffer_access, &key->base);
+
+   key->compact_mue = compact_mue;
 }
 
 static uint32_t
@@ -542,6 +545,7 @@ populate_wm_prog_key(const struct anv_graphics_base_pipeline *pipeline,
                      const struct vk_multisample_state *ms,
                      const struct vk_fragment_shading_rate_state *fsr,
                      const struct vk_render_pass_state *rp,
+                     const enum brw_sometimes is_mesh,
                      struct brw_wm_prog_key *key)
 {
    const struct anv_device *device = pipeline->base.device;
@@ -605,6 +609,8 @@ populate_wm_prog_key(const struct anv_graphics_base_pipeline *pipeline,
       key->multisample_fbo = BRW_SOMETIMES;
       key->persample_interp = BRW_SOMETIMES;
    }
+
+   key->mesh_input = is_mesh;
 
    /* Vulkan doesn't support fixed-function alpha test */
    key->alpha_test_replicate_alpha = false;
@@ -1688,11 +1694,23 @@ anv_graphics_pipeline_init_keys(struct anv_graphics_base_pipeline *pipeline,
             state->rs == NULL ||
             !state->rs->rasterizer_discard_enable ||
             BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_RASTERIZER_DISCARD_ENABLE);
+         enum brw_sometimes is_mesh = BRW_NEVER;
+         if (device->vk.enabled_extensions.EXT_mesh_shader) {
+            if (anv_pipeline_base_has_stage(pipeline, MESA_SHADER_VERTEX))
+               is_mesh = BRW_NEVER;
+            else if (anv_pipeline_base_has_stage(pipeline, MESA_SHADER_MESH))
+               is_mesh = BRW_ALWAYS;
+            else {
+               assert(pipeline->base.type == ANV_PIPELINE_GRAPHICS_LIB);
+               is_mesh = BRW_SOMETIMES;
+            }
+         }
          populate_wm_prog_key(pipeline,
                               pipeline->base.device->robust_buffer_access,
                               state->dynamic,
                               raster_enabled ? state->ms : NULL,
                               state->fsr, state->rp,
+                              is_mesh,
                               &stages[s].key.wm);
          break;
       }
@@ -1703,11 +1721,16 @@ anv_graphics_pipeline_init_keys(struct anv_graphics_base_pipeline *pipeline,
                                 &stages[s].key.task);
          break;
 
-      case MESA_SHADER_MESH:
+      case MESA_SHADER_MESH: {
+         const bool compact_mue =
+            !(pipeline->base.type == ANV_PIPELINE_GRAPHICS_LIB &&
+              !anv_pipeline_base_has_stage(pipeline, MESA_SHADER_FRAGMENT));
          populate_mesh_prog_key(device,
                                 pipeline->base.device->robust_buffer_access,
+                                compact_mue,
                                 &stages[s].key.mesh);
          break;
+      }
 
       default:
          unreachable("Invalid graphics shader stage");

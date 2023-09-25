@@ -241,9 +241,7 @@ static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
 
    /* if reference picture exists, however no reference picture found at the end
       curr_pic_ref_frame_num == 0, which is not reasonable, should be corrected. */
-   /* one exeption for I frames which is valid situation and should be skipped. */
-   if ((result.curr_field_order_cnt_list[0] == result.curr_field_order_cnt_list[1])
-      && result.used_for_reference_flags && (result.curr_pic_ref_frame_num == 0)) {
+   if (result.used_for_reference_flags && (result.curr_pic_ref_frame_num == 0)) {
       for (i = 0; i < ARRAY_SIZE(result.ref_frame_list); i++) {
          result.ref_frame_list[i] = pic->ref[i] ?
                 (uintptr_t)vl_video_buffer_get_associated_data(pic->ref[i], &dec->base) : 0xff;
@@ -2132,8 +2130,13 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
    chroma = (struct si_texture *)((struct vl_video_buffer *)out_surf)->resources[1];
 
    decode->dpb_size = (dec->dpb_type != DPB_DYNAMIC_TIER_2) ? dec->dpb.res->buf->size : 0;
-   decode->dt_size = si_resource(((struct vl_video_buffer *)out_surf)->resources[0])->buf->size +
-                     si_resource(((struct vl_video_buffer *)out_surf)->resources[1])->buf->size;
+
+   /* When texture being created, the bo will be created with total size of planes,
+    * and all planes point to the same buffer */
+   assert(si_resource(((struct vl_video_buffer *)out_surf)->resources[0])->buf->size ==
+      si_resource(((struct vl_video_buffer *)out_surf)->resources[1])->buf->size);
+
+   decode->dt_size = si_resource(((struct vl_video_buffer *)out_surf)->resources[0])->buf->size;
 
    decode->sct_size = 0;
    decode->sc_coeff_size = 0;

@@ -441,7 +441,7 @@ opt_shrink_vectors_phi(nir_builder *b, nir_phi_instr *instr)
       /* However, even if the instruction only points back at the phi, we still
        * need to check that the swizzles are trivial.
        */
-      if (nir_op_is_vec(alu->op)) {
+      if (nir_op_is_vec(alu->op) && alu->op != nir_op_mov) {
          if (src_idx != alu->src[src_idx].swizzle[0]) {
             mask |= src_read_mask;
          }

@@ -39,9 +39,12 @@ lower(nir_builder *b, nir_instr *instr, void *data)
    case nir_intrinsic_global_atomic_swap:
    case nir_intrinsic_image_atomic:
    case nir_intrinsic_image_atomic_swap:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
       break;
    case nir_intrinsic_store_global:
    case nir_intrinsic_image_store:
+   case nir_intrinsic_bindless_image_store:
       if (!(*lower_plain_stores))
          return false;
       else

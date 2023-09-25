@@ -961,7 +961,13 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
       .lower_invalid_implicit_lod = true,
    };
 
-   OPT(nir_lower_tex, &tex_options);
+   /* In the case where TG4 coords are lowered to offsets and we have a
+    * lower_xehp_tg4_offset_filter lowering those offsets further, we need to
+    * rerun the pass because the instructions inserted by the first lowering
+    * are not visible during that first pass.
+    */
+   if (OPT(nir_lower_tex, &tex_options))
+      OPT(nir_lower_tex, &tex_options);
    OPT(nir_normalize_cubemap_coords);
 
    OPT(nir_lower_global_vars_to_local);
@@ -2082,6 +2088,21 @@ brw_nir_load_global_const(nir_builder *b, nir_intrinsic_instr *load_uniform,
    }
 
    return sysval;
+}
+
+const struct glsl_type *
+brw_nir_get_var_type(const struct nir_shader *nir, nir_variable *var)
+{
+   const struct glsl_type *type = var->interface_type;
+   if (!type) {
+      type = var->type;
+      if (nir_is_arrayed_io(var, nir->info.stage) || var->data.per_view) {
+         assert(glsl_type_is_array(type));
+         type = glsl_get_array_element(type);
+      }
+   }
+
+   return type;
 }
 
 bool

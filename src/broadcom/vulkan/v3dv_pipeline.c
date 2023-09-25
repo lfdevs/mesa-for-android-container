@@ -1641,7 +1641,7 @@ pipeline_compile_shader_variant(struct v3dv_pipeline_stage *p_stage,
 
    if (!qpu_insts) {
       fprintf(stderr, "Failed to compile %s prog %d NIR to VIR\n",
-              gl_shader_stage_name(p_stage->stage),
+              broadcom_shader_stage_name(p_stage->stage),
               p_stage->program_id);
       *out_vk_result = VK_ERROR_UNKNOWN;
    } else {

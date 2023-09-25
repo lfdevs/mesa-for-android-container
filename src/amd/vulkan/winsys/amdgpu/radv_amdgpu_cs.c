@@ -455,7 +455,8 @@ radv_amdgpu_cs_finalize(struct radeon_cmdbuf *_cs)
    }
 
    /* Append the current (last) IB to the array of IB buffers. */
-   radv_amdgpu_cs_add_ib_buffer(cs, cs->ib_buffer, 0, cs->use_ib ? *cs->ib_size_ptr : cs->base.cdw, false);
+   radv_amdgpu_cs_add_ib_buffer(cs, cs->ib_buffer, 0, cs->use_ib ? G_3F2_IB_SIZE(*cs->ib_size_ptr) : cs->base.cdw,
+                                false);
 
    /* Prevent freeing this BO twice. */
    cs->ib_buffer = NULL;
@@ -714,14 +715,19 @@ radv_amdgpu_cs_execute_secondary(struct radeon_cmdbuf *_parent, struct radeon_cm
       /* Grow the current CS and copy the contents of the secondary CS. */
       for (unsigned i = 0; i < child->num_ib_buffers; i++) {
          struct radv_amdgpu_ib *ib = &child->ib_buffers[i];
+         uint32_t cdw = ib->cdw;
          uint8_t *mapped;
+
+         /* Do not copy the original chain link for IBs. */
+         if (child->use_ib)
+            cdw -= 4;
 
          assert(!ib->is_external);
 
-         if (parent->base.cdw + ib->cdw > parent->base.max_dw)
-            radv_amdgpu_cs_grow(&parent->base, ib->cdw);
+         if (parent->base.cdw + cdw > parent->base.max_dw)
+            radv_amdgpu_cs_grow(&parent->base, cdw);
 
-         parent->base.reserved_dw = MAX2(parent->base.reserved_dw, parent->base.cdw + ib->cdw);
+         parent->base.reserved_dw = MAX2(parent->base.reserved_dw, parent->base.cdw + cdw);
 
          mapped = ws->base.buffer_map(ib->bo);
          if (!mapped) {
@@ -729,9 +735,8 @@ radv_amdgpu_cs_execute_secondary(struct radeon_cmdbuf *_parent, struct radeon_cm
             return;
          }
 
-         /* Copy the IB data without the original chain link. */
-         memcpy(parent->base.buf + parent->base.cdw, mapped, 4 * ib->cdw);
-         parent->base.cdw += ib->cdw;
+         memcpy(parent->base.buf + parent->base.cdw, mapped, 4 * cdw);
+         parent->base.cdw += cdw;
       }
    }
 }
@@ -827,20 +832,6 @@ radv_amdgpu_add_cs_to_bo_list(struct radv_amdgpu_cs *cs, struct drm_amdgpu_bo_li
       for (unsigned k = 0; k < virtual_bo->bo_count; ++k) {
          struct radv_amdgpu_winsys_bo *bo = virtual_bo->bos[k];
          bool found = false;
-
-         /* Do not add the BO to the virtual BO list if it's already in the global list to avoid
-          * dangling BO references because it might have been destroyed without being previously
-          * unbound. Resetting it to NULL clears the old BO ranges if present.
-          *
-          * This is going to be clarified in the Vulkan spec:
-          * https://gitlab.khronos.org/vulkan/vulkan/-/issues/3125
-          *
-          * The issue still exists for non-global BO but it will be addressed later, once we are
-          * 100% it's RADV fault (mostly because the solution looks more complicated).
-          */
-         if (bo->base.use_global_list)
-            continue;
-
          for (unsigned m = 0; m < num_handles; ++m) {
             if (handles[m].bo_handle == bo->bo_handle) {
                found = true;

@@ -1274,7 +1274,7 @@ iris_init_render_context(struct iris_batch *batch)
    }
 #endif
 
-#if INTEL_NEEDS_WORKAROUND_1508744258
+#if INTEL_NEEDS_WA_1508744258
    /* The suggested workaround is:
     *
     *    Disable RHWO by setting 0x7010[14] by default except during resolve
@@ -6263,7 +6263,10 @@ iris_preemption_streamout_wa(struct iris_context *ice,
                              struct iris_batch *batch,
                              bool enable)
 {
-#if GFX_VERx10 >= 120
+#if INTEL_NEEDS_WA_16013994831
+   if (!intel_needs_workaround(batch->screen->devinfo, 16013994831))
+      return;
+
    iris_emit_reg(batch, GENX(CS_CHICKEN1), reg) {
       reg.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommand = !enable;
       reg.DisablePreemptionandHighPriorityPausingdueto3DPRIMITIVECommandMask = true;
@@ -6892,7 +6895,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             sol.ReorderMode = cso_rast->flatshade_first ? LEADING : TRAILING;
 
 
-#if INTEL_NEEDS_WA_14017076903
+#if INTEL_NEEDS_WA_18022508906
             /* Wa_14017076903 :
              *
              * SKL PRMs, Volume 7: 3D-Media-GPGPU, Stream Output Logic (SOL) Stage:

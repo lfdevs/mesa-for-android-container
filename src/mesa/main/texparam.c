@@ -102,8 +102,9 @@ validate_texture_wrap_mode(struct gl_context * ctx, GLenum target, GLenum wrap)
       supported = (target != GL_TEXTURE_RECTANGLE_NV)
          && (target != GL_TEXTURE_EXTERNAL_OES)
          && (_mesa_has_ARB_texture_mirror_clamp_to_edge(ctx) ||
-            _mesa_has_ATI_texture_mirror_once(ctx) ||
-            _mesa_has_EXT_texture_mirror_clamp(ctx));
+             _mesa_has_EXT_texture_mirror_clamp_to_edge(ctx) ||
+             _mesa_has_ATI_texture_mirror_once(ctx) ||
+             _mesa_has_EXT_texture_mirror_clamp(ctx));
       break;
 
    case GL_MIRROR_CLAMP_TO_BORDER_EXT:

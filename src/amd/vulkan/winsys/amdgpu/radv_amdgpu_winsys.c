@@ -42,7 +42,7 @@
 static bool
 do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 {
-   if (!ac_query_gpu_info(fd, ws->dev, &ws->info))
+   if (!ac_query_gpu_info(fd, ws->dev, &ws->info, true))
       return false;
 
    /*
@@ -56,9 +56,6 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
     */
    for (enum amd_ip_type ip_type = AMD_IP_UVD; ip_type <= AMD_IP_VCN_ENC; ip_type++)
       ws->info.max_submitted_ibs[ip_type] = 1;
-
-   if (!ac_query_pci_bus_info(fd, &ws->info))
-      return false;
 
    if (ws->info.drm_minor < 27) {
       fprintf(stderr, "radv/amdgpu: DRM 3.27+ is required (Linux kernel 4.20+)\n");

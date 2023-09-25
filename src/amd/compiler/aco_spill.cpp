@@ -660,7 +660,7 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
    }
 
    /* else: merge block */
-   std::set<Temp> partial_spills;
+   std::map<Temp, bool> partial_spills;
 
    /* keep variables spilled on all incoming paths */
    for (const std::pair<const Temp, std::pair<uint32_t, uint32_t>>& pair : next_use_distances) {
@@ -682,10 +682,11 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
             break;
          }
          if (!ctx.spills_exit[pred_idx].count(pair.first)) {
+            partial_spills.emplace(pair.first, false);
             if (!remat)
                spill = false;
          } else {
-            partial_spills.insert(pair.first);
+            partial_spills[pair.first] = true;
             /* it might be that on one incoming path, the variable has a different spill_id, but
              * add_couple_code() will take care of that. */
             spill_id = ctx.spills_exit[pred_idx][pair.first];
@@ -724,7 +725,7 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
          spilled_registers += phi->definitions[0].getTemp();
       } else {
          /* Phis might increase the register pressure. */
-         partial_spills.insert(phi->definitions[0].getTemp());
+         partial_spills[phi->definitions[0].getTemp()] = true;
       }
    }
 
@@ -734,17 +735,21 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
 
    while (reg_pressure.exceeds(ctx.target_pressure)) {
       assert(!partial_spills.empty());
-      std::set<Temp>::iterator it = partial_spills.begin();
+      std::map<Temp, bool>::iterator it = partial_spills.begin();
       Temp to_spill = Temp();
+      bool is_spilled_or_phi = false;
       unsigned distance = 0;
       RegType type = reg_pressure.vgpr > ctx.target_pressure.vgpr ? RegType::vgpr : RegType::sgpr;
 
       while (it != partial_spills.end()) {
-         assert(!ctx.spills_entry[block_idx].count(*it));
+         assert(!ctx.spills_entry[block_idx].count(it->first));
 
-         if (it->type() == type && next_use_distances.at(*it).second > distance) {
-            distance = next_use_distances.at(*it).second;
-            to_spill = *it;
+         if (it->first.type() == type && ((it->second && !is_spilled_or_phi) ||
+                                          (it->second == is_spilled_or_phi &&
+                                           next_use_distances.at(it->first).second > distance))) {
+            distance = next_use_distances.at(it->first).second;
+            to_spill = it->first;
+            is_spilled_or_phi = it->second;
          }
          ++it;
       }
@@ -1185,6 +1190,15 @@ process_block(spill_ctx& ctx, unsigned block_idx, Block* block, RegisterDemand s
 
    while (idx < block->instructions.size()) {
       aco_ptr<Instruction>& instr = block->instructions[idx];
+
+      /* Spilling is handled as part of phis (they should always have the same or higher register
+       * demand). If we try to spill here, we might not be able to reduce the register demand enough
+       * because there is no path to spill constant/undef phi operands. */
+      if (instr->opcode == aco_opcode::p_branch) {
+         instructions.emplace_back(std::move(instr));
+         idx++;
+         continue;
+      }
 
       std::map<Temp, std::pair<Temp, uint32_t>> reloads;
 

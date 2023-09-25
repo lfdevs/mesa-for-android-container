@@ -171,7 +171,8 @@ r300_finalize_nir(struct pipe_screen *pscreen, void *nir)
 
    nir_sweep(s);
 
-   if (!r300_screen(pscreen)->caps.is_r500) {
+   if (!r300_screen(pscreen)->caps.is_r500 &&
+       (r300_screen(pscreen)->caps.has_tcl || s->info.stage == MESA_SHADER_FRAGMENT)) {
       char *msg = r300_check_control_flow(s);
       if (msg)
          return strdup(msg);

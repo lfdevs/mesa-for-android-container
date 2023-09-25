@@ -118,6 +118,7 @@ nir_lower_is_helper_invocation(nir_shader *shader)
 
    return nir_shader_instructions_pass(shader,
                                        nir_lower_load_and_store_is_helper,
-                                       nir_metadata_all,
+                                       nir_metadata_block_index |
+                                          nir_metadata_dominance,
                                        is_helper_deref);
 }

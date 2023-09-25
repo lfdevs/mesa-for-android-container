@@ -1,0 +1,189 @@
+From a5db46e39802fe19ec1bc706460c3f51c92607e1 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 21 Sep 2023 23:50:14 -0700
+Subject: [PATCH 1/3] clover: Hide SPIR-V related code behind HAVE_CLOVER_SPIRV
+
+---
+ src/gallium/frontends/clover/core/compiler.hpp |  6 ++++--
+ src/gallium/frontends/clover/core/device.cpp   | 15 ++++++++++++---
+ 2 files changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/frontends/clover/core/compiler.hpp b/src/gallium/frontends/clover/core/compiler.hpp
+index 98002edea6701..265b280f356cc 100644
+--- a/src/gallium/frontends/clover/core/compiler.hpp
++++ b/src/gallium/frontends/clover/core/compiler.hpp
+@@ -62,16 +62,18 @@ namespace clover {
+       static inline binary
+       link_program(const std::vector<binary> &bs, const device &dev,
+                    const std::string &opts, std::string &log) {
+-         const bool create_library =
+-            opts.find("-create-library") != std::string::npos;
+          switch (dev.ir_format()) {
++#ifdef HAVE_CLOVER_SPIRV
+          case PIPE_SHADER_IR_NIR_SERIALIZED: {
++            const bool create_library =
++               opts.find("-create-library") != std::string::npos;
+             auto spirv_linked_module = spirv::link_program(bs, dev, opts, log);
+             if (create_library)
+                return spirv_linked_module;
+             return nir::spirv_to_nir(spirv_linked_module,
+                                      dev, log);
+          }
++#endif
+          case PIPE_SHADER_IR_NATIVE:
+             return llvm::link_program(bs, dev, opts, log);
+          default:
+diff --git a/src/gallium/frontends/clover/core/device.cpp b/src/gallium/frontends/clover/core/device.cpp
+index 59dcaabef9f1a..848c19b7660a1 100644
+--- a/src/gallium/frontends/clover/core/device.cpp
++++ b/src/gallium/frontends/clover/core/device.cpp
+@@ -25,14 +25,17 @@
+ #include "core/platform.hpp"
+ #include "pipe/p_screen.h"
+ #include "pipe/p_state.h"
+-#include "spirv/invocation.hpp"
+ #include "util/bitscan.h"
++#include "util/disk_cache.h"
+ #include "util/u_debug.h"
+-#include "spirv/invocation.hpp"
+-#include "nir/invocation.hpp"
+ #include "nir.h"
+ #include <fstream>
+ 
++#ifdef HAVE_CLOVER_SPIRV
++#include "spirv/invocation.hpp"
++#include "nir/invocation.hpp"
++#endif
++
+ using namespace clover;
+ 
+ namespace {
+@@ -525,9 +528,11 @@ device::supported_extensions() const {
+       vec.push_back( cl_name_version{ CL_MAKE_VERSION(1, 0, 0), "cl_khr_fp16" } );
+    if (svm_support())
+       vec.push_back( cl_name_version{ CL_MAKE_VERSION(1, 0, 0), "cl_arm_shared_virtual_memory" } );
++#ifdef HAVE_CLOVER_SPIRV
+    if (!clover::spirv::supported_versions().empty() &&
+        supports_ir(PIPE_SHADER_IR_NIR_SERIALIZED))
+       vec.push_back( cl_name_version{ CL_MAKE_VERSION(1, 0, 0), "cl_khr_il_program" } );
++#endif
+    vec.push_back( cl_name_version{ CL_MAKE_VERSION(1, 0, 0), "cl_khr_extended_versioning" } );
+    return vec;
+ }
+@@ -550,7 +555,11 @@ device::supported_extensions_as_string() const {
+ 
+ std::vector<cl_name_version>
+ device::supported_il_versions() const {
++#ifdef HAVE_CLOVER_SPIRV
+    return clover::spirv::supported_versions();
++#else
++   return {};
++#endif
+ }
+ 
+ const void *
+-- 
+GitLab
+
+
+From 1a6cd2c753f60d6b8305772ef7c864fc914ec517 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 21 Sep 2023 23:58:55 -0700
+Subject: [PATCH 2/3] clover: Only compile/depend libclspirv and libclnir when
+ using SPIR-V support
+
+---
+ src/gallium/frontends/clover/meson.build | 44 ++++++++++++++----------
+ 1 file changed, 26 insertions(+), 18 deletions(-)
+
+diff --git a/src/gallium/frontends/clover/meson.build b/src/gallium/frontends/clover/meson.build
+index 211731de51adc..0dffda0d4b4a3 100644
+--- a/src/gallium/frontends/clover/meson.build
++++ b/src/gallium/frontends/clover/meson.build
+@@ -75,23 +75,31 @@ libclllvm = static_library(
+   dependencies : [dep_llvm, dep_elf, dep_llvmspirvlib, idep_mesautil],
+ )
+ 
+-libclspirv = static_library(
+-  'clspirv',
+-  files('spirv/invocation.cpp', 'spirv/invocation.hpp'),
+-  include_directories : clover_incs,
+-  cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args],
+-  gnu_symbol_visibility : 'hidden',
+-  dependencies : [dep_spirv_tools, idep_mesautil],
+-)
++idep_opencl_spirv = null_dep
++if with_opencl_spirv
++  libclspirv = static_library(
++    'clspirv',
++    files('spirv/invocation.cpp', 'spirv/invocation.hpp'),
++    include_directories : clover_incs,
++    cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args],
++    gnu_symbol_visibility : 'hidden',
++    dependencies : [dep_spirv_tools, idep_mesautil],
++  )
+ 
+-libclnir = static_library(
+-  'clnir',
+-  files('nir/invocation.cpp', 'nir/invocation.hpp'),
+-  include_directories : [clover_incs, inc_mesa],
+-  dependencies : [idep_nir, idep_vtn, idep_mesaclc],
+-  cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args],
+-  gnu_symbol_visibility : 'hidden',
+-)
++  libclnir = static_library(
++    'clnir',
++    files('nir/invocation.cpp', 'nir/invocation.hpp'),
++    include_directories : [clover_incs, inc_mesa],
++    dependencies : [idep_nir, idep_vtn, idep_mesaclc],
++    cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args],
++    gnu_symbol_visibility : 'hidden',
++  )
++
++  idep_opencl_spirv = declare_dependency(
++    dependencies : [idep_nir],
++    link_with : [libclspirv, libclnir],
++  )
++endif
+ 
+ clover_files = files(
+   'api/context.cpp',
+@@ -163,6 +171,6 @@ libclover = static_library(
+     clover_cpp_args,
+   ],
+   gnu_symbol_visibility : 'hidden',
+-  link_with : [libclllvm, libclspirv, libclnir],
+-  dependencies : [idep_mesautil, idep_nir],
++  link_with : [libclllvm],
++  dependencies : [idep_mesautil, idep_nir, idep_opencl_spirv],
+ )
+-- 
+GitLab
+
+
+From 56f0712bf68eb98778315c630b20e96ac1767402 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Fri, 22 Sep 2023 00:02:35 -0700
+Subject: [PATCH 3/3] compiler: Only enable mesaclc helper if we have OpenCL
+ SPIR-V support
+
+---
+ src/compiler/meson.build | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/compiler/meson.build b/src/compiler/meson.build
+index e5fcd5418eb88..4d7d1f6923485 100644
+--- a/src/compiler/meson.build
++++ b/src/compiler/meson.build
+@@ -81,7 +81,7 @@ subdir('nir')
+ 
+ subdir('spirv')
+ 
+-if with_clc
++if with_opencl_spirv
+   subdir('clc')
+ endif
+ if with_gallium
+-- 
+GitLab
+

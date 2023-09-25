@@ -1109,6 +1109,15 @@ emit_gfx6_bpermute(Program* program, aco_ptr<Instruction>& instr, Builder& bld)
       /* Restore original EXEC */
       bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(temp_exec.physReg(), s2));
    }
+
+   /* RA assumes that the result is always in the low part of the register, so we have to shift,
+    * if it's not there already.
+    */
+   if (input.physReg().byte()) {
+      unsigned right_shift = input.physReg().byte() * 8;
+      bld.vop2(aco_opcode::v_lshrrev_b32, dst, Operand::c32(right_shift),
+               Operand(dst.physReg(), v1));
+   }
 }
 
 struct copy_operation {

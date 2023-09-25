@@ -407,6 +407,7 @@ zink_blit(struct pipe_context *pctx,
    bool in_rp = ctx->batch.in_rp;
    uint64_t tc_data = ctx->dynamic_fb.tc_info.data;
    bool queries_disabled = ctx->queries_disabled;
+   bool rp_changed = ctx->rp_changed || (!ctx->fb_state.zsbuf && util_format_is_depth_or_stencil(info->dst.format));
    unsigned ds3_states = ctx->ds3_states;
    if (ctx->unordered_blitting) {
       /* for unordered blit, swap the unordered cmdbuf for the main one for the whole op to avoid conditional hell */
@@ -464,7 +465,7 @@ zink_blit(struct pipe_context *pctx,
       zink_batch_no_rp(ctx);
       ctx->batch.in_rp = in_rp;
       ctx->gfx_pipeline_state.rp_state = zink_update_rendering_info(ctx);
-      ctx->rp_changed = false;
+      ctx->rp_changed = rp_changed;
       ctx->queries_disabled = queries_disabled;
       ctx->dynamic_fb.tc_info.data = tc_data;
       ctx->batch.state->cmdbuf = cmdbuf;

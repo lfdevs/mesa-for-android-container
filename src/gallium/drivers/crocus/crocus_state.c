@@ -1173,7 +1173,7 @@ setup_l3_config(struct crocus_batch *batch, const struct intel_l3_config *cfg)
    crocus_emit_lri(batch, L3CNTLREG2, l3cr2);
    crocus_emit_lri(batch, L3CNTLREG3, l3cr3);
 
-#if GFX_VERSIONx10 == 75
+#if GFX_VERx10 == 75
    /* TODO: Fail screen creation if command parser version < 4 */
    uint32_t scratch1, chicken3;
    crocus_pack_state(GENX(SCRATCH1), &scratch1, reg) {

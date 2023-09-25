@@ -572,7 +572,7 @@ create_color_clear_pipeline(struct v3dv_device *device,
                             uint32_t subpass_idx,
                             uint32_t rt_idx,
                             VkFormat format,
-                            uint32_t samples,
+                            VkSampleCountFlagBits samples,
                             uint32_t components,
                             bool is_layered,
                             VkPipelineLayout pipeline_layout,
@@ -689,7 +689,7 @@ static VkResult
 create_color_clear_render_pass(struct v3dv_device *device,
                                uint32_t rt_idx,
                                VkFormat format,
-                               uint32_t samples,
+                               VkSampleCountFlagBits samples,
                                VkRenderPass *pass)
 {
    VkAttachmentDescription2 att = {
@@ -737,7 +737,7 @@ create_color_clear_render_pass(struct v3dv_device *device,
 static inline uint64_t
 get_color_clear_pipeline_cache_key(uint32_t rt_idx,
                                    VkFormat format,
-                                   uint32_t samples,
+                                   VkSampleCountFlagBits samples,
                                    uint32_t components,
                                    bool is_layered)
 {
@@ -802,7 +802,7 @@ get_color_clear_pipeline(struct v3dv_device *device,
                          uint32_t rt_idx,
                          uint32_t attachment_idx,
                          VkFormat format,
-                         uint32_t samples,
+                         VkSampleCountFlagBits samples,
                          uint32_t components,
                          bool is_layered,
                          struct v3dv_meta_color_clear_pipeline **pipeline)
@@ -995,7 +995,7 @@ emit_subpass_color_clear_rects(struct v3dv_cmd_buffer *cmd_buffer,
    assert(attachment_idx < cmd_buffer->state.pass->attachment_count);
    const VkFormat format =
       cmd_buffer->state.pass->attachments[attachment_idx].desc.format;
-   const VkFormat samples =
+   const VkSampleCountFlagBits samples =
       cmd_buffer->state.pass->attachments[attachment_idx].desc.samples;
    const uint32_t components = VK_COLOR_COMPONENT_R_BIT |
                                VK_COLOR_COMPONENT_G_BIT |

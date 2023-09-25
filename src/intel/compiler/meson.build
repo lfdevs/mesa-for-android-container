@@ -167,7 +167,10 @@ libintel_compiler = static_library(
 )
 
 # For now this tool is only going to be used by Anv
-if with_intel_clc
+if get_option('intel-clc') == 'system'
+  prog_intel_clc = find_program('intel_clc', native : true)
+  dep_prog_intel_clc = []
+elif with_intel_clc
   prog_intel_clc = executable(
     'intel_clc',
     ['intel_clc.c', 'brw_kernel.c'],
@@ -180,6 +183,7 @@ if with_intel_clc
     dependencies : [idep_nir, idep_vtn, idep_mesaclc, idep_mesautil, idep_intel_dev],
     native : true,
   )
+  dep_prog_intel_clc = [prog_intel_clc]
 endif
 
 if with_tests

@@ -280,7 +280,7 @@ nv50_sifc_linear_u8(struct nouveau_context *nv,
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
    uint32_t *src = (uint32_t *)data;
    unsigned count = DIV_ROUND_UP(size, 4);
-   unsigned max_size = 0x10000;
+   unsigned max_size = 0x8000;
 
    nouveau_bufctx_refn(nv50->bufctx, 0, dst, domain | NOUVEAU_BO_WR);
    nouveau_pushbuf_bufctx(push, nv50->bufctx);

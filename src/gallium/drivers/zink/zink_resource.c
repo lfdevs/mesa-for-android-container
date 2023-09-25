@@ -1787,12 +1787,13 @@ zink_resource_from_handle(struct pipe_screen *pscreen,
    if (templ->format == PIPE_FORMAT_NONE)
       templ2.format = whandle->format;
 
-   uint64_t modifier = DRM_FORMAT_MOD_INVALID;
-   int modifier_count = 0;
-   if (whandle->modifier != DRM_FORMAT_MOD_INVALID) {
+   uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
+   int modifier_count = 1;
+   if (whandle->modifier != DRM_FORMAT_MOD_INVALID)
       modifier = whandle->modifier;
-      modifier_count = 1;
-   }
+   else
+      whandle->modifier = modifier;
+   templ2.bind |= ZINK_BIND_DMABUF;
    struct pipe_resource *pres = resource_create(pscreen, &templ2, whandle, usage, &modifier, modifier_count, NULL, NULL);
    if (pres) {
       struct zink_resource *res = zink_resource(pres);

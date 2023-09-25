@@ -200,7 +200,7 @@ nir_create_passthrough_gs(const nir_shader_compiler_options *options,
       nir_variable *in = nir_variable_clone(var, nir);
       ralloc_free(in->name);
       in->name = ralloc_strdup(in, name);
-      in->type = glsl_array_type(var->type, 4, false);
+      in->type = glsl_array_type(var->type, 6, false);
       in->data.mode = nir_var_shader_in;
       nir_shader_add_variable(nir, in);
 

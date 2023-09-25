@@ -129,6 +129,11 @@ struct brw_compiler {
    bool use_bindless_sampler_offset;
 
    struct nir_shader *clc_shader;
+
+   struct {
+      unsigned mue_header_packing;
+      bool mue_compaction;
+   } mesh;
 };
 
 #define brw_shader_debug_log(compiler, data, fmt, ... ) do {    \
@@ -403,6 +408,9 @@ struct brw_task_prog_key
 struct brw_mesh_prog_key
 {
    struct brw_base_prog_key base;
+
+   bool compact_mue:1;
+   unsigned padding:31;
 };
 
 enum brw_sf_primitive {
@@ -531,11 +539,14 @@ struct brw_wm_prog_key {
 
    enum brw_sometimes line_aa:2;
 
+   /* Whether the preceding shader stage is mesh */
+   enum brw_sometimes mesh_input:2;
+
    bool coherent_fb_fetch:1;
    bool ignore_sample_mask_out:1;
    bool coarse_pixel:1;
 
-   uint64_t padding:55;
+   uint64_t padding:53;
 };
 
 struct brw_cs_prog_key {
@@ -1022,6 +1033,7 @@ struct brw_wm_prog_data {
     * For varying slots that are not used by the FS, the value is -1.
     */
    int urb_setup[VARYING_SLOT_MAX];
+   int urb_setup_channel[VARYING_SLOT_MAX];
 
    /**
     * Cache structure into the urb_setup array above that contains the
@@ -1148,9 +1160,13 @@ wm_prog_data_barycentric_modes(const struct brw_wm_prog_data *prog_data,
 {
    uint32_t modes = prog_data->barycentric_interp_modes;
 
-   if (pushed_msaa_flags & BRW_WM_MSAA_FLAG_PERSAMPLE_INTERP) {
-      assert(pushed_msaa_flags & BRW_WM_MSAA_FLAG_ENABLE_DYNAMIC);
+   /* In the non dynamic case, we can just return the computed modes from
+    * compilation time.
+    */
+   if (!(pushed_msaa_flags & BRW_WM_MSAA_FLAG_ENABLE_DYNAMIC))
+      return modes;
 
+   if (pushed_msaa_flags & BRW_WM_MSAA_FLAG_PERSAMPLE_INTERP) {
       assert(prog_data->persample_dispatch == BRW_ALWAYS ||
              (pushed_msaa_flags & BRW_WM_MSAA_FLAG_PERSAMPLE_DISPATCH));
 
@@ -1187,6 +1203,18 @@ wm_prog_data_barycentric_modes(const struct brw_wm_prog_data *prog_data,
          modes &= ~BITFIELD_BIT(sample_mode);
          modes |= BITFIELD_BIT(BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE);
       }
+   } else {
+      /* If we're not using per-sample interpolation, we need to disable the
+       * per-sample bits.
+       *
+       * SKL PRMs, Volume 2a: Command Reference: Instructions,
+       * 3DSTATE_WM:Barycentric Interpolation Mode:
+
+       *    "MSDISPMODE_PERSAMPLE is required in order to select Perspective
+       *     Sample or Non-perspective Sample barycentric coordinates."
+       */
+      modes &= ~(BITFIELD_BIT(BRW_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
+                 BITFIELD_BIT(BRW_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
    }
 
    return modes;
@@ -1625,6 +1653,7 @@ struct brw_tue_map {
 
 struct brw_mue_map {
    int32_t start_dw[VARYING_SLOT_MAX];
+   uint32_t len_dw[VARYING_SLOT_MAX];
    uint32_t per_primitive_indices_dw;
 
    uint32_t size_dw;
@@ -1634,12 +1663,14 @@ struct brw_mue_map {
    uint32_t per_primitive_header_size_dw;
    uint32_t per_primitive_data_size_dw;
    uint32_t per_primitive_pitch_dw;
+   bool user_data_in_primitive_header;
 
    uint32_t max_vertices;
    uint32_t per_vertex_start_dw;
    uint32_t per_vertex_header_size_dw;
    uint32_t per_vertex_data_size_dw;
    uint32_t per_vertex_pitch_dw;
+   bool user_data_in_vertex_header;
 };
 
 struct brw_task_prog_data {

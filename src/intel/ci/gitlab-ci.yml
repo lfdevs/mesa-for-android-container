@@ -220,12 +220,12 @@ iris-cml-deqp:
     DEQP_SUITE: iris-cml
   parallel: 4
 
-iris-jsl-deqp:
-  extends:
-    - .iris-jsl-test
-  variables:
-    DEQP_SUITE: iris-jsl
-  parallel: 8
+#iris-jsl-deqp:
+#  extends:
+#    - .iris-jsl-test
+#  variables:
+#    DEQP_SUITE: iris-jsl
+#  parallel: 8
 
 iris-amly-egl:
   extends:

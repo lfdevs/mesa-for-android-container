@@ -511,7 +511,7 @@ fn validate_image_desc(
             desc.image_slice_pitch = desc.image_row_pitch * desc.image_height;
         }
 
-        if has_buf_parent {
+        if has_buf_parent && desc.image_type != CL_MEM_OBJECT_IMAGE1D_BUFFER {
             let pitch_alignment = devs
                 .iter()
                 .map(|d| d.image_pitch_alignment())

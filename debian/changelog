@@ -1,3 +1,13 @@
+mesa (23.2.0~rc4-1) unstable; urgency=medium
+
+  * New upstream release candidate.
+  * egl-wayland-Always-initialise-fd_display_gpu.patch: Dropped,
+    upstream.
+  * fix-clover-build-without-spirv.diff: Fix clover build.
+  * control, rules: Bump llvm to 16. (Closes: #1051680)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 25 Sep 2023 10:01:44 +0300
+
 mesa (23.2.0~rc3-3) unstable; urgency=medium
 
   * control, rules: Drop mipsel.

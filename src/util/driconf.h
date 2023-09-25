@@ -383,6 +383,10 @@
    DRI_CONF_OPT_B(vk_wsi_force_bgra8_unorm_first, def, \
                   "Force vkGetPhysicalDeviceSurfaceFormatsKHR to return VK_FORMAT_B8G8R8A8_UNORM as the first format")
 
+#define DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(def) \
+   DRI_CONF_OPT_B(vk_wsi_force_swapchain_to_current_extent, def, \
+                  "Force VkSwapchainCreateInfoKHR::imageExtent to be VkSurfaceCapabilities2KHR::currentExtent")
+
 #define DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(def) \
    DRI_CONF_OPT_I(vk_x11_override_min_image_count, def, 0, 999, \
                   "Override the VkSurfaceCapabilitiesKHR::minImageCount (0 = no override)")

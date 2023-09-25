@@ -718,10 +718,10 @@ v3d_qpu_float16_unpack_pack(enum v3d_qpu_input_unpack unpacked,
 }
 
 static bool
-v3d_qpu_float32_pack_pack(enum v3d_qpu_input_unpack unpacked,
+v3d_qpu_float32_pack_pack(enum v3d_qpu_output_pack pack,
                           uint32_t *packed)
 {
-        switch (unpacked) {
+        switch (pack) {
         case V3D_QPU_PACK_NONE:
                 *packed = 0;
                 return true;

@@ -1016,7 +1016,7 @@ TEST_F(Cache, Combined)
 #endif
 }
 
-TEST_F(Cache, List)
+TEST_F(Cache, DISABLED_List)
 {
    const char *driver_id = "make_check";
    char blob[] = "This is a RO blob";

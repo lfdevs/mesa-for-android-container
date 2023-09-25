@@ -240,6 +240,11 @@ wsi_device_init(struct wsi_device *wsi,
          wsi->force_bgra8_unorm_first =
             driQueryOptionb(dri_options, "vk_wsi_force_bgra8_unorm_first");
       }
+
+      if (driCheckOption(dri_options, "vk_wsi_force_swapchain_to_current_extent",  DRI_BOOL)) {
+         wsi->force_swapchain_to_currentExtent =
+            driQueryOptionb(dri_options, "vk_wsi_force_swapchain_to_current_extent");
+      }
    }
 
    return VK_SUCCESS;
@@ -923,12 +928,22 @@ wsi_CreateSwapchainKHR(VkDevice _device,
    else
      alloc = &device->alloc;
 
+   VkSwapchainCreateInfoKHR info = *pCreateInfo;
+
+   if (wsi_device->force_swapchain_to_currentExtent) {
+      VkSurfaceCapabilities2KHR caps2 = {
+         .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
+      };
+      iface->get_capabilities2(surface, wsi_device, NULL, &caps2);
+      info.imageExtent = caps2.surfaceCapabilities.currentExtent;
+   }
+
    /* Ignore DEFERRED_MEMORY_ALLOCATION_BIT. Would require deep plumbing to be able to take advantage of it.
     * bool deferred_allocation = pCreateInfo->flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
     */
 
    VkResult result = iface->create_swapchain(surface, _device, wsi_device,
-                                             pCreateInfo, alloc,
+                                             &info, alloc,
                                              &swapchain);
    if (result != VK_SUCCESS)
       return result;

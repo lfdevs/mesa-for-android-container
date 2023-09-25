@@ -2406,12 +2406,7 @@ cmd_buffer_emit_descriptor_pointers(struct anv_cmd_buffer *cmd_buffer,
       anv_batch_emit(&cmd_buffer->batch,
                      GENX(3DSTATE_BINDING_TABLE_POINTERS_VS), btp) {
          btp._3DCommandSubOpcode = binding_table_opcodes[s];
-#if GFX_VERX10 >= 125
-         btp.PointertoVSBindingTable = SCRATCH_SURFACE_STATE_POOL_SIZE +
-                                       cmd_buffer->state.binding_tables[s].offset;
-#else
          btp.PointertoVSBindingTable = cmd_buffer->state.binding_tables[s].offset;
-#endif
       }
    }
 }
@@ -3277,8 +3272,8 @@ cmd_buffer_emit_streamout(struct anv_cmd_buffer *cmd_buffer)
       .RenderStreamSelect = dyn->rs.rasterization_stream,
    };
 
-#if INTEL_NEEDS_WA_14017076903
-   /* Wa_14017076903 :
+#if INTEL_NEEDS_WA_18022508906
+   /* Wa_18022508906 :
     *
     * SKL PRMs, Volume 7: 3D-Media-GPGPU, Stream Output Logic (SOL) Stage:
     *

@@ -283,6 +283,9 @@ nir_ssa_def *brw_nir_load_global_const(nir_builder *b,
                                        nir_ssa_def *base_addr,
                                        unsigned off);
 
+const struct glsl_type *brw_nir_get_var_type(const struct nir_shader *nir,
+                                             nir_variable *var);
+
 #ifdef __cplusplus
 }
 #endif

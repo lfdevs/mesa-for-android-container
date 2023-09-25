@@ -3154,14 +3154,59 @@ tc_texture_subdata(struct pipe_context *_pipe,
          else if (usage & PIPE_MAP_STENCIL_ONLY)
             format = PIPE_FORMAT_S8_UINT;
 
-         unsigned stride = util_format_get_stride(format, box->width);
-         uint64_t layer_stride = util_format_get_2d_size(format, stride, box->height);
-         assert(layer_stride * box->depth <= UINT32_MAX);
+         unsigned fmt_stride = util_format_get_stride(format, box->width);
+         uint64_t fmt_layer_stride = util_format_get_2d_size(format, stride, box->height);
+         assert(fmt_layer_stride * box->depth <= UINT32_MAX);
 
-         struct pipe_resource *pres = pipe_buffer_create_with_data(pipe, 0, PIPE_USAGE_STREAM, layer_stride * box->depth, data);
+         struct pipe_resource *pres = pipe_buffer_create_with_data(pipe, 0, PIPE_USAGE_STREAM, fmt_layer_stride * box->depth, data);
          struct pipe_box src_box = *box;
          src_box.x = src_box.y = src_box.z = 0;
-         tc->base.resource_copy_region(&tc->base, resource, level, box->x, box->y, box->z, pres, 0, &src_box);
+
+         if (fmt_stride == stride && fmt_layer_stride == layer_stride) {
+            /* if stride matches, single copy is fine*/
+            tc->base.resource_copy_region(&tc->base, resource, level, box->x, box->y, box->z, pres, 0, &src_box);
+         } else {
+            /* if stride doesn't match, inline util_copy_box on the GPU and assume the driver will optimize */
+            unsigned src_offset = 0;
+            src_box.depth = 1;
+            for (unsigned z = 0; z < box->depth; ++z) {
+               unsigned dst_x = box->x, dst_y = box->y, width = box->width, height = box->height;
+               int blocksize = util_format_get_blocksize(format);
+               int blockwidth = util_format_get_blockwidth(format);
+               int blockheight = util_format_get_blockheight(format);
+
+               assert(blocksize > 0);
+               assert(blockwidth > 0);
+               assert(blockheight > 0);
+
+               dst_x /= blockwidth;
+               dst_y /= blockheight;
+               width = DIV_ROUND_UP(width, blockwidth);
+               height = DIV_ROUND_UP(height, blockheight);
+
+               width *= blocksize;
+
+               if (width == fmt_stride && width == (unsigned)stride) {
+                  uint64_t size = (uint64_t)height * width;
+
+                  assert(size <= SIZE_MAX);
+                  src_box.x = src_offset;
+                  assert(dst_x + src_box.width < u_minify(pres->width0, level));
+                  assert(dst_y + src_box.height < u_minify(pres->height0, level));
+                  assert(pres->target != PIPE_TEXTURE_3D ||  z + src_box.depth < u_minify(pres->depth0, level));
+                  tc->base.resource_copy_region(&tc->base, resource, level, dst_x, dst_y, z, pres, 0, &src_box);
+               } else {
+                  src_box.height = 1;
+                  for (unsigned i = 0; i < height; i++, dst_y++) {
+                     src_box.x = src_offset;
+                     tc->base.resource_copy_region(&tc->base, resource, level, dst_x, dst_y, z, pres, 0, &src_box);
+                     src_offset += stride;
+                  }
+               }
+               src_offset += layer_stride;
+            }
+         }
+
          pipe_resource_reference(&pres, NULL);
       } else {
          tc_sync(tc);

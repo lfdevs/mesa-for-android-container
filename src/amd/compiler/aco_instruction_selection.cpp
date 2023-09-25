@@ -2938,10 +2938,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
       if (ctx->program->gfx_level >= GFX8 && input_size <= 16) {
          bld.vop1(aco_opcode::v_cvt_f16_i16, Definition(dst), src);
       } else {
-         /* Convert to f32 and then down to f16. This is needed to handle
-          * inputs slightly outside the range [INT16_MIN, INT16_MAX],
-          * which are representable via f16 but wouldn't be converted
-          * correctly by v_cvt_f16_i16.
+         /* Large 32bit inputs need to return +-inf/FLOAT_MAX.
           *
           * This is also the fallback-path taken on GFX7 and earlier, which
           * do not support direct f16⟷i16 conversions.
@@ -2989,12 +2986,14 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          }
       }
 
-      if (ctx->program->gfx_level >= GFX8) {
-         /* float16 has a range of [0, 65519]. Converting from larger
-          * inputs is UB, so we just need to consider the lower 16 bits */
+      if (ctx->program->gfx_level >= GFX8 && input_size <= 16) {
          bld.vop1(aco_opcode::v_cvt_f16_u16, Definition(dst), src);
       } else {
-         /* GFX7 and earlier do not support direct f16⟷u16 conversions */
+         /* Large 32bit inputs need to return inf/FLOAT_MAX.
+          *
+          * This is also the fallback-path taken on GFX7 and earlier, which
+          * do not support direct f16⟷u16 conversions.
+          */
          src = bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), src);
          bld.vop1(aco_opcode::v_cvt_f16_f32, Definition(dst), src);
       }

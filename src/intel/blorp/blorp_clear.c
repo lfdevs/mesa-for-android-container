@@ -972,13 +972,10 @@ blorp_can_hiz_clear_depth(const struct intel_device_info *devinfo,
       /* We have to set the WM_HZ_OP::FullSurfaceDepthandStencilClear bit
        * whenever we clear an uninitialized HIZ buffer (as some drivers
        * currently do). However, this bit seems liable to clear 16x8 pixels in
-       * the ZCS on Gfx12 - greater than the slice alignments for depth
+       * the ZCS on Gfx12 - greater than the slice alignments of many depth
        * buffers.
-       */
-      assert(surf->image_alignment_el.w % 16 != 0 ||
-             surf->image_alignment_el.h % 8 != 0);
-
-      /* This is the hypothesis behind some corruption that was seen with the
+       *
+       * This is the hypothesis behind some corruption that was seen with the
        * amd_vertex_shader_layer-layered-depth-texture-render piglit test.
        *
        * From the Compressed Depth Buffers section of the Bspec, under the
@@ -1001,7 +998,6 @@ blorp_can_hiz_clear_depth(const struct intel_device_info *devinfo,
                                    surf->dim == ISL_SURF_DIM_3D ? 0 : layer,
                                    surf->dim == ISL_SURF_DIM_3D ? layer: 0,
                                    &slice_x0, &slice_y0, &slice_z0, &slice_a0);
-      assert(slice_z0 == 0 && slice_a0 == 0);
       const bool max_x1_y1 =
          x1 == u_minify(surf->logical_level0_px.width, level) &&
          y1 == u_minify(surf->logical_level0_px.height, level);

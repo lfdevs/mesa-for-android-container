@@ -39,6 +39,7 @@
 #include <llvm-c/Target.h>
 #include <LLVMSPIRVLib/LLVMSPIRVLib.h>
 
+#include <clang/Config/config.h>
 #include <clang/Driver/Driver.h>
 #include <clang/CodeGen/CodeGenAction.h>
 #include <clang/Lex/PreprocessorOptions.h>
@@ -76,6 +77,7 @@ using ::llvm::Function;
 using ::llvm::LLVMContext;
 using ::llvm::Module;
 using ::llvm::raw_string_ostream;
+using ::clang::driver::Driver;
 
 static void
 llvm_log_handler(const ::llvm::DiagnosticInfo &di, void *data) {
@@ -877,7 +879,7 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
    // because we might have linked clang statically.
    auto libclang_path = fs::path(LLVM_LIB_DIR) / "libclang.so";
    auto clang_res_path =
-      fs::path(clang::driver::Driver::GetResourcesPath(libclang_path.string())) / "include";
+      fs::path(Driver::GetResourcesPath(libclang_path.string(), CLANG_RESOURCE_DIR)) / "include";
 
    c->getHeaderSearchOpts().UseBuiltinIncludes = true;
    c->getHeaderSearchOpts().UseStandardSystemIncludes = true;

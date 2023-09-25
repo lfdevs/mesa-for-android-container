@@ -171,6 +171,8 @@ struct wsi_swapchain {
       VkQueue queue;
    } blit;
 
+   bool capture_key_pressed;
+
    /* Command pools, one per queue family */
    VkCommandPool *cmd_pools;
 

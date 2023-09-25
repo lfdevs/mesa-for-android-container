@@ -79,6 +79,7 @@ ac_nir_export_position(nir_builder *b,
                        uint32_t clip_cull_mask,
                        bool no_param_export,
                        bool force_vrs,
+                       bool done,
                        uint64_t outputs_written,
                        nir_ssa_def *(*outputs)[4]);
 

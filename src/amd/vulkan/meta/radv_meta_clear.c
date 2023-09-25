@@ -929,10 +929,10 @@ build_clear_dcc_comp_to_single_shader(struct radv_device *dev, bool is_msaa)
    output_img->data.binding = 0;
 
    /* Load the clear color values. */
-   nir_ssa_def *clear_values = nir_load_push_constant(&b, 2, 32, nir_imm_int(&b, 8), .range = 8);
+   nir_ssa_def *clear_values = nir_load_push_constant(&b, 4, 32, nir_imm_int(&b, 8), .range = 24);
 
    nir_ssa_def *data = nir_vec4(&b, nir_channel(&b, clear_values, 0), nir_channel(&b, clear_values, 1),
-                                nir_channel(&b, clear_values, 1), nir_channel(&b, clear_values, 1));
+                                nir_channel(&b, clear_values, 2), nir_channel(&b, clear_values, 3));
 
    /* Store the clear color values. */
    nir_ssa_def *sample_id = is_msaa ? nir_imm_int(&b, 0) : nir_ssa_undef(&b, 1, 32);
@@ -1001,7 +1001,7 @@ init_meta_clear_dcc_comp_to_single_state(struct radv_device *device)
          &(VkPushConstantRange){
             VK_SHADER_STAGE_COMPUTE_BIT,
             0,
-            16,
+            24,
          },
    };
 
@@ -1310,15 +1310,17 @@ radv_clear_dcc_comp_to_single(struct radv_cmd_buffer *cmd_buffer, struct radv_im
       unsigned dcc_width = DIV_ROUND_UP(width, image->planes[0].surface.u.gfx9.color.dcc_block_width);
       unsigned dcc_height = DIV_ROUND_UP(height, image->planes[0].surface.u.gfx9.color.dcc_block_height);
 
-      const unsigned constants[4] = {
+      const unsigned constants[6] = {
          image->planes[0].surface.u.gfx9.color.dcc_block_width,
          image->planes[0].surface.u.gfx9.color.dcc_block_height,
          color_values[0],
+         color_values[bytes_per_pixel == 16 ? 0 : 1],
+         color_values[bytes_per_pixel == 16 ? 0 : 1],
          color_values[1],
       };
 
       radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.clear_dcc_comp_to_single_p_layout,
-                            VK_SHADER_STAGE_COMPUTE_BIT, 0, 16, constants);
+                            VK_SHADER_STAGE_COMPUTE_BIT, 0, 24, constants);
 
       radv_unaligned_dispatch(cmd_buffer, dcc_width, dcc_height, layer_count);
 

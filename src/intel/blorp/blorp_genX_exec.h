@@ -267,6 +267,14 @@ emit_urb_config(struct blorp_batch *batch,
          urb.VSNumberofURBEntries      = entries[i];
       }
    }
+
+   if (batch->blorp->config.use_mesh_shading) {
+#if GFX_VERx10 >= 125
+      blorp_emit(batch, GENX(3DSTATE_URB_ALLOC_MESH), zero);
+      blorp_emit(batch, GENX(3DSTATE_URB_ALLOC_TASK), zero);
+#endif
+   }
+
 #else /* GFX_VER < 7 */
    blorp_emit_urb_config(batch, vs_entry_size, sf_entry_size);
 #endif
@@ -1422,12 +1430,6 @@ blorp_emit_pipeline(struct blorp_batch *batch,
 
    if (batch->blorp->config.use_mesh_shading) {
 #if GFX_VERx10 >= 125
-      blorp_emit(batch, GENX(3DSTATE_URB_ALLOC_MESH), zero);
-      blorp_emit(batch, GENX(3DSTATE_URB_ALLOC_TASK), zero);
-
-      blorp_emit(batch, GENX(3DSTATE_MESH_SHADER), zero);
-      blorp_emit(batch, GENX(3DSTATE_TASK_SHADER), zero);
-
       blorp_emit(batch, GENX(3DSTATE_MESH_CONTROL), zero);
       blorp_emit(batch, GENX(3DSTATE_TASK_CONTROL), zero);
 #endif
@@ -2277,7 +2279,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       .SharedLocalMemorySize = encode_slm_size(GFX_VER,
                                                prog_data->total_shared),
       .BarrierEnable = cs_prog_data->uses_barrier,
-#if GFX_VER >= 8 || GEN_IS_HASWELL
+#if GFX_VER >= 8 || GFX_VERx10 == 75
       .CrossThreadConstantDataReadLength =
          cs_prog_data->push.cross_thread.regs,
 #endif

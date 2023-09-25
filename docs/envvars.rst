@@ -345,7 +345,7 @@ Core Mesa environment variables
 
    A comma-separated list of trace types used for offline analysis. The
    option names are equal to the file extension. Traces are dumped into ``/tmp``.
-   Captures can be triggered by pressing ``F12`` with the application window
+   Captures can be triggered by pressing ``F1`` with the application window
    focused (Currently X11 only) or via :envvar:`MESA_VK_TRACE_FRAME` and
    :envvar:`MESA_VK_TRACE_TRIGGER`.
 

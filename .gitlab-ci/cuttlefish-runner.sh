@@ -92,7 +92,7 @@ RESULTS=/data/results
 uncollapsed_section_switch cuttlefish_test "cuttlefish: testing"
 
 set +e
-$ADB shell "mkdir /data/results; cd /data; strace -o /data/results/out.strace -f -s 1000 ./deqp-runner \
+$ADB shell "mkdir /data/results; cd /data; ./deqp-runner \
     suite \
     --suite /data/deqp-$DEQP_SUITE.toml \
     --output $RESULTS \

@@ -736,6 +736,7 @@ static const driOptionDescription tu_dri_options[] = {
 
    DRI_CONF_SECTION_DEBUG
       DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(false)
+      DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
       DRI_CONF_VK_DONT_CARE_AS_LOAD(false)
    DRI_CONF_SECTION_END
 

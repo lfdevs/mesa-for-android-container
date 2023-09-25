@@ -542,7 +542,7 @@ static void set_custom_cu_en_mask(struct radeon_info *info)
    }
 }
 
-bool ac_query_pci_bus_info(int fd, struct radeon_info *info)
+static bool ac_query_pci_bus_info(int fd, struct radeon_info *info)
 {
    drmDevicePtr devinfo;
 
@@ -563,7 +563,8 @@ bool ac_query_pci_bus_info(int fd, struct radeon_info *info)
    return true;
 }
 
-bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info)
+bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+                       bool require_pci_bus_info)
 {
    struct amdgpu_gpu_info amdinfo;
    struct drm_amdgpu_info_device device_info = {0};
@@ -581,6 +582,11 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info)
    STATIC_ASSERT(AMDGPU_HW_IP_VCN_DEC == AMD_IP_VCN_DEC);
    STATIC_ASSERT(AMDGPU_HW_IP_VCN_ENC == AMD_IP_VCN_ENC);
    STATIC_ASSERT(AMDGPU_HW_IP_VCN_JPEG == AMD_IP_VCN_JPEG);
+
+   if (!ac_query_pci_bus_info(fd, info)) {
+      if (require_pci_bus_info)
+         return false;
+   }
 
    assert(info->drm_major == 3);
    info->is_amdgpu = true;

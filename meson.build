@@ -250,10 +250,19 @@ with_any_broadcom = [
   with_broadcom_vk,
 ].contains(true)
 
+if ['x86_64'].contains(host_machine.cpu_family())
+  with_intel_clc = get_option('intel-clc') == 'enabled'
+  with_intel_vk_rt = with_intel_vk and get_option('intel-clc') != 'disabled'
+else
+  with_intel_clc = false
+  with_intel_vk_rt = false
+endif
+
 with_any_intel = [
   with_gallium_crocus,
   with_gallium_i915,
   with_gallium_iris,
+  with_intel_clc,
   with_intel_hasvk,
   with_intel_tools,
   with_intel_vk,
@@ -270,13 +279,6 @@ if with_aco_tests and not with_amd_vk
 endif
 
 with_microsoft_clc = get_option('microsoft-clc').enabled()
-if ['x86_64'].contains(host_machine.cpu_family())
-  with_intel_clc = get_option('intel-clc').enabled()
-  with_intel_vk_rt = with_intel_vk and with_intel_clc
-else
-  with_intel_clc = false
-  with_intel_vk_rt = false
-endif
 with_clc = with_microsoft_clc or with_intel_clc
 with_spirv_to_dxil = get_option('spirv-to-dxil')
 

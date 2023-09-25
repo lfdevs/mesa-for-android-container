@@ -2786,6 +2786,7 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");
 
    dri2_dpy->fd_render_gpu = -1;
+   dri2_dpy->fd_display_gpu = -1;
    disp->DriverData = (void *)dri2_dpy;
 
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)

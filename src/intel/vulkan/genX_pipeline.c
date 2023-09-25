@@ -559,6 +559,11 @@ emit_3dstate_sbe(struct anv_graphics_pipeline *pipeline)
             sbe_mesh.PerVertexURBEntryOutputReadLength += 1;
          }
 
+         if (mue->user_data_in_vertex_header) {
+            sbe_mesh.PerVertexURBEntryOutputReadOffset -= 1;
+            sbe_mesh.PerVertexURBEntryOutputReadLength += 1;
+         }
+
          assert(mue->per_primitive_header_size_dw % 8 == 0);
          sbe_mesh.PerPrimitiveURBEntryOutputReadOffset = mue->per_primitive_header_size_dw / 8;
          sbe_mesh.PerPrimitiveURBEntryOutputReadLength = DIV_ROUND_UP(mue->per_primitive_data_size_dw, 8);
@@ -570,7 +575,8 @@ emit_3dstate_sbe(struct anv_graphics_pipeline *pipeline)
           */
          if (wm_prog_data->urb_setup[VARYING_SLOT_VIEWPORT] >= 0 ||
              wm_prog_data->urb_setup[VARYING_SLOT_PRIMITIVE_SHADING_RATE] >= 0 ||
-             wm_prog_data->urb_setup[VARYING_SLOT_LAYER] >= 0) {
+             wm_prog_data->urb_setup[VARYING_SLOT_LAYER] >= 0 ||
+             mue->user_data_in_primitive_header) {
             assert(sbe_mesh.PerPrimitiveURBEntryOutputReadOffset > 0);
             sbe_mesh.PerPrimitiveURBEntryOutputReadOffset -= 1;
             sbe_mesh.PerPrimitiveURBEntryOutputReadLength += 1;

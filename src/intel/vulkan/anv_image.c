@@ -214,6 +214,9 @@ choose_isl_surf_usage(VkImageCreateFlags vk_create_flags,
    if (vk_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)
       isl_usage |= ISL_SURF_USAGE_TEXTURE_BIT;
 
+   if (vk_usage & VK_IMAGE_USAGE_STORAGE_BIT)
+      isl_usage |= ISL_SURF_USAGE_STORAGE_BIT;
+
    if (vk_usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
       isl_usage |= ISL_SURF_USAGE_RENDER_TARGET_BIT;
 

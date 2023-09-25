@@ -135,6 +135,12 @@ struct blorp_address {
    bool local_hint;
 };
 
+static inline bool
+blorp_address_is_null(struct blorp_address address)
+{
+   return address.buffer == NULL && address.offset == 0;
+}
+
 struct blorp_surf
 {
    const struct isl_surf *surf;

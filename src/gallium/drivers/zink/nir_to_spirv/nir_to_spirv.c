@@ -2853,7 +2853,7 @@ emit_load_scratch(struct ntv_context *ctx, nir_intrinsic_instr *intr)
                                                uint_type);
    nir_alu_type atype;
    SpvId offset = get_src(ctx, &intr->src[0], &atype);
-   if (atype == nir_type_float)
+   if (atype != nir_type_uint)
       offset = bitcast_to_uvec(ctx, offset, nir_src_bit_size(intr->src[0]), 1);
    SpvId constituents[NIR_MAX_VEC_COMPONENTS];
    SpvId scratch_block = get_scratch_block(ctx, bit_size);
@@ -2886,8 +2886,8 @@ emit_store_scratch(struct ntv_context *ctx, nir_intrinsic_instr *intr)
                                                uint_type);
    nir_alu_type otype;
    SpvId offset = get_src(ctx, &intr->src[1], &otype);
-   if (otype == nir_type_float)
-      offset = bitcast_to_uvec(ctx, offset, nir_src_bit_size(intr->src[0]), 1);
+   if (otype != nir_type_uint)
+      offset = bitcast_to_uvec(ctx, offset, nir_src_bit_size(intr->src[1]), 1);
    SpvId scratch_block = get_scratch_block(ctx, bit_size);
    /* this is a partial write, so we have to loop and do a per-component write */
    u_foreach_bit(i, wrmask) {
@@ -2984,6 +2984,8 @@ emit_store_global(struct ntv_context *ctx, nir_intrinsic_instr *intr)
                                                    dest_type);
    nir_alu_type atype;
    SpvId param = get_src(ctx, &intr->src[0], &atype);
+   if (atype != nir_type_uint)
+      param = emit_bitcast(ctx, dest_type, param);
    SpvId ptr = emit_bitcast(ctx, pointer_type, get_src(ctx, &intr->src[1], &atype));
    spirv_builder_emit_store(&ctx->builder, ptr, param);
 }

@@ -736,7 +736,7 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
             linear &= ~VK_FORMAT_FEATURE_2_BLIT_SRC_BIT;
          }
       }
-      if (radv_is_colorbuffer_format_supported(physical_device, format, &blendable)) {
+      if (radv_is_colorbuffer_format_supported(physical_device, format, &blendable) && desc->channel[0].size != 64) {
          linear |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
          tiled |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
          if (blendable) {
@@ -773,6 +773,12 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
       buffer &= ~(VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT | VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT);
       linear = 0;
       tiled = 0;
+      break;
+   case VK_FORMAT_R64_UINT:
+   case VK_FORMAT_R64_SINT:
+   case VK_FORMAT_R64_SFLOAT:
+      tiled |= VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
+      linear |= VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
       break;
    default:
       break;

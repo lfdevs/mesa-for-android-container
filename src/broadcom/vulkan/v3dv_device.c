@@ -1732,7 +1732,7 @@ v3dv_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
          props->defaultRobustnessVertexInputs =
             VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT;
          props->defaultRobustnessImages =
-            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT;
+            VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT;
          break;
       }
       default:

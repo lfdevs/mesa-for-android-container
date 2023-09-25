@@ -1,4 +1,4 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
 path_max.diff
 src_glx_dri_common.h.diff
-egl-wayland-Always-initialise-fd_display_gpu.patch
+fix-clover-build-without-spirv.diff

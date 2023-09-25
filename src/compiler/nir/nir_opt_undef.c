@@ -110,7 +110,8 @@ nir_get_undef_mask(nir_ssa_def *def)
    nir_alu_instr *alu = nir_instr_as_alu(instr);
    unsigned undef = 0;
 
-   if (nir_op_is_vec(alu->op)) {
+   /* nir_op_mov of undef is handled by opt_undef_vecN() */
+   if (nir_op_is_vec(alu->op) && alu->op != nir_op_mov) {
       for (int i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
          if (alu->src[i].src.is_ssa &&
              alu->src[i].src.ssa->parent_instr->type ==
