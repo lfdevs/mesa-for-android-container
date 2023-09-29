@@ -603,6 +603,8 @@ vn_DestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
 
    vn_device_queue_family_fini(dev);
 
+   vn_device_memory_report_fini(dev);
+
    /* We must emit vkDestroyDevice before freeing dev->queues.  Otherwise,
     * another thread might reuse their object ids while they still refer to
     * the queues in the renderer.

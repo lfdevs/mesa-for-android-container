@@ -3921,7 +3921,9 @@ tu_calc_bandwidth(struct tu_bandwidth *bandwidth,
       const VkFormat format = rp->color_attachment_formats[i];
 
       uint32_t write_bpp = 0;
-      if (att->write_mask == 0xf) {
+      if (format == VK_FORMAT_UNDEFINED) {
+         /* do nothing */
+      } else if (att->write_mask == 0xf) {
          write_bpp = vk_format_get_blocksizebits(format);
       } else {
          const enum pipe_format pipe_format = vk_format_to_pipe_format(format);
@@ -4627,9 +4629,9 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
       if (cmd->state.pipeline_has_fdm) {                                      \
          tu_cs_set_writeable(&cmd->sub_cs, true);                             \
          tu6_emit_##name##_fdm(&cs, cmd, __VA_ARGS__);                        \
-         tu_cs_set_writeable(&cmd->sub_cs, false);                            \
          cmd->state.dynamic_state[id] =                                       \
             tu_cs_end_draw_state(&cmd->sub_cs, &cs);                          \
+         tu_cs_set_writeable(&cmd->sub_cs, false);                            \
       } else {                                                                \
          unsigned size = tu6_##name##_size(cmd->device, __VA_ARGS__);         \
          if (size > 0) {                                                      \

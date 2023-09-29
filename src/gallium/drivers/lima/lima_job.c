@@ -81,8 +81,9 @@ lima_get_fb_info(struct lima_job *job)
    fb->shift_w = 0;
 
    int limit = screen->plb_max_blk;
-   while ((width * height) > limit) {
-      if (width >= height) {
+   while ((width * height) > limit ||
+          width > PLBU_BLOCK_W_MASK || height > PLBU_BLOCK_H_MASK) {
+      if (width >= height || width > PLBU_BLOCK_W_MASK) {
          width = (width + 1) >> 1;
          fb->shift_w++;
       } else {
@@ -397,6 +398,9 @@ lima_pack_head_plbu_cmd(struct lima_job *job)
    struct lima_job_fb_info *fb = &job->fb;
 
    PLBU_CMD_BEGIN(&job->plbu_cmd_head, 10);
+
+   assert((fb->block_w & PLBU_BLOCK_W_MASK) == fb->block_w);
+   assert((fb->block_h & PLBU_BLOCK_H_MASK) == fb->block_h);
 
    PLBU_CMD_UNKNOWN2();
    PLBU_CMD_BLOCK_STEP(fb->shift_min, fb->shift_h, fb->shift_w);

@@ -104,9 +104,9 @@ anv_device_utrace_emit_copy_ts_buffer(struct u_trace_context *utctx,
       container_of(utctx, struct anv_device, ds.trace_context);
    struct anv_utrace_submit *submit = cmdstream;
    struct anv_address from_addr = (struct anv_address) {
-      .bo = ts_from, .offset = from_offset * sizeof(uint64_t) };
+      .bo = ts_from, .offset = from_offset * sizeof(union anv_utrace_timestamp) };
    struct anv_address to_addr = (struct anv_address) {
-      .bo = ts_to, .offset = to_offset * sizeof(uint64_t) };
+      .bo = ts_to, .offset = to_offset * sizeof(union anv_utrace_timestamp) };
 
    anv_genX(device->info, emit_so_memcpy)(&submit->memcpy_state,
                                           to_addr, from_addr,
@@ -348,7 +348,7 @@ anv_device_utrace_init(struct anv_device *device)
 {
    anv_bo_pool_init(&device->utrace_bo_pool, device, "utrace");
    intel_ds_device_init(&device->ds, device->info, device->fd,
-                        device->physical->local_minor - 128,
+                        device->physical->local_minor,
                         INTEL_DS_API_VULKAN);
    u_trace_context_init(&device->ds.trace_context,
                         &device->ds,

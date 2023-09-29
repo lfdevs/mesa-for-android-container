@@ -201,12 +201,14 @@ vk_alloc_ahardware_buffer(const VkMemoryAllocateInfo *pAllocateInfo)
       VK_FROM_HANDLE(vk_buffer, buffer, dedicated_info->buffer);
       w = buffer->size;
       format = AHARDWAREBUFFER_FORMAT_BLOB;
-      usage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
+      usage = AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER |
+              AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
               AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
    } else {
       w = pAllocateInfo->allocationSize;
       format = AHARDWAREBUFFER_FORMAT_BLOB;
-      usage = AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
+      usage = AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER |
+              AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
               AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
    }
 

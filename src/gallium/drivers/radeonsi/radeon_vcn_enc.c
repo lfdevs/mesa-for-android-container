@@ -409,7 +409,6 @@ static void radeon_vcn_enc_hevc_get_param(struct radeon_encoder *enc,
    enc->enc_pic.picture_type = pic->picture_type;
    enc->enc_pic.frame_num = pic->frame_num;
    radeon_vcn_enc_quality_modes(enc, &pic->quality_modes);
-   enc->enc_pic.pic_order_cnt = pic->pic_order_cnt;
    enc->enc_pic.pic_order_cnt_type = pic->pic_order_cnt_type;
    enc->enc_pic.ref_idx_l0 = pic->ref_idx_l0_list[0];
    enc->enc_pic.ref_idx_l1 = pic->ref_idx_l1_list[0];
@@ -419,12 +418,11 @@ static void radeon_vcn_enc_hevc_get_param(struct radeon_encoder *enc,
    enc->enc_pic.general_tier_flag = pic->seq.general_tier_flag;
    enc->enc_pic.general_profile_idc = pic->seq.general_profile_idc;
    enc->enc_pic.general_level_idc = pic->seq.general_level_idc;
-   enc->enc_pic.max_poc = MAX2(16, util_next_power_of_two(pic->seq.intra_period));
-   enc->enc_pic.log2_max_poc = 0;
+   /* use fixed value for max_poc until new feature added */
+   enc->enc_pic.max_poc = 16;
+   enc->enc_pic.log2_max_poc = 4;
    enc->enc_pic.num_temporal_layers = 1;
-   for (int i = enc->enc_pic.max_poc; i != 0; enc->enc_pic.log2_max_poc++)
-      i = (i >> 1);
-
+   enc->enc_pic.pic_order_cnt = pic->pic_order_cnt % enc->enc_pic.max_poc;
    enc->enc_pic.chroma_format_idc = pic->seq.chroma_format_idc;
    enc->enc_pic.pic_width_in_luma_samples = pic->seq.pic_width_in_luma_samples;
    enc->enc_pic.pic_height_in_luma_samples = pic->seq.pic_height_in_luma_samples;

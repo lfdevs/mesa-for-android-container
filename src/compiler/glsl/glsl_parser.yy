@@ -34,6 +34,7 @@
 #include "compiler/glsl_types.h"
 #include "util/u_string.h"
 #include "util/format/u_format.h"
+#include "main/consts_exts.h"
 
 #ifdef _MSC_VER
 #pragma warning( disable : 4065 ) // switch statement contains 'default' but no 'case' labels
@@ -2211,7 +2212,7 @@ storage_qualifier:
           $$.stream = state->out_qualifier->stream;
       }
 
-      if (state->has_enhanced_layouts()) {
+      if (state->has_enhanced_layouts() && state->exts->ARB_transform_feedback3) {
           $$.flags.q.xfb_buffer = 1;
           $$.flags.q.explicit_xfb_buffer = 0;
           $$.xfb_buffer = state->out_qualifier->xfb_buffer;

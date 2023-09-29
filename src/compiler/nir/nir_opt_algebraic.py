@@ -3180,8 +3180,7 @@ for op in ['ffma', 'ffmaz']:
 # first eliminate temporary up-conversions such as in op1(f2fmp(f2f32(op2()))).
 #
 # Unary opcodes
-for op in ['fabs', 'fceil', 'fcos', 'fddx', 'fddx_coarse', 'fddx_fine', 'fddy',
-           'fddy_coarse', 'fddy_fine', 'fexp2', 'ffloor', 'ffract', 'flog2', 'fneg',
+for op in ['fabs', 'fceil', 'fcos', 'fexp2', 'ffloor', 'ffract', 'flog2', 'fneg',
            'frcp', 'fround_even', 'frsq', 'fsat', 'fsign', 'fsin', 'fsqrt']:
     late_optimizations += [(('~f2f32', (op, ('f2fmp', a))), (op, a))]
 

@@ -86,7 +86,8 @@ remove_tex_shadow(struct nir_builder *b, nir_instr *instr, void *data)
          sampler->type = strip_shadow_with_array(sampler->type);
          sampler_deref->type = sampler->type;
       } else {
-         sampler = nir_find_variable_with_location(b->shader, nir_var_uniform, tex->sampler_index);
+         sampler = nir_find_sampler_variable_with_tex_index(b->shader,
+                                                            tex->texture_index);
          sampler->type = strip_shadow_with_array(sampler->type);
       }
 

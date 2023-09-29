@@ -247,7 +247,6 @@ spec@glsl-4.50@execution@ssbo-atomiccompswap-int,Fail
 spec@arb_texture_cube_map_array@texsubimage cube_map_array,Fail
 
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
-spec@!opengl 1.1@texsubimage,Fail
 
 # Debian 12 CI update, see https://gitlab.freedesktop.org/mesa/mesa/-/issues/9072
 spec@arb_pixel_buffer_object@cubemap pbo,Crash

@@ -1944,7 +1944,11 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
 
    case SpvOpTypeEvent:
       val->type->base_type = vtn_base_type_event;
-      val->type->type = glsl_int_type();
+      /*
+       * this makes the event type compatible with pointer size due to LLVM 16.
+       * llvm 17 fixes this properly, but with 16 and opaque ptrs it's still wrong.
+       */
+      val->type->type = b->shader->info.cs.ptr_size == 64 ? glsl_int64_t_type() : glsl_int_type();
       break;
 
    case SpvOpTypeDeviceEvent:

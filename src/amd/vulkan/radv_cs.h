@@ -130,12 +130,15 @@ radeon_set_uconfig_reg_seq(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)
 }
 
 static inline void
-radeon_set_uconfig_reg_seq_perfctr(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)
+radeon_set_uconfig_reg_seq_perfctr(enum amd_gfx_level gfx_level, enum radv_queue_family qf, struct radeon_cmdbuf *cs,
+                                   unsigned reg, unsigned num)
 {
+   const bool filter_cam_workaround = gfx_level >= GFX10 && qf == RADV_QUEUE_GENERAL;
+
    assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
    assert(cs->cdw + 2 + num <= cs->reserved_dw);
    assert(num);
-   radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, num, 1));
+   radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, num, 0) | PKT3_RESET_FILTER_CAM_S(filter_cam_workaround));
    radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2);
 }
 
@@ -165,9 +168,9 @@ radeon_set_uconfig_reg_idx(const struct radv_physical_device *pdevice, struct ra
 }
 
 static inline void
-radeon_set_perfctr_reg(struct radv_cmd_buffer *cmd_buffer, unsigned reg, unsigned value)
+radeon_set_perfctr_reg(enum amd_gfx_level gfx_level, enum radv_queue_family qf, struct radeon_cmdbuf *cs, unsigned reg,
+                       unsigned value)
 {
-   struct radeon_cmdbuf *cs = cmd_buffer->cs;
    assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
    assert(cs->cdw + 3 <= cs->reserved_dw);
 
@@ -176,8 +179,7 @@ radeon_set_perfctr_reg(struct radv_cmd_buffer *cmd_buffer, unsigned reg, unsigne
     * that means that it can skip register writes due to not taking correctly into account the
     * fields from the GRBM_GFX_INDEX. With this bit we can force the write.
     */
-   bool filter_cam_workaround =
-      cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX10 && cmd_buffer->qf == RADV_QUEUE_GENERAL;
+   bool filter_cam_workaround = gfx_level >= GFX10 && qf == RADV_QUEUE_GENERAL;
 
    radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, 1, 0) | PKT3_RESET_FILTER_CAM_S(filter_cam_workaround));
    radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2);

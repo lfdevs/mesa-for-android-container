@@ -775,6 +775,7 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
 
    unsigned i;
    unsigned slice_idx = 0;
+   vlVaBuffer *seq_param_buf = NULL;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -800,7 +801,15 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
 
       if (buf->type == VAProtectedSliceDataBufferType)
          handleVAProtectedSliceDataBufferType(context, buf);
+      else if (buf->type == VAEncSequenceParameterBufferType)
+         seq_param_buf = buf;
    }
+
+   /* Now process VAEncSequenceParameterBufferType where the encoder is created
+    * and some default parameters are set to make sure it won't overwrite
+    * parameters already set by application from earlier buffers. */
+   if (seq_param_buf)
+      vaStatus = handleVAEncSequenceParameterBufferType(drv, context, seq_param_buf);
 
    for (i = 0; i < num_buffers && vaStatus == VA_STATUS_SUCCESS; ++i) {
       vlVaBuffer *buf = handle_table_get(drv->htab, buffers[i]);
@@ -832,10 +841,6 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
 
       case VAProcPipelineParameterBufferType:
          vaStatus = vlVaHandleVAProcPipelineParameterBufferType(drv, context, buf);
-         break;
-
-      case VAEncSequenceParameterBufferType:
-         vaStatus = handleVAEncSequenceParameterBufferType(drv, context, buf);
          break;
 
       case VAEncMiscParameterBufferType:

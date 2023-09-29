@@ -211,6 +211,8 @@ is_overwritten_since(pr_opt_ctx& ctx, PhysReg reg, RegClass rc, const Idx& since
          return true;
       else if (i == overwritten_untrackable || i == not_written_yet)
          continue;
+      else if (i == overwritten_subdword)
+         return true;
 
       assert(i.found());
 

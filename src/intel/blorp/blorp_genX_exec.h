@@ -1656,29 +1656,6 @@ blorp_setup_binding_table(struct blorp_batch *batch,
       }
    }
 
-#if GFX_VER >= 7 && GFX_VER < 12
-   if (has_indirect_clear_color) {
-      /* Updating a surface state object may require that the state cache be
-       * invalidated. From the SKL PRM, Shared Functions -> State -> State
-       * Caching:
-       *
-       *    Whenever the RENDER_SURFACE_STATE object in memory pointed to by
-       *    the Binding Table Pointer (BTP) and Binding Table Index (BTI) is
-       *    modified [...], the L1 state cache must be invalidated to ensure
-       *    the new surface or sampler state is fetched from system memory.
-       *
-       * XXX - Investigate why exactly this invalidation is necessary to
-       *       avoid Vulkan regressions on ICL.  It's possible that the
-       *       MI_ATOMIC used to update the clear color isn't correctly
-       *       ordered with the pre-existing invalidation in
-       *       blorp_update_clear_color().
-       */
-      blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
-         pipe.StateCacheInvalidationEnable = true;
-      }
-   }
-#endif
-
    return bind_offset;
 }
 
@@ -1923,132 +1900,129 @@ blorp_emit_gfx8_hiz_op(struct blorp_batch *batch,
 
 static void
 blorp_update_clear_color(UNUSED struct blorp_batch *batch,
-                         const struct brw_blorp_surface_info *info,
-                         enum isl_aux_op op)
+                         const struct brw_blorp_surface_info *info)
 {
-   if (info->clear_color_addr.buffer && op == ISL_AUX_OP_FAST_CLEAR) {
+   assert(info->clear_color_addr.buffer != NULL);
 #if GFX_VER == 11
-      blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
-         pipe.CommandStreamerStallEnable = true;
-      }
+   /* 2 QWORDS */
+   const unsigned inlinedata_dw = 2 * 2;
+   const unsigned num_dwords = GENX(MI_ATOMIC_length) + inlinedata_dw;
 
-      /* 2 QWORDS */
-      const unsigned inlinedata_dw = 2 * 2;
-      const unsigned num_dwords = GENX(MI_ATOMIC_length) + inlinedata_dw;
+   struct blorp_address clear_addr = info->clear_color_addr;
+   uint32_t *dw = blorp_emitn(batch, GENX(MI_ATOMIC), num_dwords,
+                              .DataSize = MI_ATOMIC_QWORD,
+                              .ATOMICOPCODE = MI_ATOMIC_OP_MOVE8B,
+                              .InlineData = true,
+                              .MemoryAddress = clear_addr);
+   /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
+   dw[2] = info->clear_color.u32[0];
+   dw[3] = 0;
+   dw[4] = info->clear_color.u32[1];
+   dw[5] = 0;
 
-      struct blorp_address clear_addr = info->clear_color_addr;
-      uint32_t *dw = blorp_emitn(batch, GENX(MI_ATOMIC), num_dwords,
-                                 .DataSize = MI_ATOMIC_QWORD,
-                                 .ATOMICOPCODE = MI_ATOMIC_OP_MOVE8B,
-                                 .InlineData = true,
-                                 .MemoryAddress = clear_addr);
-      /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
-      dw[2] = info->clear_color.u32[0];
-      dw[3] = 0;
-      dw[4] = info->clear_color.u32[1];
-      dw[5] = 0;
+   clear_addr.offset += 8;
+   dw = blorp_emitn(batch, GENX(MI_ATOMIC), num_dwords,
+                    .DataSize = MI_ATOMIC_QWORD,
+                    .ATOMICOPCODE = MI_ATOMIC_OP_MOVE8B,
+                    .CSSTALL = true,
+                    .ReturnDataControl = true,
+                    .InlineData = true,
+                    .MemoryAddress = clear_addr);
+   /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
+   dw[2] = info->clear_color.u32[2];
+   dw[3] = 0;
+   dw[4] = info->clear_color.u32[3];
+   dw[5] = 0;
 
-      clear_addr.offset += 8;
-      dw = blorp_emitn(batch, GENX(MI_ATOMIC), num_dwords,
-                                 .DataSize = MI_ATOMIC_QWORD,
-                                 .ATOMICOPCODE = MI_ATOMIC_OP_MOVE8B,
-                                 .CSSTALL = true,
-                                 .ReturnDataControl = true,
-                                 .InlineData = true,
-                                 .MemoryAddress = clear_addr);
-      /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
-      dw[2] = info->clear_color.u32[2];
-      dw[3] = 0;
-      dw[4] = info->clear_color.u32[3];
-      dw[5] = 0;
-
-      blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
-         pipe.StateCacheInvalidationEnable = true;
-         pipe.TextureCacheInvalidationEnable = true;
-      }
 #elif GFX_VER >= 9
 
-      /* According to Wa_2201730850, in the Clear Color Programming Note
-       * under the Red channel, "Software shall write the converted Depth
-       * Clear to this dword." The only depth formats listed under the red
-       * channel are IEEE_FP and UNORM24_X8. These two requirements are
-       * incompatible with the UNORM16 depth format, so just ignore that case
-       * and simply perform the conversion for all depth formats.
-       */
-      union isl_color_value fixed_color = info->clear_color;
-      if (GFX_VER == 12 && isl_surf_usage_is_depth(info->surf.usage)) {
-         isl_color_value_pack(&info->clear_color, info->surf.format,
-                              fixed_color.u32);
-      }
+   /* According to Wa_2201730850, in the Clear Color Programming Note under
+    * the Red channel, "Software shall write the converted Depth Clear to this
+    * dword." The only depth formats listed under the red channel are IEEE_FP
+    * and UNORM24_X8. These two requirements are incompatible with the UNORM16
+    * depth format, so just ignore that case and simply perform the conversion
+    * for all depth formats.
+    */
+   union isl_color_value fixed_color = info->clear_color;
+   if (GFX_VER == 12 && isl_surf_usage_is_depth(info->surf.usage)) {
+      isl_color_value_pack(&info->clear_color, info->surf.format,
+                           fixed_color.u32);
+   }
 
-      for (int i = 0; i < 4; i++) {
-         blorp_emit(batch, GENX(MI_STORE_DATA_IMM), sdi) {
-            sdi.Address = info->clear_color_addr;
-            sdi.Address.offset += i * 4;
-            sdi.ImmediateData = fixed_color.u32[i];
+   for (int i = 0; i < 4; i++) {
+      blorp_emit(batch, GENX(MI_STORE_DATA_IMM), sdi) {
+         sdi.Address = info->clear_color_addr;
+         sdi.Address.offset += i * 4;
+         sdi.ImmediateData = fixed_color.u32[i];
 #if GFX_VER >= 12
-            if (i == 3)
-               sdi.ForceWriteCompletionCheck = true;
-#endif
-         }
-      }
-
-/* The RENDER_SURFACE_STATE::ClearColor field states that software should
- * write the converted depth value 16B after the clear address:
- *
- *    3D Sampler will always fetch clear depth from the location 16-bytes
- *    above this address, where the clear depth, converted to native
- *    surface format by software, will be stored.
- *
- */
-#if GFX_VER >= 12
-      if (isl_surf_usage_is_depth(info->surf.usage)) {
-         blorp_emit(batch, GENX(MI_STORE_DATA_IMM), sdi) {
-            sdi.Address = info->clear_color_addr;
-            sdi.Address.offset += 4 * 4;
-            sdi.ImmediateData = fixed_color.u32[0];
+         if (i == 3)
             sdi.ForceWriteCompletionCheck = true;
-         }
+#endif
       }
+   }
+
+   /* The RENDER_SURFACE_STATE::ClearColor field states that software should
+    * write the converted depth value 16B after the clear address:
+    *
+    *    3D Sampler will always fetch clear depth from the location 16-bytes
+    *    above this address, where the clear depth, converted to native
+    *    surface format by software, will be stored.
+    *
+    */
+#if GFX_VER >= 12
+   if (isl_surf_usage_is_depth(info->surf.usage)) {
+      blorp_emit(batch, GENX(MI_STORE_DATA_IMM), sdi) {
+         sdi.Address = info->clear_color_addr;
+         sdi.Address.offset += 4 * 4;
+         sdi.ImmediateData = fixed_color.u32[0];
+         sdi.ForceWriteCompletionCheck = true;
+      }
+   }
 #endif
 
 #elif GFX_VER >= 7
-      blorp_emit(batch, GENX(MI_STORE_DATA_IMM), sdi) {
-         sdi.Address = info->clear_color_addr;
-         sdi.ImmediateData = ISL_CHANNEL_SELECT_RED   << 25 |
-                             ISL_CHANNEL_SELECT_GREEN << 22 |
-                             ISL_CHANNEL_SELECT_BLUE  << 19 |
-                             ISL_CHANNEL_SELECT_ALPHA << 16;
-         if (isl_format_has_int_channel(info->view.format)) {
-            for (unsigned i = 0; i < 4; i++) {
-               assert(info->clear_color.u32[i] == 0 ||
-                      info->clear_color.u32[i] == 1);
-            }
-            sdi.ImmediateData |= (info->clear_color.u32[0] != 0) << 31;
-            sdi.ImmediateData |= (info->clear_color.u32[1] != 0) << 30;
-            sdi.ImmediateData |= (info->clear_color.u32[2] != 0) << 29;
-            sdi.ImmediateData |= (info->clear_color.u32[3] != 0) << 28;
-         } else {
-            for (unsigned i = 0; i < 4; i++) {
-               assert(info->clear_color.f32[i] == 0.0f ||
-                      info->clear_color.f32[i] == 1.0f);
-            }
-            sdi.ImmediateData |= (info->clear_color.f32[0] != 0.0f) << 31;
-            sdi.ImmediateData |= (info->clear_color.f32[1] != 0.0f) << 30;
-            sdi.ImmediateData |= (info->clear_color.f32[2] != 0.0f) << 29;
-            sdi.ImmediateData |= (info->clear_color.f32[3] != 0.0f) << 28;
+   blorp_emit(batch, GENX(MI_STORE_DATA_IMM), sdi) {
+      sdi.Address = info->clear_color_addr;
+      sdi.ImmediateData = ISL_CHANNEL_SELECT_RED   << 25 |
+                          ISL_CHANNEL_SELECT_GREEN << 22 |
+                          ISL_CHANNEL_SELECT_BLUE  << 19 |
+                          ISL_CHANNEL_SELECT_ALPHA << 16;
+      if (isl_format_has_int_channel(info->view.format)) {
+         for (unsigned i = 0; i < 4; i++) {
+            assert(info->clear_color.u32[i] == 0 ||
+                   info->clear_color.u32[i] == 1);
          }
+         sdi.ImmediateData |= (info->clear_color.u32[0] != 0) << 31;
+         sdi.ImmediateData |= (info->clear_color.u32[1] != 0) << 30;
+         sdi.ImmediateData |= (info->clear_color.u32[2] != 0) << 29;
+         sdi.ImmediateData |= (info->clear_color.u32[3] != 0) << 28;
+      } else {
+         for (unsigned i = 0; i < 4; i++) {
+            assert(info->clear_color.f32[i] == 0.0f ||
+                   info->clear_color.f32[i] == 1.0f);
+         }
+         sdi.ImmediateData |= (info->clear_color.f32[0] != 0.0f) << 31;
+         sdi.ImmediateData |= (info->clear_color.f32[1] != 0.0f) << 30;
+         sdi.ImmediateData |= (info->clear_color.f32[2] != 0.0f) << 29;
+         sdi.ImmediateData |= (info->clear_color.f32[3] != 0.0f) << 28;
       }
-#endif
    }
+#endif
 }
 
 static void
 blorp_exec_3d(struct blorp_batch *batch, const struct blorp_params *params)
 {
    if (!(batch->flags & BLORP_BATCH_NO_UPDATE_CLEAR_COLOR)) {
-      blorp_update_clear_color(batch, &params->dst, params->fast_clear_op);
-      blorp_update_clear_color(batch, &params->depth, params->hiz_op);
+      if (params->fast_clear_op == ISL_AUX_OP_FAST_CLEAR &&
+          params->dst.clear_color_addr.buffer != NULL) {
+         blorp_update_clear_color(batch, &params->dst);
+      }
+
+      if (params->hiz_op == ISL_AUX_OP_FAST_CLEAR &&
+          params->depth.clear_color_addr.buffer != NULL) {
+         blorp_update_clear_color(batch, &params->depth);
+      }
    }
 
 #if GFX_VER >= 8

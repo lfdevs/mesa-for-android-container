@@ -577,6 +577,7 @@ process_instructions(exec_ctx& ctx, Block* block, std::vector<aco_ptr<Instructio
                       (mask_type_exact | mask_type_global));
                current_exec = get_exec_op(ctx.info[block->index].exec.back().first);
                ctx.info[block->index].exec[0].first = Operand(bld.lm);
+               state = Exact;
             }
          }
 

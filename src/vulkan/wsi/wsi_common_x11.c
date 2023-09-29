@@ -68,6 +68,13 @@
 #include <sys/shm.h>
 #endif
 
+#ifndef XCB_PRESENT_OPTION_ASYNC_MAY_TEAR
+#define XCB_PRESENT_OPTION_ASYNC_MAY_TEAR 16
+#endif
+#ifndef XCB_PRESENT_CAPABILITY_ASYNC_MAY_TEAR
+#define XCB_PRESENT_CAPABILITY_ASYNC_MAY_TEAR 8
+#endif
+
 struct wsi_x11_connection {
    bool has_dri3;
    bool has_dri3_modifiers;
@@ -1041,6 +1048,7 @@ struct x11_swapchain {
 
    bool                                         has_dri3_modifiers;
    bool                                         has_mit_shm;
+   bool                                         has_async_may_tear;
 
    xcb_connection_t *                           conn;
    xcb_window_t                                 window;
@@ -1103,7 +1111,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(x11_swapchain, base.base, VkSwapchainKHR,
 static void x11_present_complete(struct x11_swapchain *swapchain,
                                  struct x11_image *image)
 {
-   if (image->present_id) {
+   if (image->signal_present_id) {
       pthread_mutex_lock(&swapchain->present_progress_mutex);
       if (image->signal_present_id > swapchain->present_id) {
          swapchain->present_id = image->signal_present_id;
@@ -1596,6 +1604,10 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
         wsi_conn->is_xwayland) ||
        chain->base.present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)
       options |= XCB_PRESENT_OPTION_ASYNC;
+
+   if (chain->base.present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR
+      && chain->has_async_may_tear)
+      options |= XCB_PRESENT_OPTION_ASYNC_MAY_TEAR;
 
 #ifdef HAVE_DRI3_MODIFIERS
    if (chain->has_dri3_modifiers)
@@ -2723,6 +2735,15 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->status = VK_SUCCESS;
    chain->has_dri3_modifiers = wsi_conn->has_dri3_modifiers;
    chain->has_mit_shm = wsi_conn->has_mit_shm;
+
+   xcb_present_query_capabilities_cookie_t present_query_cookie;
+   xcb_present_query_capabilities_reply_t *present_query_reply;
+   present_query_cookie = xcb_present_query_capabilities(conn, chain->window);
+   present_query_reply = xcb_present_query_capabilities_reply(conn, present_query_cookie, NULL);
+   if (present_query_reply) {
+      chain->has_async_may_tear = present_query_reply->capabilities & XCB_PRESENT_CAPABILITY_ASYNC_MAY_TEAR;
+      free(present_query_reply);
+   }
 
    /* When images in the swapchain don't fit the window, X can still present them, but it won't
     * happen by flip, only by copy. So this is a suboptimal copy, because if the client would change

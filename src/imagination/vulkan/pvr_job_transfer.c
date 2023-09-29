@@ -5043,7 +5043,7 @@ pvr_generate_custom_mapping(uint32_t src_stride,
             struct pvr_transfer_wa_source *src = &pass->sources[j];
 
             for (uint32_t k = 0; k < src->mapping_count; k++) {
-               VkRect2D *src_rect = &src->mappings[i].src_rect;
+               VkRect2D *src_rect = &src->mappings[k].src_rect;
                bool extend_height =
                   pvr_extend_height(src_rect,
                                     src_height,
@@ -5058,7 +5058,7 @@ pvr_generate_custom_mapping(uint32_t src_stride,
                   new_src->mappings[new_src->mapping_count] = src->mappings[k];
                   new_src->src_offset = src->src_offset;
 
-                  for (uint32_t l = i + 1; l < src->mapping_count; l++)
+                  for (uint32_t l = k + 1; l < src->mapping_count; l++)
                      src->mappings[l - 1] = src->mappings[l];
 
                   new_src->mapping_count++;

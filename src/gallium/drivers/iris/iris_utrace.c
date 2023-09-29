@@ -183,10 +183,7 @@ void iris_utrace_init(struct iris_context *ice)
    else
       minor = 0;
 
-   /* We could be dealing with /dev/dri/card0 or /dev/dri/renderD128 so to get
-    * a GPU ID we % 128 the minor number.
-    */
-   intel_ds_device_init(&ice->ds, screen->devinfo, screen->fd, minor % 128,
+   intel_ds_device_init(&ice->ds, screen->devinfo, screen->fd, minor,
                         INTEL_DS_API_OPENGL);
 
    u_trace_context_init(&ice->ds.trace_context, &ice->ctx,

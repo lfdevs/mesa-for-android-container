@@ -427,6 +427,9 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
    uint8_t *map = NULL;
    int dst_x, dst_y;
 
+   if (rb == NULL)
+      return;
+
    /* Validate state (to be sure we have up-to-date framebuffer surfaces)
     * and flush the bitmap cache prior to reading. */
    st_validate_state(st, ST_PIPELINE_UPDATE_FB_STATE_MASK);

@@ -462,6 +462,8 @@ radv_emit_instance(struct radv_cmd_buffer *cmd_buffer, int se, int instance)
 static void
 radv_emit_select(struct radv_cmd_buffer *cmd_buffer, struct ac_pc_block *block, unsigned count, unsigned *selectors)
 {
+   const enum amd_gfx_level gfx_level = cmd_buffer->device->physical_device->rad_info.gfx_level;
+   const enum radv_queue_family qf = cmd_buffer->qf;
    struct ac_pc_block_base *regs = block->b->b;
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    unsigned idx;
@@ -473,7 +475,7 @@ radv_emit_select(struct radv_cmd_buffer *cmd_buffer, struct ac_pc_block *block, 
       return;
 
    for (idx = 0; idx < count; ++idx) {
-      radeon_set_perfctr_reg(cmd_buffer, regs->select0[idx], G_REG_SEL(selectors[idx]) | regs->select_or);
+      radeon_set_perfctr_reg(gfx_level, qf, cs, regs->select0[idx], G_REG_SEL(selectors[idx]) | regs->select_or);
    }
 
    for (idx = 0; idx < regs->num_spm_counters; idx++) {

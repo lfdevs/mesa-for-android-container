@@ -1582,7 +1582,7 @@ glsl_type::get_function_instance(const glsl_type *return_type,
                                  unsigned num_params)
 {
    const glsl_type key(return_type, params, num_params);
-   const uint32_t key_hash = record_key_hash(&key);
+   const uint32_t key_hash = function_key_hash(&key);
 
    simple_mtx_lock(&glsl_type::hash_mutex);
    assert(glsl_type_users > 0);

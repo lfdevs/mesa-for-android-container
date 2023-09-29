@@ -167,6 +167,12 @@ vlVaHandleVAEncSequenceParameterBufferTypeHEVC(vlVaDriver *drv, vlVaContext *con
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
 
       getEncParamPresetH265(context);
+      context->desc.h265enc.rc.vbv_buffer_size = 20000000;
+      context->desc.h265enc.rc.vbv_buf_lv = 48;
+      context->desc.h265enc.rc.fill_data_enable = 1;
+      context->desc.h265enc.rc.enforce_hrd = 1;
+      context->desc.h265enc.rc.max_qp = 51;
+      context->desc.h265enc.rc.min_qp = 0;
    }
 
    context->desc.h265enc.seq.general_profile_idc = h265->general_profile_idc;
@@ -429,13 +435,6 @@ vlVaHandleVAEncMiscParameterTypeHRDHEVC(vlVaContext *context, VAEncMiscParameter
 void getEncParamPresetH265(vlVaContext *context)
 {
    //rate control
-   context->desc.h265enc.rc.vbv_buffer_size = 20000000;
-   context->desc.h265enc.rc.vbv_buf_lv = 48;
-   context->desc.h265enc.rc.fill_data_enable = 1;
-   context->desc.h265enc.rc.enforce_hrd = 1;
-   context->desc.h265enc.rc.max_qp = 51;
-   context->desc.h265enc.rc.min_qp = 0;
-
    if (context->desc.h265enc.rc.frame_rate_num == 0 ||
        context->desc.h265enc.rc.frame_rate_den == 0) {
       context->desc.h265enc.rc.frame_rate_num = 30;

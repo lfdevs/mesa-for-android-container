@@ -48,7 +48,7 @@ struct asm_context {
    std::map<unsigned, constaddr_info> constaddrs;
    std::map<unsigned, constaddr_info> resumeaddrs;
    std::vector<struct aco_symbol>* symbols;
-   Block* loop_header;
+   Block* loop_header = NULL;
    const int16_t* opcode;
    // TODO: keep track of branch instructions referring blocks
    // and, when emitting the block, correct the offset in instr
@@ -1221,7 +1221,11 @@ fix_constaddrs(asm_context& ctx, std::vector<uint32_t>& out)
 void
 align_block(asm_context& ctx, std::vector<uint32_t>& code, Block& block)
 {
-   if (block.kind & block_kind_loop_exit && ctx.loop_header) {
+   /* Blocks with block_kind_loop_exit might be eliminated after jump threading, so we instead find
+    * loop exits using loop_nest_depth.
+    */
+   if (ctx.loop_header && !block.linear_preds.empty() &&
+       block.loop_nest_depth < ctx.loop_header->loop_nest_depth) {
       Block* loop_header = ctx.loop_header;
       ctx.loop_header = NULL;
       std::vector<uint32_t> nops;

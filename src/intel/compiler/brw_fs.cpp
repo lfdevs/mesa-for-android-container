@@ -2602,6 +2602,62 @@ fs_visitor::lower_constant_loads()
    invalidate_analysis(DEPENDENCY_INSTRUCTIONS);
 }
 
+static uint64_t
+src_as_uint(const fs_reg &src)
+{
+   assert(src.file == IMM);
+
+   switch (src.type) {
+   case BRW_REGISTER_TYPE_W:
+      return (uint64_t)(int16_t)(src.ud & 0xffff);
+
+   case BRW_REGISTER_TYPE_UW:
+      return (uint64_t)(uint16_t)(src.ud & 0xffff);
+
+   case BRW_REGISTER_TYPE_D:
+      return (uint64_t)src.d;
+
+   case BRW_REGISTER_TYPE_UD:
+      return (uint64_t)src.ud;
+
+   case BRW_REGISTER_TYPE_Q:
+      return src.d64;
+
+   case BRW_REGISTER_TYPE_UQ:
+      return src.u64;
+
+   default:
+      unreachable("Invalid integer type.");
+   }
+}
+
+static fs_reg
+brw_imm_for_type(uint64_t value, enum brw_reg_type type)
+{
+   switch (type) {
+   case BRW_REGISTER_TYPE_W:
+      return brw_imm_w(value);
+
+   case BRW_REGISTER_TYPE_UW:
+      return brw_imm_uw(value);
+
+   case BRW_REGISTER_TYPE_D:
+      return brw_imm_d(value);
+
+   case BRW_REGISTER_TYPE_UD:
+      return brw_imm_ud(value);
+
+   case BRW_REGISTER_TYPE_Q:
+      return brw_imm_d(value);
+
+   case BRW_REGISTER_TYPE_UQ:
+      return brw_imm_uq(value);
+
+   default:
+      unreachable("Invalid integer type.");
+   }
+}
+
 bool
 fs_visitor::opt_algebraic()
 {
@@ -2735,7 +2791,35 @@ fs_visitor::opt_algebraic()
             break;
          }
          break;
+
+      case BRW_OPCODE_AND:
+         if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+            const uint64_t src0 = src_as_uint(inst->src[0]);
+            const uint64_t src1 = src_as_uint(inst->src[1]);
+
+            inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
+            inst->src[0] = brw_imm_for_type(src0 & src1, inst->dst.type);
+            inst->src[1] = reg_undef;
+            progress = true;
+            break;
+         }
+
+         break;
+
       case BRW_OPCODE_OR:
+         if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+            const uint64_t src0 = src_as_uint(inst->src[0]);
+            const uint64_t src1 = src_as_uint(inst->src[1]);
+
+            inst->opcode = BRW_OPCODE_MOV;
+            inst->sources = 1;
+            inst->src[0] = brw_imm_for_type(src0 | src1, inst->dst.type);
+            inst->src[1] = reg_undef;
+            progress = true;
+            break;
+         }
+
          if (inst->src[0].equals(inst->src[1]) ||
              inst->src[1].is_zero()) {
             /* On Gfx8+, the OR instruction can have a source modifier that
@@ -2856,6 +2940,39 @@ fs_visitor::opt_algebraic()
             progress = true;
          }
          break;
+      case BRW_OPCODE_SHL:
+         if (inst->src[0].file == IMM && inst->src[1].file == IMM) {
+            /* It's not currently possible to generate this, and this constant
+             * folding does not handle it.
+             */
+            assert(!inst->saturate);
+
+            fs_reg result;
+
+            switch (type_sz(inst->src[0].type)) {
+            case 2:
+               result = brw_imm_uw(0x0ffff & (inst->src[0].ud << (inst->src[1].ud & 0x1f)));
+               break;
+            case 4:
+               result = brw_imm_ud(inst->src[0].ud << (inst->src[1].ud & 0x1f));
+               break;
+            case 8:
+               result = brw_imm_uq(inst->src[0].u64 << (inst->src[1].ud & 0x3f));
+               break;
+            default:
+               /* Just in case a future platform re-enables B or UB types. */
+               unreachable("Invalid source size.");
+            }
+
+            inst->opcode = BRW_OPCODE_MOV;
+            inst->src[0] = retype(result, inst->dst.type);
+            inst->src[1] = reg_undef;
+            inst->sources = 1;
+
+            progress = true;
+         }
+         break;
+
       case SHADER_OPCODE_BROADCAST:
          if (is_uniform(inst->src[0])) {
             inst->opcode = BRW_OPCODE_MOV;
@@ -6150,12 +6267,15 @@ fs_visitor::optimize()
    OPT(fixup_nomask_control_flow);
 
    if (progress) {
-      OPT(opt_copy_propagation);
+      if (OPT(opt_copy_propagation))
+         OPT(opt_algebraic);
+
       /* Only run after logical send lowering because it's easier to implement
        * in terms of physical sends.
        */
-      if (OPT(opt_zero_samples))
-         OPT(opt_copy_propagation);
+      if (OPT(opt_zero_samples) && OPT(opt_copy_propagation))
+         OPT(opt_algebraic);
+
       /* Run after logical send lowering to give it a chance to CSE the
        * LOAD_PAYLOAD instructions created to construct the payloads of
        * e.g. texturing messages in cases where it wasn't possible to CSE the
@@ -6197,7 +6317,8 @@ fs_visitor::optimize()
    if (devinfo->ver <= 5 && OPT(lower_minmax)) {
       OPT(opt_cmod_propagation);
       OPT(opt_cse);
-      OPT(opt_copy_propagation);
+      if (OPT(opt_copy_propagation))
+         OPT(opt_algebraic);
       OPT(dead_code_eliminate);
    }
 
@@ -6205,7 +6326,8 @@ fs_visitor::optimize()
    OPT(lower_derivatives);
    OPT(lower_regioning);
    if (progress) {
-      OPT(opt_copy_propagation);
+      if (OPT(opt_copy_propagation))
+         OPT(opt_algebraic);
       OPT(dead_code_eliminate);
       OPT(lower_simd_width);
    }
@@ -7678,7 +7800,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
       } else {
          const performance &perf = v32->performance_analysis.require();
 
-         if (!INTEL_DEBUG(DEBUG_DO32) && throughput > perf.throughput) {
+         if (!INTEL_DEBUG(DEBUG_DO32) && throughput >= perf.throughput) {
             brw_shader_perf_log(compiler, params->log_data,
                                 "SIMD32 shader inefficient\n");
          } else {

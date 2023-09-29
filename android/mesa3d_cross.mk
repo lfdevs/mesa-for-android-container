@@ -88,7 +88,8 @@ MESON_GEN_NINJA := \
 	-Dgallium-drivers=$(subst $(space),$(comma),$(BOARD_MESA3D_GALLIUM_DRIVERS)) \
 	-Dvulkan-drivers=$(subst $(space),$(comma),$(subst radeon,amd,$(BOARD_MESA3D_VULKAN_DRIVERS)))   \
 	-Dgbm=enabled                                                                \
-	-Degl=enabled                                                                \
+	-Degl=$(if $(BOARD_MESA3D_GALLIUM_DRIVERS),enabled,disabled)                 \
+	-Dllvm=$(if $(MESON_GEN_LLVM_STUB),enabled,disabled)                         \
 	-Dcpp_rtti=false                                                             \
 	-Dlmsensors=disabled                                                         \
 
@@ -288,7 +289,7 @@ $(MESON_OUT_DIR)/install/.install.timestamp: $(MESON_OUT_DIR)/.build.timestamp
 	rm -rf $(dir $@)
 	mkdir -p $(dir $@)
 	DESTDIR=$(call relative-to-absolute,$(dir $@)) $(MESON_BUILD) install
-	$(MESON_COPY_LIBGALLIUM)
+	$(if $(BOARD_MESA3D_GALLIUM_DRIVERS),$(MESON_COPY_LIBGALLIUM))
 	touch $@
 
 $($(M_TARGET_PREFIX)MESA3D_LIBGBM_BIN) $(MESA3D_GLES_BINS): $(MESON_OUT_DIR)/install/.install.timestamp

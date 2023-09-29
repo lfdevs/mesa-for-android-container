@@ -4181,6 +4181,9 @@ nir_variable *nir_find_variable_with_driver_location(nir_shader *shader,
 nir_variable *nir_find_state_variable(nir_shader *s,
                                       gl_state_index16 tokens[STATE_LENGTH]);
 
+nir_variable *nir_find_sampler_variable_with_tex_index(nir_shader *shader,
+                                                       unsigned texture_index);
+
 void nir_sort_variables_with_modes(nir_shader *shader,
                                    int (*compar)(const nir_variable *,
                                                  const nir_variable *),

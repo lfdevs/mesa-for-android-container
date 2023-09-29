@@ -4982,6 +4982,8 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
          const unsigned ubo_block =
             brw_nir_ubo_surface_index_get_push_block(instr->src[0]);
          const unsigned offset_256b = load_offset / 32;
+         const unsigned end_256b =
+            DIV_ROUND_UP(load_offset + type_size * instr->num_components, 32);
 
          /* See if we've selected this as a push constant candidate */
          fs_reg push_reg;
@@ -4989,7 +4991,7 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
             const struct brw_ubo_range *range = &prog_data->ubo_ranges[i];
             if (range->block == ubo_block &&
                 offset_256b >= range->start &&
-                offset_256b < range->start + range->length) {
+                end_256b <= range->start + range->length) {
 
                push_reg = fs_reg(UNIFORM, UBO_START + i, dest.type);
                push_reg.offset = load_offset - 32 * range->start;

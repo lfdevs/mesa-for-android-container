@@ -2084,11 +2084,10 @@ radv_emit_depth_bias(struct radv_cmd_buffer *cmd_buffer)
    unsigned slope = fui(d->vk.rs.depth_bias.slope * 16.0f);
    unsigned pa_su_poly_offset_db_fmt_cntl = 0;
 
-   if (render->ds_att.iview && vk_format_has_depth(render->ds_att.iview->image->vk.format) &&
+   if (vk_format_has_depth(render->ds_att.format) &&
        d->vk.rs.depth_bias.representation != VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT &&
        !device->instance->absolute_depth_bias) {
-      const struct radv_image_view *iview = render->ds_att.iview;
-      VkFormat format = vk_format_depth_only(iview->image->vk.format);
+      VkFormat format = vk_format_depth_only(render->ds_att.format);
 
       if (format == VK_FORMAT_D16_UNORM) {
          pa_su_poly_offset_db_fmt_cntl = S_028B78_POLY_OFFSET_NEG_NUM_DB_BITS(-16);
@@ -7924,15 +7923,18 @@ radv_cs_emit_indirect_mesh_draw_packet(struct radv_cmd_buffer *cmd_buffer, uint3
    uint32_t draw_id_enable = !!cmd_buffer->state.uses_drawid;
    uint32_t xyz_dim_enable = 1; /* TODO: disable XYZ_DIM when unneeded */
    uint32_t mode1_enable = 1;   /* legacy fast launch mode */
+   const bool sqtt_en = !!cmd_buffer->device->sqtt.bo;
 
    radeon_emit(cs, PKT3(PKT3_DISPATCH_MESH_INDIRECT_MULTI, 7, predicating) | PKT3_RESET_FILTER_CAM_S(1));
    radeon_emit(cs, 0); /* data_offset */
    radeon_emit(cs, S_4C1_XYZ_DIM_REG(xyz_dim_reg) | S_4C1_DRAW_INDEX_REG(draw_id_reg));
    if (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11)
       radeon_emit(cs, S_4C2_DRAW_INDEX_ENABLE(draw_id_enable) | S_4C2_COUNT_INDIRECT_ENABLE(!!count_va) |
-                         S_4C2_XYZ_DIM_ENABLE(xyz_dim_enable) | S_4C2_MODE1_ENABLE(mode1_enable));
+                         S_4C2_XYZ_DIM_ENABLE(xyz_dim_enable) | S_4C2_MODE1_ENABLE(mode1_enable) |
+                         S_4C2_THREAD_TRACE_MARKER_ENABLE(sqtt_en));
    else
-      radeon_emit(cs, S_4C2_DRAW_INDEX_ENABLE(draw_id_enable) | S_4C2_COUNT_INDIRECT_ENABLE(!!count_va));
+      radeon_emit(cs, S_4C2_DRAW_INDEX_ENABLE(draw_id_enable) | S_4C2_COUNT_INDIRECT_ENABLE(!!count_va) |
+                         S_4C2_THREAD_TRACE_MARKER_ENABLE(sqtt_en));
    radeon_emit(cs, draw_count);
    radeon_emit(cs, count_va & 0xFFFFFFFF);
    radeon_emit(cs, count_va >> 32);
@@ -8024,14 +8026,15 @@ radv_cs_emit_dispatch_taskmesh_gfx_packet(struct radv_cmd_buffer *cmd_buffer)
    uint32_t xyz_dim_en = 1; /* TODO: disable XYZ_DIM when unneeded */
    uint32_t mode1_en = 1;   /* legacy fast launch mode */
    uint32_t linear_dispatch_en = cmd_buffer->state.shaders[MESA_SHADER_TASK]->info.cs.linear_taskmesh_dispatch;
+   const bool sqtt_en = !!cmd_buffer->device->sqtt.bo;
 
    radeon_emit(cs, PKT3(PKT3_DISPATCH_TASKMESH_GFX, 2, predicating) | PKT3_RESET_FILTER_CAM_S(1));
    radeon_emit(cs, S_4D0_RING_ENTRY_REG(ring_entry_reg) | S_4D0_XYZ_DIM_REG(xyz_dim_reg));
    if (cmd_buffer->device->physical_device->rad_info.gfx_level >= GFX11)
       radeon_emit(cs, S_4D1_XYZ_DIM_ENABLE(xyz_dim_en) | S_4D1_MODE1_ENABLE(mode1_en) |
-                         S_4D1_LINEAR_DISPATCH_ENABLE(linear_dispatch_en));
+                         S_4D1_LINEAR_DISPATCH_ENABLE(linear_dispatch_en) | S_4D1_THREAD_TRACE_MARKER_ENABLE(sqtt_en));
    else
-      radeon_emit(cs, 0);
+      radeon_emit(cs, S_4D1_THREAD_TRACE_MARKER_ENABLE(sqtt_en));
    radeon_emit(cs, V_0287F0_DI_SRC_SEL_AUTO_INDEX);
 }
 
@@ -10312,6 +10315,9 @@ write_event(struct radv_cmd_buffer *cmd_buffer, struct radv_event *event, VkPipe
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    uint64_t va = radv_buffer_get_va(event->bo);
 
+   if (cmd_buffer->qf == RADV_QUEUE_VIDEO_DEC)
+      return;
+
    si_emit_cache_flush(cmd_buffer);
 
    radv_cs_add_buffer(cmd_buffer->device->ws, cs, event->bo);
@@ -10413,6 +10419,9 @@ radv_CmdWaitEvents2(VkCommandBuffer commandBuffer, uint32_t eventCount, const Vk
 {
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
+
+   if (cmd_buffer->qf == RADV_QUEUE_VIDEO_DEC)
+      return;
 
    for (unsigned i = 0; i < eventCount; ++i) {
       RADV_FROM_HANDLE(radv_event, event, pEvents[i]);

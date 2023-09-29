@@ -449,6 +449,22 @@ nir_find_state_variable(nir_shader *s,
    return NULL;
 }
 
+nir_variable *nir_find_sampler_variable_with_tex_index(nir_shader *shader,
+                                                       unsigned texture_index)
+{
+   nir_foreach_variable_with_modes(var, shader, nir_var_uniform) {
+      unsigned size =
+          glsl_type_is_array(var->type) ? glsl_array_size(var->type) : 1;
+      if ((glsl_type_is_texture(glsl_without_array(var->type)) ||
+           glsl_type_is_sampler(glsl_without_array(var->type))) &&
+          (var->data.binding == texture_index ||
+           (var->data.binding < texture_index &&
+            var->data.binding + size > texture_index)))
+         return var;
+   }
+   return NULL;
+}
+
 /* Annoyingly, qsort_r is not in the C standard library and, in particular, we
  * can't count on it on MSV and Android.  So we stuff the CMP function into
  * each array element.  It's a bit messy and burns more memory but the list of

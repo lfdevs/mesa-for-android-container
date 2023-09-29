@@ -50,6 +50,7 @@
 #include "errno.h"
 #include "common/intel_aux_map.h"
 #include "common/intel_clflush.h"
+#include "c99_alloca.h"
 #include "dev/intel_debug.h"
 #include "common/intel_gem.h"
 #include "dev/intel_device_info.h"
@@ -525,7 +526,10 @@ iris_bo_wait_syncobj(struct iris_bo *bo, int64_t timeout_ns)
 
    simple_mtx_lock(&bufmgr->bo_deps_lock);
 
-   uint32_t handles[bo->deps_size * IRIS_BATCH_COUNT * 2 + is_external];
+   const int handles_len = bo->deps_size * IRIS_BATCH_COUNT * 2 + is_external;
+   uint32_t *handles = handles_len <= 32 ?
+                        (uint32_t *)alloca(handles_len * sizeof(*handles)) :
+                        (uint32_t *)malloc(handles_len * sizeof(*handles));
    int handle_count = 0;
 
    if (is_external) {
@@ -575,6 +579,8 @@ iris_bo_wait_syncobj(struct iris_bo *bo, int64_t timeout_ns)
    }
 
 out:
+   if (handles_len > 32)
+      free(handles);
    if (external_implicit_syncobj)
       iris_syncobj_reference(bufmgr, &external_implicit_syncobj, NULL);
 

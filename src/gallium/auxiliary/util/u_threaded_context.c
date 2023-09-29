@@ -695,8 +695,13 @@ _tc_sync(struct threaded_context *tc, UNUSED const char *info, UNUSED const char
    if (tc->options.parse_renderpass_info) {
       int renderpass_info_idx = next->renderpass_info_idx;
       if (renderpass_info_idx > 0) {
+         /* don't reset if fb state is unflushed */
+         bool fb_no_draw = tc->seen_fb_state && !tc->renderpass_info_recording->has_draw;
+         uint32_t fb_info = tc->renderpass_info_recording->data32[0];
          next->renderpass_info_idx = -1;
          tc_batch_increment_renderpass_info(tc, tc->next, false);
+         if (fb_no_draw)
+            tc->renderpass_info_recording->data32[0] = fb_info;
       } else if (tc->renderpass_info_recording->has_draw) {
          tc->renderpass_info_recording->data32[0] = 0;
       }
@@ -1458,6 +1463,13 @@ tc_set_framebuffer_state(struct pipe_context *_pipe,
 
 
    if (tc->options.parse_renderpass_info) {
+      /* ensure this is treated as the first fb set if no fb activity has occurred */
+      if (!tc->renderpass_info_recording->has_draw &&
+          !tc->renderpass_info_recording->cbuf_clear &&
+          !tc->renderpass_info_recording->cbuf_load &&
+          !tc->renderpass_info_recording->zsbuf_load &&
+          !tc->renderpass_info_recording->zsbuf_clear_partial)
+         tc->batch_slots[tc->next].first_set_fb = false;
       /* store existing zsbuf data for possible persistence */
       uint8_t zsbuf = tc->renderpass_info_recording->has_draw ?
                       0 :
@@ -3158,7 +3170,8 @@ tc_texture_subdata(struct pipe_context *_pipe,
          uint64_t fmt_layer_stride = util_format_get_2d_size(format, stride, box->height);
          assert(fmt_layer_stride * box->depth <= UINT32_MAX);
 
-         struct pipe_resource *pres = pipe_buffer_create_with_data(pipe, 0, PIPE_USAGE_STREAM, fmt_layer_stride * box->depth, data);
+         struct pipe_resource *pres = pipe_buffer_create(pipe->screen, 0, PIPE_USAGE_STREAM, layer_stride * box->depth);
+         pipe->buffer_subdata(pipe, pres, PIPE_MAP_WRITE | TC_TRANSFER_MAP_THREADED_UNSYNC, 0, layer_stride * box->depth, data);
          struct pipe_box src_box = *box;
          src_box.x = src_box.y = src_box.z = 0;
 
@@ -3167,10 +3180,9 @@ tc_texture_subdata(struct pipe_context *_pipe,
             tc->base.resource_copy_region(&tc->base, resource, level, box->x, box->y, box->z, pres, 0, &src_box);
          } else {
             /* if stride doesn't match, inline util_copy_box on the GPU and assume the driver will optimize */
-            unsigned src_offset = 0;
             src_box.depth = 1;
-            for (unsigned z = 0; z < box->depth; ++z) {
-               unsigned dst_x = box->x, dst_y = box->y, width = box->width, height = box->height;
+            for (unsigned z = 0; z < box->depth; ++z, src_box.x = z * layer_stride) {
+               unsigned dst_x = box->x, dst_y = box->y, width = box->width, height = box->height, dst_z = box->z + z;
                int blocksize = util_format_get_blocksize(format);
                int blockwidth = util_format_get_blockwidth(format);
                int blockheight = util_format_get_blockheight(format);
@@ -3187,23 +3199,18 @@ tc_texture_subdata(struct pipe_context *_pipe,
                width *= blocksize;
 
                if (width == fmt_stride && width == (unsigned)stride) {
-                  uint64_t size = (uint64_t)height * width;
+                  ASSERTED uint64_t size = (uint64_t)height * width;
 
                   assert(size <= SIZE_MAX);
-                  src_box.x = src_offset;
                   assert(dst_x + src_box.width < u_minify(pres->width0, level));
                   assert(dst_y + src_box.height < u_minify(pres->height0, level));
                   assert(pres->target != PIPE_TEXTURE_3D ||  z + src_box.depth < u_minify(pres->depth0, level));
-                  tc->base.resource_copy_region(&tc->base, resource, level, dst_x, dst_y, z, pres, 0, &src_box);
+                  tc->base.resource_copy_region(&tc->base, resource, level, dst_x, dst_y, dst_z, pres, 0, &src_box);
                } else {
                   src_box.height = 1;
-                  for (unsigned i = 0; i < height; i++, dst_y++) {
-                     src_box.x = src_offset;
-                     tc->base.resource_copy_region(&tc->base, resource, level, dst_x, dst_y, z, pres, 0, &src_box);
-                     src_offset += stride;
-                  }
+                  for (unsigned i = 0; i < height; i++, dst_y++, src_box.x += stride)
+                     tc->base.resource_copy_region(&tc->base, resource, level, dst_x, dst_y, dst_z, pres, 0, &src_box);
                }
-               src_offset += layer_stride;
             }
          }
 

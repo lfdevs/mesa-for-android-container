@@ -75,6 +75,7 @@ radv_emit_wait_for_idle(const struct radv_device *device, struct radeon_cmdbuf *
 static void
 radv_emit_sqtt_start(const struct radv_device *device, struct radeon_cmdbuf *cs, enum radv_queue_family qf)
 {
+   const enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
    uint32_t shifted_size = device->sqtt.buffer_size >> SQTT_BUFFER_ALIGN_SHIFT;
    const struct radeon_info *rad_info = &device->physical_device->rad_info;
    unsigned max_se = rad_info->max_se;
@@ -94,12 +95,12 @@ radv_emit_sqtt_start(const struct radv_device *device, struct radeon_cmdbuf *cs,
 
       if (device->physical_device->rad_info.gfx_level >= GFX11) {
          /* Order seems important for the following 2 registers. */
-         radeon_set_uconfig_reg(cs, R_0367A4_SQ_THREAD_TRACE_BUF0_SIZE,
+         radeon_set_perfctr_reg(gfx_level, qf, cs, R_0367A4_SQ_THREAD_TRACE_BUF0_SIZE,
                                 S_0367A4_SIZE(shifted_size) | S_0367A4_BASE_HI(shifted_va >> 32));
 
-         radeon_set_uconfig_reg(cs, R_0367A0_SQ_THREAD_TRACE_BUF0_BASE, shifted_va);
+         radeon_set_perfctr_reg(gfx_level, qf, cs, R_0367A0_SQ_THREAD_TRACE_BUF0_BASE, shifted_va);
 
-         radeon_set_uconfig_reg(cs, R_0367B4_SQ_THREAD_TRACE_MASK,
+         radeon_set_perfctr_reg(gfx_level, qf, cs, R_0367B4_SQ_THREAD_TRACE_MASK,
                                 S_0367B4_WTYPE_INCLUDE(0x7f) | /* all shader stages */
                                    S_0367B4_SA_SEL(0) | S_0367B4_WGP_SEL(first_active_cu / 2) | S_0367B4_SIMD_SEL(0));
 
@@ -118,10 +119,11 @@ radv_emit_sqtt_start(const struct radv_device *device, struct radeon_cmdbuf *cs,
          }
          sqtt_token_mask |= S_0367B8_TOKEN_EXCLUDE(token_exclude);
 
-         radeon_set_uconfig_reg(cs, R_0367B8_SQ_THREAD_TRACE_TOKEN_MASK, sqtt_token_mask);
+         radeon_set_perfctr_reg(gfx_level, qf, cs, R_0367B8_SQ_THREAD_TRACE_TOKEN_MASK, sqtt_token_mask);
 
          /* Should be emitted last (it enables thread traces). */
-         radeon_set_uconfig_reg(cs, R_0367B0_SQ_THREAD_TRACE_CTRL, gfx11_get_sqtt_ctrl(device, true));
+         radeon_set_perfctr_reg(gfx_level, qf, cs, R_0367B0_SQ_THREAD_TRACE_CTRL, gfx11_get_sqtt_ctrl(device, true));
+
       } else if (device->physical_device->rad_info.gfx_level >= GFX10) {
          /* Order seems important for the following 2 registers. */
          radeon_set_privileged_config_reg(cs, R_008D04_SQ_THREAD_TRACE_BUF0_SIZE,
@@ -301,6 +303,7 @@ radv_copy_sqtt_info_regs(const struct radv_device *device, struct radeon_cmdbuf 
 static void
 radv_emit_sqtt_stop(const struct radv_device *device, struct radeon_cmdbuf *cs, enum radv_queue_family qf)
 {
+   const enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
    unsigned max_se = device->physical_device->rad_info.max_se;
 
    /* Stop the thread trace with a different event based on the queue. */
@@ -338,7 +341,7 @@ radv_emit_sqtt_stop(const struct radv_device *device, struct radeon_cmdbuf *cs, 
          radeon_emit(cs, 4); /* poll interval */
 
          /* Disable the thread trace mode. */
-         radeon_set_uconfig_reg(cs, R_0367B0_SQ_THREAD_TRACE_CTRL, gfx11_get_sqtt_ctrl(device, false));
+         radeon_set_perfctr_reg(gfx_level, qf, cs, R_0367B0_SQ_THREAD_TRACE_CTRL, gfx11_get_sqtt_ctrl(device, false));
 
          /* Wait for thread trace completion. */
          radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));
@@ -397,6 +400,8 @@ radv_emit_sqtt_stop(const struct radv_device *device, struct radeon_cmdbuf *cs, 
 void
 radv_emit_sqtt_userdata(const struct radv_cmd_buffer *cmd_buffer, const void *data, uint32_t num_dwords)
 {
+   const enum amd_gfx_level gfx_level = cmd_buffer->device->physical_device->rad_info.gfx_level;
+   const enum radv_queue_family qf = cmd_buffer->qf;
    struct radv_device *device = cmd_buffer->device;
    struct radeon_cmdbuf *cs = cmd_buffer->cs;
    const uint32_t *dwords = (uint32_t *)data;
@@ -413,7 +418,7 @@ radv_emit_sqtt_userdata(const struct radv_cmd_buffer *cmd_buffer, const void *da
       /* Without the perfctr bit the CP might not always pass the
        * write on correctly. */
       if (device->physical_device->rad_info.gfx_level >= GFX10)
-         radeon_set_uconfig_reg_seq_perfctr(cs, R_030D08_SQ_THREAD_TRACE_USERDATA_2, count);
+         radeon_set_uconfig_reg_seq_perfctr(gfx_level, qf, cs, R_030D08_SQ_THREAD_TRACE_USERDATA_2, count);
       else
          radeon_set_uconfig_reg_seq(cs, R_030D08_SQ_THREAD_TRACE_USERDATA_2, count);
       radeon_emit_array(cs, dwords, count);

@@ -744,10 +744,13 @@ update_bo_syncobjs(struct iris_batch *batch, struct iris_bo *bo, bool write)
    struct iris_bufmgr *bufmgr = screen->bufmgr;
    struct iris_context *ice = batch->ice;
 
+   simple_mtx_assert_locked(iris_bufmgr_get_bo_deps_lock(bufmgr));
+
    /* Make sure bo->deps is big enough */
    if (screen->id >= bo->deps_size) {
       int new_size = screen->id + 1;
       bo->deps = realloc(bo->deps, new_size * sizeof(bo->deps[0]));
+      assert(bo->deps);
       memset(&bo->deps[bo->deps_size], 0,
              sizeof(bo->deps[0]) * (new_size - bo->deps_size));
 

@@ -86,7 +86,7 @@
 static inline bool
 lp_has_fp16(void)
 {
-   return util_get_cpu_caps()->has_f16c;
+   return util_get_cpu_caps()->has_f16c || DETECT_ARCH_AARCH64;
 }
 
 /**

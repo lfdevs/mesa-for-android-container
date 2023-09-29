@@ -57,6 +57,14 @@ radv_enable_tier2(struct radv_physical_device *pdevice)
    return false;
 }
 
+static uint32_t
+radv_video_get_db_alignment(struct radv_physical_device *pdevice, int width, bool is_h265_main_10)
+{
+   if (pdevice->rad_info.family >= CHIP_RENOIR && width > 32 && is_h265_main_10)
+      return 64;
+   return 32;
+}
+
 static bool
 radv_vid_buffer_upload_alloc(struct radv_cmd_buffer *cmd_buffer, unsigned size, unsigned *out_offset, void **ptr)
 {
@@ -305,11 +313,9 @@ radv_CreateVideoSessionKHR(VkDevice _device, const VkVideoSessionCreateInfoKHR *
 
    vid->stream_handle = si_vid_alloc_stream_handle(device->physical_device);
    vid->dbg_frame_cnt = 0;
-   vid->db_alignment =
-      (device->physical_device->rad_info.family >= CHIP_RENOIR && vid->vk.max_coded.width > 32 &&
-       (vid->stream_type == RDECODE_CODEC_H265 && vid->vk.h265.profile_idc == STD_VIDEO_H265_PROFILE_IDC_MAIN_10))
-         ? 64
-         : 32;
+   vid->db_alignment = radv_video_get_db_alignment(
+      device->physical_device, vid->vk.max_coded.width,
+      vid->stream_type == RDECODE_CODEC_H265 && vid->vk.h265.profile_idc == STD_VIDEO_H265_PROFILE_IDC_MAIN_10);
 
    *pVideoSession = radv_video_session_to_handle(vid);
    return VK_SUCCESS;
@@ -1876,4 +1882,24 @@ radv_CmdDecodeVideoKHR(VkCommandBuffer commandBuffer, const VkVideoDecodeInfoKHR
       radv_uvd_decode_video(cmd_buffer, frame_info);
    else
       radv_vcn_decode_video(cmd_buffer, frame_info);
+}
+
+void
+radv_video_get_profile_alignments(struct radv_physical_device *pdevice, const VkVideoProfileListInfoKHR *profile_list,
+                                  uint32_t *width_align_out, uint32_t *height_align_out)
+{
+   vk_video_get_profile_alignments(profile_list, width_align_out, height_align_out);
+   bool is_h265_main_10 = false;
+   for (unsigned i = 0; i < profile_list->profileCount; i++) {
+      if (profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR) {
+         const struct VkVideoDecodeH265ProfileInfoKHR *h265_profile =
+            vk_find_struct_const(profile_list->pProfiles[i].pNext, VIDEO_DECODE_H265_PROFILE_INFO_KHR);
+         if (h265_profile->stdProfileIdc == STD_VIDEO_H265_PROFILE_IDC_MAIN_10)
+            is_h265_main_10 = true;
+      }
+   }
+
+   uint32_t db_alignment = radv_video_get_db_alignment(pdevice, 64, is_h265_main_10);
+   *width_align_out = MAX2(*width_align_out, db_alignment);
+   *height_align_out = MAX2(*height_align_out, db_alignment);
 }

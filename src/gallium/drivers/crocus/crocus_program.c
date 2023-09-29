@@ -1175,12 +1175,14 @@ crocus_compile_vs(struct crocus_context *ice,
 
    if (key->nr_userclip_plane_consts) {
       nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-      nir_lower_clip_vs(nir, (1 << key->nr_userclip_plane_consts) - 1, true,
-                        false, NULL);
-      nir_lower_io_to_temporaries(nir, impl, true, false);
-      nir_lower_global_vars_to_local(nir);
-      nir_lower_vars_to_ssa(nir);
-      nir_shader_gather_info(nir, impl);
+      /* Check if variables were found. */
+      if (nir_lower_clip_vs(nir, (1 << key->nr_userclip_plane_consts) - 1,
+                            true, false, NULL)) {
+         nir_lower_io_to_temporaries(nir, impl, true, false);
+         nir_lower_global_vars_to_local(nir);
+         nir_lower_vars_to_ssa(nir);
+         nir_shader_gather_info(nir, impl);
+      }
    }
 
    if (key->clamp_pointsize)

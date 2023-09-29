@@ -547,33 +547,27 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
 {
    /* Check if any successor needs the outgoing exec mask from the current block. */
 
-   bool exec_write_used;
+   bool copy_to_exec = false;
+   bool copy_from_exec = false;
 
-   if (!ctx.logical_phi_info[block.index].empty()) {
-      exec_write_used = true;
-   } else {
-      bool copy_to_exec = false;
-      bool copy_from_exec = false;
-
-      for (const auto& successor_phi_info : ctx.linear_phi_info[block.index]) {
-         copy_to_exec |= successor_phi_info.def.physReg() == exec;
-         copy_from_exec |= successor_phi_info.op.physReg() == exec;
-      }
-
-      if (copy_from_exec)
-         exec_write_used = true;
-      else if (copy_to_exec)
-         exec_write_used = false;
-      else
-         /* blocks_incoming_exec_used is initialized to true, so this is correct even for loops. */
-         exec_write_used =
-            std::any_of(block.linear_succs.begin(), block.linear_succs.end(),
-                        [&ctx](int succ_idx) { return ctx.blocks_incoming_exec_used[succ_idx]; });
+   for (const auto& successor_phi_info : ctx.linear_phi_info[block.index]) {
+      copy_to_exec |= successor_phi_info.def.physReg() == exec;
+      copy_from_exec |= successor_phi_info.op.physReg() == exec;
    }
+
+   bool exec_write_used;
+   if (copy_from_exec)
+      exec_write_used = true;
+   else if (copy_to_exec)
+      exec_write_used = false;
+   else
+      /* blocks_incoming_exec_used is initialized to true, so this is correct even for loops. */
+      exec_write_used =
+         std::any_of(block.linear_succs.begin(), block.linear_succs.end(),
+                     [&ctx](int succ_idx) { return ctx.blocks_incoming_exec_used[succ_idx]; });
 
    /* Collect information about the branching sequence. */
 
-   bool logical_end_found = false;
    bool branch_exec_val_found = false;
    int branch_exec_val_idx = -1;
    int branch_exec_copy_idx = -1;
@@ -590,10 +584,10 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
          break;
 
       /* See if the current instruction needs or writes exec. */
-      bool needs_exec = needs_exec_mask(instr.get());
+      bool needs_exec =
+         needs_exec_mask(instr.get()) ||
+         (instr->opcode == aco_opcode::p_logical_end && !ctx.logical_phi_info[block.index].empty());
       bool writes_exec = instr_writes_exec(instr.get());
-
-      logical_end_found |= instr->opcode == aco_opcode::p_logical_end;
 
       /* See if we found an unused exec write. */
       if (writes_exec && !exec_write_used) {
@@ -612,7 +606,7 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
 
       /* For a newly encountered exec write, clear the used flag. */
       if (writes_exec) {
-         if (!logical_end_found && instr->operands.size() && !branch_exec_val_found) {
+         if (instr->operands.size() && !branch_exec_val_found) {
             /* We are in a branch that jumps according to exec.
              * We just found the instruction that copies to exec before the branch.
              */
@@ -650,7 +644,7 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
 
    /* See if we can optimize the instruction that produces the exec mask. */
    if (branch_exec_val_idx != -1) {
-      assert(logical_end_found && branch_exec_tempid && branch_exec_copy_idx != -1);
+      assert(branch_exec_tempid && branch_exec_copy_idx != -1);
       try_optimize_branching_sequence(ctx, block, branch_exec_val_idx, branch_exec_copy_idx);
    }
 

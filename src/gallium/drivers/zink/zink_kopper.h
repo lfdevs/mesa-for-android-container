@@ -58,6 +58,7 @@ struct kopper_swapchain {
    unsigned num_acquires;
    unsigned max_acquires;
    unsigned async_presents;
+   struct util_queue_fence present_fence;
    struct zink_batch_usage *batch_uses;
    struct kopper_swapchain_image *images;
 };
@@ -83,7 +84,6 @@ struct kopper_displaytarget
    struct kopper_swapchain *old_swapchain;
 
    struct kopper_loader_info info;
-   struct util_queue_fence present_fence;
 
    VkSurfaceCapabilitiesKHR caps;
    VkImageFormatListCreateInfo format_list;

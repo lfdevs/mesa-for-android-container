@@ -548,7 +548,6 @@ intel_ds_device_init(struct intel_ds_device *device,
 {
    memset(device, 0, sizeof(*device));
 
-   assert(gpu_id < 128);
    device->gpu_id = gpu_id;
    device->gpu_clock_id = intel_pps_clock_id(gpu_id);
    device->fd = drm_fd;

@@ -1121,6 +1121,8 @@ zink_create_gfx_program(struct zink_context *ctx,
 
    if (screen->optimal_keys)
       prog->libs = find_or_create_lib_cache(screen, prog);
+   if (prog->libs)
+      p_atomic_inc(&prog->libs->refcount);
 
    struct mesa_sha1 sctx;
    _mesa_sha1_init(&sctx);
@@ -1545,7 +1547,7 @@ zink_destroy_gfx_program(struct zink_screen *screen,
          blob_finish(&prog->blobs[i]);
       }
    }
-   if (prog->is_separable && prog->libs)
+   if (prog->libs)
       zink_gfx_lib_cache_unref(screen, prog->libs);
 
    ralloc_free(prog);

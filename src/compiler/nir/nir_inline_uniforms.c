@@ -367,19 +367,19 @@ void
 nir_find_inlinable_uniforms(nir_shader *shader)
 {
    uint32_t uni_offsets[MAX_INLINABLE_UNIFORMS];
-   uint8_t num_offsets = 0;
+   uint8_t num_offsets[MAX_NUM_BO] = {0};
 
    nir_foreach_function_impl(impl, shader) {
       nir_metadata_require(impl, nir_metadata_loop_analysis,
                            nir_var_all, false);
 
       foreach_list_typed(nir_cf_node, node, node, &impl->body)
-         process_node(node, NULL, uni_offsets, &num_offsets);
+         process_node(node, NULL, uni_offsets, num_offsets);
    }
 
-   for (int i = 0; i < num_offsets; i++)
+   for (int i = 0; i < num_offsets[0]; i++)
       shader->info.inlinable_uniform_dw_offsets[i] = uni_offsets[i] / 4;
-   shader->info.num_inlinable_uniforms = num_offsets;
+   shader->info.num_inlinable_uniforms = num_offsets[0];
 }
 
 void

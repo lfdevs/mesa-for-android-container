@@ -1411,32 +1411,8 @@ spill_block(spill_ctx& ctx, unsigned block_idx)
 }
 
 Temp
-load_scratch_resource(spill_ctx& ctx, Temp& scratch_offset, Block& block,
-                      std::vector<aco_ptr<Instruction>>& instructions, unsigned offset)
+load_scratch_resource(spill_ctx& ctx, Builder& bld, bool apply_scratch_offset)
 {
-   Builder bld(ctx.program);
-   if (block.kind & block_kind_top_level) {
-      bld.reset(&instructions);
-   } else {
-      for (int block_idx = block.index; block_idx >= 0; block_idx--) {
-         if (!(ctx.program->blocks[block_idx].kind & block_kind_top_level))
-            continue;
-
-         /* find p_logical_end */
-         std::vector<aco_ptr<Instruction>>& prev_instructions =
-            ctx.program->blocks[block_idx].instructions;
-         unsigned idx = prev_instructions.size() - 1;
-         while (prev_instructions[idx]->opcode != aco_opcode::p_logical_end)
-            idx--;
-         bld.reset(&prev_instructions, std::next(prev_instructions.begin(), idx));
-         break;
-      }
-   }
-
-   /* GFX9+ uses scratch_* instructions, which don't use a resource. Return a SADDR instead. */
-   if (ctx.program->gfx_level >= GFX9)
-      return bld.copy(bld.def(s1), Operand::c32(offset));
-
    Temp private_segment_buffer = ctx.program->private_segment_buffer;
    if (!private_segment_buffer.bytes()) {
       Temp addr_lo =
@@ -1450,9 +1426,21 @@ load_scratch_resource(spill_ctx& ctx, Temp& scratch_offset, Block& block,
          bld.smem(aco_opcode::s_load_dwordx2, bld.def(s2), private_segment_buffer, Operand::zero());
    }
 
-   if (offset)
-      scratch_offset = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc),
-                                scratch_offset, Operand::c32(offset));
+   if (apply_scratch_offset) {
+      Temp addr_lo = bld.tmp(s1);
+      Temp addr_hi = bld.tmp(s1);
+      bld.pseudo(aco_opcode::p_split_vector, Definition(addr_lo), Definition(addr_hi),
+                 private_segment_buffer);
+
+      Temp carry = bld.tmp(s1);
+      addr_lo = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.scc(Definition(carry)), addr_lo,
+                         ctx.program->scratch_offset);
+      addr_hi = bld.sop2(aco_opcode::s_addc_u32, bld.def(s1), bld.def(s1, scc), addr_hi,
+                         Operand::c32(0), bld.scc(carry));
+
+      private_segment_buffer =
+         bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), addr_lo, addr_hi);
+   }
 
    uint32_t rsrc_conf =
       S_008F0C_ADD_TID_ENABLE(1) | S_008F0C_INDEX_STRIDE(ctx.program->wave_size == 64 ? 3 : 2);
@@ -1477,32 +1465,72 @@ load_scratch_resource(spill_ctx& ctx, Temp& scratch_offset, Block& block,
 void
 setup_vgpr_spill_reload(spill_ctx& ctx, Block& block,
                         std::vector<aco_ptr<Instruction>>& instructions, uint32_t spill_slot,
-                        unsigned* offset)
+                        Temp& scratch_offset, unsigned* offset)
 {
-   Temp scratch_offset = ctx.program->scratch_offset;
+   uint32_t scratch_size = ctx.program->config->scratch_bytes_per_wave / ctx.program->wave_size;
+
+   uint32_t offset_range;
+   if (ctx.program->gfx_level >= GFX9) {
+      offset_range =
+         ctx.program->dev.scratch_global_offset_max - ctx.program->dev.scratch_global_offset_min;
+   } else {
+      if (scratch_size < 4095)
+         offset_range = 4095 - scratch_size;
+      else
+         offset_range = 0;
+   }
+
+   bool overflow = (ctx.vgpr_spill_slots - 1) * 4 > offset_range;
+
+   Builder rsrc_bld(ctx.program);
+   if (block.kind & block_kind_top_level) {
+      rsrc_bld.reset(&instructions);
+   } else if (ctx.scratch_rsrc == Temp() && (!overflow || ctx.program->gfx_level < GFX9)) {
+      Block* tl_block = &block;
+      while (!(tl_block->kind & block_kind_top_level))
+         tl_block = &ctx.program->blocks[tl_block->linear_idom];
+
+      /* find p_logical_end */
+      std::vector<aco_ptr<Instruction>>& prev_instructions = tl_block->instructions;
+      unsigned idx = prev_instructions.size() - 1;
+      while (prev_instructions[idx]->opcode != aco_opcode::p_logical_end)
+         idx--;
+      rsrc_bld.reset(&prev_instructions, std::next(prev_instructions.begin(), idx));
+   }
+
+   /* If spilling overflows the constant offset range at any point, we need to emit the soffset
+    * before every spill/reload to avoid increasing register demand.
+    */
+   Builder offset_bld = rsrc_bld;
+   if (overflow)
+      offset_bld.reset(&instructions);
 
    *offset = spill_slot * 4;
    if (ctx.program->gfx_level >= GFX9) {
       *offset += ctx.program->dev.scratch_global_offset_min;
 
-      if (ctx.scratch_rsrc == Temp()) {
-         int32_t saddr = ctx.program->config->scratch_bytes_per_wave / ctx.program->wave_size -
-                         ctx.program->dev.scratch_global_offset_min;
-         ctx.scratch_rsrc = load_scratch_resource(ctx, scratch_offset, block, instructions, saddr);
+      if (ctx.scratch_rsrc == Temp() || overflow) {
+         int32_t saddr = scratch_size - ctx.program->dev.scratch_global_offset_min;
+         if ((int32_t)*offset > (int32_t)ctx.program->dev.scratch_global_offset_max) {
+            saddr += (int32_t)*offset;
+            *offset = 0;
+         }
+
+         /* GFX9+ uses scratch_* instructions, which don't use a resource. */
+         ctx.scratch_rsrc = offset_bld.copy(offset_bld.def(s1), Operand::c32(saddr));
       }
    } else {
-      bool add_offset_to_sgpr =
-         ctx.program->config->scratch_bytes_per_wave / ctx.program->wave_size +
-            ctx.vgpr_spill_slots * 4 >
-         4096;
-      if (!add_offset_to_sgpr)
-         *offset += ctx.program->config->scratch_bytes_per_wave / ctx.program->wave_size;
+      if (ctx.scratch_rsrc == Temp())
+         ctx.scratch_rsrc = load_scratch_resource(ctx, rsrc_bld, overflow);
 
-      if (ctx.scratch_rsrc == Temp()) {
-         unsigned rsrc_offset =
-            add_offset_to_sgpr ? ctx.program->config->scratch_bytes_per_wave : 0;
-         ctx.scratch_rsrc =
-            load_scratch_resource(ctx, scratch_offset, block, instructions, rsrc_offset);
+      if (overflow) {
+         uint32_t soffset =
+            ctx.program->config->scratch_bytes_per_wave + *offset * ctx.program->wave_size;
+         *offset = 0;
+
+         scratch_offset = offset_bld.copy(offset_bld.def(s1), Operand::c32(soffset));
+      } else {
+         *offset += scratch_size;
       }
    }
 }
@@ -1516,8 +1544,9 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
    uint32_t spill_id = spill->operands[1].constantValue();
    uint32_t spill_slot = slots[spill_id];
 
+   Temp scratch_offset = ctx.program->scratch_offset;
    unsigned offset;
-   setup_vgpr_spill_reload(ctx, block, instructions, spill_slot, &offset);
+   setup_vgpr_spill_reload(ctx, block, instructions, spill_slot, scratch_offset, &offset);
 
    assert(spill->operands[0].isTemp());
    Temp temp = spill->operands[0].getTemp();
@@ -1537,9 +1566,8 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
             bld.scratch(aco_opcode::scratch_store_dword, Operand(v1), ctx.scratch_rsrc, elem,
                         offset, memory_sync_info(storage_vgpr_spill, semantic_private));
          } else {
-            Instruction* instr =
-               bld.mubuf(aco_opcode::buffer_store_dword, ctx.scratch_rsrc, Operand(v1),
-                         ctx.program->scratch_offset, elem, offset, false, true);
+            Instruction* instr = bld.mubuf(aco_opcode::buffer_store_dword, ctx.scratch_rsrc,
+                                           Operand(v1), scratch_offset, elem, offset, false, true);
             instr->mubuf().sync = memory_sync_info(storage_vgpr_spill, semantic_private);
          }
       }
@@ -1548,7 +1576,7 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
                   memory_sync_info(storage_vgpr_spill, semantic_private));
    } else {
       Instruction* instr = bld.mubuf(aco_opcode::buffer_store_dword, ctx.scratch_rsrc, Operand(v1),
-                                     ctx.program->scratch_offset, temp, offset, false, true);
+                                     scratch_offset, temp, offset, false, true);
       instr->mubuf().sync = memory_sync_info(storage_vgpr_spill, semantic_private);
    }
 }
@@ -1560,8 +1588,9 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
    uint32_t spill_id = reload->operands[0].constantValue();
    uint32_t spill_slot = slots[spill_id];
 
+   Temp scratch_offset = ctx.program->scratch_offset;
    unsigned offset;
-   setup_vgpr_spill_reload(ctx, block, instructions, spill_slot, &offset);
+   setup_vgpr_spill_reload(ctx, block, instructions, spill_slot, scratch_offset, &offset);
 
    Definition def = reload->definitions[0];
 
@@ -1580,7 +1609,7 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
          } else {
             Instruction* instr =
                bld.mubuf(aco_opcode::buffer_load_dword, Definition(tmp), ctx.scratch_rsrc,
-                         Operand(v1), ctx.program->scratch_offset, offset, false, true);
+                         Operand(v1), scratch_offset, offset, false, true);
             instr->mubuf().sync = memory_sync_info(storage_vgpr_spill, semantic_private);
          }
       }
@@ -1590,7 +1619,7 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
                   memory_sync_info(storage_vgpr_spill, semantic_private));
    } else {
       Instruction* instr = bld.mubuf(aco_opcode::buffer_load_dword, def, ctx.scratch_rsrc,
-                                     Operand(v1), ctx.program->scratch_offset, offset, false, true);
+                                     Operand(v1), scratch_offset, offset, false, true);
       instr->mubuf().sync = memory_sync_info(storage_vgpr_spill, semantic_private);
    }
 }

@@ -3597,7 +3597,9 @@ radv_queue_ring(const struct radv_queue *queue)
 
 /* radv_video */
 void radv_init_physical_device_decoder(struct radv_physical_device *pdevice);
-
+void radv_video_get_profile_alignments(struct radv_physical_device *pdevice,
+                                       const VkVideoProfileListInfoKHR *profile_list, uint32_t *width_align_out,
+                                       uint32_t *height_align_out);
 /**
  * Helper used for debugging compiler issues by enabling/disabling LLVM for a
  * specific shader stage (developers only).

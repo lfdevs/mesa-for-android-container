@@ -213,6 +213,9 @@ vlVaUnmapBuffer(VADriverContextP ctx, VABufferID buf_id)
 
       unmap_func(drv->pipe, buf->derived_surface.transfer);
       buf->derived_surface.transfer = NULL;
+
+      if (buf->type == VAImageBufferType)
+         drv->pipe->flush(drv->pipe, NULL, 0);
    }
    mtx_unlock(&drv->mutex);
 
